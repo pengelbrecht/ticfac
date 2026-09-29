@@ -449,13 +449,15 @@ func (r *Reconciler) carryOntoIntegration(tick string, carried attemptHandle, he
 // was cut from its carried work merged onto the integration branch — its base
 // is not the head it resumed from.
 func (r *Reconciler) carriedOntoMerge(marker attemptHandle) bool {
-	seen := map[int]bool{}
-	for marker.ResumedFrom != nil && !seen[marker.ResumedFrom.Attempt] {
+	seen := map[string]bool{}
+	run := r.runID
+	for marker.ResumedFrom != nil && !seen[carryKey(run, marker.ResumedFrom)] {
 		if marker.BaseSHA != "" && marker.ResumedFrom.SHA != "" && marker.BaseSHA != marker.ResumedFrom.SHA {
 			return true
 		}
-		seen[marker.ResumedFrom.Attempt] = true
-		record, ok, err := r.store.Attempt(marker.ResumedFrom.Attempt)
+		seen[carryKey(run, marker.ResumedFrom)] = true
+		record, owner, ok, err := r.carriedFrom(run, marker.ResumedFrom)
+		run = owner
 		if err != nil || !ok {
 			return false
 		}
@@ -468,16 +470,19 @@ func (r *Reconciler) carriedOntoMerge(marker attemptHandle) bool {
 // measured above the base that try was cut from, up to the head the next try
 // resumed from — never the integration history a merged base brought in.
 func (r *Reconciler) carriedPaths(marker attemptHandle) ([]string, error) {
-	seen := map[int]bool{}
+	seen := map[string]bool{}
 	set := map[string]bool{}
 	var out []string
+	run := r.runID
 	for marker.ResumedFrom != nil {
 		from := marker.ResumedFrom
-		if seen[from.Attempt] {
+		key := carryKey(run, from)
+		if seen[key] {
 			return nil, fmt.Errorf("the carries of %s form a cycle at attempt %d", marker.TickID, from.Attempt)
 		}
-		seen[from.Attempt] = true
-		record, ok, err := r.store.Attempt(from.Attempt)
+		seen[key] = true
+		record, owner, ok, err := r.carriedFrom(run, from)
+		run = owner
 		if err != nil {
 			return nil, err
 		}

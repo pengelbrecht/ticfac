@@ -123,6 +123,11 @@ type attemptHandle struct {
 	// that resumed from nothing states it as null, never omits it, for the
 	// same reason every required-and-null provenance field does.
 	ResumedFrom *resumedFrom `json:"resumed_from"`
+
+	// TakenOver is the claim this dispatch took over from a run that ended
+	// (takeover.go): the run, and the evidence it was read as ended on. Null
+	// when the dispatch took nothing over.
+	TakenOver *takenOver `json:"taken_over"`
 }
 
 // resumedFrom is one dispatch's answer to "this work came from a released
@@ -137,6 +142,11 @@ type resumedFrom struct {
 	WriteRef   string `json:"write_ref"`
 	SHA        string `json:"sha"`
 	ReleasedBy string `json:"released_by"`
+	// RunID names the run whose attempt this is when it is not this run's
+	// own — the work of a claim taken over from a run that ended
+	// (takeover.go). Omitted for this run's own attempts, so every marker
+	// written before it reads the same.
+	RunID string `json:"run_id,omitempty"`
 }
 
 // asMap is the durable form of the marker: everything BUT StateRoot and Repo,
@@ -154,6 +164,9 @@ func (a attemptHandle) asMap() map[string]any {
 		// omitted — "no resume" is a claim, and a reader that cannot tell it
 		// from an unrecorded one is a reader guessing at provenance.
 		"resumed_from": a.ResumedFrom,
+		// The claim this dispatch took over from a run that ended, null when
+		// it took none (takeover.go).
+		"taken_over": a.TakenOver,
 		// The backstop the attempt was issued (tick wv2): what an adopting
 		// run measures it against.
 		"wall_seconds": a.WallSeconds,
@@ -224,6 +237,13 @@ func handleFromMap(raw map[string]any) attemptHandle {
 		resumed.WriteRef, _ = fields["write_ref"].(string)
 		resumed.SHA, _ = fields["sha"].(string)
 		resumed.ReleasedBy, _ = fields["released_by"].(string)
+		resumed.RunID, _ = fields["run_id"].(string)
+	}
+	var taken *takenOver
+	if fields, ok := raw["taken_over"].(map[string]any); ok {
+		taken = &takenOver{}
+		taken.RunID, _ = fields["run_id"].(string)
+		taken.Evidence, _ = fields["evidence"].(string)
 	}
 	wall := 0
 	switch value := raw["wall_seconds"].(type) {
@@ -243,6 +263,7 @@ func handleFromMap(raw map[string]any) attemptHandle {
 		SubstrateServerVersion: get("substrate_server_version"),
 		Touch:                  touch,
 		ResumedFrom:            resumed,
+		TakenOver:              taken,
 	}
 }
 
@@ -759,6 +780,19 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		return handle, executor, adoptableMarker, nil
 	}
 
+	// A claim this run TAKES OVER from a run that ended (takeover.go): the
+	// holder's committed work for the tick goes forward as a carried
+	// release's does, and the dispatch's marker records whose claim it took
+	// and on what evidence. Only a first dispatch of the tick under this run
+	// can be a takeover — any later one is under this run's own claim.
+	var taken *takenOver
+	if carry == nil && len(mine) == 0 {
+		var took *carriedWork
+		if took, taken = r.takeOverClaim(entry); took != nil {
+			carry = took
+		}
+	}
+
 	// The classification exchange (tick w9b, epic wne), at the FIRST DISPATCH
 	// of a role-less tick and nowhere else: Jev is asked once per tick, the
 	// answer — the full probability distribution and the model identity — is
@@ -801,6 +835,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		if err != nil {
 			return nil, nil, attemptHandle{}, err
 		}
+		marker.TakenOver = taken
 
 		// The executor is built BEFORE the marker, because the marker's
 		// provenance states the substrate its executor observed at the build
@@ -910,11 +945,14 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		// starting from the released commits is a fact about THIS attempt, and
 		// this line is what a person reading the run reads it from.
 		if marker.ResumedFrom != nil {
+			from := attemptLabel(tick, tryOf(attempts, tick, marker.ResumedFrom.Attempt), marker.ResumedFrom.Attempt)
+			if marker.ResumedFrom.RunID != "" && marker.ResumedFrom.RunID != r.runID {
+				from = fmt.Sprintf("run %s's attempt %d of %s", marker.ResumedFrom.RunID, marker.ResumedFrom.Attempt, tick)
+			}
 			r.record(tick, StageCarried,
 				"%s starts from the work %s left on %s (released by %s): the next worker "+
 					"continues that work rather than redoing it, and the gate still decides what merges",
-				attemptLabel(tick, try, number),
-				attemptLabel(tick, tryOf(attempts, tick, marker.ResumedFrom.Attempt), marker.ResumedFrom.Attempt),
+				attemptLabel(tick, try, number), from,
 				branchOf(marker.ResumedFrom.WriteRef), marker.ResumedFrom.ReleasedBy)
 		}
 
@@ -1507,7 +1545,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 		}
 		resumed = &resumedFrom{
 			TickID: carry.marker.TickID, Attempt: carry.marker.Attempt,
-			WriteRef: carry.marker.WriteRef, SHA: head, ReleasedBy: carry.by,
+			WriteRef: carry.marker.WriteRef, SHA: head, ReleasedBy: carry.by, RunID: carry.runID,
 		}
 	}
 	dispatch := Dispatch{
@@ -3121,14 +3159,17 @@ func (r *Reconciler) workBase(marker attemptHandle) (string, error) {
 // marker on origin — and, when that attempt was itself carried, followed down
 // the chain to the first attempt that was cut from the integration branch.
 func (r *Reconciler) carriedBase(marker attemptHandle) (string, error) {
-	seen := map[int]bool{}
+	seen := map[string]bool{}
+	run := r.runID
 	for marker.ResumedFrom != nil {
 		from := marker.ResumedFrom
-		if seen[from.Attempt] {
+		key := carryKey(run, from)
+		if seen[key] {
 			return "", fmt.Errorf("the carries of %s form a cycle at attempt %d", marker.TickID, from.Attempt)
 		}
-		seen[from.Attempt] = true
-		record, ok, err := r.store.Attempt(from.Attempt)
+		seen[key] = true
+		record, owner, ok, err := r.carriedFrom(run, from)
+		run = owner
 		if err != nil {
 			return "", err
 		}
