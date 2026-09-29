@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_aaf6886d67b5489a85fa1505239bad7e",
   "epic_id": "hn6",
-  "sequence": 4,
-  "state": "collecting",
-  "reason": "collecting r5i attempt 1",
-  "updated_at": "2026-09-29T08:54:08Z",
+  "sequence": 5,
+  "state": "failed",
+  "reason": "r5i try 1 (run dispatch #1) wrote under an authority that is not its own (.ticfac/runs/run_1960aa1435ed4ee1aa71809b5a19801a/absorptions/f6c537d5fa4912396bc914605cdda95e9d093a5060a2723051788b1d8392381b.json, .ticfac/runs/run_1960aa1435ed4ee1aa71809b5a19801a/attempts/1.json, .ticfac/runs/run_1960aa1435ed4ee1aa71809b5a19801a/checkpoint.json, .ticfac/runs/run_1960aa1435ed4ee1aa71809b5a19801a/decisions/2.json, .ticfac/runs/run_1960aa1435ed4ee1aa71809b5a19801a/decisions/3.json, .ticfac/runs/run_1960aa1435ed4ee1aa71809b5a19801a/decisions/4.json, .ticfac/runs/run_1960aa1435ed4ee1aa71809b5a19801a/evidence/gate-r5i-1-go.json, .ticfac/runs/run_1960aa1435ed4ee1aa71809b5a19801a/evidence/gate-r5i-1-ts.json, .ticfac/runs/run_1960aa1435ed4ee1aa71809b5a19801a/findings/f6c537d5fa4912396bc914605cdda95e9d093a5060a2723051788b1d8392381b.json, .ticfac/runs/run_aaf6886d67b5489a85fa1505239bad7e/checkpoint.json, .ticfac/runs/run_aaf6886d67b5489a85fa1505239bad7e/decisions/1.json, .tick/activity/activity.jsonl, .tick/issues/9dy.json, .tick/issues/r5i.json): the attempt branch carries no commit beyond the base it was cut from (52d1a2907346)",
+  "updated_at": "2026-09-29T08:54:29Z",
   "ticks": [
     {
       "tick_id": "r5i",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 1
     },
     {
