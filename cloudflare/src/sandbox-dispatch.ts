@@ -61,6 +61,7 @@
  * | `epic` | the epic the dispatch belongs to. Checked against the run's own row — a container that has somehow drifted onto another epic is refused rather than silently dispatching this run's tick under another one's name (the wave door's rule, verbatim). |
  * | `tick_id` | the tick this attempt implements. It names the container (`<run>-<tick>-<attempt>`), so it is constrained to the conservative shape a name needs: alphanumerics, `.`, `_`, `-`, first character alphanumeric, at most 64 characters. |
  * | `attempt` | 1-based attempt number, a positive integer. The attempt is in the container's name ON PURPOSE: a redispatch after a spent attempt must land in a FRESH container — reusing the name is how you inherit whatever broke it. |
+ * | `job_id` | OPTIONAL: the caller's FULL job id, when the job is not the attempt itself — a gate repair (`run-<run>/tick-<tick>/repair-1`, its retries `…/repair-1-r2`), a conflict resolution, a base fold. The job id IS the identity: the container's name, its landing branch, its boot record and the job id every answer carries derive from it (`attemptJobSlot`), because the reconciler runs several jobs under one attempt number and a repair of attempt 1 is not attempt 1 — keyed by (run, tick, attempt) alone, the settled attempt answered for every repair of it and each was refused as "already settled" (the hn6 cloud-run stall). Absent, or exactly `run-<run>/tick-<tick>/attempt-<n>`, is the attempt's own job under the names it always had. Printable ASCII, no whitespace, at most 512 characters, and it must begin `run-<run>/` for the CREDENTIAL's run — a job id naming another run is refused, never addressed. |
  * | `role` | the role this attempt runs (`implement-tick`, …), for a later cancel boot to re-derive. |
  * | `write_ref` | the attempt's own ref (`refs/heads/…`), the one the marker names and collect reads. |
  * | `base_ref` | the epic's base branch, for the same re-derivation. |
@@ -99,10 +100,14 @@
  * for addressing (a client on the far side of HTTP cannot carry a live
  * Sandbox object any more than a Workflow step can).
  *
- * ### `GET /api/sandbox/attempts/:tick_id/:attempt` — the state of a named sandbox
+ * ### `GET /api/sandbox/attempts/:tick_id/:attempt[?job_id=<job id>]` — the state of a named sandbox
  *
  * The identity is the same one start derived the container's name from (the
- * run, as ever, comes from the credential). The answer is the pinned
+ * run, as ever, comes from the credential) — INCLUDING the job: a caller that
+ * started a role job with a `job_id` asks about it with the same `job_id`
+ * (URL-encoded, the same rules as the start field), and the answer's
+ * `job_id` is that one. Without it the route answers for the attempt's own
+ * job. A settled record for one job never answers for another. The answer is the pinned
  * job-protocol `job_status` record — one vocabulary across executors, so a
  * Go client maps it onto the `JobStatus` it already parses:
  *
@@ -181,10 +186,10 @@ import { BASE_SHA_PATTERN, roomFor } from "./runs";
 import { sandboxBinding } from "./sandbox";
 import {
   AdoptionModelUnknownError,
-  attemptJobID,
   namedAttemptStatus,
   type SandboxJobHandle,
   sandboxExecutorDepsFromEnv,
+  specJobID,
   startNamedAttempt,
 } from "./sandbox-executor";
 
@@ -316,6 +321,29 @@ async function jsonBody(
   return { ok: true, raw: body as Record<string, unknown> };
 }
 
+/**
+ * Reads an optional `job_id`: undefined when absent, the id when it is a
+ * name this door keys a container by, or the refusal. It must belong to the
+ * CREDENTIAL's run (`run-<run>/…`): the run is never the caller's to state,
+ * and a job id naming another run is refused rather than addressed.
+ */
+function jobIDOf(runID: string, field: unknown): string | undefined | SandboxDispatchResult {
+  if (field === undefined || field === null) return undefined;
+  if (
+    typeof field !== "string" ||
+    !PLAIN_FIELD_PATTERN.test(field) ||
+    !field.startsWith(`run-${runID}/`)
+  ) {
+    return refuse(
+      400,
+      "invalid_request",
+      `job_id must be the full job id of a job of run ${runID} (printable ASCII with no spaces, ` +
+        `at most 512 characters, beginning run-${runID}/) — it is the identity the job's container is named by`,
+    );
+  }
+  return field;
+}
+
 // --------------------------------------------------------------- the door ---
 
 /**
@@ -366,6 +394,11 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
       "attempt must be the positive integer that identifies this try of the tick",
     );
   }
+
+  // The job, when it is not the attempt itself (a repair, a resolve, a base
+  // fold): the FULL job id is the identity the container is named by.
+  const jobID = jobIDOf(run.run_id, raw.job_id);
+  if (typeof jobID !== "string" && jobID !== undefined) return jobID;
 
   const text = (name: string, field: unknown): string | SandboxDispatchResult => {
     if (typeof field !== "string" || !PLAIN_FIELD_PATTERN.test(field)) {
@@ -479,6 +512,7 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     epic_id: run.epic,
     tick_id: tickID,
     attempt,
+    ...(jobID === undefined ? {} : { job_id: jobID }),
     role,
     project: run.project,
     write_ref: writeRef,
@@ -537,6 +571,8 @@ async function attemptStatusRoute(
     return refuse(400, "invalid_request", "the attempt in the path must be a positive integer");
   }
   const attempt = Number(attemptText);
+  const jobID = jobIDOf(run.run_id, new URL(request.url).searchParams.get("job_id") ?? undefined);
+  if (typeof jobID !== "string" && jobID !== undefined) return jobID;
 
   const binding = sandboxBinding(env);
   if (binding === null) {
@@ -548,14 +584,17 @@ async function attemptStatusRoute(
     );
   }
 
-  // The same job id the handle carries (`attemptJobID`), so a client keying
-  // on job_id reads one value whether it asked to start the attempt or to
-  // read it back. Re-addressed BY NAME on every look — never a live object.
-  const status = await namedAttemptStatus(
-    binding,
-    { run_id: run.run_id, tick_id: tickID, attempt },
-    attemptJobID(run.run_id, tickID, attempt),
-  );
+  // The same job id the handle carries (`specJobID`), so a client keying
+  // on job_id reads one value whether it asked to start the job or to read
+  // it back — and the container asked about is THIS job's, never the attempt
+  // it repairs. Re-addressed BY NAME on every look — never a live object.
+  const identity = {
+    run_id: run.run_id,
+    tick_id: tickID,
+    attempt,
+    ...(jobID === undefined ? {} : { job_id: jobID }),
+  };
+  const status = await namedAttemptStatus(binding, identity, specJobID(identity));
   return { ok: true, status: 200, body: status as unknown as Record<string, unknown> };
 }
 

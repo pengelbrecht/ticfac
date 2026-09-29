@@ -684,6 +684,13 @@ export interface SandboxAttemptBoot {
   run_id: string;
   tick_id: string;
   attempt: number;
+  /**
+   * The job's slot (sandbox-executor.ts `attemptJobSlot`): '' for the
+   * attempt's own job, the slot for a role job run under the same attempt
+   * number — a repair, a resolve — which is a different container and so a
+   * different boot (migration 0018).
+   */
+  job: string;
   model: string;
   at: string;
 }
@@ -703,11 +710,11 @@ export async function recordSandboxAttemptBoot(
 ): Promise<void> {
   await db
     .prepare(
-      `INSERT OR REPLACE INTO sandbox_attempt_boot
-        (run_id, tick_id, attempt, model, "at")
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO sandbox_job_boot
+        (run_id, tick_id, attempt, job, model, "at")
+       VALUES (?, ?, ?, ?, ?, ?)`,
     )
-    .bind(boot.run_id, boot.tick_id, boot.attempt, boot.model, boot.at)
+    .bind(boot.run_id, boot.tick_id, boot.attempt, boot.job, boot.model, boot.at)
     .run();
 }
 
@@ -718,13 +725,25 @@ export async function recordSandboxAttemptBoot(
  */
 export async function sandboxAttemptBootModel(
   db: D1Database,
-  identity: { run_id: string; tick_id: string; attempt: number },
+  identity: { run_id: string; tick_id: string; attempt: number; job: string },
 ): Promise<string | null> {
   const row = await db
+    .prepare(
+      "SELECT model FROM sandbox_job_boot WHERE run_id = ? AND tick_id = ? AND attempt = ? AND job = ?",
+    )
+    .bind(identity.run_id, identity.tick_id, identity.attempt, identity.job)
+    .first<{ model: string }>();
+  if (row !== null) return row.model;
+  if (identity.job !== "") return null;
+  // The attempt's own job may have been booted by the previous release in
+  // the window between migration 0018's copy and this release going live,
+  // into the table that release still wrote: read it there rather than
+  // refuse an adoption whose boot WAS recorded.
+  const legacy = await db
     .prepare(
       "SELECT model FROM sandbox_attempt_boot WHERE run_id = ? AND tick_id = ? AND attempt = ?",
     )
     .bind(identity.run_id, identity.tick_id, identity.attempt)
     .first<{ model: string }>();
-  return row === null ? null : row.model;
+  return legacy === null ? null : legacy.model;
 }

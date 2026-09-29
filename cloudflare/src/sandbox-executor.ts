@@ -123,8 +123,16 @@ export const JOB_HANDLE_SCHEMA_VERSION = 1;
  * broke it. The tick is in the name too, because unlike the orchestrator a
  * run may hold SEVERAL workers at once and each needs its own container.
  */
-export function attemptSandboxName(runID: string, tickID: string, attempt: number): string {
-  return `${runID}-${tickID}-${attempt}`;
+export function attemptSandboxName(
+  runID: string,
+  tickID: string,
+  attempt: number,
+  jobID?: string,
+): string {
+  const slot = attemptJobSlot(runID, tickID, attempt, jobID);
+  return slot === undefined
+    ? `${runID}-${tickID}-${attempt}`
+    : `${runID}-${tickID}-${attempt}-${slot}`;
 }
 
 /**
@@ -137,6 +145,80 @@ export function attemptSandboxName(runID: string, tickID: string, attempt: numbe
  */
 export function attemptJobID(runID: string, tickID: string, attempt: number): string {
   return `run-${runID}/tick-${tickID}/attempt-${attempt}`;
+}
+
+/**
+ * The job id a spec names: the caller's own when it stated one, else the
+ * attempt's (`attemptJobID`). Every answer the door gives about a job —
+ * the handle start mints, the status the state route reads — carries THIS,
+ * so a caller keying on job_id finds its own job and never another's.
+ */
+export function specJobID(spec: {
+  run_id: string;
+  tick_id: string;
+  attempt: number;
+  job_id?: string;
+}): string {
+  return spec.job_id ?? attemptJobID(spec.run_id, spec.tick_id, spec.attempt);
+}
+
+/**
+ * The slot a role job that is NOT the attempt itself adds to the attempt's
+ * container name, landing branch and boot record — or undefined for the
+ * attempt's own job (no job id, or exactly `attemptJobID`), whose names stay
+ * what they always were so a container an earlier deployment booted is
+ * still the one this identity re-addresses.
+ *
+ * WHY (the hn6 cloud-run stall). The reconciler runs several jobs under ONE
+ * attempt number: the implement attempt `…/attempt-1`, then — when its
+ * integrated gate fails — the repair `…/repair-1` and its retries
+ * `…/repair-1-r2`, `…/repair-1-r3`, all with attempt 1. Keyed by
+ * (run, tick, attempt) alone, every repair re-addressed the implement
+ * attempt's settled container, the door answered "succeeded", and the Go
+ * executor refused each repair as a settled attempt started again — the
+ * repair bound was spent without a repair ever booting. A job's identity is
+ * its FULL job id (herdr's rule since PR #88), so a different job id is a
+ * different container, a different landing branch and a different record.
+ *
+ * The slot is the job id's own tail (the run prefix and, when present, the
+ * tick's, stripped), reduced to a container-name- and ref-safe alphabet for
+ * a person reading it, plus a hash of the WHOLE job id — so two job ids that
+ * reduce to one readable tail still name two containers.
+ */
+export function attemptJobSlot(
+  runID: string,
+  tickID: string,
+  attempt: number,
+  jobID?: string,
+): string | undefined {
+  if (jobID === undefined || jobID === attemptJobID(runID, tickID, attempt)) return undefined;
+  let tail = jobID;
+  const runPrefix = `run-${runID}/`;
+  if (tail.startsWith(runPrefix)) tail = tail.slice(runPrefix.length);
+  const tickPrefix = `tick-${tickID}/`;
+  if (tail.startsWith(tickPrefix)) tail = tail.slice(tickPrefix.length);
+  const readable = tail
+    .replace(/[^A-Za-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/, "");
+  const digest = fnv1a32(jobID);
+  return readable === "" ? `job-${digest}` : `${readable}-${digest}`;
+}
+
+/**
+ * FNV-1a over the UTF-16 code units, as 8 hex digits: a synchronous,
+ * deterministic distinguisher for {@link attemptJobSlot}, not a security
+ * primitive — the run's credential, not the name, is what stops one run
+ * addressing another's containers.
+ */
+function fnv1a32(text: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
 }
 
 // -------------------------------------------------------------- the handle ---
@@ -273,7 +355,12 @@ export type SandboxBootRecord = {
    * when no boot was recorded — a container an older deployment booted,
    * which the adoption refuses on rather than guess about.
    */
-  modelOf(identity: { run_id: string; tick_id: string; attempt: number }): Promise<string | null>;
+  modelOf(identity: {
+    run_id: string;
+    tick_id: string;
+    attempt: number;
+    job_id?: string;
+  }): Promise<string | null>;
 };
 
 /**
@@ -283,9 +370,9 @@ export type SandboxBootRecord = {
  * holds the attempt for a person instead of recording a guess.
  */
 export class AdoptionModelUnknownError extends Error {
-  constructor(identity: { run_id: string; tick_id: string; attempt: number }) {
+  constructor(identity: { run_id: string; tick_id: string; attempt: number; job_id?: string }) {
     super(
-      `the running container for ${identity.run_id}/${identity.tick_id}/attempt-${identity.attempt} ` +
+      `the running container for ${specJobID(identity)} ` +
         "has no recorded boot, so the model it is on cannot be stated: it was booted by a deployment " +
         "that did not record boots, and adopting it would name a model nobody observed",
     );
@@ -377,12 +464,18 @@ export async function startNamedAttempt(
   deps: SandboxExecutorDeps,
   spec: AttemptSpec,
 ): Promise<{ handle: SandboxJobHandle; adopted: boolean }> {
-  const name = attemptSandboxName(spec.run_id, spec.tick_id, spec.attempt);
+  // Named by the FULL job id: a repair of attempt 1 is not attempt 1, and a
+  // settled attempt's container must never answer for the job that repairs
+  // it (attemptJobSlot says why).
+  const jobID = specJobID(spec);
+  const slot = attemptJobSlot(spec.run_id, spec.tick_id, spec.attempt, spec.job_id);
+  const name = attemptSandboxName(spec.run_id, spec.tick_id, spec.attempt, spec.job_id);
   // The per-attempt landing branch the container derives from the boot
-  // (worker-boot.ts puts the attempt in the epic slot): the work the
-  // container pushes lands on no other attempt's branch, so a redispatch
-  // starts from the base it was given, not from the previous attempt's work.
-  const landing = attemptLandingBranch(spec.epic_id, spec.attempt, spec.tick_id);
+  // (worker-boot.ts puts the attempt — and a role job's slot — in the epic
+  // slot): the work the container pushes lands on no other job's branch, so
+  // a redispatch starts from the base it was given, not from the previous
+  // attempt's work, and a repair never adopts the attempt's pushed branch.
+  const landing = attemptLandingBranch(spec.epic_id, spec.attempt, spec.tick_id, slot);
   const payload: Omit<
     SandboxHandlePayload,
     "process_id" | "launched" | "detail" | "model" | "harness"
@@ -426,7 +519,7 @@ export async function startNamedAttempt(
     return {
       handle: {
         schema_version: JOB_HANDLE_SCHEMA_VERSION,
-        job_id: attemptJobID(spec.run_id, spec.tick_id, spec.attempt),
+        job_id: jobID,
         attempt: spec.attempt,
         executor: SANDBOX_EXECUTOR_NAME,
         issued_at: new Date().toISOString(),
@@ -454,6 +547,7 @@ export async function startNamedAttempt(
     run_id: spec.run_id,
     tick_id: spec.tick_id,
     attempt: spec.attempt,
+    job: slot ?? "",
     model: bootedModel(boot),
     at: new Date().toISOString(),
   });
@@ -463,7 +557,7 @@ export async function startNamedAttempt(
   return {
     handle: {
       schema_version: JOB_HANDLE_SCHEMA_VERSION,
-      job_id: attemptJobID(spec.run_id, spec.tick_id, spec.attempt),
+      job_id: jobID,
       attempt: spec.attempt,
       executor: SANDBOX_EXECUTOR_NAME,
       issued_at: new Date().toISOString(),
@@ -617,11 +711,18 @@ async function inspectAttempt(
  */
 export async function namedAttemptStatus(
   binding: SandboxBinding,
-  identity: { run_id: string; tick_id: string; attempt: number },
+  identity: { run_id: string; tick_id: string; attempt: number; job_id?: string },
   jobID: string,
   now: () => string = () => new Date().toISOString(),
 ): Promise<AttemptStatus> {
-  const name = attemptSandboxName(identity.run_id, identity.tick_id, identity.attempt);
+  // Re-addressed by the FULL job id, never (run, tick, attempt) alone: a
+  // settled attempt's container must not answer for the repair of it.
+  const name = attemptSandboxName(
+    identity.run_id,
+    identity.tick_id,
+    identity.attempt,
+    identity.job_id,
+  );
   const sandbox = await namedSandbox(binding, name);
   // The list, never a remembered id — the evidence-gap rule the seam documents
   // and `inspectAttempt` already leans on: a caller with no handle has no id
@@ -767,6 +868,7 @@ async function cancelAttempt(deps: SandboxExecutorDeps, handle: SandboxJobHandle
     epic_id: payload.epic_id,
     tick_id: payload.tick_id,
     attempt: handle.attempt,
+    job_id: handle.job_id,
     role: payload.role,
     project: payload.project,
     write_ref: payload.write_ref,
@@ -937,6 +1039,7 @@ export function sandboxExecutorDepsFromEnv(
         : { spawn: { logs: workerLogSink(env.ARTIFACTS, input.project, input.run_id) } }),
       boots: d1BootRecord(env.DB),
       boot: async (spec) => {
+        const slot = attemptJobSlot(spec.run_id, spec.tick_id, spec.attempt, spec.job_id);
         // Minted per dispatch, revoking NOTHING (tick 53s): the run's workers
         // are parallel spenders, so a boot that rotated would cut every live
         // sibling off at the next worker's start — including this executor's
@@ -960,6 +1063,7 @@ export function sandboxExecutorDepsFromEnv(
           epic: spec.epic_id,
           tick: spec.tick_id,
           attempt: spec.attempt,
+          ...(slot === undefined ? {} : { job: slot }),
           run_id: spec.run_id,
           gateway_base_url: runGatewayEndpoint(factory as string),
           gateway_token: credential.token,
@@ -995,8 +1099,15 @@ export function d1BootRecord(db: D1Database): SandboxBootRecord {
     async record(boot: SandboxAttemptBoot) {
       await recordSandboxAttemptBoot(db, boot);
     },
-    async modelOf(identity: { run_id: string; tick_id: string; attempt: number }) {
-      return sandboxAttemptBootModel(db, identity);
+    async modelOf(identity: { run_id: string; tick_id: string; attempt: number; job_id?: string }) {
+      return sandboxAttemptBootModel(db, {
+        run_id: identity.run_id,
+        tick_id: identity.tick_id,
+        attempt: identity.attempt,
+        job:
+          attemptJobSlot(identity.run_id, identity.tick_id, identity.attempt, identity.job_id) ??
+          "",
+      });
     },
   };
 }

@@ -170,8 +170,13 @@ export function workerBranch(epic: string, tick: string): string {
  * commits. The tick id keeps the real slot — the prompt and the report file
  * (`RESULT-<tick>.md`) are derived from it.
  */
-export function workerAttemptEpicSlot(epic: string, attempt: number): string {
-  return `${epic}/attempt-${attempt}`;
+export function workerAttemptEpicSlot(epic: string, attempt: number, job?: string): string {
+  // A role job that is not the attempt itself — a gate repair, a conflict
+  // resolution, a base fold — carries its own job slot (sandbox-executor.ts
+  // `attemptJobSlot`), so it lands on a branch of its OWN: sharing the
+  // implement attempt's landing branch would make its container adopt the
+  // attempt's pushed work as its own (image/worker.sh adopt_worker_branch).
+  return job === undefined ? `${epic}/attempt-${attempt}` : `${epic}/attempt-${attempt}-${job}`;
 }
 
 /**
@@ -182,8 +187,13 @@ export function workerAttemptEpicSlot(epic: string, attempt: number): string {
  * tests pin, because the image's rule and this helper have no compiler
  * between them.
  */
-export function attemptLandingBranch(epic: string, attempt: number, tick: string): string {
-  return `${WORKER_BRANCH_PREFIX}${workerAttemptEpicSlot(epic, attempt)}/${tick}`;
+export function attemptLandingBranch(
+  epic: string,
+  attempt: number,
+  tick: string,
+  job?: string,
+): string {
+  return `${WORKER_BRANCH_PREFIX}${workerAttemptEpicSlot(epic, attempt, job)}/${tick}`;
 }
 
 /** The report a worker's branch must carry. Mirrors `resultFile` in worker-collect.ts. */
@@ -225,6 +235,13 @@ export type WorkerBootInput = {
    * the prompt and the report file, and stays the tick's own id.
    */
   attempt?: number;
+  /**
+   * The job slot of a role job that is not the attempt itself (a repair, a
+   * resolve, a base fold — sandbox-executor.ts `attemptJobSlot`), when this
+   * boot belongs to one. It rides the epic slot beside the attempt, so the
+   * job lands on a branch no other job of the attempt shares.
+   */
+  job?: string;
   run_id: string;
   gateway_base_url: string;
   gateway_token: string;
@@ -418,7 +435,9 @@ export function workerBootEnv(input: WorkerBootInput): Record<string, string> {
     TICKS_REPO_URL: input.repo_url,
     TICKS_BASE_SHA: input.base_sha,
     TICKS_EPIC:
-      input.attempt === undefined ? input.epic : workerAttemptEpicSlot(input.epic, input.attempt),
+      input.attempt === undefined
+        ? input.epic
+        : workerAttemptEpicSlot(input.epic, input.attempt, input.job),
     TICKS_TICK: input.tick,
     TICKS_RUN_ID: input.run_id,
     AI_GATEWAY_BASE_URL: input.gateway_base_url,

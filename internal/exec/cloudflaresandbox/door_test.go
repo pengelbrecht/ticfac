@@ -21,9 +21,12 @@ import (
 //
 // The fake models the door's OWN rules, not this client's, so a client bug
 // that quietly changes the request is caught by the fake refusing it:
-//   - the status route answers BY IDENTITY (tick, attempt), deriving the job
-//     id from the CREDENTIAL's run the way the real route does, never from
-//     anything the caller states;
+//   - both routes answer BY IDENTITY — the FULL job id (the start body's
+//     job_id, the status route's ?job_id=), because several jobs run under
+//     one attempt number and each is its own container; a request that
+//     names no job is the attempt's own job, derived from the CREDENTIAL's
+//     run the way the real route derives it; a job id naming another run is
+//     refused, as the real route refuses it;
 //   - an identity the door was never told about answers `lost`, the observer's
 //     statement, not a verdict;
 //   - a start is answered with a handle, never with a result — the fake never
@@ -37,9 +40,21 @@ type fakeDoor struct {
 	runID   string
 	project string
 
-	// statuses is the container state per identity key ("tick/attempt"),
-	// the answer the named-container lookup would give.
+	// statuses is the container state per identity key (the job id), the
+	// answer the named-container lookup would give.
 	statuses map[string]doorStatus
+
+	// keysByAttempt, when set, makes the fake the door BEFORE it keyed by
+	// job: it ignores the caller's job id and answers for the attempt's own
+	// job — the door the hn6 cloud-run stall ran against, whose settled
+	// implement attempt answered for every repair of it.
+	keysByAttempt bool
+
+	// mintJobID and answerJobID, when set, are the job id the start route
+	// mints and the status route answers for INSTEAD of the one asked about —
+	// a door that disagrees with the caller about whose job this is.
+	mintJobID   string
+	answerJobID string
 
 	// running is the model each identity's LIVE work process is on, keyed by
 	// identity: what a fresh start's answer RECORDS (the door boots the
@@ -97,15 +112,30 @@ func newFakeDoor(t *testing.T) *fakeDoor {
 // URL is the door's base URL, the FACTORY_BASE_URL a container boot exports.
 func (d *fakeDoor) URL() string { return d.server.URL }
 
-// key is one identity, spelled the way the fake files it.
-func key(tickID string, attempt int) string { return fmt.Sprintf("%s/%d", tickID, attempt) }
-
-// setStatus tells the door what its named-container lookup answers for one
-// identity: running, finished with a result, or absent.
-func (d *fakeDoor) setStatus(tickID string, attempt int, status doorStatus) {
+// identity is the job a request is about, the way the door keys it: the
+// caller's job id, or the attempt's own when it names none (or when the fake
+// is the door that ignored it). ok is false for a job id the real door
+// refuses — one that is not this run's.
+func (d *fakeDoor) identity(tickID string, attempt int, jobID string) (string, bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.statuses[key(tickID, attempt)] = status
+	if jobID == "" || d.keysByAttempt {
+		return d.jobIDLocked(tickID, attempt), true
+	}
+	return jobID, strings.HasPrefix(jobID, "run-"+d.runID+"/")
+}
+
+// setStatus tells the door what its named-container lookup answers for one
+// attempt's own job: running, finished with a result, or absent.
+func (d *fakeDoor) setStatus(tickID string, attempt int, status doorStatus) {
+	d.setJobStatus(d.jobID(tickID, attempt), status)
+}
+
+// setJobStatus is setStatus for any job, by its full job id.
+func (d *fakeDoor) setJobStatus(jobID string, status doorStatus) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.statuses[jobID] = status
 }
 
 // adoptRunning seeds a LIVE work process under one identity, already on a
@@ -113,9 +143,10 @@ func (d *fakeDoor) setStatus(tickID string, attempt int, status doorStatus) {
 // view. A start under that identity finds it and must answer for the model it
 // is on — the truthful-adoption case the tests that refuse it are about.
 func (d *fakeDoor) adoptRunning(tickID string, attempt int, model string) {
+	jobID := d.jobID(tickID, attempt)
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.running[key(tickID, attempt)] = model
+	d.running[jobID] = model
 }
 
 // startCount is how many starts the door was asked for.
@@ -146,19 +177,43 @@ func (d *fakeDoor) lastAuthorization() string {
 	return d.lastAuth
 }
 
-// setRunID changes the run the CREDENTIAL names — the door's own view of
-// whose dispatch this is, for the tests that make it disagree.
-func (d *fakeDoor) setRunID(runID string) {
+// disagree makes the door mint (start) or answer for (status) a job other
+// than the one asked about — the door's own view of whose job this is, for
+// the tests that make it disagree with the caller's.
+func (d *fakeDoor) disagree(mint, answer string) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.runID = runID
+	d.mintJobID, d.answerJobID = mint, answer
+}
+
+// keyByAttempt makes the fake the door before it keyed by job (see
+// keysByAttempt).
+func (d *fakeDoor) keyByAttempt() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.keysByAttempt = true
 }
 
 // jobID is the job id the door derives for an identity — from the
 // CREDENTIAL's run, never from the body, the way attemptJobID does on the
 // real side.
 func (d *fakeDoor) jobID(tickID string, attempt int) string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.jobIDLocked(tickID, attempt)
+}
+
+func (d *fakeDoor) jobIDLocked(tickID string, attempt int) string {
 	return fmt.Sprintf("run-%s/tick-%s/attempt-%d", d.runID, tickID, attempt)
+}
+
+// refuseInvalid answers the real route's refusal of a job id that is not the
+// credential's run's.
+func refuseInvalid(w http.ResponseWriter, jobID string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": "invalid_request",
+		"detail": fmt.Sprintf("job_id %q is not a job of this run", jobID)})
 }
 
 func (d *fakeDoor) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -205,18 +260,24 @@ func (d *fakeDoor) serveStart(w http.ResponseWriter, r *http.Request) {
 	if n, ok := body["attempt"].(float64); ok {
 		attempt = int(n)
 	}
+	asked, _ := body["job_id"].(string)
+	jobID, ok := d.identity(tickID, attempt, asked)
+	if !ok {
+		refuseInvalid(w, asked)
+		return
+	}
 
 	d.mu.Lock()
 	d.starts++
 	d.lastBody = body
-	running, adopted := d.running[key(tickID, attempt)]
+	running, adopted := d.running[jobID]
 	d.mu.Unlock()
 	if adopted {
 		// The named container already holds a live work process: the SAME
 		// attempt comes back, adopted, on the model that process is on — the
 		// recorded model of the boot that started it (tick dyo), never the
 		// model this request carried.
-		answer := map[string]any{"handle": d.handleBodyFor(tickID, attempt, body, running,
+		answer := map[string]any{"handle": d.handleBodyFor(jobID, tickID, attempt, body, running,
 			"adopted: this container's work process was already running"), "adopted": true}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -234,10 +295,10 @@ func (d *fakeDoor) serveStart(w http.ResponseWriter, r *http.Request) {
 	if d.bootedModel != "" {
 		model = d.bootedModel
 	}
-	d.running[key(tickID, attempt)] = model
+	d.running[jobID] = model
 	d.mu.Unlock()
 
-	handle := d.handleBodyFor(tickID, attempt, body, model, "dispatch confirmed")
+	handle := d.handleBodyFor(jobID, tickID, attempt, body, model, "dispatch confirmed")
 	answer := map[string]any{"handle": handle, "adopted": false}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
@@ -260,10 +321,20 @@ func (d *fakeDoor) serveStatus(w http.ResponseWriter, r *http.Request, tickID, a
 		script(w, r)
 		return
 	}
-	status, ok := d.statuses[key(tickID, attempt)]
+	d.mu.Unlock()
+	asked := r.URL.Query().Get("job_id")
+	jobID, valid := d.identity(tickID, attempt, asked)
+	if !valid {
+		refuseInvalid(w, asked)
+		return
+	}
+	d.mu.Lock()
+	status, ok := d.statuses[jobID]
+	if d.answerJobID != "" {
+		jobID = d.answerJobID
+	}
 	d.mu.Unlock()
 
-	jobID := d.jobID(tickID, attempt)
 	answer := map[string]any{
 		"schema_version": subprocess.SchemaVersion,
 		"job_id":         jobID,
@@ -289,7 +360,7 @@ func (d *fakeDoor) serveStatus(w http.ResponseWriter, r *http.Request, tickID, a
 // names — on the MODEL GIVEN, which is the model the container the answer
 // is about is on: the request's for a fresh boot, the recorded boot's for an
 // adoption (tick dyo).
-func (d *fakeDoor) handleBodyFor(tickID string, attempt int, body map[string]any, model, detail string) map[string]any {
+func (d *fakeDoor) handleBodyFor(jobID, tickID string, attempt int, body map[string]any, model, detail string) map[string]any {
 	role, _ := body["role"].(string)
 	writeRef, _ := body["write_ref"].(string)
 	baseRef, _ := body["base_ref"].(string)
@@ -305,23 +376,36 @@ func (d *fakeDoor) handleBodyFor(tickID string, attempt int, body map[string]any
 	if d.bootedHarness != "" {
 		harness = d.bootedHarness
 	}
+	minted := jobID
+	if d.mintJobID != "" {
+		minted = d.mintJobID
+	}
+	runID := d.runID
+	canonical := d.jobIDLocked(tickID, attempt)
 	d.mu.Unlock()
-	processID := fmt.Sprintf("proc-%s-%d", tickID, attempt)
+	// One container per JOB: the attempt's own job keeps the name it always
+	// had, and any other job's name carries its job id, so two jobs of one
+	// attempt are told apart by what they address.
+	sandbox := fmt.Sprintf("%s-%s-%d", runID, tickID, attempt)
+	if jobID != canonical {
+		sandbox += "-" + strings.NewReplacer("/", "-").Replace(jobID)
+	}
+	processID := "proc-" + strings.NewReplacer("/", "-").Replace(jobID)
 	return map[string]any{
 		"schema_version": subprocess.SchemaVersion,
-		"job_id":         d.jobID(tickID, attempt),
+		"job_id":         minted,
 		"attempt":        attempt,
 		"executor":       ExecutorName,
 		"issued_at":      "2026-09-22T18:00:00Z",
 		"handle": map[string]any{
-			"sandbox":    fmt.Sprintf("%s-%s-%d", d.runID, tickID, attempt),
+			"sandbox":    sandbox,
 			"process_id": processID,
 			"base_sha":   baseSHA,
 			"branch":     strings.TrimPrefix(writeRef, "refs/heads/"),
 			"write_ref":  writeRef,
 			"launched":   true,
 			"detail":     detail,
-			"run_id":     d.runID,
+			"run_id":     runID,
 			"epic_id":    epic,
 			"tick_id":    tickID,
 			"role":       role,

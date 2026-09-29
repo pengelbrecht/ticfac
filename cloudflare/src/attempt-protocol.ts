@@ -23,6 +23,17 @@ export type AttemptSpec = {
   tick_id: string;
   /** 1-based, per tick — the number the attempt marker and branch carry. */
   attempt: number;
+  /**
+   * The caller's FULL job id, when the job is not the attempt itself: a gate
+   * repair (`…/repair-1`, `…/repair-1-r2`), a conflict resolution, a base
+   * fold. Absent is the attempt's own job (`attemptJobID`). The job id is the
+   * identity — the container's name, the boot record, the landing branch and
+   * the job id every answer carries all derive from it — because a repair of
+   * attempt 1 is a different job from attempt 1, and keying it by
+   * (run, tick, attempt) alone made the settled attempt answer for the repair
+   * (the hn6 cloud-run stall: every repair refused as "already settled").
+   */
+  job_id?: string;
   role: string;
   project: string;
   /** The branch the attempt commits to; created empty by the executor. */

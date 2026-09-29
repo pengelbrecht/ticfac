@@ -148,6 +148,17 @@ class FakeSandboxes implements SandboxBinding {
     return sandbox;
   }
 
+  /** Finishes the named container's live work process; false when it has none. */
+  finish(name: string, code: number): boolean {
+    const sandbox = this.#byName.get(name);
+    const work = sandbox?.processes.find(
+      (p) => p.command === WORKER_COMMAND && p.state === "running",
+    );
+    if (work === undefined) return false;
+    work.finish(code);
+    return true;
+  }
+
   /** What the Go test reads back: every container ever addressed, and every process it was asked to run. */
   describe(): {
     sandboxes: Array<{
@@ -186,6 +197,17 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/__door_harness/sandboxes") {
       return Response.json(binding.describe());
+    }
+    if (url.pathname === "/__door_harness/finish" && request.method === "POST") {
+      // The worker in one named container finishes, with the exit code the
+      // test names — the only way a Go test can SETTLE a job the real door
+      // booted, and so prove a settled job never answers for another.
+      const name = url.searchParams.get("sandbox") ?? "";
+      const code = Number(url.searchParams.get("code") ?? "0");
+      if (!binding.finish(name, code)) {
+        return new Response(`no live work process in ${name}`, { status: 404 });
+      }
+      return new Response(null, { status: 204 });
     }
     // The one substitution, applied per request exactly the way the worker's
     // own vitest suite applies it per test: the SANDBOXES seam takes a test

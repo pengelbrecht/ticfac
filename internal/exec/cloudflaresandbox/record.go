@@ -75,9 +75,16 @@ var (
 // is closed on both sides of one HTTP call, and a field one side stops
 // sending is a drift this file exists to catch.
 type startRequest struct {
-	Epic     string `json:"epic"`
-	TickID   string `json:"tick_id"`
-	Attempt  int    `json:"attempt"`
+	Epic    string `json:"epic"`
+	TickID  string `json:"tick_id"`
+	Attempt int    `json:"attempt"`
+	// JobID is the job's FULL id — the identity the door names the job's
+	// container by. The reconciler runs several jobs under one attempt
+	// number (the implement attempt, a gate repair of it and the repair's
+	// retries, a conflict resolution), and keyed by (tick, attempt) alone
+	// the settled attempt answered for every repair of it: the hn6
+	// cloud-run stall, every repair refused as "already settled".
+	JobID    string `json:"job_id"`
 	Role     string `json:"role"`
 	WriteRef string `json:"write_ref"`
 	BaseRef  string `json:"base_ref"`
@@ -445,6 +452,10 @@ func validateDoorFields(req *startRequest) error {
 	}
 	if req.Attempt < 1 {
 		return fmt.Errorf("attempt is %d: the door takes the positive integer that identifies this try", req.Attempt)
+	}
+	if !plainFieldPattern.MatchString(req.JobID) {
+		return fmt.Errorf("job id %q is not a non-empty printable ASCII string the door reads: it is the identity "+
+			"the job's container is named by", req.JobID)
 	}
 	if !plainFieldPattern.MatchString(req.Role) {
 		return fmt.Errorf("role %q is not a non-empty printable ASCII string the door reads", req.Role)

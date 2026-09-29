@@ -490,7 +490,7 @@ describe("start", () => {
     // rather than naming the request's model over a container it did not
     // boot on it: a hold the caller surfaces, never a lie in the record.
     await env.DB.prepare(
-      "DELETE FROM sandbox_attempt_boot WHERE run_id = ? AND tick_id = ? AND attempt = 1",
+      "DELETE FROM sandbox_job_boot WHERE run_id = ? AND tick_id = ? AND attempt = 1",
     )
       .bind(RUN_ID, TICK)
       .run();
@@ -876,6 +876,141 @@ describe("state", () => {
     });
     expect(bad.status).toBe(400);
     expect((await denialOf(bad)).error).toBe("invalid_request");
+  });
+});
+
+// ---------------------------------------------------------- job identity ---
+
+/**
+ * The hn6 cloud-run stall, at the door: the reconciler runs a gate repair of
+ * attempt 1 as its own job (`…/repair-1`, retries `…/repair-1-r2`) under the
+ * SAME attempt number. Keyed by (run, tick, attempt) alone, the implement
+ * attempt's settled container answered for every repair, and the Go executor
+ * refused each as "already settled". A job's identity is its FULL job id.
+ */
+describe("job identity", () => {
+  const repairJob = (suffix = "") => `run-${RUN_ID}/tick-${TICK}/repair-1${suffix}`;
+
+  function getJobState(jobID: string): Promise<Response> {
+    return SELF.fetch(
+      `${BASE}/api/sandbox/attempts/${TICK}/1?job_id=${encodeURIComponent(jobID)}`,
+      { headers: { authorization: `Bearer ${runToken}` } },
+    );
+  }
+
+  function repairBody(jobID: string): Record<string, unknown> {
+    return startBody({
+      job_id: jobID,
+      role: "repair-gate",
+      write_ref: `refs/heads/ticfac/${jobID}`,
+    });
+  }
+
+  it("a settled implement attempt does not answer for the repair of it: the repair starts fresh", async () => {
+    // The implement attempt runs and SETTLES.
+    const implement = await postStart(runToken, startBody());
+    expect(implement.status).toBe(201);
+    binding
+      .named(attemptSandboxName(RUN_ID, TICK, 1))
+      .workProcess()
+      ?.finish(0);
+    const settled = (await (await getState(runToken, TICK, 1)).json()) as { state: string };
+    expect(settled.state).toBe("succeeded");
+
+    // The repair's own identity is absent — NOT the attempt's settled record.
+    const before = (await (await getJobState(repairJob())).json()) as Record<string, unknown>;
+    expect(before).toMatchObject({ job_id: repairJob(), state: "lost", terminal: false });
+
+    // So the repair starts: a fresh container, named by its job, answering
+    // for its job.
+    const repair = await postStart(runToken, repairBody(repairJob()));
+    expect(repair.status).toBe(201);
+    const body = (await repair.json()) as { handle: SandboxJobHandle; adopted: boolean };
+    expect(body.adopted).toBe(false);
+    expect(body.handle.job_id).toBe(repairJob());
+    const errors = validate(
+      jobHandleSchema,
+      protocolDefs,
+      body.handle as unknown as Record<string, unknown>,
+    );
+    expect(errors, errors.join("; ")).toEqual([]);
+    const name = attemptSandboxName(RUN_ID, TICK, 1, repairJob());
+    expect(name).not.toBe(attemptSandboxName(RUN_ID, TICK, 1));
+    expect(body.handle.handle.sandbox).toBe(name);
+    const work = binding.named(name).workProcess();
+    expect(work?.state).toBe("running");
+    // Its own landing branch: never the implement attempt's, which its
+    // container would otherwise adopt as its own pushed work.
+    expect(work?.env.TICKS_EPIC).not.toBe(`${EPIC}/attempt-1`);
+    expect(work?.env.TICKS_EPIC?.startsWith(`${EPIC}/attempt-1-repair-1-`)).toBe(true);
+    expect(body.handle.handle.branch).toBe(`tick/${work?.env.TICKS_EPIC}/${TICK}`);
+
+    // The state route answers for the repair by its job id — running — while
+    // the attempt's own record stays the settled one.
+    const running = (await (await getJobState(repairJob())).json()) as Record<string, unknown>;
+    expect(validate(jobStatusSchema, protocolDefs, running)).toEqual([]);
+    expect(running).toMatchObject({ job_id: repairJob(), state: "running", terminal: false });
+    const attempt = (await (await getState(runToken, TICK, 1)).json()) as Record<string, unknown>;
+    expect(attempt).toMatchObject({ job_id: attemptJobID(RUN_ID, TICK, 1), state: "succeeded" });
+  });
+
+  it("a repair's retry is its own job, and the same job id twice is adopted, not a rival", async () => {
+    const first = await postStart(runToken, repairBody(repairJob()));
+    expect(first.status).toBe(201);
+    binding
+      .named(attemptSandboxName(RUN_ID, TICK, 1, repairJob()))
+      .workProcess()
+      ?.finish(1);
+
+    // -r2 is a new job under the same attempt: it starts in its own container.
+    const retry = await postStart(runToken, repairBody(repairJob("-r2")));
+    expect(retry.status).toBe(201);
+    const retryBody = (await retry.json()) as { handle: SandboxJobHandle; adopted: boolean };
+    expect(retryBody.handle.job_id).toBe(repairJob("-r2"));
+    const retryName = attemptSandboxName(RUN_ID, TICK, 1, repairJob("-r2"));
+    expect(retryName).not.toBe(attemptSandboxName(RUN_ID, TICK, 1, repairJob()));
+    expect(retryBody.handle.handle.sandbox).toBe(retryName);
+
+    // The same job id asked again is the SAME running job, adopted.
+    const again = await postStart(runToken, repairBody(repairJob("-r2")));
+    expect(again.status).toBe(200);
+    const againBody = (await again.json()) as { handle: SandboxJobHandle; adopted: boolean };
+    expect(againBody.adopted).toBe(true);
+    expect(againBody.handle.job_id).toBe(repairJob("-r2"));
+    expect(againBody.handle.handle.process_id).toBe(retryBody.handle.handle.process_id);
+    expect(againBody.handle.handle.model).toBe(REQUESTED_MODEL);
+    const container = binding.named(retryName);
+    expect(container.processes.filter((p) => p.command === WORKER_COMMAND)).toHaveLength(1);
+
+    // And each job's state is its own.
+    const failed = (await (await getJobState(repairJob())).json()) as { state: string };
+    expect(failed.state).toBe("failed");
+    const running = (await (await getJobState(repairJob("-r2"))).json()) as { state: string };
+    expect(running.state).toBe("running");
+  });
+
+  it("the attempt's own job id is the attempt, under the names it always had", async () => {
+    const response = await postStart(
+      runToken,
+      startBody({ job_id: attemptJobID(RUN_ID, TICK, 1) }),
+    );
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { handle: SandboxJobHandle };
+    expect(body.handle.handle.sandbox).toBe(attemptSandboxName(RUN_ID, TICK, 1));
+    // A caller that states the job id and one that does not reach one container.
+    const again = await postStart(runToken, startBody());
+    expect(again.status).toBe(200);
+  });
+
+  it("refuses a job id that is not this run's, on both routes", async () => {
+    for (const jobID of ["run-someone_else/tick-8ty/repair-1", "repair-1", "run-x y/z", 7]) {
+      const response = await postStart(runToken, startBody({ job_id: jobID }));
+      expect(response.status, JSON.stringify(jobID)).toBe(400);
+      expect((await denialOf(response)).error).toBe("invalid_request");
+    }
+    const state = await getJobState("run-someone_else/tick-8ty/repair-1");
+    expect(state.status).toBe(400);
+    expect(binding.addressed).toEqual([]);
   });
 });
 
