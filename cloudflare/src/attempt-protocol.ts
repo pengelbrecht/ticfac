@@ -65,6 +65,13 @@ export type AttemptSpec = {
    * dispatch, whose prompt is the image's own.
    */
   prompt?: string;
+  /**
+   * The dispatch's wall clock, in seconds (tick 86y): the reconciler's bound
+   * on this job. The worker's harness is bounded just under it
+   * (worker-boot.ts `workerHarnessBudgetMs`), so the container stops its
+   * harness and pushes before the wall fires. Absent is unbounded.
+   */
+  wall_seconds?: number;
 };
 
 /** The JobHandle the executor's start returned (SPEC 4.3); opaque here. */

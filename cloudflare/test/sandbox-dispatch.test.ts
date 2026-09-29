@@ -39,7 +39,7 @@ import {
   SANDBOX_EXECUTOR_NAME,
   type SandboxJobHandle,
 } from "../src/sandbox-executor";
-import { WORKER_COMMAND, WORKER_PROBE_MARKER } from "../src/worker-boot";
+import { WORKER_COMMAND, WORKER_PROBE_MARKER, WORKER_PUSH_MARGIN_MS } from "../src/worker-boot";
 import { type Defs, parseDefs, parseSchema, validate } from "./json-schema";
 
 // --------------------------------------------------------- the fake sandbox ---
@@ -700,6 +700,25 @@ describe("start", () => {
     expect(tail.text).toContain("implementing the tick");
   });
 
+  // Tick 86y's other half: the wave path bounded every worker's harness
+  // (TICKS_WORKER_TIMEOUT) and the door bounded none. The dispatch's own wall
+  // is the budget, less the margin the container needs to commit, report and
+  // push before the reconciler's wall fires over it.
+  it("bounds the worker's harness by the dispatch's wall, less the push margin (tick 86y)", async () => {
+    expect((await postStart(runToken, startBody({ wall_seconds: 3600 }))).status).toBe(201);
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess()!;
+    expect(work.env.TICKS_WORKER_TIMEOUT).toBe(String(3600 - WORKER_PUSH_MARGIN_MS / 1000));
+  });
+
+  it("boots an unbounded harness when the dispatch states no wall, and refuses a malformed one", async () => {
+    const bad = await postStart(runToken, startBody({ wall_seconds: "8h" }));
+    expect(bad.status).toBe(400);
+    expect((await denialOf(bad)).detail).toContain("wall_seconds");
+    expect((await postStart(runToken, startBody())).status).toBe(201);
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess()!;
+    expect(work.env.TICKS_WORKER_TIMEOUT).toBeUndefined();
+  });
+
   it("a second call with the same identity returns the SAME running attempt, not a rival", async () => {
     const first = await postStart(runToken, startBody());
     expect(first.status).toBe(201);
@@ -906,6 +925,40 @@ describe("state", () => {
     const status = (await again.json()) as Record<string, unknown>;
     expect(validate(jobStatusSchema, protocolDefs, status)).toEqual([]);
     expect(status).toMatchObject({ state: "succeeded", terminal: true });
+  });
+
+  // Tick 86y, and epic hn6's r5i try 2: the door drained a worker's output
+  // only inside its confirm window, which closes at the first byte — the run's
+  // log held five lines and stopped at "checked out <sha>", and the worker
+  // that died five minutes later left no word of why.
+  it("streams what a worker prints AFTER its confirm window, on every status read, once", async () => {
+    await postStart(runToken, startBody());
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess()!;
+    work.output += "running the tests\n";
+    await getState(runToken, TICK, 1);
+    work.output += "committing\n";
+    await getState(runToken, TICK, 1);
+    await getState(runToken, TICK, 1); // nothing new: nothing written twice
+
+    const tail = await readWorkerLogTail(env.ARTIFACTS, project, RUN_ID, TICK);
+    expect(tail.text).toContain("running the tests\ncommitting\n");
+    expect(tail.text.split("implementing the tick").length - 1).toBe(1);
+    expect(tail.text.split("running the tests").length - 1).toBe(1);
+  });
+
+  it("drains a settled worker's log to its end BEFORE the container is reclaimed", async () => {
+    await postStart(runToken, startBody());
+    const container = binding.named(attemptSandboxName(RUN_ID, TICK, 1));
+    const work = container.workProcess()!;
+    work.output += "the gateway did not answer a one-token request within 30s\n";
+    work.finish(7);
+
+    const status = (await (await getState(runToken, TICK, 1)).json()) as { state: string };
+    expect(status.state).toBe("failed");
+    expect(container.destroyed).toBe(true);
+    const tail = await readWorkerLogTail(env.ARTIFACTS, project, RUN_ID, TICK);
+    expect(tail.text).toContain("the gateway did not answer a one-token request within 30s");
+    expect(tail.text.split("implementing the tick").length - 1).toBe(1);
   });
 
   it("a fresh boot under a settled identity is running again, not its old settlement", async () => {

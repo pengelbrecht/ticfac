@@ -93,6 +93,10 @@ type startRequest struct {
 	Model    string `json:"model"`
 	Harness  string `json:"harness"`
 	Prompt   string `json:"prompt"`
+	// WallSeconds is the dispatch's wall (tick 86y): the door bounds the
+	// worker's harness just under it, so the container stops and pushes
+	// before the reconciler's wall fires. Omitted when unbounded.
+	WallSeconds int `json:"wall_seconds,omitempty"`
 }
 
 // startResponse is the door's answer to a start: the handle, and whether the

@@ -291,18 +291,19 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	attempt := e.opts.Attempt
 	tickID := tickOf(spec)
 	req := &startRequest{
-		Epic:     e.opts.EpicID,
-		TickID:   tickID,
-		Attempt:  attempt,
-		JobID:    spec.JobID,
-		Role:     spec.Role,
-		WriteRef: spec.Source.WriteRef,
-		BaseRef:  e.opts.BaseRef,
-		Title:    e.opts.Title,
-		BaseSHA:  spec.Source.BaseSHA,
-		Model:    e.opts.Model,
-		Harness:  e.opts.Harness,
-		Prompt:   e.opts.Prompt,
+		Epic:        e.opts.EpicID,
+		TickID:      tickID,
+		Attempt:     attempt,
+		JobID:       spec.JobID,
+		Role:        spec.Role,
+		WriteRef:    spec.Source.WriteRef,
+		BaseRef:     e.opts.BaseRef,
+		Title:       e.opts.Title,
+		BaseSHA:     spec.Source.BaseSHA,
+		Model:       e.opts.Model,
+		Harness:     e.opts.Harness,
+		Prompt:      e.opts.Prompt,
+		WallSeconds: spec.Limits.WallSeconds,
 	}
 	if err := validateDoorFields(req); err != nil {
 		return nil, err
