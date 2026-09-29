@@ -208,6 +208,8 @@ require_gateway() {
 # not just the one this run expects to use: a harness that silently falls back
 # to another provider still cannot leave the gateway.
 configure_model_routing() {
+	# AI_GATEWAY_* is the run's control plane (internal/runenv): a gate and a
+	# test binary shed it. The vendor variables below are build environment.
 	export AI_GATEWAY_BASE_URL="$gateway"
 	export ANTHROPIC_BASE_URL="$gateway/anthropic"
 	export OPENAI_BASE_URL="$gateway/openai"

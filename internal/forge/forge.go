@@ -43,6 +43,9 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/httpnet"
+	// A test binary that reads the run's factory token door sheds a live
+	// run's control plane first (runenv's init).
+	_ "github.com/pengelbrecht/ticfac/internal/runenv"
 )
 
 // DefaultAPI is GitHub's REST API, the forge this implementation speaks.
