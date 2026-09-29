@@ -133,13 +133,16 @@ func commitsBeyond(repo, base, head string) (int, error) {
 	return n, nil
 }
 
-// changedPaths is the boundary diff: every path that differs between the
-// attempt's recorded base and its head.
+// changedPaths is the boundary diff: every path the attempt's OWN commits
+// change, base...head (from the merge base) — the measure the
+// cloudflare-sandbox collect and worker-collect.ts take. A two-dot tree diff
+// charges the attempt with every file its base gained whenever the head does
+// not descend from the base.
 func changedPaths(repo, base, head string) ([]string, error) {
 	if head == "" || head == base {
 		return nil, nil
 	}
-	out, err := git(repo, "diff", "--name-only", "--no-renames", base, head)
+	out, err := git(repo, "diff", "--name-only", "--no-renames", base+"..."+head)
 	if err != nil {
 		return nil, err
 	}

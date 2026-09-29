@@ -92,9 +92,18 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 	// remote is an error, never an empty branch: reading an outage as "no
 	// work" is the same guess an unreachable door is refused as (tick avx's
 	// rule), in the one other place this substrate crosses a network.
-	head, err := e.attemptHead(record)
+	branch, head, err := e.attemptHead(record)
 	if err != nil {
 		return nil, err
+	}
+	// From here on the record names the branch the container actually pushed
+	// — the recorded landing branch, or the image's per-run fallback beside
+	// it (attemptHead) — so every sentence, the report's path and the role
+	// payload name the ref the work is on, never one another run left.
+	if branch != record.Branch {
+		landed := *record
+		landed.Branch = branch
+		record = &landed
 	}
 	commits, err := commitsBeyond(e.opts.Repo, record.BaseSHA, head)
 	if err != nil {
@@ -211,29 +220,83 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 	return collected, nil
 }
 
-// attemptHead is the commit the attempt's landing branch carries on the
-// remote, fetched into the orchestrator's own checkout. Empty is the honest
-// answer for a container whose push never landed — the branch is not there,
-// which is a fact about the work, stated by the remote the durable layer is.
-func (e *Executor) attemptHead(record *attemptRecord) (string, error) {
+// attemptHead is the branch the attempt's container pushed and the commit it
+// carries on the remote, fetched into the orchestrator's own checkout. An
+// empty head is the honest answer for a container whose push never landed —
+// the branch is not there, which is a fact about the work, stated by the
+// remote the durable layer is.
+//
+// The branch is resolved by the container's OWN rule (image/worker.sh
+// adopt_worker_branch), never assumed to be the recorded landing branch. The
+// landing name is `tick/<epic>/attempt-<n>/<tick>`: per attempt, but NOT per
+// run, so a second run of one epic dispatches its attempt 1 onto the name the
+// first run's attempt 1 already pushed. The container finds that branch, sees
+// it does not descend from its own base, leaves it untouched and pushes
+// `<landing>-<run id>` instead. A collect that read the recorded name anyway
+// ruled on the OTHER run's work (epic hn6's second cloud run: r5i try 1
+// committed on the per-run branch, and the collect read the first run's
+// branch — "no commits"). So: the recorded branch when it is absent (the push
+// never landed) or descends from the base (this attempt's, or an earlier
+// push the container adopted); otherwise the per-run branch beside it.
+func (e *Executor) attemptHead(record *attemptRecord) (string, string, error) {
 	if record.Branch == "" {
-		return "", fmt.Errorf("the attempt record at %s carries no landing branch: the door's handle names one, "+
+		return "", "", fmt.Errorf("the attempt record at %s carries no landing branch: the door's handle names one, "+
 			"and a collect without it has no durable layer to read", record.State)
 	}
-	head, err := remoteHead(e.opts.Repo, e.remoteName(), record.Branch)
+	head, err := e.branchHead(record.Branch)
+	if err != nil || head == "" {
+		return record.Branch, head, err
+	}
+	ours, err := isAncestor(e.opts.Repo, record.BaseSHA, head)
 	if err != nil {
-		return "", fmt.Errorf("read %s on %s: %w", record.Branch, e.remoteName(), err)
+		return "", "", fmt.Errorf("is %s at %s cut from the attempt's base %s: %w",
+			record.Branch, shortSHA(head), shortSHA(record.BaseSHA), err)
+	}
+	if ours {
+		return record.Branch, head, nil
+	}
+	fallback := runLandingBranch(record.Branch, record.RunID)
+	if fallback == "" {
+		// No run id to derive the container's fallback from: the recorded
+		// branch is still not this attempt's, and ruling on it would rule
+		// on another run's work.
+		return record.Branch, "", nil
+	}
+	head, err = e.branchHead(fallback)
+	if err != nil {
+		return "", "", err
+	}
+	return fallback, head, nil
+}
+
+// runLandingBranch is the branch a worker container pushes when origin
+// already carries its landing branch from an attempt at another base —
+// `${worker_branch}-${run_id}`, image/worker.sh adopt_worker_branch's own
+// spelling, whose run_id is the boot's TICKS_RUN_ID: the handle's run id.
+func runLandingBranch(branch, runID string) string {
+	if runID == "" {
+		return ""
+	}
+	return branch + "-" + runID
+}
+
+// branchHead is one branch's head on the remote, fetched into the
+// orchestrator's own checkout; empty when the remote does not carry it.
+func (e *Executor) branchHead(branch string) (string, error) {
+	head, err := remoteHead(e.opts.Repo, e.remoteName(), branch)
+	if err != nil {
+		return "", fmt.Errorf("read %s on %s: %w", branch, e.remoteName(), err)
 	}
 	if head == "" {
 		return "", nil
 	}
-	fetched, err := fetchBranch(e.opts.Repo, e.remoteName(), record.Branch)
+	fetched, err := fetchBranch(e.opts.Repo, e.remoteName(), branch)
 	if err != nil {
-		return "", fmt.Errorf("fetch %s from %s: %w", record.Branch, e.remoteName(), err)
+		return "", fmt.Errorf("fetch %s from %s: %w", branch, e.remoteName(), err)
 	}
 	if fetched != head {
 		return "", fmt.Errorf("%s was fetched as %s after reading %s: the remote moved under the collect, which is "+
-			"not a branch to rule on — collect again", record.Branch, shortSHA(fetched), shortSHA(head))
+			"not a branch to rule on — collect again", branch, shortSHA(fetched), shortSHA(head))
 	}
 	return head, nil
 }
