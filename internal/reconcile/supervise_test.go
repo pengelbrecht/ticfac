@@ -397,3 +397,40 @@ func TestACIWaitResumesOverAnUnchangedTreeUntilTheCap(t *testing.T) {
 		t.Error("a repeated non-CI stop over an unchanged tree was continued: the anti-spin rule is gone")
 	}
 }
+
+// transientDoorError is an operational error that says of itself it is a
+// transient remote failure — the shape cloudflaresandbox's unreachable door
+// takes — carrying text no git marker recognises.
+type transientDoorError struct{}
+
+func (transientDoorError) Error() string {
+	return `the sandbox dispatch door could not be reached at https://factory.example.com: Get ` +
+		`"https://factory.example.com/api/sandbox/attempts/a1/3": context deadline exceeded ` +
+		`(Client.Timeout exceeded while awaiting headers)`
+}
+
+func (transientDoorError) TransientRemote() bool { return true }
+
+// Epic hn6's second cloud run halted over "a stop this run has no
+// classification for" when the door timed out. A typed transient failure is
+// StoppedRemoteTransient however it is wrapped, and — like a CI wait — the
+// anti-spin rule abstains from it over an unchanged tree: the world waited on
+// is the remote's. The cap still bounds it.
+// short: the supervisor's rules over synthesised stops
+func TestATransientDoorFailureIsResumedOverAnUnchangedTreeUntilTheCap(t *testing.T) {
+	t.Parallel()
+	err := fmt.Errorf("start a1: %w", transientDoorError{})
+	if got := errorStopReason(err); got != StoppedRemoteTransient {
+		t.Fatalf("a door timeout is stop %q, want %q", got, StoppedRemoteTransient)
+	}
+	if got := errorStopReason(fmt.Errorf("start a1: %w", errors.New(transientDoorError{}.Error()))); got != "" {
+		t.Errorf("the same text without the type classified as %q: the type, not the prose, is the contract", got)
+	}
+	stop := supervisedStop{Reason: StoppedRemoteTransient, TickID: "a1", Tree: "tree-1"}
+	if halt := haltReason(stop, stop, 1, 12); halt != "" {
+		t.Errorf("a repeated transient remote failure over an unchanged tree halted the run: %q", halt)
+	}
+	if halt := haltReason(stop, stop, 12, 12); halt == "" {
+		t.Error("a transient remote failure continued past the cap")
+	}
+}

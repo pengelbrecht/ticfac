@@ -60,7 +60,13 @@ import type {
   AttemptStatus,
 } from "./attempt-protocol";
 import { containerGitToken, planSandboxGit } from "./credentials";
-import { recordSandboxAttemptBoot, type SandboxAttemptBoot, sandboxAttemptBootModel } from "./db";
+import {
+  recordSandboxAttemptBoot,
+  recordSandboxJobSettled,
+  type SandboxAttemptBoot,
+  sandboxAttemptBootModel,
+  sandboxJobSettled,
+} from "./db";
 import { factoryBaseURL, issueWorkerRunToken, runGatewayEndpoint } from "./gateway";
 import { type GitRefWriter, gitRefWriter, writeRefBranch } from "./git-refs";
 import { containerGitHub } from "./github-app";
@@ -714,7 +720,21 @@ export async function namedAttemptStatus(
   identity: { run_id: string; tick_id: string; attempt: number; job_id?: string },
   jobID: string,
   now: () => string = () => new Date().toISOString(),
+  records?: SandboxJobRecords,
 ): Promise<AttemptStatus> {
+  // The records first, and the container only when they cannot answer
+  // (epic hn6's second cloud run). Through the SDK, ANY call on a container
+  // that is not running STARTS it, so a status read that addressed the
+  // container of a job nobody booted cold-booted one — and waited for a free
+  // instance while the orchestrator and settled workers held them all, until
+  // the caller's client gave up. A job with no recorded boot has no work
+  // process (the boot is recorded before its container is addressed), and a
+  // settled job answers from its settlement: neither needs a container.
+  if (records !== undefined) {
+    const settled = await records.settled(identity);
+    if (settled !== null) return statusFromProcess(settled, jobID, now);
+    if (!(await records.booted(identity))) return statusFromProcess(null, jobID, now);
+  }
   // Re-addressed by the FULL job id, never (run, tick, attempt) alone: a
   // settled attempt's container must not answer for the repair of it.
   const name = attemptSandboxName(
@@ -744,7 +764,71 @@ export async function namedAttemptStatus(
   if (work.state === "running") {
     return statusFromProcess({ state: "running", exit_code: null }, jobID, now);
   }
-  return statusFromProcess({ state: work.state, exit_code: work.exit_code }, jobID, now);
+  const settled = { state: work.state, exit_code: work.exit_code };
+  if (records !== undefined) {
+    // Settled: the verdict is recorded FIRST, then the container reclaimed.
+    // Its work is on the landing branch (the entrypoint pushes before it
+    // exits) and collect reads git, never the container — so a settled
+    // worker's container is only capacity held, and left up it idles out
+    // after SANDBOX_SLEEP_AFTER at the earliest, every status poll renewing
+    // it. A reclaim that fails is not the verdict's to inherit: the record
+    // stands, and the container still idles out on its own.
+    await records.settle(identity, settled);
+    try {
+      await sandbox.destroy();
+    } catch (error) {
+      console.error(
+        `factory sandbox door: could not reclaim settled container ${name}: ${String(error)}`,
+      );
+    }
+  }
+  return statusFromProcess(settled, jobID, now);
+}
+
+/**
+ * The durable records the door's state route answers from before it addresses
+ * a container (migrations 0018 and 0019): whether a job's container was ever
+ * booted, and the terminal state it settled in. Behind a seam so the route's
+ * "never boot a container to answer a question" rule is testable without D1.
+ */
+export type SandboxJobRecords = {
+  booted(identity: SandboxJobIdentity): Promise<boolean>;
+  settled(
+    identity: SandboxJobIdentity,
+  ): Promise<{ state: "completed" | "failed"; exit_code: number | null } | null>;
+  settle(
+    identity: SandboxJobIdentity,
+    settled: { state: SandboxProcessState; exit_code: number | null },
+  ): Promise<void>;
+};
+
+type SandboxJobIdentity = { run_id: string; tick_id: string; attempt: number; job_id?: string };
+
+/** The job records over the factory's own D1. */
+export function d1JobRecords(db: D1Database): SandboxJobRecords {
+  const key = (identity: SandboxJobIdentity) => ({
+    run_id: identity.run_id,
+    tick_id: identity.tick_id,
+    attempt: identity.attempt,
+    job: attemptJobSlot(identity.run_id, identity.tick_id, identity.attempt, identity.job_id) ?? "",
+  });
+  return {
+    async booted(identity) {
+      return (await sandboxAttemptBootModel(db, key(identity))) !== null;
+    },
+    async settled(identity) {
+      return sandboxJobSettled(db, key(identity));
+    },
+    async settle(identity, settled) {
+      if (settled.state !== "completed" && settled.state !== "failed") return;
+      await recordSandboxJobSettled(db, {
+        ...key(identity),
+        state: settled.state,
+        exit_code: settled.exit_code,
+        at: new Date().toISOString(),
+      });
+    },
+  };
 }
 
 // ---------------------------------------------------------------- collect ---

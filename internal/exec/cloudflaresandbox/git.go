@@ -1,6 +1,7 @@
 package cloudflaresandbox
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -145,13 +146,19 @@ func commitsBeyond(repo, base, head string) (int, error) {
 	return n, nil
 }
 
-// changedPaths is the boundary diff: every path that differs between the
-// attempt's recorded base and the head its container pushed.
+// changedPaths is the boundary diff: every path the attempt's OWN commits
+// change — `base...head`, measured from the merge base of the attempt's
+// recorded base and its head, which is what merging the head brings in and
+// the comparison worker-collect.ts already makes through GitHub's three-dot
+// compare. Never the two-dot tree diff: a head that does not descend from
+// the base (another run's branch, an ancestor of the base) makes every file
+// the BASE gained read as a write the attempt made — epic hn6's second cloud
+// run was rejected for "writing" the first run's state files exactly so.
 func changedPaths(repo, base, head string) ([]string, error) {
 	if head == "" || head == base {
 		return nil, nil
 	}
-	out, err := git(repo, "diff", "--name-only", "--no-renames", base, head)
+	out, err := git(repo, "diff", "--name-only", "--no-renames", base+"..."+head)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +166,20 @@ func changedPaths(repo, base, head string) ([]string, error) {
 		return nil, nil
 	}
 	return strings.Split(out, "\n"), nil
+}
+
+// isAncestor says whether ancestor is reachable from commit. Exit status 1
+// is git's "no"; anything else it fails with is an error, never a guess.
+func isAncestor(repo, ancestor, commit string) (bool, error) {
+	_, err := git(repo, "merge-base", "--is-ancestor", ancestor, commit)
+	if err == nil {
+		return true, nil
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, err
 }
 
 // showFile reads one path out of one commit, which is how the report comes

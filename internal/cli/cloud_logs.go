@@ -25,7 +25,7 @@ const defaultCloudLogsInterval = 5 * time.Second
 // newCloudLogsCommand builds `cloud logs`'s cobra command.
 func newCloudLogsCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "logs <run-id>",
+		Use:   "logs <run-id|epic-id>",
 		Short: "what the container printed",
 	}
 	fs := newFlagSet("cloud logs", nil)
@@ -79,7 +79,7 @@ func cloudLogs(ctx context.Context, args []string, tail *int, tick *string, foll
 	// A prefix is resolved before the read, not passed through to the
 	// factory's 404: "no run run_62c289d1" is true of the prefix and reads as a
 	// verdict on the run (tick c5i).
-	runID, err := cloudRunIDArg(ctx, rest[0], stderr)
+	runID, err := cloudRunArg(ctx, "logs", rest[0], true, stderr)
 	if err != nil {
 		return err
 	}
