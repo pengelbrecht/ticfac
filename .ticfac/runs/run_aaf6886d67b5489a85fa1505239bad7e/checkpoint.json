@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_aaf6886d67b5489a85fa1505239bad7e",
   "epic_id": "hn6",
-  "sequence": 11,
-  "state": "running",
-  "reason": "r5i try 2 (run dispatch #2) is rejected (missing-result): the container's branch tick/hn6/attempt-2/r5i carries no report and no commit beyond the base it was cut from: the push never landed, and this is neither running nor done",
-  "updated_at": "2026-09-29T09:00:56Z",
+  "sequence": 12,
+  "state": "failed",
+  "reason": "r5i try 2 (run dispatch #2) is missing-result: the container's branch tick/hn6/attempt-2/r5i carries no report and no commit beyond the base it was cut from: the push never landed, and this is neither running nor done",
+  "updated_at": "2026-09-29T09:00:58Z",
   "ticks": [
     {
       "tick_id": "r5i",
