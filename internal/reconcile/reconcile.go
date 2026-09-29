@@ -408,6 +408,10 @@ type Dispatch struct {
 type carriedWork struct {
 	marker attemptHandle
 	by, at string
+	// runID is the run whose attempt the work is, when it is not this run's
+	// own: a claim taken over from a run that ended (takeover.go) carries
+	// that run's attempt. Empty for this run's own attempts.
+	runID string
 }
 
 // Options configure a reconciler. Everything it talks to is passed in rather
@@ -495,6 +499,17 @@ type Options struct {
 	// precondition nothing can check is one a whole run of work discovers it
 	// cannot complete only at the end.
 	PullRequests forge.PullRequests
+
+	// ClaimHolder answers whether the run holding a foreign claim is still
+	// running, asked only when that run's checkpoint on the integration
+	// branch does not already read terminal (claim.go). A run that DIED never
+	// writes that it did, so its host is asked: the process table and the
+	// run registry for a local run, the factory for a cloud one. HolderDead
+	// makes the claim a stale one the run takes over, carrying the holder's
+	// committed work for the tick; HolderUnknown holds the run on
+	// claim_holder_unknown, resumable without a person. Nil keeps the
+	// records-only reading: a non-terminal holder is live.
+	ClaimHolder func(ctx context.Context, runID string) HolderState
 
 	// ReleaseOnly builds a reconciler that only releases attempts (`ticfac
 	// settle`): it never reaches the close-out, so the close-out rule's
@@ -2086,6 +2101,17 @@ type planEntry struct {
 	// the holder in the hold is what lets an operator go and look.
 	ClaimHolder string
 
+	// ClaimHolderUnknown marks a foreign claim whose holder's checkpoint does
+	// not read terminal and whose host could not say whether it still runs
+	// (claim.go). It is held like a live claim, in its own resumable
+	// vocabulary (RefusedClaimHolderUnknown).
+	ClaimHolderUnknown bool
+
+	// ClaimEvidence is what the verdict on a foreign claim's holder rests
+	// on — the checkpoint's state or the host's answer — said in the takeover
+	// record or the hold.
+	ClaimEvidence string
+
 	// InFlight marks a tick this run already has a live attempt of — a
 	// dispatched marker whose tick the checkpoint reads as dispatched,
 	// reported or integrated. A pass ADOPTS these before it claims anything
@@ -2575,6 +2601,16 @@ const (
 	// records it left — and a re-run under the same run id re-derives and
 	// proceeds the moment it does.
 	RefusedForeignClaim = "foreign_claim"
+
+	// RefusedClaimHolderUnknown is foreign_claim's conservative twin: the
+	// holder's checkpoint does not read terminal, and the party that runs
+	// the holder — the factory, the process table — could not say whether
+	// it still does. The run does not dispatch over the claim on a guess,
+	// so it HOLDS; but what it waits on is an answer, not a person, and
+	// nothing on the integration branch has to change for the answer to
+	// arrive — so it resumes without a person and the anti-spin rule
+	// abstains (waitsOnTheWorld), bounded by the continuation cap.
+	RefusedClaimHolderUnknown = "claim_holder_unknown"
 
 	// The five the CLOSE-OUT ADMISSION adds (tick 0iz), the sixth its own
 	// CLOSE gate adds (tick sqx), and the seventh the PR's WRITE half adds

@@ -1025,6 +1025,10 @@ type fixtureOptions struct {
 	// notReadyForAPerson makes the run an older build made of a NOT READY
 	// review (Options.notReadyForAPerson): carried and held, never acted on.
 	notReadyForAPerson bool
+	// claimHolder is the fake host a foreign claim's holder is asked about
+	// (Options.ClaimHolder): the factory or the process table, answering
+	// alive, dead or unknown. Nil keeps the records-only reading.
+	claimHolder func(ctx context.Context, runID string) HolderState
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -1123,6 +1127,7 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		GatingClassifier:        opts.gatingClassifier,
 		proseFindingsForAPerson: opts.proseFindingsForAPerson,
 		notReadyForAPerson:      opts.notReadyForAPerson,
+		ClaimHolder:             opts.claimHolder,
 		AbsorptionDepthBound:    opts.absorptionDepth,
 		// A depth the test NAMES is explicit — the person's raise over the
 		// recorded bound — and zero adopts whatever the run branch records

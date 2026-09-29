@@ -1323,6 +1323,9 @@ function safeSweepRecord(record: string): unknown {
 /** `/api/projects/<owner>/<repo>/pending`, and nothing below it. */
 const PENDING_LIST_PATH = /^\/api\/projects\/([^/]+)\/([^/]+)\/pending$/;
 
+/** `/api/runs/<id>`, and nothing below it. */
+const RUN_STATUS_PATH = /^\/api\/runs\/([^/]+)$/;
+
 /**
  * Whether a RUN's credential may use the project's pending list.
  *
@@ -1340,6 +1343,13 @@ const PENDING_LIST_PATH = /^\/api\/projects\/([^/]+)\/([^/]+)\/pending$/;
  * settling stay operator-only, because an answer is a person's word and a run
  * must never be able to supply its own.
  *
+ * And one read beside them: `GET /api/runs/<id>` for a run of the SAME project
+ * (the hn6 cloud-run stall). A run that finds a tick claimed by another run of
+ * its epic whose checkpoint does not read finished must learn whether that run
+ * is still running — a run that DIED never writes that it did — and the
+ * factory's record and Workflow instance are the only witness of that. Without
+ * this read the next submission held on the dead run's claim forever.
+ *
  * Returns `"not_run_scoped"` when the request is not this case at all (the
  * caller then applies the factory token as always), `"allowed"` when the run
  * credential admits it, or the refusal to send.
@@ -1349,9 +1359,13 @@ async function authorizeRunQuestionAccess(
   env: Env,
   pathname: string,
 ): Promise<"not_run_scoped" | "allowed" | Response> {
-  const match = PENDING_LIST_PATH.exec(pathname);
-  if (match === null) return "not_run_scoped";
-  if (request.method !== "GET" && request.method !== "POST") return "not_run_scoped";
+  const pendingMatch = PENDING_LIST_PATH.exec(pathname);
+  const runMatch = pendingMatch === null ? RUN_STATUS_PATH.exec(pathname) : null;
+  if (pendingMatch === null && runMatch === null) return "not_run_scoped";
+  if (pendingMatch !== null && request.method !== "GET" && request.method !== "POST") {
+    return "not_run_scoped";
+  }
+  if (runMatch !== null && request.method !== "GET") return "not_run_scoped";
   const presented = extractRunToken(request);
   if (presented === null || !presented.startsWith(RUN_TOKEN_PREFIX)) return "not_run_scoped";
 
@@ -1362,7 +1376,44 @@ async function authorizeRunQuestionAccess(
       { status: authorized.denial.status },
     );
   }
-  const project = `${match[1]}/${match[2]}`;
+  let project: string;
+  if (pendingMatch !== null) {
+    project = `${pendingMatch[1]}/${pendingMatch[2]}`;
+  } else {
+    // The run a claim's holder is (the hn6 cloud-run stall): readable by the
+    // orchestrator of a live run of the SAME project, and no other — the
+    // project is the target run's own, read from its row, never the path's.
+    // An unknown run is answered 404 here, which says nothing a run of this
+    // project could not learn from the branch it already reads.
+    let targetID: string;
+    try {
+      targetID = decodeURIComponent(runMatch?.[1] ?? "");
+    } catch {
+      return Response.json(
+        { error: "invalid_request", detail: "the run id is not a valid path segment" },
+        { status: 400 },
+      );
+    }
+    const target = await getRun(env.DB, targetID);
+    if (target === null) {
+      return Response.json(
+        { error: "not_found", detail: "no such run in this factory" },
+        { status: 404 },
+      );
+    }
+    if (target.project !== authorized.run.project) {
+      // Named without the target's own project: a run learns nothing about
+      // another project's runs, not even which project they belong to.
+      return Response.json(
+        {
+          error: "wrong_project",
+          detail: `run ${targetID} is not a run of ${authorized.run.project}`,
+        },
+        { status: 403 },
+      );
+    }
+    project = target.project;
+  }
   if (authorized.run.project !== project) {
     return Response.json(
       {
@@ -1391,9 +1442,11 @@ export default {
     // Auth runs before routing, so an unauthenticated caller cannot map the
     // route table by telling 404 apart from 401.
     if (!isAuthExempt(url.pathname)) {
-      // The one operator-bridge door a RUN may also knock on: its own
-      // project's pending list. Anything else — or a caller presenting the
-      // operator's token — takes the factory-token path exactly as before.
+      // The two operator-bridge doors a RUN may also knock on: its own
+      // project's pending list, and the status of a run of its own project
+      // (whether a claim's holder is still running). Anything else — or a
+      // caller presenting the operator's token — takes the factory-token
+      // path exactly as before.
       const runScoped = await authorizeRunQuestionAccess(request, env, url.pathname);
       if (runScoped instanceof Response) return runScoped;
       if (runScoped === "not_run_scoped") {

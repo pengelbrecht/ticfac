@@ -433,10 +433,26 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 				// answers the same question one level up — and its vocabulary
 				// is the one the dz1 acceptance pinned.
 				var refusal *Refusal
-				if entry.liveForeignClaim() && r.claimsHeld(&window, plan) < r.widthForWave(plan, entry.Wave) {
+				if entry.liveForeignClaim() && entry.ClaimHolderUnknown &&
+					r.claimsHeld(&window, plan) < r.widthForWave(plan, entry.Wave) {
+					// The holder's records do not read finished and its host
+					// could not say whether it still runs: held, never taken
+					// over on a guess — but what the hold waits on is an
+					// answer, so it is not a person's (claim.go).
+					refusal = r.refuse(RefusedClaimHolderUnknown, entry.TickID,
+						"%s is claimed by run %s, whose records on the integration branch do not read finished, and "+
+							"whether that run is still running could not be read (%s). The run does not dispatch over a "+
+							"claim on a guess, so it is HELD; running the epic again asks again, and takes the claim over "+
+							"— carrying the holder's committed work for the tick — the moment the holder is known to have "+
+							"ended, or keeps holding while it is known to be alive",
+						entry.TickID, entry.ClaimHolder, entry.ClaimEvidence)
+				} else if entry.liveForeignClaim() && r.claimsHeld(&window, plan) < r.widthForWave(plan, entry.Wave) {
 					who := "a party whose claim no record on the integration branch witnesses (a person with tk, or a run from another checkout)"
 					if entry.ClaimHolder != "" {
 						who = "run " + entry.ClaimHolder + ", whose records on the integration branch do not read finished"
+						if entry.ClaimEvidence != "" {
+							who += " and which is alive (" + entry.ClaimEvidence + ")"
+						}
 					}
 					refusal = r.refuse(RefusedForeignClaim, entry.TickID,
 						"%s is claimed by %s, and the width is not what is holding it back — there is room. The run "+
@@ -581,6 +597,8 @@ func (r *Reconciler) adoptionFirst(plan []planEntry) ([]planEntry, error) {
 		if w, ok := witnesses[out[i].TickID]; ok && out[i].Claimed && !out[i].OwnClaim {
 			out[i].StaleClaim = w.stale
 			out[i].ClaimHolder = w.holder
+			out[i].ClaimHolderUnknown = w.unknown
+			out[i].ClaimEvidence = w.evidence
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return rank(out[i]) < rank(out[j]) })
@@ -605,7 +623,8 @@ func (r *Reconciler) adoptionFirst(plan []planEntry) ([]planEntry, error) {
 // whoever was holding the claim — and the very admission the refusal
 // interrupted is made at the tier it was planned at.
 func refusedTickState(refusal *Refusal) string {
-	if refusal != nil && (refusal.Reason == RefusedClaimWidth || refusal.Reason == RefusedForeignClaim) {
+	if refusal != nil && (refusal.Reason == RefusedClaimWidth || refusal.Reason == RefusedForeignClaim ||
+		refusal.Reason == RefusedClaimHolderUnknown) {
 		return "ready"
 	}
 	return "rejected"
@@ -941,6 +960,7 @@ func refreshClaims(entries []planEntry, fresh map[string]planEntry) []planEntry 
 		if !out[i].Claimed {
 			out[i].OwnClaim = false
 			out[i].StaleClaim = false
+			out[i].ClaimHolderUnknown = false
 		}
 	}
 	return out

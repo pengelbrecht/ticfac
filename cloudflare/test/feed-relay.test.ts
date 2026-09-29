@@ -1,5 +1,5 @@
 import { env, SELF } from "cloudflare:test";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { deriveTokenHash, FEED_RELAY_PATH, mintFactoryToken } from "../src/auth";
 import { enrolProject, insertRun, type Run } from "../src/db";
@@ -359,5 +359,99 @@ describe("the container's parked-question sweep, on its run's credential", () =>
       headers: { authorization: `Bearer ${worker}` },
     });
     expect(res.status).toBe(403);
+  });
+});
+
+describe("a run asking whether a claim's holder is still running (hn6 cloud-run stall)", () => {
+  const status = (runID: string) => `${BASE}/api/runs/${runID}`;
+
+  // The holder's Workflow instance, as the factory reads it: ended. A stand-in
+  // for the binding, so the read answers what a dead run's instance says.
+  const originalWorkflow = env.RUN_WORKFLOW;
+  beforeEach(() => {
+    env.RUN_WORKFLOW = {
+      async get(id: string) {
+        return {
+          id,
+          async status() {
+            return { status: "complete" };
+          },
+        };
+      },
+    } as unknown as typeof env.RUN_WORKFLOW;
+  });
+  afterEach(() => {
+    env.RUN_WORKFLOW = originalWorkflow;
+  });
+
+  /** A run of the same epic that ended: the claim holder a new run asks about. */
+  async function endedRun(project = PROJECT): Promise<Run> {
+    const run: Run = {
+      run_id: `run_ended_${++counter}`,
+      project,
+      epic: "hn6",
+      base_sha: "b".repeat(40),
+      requested_by: "operator",
+      state: "failed",
+      started_at: new Date().toISOString(),
+      ended_at: new Date().toISOString(),
+      cost_usd: 0,
+      trace_id: null,
+      credential_grade: "write",
+    };
+    await insertRun(env.DB, run);
+    return run;
+  }
+
+  it("reads a run of its own project on its orchestrator credential (was 401 unauthorized)", async () => {
+    const { token } = await liveRun();
+    const holder = await endedRun();
+    const res = await SELF.fetch(status(holder.run_id), {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      run: { run_id: holder.run_id, state: "failed" },
+      phase: { workflow: { id: holder.run_id, status: "complete" } },
+    });
+  });
+
+  it("is refused another project's run, and an unknown one, without naming either", async () => {
+    const { token } = await liveRun();
+    const foreign = await endedRun("example-org/someone-else");
+    const other = await SELF.fetch(status(foreign.run_id), {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(other.status).toBe(403);
+    const body = (await other.json()) as { error: string; detail: string };
+    expect(body.error).toBe("wrong_project");
+    expect(body.detail).not.toContain("someone-else");
+
+    const unknown = await SELF.fetch(status("run_nobody"), {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(unknown.status).toBe(404);
+  });
+
+  it("is refused a worker's credential, and every write below the run", async () => {
+    const { run } = await liveRun();
+    const holder = await endedRun();
+    const { token: worker } = await issueWorkerRunToken(env, {
+      run_id: run.run_id,
+      tick_id: "r5i",
+      attempt: 1,
+    });
+    const byWorker = await SELF.fetch(status(holder.run_id), {
+      headers: { authorization: `Bearer ${worker}` },
+    });
+    expect(byWorker.status).toBe(403);
+
+    const { token } = await liveRun();
+    const stop = await SELF.fetch(`${status(holder.run_id)}/stop`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ mode: "hard" }),
+    });
+    expect(stop.status).toBe(401);
   });
 });
