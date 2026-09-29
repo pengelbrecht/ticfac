@@ -504,6 +504,7 @@ func (e *Executor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.
 		return nil, fmt.Errorf("the door answered for %s, not %s: the credential names a run this handle does not",
 			status.JobID, want)
 	}
+	nameExitClasses(status)
 	return status, nil
 }
 
