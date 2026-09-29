@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
@@ -284,5 +285,74 @@ func TestATakeoverCarriesASandboxAttemptsWorkFromItsPerRunLandingBranch(t *testi
 	}
 	if line, ok := journalLine(r, "a1", StageClaimTakenOver); !ok || !strings.Contains(line, landing+"-"+holder) {
 		t.Errorf("the takeover does not name the branch the work was on (%s-%s): %q", landing, holder, line)
+	}
+}
+
+// A dead run never reaches its close-out, so the findings it left UNTRIAGED
+// would sit under a run nothing will ever finish. The run that takes over its
+// claim adopts them: they become this run's drafts — their discovery kept —
+// and this run's close-out decides them by the existing rules (here: routed to
+// another repository, so a local backlog tick naming the target), while a
+// finding a person already decided stays where it was decided.
+func TestATakeoverAdoptsTheDeadRunsUntriagedFindingsForTheCloseOut(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f, _, holder := deadHolderFixture(t, "")
+	routedEpic(t, f)
+
+	// The dead run's drafts: one left for triage, one a person discarded.
+	dead := openRunStore(t, f.Repo.Dir, "epic/qeu", holder)
+	attempts, err := dead.Attempts()
+	if err != nil || len(attempts) == 0 {
+		t.Fatalf("read the dead run's attempts: %v %d", err, len(attempts))
+	}
+	draft := func(title string) runstate.Finding {
+		reported := subprocess.Finding{Kind: "upstream-tick", Title: title,
+			Body: "The upstream half, reported verbatim.", Severity: "low", Target: routedTarget}
+		return runstate.Finding{
+			Key: findingKey(reported), Source: findingSource, DiscoveredFrom: "run-" + holder + "/tick-a1/attempt-1",
+			Kind: reported.Kind, Title: reported.Title, Body: reported.Body, Severity: reported.Severity,
+			Target: reported.Target, DoneItem: "A1", TickID: attempts[0].TickID, Attempt: attempts[0].Attempt,
+			Status: runstate.FindingProposed, ProposedAt: "2026-09-29T09:00:00Z", Provenance: attempts[0].Provenance,
+		}
+	}
+	untriaged, decided := draft("An upstream finding the dead run left untriaged"), draft("One a person already discarded")
+	for _, one := range []runstate.Finding{untriaged, decided} {
+		if _, err := dead.PutFinding(one); err != nil {
+			t.Fatalf("draft the dead run's finding: %v", err)
+		}
+	}
+	if _, _, err := dead.TriageFinding(decided.Key, runstate.Triage{Status: runstate.FindingDiscarded, By: "a person"}); err != nil {
+		t.Fatalf("discard the decided finding: %v", err)
+	}
+
+	host := &hostSays{run: holder, verdict: HolderDead}
+	f.Runner = fakeRunnerArgv(t, "report")
+	r, result, err := f.run(f.Repo, fixtureOptions{runID: "r-next", claimHolder: host.ask})
+	if err != nil {
+		t.Fatalf("the new run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the new run ended %s (%+v): the adopted finding must be decided by its close-out, not held on",
+			result.State, result.Failure)
+	}
+	line, ok := journalLine(r, untriaged.TickID, StageFindingAdopted)
+	if !ok || !strings.Contains(line, holder) || !strings.Contains(line, untriaged.Key) {
+		t.Errorf("no %s line naming the dead run and the finding: %q\n%s", StageFindingAdopted, line, journalText(r))
+	}
+
+	// Decided by this run's close-out as its own: routed, a local backlog tick.
+	finding, record := routedFinding(t, f, r)
+	if finding.Key != untriaged.Key || finding.DiscoveredFrom != untriaged.DiscoveredFrom {
+		t.Errorf("the adopted finding is %s discovered by %s, want %s discovered by %s — the discovery is kept",
+			finding.Key, finding.DiscoveredFrom, untriaged.Key, untriaged.DiscoveredFrom)
+	}
+	assertRuleDecided(t, finding, record)
+	assertLocalTrackingTick(t, f, finding, record, "no [findings.route")
+
+	// The decided one stays the dead run's: its decision is already made.
+	next := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-next")
+	if _, ok, err := next.Finding(decided.Key); err != nil || ok {
+		t.Errorf("a finding a person already discarded was adopted (%v, %v): its decision stands where it was made", ok, err)
 	}
 }
