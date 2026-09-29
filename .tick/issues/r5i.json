@@ -12,6 +12,6 @@
   "acceptance_criteria": "[1] contract.json schema carries every hn6 field (tick pipeline/parent/duration/findings/report, try tier/reason/next_step, worker handle/activity, health.verdict, cost.lines, recent, epic_title, gloss) with a populated 'dashboard' golden and the three new negatives; `go test -short -timeout 20m -run 'TestTheContract|TestTheGoType|TestBuildEmitsTheDashboardFieldsEmpty' ./internal/statusmodel/` passes. [2] Stub builders live in pipeline.go, verdict.go, cost.go, activity.go, report.go, are called from Build, and are wired from localStatusModel/cloudStatusModel. [3] `make gate` passes.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-28T18:40:57.437314Z",
-  "updated_at": "2026-09-29T09:01:45.115266772Z",
+  "updated_at": "2026-09-29T12:37:42.052480261Z",
   "started_at": "2026-09-28T22:04:34.196796223Z"
 }
