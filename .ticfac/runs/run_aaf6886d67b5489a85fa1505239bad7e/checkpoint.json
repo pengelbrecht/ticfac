@@ -1,0 +1,74 @@
+{
+  "schema_version": 3,
+  "run_id": "run_aaf6886d67b5489a85fa1505239bad7e",
+  "epic_id": "hn6",
+  "sequence": 1,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-29T08:08:36Z",
+  "ticks": [
+    {
+      "tick_id": "r5i",
+      "state": "ready"
+    },
+    {
+      "tick_id": "3gk",
+      "state": "ready"
+    },
+    {
+      "tick_id": "7uv",
+      "state": "ready"
+    },
+    {
+      "tick_id": "ltg",
+      "state": "ready"
+    },
+    {
+      "tick_id": "0rx",
+      "state": "ready"
+    },
+    {
+      "tick_id": "u5n",
+      "state": "ready"
+    },
+    {
+      "tick_id": "3rc",
+      "state": "ready"
+    },
+    {
+      "tick_id": "c2u",
+      "state": "ready"
+    },
+    {
+      "tick_id": "u4l",
+      "state": "ready"
+    },
+    {
+      "tick_id": "v16",
+      "state": "ready"
+    },
+    {
+      "tick_id": "qjl",
+      "state": "ready"
+    }
+  ],
+  "provenance": {
+    "run_id": "run_aaf6886d67b5489a85fa1505239bad7e",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "dcea33cf67a2cc5ca210844e5e78ffb1eef19313",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
