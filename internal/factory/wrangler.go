@@ -475,6 +475,22 @@ var deployedTriggersPattern = regexp.MustCompile(`(?i)^\s*(?:Deployed|Published)
 // output is this deployment, whatever banner shape the CLI used to print it.
 var workersDevPattern = regexp.MustCompile(`https://[A-Za-z0-9.-]+\.workers\.dev`)
 
+// workerVersionPattern is the line `wrangler deploy` ends with: the Worker
+// version the deploy created.
+var workerVersionPattern = regexp.MustCompile(`(?m)^\s*Current Version ID:\s*([0-9A-Za-z-]+)\s*$`)
+
+// parseWorkerVersionID returns the Worker version a `wrangler deploy` created,
+// or "" when its output names none. It is a report, never a decision: nothing
+// keys on it but the deploy's summary (and CI's job summary, which is where a
+// deploy is looked up after the fact).
+func parseWorkerVersionID(out string) string {
+	matches := workerVersionPattern.FindAllStringSubmatch(out, -1)
+	if len(matches) == 0 {
+		return ""
+	}
+	return matches[len(matches)-1][1]
+}
+
 // parseDeployedURL pulls the deployment's base URL out of `wrangler deploy`
 // output. Detection is best-effort by nature — a custom route or a
 // workers_dev = false config prints something else entirely — so a caller that

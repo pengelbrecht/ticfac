@@ -66,6 +66,9 @@ func TestStartReturnsAHandleWithoutBlocking(t *testing.T) {
 		"model":     testModel,
 		"harness":   testHarness,
 		"prompt":    testPrompt,
+		// The dispatch's wall (tick 86y): the door bounds the worker's
+		// harness just under it.
+		"wall_seconds": float64(h.spec.Limits.WallSeconds),
 	} {
 		if got := body[field]; got != want {
 			t.Errorf("the start body's %q is %v, want %v", field, got, want)

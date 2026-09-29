@@ -98,10 +98,65 @@ func TestCIDeploysTheFactoryFromTicfac(t *testing.T) {
 	workflowMustContain(t, workflow, "./cmd/ticfac",
 		"the deploy must use a ticfac built out of the released tree — the embedded bundle IS the version pin (D16)")
 	// And what it runs is the installer, exactly once, with no flags: the
-	// exact string pins the no-rotation contract below too.
-	if strings.Count(workflow, "run: ./ticfac factory deploy") != 1 {
-		t.Errorf("the deploy step must be exactly one `run: ./ticfac factory deploy` — the installer with no flags, not a second deploy path grown around it")
+	// exact string pins the no-rotation contract below too. (Its output is
+	// piped on — kept for the job summary, filtered for the public log — so
+	// the invocation is matched as a line, not as a `run:` value.)
+	var invocations []string
+	for _, line := range strings.Split(workflow, "\n") {
+		trimmed := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "run:"))
+		if strings.HasPrefix(trimmed, "./ticfac factory deploy") {
+			invocations = append(invocations, trimmed)
+		}
 	}
+	if len(invocations) != 1 {
+		t.Fatalf("the workflow invokes `./ticfac factory deploy` %d times, want exactly once — the installer, not a second deploy path grown around it", len(invocations))
+	}
+	if rest := strings.TrimPrefix(invocations[0], "./ticfac factory deploy"); strings.HasPrefix(strings.TrimSpace(rest), "-") {
+		t.Errorf("the deploy runs with flags (%q) — CI runs the installer with none", invocations[0])
+	}
+}
+
+// TestCIDeploysMainOnlyAfterCIPassed pins the operator's 2026-09-29 decision:
+// GitHub Actions is the normal way the factory is deployed, so main keeps it
+// current — but only a commit CI passed, one deploy at a time, never under a
+// live run without first waiting for it, and every deploy leaves a record of
+// what it shipped where the operator looks.
+func TestCIDeploysMainOnlyAfterCIPassed(t *testing.T) {
+	t.Parallel()
+	workflow := readDeployWorkflow(t)
+
+	workflowMustContain(t, workflow, "workflow_run:",
+		"main deploys once CI has concluded, from the verdict CI reached — not on the push, before CI has said anything")
+	workflowMustContain(t, workflow, "workflows: [CI]",
+		"the deploy waits on ci.yml (whose name is CI), not on any workflow")
+	workflowMustContain(t, workflow, "github.event.workflow_run.conclusion == 'success'",
+		"a failed or cancelled CI must never deploy")
+	workflowMustContain(t, workflow, "github.event.workflow_run.head_branch == 'main'",
+		"only main deploys; an epic branch's CI passing is not a release")
+	workflowMustContain(t, workflow, "github.event.workflow_run.event == 'workflow_dispatch'",
+		"a dispatched CI run on main cancels the push's run (ci.yml's concurrency), so its verdict must deploy too — or main's head may never deploy")
+	workflowMustContain(t, workflow, "github.event.workflow_run.head_sha",
+		"the deploy must check out the commit CI tested, not main's head at the time the event fired")
+	workflowMustContain(t, workflow, "cancel-in-progress: false",
+		"a newer commit may replace a queued deploy, but must never tear down one mid-push")
+	workflowMustContain(t, workflow, "git diff --name-only",
+		"a main commit that changes nothing the factory ships must not redeploy it")
+	workflowMustContain(t, workflow, "factory_deployment",
+		"the path check diffs against the commit the factory actually runs, so a superseded or skipped deploy is not lost")
+
+	workflowMustContain(t, workflow, "ticfac cloud status --json",
+		"the deploy asks the factory whether a run is live before deploying under it")
+	workflowMustContain(t, workflow, "limit=3600",
+		"the live-run wait is bounded: one long run must not pin the factory to old code")
+
+	workflowMustContain(t, workflow, "GITHUB_STEP_SUMMARY",
+		"the job summary records what was deployed")
+	for _, fact := range []string{"Worker version", "image digest", "commit"} {
+		workflowMustContain(t, workflow, fact, "the job summary must name the deployment's "+fact)
+	}
+
+	workflowMustContain(t, workflow, "::add-mask::",
+		"this repository is public: the factory's endpoint is masked out of the deploy's log")
 }
 
 // TestTheDeployCISkipsLoudlyOnMissingSecrets is ticks s70's lesson, pinned so

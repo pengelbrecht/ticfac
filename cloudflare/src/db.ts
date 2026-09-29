@@ -812,3 +812,59 @@ export async function sandboxJobSettled(
   if (row === null) return null;
   return { state: row.state === "completed" ? "completed" : "failed", exit_code: row.exit_code };
 }
+
+/** One job's log cursor (migration 0020, tick 86y). */
+export type SandboxJobLogCursor = {
+  /** The work process the cursor belongs to. */
+  process_id: string;
+  /** How much of that process's output is already in the run's stream. */
+  offset: number;
+  /** Where the next segment goes: the stream's epoch and the last seq written. */
+  epoch: number;
+  seq: number;
+};
+
+type SandboxJobKey = { run_id: string; tick_id: string; attempt: number; job: string };
+
+/** Reads one job's log cursor, or null when none was recorded. */
+export async function sandboxJobLogCursor(
+  db: D1Database,
+  key: SandboxJobKey,
+): Promise<SandboxJobLogCursor | null> {
+  const row = await db
+    .prepare(
+      "SELECT process_id, output_offset, epoch, seq FROM sandbox_job_log " +
+        "WHERE run_id = ? AND tick_id = ? AND attempt = ? AND job = ?",
+    )
+    .bind(key.run_id, key.tick_id, key.attempt, key.job)
+    .first<{ process_id: string; output_offset: number; epoch: number; seq: number }>();
+  if (row === null) return null;
+  return { process_id: row.process_id, offset: row.output_offset, epoch: row.epoch, seq: row.seq };
+}
+
+/** Records (replaces) one job's log cursor. */
+export async function putSandboxJobLogCursor(
+  db: D1Database,
+  key: SandboxJobKey,
+  cursor: SandboxJobLogCursor,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO sandbox_job_log (run_id, tick_id, attempt, job, process_id, output_offset, epoch, seq)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (run_id, tick_id, attempt, job) DO UPDATE SET
+         process_id = excluded.process_id, output_offset = excluded.output_offset,
+         epoch = excluded.epoch, seq = excluded.seq`,
+    )
+    .bind(
+      key.run_id,
+      key.tick_id,
+      key.attempt,
+      key.job,
+      cursor.process_id,
+      cursor.offset,
+      cursor.epoch,
+      cursor.seq,
+    )
+    .run();
+}

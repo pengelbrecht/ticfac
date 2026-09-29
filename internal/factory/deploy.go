@@ -134,6 +134,10 @@ type Result struct {
 	// observed serving ImageDigest. False means the deploy is not claiming a
 	// run started now boots this image.
 	RolloutConfirmed bool
+	// WorkerVersionID is the Worker version `wrangler deploy` created
+	// ("Current Version ID"), the identity Cloudflare's own dashboard and
+	// `wrangler versions` name. Empty when wrangler did not print one.
+	WorkerVersionID string
 }
 
 // DefaultBundleDir is where the bundle is materialized: under the ticks home
@@ -429,6 +433,7 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 		CreatedBucket:   createdBucket,
 		WranglerVersion: wranglerVersion,
 		ConfigPath:      cfg.Path(),
+		WorkerVersionID: parseWorkerVersionID(deployOut),
 	}
 
 	if err := verifyEndpoint(ctx, opts, url, token); err != nil {

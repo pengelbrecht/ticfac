@@ -2,12 +2,39 @@ name: Deploy factory
 
 # CI deploys the factory from ticfac (SPEC §12 Phase 4 item 7). The factory is
 # a deployable in the operator's own Cloudflare account (D16), and this
-# workflow is that operator's release cadence: it runs the same installer an
+# workflow is the NORMAL way it is upgraded: it runs the same installer an
 # operator runs by hand — `ticfac factory deploy`, from the bundle embedded in
-# the exact commit being released — so there is ONE deploy path, not a CI one
+# the exact commit being deployed — so there is ONE deploy path, not a CI one
 # and a laptop one. First deployment is by hand (`ticfac factory setup`, the
 # credential ladder: it verifies every rung against the live service, and its
-# device-flow rung needs a browser); releases then upgrade the deployment.
+# device-flow rung needs a browser); from then on main keeps the deployment
+# current, and a local `ticfac factory deploy` is the fallback.
+#
+# When it deploys (operator decision 2026-09-29: local deploys from an
+# emulated-amd64 Mac were fragile — PR #132 — and the factory drifted behind
+# main between them):
+#
+#   - every commit on main whose CI passed and whose shipped tree differs from
+#     the one the factory runs (workflow_run on CI, below);
+#   - every v* tag (a release);
+#   - workflow_dispatch: unconditionally, from the chosen ref. It is also how
+#     a failed deploy is retried — the D1 record the path check reads is
+#     written mid-deploy, so a re-run of a failed main deploy can read
+#     "already deployed".
+#
+# Why workflow_run and not `push: paths:` plus waiting for CI inside the job.
+# A deploy must only ever ship a commit CI passed. workflow_run fires once CI
+# has concluded, carries the verdict and the exact head_sha CI tested, and
+# holds no runner while CI runs; a push trigger would have to poll its own
+# commit's check runs and re-implement "which of CI's jobs count". workflow_run
+# has no `paths:` filter, so the path check is a step — and a stronger one than
+# a push filter: it diffs the commit against the commit the factory actually
+# runs (factory_deployment.tk_version in the factory's D1, which this workflow
+# stamps with `git describe`), not against the previous commit. A deploy
+# superseded while queued, a CI run cancelled by the next push, a hand deploy
+# of another branch: each leaves a difference the next deploy sees. A factory
+# whose recorded version names no commit (a laptop "dev" build, a release
+# version) is deployed.
 #
 # Credential ownership, stated so a secret never becomes a thing that only
 # works on one machine (the Phase 3 split, ticks 9hu's ~/.ticfacrc, is the
@@ -54,7 +81,12 @@ name: Deploy factory
 #   their flags. The structural gap zkq names belongs to the ticks-owned
 #   vendored tree it is filed against — recorded at the top of that file.
 
+
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   push:
     tags:
       - "v*"
@@ -63,25 +95,53 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  # One deploy at a time: two tag pushes racing one Cloudflare account is the
-  # two-writers-one-name problem, and an upgrade must not cancel a deploy that
-  # is mid-push (cancel-in-progress is false so a queued release waits its
-  # turn instead of tearing down the previous one's image build).
-  group: deploy-factory
-  cancel-in-progress: false
-
 jobs:
   deploy-factory:
     name: deploy-factory
+    # Only main in this repository, and only a CI run that passed. A
+    # cancelled or failed CI, a PR, an epic branch and a fork never deploy,
+    # and never take the concurrency slot below either: a job skipped by its
+    # `if` does not enter the group, so a skip cannot supersede a queued
+    # deploy. A DISPATCHED CI run on main counts as much as a push's: ci.yml's
+    # concurrency cancels main's push run when CI is dispatched on main (the
+    # run's silent-CI dispatch, an operator's re-run), and on 2026-09-29 that
+    # left the dispatched run as the only verdict main's head ever got — a
+    # push-only filter never deployed it.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # The live-run guard waits up to 60 minutes; the deploy itself takes ~10
+    # (image build and push, then a rollout wait of up to 10).
+    timeout-minutes: 100
+    concurrency:
+      # One deploy at a time: two deploys racing one Cloudflare account is the
+      # two-writers-one-name problem, and an upgrade must not cancel a deploy
+      # that is mid-push (cancel-in-progress is false). GitHub keeps at most
+      # one PENDING job per group, so a newer commit's deploy replaces an older
+      # one still waiting. That loses nothing: the path check diffs against
+      # what the factory runs, not against the previous commit.
+      group: deploy-factory
+      cancel-in-progress: false
+    env:
+      # The commit CI tested (workflow_run), else the pushed tag or the
+      # dispatched ref. Never github.sha under workflow_run: that is main's
+      # head when the event fired, which may be a commit CI has not passed.
+      DEPLOY_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # Full history: the path check diffs against the deployed commit,
+          # and the version stamp is `git describe`.
+          fetch-depth: 0
 
-      # The credential check is the whole gate: it names every secret the
-      # deploy needs, warns per missing one (s70: a skip nobody can see is a
-      # skip nobody configures), and hands the verdict to every later step.
+      # The credential check names every secret the deploy needs, warns per
+      # missing one (s70: a skip nobody can see is a skip nobody configures),
+      # and hands the verdict to every later step.
       - name: Check the deploy credentials are configured
         id: deploy-credentials
         env:
@@ -100,8 +160,38 @@ jobs:
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "Factory deploy skipped: releases upgrade the factory only when CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID and TICFAC_FACTORY_TOKEN are all configured."
+            echo "Factory deploy skipped: CI upgrades the factory only when CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID and TICFAC_FACTORY_TOKEN are all configured."
+            echo "Factory deploy **skipped**: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ACCOUNT_ID and TICFAC_FACTORY_TOKEN are not all configured." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # This is a public repository and its Actions logs are public. The
+      # factory's endpoint is not a credential (every request needs the token),
+      # but it is the operator's, and it has no business in a public log. It is
+      # derived here (the workers.dev host of the Worker cloudflare/wrangler.toml
+      # names, on the account's own subdomain) and masked before any later step
+      # can print it. The deploy's output is filtered as well (see that step),
+      # for a host this derivation did not predict. The derived endpoint is
+      # also what the live-run guard asks.
+      - name: Resolve and mask the factory endpoint
+        id: endpoint
+        if: steps.deploy-credentials.outputs.configured == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          worker="$(sed -n 's/^name = "\(.*\)"$/\1/p' cloudflare/wrangler.toml | head -n1)"
+          subdomain="$(curl -fsS -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" 2>/dev/null \
+            | jq -r '.result.subdomain // empty' 2>/dev/null || true)"
+          if [ -z "$worker" ] || [ -z "$subdomain" ]; then
+            echo "::warning::could not resolve the factory endpoint from the Cloudflare API; the live-run guard is skipped (the deploy's output is still filtered)"
+            echo "resolved=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "::add-mask::$subdomain"
+          echo "::add-mask::https://$worker.$subdomain.workers.dev"
+          echo "$worker.$subdomain.workers.dev" > "$RUNNER_TEMP/factory-host"
+          echo "resolved=true" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@v6
         if: steps.deploy-credentials.outputs.configured == 'true'
@@ -136,29 +226,189 @@ jobs:
           pnpm install --frozen-lockfile
           echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
 
-      - name: Build ticfac
+      # The path check: does the factory already run DEPLOY_SHA's shipped tree?
+      # What ships is the Worker bundle and the image context (cloudflare/ and
+      # image/, embedded.go's factoryFS and sandboxFS), the Go the deploy
+      # cross-compiles INTO the image (ticfac and ticfac-exec-subprocess:
+      # cmd/ticfac*, internal/, the embed roots and the pins, contracts and
+      # profiles they embed, go.mod/go.sum), and this workflow. Tests and test
+      # fixtures do not ship. Deliberately broad: a needless deploy costs ten
+      # minutes, a missed one is a factory running old code.
+      - name: Decide whether this commit changes the deployed factory
+        id: decide
         if: steps.deploy-credentials.outputs.configured == 'true'
-        run: go build -o ./ticfac ./cmd/ticfac
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          decide() {
+            echo "deploy=$1" >> "$GITHUB_OUTPUT"
+            echo "decision: $([ "$1" = true ] && echo deploy || echo skip) — $2"
+            echo "Deploy decision for \`$DEPLOY_SHA\`: **$([ "$1" = true ] && echo deploy || echo skip)** — $2" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          }
+          if [ "$EVENT" != "workflow_run" ]; then
+            decide true "$EVENT deploys unconditionally"
+          fi
+
+          # What the factory runs, as its last deploy recorded it. Read from a
+          # scratch directory: the committed wrangler.toml's database_id is a
+          # placeholder the deploy rewrites in its staged copy, and with no
+          # config wrangler resolves the database by name.
+          scratch="$(mktemp -d)"
+          deployed="$(cd "$scratch" && wrangler d1 execute ticks-factory --remote --json \
+            --command "SELECT tk_version FROM factory_deployment WHERE id = 1" 2>/dev/null \
+            | jq -r '.[0].results[0].tk_version // empty' 2>/dev/null || true)"
+          echo "the factory's recorded version: ${deployed:-<unreadable>}"
+          base="$(printf '%s' "$deployed" | sed -nE 's/^(.*-g)?([0-9a-f]{12,40})$/\2/p')"
+          if [ -z "$base" ]; then
+            decide true "the deployed version (${deployed:-unreadable}) names no commit"
+          fi
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            git fetch --quiet origin "$base" 2>/dev/null || true
+          fi
+          if ! base="$(git rev-parse --verify --quiet "$base^{commit}")"; then
+            decide true "the deployed commit is not in this repository's history"
+          fi
+          if [ "$base" = "$(git rev-parse HEAD)" ]; then
+            decide false "the factory already runs this commit"
+          fi
+          if git merge-base --is-ancestor HEAD "$base"; then
+            decide false "the factory runs a newer commit (${base:0:12}) that contains this one"
+          fi
+
+          paths=(
+            .github/workflows/deploy-factory.yml
+            cloudflare image
+            embedded.go go.mod go.sum factory.pin.json contracts.pin.json contracts
+            profiles profiles-cloudflare-sandbox profiles-herdr
+            cmd/ticfac cmd/ticfac-exec-subprocess internal
+            ':(exclude,glob)**/*_test.go'
+            ':(exclude,glob)**/testdata/**'
+          )
+          changed="$(git diff --name-only "$base" HEAD -- "${paths[@]}")"
+          if [ -z "$changed" ]; then
+            decide false "nothing that ships changed since the deployed commit ${base:0:12}"
+          fi
+          echo "changed since the deployed commit ${base:0:12}:"
+          printf '%s\n' "$changed" | sed 's/^/  /'
+          decide true "$(printf '%s\n' "$changed" | wc -l | tr -d ' ') shipped file(s) changed since the deployed commit ${base:0:12}"
+
+      # The version the deployment is recorded against, and so the anchor the
+      # next path check diffs from: `git describe` names the commit
+      # (v1.2.3-4-g<sha>, or the bare sha while no release tag exists).
+      - name: Build ticfac
+        if: steps.decide.outputs.deploy == 'true'
+        run: |
+          version="$(git describe --tags --match 'v*' --always --long --abbrev=12)"
+          echo "ticfac version: $version"
+          go build -ldflags "-X github.com/pengelbrecht/ticfac/internal/cli.Version=$version" -o ./ticfac ./cmd/ticfac
 
       # The deploy reads ~/.ticfacrc, and a CI runner has none. Staging the
       # operator's token here is what makes the deploy REUSE it instead of
       # minting a fresh one — a minted token would push a new hash to the
       # Worker (invalidating the laptop's token) and then die with the runner.
-      # The file is owner-only, as it is on the laptop.
+      # The file is owner-only, as it is on the laptop. The endpoint rides
+      # along when it was resolved, so the live-run guard can ask the factory.
       - name: Stage the factory credential file
-        if: steps.deploy-credentials.outputs.configured == 'true'
+        if: steps.decide.outputs.deploy == 'true'
         env:
           TICFAC_FACTORY_TOKEN: ${{ secrets.TICFAC_FACTORY_TOKEN }}
         run: |
           umask 077
           printf 'factory_token=%s\n' "$TICFAC_FACTORY_TOKEN" > ~/.ticfacrc
+          if [ -s "$RUNNER_TEMP/factory-host" ]; then
+            printf 'factory_url=https://%s\n' "$(cat "$RUNNER_TEMP/factory-host")" >> ~/.ticfacrc
+          fi
+
+      # The live-run guard. A Workers deploy is atomic and a running container
+      # keeps the image it booted, so deploying under a live run is safe — but
+      # that run's NEXT container (a worker, a resume) boots the new image. So:
+      # wait while any run is live (starting, running, stopping), up to 60
+      # minutes, then deploy anyway; one long run must not pin the factory to
+      # old code. An unreadable status is not a live run: it is logged and the
+      # deploy proceeds.
+      - name: Wait for live runs to finish (bounded)
+        if: steps.decide.outputs.deploy == 'true'
+        env:
+          RESOLVED: ${{ steps.endpoint.outputs.resolved }}
+        run: |
+          record() {
+            echo "live-run guard: $1"
+            echo "Live-run guard: $1" >> "$GITHUB_STEP_SUMMARY"
+          }
+          if [ "$RESOLVED" != "true" ]; then
+            record "skipped — the factory endpoint was not resolved"
+            exit 0
+          fi
+          start=$SECONDS
+          limit=3600
+          while :; do
+            if ! status="$(./ticfac cloud status --json 2>"$RUNNER_TEMP/status.err")"; then
+              echo "::warning::could not read the factory's runs; deploying without waiting"
+              sed -E 's#https?://[A-Za-z0-9.-]+#<factory>#g' "$RUNNER_TEMP/status.err"
+              record "the factory's status was unreadable — deployed without waiting"
+              exit 0
+            fi
+            live="$(jq -r '[.runs[]? | select(.state == "starting" or .state == "running" or .state == "stopping")
+              | "\(.run_id) (epic \(.epic), \(.state))"] | join(", ")' <<<"$status")"
+            waited=$(( (SECONDS - start) / 60 ))
+            if [ -z "$live" ]; then
+              record "no live run (waited ${waited}m) — deploying"
+              exit 0
+            fi
+            if [ $((SECONDS - start)) -ge "$limit" ]; then
+              echo "::warning::runs still live after ${waited}m: $live — deploying anyway (running containers keep their image)"
+              record "still live after ${waited}m ($live) — deployed anyway"
+              exit 0
+            fi
+            echo "live: $live — waited ${waited}m, asking again in 60s"
+            sleep 60
+          done
 
       # The deploy itself, with no flags: it builds and pushes the sandbox
       # image from this build's embedded context, applies migrations, deploys
       # the Worker, verifies the endpoint and waits for the container rollout.
+      # Its output is kept for the summary and filtered on its way to the
+      # public log: any workers.dev host becomes <factory>, whatever the mask
+      # above did or did not catch.
       - name: Deploy the factory
-        if: steps.deploy-credentials.outputs.configured == 'true'
+        if: steps.decide.outputs.deploy == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: ./ticfac factory deploy
+        run: |
+          set -o pipefail
+          ./ticfac factory deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log" \
+            | sed -E 's#https?://[A-Za-z0-9.-]+\.workers\.dev#<factory>#g'
+
+      # What was deployed, where the operator looks for it: the commit, the
+      # Worker version wrangler created, and the image digest the container
+      # rollout was confirmed serving. Written on failure too, so a failed
+      # deploy's summary says how far it got.
+      - name: Record the deployment in the job summary
+        if: always() && steps.decide.outputs.deploy == 'true'
+        run: |
+          log="$RUNNER_TEMP/deploy.log"
+          touch "$log"
+          worker="$(sed -nE 's/^[[:space:]]*(worker:|Current Version ID:)[[:space:]]*([0-9A-Za-z-]+)[[:space:]]*$/\2/p' "$log" | tail -n1)"
+          image="$(sed -nE 's/^[[:space:]]*image:[[:space:]]*(sha256:[0-9a-f]+).*$/\1/p' "$log" | tail -n1)"
+          version="$(git describe --tags --match 'v*' --always --long --abbrev=12)"
+          if grep -q '^Factory ready at' "$log"; then
+            outcome="deployed, container rollout confirmed"
+          elif grep -q '^Factory deployed at' "$log"; then
+            outcome="deployed, container rollout NOT confirmed"
+          else
+            outcome="FAILED (retry with workflow_dispatch)"
+          fi
+          {
+            echo "### Factory deploy: $outcome"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| commit | \`$DEPLOY_SHA\` |"
+            echo "| ticfac version | \`$version\` |"
+            echo "| Worker version | \`${worker:-unknown}\` |"
+            echo "| image digest | \`${image:-unknown}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"

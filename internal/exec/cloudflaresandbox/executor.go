@@ -291,18 +291,19 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	attempt := e.opts.Attempt
 	tickID := tickOf(spec)
 	req := &startRequest{
-		Epic:     e.opts.EpicID,
-		TickID:   tickID,
-		Attempt:  attempt,
-		JobID:    spec.JobID,
-		Role:     spec.Role,
-		WriteRef: spec.Source.WriteRef,
-		BaseRef:  e.opts.BaseRef,
-		Title:    e.opts.Title,
-		BaseSHA:  spec.Source.BaseSHA,
-		Model:    e.opts.Model,
-		Harness:  e.opts.Harness,
-		Prompt:   e.opts.Prompt,
+		Epic:        e.opts.EpicID,
+		TickID:      tickID,
+		Attempt:     attempt,
+		JobID:       spec.JobID,
+		Role:        spec.Role,
+		WriteRef:    spec.Source.WriteRef,
+		BaseRef:     e.opts.BaseRef,
+		Title:       e.opts.Title,
+		BaseSHA:     spec.Source.BaseSHA,
+		Model:       e.opts.Model,
+		Harness:     e.opts.Harness,
+		Prompt:      e.opts.Prompt,
+		WallSeconds: spec.Limits.WallSeconds,
 	}
 	if err := validateDoorFields(req); err != nil {
 		return nil, err
@@ -504,6 +505,7 @@ func (e *Executor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.
 		return nil, fmt.Errorf("the door answered for %s, not %s: the credential names a run this handle does not",
 			status.JobID, want)
 	}
+	nameExitClasses(status)
 	return status, nil
 }
 

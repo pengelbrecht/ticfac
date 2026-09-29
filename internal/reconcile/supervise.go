@@ -132,6 +132,11 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 //     stop: the next incarnation reads the holder's terminal checkpoint and
 //     takes the orphaned claim over, so what remains here is live by every
 //     record this checkout can read.
+//   - RefusedClaimHolderUnknown: foreign_claim's conservative twin — the
+//     holder's records do not read finished and its host (the factory, the
+//     process table) could not say whether it still runs. The next
+//     incarnation asks again; nothing on the branch has to change for the
+//     answer to, so it also waits on the world (waitsOnTheWorld).
 //   - RefusedStale: the integration branch moved under a gate, so its evidence
 //     is no longer about what would be published (gate.go). Re-deriving is the
 //     entire repair, it is keyed by commit, and a person has no part in it.
@@ -159,7 +164,7 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 func resumesWithoutAPerson(reason string) bool {
 	switch reason {
 	case RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
-		RefusedBlockedRedispatch, RefusedRejectedRedispatch:
+		RefusedBlockedRedispatch, RefusedRejectedRedispatch, RefusedClaimHolderUnknown:
 		return true
 	}
 	return waitsOnCI(reason)
@@ -188,10 +193,11 @@ func waitsOnCI(reason string) bool {
 // unchanged tree between two of them says nothing about progress. CI waits,
 // and a transient remote — a git host or the factory's sandbox door that did
 // not answer (epic hn6's second cloud run: attempt 3's start timed out
-// waiting on the door, twice would have read as a spin). The continuation
-// cap bounds them all.
+// waiting on the door, twice would have read as a spin), and a foreign claim
+// whose holder's host could not say whether it still runs — the answer comes
+// from that host, never from the branch. The continuation cap bounds them all.
 func waitsOnTheWorld(reason string) bool {
-	return waitsOnCI(reason) || reason == StoppedRemoteTransient
+	return waitsOnCI(reason) || reason == StoppedRemoteTransient || reason == RefusedClaimHolderUnknown
 }
 
 // supervisedStop is one incarnation's stop, reduced to the facts the decision

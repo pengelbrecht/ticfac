@@ -386,6 +386,10 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 		// and only one named there, never the default the flag merely carries
 		// — overrides the bound recorded on the run branch.
 		AbsorptionDepthExplicit: *fl.absorptionDepth > 0,
+		// Whether a foreign claim's holder is still running, when its records
+		// do not say it is over (claim_holder.go): the process table for a
+		// local holder, the factory for a cloud one.
+		ClaimHolder: claimHolderLiveness(repoDir),
 	}
 	if classifier != nil {
 		opts.Classifier = classifier

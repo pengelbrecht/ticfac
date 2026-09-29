@@ -1,6 +1,7 @@
 package reconcile
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -55,10 +56,50 @@ type claimWitness struct {
 	// Empty when no marker on the branch names the tick at all: a person with
 	// tk, or a run from a checkout this branch does not see.
 	holder string
-	// stale says the holder run is OVER (its checkpoint reads terminal) and
-	// its own account does not say it closed the tick: the claim stands with
-	// nobody behind it, and this run may take it over.
+	// stale says the holder run is OVER (its checkpoint reads terminal, or
+	// the party that runs it says it ended — HolderState) and its own account
+	// does not say it closed the tick: the claim stands with nobody behind
+	// it, and this run may take it over.
 	stale bool
+	// unknown says the holder's checkpoint does not read terminal and the
+	// party asked whether the holder is still running could not answer. The
+	// claim is held — conservatively, as a live one is — but the hold is a
+	// wait on an answer, not on a person (RefusedClaimHolderUnknown).
+	unknown bool
+	// evidence is what the verdict rests on, in words: the checkpoint's
+	// state, or the answer the holder's host gave. It rides the takeover's
+	// record and the hold's refusal, so either can be checked.
+	evidence string
+}
+
+// The three answers a claim holder's host can give (tick: the hn6 cloud-run
+// stall of run_6ece…, whose predecessor's claim blocked it forever).
+//
+// A run's checkpoint on the integration branch is the witness claim.go read
+// from the start, and it is exactly the witness a run that DIED cannot leave:
+// hn6's second cloud run was killed with its checkpoint at "dispatching r5i as
+// attempt 3", the factory recorded it failed and its Workflow complete, and
+// the next submission held on its claim as a live party's — then held again,
+// and again, because nothing about a dead run's records ever changes. So the
+// checkpoint is asked first, and when it does not read terminal the party
+// that RUNS the holder is asked: the operator's registry and the process
+// table for a local run, the factory for a cloud one.
+const (
+	// HolderAlive: the holder's host vouches it is running.
+	HolderAlive = "alive"
+	// HolderDead: the holder's host says it ended — finished, failed,
+	// cancelled, its Workflow over, or its process gone without releasing.
+	HolderDead = "dead"
+	// HolderUnknown: nobody could say. The claim is held, never taken over
+	// on a guess.
+	HolderUnknown = "unknown"
+)
+
+// HolderState is one answer to "is run X still running?", with the evidence
+// it rests on.
+type HolderState struct {
+	Verdict  string
+	Evidence string
 }
 
 // foreignClaims reads the durable records' witness of every tick named: who
@@ -83,7 +124,16 @@ type claimWitness struct {
 // marker and its checkpoint left exactly this shape, and its orphan is the
 // clearest case there is. A checkpoint that cannot be read at all says
 // nothing, and nothing is the live answer.
+//
+// A checkpoint that does not read terminal is not proof of life either: a run
+// that DIED never writes that it did (the hn6 cloud-run stall). So when one
+// is configured, the holder's host is asked (Options.ClaimHolder): dead is a
+// stale claim like a terminal checkpoint's, alive is live, and an answer
+// nobody could give holds the run as a wait rather than a person's hold.
 func (r *Reconciler) foreignClaims(ticks []string) (map[string]claimWitness, error) {
+	// The answer is a question to another host, bounded by that host's own
+	// client timeout; nothing the run is doing is cancelled by it.
+	ctx := context.Background()
 	out := map[string]claimWitness{}
 	if len(ticks) == 0 {
 		return out, nil
@@ -110,6 +160,8 @@ func (r *Reconciler) foreignClaims(ticks []string) (map[string]claimWitness, err
 			latest[attempt.TickID] = attempt
 		}
 	}
+	asked = map[string]bool{} // now: the holders whose host has been asked
+	answers := map[string]HolderState{}
 	for _, tick := range ticks {
 		w := claimWitness{}
 		if attempt, ok := latest[tick]; ok {
@@ -118,7 +170,31 @@ func (r *Reconciler) foreignClaims(ticks []string) (map[string]claimWitness, err
 			if err != nil {
 				return nil, fmt.Errorf("reconcile: read run %s's checkpoint: %w", w.holder, err)
 			}
-			w.stale = exists && checkpoint.State.Terminal() && !closedRow(checkpoint, tick)
+			switch {
+			case exists && closedRow(checkpoint, tick):
+				// A spent claim: whoever claimed the tick since is live by
+				// construction, however dead this holder is.
+			case exists && checkpoint.State.Terminal():
+				w.stale = true
+				w.evidence = fmt.Sprintf("its checkpoint on the integration branch reads %s", checkpoint.State)
+			case r.opts.ClaimHolder != nil:
+				// The checkpoint does not say the run is over — a run that
+				// DIED never writes that it did — so the holder's host is
+				// asked. Once per holder: several ticks can share one.
+				if !asked[w.holder] {
+					asked[w.holder] = true
+					answers[w.holder] = r.opts.ClaimHolder(ctx, w.holder)
+				}
+				answer := answers[w.holder]
+				w.evidence = answer.Evidence
+				switch answer.Verdict {
+				case HolderDead:
+					w.stale = true
+				case HolderAlive:
+				default:
+					w.unknown = true
+				}
+			}
 		}
 		out[tick] = w
 	}

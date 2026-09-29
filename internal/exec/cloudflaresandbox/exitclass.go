@@ -1,0 +1,77 @@
+package cloudflaresandbox
+
+import (
+	"regexp"
+	"strconv"
+
+	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/sandboximage"
+)
+
+// A settled worker's exit code, NAMED (epic hn6's second cloud run). r5i try 2
+// settled as failed about five minutes after its checkout, with no model call
+// and nothing pushed, and the run said only "settled as failed": the door's
+// observation carried "the container's work process exited N", and N was the
+// one fact that said which step of the container's boot died — the checkout's
+// branch, tk, the model route, the harness, the repository's setup, the
+// pre-flight. The worker's log is the other half (tick 86y); this half costs
+// one line and needs no log at all. The classes are the image's own
+// (internal/sandboximage), so the sentence is the entrypoint's vocabulary,
+// never a second copy of it.
+
+var exitedPattern = regexp.MustCompile(`exited (\d+)$`)
+
+// exitClass is what one worker exit code means, or "" for a code the image
+// does not assign.
+func exitClass(code int) string {
+	switch code {
+	case sandboximage.ExitConfig:
+		return "a required input was missing or malformed"
+	case sandboximage.ExitClone:
+		return "the checkout of the base or its worker branch failed"
+	case sandboximage.ExitTkVersion:
+		return "tk is absent or not the version the image pins"
+	case sandboximage.ExitPreflight:
+		return "an [environment.commands] pre-flight check failed"
+	case sandboximage.ExitSetup:
+		return "the repository's [sandbox] setup failed"
+	case sandboximage.ExitModel:
+		return "the container could not call its model (the gateway probe failed)"
+	case sandboximage.ExitHarness:
+		return "the harness could not use the model route (the harness probe failed)"
+	case sandboximage.ExitWorkerPush:
+		return "commits exist and origin would not take them"
+	case sandboximage.ExitWorkerNoWork:
+		return "the branch and report reached origin with no work commits"
+	case sandboximage.ExitWorkerAgent:
+		return "the harness failed, ran out of time, or left no report"
+	case 124:
+		return "a bounded step timed out"
+	case 137:
+		return "the process was killed (SIGKILL: out of memory, or the container was stopped)"
+	case 143:
+		return "the process was terminated (SIGTERM)"
+	}
+	return ""
+}
+
+// nameExitClasses appends the class to every "exited N" observation the door
+// answered with, so the settled line a person reads says which step died.
+func nameExitClasses(status *subprocess.JobStatus) {
+	if status == nil {
+		return
+	}
+	for i, o := range status.Observations {
+		m := exitedPattern.FindStringSubmatch(o.Detail)
+		if m == nil {
+			continue
+		}
+		code, err := strconv.Atoi(m[1])
+		if err != nil || code == 0 {
+			continue
+		}
+		if class := exitClass(code); class != "" {
+			status.Observations[i].Detail = o.Detail + " (" + class + ")"
+		}
+	}
+}

@@ -404,6 +404,29 @@ export function workerModel(run?: string | null, deployment?: string | null): st
 }
 
 /**
+ * What a bounded harness leaves the container before its caller's own bound
+ * fires: the time to commit, write the report and push (tick 86y). Sixty
+ * seconds — the margin run `run_2e66e765`'s killed containers proved enough to
+ * produce a readable branch, and the same window salvage grants
+ * (worker-dispatch.ts DEFAULT_SALVAGE_GRACE_MS).
+ */
+export const WORKER_PUSH_MARGIN_MS = 60_000;
+
+/**
+ * The harness budget for a dispatch bounded by `wallSeconds` (tick 86y): the
+ * wall less {@link WORKER_PUSH_MARGIN_MS}, so the container stops its harness
+ * and pushes before the reconciler's wall fires over it — never less than half
+ * the wall, so a short wall still leaves the harness most of it. Undefined
+ * (unbounded) for no wall.
+ */
+export function workerHarnessBudgetMs(wallSeconds?: number): number | undefined {
+  if (wallSeconds === undefined || !Number.isFinite(wallSeconds) || wallSeconds <= 0)
+    return undefined;
+  const wall = wallSeconds * 1000;
+  return Math.max(wall - WORKER_PUSH_MARGIN_MS, Math.floor(wall / 2));
+}
+
+/**
  * The container's own harness bound, in whole seconds — `TICKS_WORKER_TIMEOUT`.
  *
  * Zero (unbounded) when the caller bounds nothing, which is what an unset
