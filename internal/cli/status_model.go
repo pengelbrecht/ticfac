@@ -167,6 +167,16 @@ var statusCI = func(ctx context.Context, repo, epicID string) (*statusmodel.CIIn
 	return input, nil
 }
 
+// statusBuild is the model's assembly point, a seam in the shape of
+// epicGraph and statusCI above it: both gathering functions hand their
+// Sources to THIS and never to statusmodel.Build directly, so a test can
+// observe what the wiring passes. The dashboard's wave-1 readers (hn6,
+// tick r5i) answer nil — the honest not-measured — which means an emitted
+// model cannot tell a wired gathering from an unwired one: the Sources are
+// the only place the wire is observable, and the command-level tests hold
+// it there.
+var statusBuild = statusmodel.Build
+
 // modelGatherers is the per-frame source policy for a FOLLOWING surface:
 // `status --json` answers once and pays every read on the way, but the live
 // watch (89m) re-gathers every frame, and a frame every two seconds must
@@ -235,7 +245,7 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 		return statusmodel.SessionLog(home, worktree)
 	}
 
-	return statusmodel.Build(statusmodel.Sources{
+	return statusBuild(statusmodel.Sources{
 		Now:          now,
 		RunID:        runID,
 		Host:         statusmodel.HostLocal,
@@ -378,7 +388,7 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		workerCost = &statusmodel.WorkerCostInput{USD: *record.CostUSD, Source: "gateway"}
 	}
 
-	return statusmodel.Build(statusmodel.Sources{
+	return statusBuild(statusmodel.Sources{
 		Now:          now,
 		RunID:        runID,
 		Host:         statusmodel.HostCloud,

@@ -603,6 +603,142 @@ func TestStatusCloudRunReadsTheContainersRecords(t *testing.T) {
 	}
 }
 
+// captureStatusSources swaps the model's assembly seam for a recorder that
+// hands back the Sources each gathering built, so a test can pin WHAT the
+// wiring passes rather than what the model answers. The dashboard's wave-1
+// readers (hn6, tick r5i) are nil-safe stubs that answer nil, so an emitted
+// model cannot tell a wired gathering from an unwired one: the Sources are
+// the only place the wire is observable at all.
+func captureStatusSources(t *testing.T) *statusmodel.Sources {
+	t.Helper()
+	real := statusBuild
+	captured := &statusmodel.Sources{}
+	statusBuild = func(src statusmodel.Sources) statusmodel.Model {
+		*captured = src
+		return statusmodel.Model{SchemaVersion: statusmodel.SchemaVersion}
+	}
+	t.Cleanup(func() { statusBuild = real })
+	return captured
+}
+
+// TestStatusModelLocalWiringPassesTheDashboardReaders (hn6 wave 1, tick r5i):
+// a LOCAL run's gathering passes the two dashboard readers the wave-2
+// ticks fill — the runner-transcript activity window and the attempt
+// reports. Both answer nil today, so an unwired gathering would leave every
+// wave-2 fill invisible in `status --json` while every suite stays green
+// (the package tests pin the readers, the renderer tests pin the golden);
+// this pin is the only thing that holds the wire in place.
+func TestStatusModelLocalWiringPassesTheDashboardReaders(t *testing.T) {
+	captured := captureStatusSources(t)
+
+	// A bare repository stands for the checkout: every source read is
+	// best-effort, and the wiring under test is what the gathering PASSES,
+	// not what any source answers.
+	repo := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	git("init", "--quiet", "-b", "main")
+	git("config", "user.email", "status@example.com")
+	git("config", "user.name", "status test")
+	if err := os.WriteFile(filepath.Join(repo, "base.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "-A")
+	git("commit", "--quiet", "-m", "base")
+
+	localStatusModel(context.Background(), repo, "epic-none",
+		runlife.Status{State: runlife.Alive},
+		modelGatherers{
+			graph: func(context.Context, string, string) *tk.Graph { return nil },
+			ci:    func(context.Context, string, string) (*statusmodel.CIInput, error) { return nil, nil },
+		})
+
+	if captured.Activity == nil {
+		t.Error("localStatusModel passes no Activity reader: the wave-2 activity tick would fill a reader no gathering calls")
+	}
+	if captured.Report == nil {
+		t.Error("localStatusModel passes no Report reader: the wave-2 report tick would fill a reader no gathering calls")
+	}
+}
+
+// TestStatusModelCloudWiringCarriesTheHostCost (hn6 wave 1, tick r5i): a
+// CLOUD run's gathering passes no readers — its runners and attempt reports
+// are not on this machine — and passes the factory's own ground-truth cost
+// as the gateway's number when the run record carries one, and nothing when
+// it does not. The command path reads the record the factory serves, so the
+// record's cost_usd must ride through the same fetch the liveness answer
+// rides on; the wave-1 model's cost lines answer empty either way, and only
+// this pin says the river is wired.
+func TestStatusModelCloudWiringCarriesTheHostCost(t *testing.T) {
+	runID := "run_6a4b8e0f2c1d5f3a"
+	const cost = 1.23
+	for _, leg := range []struct {
+		name  string
+		carry bool
+	}{
+		{"record carries cost_usd", true},
+		{"record carries no cost_usd", false},
+	} {
+		t.Run(leg.name, func(t *testing.T) {
+			captured := captureStatusSources(t)
+			repo := t.TempDir()
+			execTestCmd(t, repo, "git", "init", "--quiet", "-b", "main")
+
+			endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+				run := map[string]any{"run_id": runID, "epic": "cst", "state": "running"}
+				if leg.carry {
+					run["cost_usd"] = cost
+				}
+				switch {
+				case request.Path == "/api/runs":
+					return 200, map[string]any{"runs": []any{run}}
+				case request.Path == "/api/runs/"+runID:
+					return 200, map[string]any{"run": run}
+				case request.Path == "/api/runs/"+runID+"/events":
+					return 200, map[string]any{"run_id": runID, "state": "running", "text": "", "bytes": 0, "total_bytes": 0}
+				}
+				return 404, map[string]any{"error": "not_found"}
+			})
+			configureCloudFactory(t, endpoint)
+
+			realGraph := epicGraph
+			t.Cleanup(func() { epicGraph = realGraph })
+			epicGraph = func(context.Context, string, string) *tk.Graph { return nil }
+
+			var out, errOut bytes.Buffer
+			if code := Run([]string{"status", "--repo", repo, "--json", runID}, &out, &errOut); code != 0 {
+				t.Fatalf("a live cloud run exited %d: %s\n%s", code, out.String(), errOut.String())
+			}
+			if len(cloudFactoryRequests(requests)) == 0 {
+				t.Fatal("the factory was never asked")
+			}
+
+			// A cloud run's runners and reports are not on this machine: the
+			// readers pass nil and the model states the honest not-measured.
+			if captured.Activity != nil || captured.Report != nil {
+				t.Errorf("a cloud run's gathering passes readers (activity=%v report=%v), want nil: its worktrees belong to the factory's containers",
+					captured.Activity != nil, captured.Report != nil)
+			}
+			switch {
+			case leg.carry && captured.WorkerCost == nil:
+				t.Error("the record carried cost_usd and the gathering passed no WorkerCost: the factory's ground-truth number is the river the wave-2 cost lines read")
+			case leg.carry && (captured.WorkerCost.USD != cost || captured.WorkerCost.Source != "gateway"):
+				t.Errorf("the gathering passed WorkerCost $%.2f from %q, want the record's own $%.2f from \"gateway\"",
+					captured.WorkerCost.USD, captured.WorkerCost.Source, cost)
+			case !leg.carry && captured.WorkerCost != nil:
+				t.Errorf("a record with no cost_usd passed WorkerCost %+v, want nil", *captured.WorkerCost)
+			}
+		})
+	}
+}
+
 // TestStatusCIRefusesAnotherForge (tick 4zo): the CI gatherer resolves the
 // repository the forge mirrors through the same reader everything else
 // does, so a GitLab origin is refused by the host check — naming the host —
