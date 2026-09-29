@@ -138,7 +138,7 @@ func TestFactoryStatusFlagsStaleDeployment(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("ticfac factory status --offline: %s\n%s", stderr.String(), out.String())
 	}
-	if output := out.String(); !strings.Contains(output, "version behind") || !strings.Contains(output, "ticfac factory deploy") {
+	if output := out.String(); !strings.Contains(output, "not this build's 1.3.0") || !strings.Contains(output, "ticfac factory deploy") {
 		t.Errorf("status does not flag the stale factory deployment:\n%s", output)
 	}
 }

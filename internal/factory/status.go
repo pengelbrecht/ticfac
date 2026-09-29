@@ -88,6 +88,13 @@ type StatusReport struct {
 	// configured exactly when both are, and its live check is one tiny
 	// classification.
 	Classifier CredentialState
+
+	// Deployed is what the factory itself reports it runs (GET
+	// /api/deployment), read on a live check once the deployment rung
+	// passed. Nil offline, on a rejected deployment, or when the read failed;
+	// DeployedNote then says why.
+	Deployed     *DeployedFacts
+	DeployedNote string
 }
 
 // rungs returns the report's states in the order the ladder is walked.
@@ -143,29 +150,45 @@ func Status(ctx context.Context, opts StatusOptions) (*StatusReport, error) {
 	if url != "" {
 		report.Deployment.Configured = true
 		report.Deployment.Summary = url
-		version := cfg.Get(credentials.KeyVersion)
-		if version != "" {
-			report.Deployment.Summary += " (tk " + version + ")"
+		// The version this machine's last deploy wrote. Since CI became the
+		// normal deploy path it is often stale, so it is only the fallback:
+		// the factory's own answer (below) wins whenever there is one.
+		localVersion := cfg.Get(credentials.KeyVersion)
+		if localVersion != "" {
+			report.Deployment.Summary += " (tk " + localVersion + ")"
 		}
+		runningVersion := localVersion
 		switch {
 		case opts.Offline:
 			report.Deployment.Detail = "not checked (--offline)"
 		default:
 			report.Deployment.Checked = true
-			if err := verifyOnce(ctx, client, url, cfg.Get(credentials.KeyToken)); err != nil {
+			token := cfg.Get(credentials.KeyToken)
+			if err := verifyOnce(ctx, client, url, token); err != nil {
 				report.Deployment.Detail = "rejected: " + err.Error()
-			} else {
-				report.Deployment.OK = true
-				report.Deployment.Detail = "live, and it accepts your token"
+				break
+			}
+			report.Deployment.OK = true
+			report.Deployment.Detail = "live, and it accepts your token"
+			deployed, err := FetchDeployed(ctx, client, url, token)
+			if err != nil {
+				report.DeployedNote = err.Error()
+				break
+			}
+			report.Deployed = deployed
+			if deployed.Version != "" {
+				runningVersion = deployed.Version
+				report.Deployment.Summary = url + " (runs " + deployed.Version + ")"
+				if note := deployed.LocalDisagreement(localVersion); note != "" {
+					report.Deployment.Detail += "; " + note
+				}
 			}
 		}
-		// The factory bundle is pinned to the tk version that deployed it
-		// (D16, "upgrades ride the repo"), so an upgrade leaves a deployed
-		// factory a version behind until the operator redeploys. This is the
-		// one place that says so — status is the pre-flight an operator
-		// already runs to see what's configured.
-		if opts.CurrentVersion != "" && version != "" && version != opts.CurrentVersion {
-			report.Deployment.Detail += fmt.Sprintf("; a version behind (you have ticfac %s) — run `ticfac factory deploy` to redeploy it from this build", opts.CurrentVersion)
+		// The factory bundle is pinned to the ticfac build that deployed it
+		// (D16, "upgrades ride the repo"), so the factory can run other code
+		// than the build asking. A "dev" build names no version to compare.
+		if opts.CurrentVersion != "" && opts.CurrentVersion != "dev" && runningVersion != "" && runningVersion != opts.CurrentVersion {
+			report.Deployment.Detail += fmt.Sprintf("; it runs %s, not this build's %s — CI redeploys it from main; `ticfac factory deploy` would deploy this build instead", runningVersion, opts.CurrentVersion)
 		}
 	}
 
@@ -422,7 +445,47 @@ func (r *StatusReport) Write(w io.Writer) {
 		}
 		fmt.Fprintf(w, "  configured    %s\n", state.Summary)
 		fmt.Fprintf(w, "  check         %s\n", orUnchecked(state.Detail))
+		if state.Name == "deployment" {
+			r.writeDeployed(w)
+		}
 	}
+}
+
+// writeDeployed prints what the factory reports it runs, under the
+// deployment rung.
+func (r *StatusReport) writeDeployed(w io.Writer) {
+	if r.Deployed == nil {
+		if r.DeployedNote != "" {
+			fmt.Fprintf(w, "  runs          unknown — %s\n", r.DeployedNote)
+		}
+		return
+	}
+	d := r.Deployed
+	runs := orUnknown(d.Version)
+	if commit := d.Commit(); commit != "" && commit != d.Version {
+		runs += " (commit " + commit + ")"
+	}
+	if d.DeployedAt != "" {
+		runs += ", deployed " + d.DeployedAt
+	}
+	fmt.Fprintf(w, "  runs          %s\n", runs)
+	worker := orUnknown(d.WorkerVersionID)
+	if d.WorkerVersionTimestamp != "" {
+		worker += " (uploaded " + d.WorkerVersionTimestamp + ")"
+	}
+	fmt.Fprintf(w, "  worker        %s\n", worker)
+	image := d.ImageDigest
+	if image == "" {
+		image = "unconfirmed — no deploy has confirmed a container rollout"
+	}
+	fmt.Fprintf(w, "  image         %s\n", image)
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "unknown"
+	}
+	return s
 }
 
 func orUnchecked(detail string) string {

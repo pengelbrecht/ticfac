@@ -212,6 +212,8 @@ func factoryStatus(ctx context.Context, args []string, offline, check *bool, git
 		if failures := report.Failures(); len(failures) > 0 {
 			doc.Failures = failures
 		}
+		doc.Deployed = report.Deployed
+		doc.DeployedNote = report.DeployedNote
 		if err := emitAgentJSON(stdout, doc); err != nil {
 			return newExitError(exitGeneric, "%v", err)
 		}
@@ -243,6 +245,11 @@ type factoryStatusJSON struct {
 	ConfigPath string            `json:"config_path"`
 	Rungs      []factoryRungJSON `json:"rungs"`
 	Failures   []string          `json:"failures,omitempty"`
+	// Deployed is what the factory itself reports it runs — its recorded
+	// version, Worker version and confirmed image — read on a live check.
+	// Absent offline or when the factory could not say (DeployedNote).
+	Deployed     *factory.DeployedFacts `json:"deployed,omitempty"`
+	DeployedNote string                 `json:"deployed_note,omitempty"`
 }
 
 // factoryPinColorProfile is a deliberate COPY of ticks' internal/tui
