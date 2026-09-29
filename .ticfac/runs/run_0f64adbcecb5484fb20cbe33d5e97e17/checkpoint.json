@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_0f64adbcecb5484fb20cbe33d5e97e17",
   "epic_id": "hn6",
-  "sequence": 20,
-  "state": "dispatching",
-  "reason": "dispatching ltg as attempt 4",
-  "updated_at": "2026-09-29T13:47:41Z",
+  "sequence": 21,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-29T13:49:46Z",
   "ticks": [
     {
       "tick_id": "r5i",
@@ -60,7 +60,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/hn6",
-    "source_sha": "097ffbf3a67d82f7afc0a6e22bfca9d4967e19cc",
+    "source_sha": "2d37a70ae2a8214b63a2954b7ab1a0d1a94b06d6",
     "integration_ref": "refs/heads/epic/hn6",
     "phase": "worker",
     "executor": null,
