@@ -285,7 +285,8 @@ var (
 		if github.Configured {
 			rung = "github " + github.Summary + " — " + orUncheckedDetail(github.Detail)
 		}
-		return fmt.Sprintf("configured (re-check it all live: ticfac factory status) — %s; %s", report.ConfigPath, rung), nil
+		return fmt.Sprintf("configured (re-check it all live: ticfac factory status) — %s; %s; %s",
+			report.ConfigPath, rung, doctorDeployed(ctx)), nil
 	}
 )
 
@@ -515,6 +516,43 @@ func doctorReport(checks []doctorCheck, substrate string, cloudish bool, asJSON 
 }
 
 // orUncheckedDetail is a rung's detail, or what its absence means.
+// doctorDeployed asks the factory what it runs — the one live read besides
+// the GitHub rung, because since CI deploys the factory, ~/.ticfacrc no longer
+// knows. It never fails the check: what the factory runs is a report, and a
+// factory that cannot say is already visible in `ticfac factory status`.
+func doctorDeployed(ctx context.Context) string {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	facts, local, err := factory.ReadDeployed(ctx, "", nil)
+	return describeDeployed(facts, local, err)
+}
+
+// describeDeployed is doctorDeployed's sentence, separate so it is testable
+// without a factory.
+func describeDeployed(facts *factory.DeployedFacts, localVersion string, err error) string {
+	if err != nil {
+		return "what it runs is unknown: " + err.Error()
+	}
+	short := func(s string, n int) string {
+		if len(s) > n {
+			return s[:n]
+		}
+		return s
+	}
+	unknown := func(s string) string {
+		if s == "" {
+			return "unknown"
+		}
+		return s
+	}
+	out := fmt.Sprintf("runs %s (worker %s, image %s)",
+		unknown(facts.Version), unknown(facts.WorkerVersionID), unknown(short(facts.ImageDigest, 19)))
+	if note := facts.LocalDisagreement(localVersion); note != "" {
+		out += "; " + note
+	}
+	return out
+}
+
 func orUncheckedDetail(detail string) string {
 	if detail == "" {
 		return "not checked"

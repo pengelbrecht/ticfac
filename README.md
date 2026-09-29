@@ -256,7 +256,10 @@ against the commit the factory actually runs), for every `v*` tag, and on
 `workflow_dispatch` (which is also how a failed CI deploy is retried). Deploys
 serialize; before deploying it asks the factory whether a run is live and
 waits for it, up to 60 minutes, then deploys anyway. The job summary records
-the commit, the Worker version and the image digest. A local `ticfac factory
+the commit, the Worker version and the image digest; `ticfac factory status`
+(and `ticfac doctor`) ask the factory for the same facts (`GET
+/api/deployment`) and say when this machine's `~/.ticfacrc` remembers an
+older deploy. A local `ticfac factory
 deploy` is the fallback: the first install, a token rotation, or CI being
 unable to deploy.
 

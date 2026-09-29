@@ -108,6 +108,13 @@ max_instances = 3
 # a node_modules tree exists.
 instance_type = "standard-3"
 
+# The Worker version this code is running as (its id, tag and upload time),
+# so GET /api/deployment can say which version the factory actually serves —
+# the one fact the D1 deployment record cannot hold, because wrangler assigns
+# it after the record is written.
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
 # Run artifacts: runs/<project>/<run_id>/{run.json, artifacts/<tick_id>/...}
 [[r2_buckets]]
 binding = "ARTIFACTS"

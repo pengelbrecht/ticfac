@@ -3,6 +3,8 @@ package factory
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
 
@@ -54,27 +56,100 @@ func TestStatusFlagsDeploymentAVersionBehind(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
-	if !strings.Contains(report.Deployment.Detail, "a version behind") ||
-		!strings.Contains(report.Deployment.Detail, "1.3.0") {
-		t.Errorf("Deployment.Detail = %q, want it to flag the deployed factory as a version behind 1.3.0", report.Deployment.Detail)
+	if !strings.Contains(report.Deployment.Detail, "not this build's 1.3.0") ||
+		!strings.Contains(report.Deployment.Detail, "runs 1.2.3") {
+		t.Errorf("Deployment.Detail = %q, want it to say the factory runs 1.2.3, not this build's 1.3.0", report.Deployment.Detail)
 	}
 
-	opts.CurrentVersion = "1.2.3"
-	report, err = Status(context.Background(), opts)
+	// Matching, unset, and a "dev" build (which names no version) all say
+	// nothing.
+	for _, current := range []string{"1.2.3", "", "dev"} {
+		opts.CurrentVersion = current
+		report, err = Status(context.Background(), opts)
+		if err != nil {
+			t.Fatalf("Status: %v", err)
+		}
+		if strings.Contains(report.Deployment.Detail, "not this build's") {
+			t.Errorf("CurrentVersion %q: Deployment.Detail = %q, want no version note", current, report.Deployment.Detail)
+		}
+	}
+}
+
+// Since CI deploys the factory, ~/.ticfacrc's factory_version is this
+// machine's last deploy, not the factory's. A live status asks the factory
+// (GET /api/deployment) and reports ITS answer — the recorded version and the
+// commit it names, the Worker version, the confirmed image — and says when
+// the local record disagrees.
+func TestStatusReportsWhatTheFactoryRuns(t *testing.T) {
+	h := newSetupHarness(t, "sk-provider-key")
+	seedDeployment(t, h)
+	h.configure(t, "sk-provider-key") // factory_version=1.2.3, this machine's
+	route := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path != "/api/deployment" {
+			return false
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"version":                  "v1.3.0-2-g0123456789ab",
+			"bundle_sha256":            "bundlesha",
+			"deployed_at":              "2026-09-29T12:00:00Z",
+			"image_ref":                "registry/ticks-orchestrator@sha256:abc",
+			"image_digest":             "sha256:abc",
+			"worker_version_id":        "becc1446-5594-43fb-acfd-1d6c71008891",
+			"worker_version_timestamp": "2026-09-29T12:01:00Z",
+		})
+		return true
+	}
+	h.routes.Store(&route)
+
+	opts := h.statusOptions()
+	opts.CurrentVersion = "dev"
+	report, err := Status(context.Background(), opts)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
-	if strings.Contains(report.Deployment.Detail, "version behind") {
-		t.Errorf("Deployment.Detail = %q, want no staleness note when versions match", report.Deployment.Detail)
+	if report.Deployed == nil {
+		t.Fatalf("Deployed = nil (note %q), want the factory's answer", report.DeployedNote)
+	}
+	if got := report.Deployed.Commit(); got != "0123456789ab" {
+		t.Errorf("Commit() = %q, want the sha the describe names", got)
+	}
+	if !strings.Contains(report.Deployment.Summary, "runs v1.3.0-2-g0123456789ab") {
+		t.Errorf("Summary = %q, want the factory's version, not the local record", report.Deployment.Summary)
+	}
+	if !strings.Contains(report.Deployment.Detail, "records 1.2.3") {
+		t.Errorf("Detail = %q, want the local record's disagreement named", report.Deployment.Detail)
 	}
 
-	opts.CurrentVersion = ""
-	report, err = Status(context.Background(), opts)
+	var buf bytes.Buffer
+	report.Write(&buf)
+	for _, want := range []string{"commit 0123456789ab", "becc1446-5594-43fb-acfd-1d6c71008891", "sha256:abc"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("status output does not report %q:\n%s", want, buf.String())
+		}
+	}
+}
+
+// A factory deployed before the route existed answers 404; status says so
+// instead of failing the rung (the deployment still works).
+func TestStatusOnAFactoryThatPredatesTheDeploymentRoute(t *testing.T) {
+	h := newSetupHarness(t, "sk-provider-key")
+	seedDeployment(t, h)
+	h.configure(t, "sk-provider-key")
+
+	report, err := Status(context.Background(), h.statusOptions())
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
-	if strings.Contains(report.Deployment.Detail, "version behind") {
-		t.Errorf("Deployment.Detail = %q, want no staleness note when CurrentVersion is unset", report.Deployment.Detail)
+	if !report.Deployment.OK {
+		t.Errorf("Deployment.OK = false (%s), want the rung to pass", report.Deployment.Detail)
+	}
+	if report.Deployed != nil || !strings.Contains(report.DeployedNote, "predates") {
+		t.Errorf("Deployed = %v, note %q; want no facts and a note that the factory predates the route", report.Deployed, report.DeployedNote)
+	}
+	var buf bytes.Buffer
+	report.Write(&buf)
+	if !strings.Contains(buf.String(), "runs          unknown") {
+		t.Errorf("status output does not say what the factory runs is unknown:\n%s", buf.String())
 	}
 }
 

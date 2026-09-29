@@ -74,6 +74,23 @@ export interface DeploymentImage {
   image_digest: string;
 }
 
+/**
+ * The deployment record `ticfac factory deploy` writes (migrations/0001):
+ * the ticfac version that deployed (from CI, `git describe` of the commit),
+ * the bundle's digest and when. Null on a factory no deploy has recorded.
+ */
+export interface DeploymentRecord {
+  tk_version: string;
+  bundle_sha256: string;
+  deployed_at: string;
+}
+
+export async function getDeploymentRecord(db: D1Database): Promise<DeploymentRecord | null> {
+  return db
+    .prepare("SELECT tk_version, bundle_sha256, deployed_at FROM factory_deployment WHERE id = 1")
+    .first<DeploymentRecord>();
+}
+
 export interface Signal {
   signal_id: string;
   source: string;
