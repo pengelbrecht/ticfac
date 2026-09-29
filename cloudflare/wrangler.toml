@@ -202,8 +202,13 @@ GITHUB_CONSENT_LABEL = "tk"
 # minutes with 393+ model calls each and nothing committed. Four hours holds a
 # couple of batches of real ticks plus orchestration; the COST ceiling below is
 # unchanged and remains the bound that protects the money.
-RUN_MAX_WALL_CLOCK_MS = "14400000"
-RUN_MAX_COST_USD = "40"
+#
+# Raised again 2026-09-28 after the first ticfac epic run in the cloud (hn6: 9
+# ticks, ~1h per tick on GLM-class workers) could not fit four hours, and the
+# operator's rule for Workers AI spend is not to cap it: both are now runaway
+# guards, not budgets. Liveness is judged by activity (wv2), not by this clock.
+RUN_MAX_WALL_CLOCK_MS = "86400000"
+RUN_MAX_COST_USD = "250"
 # How long the in-flight work has to land before a clean stop kills the
 # orchestrator. Nothing durable is lost either way — tracker state is committed
 # to the run branch — but a tick that is one commit from done deserves it.
