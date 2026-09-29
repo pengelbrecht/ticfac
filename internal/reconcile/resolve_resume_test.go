@@ -73,6 +73,10 @@ func TestARestartMidResolveWaitsForTheResolveJobInsteadOfJudgingItsStartingCommi
 		}
 		t.Run(name, func(t *testing.T) {
 			conflictSync(t)
+			// The implement side that conflicts outlives its own report by a
+			// moment, so the run collects and releases it while it is still
+			// alive (hol): the interleaving CI met by chance, forced.
+			t.Setenv("CONFLICT_LINGER", "3")
 			sync := os.Getenv("CONFLICT_SYNC")
 			opts := fixtureOptions{mode: "conflict_resolve_hold", gate: resolveGate}
 			f := newFixture(t, opts)

@@ -33,6 +33,11 @@ func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == superviseMissingChildrenArg {
 		os.Exit(superviseMissingChildren(os.Args[2:]))
 	}
+	// And one whose nudge announcement is held until the test lets it go
+	// (nudge_order_test.go).
+	if len(os.Args) > 1 && os.Args[1] == superviseHeldAnnouncementArg {
+		os.Exit(superviseHeldAnnouncement(os.Args[2:]))
+	}
 	root, err := contracts.RepoRoot()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "locate the module root: %v\n", err)
