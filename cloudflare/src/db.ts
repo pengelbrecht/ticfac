@@ -708,14 +708,23 @@ export async function recordSandboxAttemptBoot(
   db: D1Database,
   boot: SandboxAttemptBoot,
 ): Promise<void> {
-  await db
-    .prepare(
-      `INSERT OR REPLACE INTO sandbox_job_boot
-        (run_id, tick_id, attempt, job, model, "at")
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-    .bind(boot.run_id, boot.tick_id, boot.attempt, boot.job, boot.model, boot.at)
-    .run();
+  // A fresh boot under an identity starts a NEW work process, so any
+  // settlement recorded for the identity's previous one is no longer its
+  // state (migration 0019): cleared in the same batch as the boot is written.
+  await db.batch([
+    db
+      .prepare(
+        `INSERT OR REPLACE INTO sandbox_job_boot
+          (run_id, tick_id, attempt, job, model, "at")
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(boot.run_id, boot.tick_id, boot.attempt, boot.job, boot.model, boot.at),
+    db
+      .prepare(
+        "DELETE FROM sandbox_job_settled WHERE run_id = ? AND tick_id = ? AND attempt = ? AND job = ?",
+      )
+      .bind(boot.run_id, boot.tick_id, boot.attempt, boot.job),
+  ]);
 }
 
 /**
@@ -746,4 +755,60 @@ export async function sandboxAttemptBootModel(
     .bind(identity.run_id, identity.tick_id, identity.attempt)
     .first<{ model: string }>();
   return legacy === null ? null : legacy.model;
+}
+
+/** The terminal state one job's worker container settled in (migration 0019). */
+export type SandboxJobSettled = {
+  run_id: string;
+  tick_id: string;
+  attempt: number;
+  /** The job's slot — '' for the attempt's own job (see SandboxAttemptBoot.job). */
+  job: string;
+  /** The work process's terminal state. */
+  state: "completed" | "failed";
+  exit_code: number | null;
+  at: string;
+};
+
+/**
+ * Records the FIRST terminal observation of one job's work process. First
+ * wins (INSERT OR IGNORE): a settled job's verdict is not re-decided by a
+ * later look at a container that has since been reclaimed.
+ */
+export async function recordSandboxJobSettled(
+  db: D1Database,
+  settled: SandboxJobSettled,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT OR IGNORE INTO sandbox_job_settled
+        (run_id, tick_id, attempt, job, state, exit_code, "at")
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      settled.run_id,
+      settled.tick_id,
+      settled.attempt,
+      settled.job,
+      settled.state,
+      settled.exit_code,
+      settled.at,
+    )
+    .run();
+}
+
+/** Reads one job's recorded terminal state, or null when it has not settled. */
+export async function sandboxJobSettled(
+  db: D1Database,
+  identity: { run_id: string; tick_id: string; attempt: number; job: string },
+): Promise<{ state: "completed" | "failed"; exit_code: number | null } | null> {
+  const row = await db
+    .prepare(
+      "SELECT state, exit_code FROM sandbox_job_settled " +
+        "WHERE run_id = ? AND tick_id = ? AND attempt = ? AND job = ?",
+    )
+    .bind(identity.run_id, identity.tick_id, identity.attempt, identity.job)
+    .first<{ state: string; exit_code: number | null }>();
+  if (row === null) return null;
+  return { state: row.state === "completed" ? "completed" : "failed", exit_code: row.exit_code };
 }

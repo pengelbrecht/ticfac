@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -182,6 +183,17 @@ func waitsOnCI(reason string) bool {
 	return false
 }
 
+// waitsOnTheWorld is the set of stops the anti-spin rule abstains from: the
+// ones whose cause is a world that is not the integration branch, so an
+// unchanged tree between two of them says nothing about progress. CI waits,
+// and a transient remote — a git host or the factory's sandbox door that did
+// not answer (epic hn6's second cloud run: attempt 3's start timed out
+// waiting on the door, twice would have read as a spin). The continuation
+// cap bounds them all.
+func waitsOnTheWorld(reason string) bool {
+	return waitsOnCI(reason) || reason == StoppedRemoteTransient
+}
+
 // supervisedStop is one incarnation's stop, reduced to the facts the decision
 // is a function of.
 type supervisedStop struct {
@@ -259,6 +271,15 @@ func (r *Reconciler) stopOf(result *Result, err error) (supervisedStop, bool) {
 // errorStopReason names the stop an operational error is, when runstate can
 // classify it, and is empty — the unclassified stop — when it cannot.
 func errorStopReason(err error) string {
+	// An error that says of itself it is a transient remote failure — the
+	// sandbox dispatch door not answering (a transport failure or a client
+	// timeout) — is one, typed, whatever its text: a door timeout reads
+	// "Client.Timeout exceeded while awaiting headers", which no git marker
+	// names, and it halted a cloud run as unclassified (epic hn6).
+	var transient interface{ TransientRemote() bool }
+	if errors.As(err, &transient) && transient.TransientRemote() {
+		return StoppedRemoteTransient
+	}
 	switch runstate.ClassifyRemote(err) {
 	case runstate.RemoteTransient:
 		return StoppedRemoteTransient
@@ -424,7 +445,7 @@ func haltReason(stop, previous supervisedStop, made, capped int) string {
 	case !resumesWithoutAPerson(stop.Reason) && !stop.Decides:
 		return "it needs a person — this is a decision, not a retype, and the run stops for it exactly as it " +
 			"always has"
-	case stop.sameStop(previous) && !waitsOnCI(stop.Reason):
+	case stop.sameStop(previous) && !waitsOnTheWorld(stop.Reason):
 		// The safety this tick is really about. The last incarnation changed
 		// nothing — the integration branch head did not move — and came back
 		// with the identical refusal. Another resume would ask the same

@@ -103,6 +103,11 @@ class FakeSandbox implements OrchestratorSandbox {
   }
 
   async listProcesses(): Promise<SandboxProcessView[]> {
+    // The real SDK STARTS a container that is not running on any call —
+    // this one included. A destroyed container addressed again is that
+    // cold boot, which under full capacity waits for a free instance.
+    if (this.destroyed)
+      throw new Error(`listProcesses cold-booted destroyed container ${this.name}`);
     return this.processes.map((p) => ({ ...p.view }));
   }
 
@@ -148,6 +153,11 @@ class FakeSandboxes implements SandboxBinding {
     const sandbox = this.#byName.get(name);
     if (sandbox === undefined) throw new Error(`no sandbox named ${name} was addressed`);
     return sandbox;
+  }
+
+  /** The platform reclaimed the named container: the next address is a fresh one. */
+  reset(name: string): void {
+    this.#byName.delete(name);
   }
 }
 
@@ -838,8 +848,20 @@ describe("state", () => {
     expect(status.observations[0]?.detail).toContain("0");
 
     // A failure is a result too — the vocabulary the reconciler branches on.
-    work?.finish(11);
-    const failed = (await (await getState(runToken, TICK, 1)).json()) as { state: string };
+    // (Its own attempt: a settled job's first terminal observation is its
+    // record, so the same work process cannot settle twice.)
+    await postStart(
+      runToken,
+      startBody({
+        attempt: 2,
+        write_ref: `refs/heads/ticfac/run-${RUN_ID}/tick-${TICK}/attempt-2`,
+      }),
+    );
+    binding
+      .named(attemptSandboxName(RUN_ID, TICK, 2))
+      .workProcess()
+      ?.finish(11);
+    const failed = (await (await getState(runToken, TICK, 2)).json()) as { state: string };
     expect(failed.state).toBe("failed");
   });
 
@@ -852,6 +874,55 @@ describe("state", () => {
     // may re-adopt. A caller must never read absent as "finished".
     expect(status.state).toBe("lost");
     expect(status.terminal).toBe(false);
+  });
+
+  // Epic hn6's second cloud run: a status read of attempt 3 — asked before
+  // its start, as the Go client always does — addressed a container nobody
+  // had booted, and the SDK boots on any call. With the orchestrator and two
+  // settled workers holding every instance, the read waited for a slot until
+  // the client timed out and the run halted.
+  it("answers for a job nobody booted WITHOUT addressing a container — a read never boots one", async () => {
+    const status = (await (await getState(runToken, TICK, 3)).json()) as Record<string, unknown>;
+    expect(validate(jobStatusSchema, protocolDefs, status)).toEqual([]);
+    expect(status).toMatchObject({ state: "lost", terminal: false });
+    expect(binding.addressed).toEqual([]);
+  });
+
+  it("reclaims a settled worker's container at its first terminal observation, and answers from the record after", async () => {
+    await postStart(runToken, startBody());
+    const container = binding.named(attemptSandboxName(RUN_ID, TICK, 1));
+    container.workProcess()?.finish(0);
+
+    const first = (await (await getState(runToken, TICK, 1)).json()) as Record<string, unknown>;
+    expect(first).toMatchObject({ state: "succeeded", terminal: true });
+    // Settled work is on its branch; the container is only capacity held.
+    expect(container.destroyed).toBe(true);
+
+    // Asked again, the settled job answers from its record: the destroyed
+    // container is never addressed (the fake throws if it is, as the real
+    // one would cold-boot).
+    const again = await getState(runToken, TICK, 1);
+    expect(again.status).toBe(200);
+    const status = (await again.json()) as Record<string, unknown>;
+    expect(validate(jobStatusSchema, protocolDefs, status)).toEqual([]);
+    expect(status).toMatchObject({ state: "succeeded", terminal: true });
+  });
+
+  it("a fresh boot under a settled identity is running again, not its old settlement", async () => {
+    await postStart(runToken, startBody());
+    binding
+      .named(attemptSandboxName(RUN_ID, TICK, 1))
+      .workProcess()
+      ?.finish(1);
+    expect(((await (await getState(runToken, TICK, 1)).json()) as { state: string }).state).toBe(
+      "failed",
+    );
+
+    // The same name re-addressed after its reclaim is a new container.
+    binding.reset(attemptSandboxName(RUN_ID, TICK, 1));
+    expect((await postStart(runToken, startBody())).status).toBe(201);
+    const status = (await (await getState(runToken, TICK, 1)).json()) as { state: string };
+    expect(status.state).toBe("running");
   });
 
   it("reports a container that lost its own record as lost, not as a clean failure", async () => {

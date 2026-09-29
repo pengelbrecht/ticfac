@@ -73,6 +73,36 @@ func (e *doorError) Error() string {
 	return fmt.Sprintf("the sandbox dispatch door refused (%d %s): %s", e.Status, e.Class, e.Detail)
 }
 
+// TransientRemote says whether this refusal is the edge's rather than the
+// door's: a 5xx whose body is not the door's {error, detail} shape is a
+// gateway page (a 502/504 from the platform in front of the Worker), which
+// is a pipe that did not answer, not a door that said no. A 5xx the door
+// itself wrote — sandbox_dispatch_not_wired — is a configuration it named.
+func (e *doorError) TransientRemote() bool {
+	return e.Status >= 500 && e.Class == "unreadable_refusal"
+}
+
+// doorUnreachable is the door not answering at all: a transport failure or
+// the client's own timeout (epic hn6's second cloud run: "context deadline
+// exceeded (Client.Timeout exceeded while awaiting headers)"). It is never a
+// `lost` — unreachable is not absent — and it is TRANSIENT: it says so as a
+// type (TransientRemote), which is how the reconciler's supervisor tells it
+// from a stop that needs a person without matching on prose or importing
+// this package.
+type doorUnreachable struct {
+	baseURL string
+	err     error
+}
+
+func (e *doorUnreachable) Error() string {
+	return fmt.Sprintf("the sandbox dispatch door could not be reached at %s: %v", e.baseURL, e.err)
+}
+
+func (e *doorUnreachable) Unwrap() error { return e.err }
+
+// TransientRemote marks the failure as the remote's pipe, not its answer.
+func (e *doorUnreachable) TransientRemote() bool { return true }
+
 // AsDoorError reports whether err is the door's own refusal, and which one.
 func AsDoorError(err error) (*doorError, bool) {
 	var d *doorError
@@ -200,7 +230,7 @@ func (c *Client) roundTrip(req *http.Request, expected ...int) ([]byte, error) {
 		// transport error, never a `lost` and never a status a caller could
 		// mistake for one. The route's own header leaves this rule to the
 		// client, and this is the line that holds it.
-		return nil, fmt.Errorf("the sandbox dispatch door could not be reached at %s: %w", c.baseURL, err)
+		return nil, &doorUnreachable{baseURL: c.baseURL, err: err}
 	}
 	defer resp.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxDoorBody))
