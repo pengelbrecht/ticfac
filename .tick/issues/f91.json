@@ -1,0 +1,13 @@
+{
+  "id": "f91",
+  "title": "A re-dispatched tick whose work is already in its base cannot collect green",
+  "description": "When a run replays a wave whose tick a previous run already merged into the integration branch, the fresh dispatch cuts that tick from a base that already carries its deliverable. On the cloudflare-sandbox substrate a worker that verifies the tree and reports honestly still leaves only the report commit, which collect classifies as no-commits (the report-only branch), so the tick climbs the refusal ladder to a person unless it finds new in-scope work. The carried-work rule (tick isp, deliverCarriedWork) only recognises attempts cut from a carried head, not fresh re-dispatches over an already-merged tree. r5i has now hit this on three consecutive dispatches: run_1960aa14's re-dispatch (run_aaf6886d) and this run (run_0f64adb, base e89c11be whose parent is d4215948) each had to find a real in-scope gap to close so the attempt could leave a change beyond the base at all.\nevidence: internal/exec/cloudflaresandbox/collect.go:344 reportIsOnlyChange and the reportOnly no-commits case; internal/reconcile/dispatch.go deliverCarriedWork's resumed_from guard; this run's base e89c11be already containing the r5i deliverable (82cf262d, 216e9d1c, d4215948)\n\nticfac run run_0f64adbcecb5484fb20cbe33d5e97e17 filed this backlog tick from the finding f03b69cead36ef1c5aadb2b8b180659a8f024f4cb0b08c7e79181c7c2c0d5053 (reported by run-run_0f64adbcecb5484fb20cbe33d5e97e17/tick-r5i/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_0f64adbcecb5484fb20cbe33d5e97e17/absorptions/f03b69cead36ef1c5aadb2b8b180659a8f024f4cb0b08c7e79181c7c2c0d5053.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-run_0f64adbcecb5484fb20cbe33d5e97e17/tick-r5i/attempt-1",
+  "created_by": "ticfac run run_0f64adbcecb5484fb20cbe33d5e97e17",
+  "created_at": "2026-09-29T13:13:19Z",
+  "updated_at": "2026-09-29T13:13:19Z"
+}
