@@ -9,6 +9,8 @@
  * - GET  /health           - liveness + binding presence (unauthenticated)
  * - POST /api/runs         - submit a run (`queue` parks it behind a live lease)
  * - GET  /api/runs         - the run index plus per-project lease and queue
+ * - GET  /api/deployment   - what this factory runs: the deploy's recorded
+ *                             version, the confirmed image, the Worker version
  * - GET  /api/runs/:id     - one run: Workflow step state, lease, gates, queue
  * - POST /api/runs/:id/stop- a clean stop, enforced at the control plane (D15)
  * - GET  /api/runs/:id/logs- the run's harness output, streamed to R2 during
@@ -80,6 +82,8 @@ import { proxyGitRequest } from "./credentials";
 import {
   type EnrolledProject,
   enrolProject,
+  getDeploymentImage,
+  getDeploymentRecord,
   getEnrolledProject,
   getRun,
   getSweepSelection,
@@ -213,6 +217,23 @@ async function health(env: Env): Promise<Response> {
       required: true,
       configured: await isAuthConfigured(env),
     },
+  });
+}
+
+async function deploymentRoute(env: Env): Promise<Response> {
+  const [record, image] = await Promise.all([
+    getDeploymentRecord(env.DB),
+    getDeploymentImage(env.DB),
+  ]);
+  const version = env.CF_VERSION_METADATA;
+  return Response.json({
+    version: record?.tk_version ?? null,
+    bundle_sha256: record?.bundle_sha256 ?? null,
+    deployed_at: record?.deployed_at ?? null,
+    image_ref: image?.image_ref ?? null,
+    image_digest: image?.image_digest ?? null,
+    worker_version_id: version?.id || null,
+    worker_version_timestamp: version?.timestamp || null,
   });
 }
 
@@ -1635,6 +1656,16 @@ export default {
     // and may only ever say "the factory created this".
     if (segments[0] === "api" && segments[1] === "ci" && segments[2] === "branches") {
       return await branchOwnershipRoute(request, env, segments.slice(3));
+    }
+
+    // What this factory actually runs (GET /api/deployment): the deploy's own
+    // record, the image its container rollout was confirmed serving, and the
+    // Worker version answering this request. `ticfac factory status` reads it
+    // so the operator sees the factory's answer, not the laptop's memory of
+    // its own last deploy — CI deploys most of them now.
+    if (segments[0] === "api" && segments[1] === "deployment" && segments.length === 2) {
+      if (request.method !== "GET") return methodNotAllowed(["GET"]);
+      return await deploymentRoute(env);
     }
 
     if (segments[0] === "api" && segments[1] === "projects") {

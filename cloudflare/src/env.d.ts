@@ -28,6 +28,12 @@ declare namespace Cloudflare {
     /** Signals, dispatch log, run index, project enrolment. */
     DB: D1Database;
     /**
+     * The Worker version serving this request (`[version_metadata]`).
+     * Optional: a test runtime or an older deployment may not bind it, and
+     * GET /api/deployment then reports the version as unknown.
+     */
+    CF_VERSION_METADATA?: { id: string; tag?: string; timestamp?: string };
+    /**
      * The Run Workflow each submission ignites as one instance, keyed by run
      * id (`[[workflows]]` in wrangler.toml, class `RunWorkflow`).
      *
