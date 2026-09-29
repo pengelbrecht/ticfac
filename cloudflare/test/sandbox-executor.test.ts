@@ -11,7 +11,7 @@ import jobProtocol from "../../contracts/job-protocol.json";
 import type { AttemptSpec } from "../src/attempt-protocol";
 import { insertRun, type Run } from "../src/db";
 import { authorizeRunCredential, revokeRunTokens } from "../src/gateway";
-import type { GitRefWriter, RefPut } from "../src/git-refs";
+import type { GitRefWriter, RefPut, RefPutInput } from "../src/git-refs";
 import type {
   OrchestratorSandbox,
   SandboxBinding,
@@ -242,10 +242,10 @@ class FakeCollector implements WorkerCollector {
  * write_ref is recorded, and a case can make it fail the way GitHub can.
  */
 class FakeRefWriter implements GitRefWriter {
-  readonly puts: Array<{ branch: string; ref: string }> = [];
+  readonly puts: RefPutInput[] = [];
   answer: RefPut = { state: "created", sha: "pushed-head-1" };
 
-  async put(input: { branch: string; ref: string }): Promise<RefPut> {
+  async put(input: RefPutInput): Promise<RefPut> {
     this.puts.push(input);
     return this.answer;
   }
@@ -599,7 +599,16 @@ describe("collect", () => {
     // pushBranch: the container lands on a per-attempt branch (the image
     // derives it), and collect is the moment the attempt's own ref — the one
     // the marker, the settle and a person all name — comes to carry the work.
-    expect(refs.puts).toEqual([{ branch: "tick/ncv/attempt-3/k4s", ref: SPEC.write_ref }]);
+    expect(refs.puts).toEqual([
+      {
+        branch: "tick/ncv/attempt-3/k4s",
+        ref: SPEC.write_ref,
+        // The base and run: the put reads the branch the container ACTUALLY
+        // pushed, never another run's holding the landing name (hn6).
+        base_sha: BASE_SHA,
+        run_id: RUN_ID,
+      },
+    ]);
     // And the collect READS the attempt's write_ref, never the landing
     // branch: the reconciler's settle and the collect look at one ref.
     expect(collector.asked).toEqual([
@@ -855,7 +864,16 @@ describe("the four operations, end to end", () => {
     expect(report.outcome).toBe("done");
     expect(report.detail).toContain("ready-to-merge");
     // The work reached the attempt's own ref on the way to the verdict.
-    expect(refs.puts).toEqual([{ branch: "tick/ncv/attempt-3/k4s", ref: SPEC.write_ref }]);
+    expect(refs.puts).toEqual([
+      {
+        branch: "tick/ncv/attempt-3/k4s",
+        ref: SPEC.write_ref,
+        // The base and run: the put reads the branch the container ACTUALLY
+        // pushed, never another run's holding the landing name (hn6).
+        base_sha: BASE_SHA,
+        run_id: RUN_ID,
+      },
+    ]);
     const record = handle as unknown as Record<string, unknown>;
     // The handle is a local attempt's shape, not a cloud-only one.
     expect(record.executor).toBe("cloudflare-sandbox");
