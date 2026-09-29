@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_0f64adbcecb5484fb20cbe33d5e97e17",
   "epic_id": "hn6",
-  "sequence": 35,
-  "state": "running",
-  "reason": "7uv is running as attempt 6",
-  "updated_at": "2026-09-29T13:53:23Z",
+  "sequence": 36,
+  "state": "collecting",
+  "reason": "collecting 3gk attempt 5",
+  "updated_at": "2026-09-29T13:53:28Z",
   "ticks": [
     {
       "tick_id": "r5i",
