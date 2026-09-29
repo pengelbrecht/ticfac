@@ -60,9 +60,19 @@ func (e *Executor) Inspect(h *JobHandle, cursor string) (*JobStatus, error) {
 // statusOf is the one place a state is decided, so `state` and `terminal`
 // cannot come from two different opinions.
 func (e *Executor) statusOf(st *store, record *attemptRecord, cursor string) *JobStatus {
-	observations, next := st.observationsFrom(cursor)
-
+	// The state is decided FIRST and the stream read after it (hol). Every
+	// observation a writer makes before the evidence it precedes — the
+	// supervisor announces a nudge before the nudged runner can report — is
+	// then in the stream this answer carries. Read the other way round, an
+	// announcement and a report landing between the two reads made a
+	// terminal answer without the announcement, and a terminal answer is the
+	// last one a reader asks for.
 	state, detail := e.observe(st, record)
+
+	if statusBetweenReads != nil {
+		statusBetweenReads()
+	}
+	observations, next := st.observationsFrom(cursor)
 
 	status := &JobStatus{
 		SchemaVersion: SchemaVersion,
@@ -83,6 +93,12 @@ func (e *Executor) statusOf(st *store, record *attemptRecord, cursor string) *Jo
 	}
 	return status
 }
+
+// statusBetweenReads is a test seam and nothing else: nil in every real
+// build. It runs between statusOf's two reads — the observation stream and
+// the evidence the state is decided from — which is where an observation
+// written just before the evidence used to be dropped (hol).
+var statusBetweenReads func()
 
 func kindFor(state string) string {
 	switch state {

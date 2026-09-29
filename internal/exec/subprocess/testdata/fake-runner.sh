@@ -316,6 +316,14 @@ report_then_hang)
 	report
 	exec sleep 86400
 	;;
+report_then_linger)
+	# The tail of a finished worker (hol): the report is written, and the
+	# runner exits a moment later, on its own. A cancel that lands in that
+	# moment is a release of finished work, not a stop of a spending one.
+	commit
+	report
+	sleep "${FAKE_RUNNER_LINGER:-2}"
+	;;
 quota_exhausted)
 	# No commit, no report: the shape of a codex run that hit its flat-rate
 	# seat's usage limit before writing anything. The log is golden —

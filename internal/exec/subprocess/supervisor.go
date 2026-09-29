@@ -240,6 +240,9 @@ func Supervise(stateDir string) error {
 			note("the runner pid file could not be written (%v); cancel reaches this runner through its "+
 				"lock instead", err)
 		}
+		if runnerStarted != nil {
+			runnerStarted(env)
+		}
 		started(runnerPID)
 
 		// The runner is alive, for a stop, while it runs or while something it
@@ -373,12 +376,17 @@ func Supervise(stateDir string) error {
 			continue
 		}
 		nudged++
+		// The nudge is announced BEFORE the nudged runner starts (hol): once
+		// it runs it can report at once, and a report is the evidence an
+		// inspect answers `succeeded` — terminal — from. An announcement
+		// written after that answer is one no reader ever asks for, and the
+		// feed never said the job was nudged.
+		observe(ObsStarted, fmt.Sprintf("%snudge %d of %d: the %s runner exited 0 without "+
+			"writing its report at %s, and a headless runner that ends its turn early ends the job; %s",
+			nudgeDetailPrefix, nudged, MaxNudges, record.Runner, record.ResultPath, how))
 		code, settled, err = runTurn(record.NudgeArgv,
 			append(append([]string{}, runnerEnv...), fmt.Sprintf("%s=%d", EnvNudge, nudged)),
 			func(pid int) {
-				observe(ObsStarted, fmt.Sprintf("%snudge %d of %d, pid %d: the %s runner exited 0 without "+
-					"writing its report at %s, and a headless runner that ends its turn early ends the job; %s",
-					nudgeDetailPrefix, nudged, MaxNudges, pid, record.Runner, record.ResultPath, how))
 				note("the runner exited 0 with no report; nudge %d of %d (pid %d), %s",
 					nudged, MaxNudges, pid, how)
 			})
@@ -401,6 +409,12 @@ func Supervise(stateDir string) error {
 	note("the runner exited with %d", code)
 	return atomicWrite(st.path(fileRunnerExit), []byte(strconv.Itoa(code)+"\n"), 0o644)
 }
+
+// runnerStarted is a test seam and nothing else: nil in every real build. It
+// runs between a runner's start and the observation that announces it, which
+// is where a nudged runner used to write its report before its supervisor had
+// said it was nudged (hol) — a helper supervisor holds it there.
+var runnerStarted func(env []string)
 
 // stopExitCode is the exit code a stopped attempt settles with: the shell's
 // 128+signal, so 143 reads as SIGTERM and 130 as SIGINT to anybody who looks

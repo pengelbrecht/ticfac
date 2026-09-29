@@ -891,3 +891,52 @@ func TestCancelStopsAWorkerThatWroteItsReportAndKeptRunning(t *testing.T) {
 		t.Errorf("a cancelled attempt inspects as %s; the report outranked the cancellation", status.State)
 	}
 }
+
+// A cancel that lands in a finished worker's tail does not rename its verdict
+// (hol). The worker wrote its report and is still alive for a moment — the
+// runner exiting, the supervisor's last push — when the reconciler, which has
+// just collected it as succeeded, releases it. The cancel used to record a
+// durable cancellation over it, so every later inspect and collect answered
+// `cancelled`, and a resumed run re-adopted the attempt it had collected
+// ready-to-merge and rejected it. Deterministic: the runner lingers two
+// seconds past its report, and the cancel is issued inside them.
+func TestCancelInAFinishedWorkersTailLeavesItsVerdictAlone(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "report_then_linger"})
+	handle := f.Start(f.spec("run-hol/tick-lll/attempt-1", "lll"))
+	st := f.store(handle)
+
+	waitFor(t, "the report to be written while the runner is still alive", 20*time.Second, func() bool {
+		local, err := handle.Local()
+		if err != nil {
+			return false
+		}
+		if _, err := os.Stat(local.ResultPath); err != nil {
+			return false
+		}
+		return liveOf(st, lockRunner)
+	})
+	if status := f.inspect(handle); status.State != StateSucceeded {
+		t.Fatalf("the reported attempt inspects as %s before the cancel, want %s", status.State, StateSucceeded)
+	}
+
+	ack, err := f.Executor.Cancel(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ack.CredentialsRevoked || ack.Order != OrderRevokeThenStop {
+		t.Errorf("acknowledgement %+v", ack)
+	}
+	if ack.StopRequested {
+		t.Error("the acknowledgement says a stop was requested, and the worker settled on its own")
+	}
+	if _, ok := st.cancelled(); ok {
+		t.Error("a cancel of a worker that settled on its own inside the grace recorded a cancellation")
+	}
+	if status := f.inspect(handle); status.State != StateSucceeded {
+		t.Errorf("the attempt inspects as %s after the release, want %s: the release renamed its verdict",
+			status.State, StateSucceeded)
+	}
+	if collected := f.collect(handle); collected.Verdict != VerdictReadyToMerge {
+		t.Errorf("verdict %s after the release, want %s", collected.Verdict, VerdictReadyToMerge)
+	}
+}

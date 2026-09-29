@@ -287,6 +287,14 @@ conflict_side() {
 	printf 'the %s side of the shared file\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/shared-work.txt"
 	commit
 	report
+	# A worker that writes its report and then keeps going for a moment — it
+	# tidies up, or its supervisor is still pushing — before it exits (hol).
+	# $CONFLICT_LINGER holds the side that conflicts that long past its
+	# report, so the run collects it, and releases it, while it is still
+	# alive.
+	if [ "$TICFAC_TICK" != "$first" ] && [ -n "${CONFLICT_LINGER:-}" ]; then
+		sleep "$CONFLICT_LINGER"
+	fi
 }
 
 in_conflict_ticks() {
