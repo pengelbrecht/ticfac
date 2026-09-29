@@ -1036,7 +1036,15 @@ async function collectAttempt(
   handle: SandboxJobHandle,
 ): Promise<AttemptReport> {
   const payload = handle.handle;
-  const put = await deps.refs.put({ branch: payload.branch, ref: payload.write_ref });
+  // The base and run ride the put so it reads the branch the container
+  // ACTUALLY pushed — never another run's branch that holds the landing name
+  // (epic hn6's second cloud run; git-refs.ts GitRefWriter).
+  const put = await deps.refs.put({
+    branch: payload.branch,
+    ref: payload.write_ref,
+    base_sha: payload.base_sha,
+    run_id: payload.run_id,
+  });
   if (put.state === "refused") {
     return {
       outcome: "failed",

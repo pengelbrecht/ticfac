@@ -40,19 +40,38 @@ export const GITHUB_API_BASE_URL = "https://api.github.com";
 /** What one put did. Every case a caller must tell apart is its own state. */
 export type RefPut =
   /** The write_ref did not exist; it was created at the landing branch's head. */
-  | { state: "created"; sha: string }
+  | { state: "created"; sha: string; branch?: string }
   /** The write_ref existed behind; it was advanced, fast-forward only. */
-  | { state: "advanced"; sha: string }
+  | { state: "advanced"; sha: string; branch?: string }
   /** The write_ref already carries the landing branch's head: a no-op. */
-  | { state: "already"; sha: string }
+  | { state: "already"; sha: string; branch?: string }
   /** The landing branch is not on origin: nothing to put. */
   | { state: "missing" }
   /** The put could not be made. NEVER a clean verdict — name what happened. */
   | { state: "refused"; detail: string };
 
-/** Puts one pushed branch's head on a ref of origin, create-or-advance. */
+/**
+ * One put: the landing branch the container derives, the attempt's write
+ * ref, and — when the caller knows them — the attempt's base and run, so the
+ * put reads the branch the container ACTUALLY pushed (see {@link GitRefWriter}).
+ */
+export type RefPutInput = { branch: string; ref: string; base_sha?: string; run_id?: string };
+
+/**
+ * Puts one pushed branch's head on a ref of origin, create-or-advance.
+ *
+ * WHICH branch (epic hn6's second cloud run): the landing name is per
+ * attempt but not per run, so a second run's attempt 1 lands on the name the
+ * first run's attempt 1 already pushed. The container finds that branch, sees
+ * it is not cut from its own base, leaves it untouched and pushes
+ * `<landing>-<run id>` instead (image/worker.sh adopt_worker_branch). Given
+ * the base and run, the put follows the same rule: the landing branch when
+ * it descends from the base, else the per-run branch beside it — and never
+ * another run's work onto this attempt's ref. A successful put names the
+ * branch it read.
+ */
 export interface GitRefWriter {
-  put(input: { branch: string; ref: string }): Promise<RefPut>;
+  put(input: RefPutInput): Promise<RefPut>;
 }
 
 /**
@@ -144,38 +163,97 @@ async function updateRef(env: Env, project: string, ref: string, sha: string): P
   return { ok: false, detail: `GitHub answered HTTP ${response.status} advancing ${ref}` };
 }
 
+type Descent = { ok: true; descends: boolean } | { ok: false; detail: string };
+
+/**
+ * Whether `head` descends from `base` — GitHub's compare `base...head`, whose
+ * `behind_by` is zero exactly when every commit of the base is in the head.
+ * An unreadable answer is refused, never read as either.
+ */
+async function descendsFrom(
+  env: Env,
+  project: string,
+  base: string,
+  head: string,
+): Promise<Descent> {
+  let auth: Record<string, string>;
+  try {
+    auth = await headers(env, project);
+  } catch (error) {
+    return { ok: false, detail: String((error as Error).message ?? error) };
+  }
+  const url =
+    `${apiBase(env)}/repos/${project}/compare/` +
+    `${encodeURIComponent(base)}...${encodeURIComponent(head)}`;
+  const response = await fetch(url, { headers: auth });
+  if (!response.ok) {
+    return {
+      ok: false,
+      detail: `GitHub answered HTTP ${response.status} comparing ${base}...${head}`,
+    };
+  }
+  const body = (await response.json()) as { behind_by?: number };
+  if (typeof body.behind_by !== "number") {
+    return { ok: false, detail: `GitHub's compare of ${base}...${head} carried no behind_by` };
+  }
+  return { ok: true, descends: body.behind_by === 0 };
+}
+
 /** The writer a deployment uses: GitHub's git-data API against origin. */
 export function gitRefWriter(env: Env, project: string): GitRefWriter {
   return {
-    async put(input: { branch: string; ref: string }): Promise<RefPut> {
+    async put(input: RefPutInput): Promise<RefPut> {
       let landing: RefRead;
       let written: RefRead;
+      let branch = input.branch;
       try {
-        landing = await readBranchHead(env, project, input.branch);
+        landing = await readBranchHead(env, project, branch);
       } catch (error) {
-        return { state: "refused", detail: `reading ${input.branch} raised ${String(error)}` };
+        return { state: "refused", detail: `reading ${branch} raised ${String(error)}` };
       }
       if (!landing.ok) {
         return landing.missing
           ? { state: "missing" }
           : { state: "refused", detail: landing.detail };
       }
+      if (input.base_sha !== undefined && input.base_sha !== "") {
+        const ours = await descendsFrom(env, project, input.base_sha, landing.sha);
+        if (!ours.ok) return { state: "refused", detail: ours.detail };
+        if (!ours.descends) {
+          // Another run's branch holds the landing name: this attempt's
+          // container pushed beside it, or nowhere.
+          if (input.run_id === undefined || input.run_id === "") return { state: "missing" };
+          branch = `${input.branch}-${input.run_id}`;
+          try {
+            landing = await readBranchHead(env, project, branch);
+          } catch (error) {
+            return { state: "refused", detail: `reading ${branch} raised ${String(error)}` };
+          }
+          if (!landing.ok) {
+            return landing.missing
+              ? { state: "missing" }
+              : { state: "refused", detail: landing.detail };
+          }
+        }
+      }
       try {
         written = await readBranchHead(env, project, writeRefBranch(input.ref));
       } catch (error) {
         return { state: "refused", detail: `reading ${input.ref} raised ${String(error)}` };
       }
-      if (written.ok && written.sha === landing.sha) return { state: "already", sha: landing.sha };
+      if (written.ok && written.sha === landing.sha) {
+        return { state: "already", sha: landing.sha, branch };
+      }
       if (written.ok) {
         const advanced = await updateRef(env, project, input.ref, landing.sha);
         return advanced.ok
-          ? { state: "advanced", sha: landing.sha }
+          ? { state: "advanced", sha: landing.sha, branch }
           : { state: "refused", detail: advanced.detail };
       }
       if (!written.missing) return { state: "refused", detail: written.detail };
       const created = await createRef(env, project, input.ref, landing.sha);
       return created.ok
-        ? { state: "created", sha: landing.sha }
+        ? { state: "created", sha: landing.sha, branch }
         : { state: "refused", detail: created.detail };
     },
   };
