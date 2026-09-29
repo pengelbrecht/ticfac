@@ -96,6 +96,9 @@ type fakeSandboxDoor struct {
 	adoptions  int
 	starts     int
 	statusAsks int
+	// darkCalls is a BOUNDED outage: the next darkCalls calls fail as
+	// unreachable, and the door answers again after them.
+	darkCalls  int
 	containers map[doorIdentity]*doorContainer
 }
 
@@ -118,6 +121,39 @@ func (d *fakeSandboxDoor) goDark() {
 	d.reachable = false
 	d.mu.Unlock()
 }
+
+// goDarkFor makes the factory unreachable for its next n calls, then it
+// answers again: the outage a resume is for.
+func (d *fakeSandboxDoor) goDarkFor(n int) {
+	d.mu.Lock()
+	d.darkCalls = n
+	d.mu.Unlock()
+}
+
+// dark says whether this call meets the outage, spending one call of a
+// bounded one. The caller holds d.mu.
+func (d *fakeSandboxDoor) dark() bool {
+	if !d.reachable {
+		return true
+	}
+	if d.darkCalls > 0 {
+		d.darkCalls--
+		return true
+	}
+	return false
+}
+
+// doorOutage is the door not answering, restated as the real client types it
+// (cloudflaresandbox's doorUnreachable): an error that says of itself it is a
+// transient remote failure, which is what the supervisor reads it by.
+type doorOutage struct{}
+
+func (*doorOutage) Error() string {
+	return "the sandbox dispatch door could not be reached: the factory at the run's credential is " +
+		"unreachable, which is a transport failure and not an answer about any sandbox"
+}
+
+func (*doorOutage) TransientRemote() bool { return true }
 
 func (d *fakeSandboxDoor) bootCount() int {
 	d.mu.Lock()
@@ -162,9 +198,8 @@ func (d *fakeSandboxDoor) status(id doorIdentity) (*subprocess.JobStatus, error)
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.statusAsks++
-	if !d.reachable {
-		return nil, fmt.Errorf("the sandbox dispatch door could not be reached: the factory at the run's " +
-			"credential is unreachable, which is a transport failure and not an answer about any sandbox")
+	if d.dark() {
+		return nil, &doorOutage{}
 	}
 	status := &subprocess.JobStatus{
 		SchemaVersion: subprocess.SchemaVersion,
@@ -196,9 +231,8 @@ func (d *fakeSandboxDoor) start(id doorIdentity) (*subprocess.JobHandle, bool, e
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.starts++
-	if !d.reachable {
-		return nil, false, fmt.Errorf("the sandbox dispatch door could not be reached: the factory at the run's " +
-			"credential is unreachable, which is a transport failure and not an answer about any sandbox")
+	if d.dark() {
+		return nil, false, &doorOutage{}
 	}
 	if container := d.containers[id]; container != nil {
 		if container.terminal {
@@ -750,4 +784,63 @@ func TestAnUnreachableFactoryIsNotNoSandboxRunning(t *testing.T) {
 	if row := tickRowOf(t, store, "a1"); row == "rejected" {
 		t.Errorf("the checkpoint row for a1 reads %q behind an unreachable factory: an outage is not a verdict on the work", row)
 	}
+}
+
+// TestAFactoryOutageAtStartIsResumedNotHandedToAPerson: epic hn6's second
+// cloud run halted over "a stop this run has no classification for" when
+// attempt 3's start timed out waiting on the door. An outage is not a verdict
+// (the test above) and it is not a decision either: the stop is a transient
+// remote failure, the supervisor continues across it, and once the factory
+// answers the next incarnation dispatches — one container, no rival.
+func TestAFactoryOutageAtStartIsResumedNotHandedToAPerson(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{gate: cloudGate})
+	door := newFakeSandboxDoor("r-fixture")
+	// The first incarnation's start meets the outage; it is over by the time
+	// the supervisor continues.
+	door.goDarkFor(1)
+
+	r, err := New(f.doorOptions(t, f.Repo, door, f.StateRoot, stopAt("a1", StageAdopted)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The next incarnation finds the claim and marker the failed start left and
+	// takes the attempt up by identity: the door boots it then, and only then.
+	killedAfter(t, superviseProtected(r), "a1", StageAdopted)
+
+	events := feedStages(t, f.Repo.Dir, r.RunID())
+	resumed := detailOfStage(events, StageResumedAutomatically)
+	if n := countStage(events, StageResumedAutomatically); n != 1 {
+		t.Fatalf("the run was continued %d time(s), want once across the outage", n)
+	}
+	if !strings.Contains(resumed, StoppedRemoteTransient) {
+		t.Errorf("the outage stopped the run as %q, want %s: an unreachable door is the remote's pipe, "+
+			"not a stop for a person", resumed, StoppedRemoteTransient)
+	}
+	if n := countStage(events, StageSupervisionHalted); n != 0 {
+		t.Errorf("the run halted for a person over a factory outage (%d %s line(s))", n, StageSupervisionHalted)
+	}
+	if n := countStage(events, StageStartFailed); n != 1 {
+		t.Errorf("%d %s line(s), want the one failed start", n, StageStartFailed)
+	}
+	if boots := door.bootCount(); boots != 1 {
+		t.Errorf("the factory booted %d containers, want 1", boots)
+	}
+}
+
+// superviseProtected is Supervise under the harness's simulated kill, the way
+// RunProtected is Run under it.
+func superviseProtected(r *Reconciler) (err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			cut, ok := recovered.(stopped)
+			if !ok {
+				panic(recovered)
+			}
+			err = &killedAt{Event: cut.At}
+		}
+	}()
+	_, err = r.Supervise(context.Background())
+	return err
 }

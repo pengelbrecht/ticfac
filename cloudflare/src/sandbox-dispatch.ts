@@ -125,6 +125,14 @@
  *     `lost` either (tick avx's rule: unreachable is not absent, and the
  *     distinction lives in the client's error handling, not in this body).
  *
+ * A read NEVER boots a container (epic hn6's second cloud run): through the
+ * SDK any call on a container that is not running starts one, so the route
+ * answers from D1 first — a job with no recorded boot is `lost` without its
+ * container being addressed, and a settled job answers from its recorded
+ * settlement (migration 0019). The first terminal observation is recorded
+ * and the worker's container destroyed: its work is on its branch, and a
+ * settled container left up held one of max_instances until it idled out.
+ *
  * ### Where each of the other operations lives (DECIDED, tick xev)
  *
  * Which of the four operations cross this door and which the Go side does
@@ -186,6 +194,7 @@ import { BASE_SHA_PATTERN, roomFor } from "./runs";
 import { sandboxBinding } from "./sandbox";
 import {
   AdoptionModelUnknownError,
+  d1JobRecords,
   namedAttemptStatus,
   type SandboxJobHandle,
   sandboxExecutorDepsFromEnv,
@@ -594,7 +603,15 @@ async function attemptStatusRoute(
     attempt,
     ...(jobID === undefined ? {} : { job_id: jobID }),
   };
-  const status = await namedAttemptStatus(binding, identity, specJobID(identity));
+  // Answered from the job records before any container is addressed: a
+  // status read must never boot one (namedAttemptStatus says why).
+  const status = await namedAttemptStatus(
+    binding,
+    identity,
+    specJobID(identity),
+    undefined,
+    d1JobRecords(env.DB),
+  );
   return { ok: true, status: 200, body: status as unknown as Record<string, unknown> };
 }
 
