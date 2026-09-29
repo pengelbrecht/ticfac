@@ -70,6 +70,7 @@
  * | `model` | the model the caller's profile RESOLVED for this attempt (tick a08) — a FRESH container is booted on exactly this (`TICKS_MODEL`), outranking the deployment's `RUN_WORKER_MODEL`. Required: a start with no model would boot on the factory's own default, and the caller's record would name a model that never ran. The handle's `model` names the model the container it ANSWERS FOR is on: for a fresh boot, this field; for an adoption, the recorded model of the boot that started the running work process (tick dyo) — never an echo of what this request carried. |
  * | `harness` | the harness the caller's profile RESOLVED for this attempt (tick 9iz) — the worker container binds exactly this (`TICKS_HARNESS`), outranking the deployment's `RUN_WORKER_HARNESS`, and the handle's `harness` names it back. Required, for the model's reason verbatim: a start with no harness would boot on the factory's own default, and the caller's record would name a harness that never ran. |
  * | `prompt` | the RENDERED role prompt the caller's profile resolved (tick 9iz) — the profile's own prompt text, not a filename and not a reference. The worker container's entrypoint renders its worker prompt from the checkout's tracker and never sees the factory's prompt otherwise; the door delivers it into the container's boot environment (`TICKS_ROLE_PROMPT`, beside the harness and the model the same boot carries), so the worker runs on the prompt the run's records digest into `prompt_digest`. Required: PROSE — any UTF-8 text with no control character but tab, LF and CR, at most 64 KiB (65536 UTF-8 bytes) — a start with no prompt would boot a worker on a prompt nobody chose. |
+ * | `wall_seconds` | OPTIONAL: the dispatch's wall clock in whole seconds (tick 86y). The worker's harness is bounded just under it (`TICKS_WORKER_TIMEOUT`, the wall less the push margin — worker-boot.ts `workerHarnessBudgetMs`), so the container stops its harness, commits, reports and pushes before the reconciler's wall fires. Absent boots an unbounded harness. |
  *
  * The response NEVER blocks until the attempt finishes — nothing waits. What
  * returns is a HANDLE, once the dispatch is confirmed (the green-start probe
@@ -194,6 +195,7 @@ import { BASE_SHA_PATTERN, roomFor } from "./runs";
 import { sandboxBinding } from "./sandbox";
 import {
   AdoptionModelUnknownError,
+  d1JobLogs,
   d1JobRecords,
   namedAttemptStatus,
   type SandboxJobHandle,
@@ -409,6 +411,20 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
   const jobID = jobIDOf(run.run_id, raw.job_id);
   if (typeof jobID !== "string" && jobID !== undefined) return jobID;
 
+  // The dispatch's wall (tick 86y), optional: the worker's harness is bounded
+  // just under it, and an older client that sends none boots unbounded.
+  const wallSeconds = raw.wall_seconds;
+  if (
+    wallSeconds !== undefined &&
+    (typeof wallSeconds !== "number" || !Number.isInteger(wallSeconds) || wallSeconds < 1)
+  ) {
+    return refuse(
+      400,
+      "invalid_request",
+      "wall_seconds, when present, must be the dispatch's wall clock as a positive whole number of seconds",
+    );
+  }
+
   const text = (name: string, field: unknown): string | SandboxDispatchResult => {
     if (typeof field !== "string" || !PLAIN_FIELD_PATTERN.test(field)) {
       return refuse(
@@ -530,6 +546,7 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     model,
     harness,
     prompt,
+    ...(wallSeconds === undefined ? {} : { wall_seconds: wallSeconds }),
   };
 
   // The machinery, not a copy of it: `startNamedAttempt` resolves the container
@@ -611,6 +628,9 @@ async function attemptStatusRoute(
     specJobID(identity),
     undefined,
     d1JobRecords(env.DB),
+    // The worker's output past its confirm window, copied on every look and
+    // drained before a settled container is reclaimed (tick 86y).
+    env.ARTIFACTS === undefined ? undefined : d1JobLogs(env.DB, env.ARTIFACTS, run.project),
   );
   return { ok: true, status: 200, body: status as unknown as Record<string, unknown> };
 }

@@ -51,7 +51,7 @@
  * attempt's commits.
  */
 
-import { workerLogSink } from "./artifacts";
+import { workerLogSink, writeWorkerLogSegment } from "./artifacts";
 import type {
   AttemptExecutor,
   AttemptHandle,
@@ -61,10 +61,12 @@ import type {
 } from "./attempt-protocol";
 import { containerGitToken, planSandboxGit } from "./credentials";
 import {
+  putSandboxJobLogCursor,
   recordSandboxAttemptBoot,
   recordSandboxJobSettled,
   type SandboxAttemptBoot,
   sandboxAttemptBootModel,
+  sandboxJobLogCursor,
   sandboxJobSettled,
 } from "./db";
 import { factoryBaseURL, issueWorkerRunToken, runGatewayEndpoint } from "./gateway";
@@ -85,6 +87,7 @@ import {
   type WorkerBootInput,
   workerBootEnv,
   workerHarness,
+  workerHarnessBudgetMs,
   workerModel,
   workerWorkSpec,
 } from "./worker-boot";
@@ -408,7 +411,109 @@ export type SandboxExecutorDeps = {
   boots: SandboxBootRecord;
   /** Spawn knobs (sleep, log sinks, budgets) — the wave machinery's own. */
   spawn?: SpawnOptions;
+  /**
+   * Where a job's log cursor starts (tick 86y): the confirm window copied the
+   * worker's first output, and the state route copies the rest from where
+   * it ended. Absent means nothing continues the stream.
+   */
+  jobLogs?: SandboxJobLogs;
 };
+
+// ------------------------------------------------------------ job logs ---
+
+/**
+ * A job's worker output, copied into the run's log stream past the confirm
+ * window (tick 86y). The door's spawn drained a worker's output only while
+ * it confirmed the dispatch — which ends at the first byte — so a worker's
+ * log stopped at "checked out <sha>" however long it ran, and epic hn6's r5i
+ * try 2 died five minutes later without a word anyone could read. The state
+ * route now copies what the work process printed since the last look, on
+ * every look, and drains it to the end before a settled container is
+ * reclaimed (namedAttemptStatus): the reclaim destroys the container, and
+ * the output with it.
+ */
+export type SandboxJobLogs = {
+  /** A fresh boot's dispatch is confirmed: its output up to `offset` is already copied. */
+  started(identity: SandboxJobIdentity, processID: string, offset: number): Promise<void>;
+  /** Copies what the work process printed since the job's cursor. */
+  drain(
+    identity: SandboxJobIdentity,
+    sandbox: OrchestratorSandbox,
+    processID: string,
+  ): Promise<void>;
+};
+
+/** The job log cursors over D1 (migration 0020), the segments into the run's R2 stream. */
+export function d1JobLogs(db: D1Database, bucket: R2Bucket, project: string): SandboxJobLogs {
+  const key = (identity: SandboxJobIdentity) => ({
+    run_id: identity.run_id,
+    tick_id: identity.tick_id,
+    attempt: identity.attempt,
+    job: attemptJobSlot(identity.run_id, identity.tick_id, identity.attempt, identity.job_id) ?? "",
+  });
+  return {
+    async started(identity, processID, offset) {
+      // Its own epoch, taken now: the confirm window's segments were written
+      // under an earlier one, so the continuation sorts after them.
+      await putSandboxJobLogCursor(db, key(identity), {
+        process_id: processID,
+        offset,
+        epoch: Date.now(),
+        seq: 0,
+      });
+    },
+    async drain(identity, sandbox, processID) {
+      const found = await sandboxJobLogCursor(db, key(identity));
+      // No cursor for this process: a boot from before the cursor existed,
+      // or a fresh boot under a reused identity. Its whole output is copied
+      // from the start — the confirm window's first lines twice at worst,
+      // never a hole.
+      const cursor =
+        found !== null && found.process_id === processID
+          ? found
+          : { process_id: processID, offset: 0, epoch: Date.now(), seq: 0 };
+      const chunk = await sandbox.readOutput(processID, cursor.offset);
+      if (chunk.text === "" && chunk.offset === cursor.offset && found !== null) return;
+      let seq = cursor.seq;
+      if (chunk.text !== "") {
+        seq += 1;
+        await writeWorkerLogSegment(
+          bucket,
+          project,
+          identity.run_id,
+          identity.tick_id,
+          cursor.epoch,
+          seq,
+          chunk.text,
+        );
+      }
+      await putSandboxJobLogCursor(db, key(identity), {
+        process_id: processID,
+        offset: chunk.offset,
+        epoch: cursor.epoch,
+        seq,
+      });
+    },
+  };
+}
+
+/** A drain that fails is observed, never the status read's failure. */
+async function drainJobLog(
+  logs: SandboxJobLogs | undefined,
+  identity: SandboxJobIdentity,
+  sandbox: OrchestratorSandbox,
+  processID: string,
+): Promise<void> {
+  if (logs === undefined) return;
+  try {
+    await logs.drain(identity, sandbox, processID);
+  } catch (error) {
+    console.error(
+      `factory sandbox door: could not copy ${identity.tick_id} attempt ${identity.attempt}'s ` +
+        `worker output: ${String(error)}`,
+    );
+  }
+}
 
 // ----------------------------------------------------------------- start ---
 
@@ -560,6 +665,18 @@ export async function startNamedAttempt(
   const work = workerWorkSpec(boot);
   const task = { tick_id: spec.tick_id, branch: landing, base_sha: boot.base_sha };
   const spawned = await spawnWorker(deps.binding, name, task, work, deps.spawn);
+  if (deps.jobLogs !== undefined && spawned.launched && spawned.process_id !== null) {
+    // Where the confirm window's copy ended, so the state route continues the
+    // stream rather than repeating it (tick 86y). Best effort: a cursor that
+    // could not be written means the first drain copies from the start.
+    try {
+      await deps.jobLogs.started(spec, spawned.process_id, spawned.output_offset ?? 0);
+    } catch (error) {
+      console.error(
+        `factory sandbox door: could not record ${name}'s log cursor: ${String(error)}`,
+      );
+    }
+  }
   return {
     handle: {
       schema_version: JOB_HANDLE_SCHEMA_VERSION,
@@ -721,6 +838,7 @@ export async function namedAttemptStatus(
   jobID: string,
   now: () => string = () => new Date().toISOString(),
   records?: SandboxJobRecords,
+  logs?: SandboxJobLogs,
 ): Promise<AttemptStatus> {
   // The records first, and the container only when they cannot answer
   // (epic hn6's second cloud run). Through the SDK, ANY call on a container
@@ -750,7 +868,7 @@ export async function namedAttemptStatus(
   // running here". The LAST work process in the list is the live one when
   // there is one: adoption means a container holds at most one.
   const listed = await sandbox.listProcesses();
-  let work: { state: SandboxProcessState; exit_code: number | null } | null = null;
+  let work: { id: string; state: SandboxProcessState; exit_code: number | null } | null = null;
   for (const view of listed ?? []) {
     if (isWorkProcess(view)) work = view;
   }
@@ -761,6 +879,10 @@ export async function namedAttemptStatus(
     // was ever started.
     return statusFromProcess(null, jobID, now);
   }
+  // What the worker printed since the last look goes to the run's log on
+  // every look (tick 86y) — and for a settled worker, to its END, before the
+  // reclaim below destroys the container and its output with it.
+  await drainJobLog(logs, identity, sandbox, work.id);
   if (work.state === "running") {
     return statusFromProcess({ state: "running", exit_code: null }, jobID, now);
   }
@@ -1120,7 +1242,12 @@ export function sandboxExecutorDepsFromEnv(
       // (the probe and the confirmed dispatch) observes is what streams.
       ...(env.ARTIFACTS === undefined || input.run_id === undefined
         ? {}
-        : { spawn: { logs: workerLogSink(env.ARTIFACTS, input.project, input.run_id) } }),
+        : {
+            spawn: { logs: workerLogSink(env.ARTIFACTS, input.project, input.run_id) },
+            // The rest of the stream, past the confirm window: the state route
+            // continues it from where the spawn's copy ended (tick 86y).
+            jobLogs: d1JobLogs(env.DB as D1Database, env.ARTIFACTS, input.project),
+          }),
       boots: d1BootRecord(env.DB),
       boot: async (spec) => {
         const slot = attemptJobSlot(spec.run_id, spec.tick_id, spec.attempt, spec.job_id);
@@ -1161,6 +1288,11 @@ export function sandboxExecutorDepsFromEnv(
           // attempt outranks the deployment's standing one.
           model: workerModel(spec.model ?? null, textVar(env, "RUN_WORKER_MODEL")),
           prompt: spec.prompt,
+          // The dispatch's wall, less the push margin (tick 86y): the door
+          // bounded no worker's harness where the wave path bounded every one.
+          ...(workerHarnessBudgetMs(spec.wall_seconds) === undefined
+            ? {}
+            : { harness_budget_ms: workerHarnessBudgetMs(spec.wall_seconds) }),
           github_token: containerGitToken(git.plan, github.token, credential.token),
           ...(github.token_url === undefined ? {} : { github_token_url: github.token_url }),
           sandbox_image: deploymentImage(env),

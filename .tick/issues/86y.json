@@ -4,12 +4,14 @@
   "gloss": "door worker log tail + harness budget",
   "description": "From yoh findings 127240d6 and b21c18d0 (9iz). A door-dispatched worker's log output after the confirm window goes nowhere, and the door carries no per-worker harness budget (TICKS_WORKER_TIMEOUT), which the wave path used to set. For an unattended cloud run both matter: the tail is where a failed worker says why, and a budget is the runaway guard (liveness itself is b1t's: pi's session log, not a wall clock).",
   "notes": "2026-09-29 12:22 - Evidence from epic hn6's second cloud run (run_aaf6886d, 2026-09-29): 'ticfac cloud logs \u003crun\u003e --tick r5i' held 5 lines per attempt and stopped at 'checked out \u003csha\u003e' — the door's spawn drains output only inside confirmDispatch, which returns at the first byte of output, and nothing drains after. r5i try 2 then settled failed ~5 min later with zero model calls and nothing pushed, and its cause is unrecoverable: no log, and its container has since idled out. PR #130 (door reclaims a settled worker's container at its first terminal observation) makes this strictly worse: the unread tail is now destroyed at settle, not just left unread. The fix belongs in the state route: drain the work process's output on every look (offset persisted per job, continuing from the confirm window's offset) and drain to the end BEFORE the reclaim destroy. Stopgap landed separately: a failed settle line now names the worker's exit code and its class (fix/hn6-worker-log).",
-  "status": "open",
+  "status": "closed",
   "priority": 1,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "A door-dispatched worker's whole log reaches the run's logs; the door carries a harness budget taken from config and the worker honours it; tests cover both",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T16:48:46.558751Z",
-  "updated_at": "2026-09-29T10:22:02.599768Z"
+  "updated_at": "2026-09-29T10:47:48.280877Z",
+  "closed_at": "2026-09-29T10:47:48.280877Z",
+  "closed_reason": "Both halves, PR fix/86y-worker-log: the door's state route copies a worker's output past its confirm window on every look and drains it to the end before a settled container is reclaimed (D1 cursor, migration 0020), so the run's logs hold the whole log; the Go client sends the dispatch's wall_seconds and the door bounds the worker's harness at the wall less the 60s push margin (TICKS_WORKER_TIMEOUT). Tests: four vitest cases and the Go start-body pin, each failing before."
 }
