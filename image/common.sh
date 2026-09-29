@@ -955,14 +955,27 @@ explain_git_refusal() {
 # The factory caches the token it mints, so asking costs a request, not a
 # GitHub mint. Without the URL (the PAT and device-flow rungs) the helper is
 # the static one it always was.
+#
+# The door is asked up to three times, a second apart, before the helper falls
+# back, and a fallback SAYS so on stderr, which git passes through into the
+# failed command's own error. Epic hn6's cloud run (2026-09-29) lost two boots
+# to "remote: Permission to <repo> denied to <app>[bot]" (403) on its own
+# integration-branch pushes while the same pushes minutes either side went
+# through, and nothing in the error could say which token git had sent: a
+# door that did not answer once, under a Worker that was timing out other
+# calls that hour, handed git the boot token silently — and a boot token can
+# be up to an hour old when the container gets it (the Worker's cache).
 install_git_credential_helper() {
 	[[ -n ${GITHUB_TOKEN:-} ]] || return 0
 	if [[ -n ${TICKS_GITHUB_TOKEN_URL:-} && -n ${TICKS_FACTORY_TOKEN:-} ]]; then
 		# POSIX sh (git runs the helper through sh), and the token is read out
 		# of the door's JSON with sed: the image has jq, but the helper must
-		# not depend on anything a slimmer image could drop.
+		# not depend on anything a slimmer image could drop. The retry is a
+		# loop rather than curl's --retry-all-errors, which an older curl
+		# refuses as an unknown option — and a helper that errors hands git
+		# no password at all.
 		git config --global credential.helper \
-			'!f() { test "$1" = get || exit 0; t=$(curl -fsS --max-time 20 -X POST -H "Authorization: Bearer ${TICKS_FACTORY_TOKEN}" "${TICKS_GITHUB_TOKEN_URL}" 2>/dev/null | sed -n '"'"'s/.*"token":"\([^"]*\)".*/\1/p'"'"'); echo username=x-access-token; echo "password=${t:-$GITHUB_TOKEN}"; }; f' || true
+			'!f() { test "$1" = get || exit 0; t=; n=0; while [ -z "$t" ] && [ "$n" -lt 3 ]; do [ "$n" -eq 0 ] || sleep 1; n=$((n+1)); t=$(curl -fsS --max-time 20 -X POST -H "Authorization: Bearer ${TICKS_FACTORY_TOKEN}" "${TICKS_GITHUB_TOKEN_URL}" 2>/dev/null | sed -n '"'"'s/.*"token":"\([^"]*\)".*/\1/p'"'"'); done; [ -n "$t" ] || echo "ticks credential helper: the factory token door gave no GitHub token in $n tries; git is sending the token this container booted with, which GitHub expires an hour after it was minted" >&2; echo username=x-access-token; echo "password=${t:-$GITHUB_TOKEN}"; }; f' || true
 		return 0
 	fi
 	git config --global credential.helper \

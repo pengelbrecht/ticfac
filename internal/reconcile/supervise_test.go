@@ -375,6 +375,42 @@ func TestAPersistentAuthRefusalIsANamedStopThatSaysWhatToCheck(t *testing.T) {
 	}
 }
 
+// TestARefusedHTTPSTokenPushIsANamedStopNotAnUnclassifiedOne is epic hn6's
+// cloud run (2026-09-29): the orchestrator's push of its own integration
+// branch with the per-run GitHub App token came back 403, "Permission to …
+// denied to <app>[bot]", and the boot ended as "a stop this run has no
+// classification for". It is the named auth refusal, and its halt line sends
+// the reader to the token — the App's permissions, workflows: write, the
+// credential helper — not to ssh-agent.
+// short: the supervisor's rules over synthesised stops
+func TestARefusedHTTPSTokenPushIsANamedStopNotAnUnclassifiedOne(t *testing.T) {
+	t.Parallel()
+	retry := runstate.RemoteRetry{Sleep: func(time.Duration) {}}
+	err := retry.Do("git push", func() error {
+		return errors.New("git push --force-with-lease=refs/heads/epic/e1:" + strings.Repeat("a", 40) +
+			" origin " + strings.Repeat("b", 40) + ":refs/heads/epic/e1: exit status 128: " +
+			"remote: Permission to example/repo.git denied to example-app[bot].\n" +
+			"fatal: unable to access 'https://github.com/example/repo.git/': The requested URL returned error: 403")
+	})
+	err = fmt.Errorf("record the gate's evidence for t1: %w", err)
+
+	reason := errorStopReason(err)
+	if reason != StoppedRemoteAuthRefused {
+		t.Fatalf("a refused https token push is stop %q, want %q", reason, StoppedRemoteAuthRefused)
+	}
+	stop := supervisedStop{Reason: reason, Message: err.Error(), Tree: treeUnreadable}
+	line := reasonOf(stop) + detailOf(stop)
+	for _, want := range []string{StoppedRemoteAuthRefused, "workflows: write", "contents: write",
+		"credential helper", "denied to example-app[bot]"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the halt line does not say %q: %s", want, line)
+		}
+	}
+	if strings.Contains(line, "no classification") {
+		t.Errorf("the halt line still calls a refused token unclassified: %s", line)
+	}
+}
+
 // Waiting on CI is not a decision (epic-6in follow-up): a CI wait whose bound
 // ran out resumes without a person even over an UNCHANGED tree — the world
 // waited on is the forge's, not the branch's — and the continuation cap still

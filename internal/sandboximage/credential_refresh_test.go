@@ -26,6 +26,14 @@ import (
 // tests use, so no host credential helper (a keychain) can answer instead.
 func credentialFill(t *testing.T, extra ...string) string {
 	t.Helper()
+	password, _ := credentialFillOutput(t, extra...)
+	return password
+}
+
+// credentialFillOutput is credentialFill, also answering everything git and
+// the helper printed — the helper's stderr is part of a failed push's error.
+func credentialFillOutput(t *testing.T, extra ...string) (string, string) {
+	t.Helper()
 	common, err := Path("common.sh")
 	if err != nil {
 		t.Fatal(err)
@@ -44,28 +52,41 @@ func credentialFill(t *testing.T, extra ...string) string {
 	}
 	for _, line := range strings.Split(string(out), "\n") {
 		if password, ok := strings.CutPrefix(line, "password="); ok {
-			return password
+			return password, string(out)
 		}
 	}
 	t.Fatalf("git credential fill answered no password:\n%s", out)
-	return ""
+	return "", ""
 }
 
 type fakeTokenDoor struct {
 	server *httptest.Server
 	calls  atomic.Int32
+	// failFirst is how many calls answer 502 before the door answers status.
+	failFirst int32
 }
 
 func newFakeTokenDoor(t *testing.T, status int) *fakeTokenDoor {
+	return newFlakyTokenDoor(t, status, 0)
+}
+
+// newFlakyTokenDoor is a door that answers 502 to its first failFirst calls
+// — a Worker that did not answer once — and status after.
+func newFlakyTokenDoor(t *testing.T, status int, failFirst int32) *fakeTokenDoor {
 	t.Helper()
-	door := &fakeTokenDoor{}
+	door := &fakeTokenDoor{failFirst: failFirst}
 	door.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		door.calls.Add(1)
+		call := door.calls.Add(1)
 		if r.Method != http.MethodPost || r.Header.Get("Authorization") != "Bearer tkr_placeholder_run" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if call <= door.failFirst {
+			w.WriteHeader(http.StatusBadGateway)
+			_, _ = w.Write([]byte(`{"error":"github_app_unavailable","detail":"down"}`))
+			return
+		}
 		w.WriteHeader(status)
 		if status == http.StatusOK {
 			_, _ = w.Write([]byte(`{"token":"ghs_fresh_placeholder","expires_at":"2026-01-01T01:00:00Z"}`))
@@ -96,13 +117,48 @@ func TestTheCredentialHelperAsksTheFactoryForTheCurrentToken(t *testing.T) {
 // short: one bash and one git per case against a local HTTP fake; no network
 func TestTheCredentialHelperFallsBackToTheBootTokenWhenTheDoorFails(t *testing.T) {
 	door := newFakeTokenDoor(t, http.StatusBadGateway)
-	got := credentialFill(t,
+	got, out := credentialFillOutput(t,
 		"GITHUB_TOKEN=ghs_boot_placeholder",
 		"TICKS_GITHUB_TOKEN_URL="+door.server.URL+"/api/github/token",
 		"TICKS_FACTORY_TOKEN=tkr_placeholder_run",
 	)
 	if got != "ghs_boot_placeholder" {
 		t.Fatalf("git would send %q, want the boot token when the door cannot answer", got)
+	}
+	// Epic hn6 (2026-09-29): a silent fallback left a 403 push nobody could
+	// attribute to the token git sent. The door is asked a bounded number of
+	// times, and the fallback says so where the failed push's error carries it.
+	if door.calls.Load() != 3 {
+		t.Errorf("the door was asked %d times before the fallback, want 3", door.calls.Load())
+	}
+	if !strings.Contains(out, "ticks credential helper: the factory token door gave no GitHub token in 3 tries") ||
+		!strings.Contains(out, "booted with") {
+		t.Errorf("the fallback to the boot token was silent:\n%s", out)
+	}
+	if strings.Contains(out, "ghs_boot_placeholder") && !strings.Contains(out, "password=ghs_boot_placeholder") {
+		t.Errorf("the warning printed the token itself:\n%s", out)
+	}
+}
+
+// TestTheCredentialHelperRidesOutADoorThatDidNotAnswerOnce: a Worker that
+// misses one call must not cost the push its fresh token — the helper asks
+// again rather than handing git a boot token that may already be dead.
+// short: one bash and one git per case against a local HTTP fake; no network
+func TestTheCredentialHelperRidesOutADoorThatDidNotAnswerOnce(t *testing.T) {
+	door := newFlakyTokenDoor(t, http.StatusOK, 1)
+	got, out := credentialFillOutput(t,
+		"GITHUB_TOKEN=ghs_boot_placeholder",
+		"TICKS_GITHUB_TOKEN_URL="+door.server.URL+"/api/github/token",
+		"TICKS_FACTORY_TOKEN=tkr_placeholder_run",
+	)
+	if got != "ghs_fresh_placeholder" {
+		t.Fatalf("git would send %q, want the door's token on its second answer:\n%s", got, out)
+	}
+	if door.calls.Load() != 2 {
+		t.Errorf("the door was asked %d times, want 2", door.calls.Load())
+	}
+	if strings.Contains(out, "ticks credential helper:") {
+		t.Errorf("a fresh token still printed the fallback warning:\n%s", out)
 	}
 }
 
