@@ -372,6 +372,11 @@ type stripping (Node 24 has it on by default), because it imports
 
 ## Deploy
 
+Normally this happens in CI: `.github/workflows/deploy-factory.yml` runs
+`ticfac factory deploy` for every commit on main that CI passed and that
+changes what the factory ships (see the repository README, "Deploying the
+factory"). Running it by hand, below, is the fallback.
+
 `tk factory deploy` is the supported path. It wraps everything below against the
 operator's own account, is idempotent, and pins the deployment to the tk version
 whose embedded copy of this directory it uploaded (D16, "upgrades ride the repo"):

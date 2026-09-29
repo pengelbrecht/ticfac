@@ -949,7 +949,9 @@ nonzero with each failing check named.
 
 ## Build and run
 
-`ticfac factory deploy` is what builds and pushes this image in the normal case: it
+`ticfac factory deploy` is what builds and pushes this image in the normal case
+(run by `.github/workflows/deploy-factory.yml` for every main commit that CI
+passed and that changes what the factory ships; by hand only as the fallback): it
 stages this directory next to the factory bundle (`~/.tick/factory/sandbox`),
 and wrangler builds it from the `[[containers]]` declaration in
 `cloudflare/wrangler.toml` and pushes it to the operator's own managed
