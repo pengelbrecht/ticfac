@@ -6,6 +6,7 @@ import { insertRun, type Run } from "../src/db";
 import { issueRunToken } from "../src/gateway";
 import {
   appJWT,
+  BOOT_TOKEN_MIN_LIFE_MS,
   containerGitHub,
   GITHUB_APP_CALLBACK_PATH,
   GITHUB_APP_INSTALLED_PATH,
@@ -382,6 +383,64 @@ describe("what a container is handed", () => {
       github_token_url: handed.ok ? handed.token_url : "",
     });
     expect(worker.TICKS_GITHUB_TOKEN_URL).toBe(`${FACTORY}/api/github/token`);
+  });
+
+  it("asks for contents and workflows write for a write-grade container, and a read stays read", async () => {
+    // A write-grade run pushes its integration branch, and once main's own
+    // workflow edits are folded into it GitHub refuses any push touching
+    // .github/workflows from a token without workflows: write.
+    const github = fakeGitHub({});
+    await containerGitHub(env, PROJECT, { token_source: "operator" }, FACTORY, {
+      fetcher: github.fetcher,
+      now: () => T0,
+    });
+    const boot = github.calls.filter((call) => call.method === "POST").at(-1)!.body as {
+      permissions: Record<string, string>;
+    };
+    expect(boot.permissions).toMatchObject({ contents: "write", workflows: "write" });
+
+    const read = await installationToken(env, PROJECT, {
+      fetcher: github.fetcher,
+      now: () => T0,
+      permissions: GITHUB_APP_READ_PERMISSIONS,
+    });
+    expect(read.ok && read.permissions).toEqual({ contents: "read", metadata: "read" });
+  });
+
+  it("never boots a container on a cached token with less than the boot minimum left", async () => {
+    // The boot token is what the container's credential helper falls back to
+    // when the token door does not answer. One minted 55 minutes before the
+    // boot would pass the cache's own five-minute margin and die minutes in.
+    let now = T0;
+    const github = fakeGitHub({ now: () => now });
+    const options = { fetcher: github.fetcher, now: () => now };
+
+    await installationToken(env, PROJECT, options); // a Worker reader's mint at T0
+    now = T0 + 3_600_000 - BOOT_TOKEN_MIN_LIFE_MS + 60_000; // 44 minutes left
+    const door = await installationToken(env, PROJECT, options);
+    expect(door.ok && door.cached).toBe(true); // the door and readers still share it
+
+    const handed = await containerGitHub(
+      env,
+      PROJECT,
+      { token_source: "operator" },
+      FACTORY,
+      options,
+    );
+    expect(handed.ok && handed.token).toBe("ghs_placeholder_2");
+    expect(github.minted()).toBe(2);
+
+    // And a boot inside the fresh token's life takes it from the cache.
+    now += 10 * 60_000;
+    const again = await containerGitHub(
+      env,
+      PROJECT,
+      { token_source: "operator" },
+      FACTORY,
+      options,
+    );
+    expect(again.ok && again.token).toBe("ghs_placeholder_2");
+    expect(github.minted()).toBe(2);
   });
 
   it("on the token rung: the stored token and no refresh door, exactly as before", async () => {

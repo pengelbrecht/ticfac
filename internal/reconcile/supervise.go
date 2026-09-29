@@ -446,8 +446,8 @@ func (r *Reconciler) Supervise(ctx context.Context) (*Result, error) {
 func haltReason(stop, previous supervisedStop, made, capped int) string {
 	switch {
 	case stop.Reason == StoppedRemoteAuthRefused:
-		return "the remote refused this machine's credentials past the retry bound — a key, an ssh-agent or " +
-			"an access grant is a person's to fix, and the refusal below says what to check"
+		return "the remote refused this machine's credentials past the retry bound — a key, an ssh-agent, " +
+			"an access grant or a token's permissions is a person's to fix, and the refusal below says what to check"
 	case !resumesWithoutAPerson(stop.Reason) && !stop.Decides:
 		return "it needs a person — this is a decision, not a retype, and the run stops for it exactly as it " +
 			"always has"

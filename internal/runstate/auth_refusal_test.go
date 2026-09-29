@@ -16,6 +16,63 @@ import (
 const publickeyRefusal = "git@github.com: Permission denied (publickey).\n" +
 	"fatal: Could not read from remote repository."
 
+// githubAppPushRefusal is what GitHub said to epic hn6's cloud orchestrator
+// (2026-09-29) pushing its own integration branch over https with the run's
+// GitHub App installation token — twice, each time ending the boot as "a stop
+// this run has no classification for". Verbatim but for the shas.
+const githubAppPushRefusal = "remote: Permission to pengelbrecht/ticfac.git denied to ticfac[bot].\n" +
+	"fatal: unable to access 'https://github.com/pengelbrecht/ticfac.git/': The requested URL returned error: 403"
+
+// TestAnHTTPSTokenRefusalIsRetriedABoundAndThenNamedForTheToken: the hn6
+// refusal is an auth refusal — waited through a small bound, because each
+// attempt runs the credential helper again and so asks the factory for a
+// fresh token — and when it persists the refusal names a TOKEN's causes (the
+// App's permissions, workflows: write, an expired token behind a helper that
+// fell back), not an ssh key's.
+// short: remote failure classification over captured stderr, with a stubbed sleep
+func TestAnHTTPSTokenRefusalIsRetriedABoundAndThenNamedForTheToken(t *testing.T) {
+	refusal := errors.New("git push --force-with-lease=refs/heads/epic/e1:" + strings.Repeat("a", 40) +
+		" origin " + strings.Repeat("b", 40) + ":refs/heads/epic/e1: exit status 128: " + githubAppPushRefusal)
+
+	t.Run("a one-off refusal is waited through", func(t *testing.T) {
+		retry := RemoteRetry{Attempts: 4, Backoff: time.Microsecond, Sleep: func(time.Duration) {}}
+		tries := 0
+		err := retry.Do("git push", func() error {
+			if tries++; tries == 1 {
+				return refusal
+			}
+			return nil
+		})
+		if err != nil || tries != 2 {
+			t.Fatalf("a one-off token refusal stopped the caller after %d tries: %v", tries, err)
+		}
+	})
+
+	t.Run("a persistent refusal is refused by name, with the token's remedy", func(t *testing.T) {
+		retry := RemoteRetry{Attempts: 10, Backoff: time.Microsecond, Sleep: func(time.Duration) {}}
+		tries := 0
+		err := retry.Do("git push", func() error { tries++; return refusal })
+		if tries != AuthRefusalAttempts {
+			t.Errorf("a persistent token refusal ran %d times, want the auth bound of %d", tries, AuthRefusalAttempts)
+		}
+		var named *RemoteAuthRefusedError
+		if !errors.As(err, &named) {
+			t.Fatalf("a persistent token refusal is not a RemoteAuthRefusedError: %v", err)
+		}
+		first, _, _ := strings.Cut(err.Error(), "\n")
+		for _, want := range []string{RemoteAuthRefusedClass, "3 times", "https remote refused this run's token",
+			"contents: write", "workflows: write", "credential helper", "ticfac factory status",
+			"denied to ticfac[bot]"} {
+			if !strings.Contains(first, want) {
+				t.Errorf("the refusal's first line does not say %q: %s", want, first)
+			}
+		}
+		if strings.Contains(first, "ssh-add") {
+			t.Errorf("a refused https token sends the reader to ssh-add: %s", first)
+		}
+	})
+}
+
 // TestAnAuthRefusalIsRetriedABoundAndThenNamed is the rule over RemoteRetry
 // itself: a small bound of retries, and a named refusal with the remedy when
 // the refusal persists.

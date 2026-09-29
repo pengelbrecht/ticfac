@@ -129,6 +129,20 @@ func TestARemoteFailureIsClassifiedByWhatTheRemoteActuallySaid(t *testing.T) {
 			want:   RemoteAuthRefused,
 		},
 		{
+			// Epic hn6's cloud run, 2026-09-29: the orchestrator's push of its
+			// own integration branch over https with the per-run GitHub App
+			// token, verbatim but for the shas. It read as unclassified, and
+			// the run halted for a person.
+			name:   "an https push the remote refused this token",
+			stderr: githubAppPushRefusal,
+			want:   RemoteAuthRefused,
+		},
+		{
+			name:   "an https fetch refused outright",
+			stderr: "fatal: unable to access 'https://github.com/o/r.git/': The requested URL returned error: 401",
+			want:   RemoteAuthRefused,
+		},
+		{
 			// A "permission denied" that is not ssh's is not an auth refusal.
 			name:   "a file this machine may not write",
 			stderr: "error: unable to create temporary file: Permission denied",

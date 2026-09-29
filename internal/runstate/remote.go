@@ -85,6 +85,53 @@ var authMarkers = []string{
 	"invalid username or password",
 	"could not read username",
 	"terminal prompts disabled",
+	// An https remote that KNOWS the credential and refuses it this
+	// operation: GitHub's "remote: Permission to <owner>/<repo>.git denied to
+	// <who>." above curl's "The requested URL returned error: 403". Epic
+	// hn6's cloud run (2026-09-29) halted twice on exactly this, pushing its
+	// own integration branch with the per-run GitHub App token, as "a stop
+	// this run has no classification for": the words are "permission to …
+	// denied", which neither ssh's "permission denied (" nor the bare
+	// "permission denied" below ever matched. The same writes went through on
+	// the next boot.
+	"the requested url returned error: 403",
+	"the requested url returned error: 401",
+}
+
+// httpsTokenMarkers say an auth refusal was an HTTPS TOKEN's, not an ssh
+// key's. The remedy is a different sentence — the App's permissions, the
+// token's scope or life, the credential helper — and a person sent to
+// ssh-add over a GitHub App token is looking in the wrong place.
+var httpsTokenMarkers = []string{
+	"the requested url returned error: 403",
+	"the requested url returned error: 401",
+	"invalid username or password",
+	"authentication failed for 'http",
+}
+
+// IsHTTPSTokenRefusal answers whether an auth refusal came from an https
+// remote refusing a token rather than an ssh remote refusing a key.
+func IsHTTPSTokenRefusal(err error) bool {
+	return err != nil && containsAny(strings.ToLower(err.Error()), httpsTokenMarkers)
+}
+
+// AuthRefusalRemedy is what to check about a refused credential, worded for
+// the credential that was refused. The feed line and the halt both quote it,
+// so the two never send a person to different places.
+func AuthRefusalRemedy(err error) string {
+	if IsHTTPSTokenRefusal(err) {
+		return "the https remote refused this run's token. On the factory's GitHub App rung the likely " +
+			"causes are a permission the installation token lacks (contents: write for any push; " +
+			"workflows: write for a push whose commits touch .github/workflows) or a token that expired " +
+			"because the container's git credential helper could not get a fresh one from the factory's " +
+			"token door and fell back to the token it booted with (its warning is in the stderr below). " +
+			"Check `ticfac factory status` (the App's live mint) and accept any permissions the App " +
+			"requests on its installation's settings page; for a PAT, check it is unexpired and can push " +
+			"(with the workflow scope)"
+	}
+	return "check that ssh-agent is running and holds the key (ssh-add -l), that the key is one the remote " +
+		"knows (ssh -T git@github.com), that the key or deploy key has access to this repository, and for an " +
+		"https remote that `gh auth status` is logged in and the credential helper answers"
 }
 
 // RemoteAuthRefusedError is an auth refusal that outlived its bound. Its text
@@ -97,11 +144,8 @@ type RemoteAuthRefusedError struct {
 }
 
 func (e *RemoteAuthRefusedError) Error() string {
-	return fmt.Sprintf("%s: %s was refused authentication %d times running, so this is not a blip; check that "+
-		"ssh-agent is running and holds the key (ssh-add -l), that the key is one the remote knows "+
-		"(ssh -T git@github.com), that the key or deploy key has access to this repository, and for an https "+
-		"remote that `gh auth status` is logged in and the credential helper answers: %v",
-		RemoteAuthRefusedClass, e.What, e.Attempts, e.Err)
+	return fmt.Sprintf("%s: %s was refused authentication %d times running, so this is not a blip; %s: %v",
+		RemoteAuthRefusedClass, e.What, e.Attempts, AuthRefusalRemedy(e.Err), e.Err)
 }
 
 func (e *RemoteAuthRefusedError) Unwrap() error { return e.Err }
