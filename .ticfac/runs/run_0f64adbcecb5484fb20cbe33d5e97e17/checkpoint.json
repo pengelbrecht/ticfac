@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_0f64adbcecb5484fb20cbe33d5e97e17",
   "epic_id": "hn6",
-  "sequence": 7,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-09-29T13:24:30Z",
+  "sequence": 8,
+  "state": "failed",
+  "reason": "the executor refused to start r5i: attempt 1 of run-run_0f64adbcecb5484fb20cbe33d5e97e17/tick-r5i/attempt-1 already settled as succeeded under this identity: a retry is a new attempt number, not this one again",
+  "updated_at": "2026-09-29T13:24:35Z",
   "ticks": [
     {
       "tick_id": "r5i",
-      "state": "integrated",
+      "state": "rejected",
       "attempt": 1
     },
     {
