@@ -21,8 +21,9 @@ import (
 //   - POST /api/sandbox/attempts — start one attempt's worker container,
 //     named by the attempt's identity, and return its handle without
 //     waiting for it.
-//   - GET  /api/sandbox/attempts/:tick_id/:attempt — the state of the named
-//     sandbox: running, finished with a result, or absent.
+//   - GET  /api/sandbox/attempts/:tick_id/:attempt?job_id=… — the state of
+//     the named sandbox: running, finished with a result, or absent. The
+//     job id is part of the name: a repair of attempt 1 is not attempt 1.
 //
 // Both are authorized by the run's OWN gateway token (D17) — the credential
 // the orchestrator container holds and the only one it may hold — verified
@@ -162,12 +163,18 @@ func (c *Client) startAttempt(ctx context.Context, req *startRequest) (*subproce
 }
 
 // attemptStatus reads the named sandbox's state BY IDENTITY: run from the
-// credential, tick and attempt from the path. Nothing persisted by a caller
-// that may since have died is consulted — the door re-addresses the
+// credential, tick and attempt from the path, and the job from the query —
+// the FULL job id, because several jobs run under one attempt number and a
+// settled record for one must never answer for another. Nothing persisted by
+// a caller that may since have died is consulted — the door re-addresses the
 // container by name, which is what makes a handle re-queriable after the
-// process that created it is gone.
-func (c *Client) attemptStatus(ctx context.Context, tickID string, attempt int) (*subprocess.JobStatus, error) {
+// process that created it is gone. An empty jobID asks about the attempt's
+// own job, the door's answer before it keyed by job.
+func (c *Client) attemptStatus(ctx context.Context, tickID string, attempt int, jobID string) (*subprocess.JobStatus, error) {
 	path := c.baseURL + doorPathAttempts + url.PathEscape(tickID) + "/" + fmtInt(attempt)
+	if jobID != "" {
+		path += "?" + url.Values{"job_id": {jobID}}.Encode()
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err

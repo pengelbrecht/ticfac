@@ -9,6 +9,9 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/herd/client"
+	// A test binary that reads TICKS_SUBSTRATE sheds a live run's control
+	// plane first (runenv's init): no test inherits the run's substrate.
+	_ "github.com/pengelbrecht/ticfac/internal/runenv"
 )
 
 // EnvVar is the environment variable herdr exports inside a managed pane. The

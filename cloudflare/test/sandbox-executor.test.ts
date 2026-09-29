@@ -21,6 +21,7 @@ import type {
 } from "../src/sandbox";
 import {
   AdoptionModelUnknownError,
+  attemptJobSlot,
   attemptSandboxName,
   reportFromWorker,
   type SandboxBootRecord,
@@ -256,8 +257,13 @@ class FakeRefWriter implements GitRefWriter {
  * exercised against the same contract the deployed D1 wiring answers to.
  */
 class FakeBootRecord implements SandboxBootRecord {
-  readonly recorded: Array<{ run_id: string; tick_id: string; attempt: number; model: string }> =
-    [];
+  readonly recorded: Array<{
+    run_id: string;
+    tick_id: string;
+    attempt: number;
+    job: string;
+    model: string;
+  }> = [];
   readonly #byIdentity = new Map<string, string>();
 
   /** Every boot the record holds, forgotten — a deployment that predates it. */
@@ -269,9 +275,10 @@ class FakeBootRecord implements SandboxBootRecord {
     run_id: string;
     tick_id: string;
     attempt: number;
+    job: string;
     model: string;
   }): Promise<void> {
-    this.#byIdentity.set(`${boot.run_id}/${boot.tick_id}/${boot.attempt}`, boot.model);
+    this.#byIdentity.set(`${boot.run_id}/${boot.tick_id}/${boot.attempt}/${boot.job}`, boot.model);
     this.recorded.push({ ...boot });
   }
 
@@ -279,9 +286,14 @@ class FakeBootRecord implements SandboxBootRecord {
     run_id: string;
     tick_id: string;
     attempt: number;
+    job_id?: string;
   }): Promise<string | null> {
+    // Keyed the way the D1 wiring keys it: the job's slot beside the attempt.
+    const job =
+      attemptJobSlot(identity.run_id, identity.tick_id, identity.attempt, identity.job_id) ?? "";
     return (
-      this.#byIdentity.get(`${identity.run_id}/${identity.tick_id}/${identity.attempt}`) ?? null
+      this.#byIdentity.get(`${identity.run_id}/${identity.tick_id}/${identity.attempt}/${job}`) ??
+      null
     );
   }
 }

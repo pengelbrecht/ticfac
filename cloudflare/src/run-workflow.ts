@@ -81,6 +81,7 @@ import {
   type SandboxGitPlan,
 } from "./credentials";
 import { getRun, recordRunProgress, updateRunState } from "./db";
+import { appendBootFeed, orchestratorBootFeedEvent, orchestratorExitFeedEvent } from "./feed-relay";
 import {
   factoryBaseURL,
   issueRunToken,
@@ -1518,6 +1519,22 @@ async function supervisePass(
             factoryBaseURL(env),
           );
           if (!github.ok) throw new Error(github.denial.detail);
+          // The boot's own line on the run feed, BEFORE the process exists:
+          // every line the container relays for this boot sorts after it
+          // (src/feed-relay.ts), and a boot that never gets as far as
+          // `ticfac run-epic` is still a boot the operator can see starting.
+          // Best effort, like every feed append — a replayed step rewrites
+          // the same key.
+          await appendBootFeed(env, {
+            project: params.project,
+            run_id: params.run_id,
+            boot,
+            slot: "a",
+            event: orchestratorBootFeedEvent(
+              params.run_id,
+              `orchestrator boot ${boot} starting (phase ${phase}): booting its container`,
+            ),
+          });
           const sandbox = await binding.get(name, { image, keepAlive: true });
           const started = await sandbox.startProcess(ORCHESTRATOR_COMMAND, {
             env: orchestratorEnv({
@@ -1670,6 +1687,10 @@ async function supervisePass(
     // the price: without this finally the run would leave it billing until an
     // operator noticed, and `finalize`'s sweep would arrive far too late to be
     // the only destroy.
+    //
+    // How this boot ended, in the words its `d` line on the run feed says —
+    // set on every path out of the watch below, written in the finally.
+    let bootEnded = `orchestrator boot ${boot} ended`;
     try {
       // The one absolute deadline a sleep on this pass must not run past: the
       // run's wall clock, enforced on every pass since tick dl8 removed the
@@ -1781,6 +1802,7 @@ async function supervisePass(
           // point of the window) and dies with the run at finalize; a hard
           // stop's already died above.
           if (!trip.hard) await revoke("revoke:clean");
+          bootEnded = `orchestrator boot ${boot} was stopped: ${trip.detail}`;
           return { kind: "tripped", trip, boots: counter.next - 1 };
         }
 
@@ -1822,11 +1844,13 @@ async function supervisePass(
             });
             return { unanswerable: true };
           });
+          bootEnded = `orchestrator boot ${boot}: ${detail}`;
           return { kind: "failed", detail, boots: counter.next - 1 };
         }
         unasked = 0;
 
         if (seen.process === "completed" && (seen.exit_code ?? 0) === 0) {
+          bootEnded = `the orchestrator exited 0 (boot ${boot})`;
           return { kind: "completed", boots: counter.next - 1 };
         }
 
@@ -1836,7 +1860,9 @@ async function supervisePass(
             seen.process === "gone"
               ? `the orchestrator sandbox died (boot ${boot})`
               : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})`;
+          bootEnded = lastDetail;
           if (isTerminalExit(code)) {
+            bootEnded = `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)})`;
             // A configuration verdict from the boot: the SHA still will not check
             // out, the pre-flight still fails, the epic the run was submitted
             // for is still missing from the submitted tree. Another container
@@ -1862,6 +1888,7 @@ async function supervisePass(
           drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
         );
         const detail = `the run outlived its observation budget (${context.config.max_observations} looks)`;
+        bootEnded = `orchestrator boot ${boot} was stopped: ${detail}`;
         return options.on_exhausted === "fail"
           ? { kind: "failed", detail, boots: counter.next - 1 }
           : {
@@ -1901,6 +1928,21 @@ async function supervisePass(
       // the only way a keepAlive container outlives the Workflow is a Workflow
       // instance that never runs again at all — and `finalize`'s sweep still
       // destroys every boot as the backstop for exactly that case.
+      //
+      // First, the boot's `d` line on the run feed: how it ended, exit code
+      // and all. It also CLOSES the boot's slice of the feed to relayed
+      // segments (src/feed-relay.ts), so nothing lands before it afterwards.
+      const ended = bootEnded;
+      await step.do(`${options.label}:ended:${attempt}`, OBSERVE_RETRIES, async () => {
+        const wrote = await appendBootFeed(env, {
+          project: params.project,
+          run_id: params.run_id,
+          boot,
+          slot: "d",
+          event: orchestratorExitFeedEvent(params.run_id, ended),
+        });
+        return { wrote };
+      });
       await step.do(`${options.label}:destroy:${attempt}`, OBSERVE_RETRIES, async () => {
         const binding = sandboxBinding(env);
         if (binding === null) return { destroyed: false };

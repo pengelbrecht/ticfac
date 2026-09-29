@@ -576,6 +576,9 @@ PROMPT
 }
 
 start_harness() {
+	# The run's control plane, not the machine's: a gate's command and a test
+	# binary never inherit these (internal/runenv names the list, and its test
+	# fails on an export here that nobody classified).
 	export TK_ACTOR="$ACTOR"
 	export TICKS_RUN_ID="$run_id"
 	export TICKS_PHASE="$phase"
@@ -639,12 +642,100 @@ start_harness() {
 	exec "${cmd[@]}"
 }
 
+# ---------------------------------------------------------------------------
+# The boot's lifecycle, on the run's feed
+# ---------------------------------------------------------------------------
+# An operator following a cloud run (`ticfac watch/status/events`) reads the
+# factory's run feed, and until the feed relay existed a boot was silent there
+# from "run started" to "the orchestrator exited 1": the clone, the probes and
+# the pre-flight — and a boot that died in one of them — said nothing. So the
+# boot says where it is, as feed lines of its own (stage `container`), relayed
+# to the factory's feed-relay door as the `boot` stream on this run's own
+# token. `ticfac run-epic` then relays the reconciler's feed itself
+# (internal/feedrelay), and the Workflow writes the boot's exit line.
+#
+# The lines are kept in a file outside the checkout — the checkout's tree is
+# the run's to commit — and relayed from the offset the factory last took, so
+# a POST that failed is carried by the next one and a replay is harmless (the
+# door keys a batch by its offset). Best effort throughout: nothing here can
+# fail or slow the boot beyond one bounded curl.
+feed_notes_file="${TICKS_FEED_NOTES:-${TMPDIR:-/tmp}/ticks-feed-notes-${run_id}.jsonl}"
+feed_notes_relayed=0
+# The step the boot is in, for the line a boot that dies before the
+# orchestrator starts leaves behind.
+boot_step="starting"
+
+feed_note() {
+	local stage="$1" detail="$2"
+	# A review reads a hostile pull request and posts one comment; it has no
+	# reconciler feed to frame and phones home with nothing else.
+	[[ $phase != "review" ]] || return 0
+	[[ -n $factory_url && -n $factory_token && $run_id != "unknown" ]] || return 0
+	command -v jq >/dev/null 2>&1 || return 0
+	command -v curl >/dev/null 2>&1 || return 0
+	local at line
+	at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	line="$(jq -cn --arg at "$at" --arg run "$run_id" --arg stage "$stage" --arg detail "$detail" \
+		'{schema_version: 1, at: $at, run_id: $run, tick_id: null, attempt: null, stage: $stage, detail: $detail}' 2>/dev/null)" || return 0
+	[[ -n $line ]] || return 0
+	printf '%s\n' "$line" >>"$feed_notes_file" 2>/dev/null || return 0
+	feed_notes_relay
+	return 0
+}
+
+# feed_notes_relay posts every note past the factory's offset. A replayed
+# offset is answered with where the stored segment ends, and a lost place with
+# the offset expected; either way the next round starts where the factory
+# stands. Three rounds at most: a boot does not wait on its own exhaust.
+feed_notes_relay() {
+	local round size text body answer status reply end
+	for round in 1 2 3; do
+		size="$(wc -c <"$feed_notes_file" 2>/dev/null | tr -d ' ')"
+		[[ $size =~ ^[0-9]+$ ]] || return 0
+		((size > feed_notes_relayed)) || return 0
+		# The trailing sentinel keeps the final newline command substitution
+		# would otherwise strip: the door takes whole lines only.
+		text="$(tail -c +"$((feed_notes_relayed + 1))" "$feed_notes_file"; printf x)"
+		text="${text%x}"
+		body="$(jq -cn --argjson offset "$feed_notes_relayed" --arg text "$text" \
+			'{stream: "boot", offset: $offset, text: $text}' 2>/dev/null)" || return 0
+		answer="$(curl -sS --max-time 10 -w '\n%{http_code}' -X POST \
+			-H "Authorization: Bearer $factory_token" -H 'Content-Type: application/json' \
+			--data-binary "$body" "${factory_url%/}/api/feed" 2>/dev/null)" || return 0
+		status="${answer##*$'\n'}"
+		reply="${answer%$'\n'*}"
+		case "$status" in
+		2*) end="$(jq -r '.end // empty' <<<"$reply" 2>/dev/null)" ;;
+		409) end="$(jq -r '.expected // empty' <<<"$reply" 2>/dev/null)" ;;
+		*) return 0 ;;
+		esac
+		[[ $end =~ ^[0-9]+$ ]] || return 0
+		feed_notes_relayed="$end"
+	done
+	return 0
+}
+
+# feed_note_exit is the line a boot that never reached the orchestrator
+# leaves: the exit code and the step it died in. An exec'd orchestrator
+# replaces this shell, so it never runs on the path where the boot succeeded.
+feed_note_exit() {
+	local status=$?
+	# Only the entrypoint's own shell speaks for the boot, never a subshell.
+	[[ ${BASHPID:-$$} == "$$" ]] || return "$status"
+	feed_note container "the container's entrypoint exited ${status} while ${boot_step}, before the orchestrator started"
+	return "$status"
+}
+
 main() {
 	say "run ${run_id}: epic ${epic} at ${base_sha} (harness ${harness}, phase ${phase})$(trace_note)"
+	trap feed_note_exit EXIT
+	boot_step="checking its inputs"
 	require_inputs
 	require_gateway
+	feed_note container "booting: phase ${phase}, epic ${epic} at ${base_sha:0:12}"
 	configure_model_routing
 	configure_caches
+	boot_step="cloning the repository"
 	clone_at_sha
 	# The clone stops detached at the base; which branch this role works on is
 	# its own decision, so the run branch is adopted here rather than inside it.
@@ -656,6 +747,7 @@ main() {
 		adopt_run_branch
 	fi
 	cd "$workdir" || die $EXIT_CLONE "cannot enter $workdir"
+	boot_step="verifying tk"
 	verify_tk
 	# Every boot of an epic's orchestrator is a chance to deliver a question
 	# `tk ask` parked on an earlier boot, and to collect whatever Telegram has
@@ -671,6 +763,7 @@ main() {
 	# The model is settled and proved BEFORE provisioning, setup and the
 	# pre-flight: those are the slow, expensive steps, and a run that cannot
 	# make a model call is over whether or not its toolchain installed.
+	boot_step="probing the model and the harness"
 	resolve_model
 	# Config-only and cheap, settled beside the model and before the slow steps:
 	# a run that cannot say how it dispatches workers is over either way. A
@@ -685,6 +778,7 @@ main() {
 	select_harness_route
 	configure_harness_provider
 	probe_harness
+	feed_note container "probes green: model ${model:-?} via ${model_provider:-?}, harness ${harness}"
 	# Everything below this line exists so a container can BUILD and TEST the
 	# repository, and a review does neither: it reads a diff and writes prose.
 	# Skipping it is not only a saving (toolchain provisioning and setup are
@@ -697,9 +791,14 @@ main() {
 		start_harness
 		return
 	fi
+	boot_step="provisioning the toolchain"
 	provision_toolchain
+	boot_step="running the repository's setup"
 	repo_setup
+	boot_step="running the pre-flight"
 	run_preflight
+	feed_note container "pre-flight green: starting the orchestrator"
+	boot_step="starting the orchestrator"
 	start_harness
 }
 

@@ -741,6 +741,9 @@ nudge_due() {
 # ---------------------------------------------------------------------------
 run_harness() {
 	local prompt="$1" session="${2:-}" resume="${3:-0}" status
+	# The run's control plane, not the machine's: a gate's command and a test
+	# binary never inherit these (internal/runenv names the list, and its test
+	# fails on an export here that nobody classified).
 	export TK_ACTOR="$ACTOR"
 	export TICKS_RUN_ID="$run_id"
 	export TICKS_TICK="$tick_id"

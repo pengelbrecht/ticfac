@@ -31,6 +31,9 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/httpnet"
+	// A test binary that reads TICKS_FACTORY_* sheds a live run's control
+	// plane first (runenv's init): no test reaches the run's factory.
+	_ "github.com/pengelbrecht/ticfac/internal/runenv"
 )
 
 // The door's path, spelled as the Worker serves it (cloudflare/src/run-done.ts;

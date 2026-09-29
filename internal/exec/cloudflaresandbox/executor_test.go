@@ -2,6 +2,7 @@ package cloudflaresandbox
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -362,8 +363,9 @@ func TestInspectRefusesAnotherExecutorsHandle(t *testing.T) {
 func TestTheDoorMintingTheWrongJobIsRefused(t *testing.T) {
 	h := newHarness(t)
 	h.running("keh")
-	spec := h.spec // the job id the RECONCILER owns, frozen before the door drifts
-	h.door.setRunID("somebody-else")
+	spec := h.spec // the job id the RECONCILER owns
+	// The door mints a handle for a job the caller did not ask about.
+	h.door.disagree("run-somebody-else/tick-keh/attempt-1", "")
 	_, err := h.ex.Start(spec)
 	if err == nil || !strings.Contains(err.Error(), "the door minted handle") {
 		t.Fatalf("a door minting a handle for another run's job must be refused, got %v", err)
@@ -378,7 +380,7 @@ func TestTheStatusAnsweringForAnotherJobIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	h.door.setRunID("somebody-else")
+	h.door.disagree("", "run-somebody-else/tick-keh/attempt-1")
 	if _, err := h.ex.Inspect(handle, ""); err == nil || !strings.Contains(err.Error(), "the door answered for") {
 		t.Fatalf("a status answering for another run's attempt must be refused, got %v", err)
 	}
@@ -593,5 +595,123 @@ func TestAsDoorErrorRejectsForeignErrors(t *testing.T) {
 	}
 	if _, ok := AsDoorError(nil); ok {
 		t.Error("nil was typed as a door refusal")
+	}
+}
+
+// repairSpec is the spec the reconciler builds for a gate repair of attempt 1
+// (internal/reconcile/gate_repair.go): its own job id — `…/repair-1`, a retry
+// suffixed `-r2`, `-r3` — under the SAME attempt number as the implement
+// attempt it repairs, and its own write ref.
+func (h *harness) repairSpec(tickID, suffix string) *subprocess.JobSpec {
+	h.Helper()
+	spec := h.newSpec(tickID)
+	jobID := fmt.Sprintf("run-%s/tick-%s/repair-1%s", h.door.runID, tickID, suffix)
+	spec.JobID = jobID
+	spec.Role = "plan-repair"
+	spec.Source.WriteRef = "refs/heads/ticfac/" + jobID
+	spec.ArtifactPrefix = "runs/" + jobID + "/"
+	return spec
+}
+
+// The hn6 cloud-run stall: after r5i's attempt 1 settled and its integrated
+// gate failed, every repair job — repair-1, repair-1-r2, repair-1-r3, all
+// under attempt 1 — was refused as "attempt 1 … already settled", because
+// the executor and the door keyed a job by (run, tick, attempt) and so the
+// implement attempt's settled container answered for each repair. A job's
+// identity is its FULL job id: the repair starts, its retry starts, and the
+// same job id asked twice is adopted, never refused.
+//
+// short: an httptest door and state directories; no container.
+func TestARepairStartsAfterTheAttemptItRepairsSettled(t *testing.T) {
+	h := newHarness(t)
+	if _, err := h.start("r5i"); err != nil {
+		t.Fatalf("the implement attempt's Start: %v", err)
+	}
+	h.settled("r5i", subprocess.StateSucceeded)
+
+	repair := h.repairSpec("r5i", "")
+	handle, err := h.ex.Start(repair)
+	if err != nil {
+		t.Fatalf("the repair of a settled attempt did not start: %v", err)
+	}
+	if handle.JobID != repair.JobID {
+		t.Errorf("the repair's handle is for %q, want %q", handle.JobID, repair.JobID)
+	}
+	if got := h.door.lastStartBody()["job_id"]; got != repair.JobID {
+		t.Errorf("the start body names job %v, want %q: the door keys the container by the full job id", got, repair.JobID)
+	}
+	if h.door.startCount() != 2 {
+		t.Errorf("the door saw %d starts, want 2 (the attempt, then its repair)", h.door.startCount())
+	}
+	// The repair is watched as ITSELF, not as the attempt it repairs.
+	h.door.setJobStatus(repair.JobID, doorStatus{state: subprocess.StateRunning})
+	status, err := h.ex.Inspect(handle, "")
+	if err != nil {
+		t.Fatalf("Inspect the repair: %v", err)
+	}
+	if status.JobID != repair.JobID || status.State != subprocess.StateRunning {
+		t.Errorf("the repair reads %s as %s, want %s running", status.JobID, status.State, repair.JobID)
+	}
+
+	// The repair fails; its retry is a NEW job under the same attempt, and
+	// it starts too.
+	h.door.setJobStatus(repair.JobID, doorStatus{state: subprocess.StateFailed, terminal: true})
+	retry := h.repairSpec("r5i", "-r2")
+	retryHandle, err := h.ex.Start(retry)
+	if err != nil {
+		t.Fatalf("the repair's retry did not start: %v", err)
+	}
+	if retryHandle.JobID != retry.JobID {
+		t.Errorf("the retry's handle is for %q, want %q", retryHandle.JobID, retry.JobID)
+	}
+
+	// The same job id asked again — a restarted orchestrator holding none of
+	// this one's state — is the SAME running job, adopted rather than
+	// refused or booted beside itself.
+	h.door.setJobStatus(retry.JobID, doorStatus{state: subprocess.StateRunning})
+	fresh := h.newExecutor(t.TempDir())
+	again, err := fresh.Start(retry)
+	if err != nil {
+		t.Fatalf("the same job id asked again was not adopted: %v", err)
+	}
+	record, err := newStore(fresh.stateDirFor(retry.JobID, 1)).readAttempt()
+	if err != nil {
+		t.Fatalf("read the adopting incarnation's record: %v", err)
+	}
+	if !record.Adopted {
+		t.Error("the second start of one job id was not recorded as adopted")
+	}
+	payloadAgain, _ := local(again)
+	payloadRetry, _ := local(retryHandle)
+	if payloadAgain.Sandbox != payloadRetry.Sandbox || payloadAgain.Sandbox == "" {
+		t.Errorf("the adoption addresses container %q, want the retry's %q", payloadAgain.Sandbox, payloadRetry.Sandbox)
+	}
+}
+
+// A door that still keys by (tick, attempt) answers the implement attempt's
+// settled record when asked about its repair. That answer is about ANOTHER
+// job, and the executor must not read it as this job's verdict — not a
+// settled refusal (the stall's mechanism: the repair bound spent on refusals
+// that were never about the repair), but a loud error naming both jobs.
+//
+// short: an httptest door and one state directory.
+func TestADoorAnsweringForTheAttemptIsNotTheRepairsVerdict(t *testing.T) {
+	h := newHarness(t)
+	h.door.keyByAttempt()
+	h.settled("r5i", subprocess.StateSucceeded)
+
+	repair := h.repairSpec("r5i", "")
+	_, err := h.ex.Start(repair)
+	if err == nil {
+		t.Fatal("a status answering for the implement attempt was taken as the repair's")
+	}
+	if refusal, ok := subprocess.AsRefusal(err); ok && refusal.Reason == subprocess.RefusedSettled {
+		t.Fatalf("the repair was refused as settled on the attempt's record: %v", err)
+	}
+	if !strings.Contains(err.Error(), "answered for") || !strings.Contains(err.Error(), repair.JobID) {
+		t.Errorf("the error does not name the job the door answered for and the one asked about: %v", err)
+	}
+	if h.door.startCount() != 0 {
+		t.Errorf("the door saw %d starts, want 0", h.door.startCount())
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -257,6 +258,101 @@ func TestTheRealDoorAcceptsTheRealCloudProfileAndAnEmDashTitle(t *testing.T) {
 	door.assertOneLiveWorkProcess(t, "after the UTF-8 dispatch")
 }
 
+// The hn6 cloud-run stall, against the REAL door: r5i's implement attempt 1
+// settled, its integrated gate failed, and every repair job — repair-1,
+// repair-1-r2, repair-1-r3, all run under attempt 1 — was refused before it
+// booted, because the door re-addressed the container by (run, tick,
+// attempt) and the settled implement attempt answered for each. Here the
+// real executor settles the implement attempt in the real door's container,
+// then starts the repair and its retry: each boots its OWN container, and
+// the same job id asked twice is adopted.
+func TestTheRealDoorStartsARepairOfASettledAttempt(t *testing.T) {
+	shorttest.EndToEnd(t)
+	door := newRealDoor(t)
+	const tickID = "r5i"
+	ex := door.newExecutor(t.TempDir())
+
+	implement := door.newSpec(tickID)
+	handle, err := ex.Start(implement)
+	if err != nil {
+		t.Fatalf("the implement attempt's Start: %v", err)
+	}
+	payload, err := local(handle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	door.finish(t, payload.Sandbox, 0)
+	status, err := ex.Inspect(handle, "")
+	if err != nil {
+		t.Fatalf("Inspect the implement attempt: %v", err)
+	}
+	if status.State != subprocess.StateSucceeded || !status.Terminal {
+		t.Fatalf("the implement attempt reads %s (terminal %v), want settled succeeded", status.State, status.Terminal)
+	}
+
+	repair := door.repairSpec(tickID, "")
+	repairHandle, err := ex.Start(repair)
+	if err != nil {
+		t.Fatalf("the repair of the settled attempt did not start: %v", err)
+	}
+	if repairHandle.JobID != repair.JobID {
+		t.Errorf("the repair's handle is for %q, want %q", repairHandle.JobID, repair.JobID)
+	}
+	repairPayload, err := local(repairHandle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if repairPayload.Sandbox == payload.Sandbox {
+		t.Fatalf("the repair was booted in the implement attempt's container %q", payload.Sandbox)
+	}
+	if repairPayload.Branch == payload.Branch {
+		t.Errorf("the repair lands on the implement attempt's branch %q: its container would adopt that work as its own", payload.Branch)
+	}
+	repairStatus, err := ex.Inspect(repairHandle, "")
+	if err != nil {
+		t.Fatalf("Inspect the repair: %v", err)
+	}
+	if repairStatus.JobID != repair.JobID || repairStatus.State != subprocess.StateRunning {
+		t.Errorf("the repair reads %s as %s, want %s running", repairStatus.JobID, repairStatus.State, repair.JobID)
+	}
+
+	// The repair fails; its retry is its own job under the same attempt.
+	door.finish(t, repairPayload.Sandbox, 1)
+	retry := door.repairSpec(tickID, "-r2")
+	retryHandle, err := ex.Start(retry)
+	if err != nil {
+		t.Fatalf("the repair's retry did not start: %v", err)
+	}
+	retryPayload, err := local(retryHandle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if retryPayload.Sandbox == repairPayload.Sandbox || retryPayload.Sandbox == payload.Sandbox {
+		t.Errorf("the retry was booted in container %q, which an earlier job holds", retryPayload.Sandbox)
+	}
+
+	// The same job id from a restarted orchestrator: adopted, not refused.
+	restarted := door.newExecutor(t.TempDir())
+	again, err := restarted.Start(retry)
+	if err != nil {
+		t.Fatalf("the retry asked again was not adopted: %v", err)
+	}
+	againPayload, err := local(again)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if againPayload.ProcessID == nil || retryPayload.ProcessID == nil || *againPayload.ProcessID != *retryPayload.ProcessID {
+		t.Errorf("the adoption addresses process %v, want the retry's %v", againPayload.ProcessID, retryPayload.ProcessID)
+	}
+	record, err := newStore(restarted.stateDirFor(retry.JobID, restarted.opts.Attempt)).readAttempt()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !record.Adopted {
+		t.Error("the restarted incarnation's start of the retry was not recorded as adopted")
+	}
+}
+
 // assertUnreachable states what avx's rule means at the call site: the error
 // is the client's transport failure naming the door it cannot reach — never
 // the door's own refusal (the door never answered), never anything a caller
@@ -483,6 +579,37 @@ func (d *realDoor) newSpec(tickID string) *subprocess.JobSpec {
 			}},
 		},
 		Limits: subprocess.Limits{WallSeconds: 300},
+	}
+}
+
+// repairSpec is the spec the reconciler builds for a gate repair of attempt
+// 1: its own job id (`…/repair-1`, retries suffixed `-r2`) under the SAME
+// attempt number as the implement attempt, and its own write ref.
+func (d *realDoor) repairSpec(tickID, suffix string) *subprocess.JobSpec {
+	d.t.Helper()
+	spec := d.newSpec(tickID)
+	jobID := fmt.Sprintf("run-%s/tick-%s/repair-1%s", d.runID, tickID, suffix)
+	spec.JobID = jobID
+	spec.Role = "plan-repair"
+	spec.Source.WriteRef = "refs/heads/ticfac/" + jobID
+	spec.ArtifactPrefix = "runs/" + jobID + "/"
+	return spec
+}
+
+// finish settles the live work process in one named container through the
+// harness's finish route — the worker exiting with the code given.
+func (d *realDoor) finish(t *testing.T, sandbox string, code int) {
+	t.Helper()
+	response, err := http.Post(d.url+"/__door_harness/finish?"+url.Values{
+		"sandbox": {sandbox}, "code": {fmt.Sprint(code)},
+	}.Encode(), "text/plain", nil)
+	if err != nil {
+		t.Fatalf("finish %s: %v", sandbox, err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNoContent {
+		body, _ := io.ReadAll(response.Body)
+		t.Fatalf("finish %s: %d %s", sandbox, response.StatusCode, body)
 	}
 }
 

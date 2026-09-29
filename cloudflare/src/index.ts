@@ -30,6 +30,12 @@
  * - POST /api/done          - a finished orchestrator waking its Run Workflow
  *                             through the Worker (tick 7eq); best effort — the
  *                             pushed branch, never the event, is the truth
+ * - GET/POST /api/feed      - the orchestrator container relaying its
+ *                             reconciler's event feed and its own lifecycle
+ *                             lines into the run's feed, on its run's token
+ * - GET/POST /api/projects/:owner/:repo/pending - also open to a live run's
+ *                             ORCHESTRATOR token for its own project (list
+ *                             and register only; answers stay the operator's)
  * - POST /api/status-snapshots - a LOCAL run pushing its status model so the
  *                             factory serves it on the phone page (tick i1r);
  *                             the same push evaluates the Telegram alerts
@@ -82,13 +88,19 @@ import {
   removeEnrolledProject,
 } from "./db";
 import { handleDraftPress, parseDraftCallback } from "./drafts";
+import { FEED_RELAY_PATH, feedRelayRoute } from "./feed-relay";
 import {
   bareTextOf,
   type FreeTextCandidate,
   renderFreeTextRefusal,
   resolveFreeText,
 } from "./free-text";
-import { proxyModelRequest } from "./gateway";
+import {
+  authorizeRunCredential,
+  extractRunToken,
+  proxyModelRequest,
+  RUN_TOKEN_PREFIX,
+} from "./gateway";
 import {
   GITHUB_APP_CALLBACK_PATH,
   GITHUB_APP_INSTALLED_PATH,
@@ -1308,6 +1320,70 @@ function safeSweepRecord(record: string): unknown {
   }
 }
 
+/** `/api/projects/<owner>/<repo>/pending`, and nothing below it. */
+const PENDING_LIST_PATH = /^\/api\/projects\/([^/]+)\/([^/]+)\/pending$/;
+
+/**
+ * Whether a RUN's credential may use the project's pending list.
+ *
+ * The orchestrator container's parked-question sweep (image/common.sh,
+ * deliver_parked_questions) lists and registers its project's questions on
+ * every boot, and it holds exactly one credential: its run's gateway token
+ * (TICKS_FACTORY_TOKEN), never the operator's. The route demanded the
+ * operator's token, so every cloud boot logged `questions: the factory
+ * refused the pending list (HTTP 401): {"error":"unauthorized"}` and no
+ * parked question ever reached a phone from a cloud run.
+ *
+ * So exactly two operations — the list (GET) and a registration (POST) — are
+ * open to a run's credential, and only for the ORCHESTRATOR of a live run of
+ * THAT project: the run names the project, never the path. Answering and
+ * settling stay operator-only, because an answer is a person's word and a run
+ * must never be able to supply its own.
+ *
+ * Returns `"not_run_scoped"` when the request is not this case at all (the
+ * caller then applies the factory token as always), `"allowed"` when the run
+ * credential admits it, or the refusal to send.
+ */
+async function authorizeRunQuestionAccess(
+  request: Request,
+  env: Env,
+  pathname: string,
+): Promise<"not_run_scoped" | "allowed" | Response> {
+  const match = PENDING_LIST_PATH.exec(pathname);
+  if (match === null) return "not_run_scoped";
+  if (request.method !== "GET" && request.method !== "POST") return "not_run_scoped";
+  const presented = extractRunToken(request);
+  if (presented === null || !presented.startsWith(RUN_TOKEN_PREFIX)) return "not_run_scoped";
+
+  const authorized = await authorizeRunCredential(env, presented);
+  if (!authorized.ok) {
+    return Response.json(
+      { error: authorized.denial.error, detail: authorized.denial.detail },
+      { status: authorized.denial.status },
+    );
+  }
+  const project = `${match[1]}/${match[2]}`;
+  if (authorized.run.project !== project) {
+    return Response.json(
+      {
+        error: "wrong_project",
+        detail: `run ${authorized.run.run_id} belongs to ${authorized.run.project}, not ${project}`,
+      },
+      { status: 403 },
+    );
+  }
+  if (authorized.token.tick_id !== authorized.run.epic) {
+    return Response.json(
+      {
+        error: "not_orchestrator",
+        detail: "only the run's orchestrator may reach its project's questions",
+      },
+      { status: 403 },
+    );
+  }
+  return "allowed";
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -1315,8 +1391,15 @@ export default {
     // Auth runs before routing, so an unauthenticated caller cannot map the
     // route table by telling 404 apart from 401.
     if (!isAuthExempt(url.pathname)) {
-      const denied = await authenticateFactoryRequest(request, env);
-      if (denied !== null) return denied;
+      // The one operator-bridge door a RUN may also knock on: its own
+      // project's pending list. Anything else — or a caller presenting the
+      // operator's token — takes the factory-token path exactly as before.
+      const runScoped = await authorizeRunQuestionAccess(request, env, url.pathname);
+      if (runScoped instanceof Response) return runScoped;
+      if (runScoped === "not_run_scoped") {
+        const denied = await authenticateFactoryRequest(request, env);
+        if (denied !== null) return denied;
+      }
     }
 
     if (url.pathname === "/health") {
@@ -1349,6 +1432,14 @@ export default {
           status: 202,
         },
       );
+    }
+
+    // The feed relay: the orchestrator container relaying the reconciler's
+    // event feed and its own lifecycle lines into the run's feed, on its own
+    // run's gateway token (src/feed-relay.ts). Beside the other
+    // run-credential doors, for the same reason as each of them.
+    if (url.pathname === FEED_RELAY_PATH) {
+      return await feedRelayRoute(request, env);
     }
 
     // A container recording the branch it just created (tick t4y). Placed
