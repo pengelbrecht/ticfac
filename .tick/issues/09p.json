@@ -2,6 +2,7 @@
   "id": "09p",
   "title": "Naked-container cloud-branch test fails wherever factory creds exist",
   "description": "TestCloudBranchNamesTheConsequenceOfANakedContainer (internal/cli/cloud_branch_test.go) asserts the no-credential refusal, but nothing neutralizes TICKS_FACTORY_URL/TICKS_FACTORY_TOKEN, so in any environment that carries factory credentials — every ticfac worker container does — the command talks to the real factory and the test fails. It fails at the base commit too (reproduced at c948bb7), so `make gate` goes red in worker containers through no fault of the tick being gated. It should setenv the two variables empty, as its sibling tests do.\nevidence: internal/cli/cloud_branch_test.go:113-121; reproduction: go test -run TestCloudBranchNamesTheConsequenceOfANakedContainer ./internal/cli/ at c948bb7 with TICKS_FACTORY_TOKEN set\n\nticfac run run_aaf6886d67b5489a85fa1505239bad7e filed this backlog tick from the finding f6c537d5fa4912396bc914605cdda95e9d093a5060a2723051788b1d8392381b (reported by run-run_aaf6886d67b5489a85fa1505239bad7e/tick-r5i/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_aaf6886d67b5489a85fa1505239bad7e/absorptions/f6c537d5fa4912396bc914605cdda95e9d093a5060a2723051788b1d8392381b.json on the run branch.",
+  "notes": "2026-09-29 08:54 - ticfac run run_aaf6886d67b5489a85fa1505239bad7e: created by absorbing finding f6c537d5fa4912396bc914605cdda95e9d093a5060a2723051788b1d8392381b — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/run_aaf6886d67b5489a85fa1505239bad7e/absorptions/f6c537d5fa4912396bc914605cdda95e9d093a5060a2723051788b1d8392381b.json on epic/hn6, and it says: the classifier put 0.15 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_aaf6886d67b5489a85fa1505239bad7e/tick-r5i/attempt-1",
   "created_by": "ticfac run run_aaf6886d67b5489a85fa1505239bad7e",
   "created_at": "2026-09-29T08:54:18Z",
-  "updated_at": "2026-09-29T08:54:18Z"
+  "updated_at": "2026-09-29T08:54:23.78781865Z"
 }
