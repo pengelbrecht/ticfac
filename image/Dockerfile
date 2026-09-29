@@ -196,9 +196,20 @@ RUN set -euo pipefail; \
 # resolves TK_SOURCE_REF through the module proxy and verifies it against the
 # checksum database, which is the same guarantee the sha256sum lines above give
 # the tarballs. -trimpath and the version ldflag reproduce the release build.
+#
+# The fetch is retried (2026-09-29): under emulated amd64 builds the many
+# parallel checksum-database tile reads failed with HTTP/2 "stream error …
+# INTERNAL_ERROR; received from peer" two deploys running, while each URL
+# answered fine on its own. HTTP/1.1 (GODEBUG=http2client=0) avoids the
+# multiplexed stream that fails, and a bounded retry absorbs what remains;
+# a module that does not verify still fails every try.
 RUN set -euo pipefail; \
-    GOTOOLCHAIN=local GOFLAGS=-trimpath GOBIN=/usr/local/bin \
-      go install -ldflags "-s -w -X main.Version=${TK_VERSION}" "${TK_MODULE}@${TK_SOURCE_REF}"; \
+    for try in 1 2 3; do \
+      if GODEBUG=http2client=0 GOTOOLCHAIN=local GOFLAGS=-trimpath GOBIN=/usr/local/bin \
+        go install -ldflags "-s -w -X main.Version=${TK_VERSION}" "${TK_MODULE}@${TK_SOURCE_REF}"; then break; fi; \
+      if [ "$try" = 3 ]; then exit 1; fi; \
+      echo "go install of tk failed (try $try of 3); retrying" >&2; sleep $((try * 5)); \
+    done; \
     rm -rf /root/go/pkg/mod /root/.cache/go-build; \
     test -x /usr/local/bin/tk
 
