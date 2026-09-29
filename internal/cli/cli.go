@@ -24,6 +24,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac"
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
+	"github.com/pengelbrecht/ticfac/internal/feedrelay"
 	"github.com/pengelbrecht/ticfac/internal/gatewaytrace"
 	"github.com/pengelbrecht/ticfac/internal/jev"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
@@ -34,6 +35,11 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
+
+// relayDrainTimeout bounds the feed relay's last drain as run-epic exits: long
+// enough for a few batches to a slow factory, short enough that a factory
+// that cannot be reached never holds a finished container open.
+const relayDrainTimeout = 20 * time.Second
 
 // tempSweepAge is how long a dead process's temp dir is left alone before
 // run-epic removes it (tick w9j): a day, well past any leg that could still
@@ -472,6 +478,18 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// pidfile release on purpose, so its ending push is written LAST — after
 	// the release — and carries the run's terminal answer (a probe that still
 	// saw the pidfile would make "done" read "running" forever on the page).
+	// The cloud view: inside an orchestrator container the feed below is a
+	// file nobody outside can read, so a follower relays it to the factory's
+	// run feed as it is written — `ticfac events/status/watch` then show a
+	// cloud run exactly like a local one. Nil (a no-op) for every run that is
+	// not the container's booted run. Stopped — drained — before every
+	// completion signal and exit below, because the last lines are the ones
+	// an operator most wants.
+	relay := feedrelay.FromEnv(repoDir, liveRun, stderr)
+	relay.Start()
+	stopRelay := func() { relay.Stop(relayDrainTimeout) }
+	defer stopRelay()
+
 	pusher := startStatusPusher(repoDir, liveRun, operatorStderr, *fl.statusPush)
 	defer func() {
 		if pusher != nil {
@@ -544,6 +562,9 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 			// flush, which may still need them.
 			tempdir.ReleaseAll()
 			died(detail)
+			// os.Exit runs no defer either: the death line is relayed now or
+			// never reaches the factory's feed.
+			stopRelay()
 			life.Release(detail)
 			status := 130
 			if sig == syscall.SIGTERM {
@@ -561,6 +582,9 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 		fmt.Fprintf(stderr, "ticfac run-epic %s: %v\n", epicID, err)
 		died(err.Error())
 		life.Release("died: " + err.Error())
+		// Drained BEFORE the completion signal: the signal wakes the
+		// supervisor, which ends this boot and closes its slice of the feed.
+		stopRelay()
 		// The completion signal (tick 7eq): a dead run wants its supervisor
 		// woken just as much as a finished one, so the reboot does not wait out
 		// a whole cadence to learn what the container already knew. The branch
@@ -608,7 +632,9 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// branch is the source of truth, so FromEnv's nil — a local run with no
 	// factory in its environment — makes this a no-op, and a signal that cannot
 	// be delivered is said to the log (which is run.log here, the stream the
-	// Workflow drains to R2) and swallowed, never an exit code.
+	// Workflow drains to R2) and swallowed, never an exit code. The feed relay
+	// is drained first, for the reason the error path gives.
+	stopRelay()
 	runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *fl.remote, reconciler.IntegrationBranch())
 	if *fl.asJSON {
 		// The one document (tick 8v3): the run's whole answer as fields, so
