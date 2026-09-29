@@ -34,7 +34,7 @@ const cloudTraceDetailWorkers = 6
 // newCloudTraceCommand builds `cloud trace`'s cobra command.
 func newCloudTraceCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "trace <run-id>",
+		Use:   "trace <run-id|epic-id>",
 		Short: "what the model said and decided",
 	}
 	fs := newFlagSet("cloud trace", nil)
@@ -42,22 +42,33 @@ func newCloudTraceCommand(stdout, stderr io.Writer) *cobra.Command {
 	call := fs.Int("call", 0, "dump one exchange in full, by its 1-based call number")
 	tools := fs.Bool("tools", false, "list only the tool calls and their arguments")
 	cache := fs.Bool("cache", false, "per-call prefix-cache table: input tokens, cached tokens, hit rate")
+	tick := fs.String("tick", "", "only the model calls one tick's worker made (the gateway stamps each call with its tick id)")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(runCloudTrace(c.Context(), args, asJSON, tools, cache, call, stdout, stderr))
+		changed := func(name string) bool { return c.Flags().Changed(name) }
+		return codeToErr(runCloudTrace(c.Context(), args, asJSON, tools, cache, call, tick, changed, stdout, stderr))
 	}
 	return cmd
 }
 
-func runCloudTrace(ctx context.Context, args []string, asJSON, tools, cache *bool, call *int, stdout, stderr io.Writer) int {
-	err := cloudTrace(ctx, args, asJSON, tools, cache, call, stdout, stderr)
+func runCloudTrace(ctx context.Context, args []string, asJSON, tools, cache *bool, call *int, tick *string,
+	changed func(string) bool, stdout, stderr io.Writer) int {
+	err := cloudTrace(ctx, args, asJSON, tools, cache, call, tick, changed, stdout, stderr)
 	return reportCommand("cloud trace", err, stderr)
 }
 
-func cloudTrace(ctx context.Context, args []string, asJSON, tools, cache *bool, call *int, stdout, stderr io.Writer) error {
+func cloudTrace(ctx context.Context, args []string, asJSON, tools, cache *bool, call *int, tick *string,
+	changed func(string) bool, stdout, stderr io.Writer) error {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		return newExitError(exitUsage, "exactly one run id is required")
+	}
+	// The rule `cloud logs --tick` holds: an operator who asked for one tick
+	// and silently got the whole run would read the orchestrator's turns as
+	// the worker's.
+	tickID := strings.TrimSpace(*tick)
+	if changed("tick") && tickID == "" {
+		return newExitError(exitGeneric, "--tick takes a tick id")
 	}
 
 	// Views are refused in combination rather than silently ranked: an
@@ -91,7 +102,7 @@ func cloudTrace(ctx context.Context, args []string, asJSON, tools, cache *bool, 
 	// Before the gateway is asked anything: it can only answer about the exact
 	// string it is given, and its answer for a prefix is a negative that reads
 	// as a verdict on the run (tick c5i).
-	runID, err := cloudRunIDArg(ctx, rest[0], stderr)
+	runID, err := cloudRunArg(ctx, "trace", rest[0], true, stderr)
 	if err != nil {
 		return err
 	}
@@ -99,11 +110,30 @@ func cloudTrace(ctx context.Context, args []string, asJSON, tools, cache *bool, 
 	if err != nil {
 		return newExitError(exitGeneric, "%v", err)
 	}
+	label := runID
+	if tickID != "" {
+		runCalls := calls
+		calls = cloudTraceTickCalls(calls, tickID)
+		label = fmt.Sprintf("%s tick %s", runID, tickID)
+		if len(calls) == 0 && len(runCalls) > 0 {
+			// The run made calls and none is this tick's: say whose they
+			// are, so a mistyped tick id is not read as a quiet worker.
+			if *asJSON {
+				return writeCloudTraceJSON(stdout, cloudTraceTickField(map[string]any{
+					"run_id": runID, "totals": gatewaytrace.Sum(calls), "calls": []any{},
+				}, tickID))
+			}
+			fmt.Fprintf(stdout, "Run %s made %s, and none is stamped with tick %s.\n",
+				runID, plural(len(runCalls), "model call", "model calls"), tickID)
+			fmt.Fprintf(stdout, "  calls by tick: %s\n", cloudTraceTickCounts(runCalls))
+			return nil
+		}
+	}
 	if len(calls) == 0 {
 		if *asJSON {
-			return writeCloudTraceJSON(stdout, map[string]any{
+			return writeCloudTraceJSON(stdout, cloudTraceTickField(map[string]any{
 				"run_id": runID, "totals": gatewaytrace.Sum(calls), "calls": []any{},
-			})
+			}, tickID))
 		}
 		// Two different facts, and the operator needs to know which: a run that
 		// made no model calls, or a run id that never existed here.
@@ -114,11 +144,11 @@ func cloudTrace(ctx context.Context, args []string, asJSON, tools, cache *bool, 
 
 	switch {
 	case *call > 0:
-		return cloudTraceOneCall(ctx, client, runID, calls, *call, *asJSON, stdout)
+		return cloudTraceOneCall(ctx, client, runID, tickID, calls, *call, *asJSON, stdout)
 	case *cache:
-		return cloudTraceCacheView(stdout, runID, calls)
+		return cloudTraceCacheView(stdout, label, calls)
 	case *asJSON:
-		return cloudTraceJSONRows(stdout, runID, calls)
+		return cloudTraceJSONRows(stdout, runID, tickID, calls)
 	}
 
 	conversation, missed, err := cloudTraceConversation(ctx, client, calls)
@@ -126,10 +156,10 @@ func cloudTrace(ctx context.Context, args []string, asJSON, tools, cache *bool, 
 		return newExitError(exitGeneric, "%v", err)
 	}
 	if *tools {
-		cloudTraceToolsView(stdout, runID, conversation, missed)
+		cloudTraceToolsView(stdout, label, conversation, missed)
 		return nil
 	}
-	cloudTraceSummary(stdout, runID, calls)
+	cloudTraceSummary(stdout, label, calls)
 	fmt.Fprintln(stdout)
 	cloudTraceConversationView(stdout, conversation, missed)
 	return nil
@@ -271,11 +301,15 @@ func cloudTraceMissedNote(out io.Writer, missed []int) {
 		noun, strings.Join(text, ", "))
 }
 
-func cloudTraceOneCall(ctx context.Context, client *gatewaytrace.Client, runID string,
+func cloudTraceOneCall(ctx context.Context, client *gatewaytrace.Client, runID, tickID string,
 	calls []gatewaytrace.Call, callNumber int, asJSON bool, out io.Writer) error {
+	label := runID
+	if tickID != "" {
+		label = fmt.Sprintf("%s tick %s", runID, tickID)
+	}
 	if callNumber > len(calls) {
 		return newExitError(exitGeneric, "run %s made %d model calls, so there is no call %d",
-			runID, len(calls), callNumber)
+			label, len(calls), callNumber)
 	}
 	call := calls[callNumber-1]
 
@@ -283,7 +317,7 @@ func cloudTraceOneCall(ctx context.Context, client *gatewaytrace.Client, runID s
 	response, responseErr := client.ResponseBody(ctx, call.ID)
 
 	if asJSON {
-		payload := map[string]any{"run_id": runID, "call": call.Index, "id": call.ID, "row": call.Raw}
+		payload := cloudTraceTickField(map[string]any{"run_id": runID, "call": call.Index, "id": call.ID, "row": call.Raw}, tickID)
 		if requestErr == nil {
 			payload["request"] = request
 		} else {
@@ -297,7 +331,7 @@ func cloudTraceOneCall(ctx context.Context, client *gatewaytrace.Client, runID s
 		return writeCloudTraceJSON(out, payload)
 	}
 
-	fmt.Fprintf(out, "Cloud run %s — call %d of %d\n", runID, call.Index, len(calls))
+	fmt.Fprintf(out, "Cloud run %s — call %d of %d\n", label, call.Index, len(calls))
 	fmt.Fprintf(out, "  id: %s\n", call.ID)
 	fmt.Fprintf(out, "  time: %s\n", call.CreatedAt)
 	fmt.Fprintf(out, "  model: %s (%s)\n", call.Model, call.Provider)
@@ -377,16 +411,63 @@ func cloudTraceIDLine(out io.Writer, calls []gatewaytrace.Call) {
 	}
 }
 
-func cloudTraceJSONRows(out io.Writer, runID string, calls []gatewaytrace.Call) error {
+func cloudTraceJSONRows(out io.Writer, runID, tickID string, calls []gatewaytrace.Call) error {
 	rows := make([]json.RawMessage, 0, len(calls))
 	for _, call := range calls {
 		rows = append(rows, call.Raw)
 	}
-	return writeCloudTraceJSON(out, map[string]any{
+	return writeCloudTraceJSON(out, cloudTraceTickField(map[string]any{
 		"run_id": runID,
 		"totals": gatewaytrace.Sum(calls),
 		"calls":  rows,
-	})
+	}, tickID))
+}
+
+// cloudTraceTickField names the tick a --tick document was narrowed to, so a
+// reader never takes one worker's calls for the whole run's.
+func cloudTraceTickField(payload map[string]any, tickID string) map[string]any {
+	if tickID != "" {
+		payload["tick_id"] = tickID
+	}
+	return payload
+}
+
+// cloudTraceTickCalls keeps the calls one tick's worker made — the gateway
+// stamps every proxied request with the tick id off the run token's row
+// (gatewayMetadata in cloudflare/src/gateway.ts) — renumbered from 1, so
+// --call N and the conversation read as that worker's own.
+func cloudTraceTickCalls(calls []gatewaytrace.Call, tickID string) []gatewaytrace.Call {
+	kept := make([]gatewaytrace.Call, 0, len(calls))
+	for _, call := range calls {
+		if call.TickID == tickID {
+			call.Index = len(kept) + 1
+			kept = append(kept, call)
+		}
+	}
+	return kept
+}
+
+// cloudTraceTickCounts is "a (3), b (12)": the ticks a run's calls are
+// stamped with, a call stamped with none named as such.
+func cloudTraceTickCounts(calls []gatewaytrace.Call) string {
+	counts := make(map[string]int)
+	keys := make([]string, 0)
+	for _, call := range calls {
+		key := call.TickID
+		if key == "" {
+			key = "(no tick)"
+		}
+		if counts[key] == 0 {
+			keys = append(keys, key)
+		}
+		counts[key]++
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s (%d)", key, counts[key]))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // writeCloudTraceJSON stamps the versioned schema id and writes exactly

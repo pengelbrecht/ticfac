@@ -26,7 +26,7 @@ var cloudflareHTTPClient *http.Client
 // newCloudSupervisorCommand builds `cloud supervisor`'s cobra command.
 func newCloudSupervisorCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "supervisor <run-id>",
+		Use:   "supervisor <run-id|epic-id>",
 		Short: "whether the Workflow is alive",
 	}
 	fs := newFlagSet("cloud supervisor", nil)
@@ -55,7 +55,7 @@ func cloudSupervisor(ctx context.Context, args []string, steps *int, asJSON *boo
 	}
 	// A whole run id never touches the factory here, which is what lets this
 	// command answer while the deployment is the thing under suspicion.
-	runID, err := cloudRunIDArg(ctx, rest[0], stderr)
+	runID, err := cloudRunArg(ctx, "supervisor", rest[0], false, stderr)
 	if err != nil {
 		return err
 	}
