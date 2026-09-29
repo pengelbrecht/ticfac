@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_0f64adbcecb5484fb20cbe33d5e97e17",
   "epic_id": "hn6",
-  "sequence": 13,
-  "state": "publishing",
-  "reason": "closing r5i behind the integrated gate on 767446cedbb6",
-  "updated_at": "2026-09-29T13:45:34Z",
+  "sequence": 14,
+  "state": "running",
+  "reason": "r5i is closed",
+  "updated_at": "2026-09-29T13:45:45Z",
   "ticks": [
     {
       "tick_id": "r5i",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
