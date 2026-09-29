@@ -1351,6 +1351,43 @@ func (r *Reconciler) preserveAttemptWork(marker attemptHandle) {
 	}
 }
 
+// preserveCollectedWork is preserveAttemptWork for an attempt whose work
+// never had a branch in this checkout: a sandbox container pushed it to a
+// landing branch of its own, and the collect read it there, so the head the
+// collect ruled on is in this clone (the executor fetched it) but NOT on the
+// attempt's write ref — until integrate's durableAttemptHead, which a
+// rejected attempt never reaches. Without this, a cloud attempt rejected on
+// the merits (a boundary violation WITH commits) looked like one that left
+// nothing: the run's disposal (rejected_work.go) reads the write ref, found
+// it empty, and the rejection halted the run for a person instead of being
+// released and redispatched fresh (epic hn6's second cloud run). The same
+// promise the local push keeps: "rejected" on origin means the work the
+// rejection was about is on origin too, on the attempt's own ref.
+func (r *Reconciler) preserveCollectedWork(marker attemptHandle, collected *subprocess.Collection) {
+	if collected == nil || collected.Result == nil || collected.Result.Source.HeadSHA == nil {
+		return
+	}
+	if r.attemptWorkHead(marker) != "" {
+		return // the local branch is the work, and preserveAttemptWork put it there
+	}
+	head := *collected.Result.Source.HeadSHA
+	if head == "" || head == marker.BaseSHA || r.git.contains(head, marker.BaseSHA) {
+		return
+	}
+	branch := branchOf(marker.WriteRef)
+	if branch == "" {
+		return
+	}
+	if remote, err := r.git.remoteHead(branch); err == nil && remote == head {
+		return
+	}
+	if _, stderr, err := r.git.try("", "push", r.opts.Remote, head+":"+refFor(branch)); err != nil {
+		r.record(marker.TickID, StageCollected,
+			"the collected head %s could not be put on %s (%s): the work stays on the branch the container "+
+				"pushed, which is where the collect read it", short(head), branch, firstLine(stderr))
+	}
+}
+
 // rejectDurably records that an attempt was rejected, ON ORIGIN, before the
 // refusal is returned.
 //
@@ -2748,6 +2785,7 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	// true for the attempt whose work is most at risk: the one nothing
 	// merged.
 	r.preserveAttemptWork(marker)
+	r.preserveCollectedWork(marker, collected)
 
 	// Appendix A #10's premise is that compliance is not a property of the
 	// model, and a boundary measured from a base the enforced party can choose
@@ -2815,6 +2853,18 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 			r.disposeRejected(handle, executor, marker, "the attempt wrote under an authority that is not its own")
 			if redispatch != nil {
 				return nil, redispatch
+			}
+			if r.rejectedWorkHead(marker) == "" {
+				// Nothing committed is on the attempt's ref, so there is no
+				// work to release and nothing for a person to decide: the
+				// rejection is resumable exactly as a no-commits collect is,
+				// and the resume redispatches the tick fresh ("a rejected
+				// attempt that left nothing is redispatched"). Holding it for a
+				// person is what halted epic hn6's second cloud run.
+				return nil, r.refuse(RefusedCollect, marker.TickID,
+					"%s wrote under an authority that is not its own (%s) and left no work to release: %s",
+					r.attemptName(marker.TickID, marker.Attempt), strings.Join(collected.BoundaryViolations, ", "),
+					collected.Message)
 			}
 			return nil, r.refuse(RefusedBoundary, marker.TickID,
 				"%s wrote under an authority that is not its own (%s): %s",
