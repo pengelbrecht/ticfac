@@ -198,3 +198,21 @@ func TestParseDeployedURLRefusesToGuess(t *testing.T) {
 		t.Errorf("parseDeployedURL = %q, want \"\" so the caller asks for --url", got)
 	}
 }
+
+// The Worker version a deploy created is what Cloudflare's dashboard and
+// `wrangler versions` name, and CI's job summary records it. It is the last
+// "Current Version ID" line wrangler printed, and "" when it printed none.
+func TestParseWorkerVersionID(t *testing.T) {
+	out := strings.Join([]string{
+		"  #15 [ 3/14] RUN echo 'Current Version ID: not-this-one'",
+		"  Deployed ticks-factory triggers (6.19 sec)",
+		"    workflow: ticks-run",
+		"  Current Version ID: 08f93d0c-b20c-43c4-8b88-797c875a7c9a",
+	}, "\n")
+	if got := parseWorkerVersionID(out); got != "08f93d0c-b20c-43c4-8b88-797c875a7c9a" {
+		t.Errorf("parseWorkerVersionID = %q, want the deploy's version id", got)
+	}
+	if got := parseWorkerVersionID("  Uploaded ticks-factory (7.87 sec)"); got != "" {
+		t.Errorf("parseWorkerVersionID = %q, want \"\" when wrangler named no version", got)
+	}
+}

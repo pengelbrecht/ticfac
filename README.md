@@ -248,12 +248,23 @@ time (wrangler, a deployment, a GitHub credential, model access) and verifies
 every rung against the live service before storing it; `ticfac factory status`
 re-checks all of them live.
 
-`.github/workflows/deploy-factory.yml` runs the same installer in CI on a `v*`
-tag, so releases upgrade the factory: configure `CLOUDFLARE_API_TOKEN`,
-`CLOUDFLARE_ACCOUNT_ID` and `TICFAC_FACTORY_TOKEN` (the `factory_token` from
-`~/.ticfacrc`) as repository secrets to enable it. A repository without them
-skips the deploy with a warning naming what is missing — the factory is the
-operator's opt-in, not a service this repository runs.
+**CI is the normal way the factory is deployed.**
+`.github/workflows/deploy-factory.yml` runs the same installer for every
+commit on main that CI passed and that changes something the factory ships
+(the Worker bundle, the image, or the Go cross-compiled into it — diffed
+against the commit the factory actually runs), for every `v*` tag, and on
+`workflow_dispatch` (which is also how a failed CI deploy is retried). Deploys
+serialize; before deploying it asks the factory whether a run is live and
+waits for it, up to 60 minutes, then deploys anyway. The job summary records
+the commit, the Worker version and the image digest. A local `ticfac factory
+deploy` is the fallback: the first install, a token rotation, or CI being
+unable to deploy.
+
+Configure `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and
+`TICFAC_FACTORY_TOKEN` (the `factory_token` from `~/.ticfacrc`) as repository
+secrets to enable it. A repository without them skips the deploy with a
+warning naming what is missing — the factory is the operator's opt-in, not a
+service this repository runs.
 
 
 ## Following the factory from a phone

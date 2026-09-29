@@ -36,6 +36,20 @@ needless stress run. Always key CI to the commit you pushed:
 
 Before acting on a failure, confirm its `headSha` is your HEAD.
 
+## Deploying the factory: CI does it, merging to main is the deploy
+
+`.github/workflows/deploy-factory.yml` deploys the factory after CI passes on
+every main commit that changes what it ships (cloudflare/, image/, the Go
+cross-compiled into the image). So to get a fix into the factory, merge it
+and watch that workflow's run for your commit (`gh run list --workflow
+deploy-factory.yml`, then confirm its summary names your sha); check the
+result read-only with `ticfac factory status`. It waits for live runs (up to
+60 minutes) before deploying. Retry a failed deploy with `gh workflow run
+deploy-factory.yml`. A local `ticfac factory deploy` is the fallback only
+(first install, token rotation, CI unable to deploy): from this Mac it builds
+an emulated amd64 image and is fragile. The repository is public: never paste
+the factory URL, account ids or tokens into a log, commit or PR.
+
 ## A live run may own the main checkout
 
 `ticfac run-epic` works from the main checkout. Do your work in a git

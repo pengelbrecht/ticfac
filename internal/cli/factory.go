@@ -34,7 +34,13 @@ func newFactoryDeployCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "deploy",
 		Short: "put the ticks cloud factory in your own Cloudflare account",
-		Long:  "Install (or upgrade) the factory in the operator's OWN Cloudflare account,\nfrom the bundle embedded in this build. A failure is a stop with the remedy\nin it, never a half-configured account left behind.",
+		Long: "Install (or upgrade) the factory in the operator's OWN Cloudflare account,\nfrom the bundle embedded in this build. A failure is a stop with the remedy\nin it, never a half-configured account left behind.\n\n" +
+			"CI is the normal path: .github/workflows/deploy-factory.yml runs this same\n" +
+			"command for every commit on main that CI passed and that changes what the\n" +
+			"factory ships (and for v* tags, and on workflow_dispatch — which is also how\n" +
+			"a failed CI deploy is retried). Run it locally only as the fallback: for the\n" +
+			"first install (after `ticfac factory setup`), to rotate the token, or when\n" +
+			"CI cannot deploy.",
 	}
 	fs := flag.NewFlagSet("factory deploy", flag.ContinueOnError)
 	var (
@@ -85,6 +91,7 @@ func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *str
 			BundleSHA        string `json:"bundle_sha"`
 			ImageRef         string `json:"image_ref"`
 			ImageDigest      string `json:"image_digest"`
+			WorkerVersionID  string `json:"worker_version_id"`
 			RolloutConfirmed bool   `json:"rollout_confirmed"`
 			Rotated          bool   `json:"token_rotated"`
 			ConfigPath       string `json:"credentials_path"`
@@ -96,6 +103,7 @@ func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *str
 			BundleSHA:        result.BundleSHA,
 			ImageRef:         result.ImageRef,
 			ImageDigest:      result.ImageDigest,
+			WorkerVersionID:  result.WorkerVersionID,
 			RolloutConfirmed: result.RolloutConfirmed,
 			Rotated:          result.Rotated,
 			ConfigPath:       result.ConfigPath,
@@ -116,6 +124,9 @@ func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *str
 	}
 	fmt.Fprintf(stdout, "  ticfac:      %s\n", result.Version)
 	fmt.Fprintf(stdout, "  image tk:    built from %s\n", result.SourceRef)
+	if result.WorkerVersionID != "" {
+		fmt.Fprintf(stdout, "  worker:      %s\n", result.WorkerVersionID)
+	}
 	if result.ImageDigest != "" {
 		fmt.Fprintf(stdout, "  image:       %s\n", result.ImageDigest)
 	}
