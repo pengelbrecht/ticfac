@@ -1,7 +1,7 @@
 <!-- ticks-worker: container facts, prepended after the harness exited. The
 agent's report, including its STATUS line, is unchanged below. -->
 
-_ticks-worker: branch `tick/hn6/attempt-1/r5i`, base `c948bb7aaf209e5f99a755e4ad7ea0b0efd10035`, harness `pi` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+_ticks-worker: branch `tick/hn6/attempt-1/r5i-run_aaf6886d67b5489a85fa1505239bad7e`, base `52d1a2907346ced9a22ff88fe1ef9e4568a85e8c`, harness `pi` exited 0, 1 work commit(s), 1 uncommitted path(s)._
 
 > **BOUNDARY VIOLATION ATTEMPTED.** This agent tried to write tracker state, which the
 > orchestrator owns. The container refused it, so nothing under `.tick/`
@@ -146,220 +146,108 @@ _ticks-worker: branch `tick/hn6/attempt-1/r5i`, base `c948bb7aaf209e5f99a755e4ad
 > - the agent ran `tk version --json`
 > - the agent ran `tk version --json`
 > - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
-> - the agent ran `tk version --json`
 
-# Status model declares the dashboard fields (tick r5i)
+# Status model declares the dashboard fields (tick r5i, re-dispatch of run_aaf6886d)
 
-Wave 1 of epic hn6: one place — `contracts/status-model.json` plus the Go
-types it binds — now declares every field the dashboard renders, so the
-wave-2 ticks (3gk, 7uv, ltg) fill them in parallel against a fixed shape.
-Everything is additive within schema_version 1, which does NOT move: the
-phone page's snapshot parser refuses any other version. The only fields this
-tick computes for real are `recent` (the feed's last five lines, oldest
-first), `epic_title` and the per-tick `gloss` (direct graph copies); every
-other new field comes out at its honest empty value.
+r5i arrived at this attempt already implemented in its own base. The previous
+run (run_1960aa14) completed this tick's work — commits 82cf262d and 216e9d1c
+— merged its attempt branch into `epic/hn6`, and stalled before the tick
+closed; the stall is what main's #124 fixed. This run replays wave 1 on the
+moved base (main #123–#127 folded in by dcea33cf), so the r5i-owned files
+(internal/statusmodel/*, internal/cli/status_model.go, cloud.go,
+contracts/status-model.json, bundle.json, CHANGELOG.md,
+cloudflare/contracts.pin.json) are byte-identical between 216e9d1c and this
+attempt's base 52d1a290. This attempt therefore verified every acceptance
+criterion on the post-merge tree, closed the one real gap the audit found,
+and reports that as its work. The previous attempt's report (committed at
+b6effb18 and folded into the epic branch with the work) describes the
+implementation itself; this report does not repeat it.
 
-## What changed
+## What changed (one commit, d4215948)
 
-- **`internal/statusmodel/statusmodel.go`** — the vocabulary and the types:
-  pipeline stage/state/verdict/cost-source constants, the exported
-  `PipelineImplement`/`PipelineReview`/`PipelineCloseout` stage lists, and the
-  new `Tick` (`pipeline`, `parent_tick_id`, `duration_seconds`, `findings`,
-  `report`, `gloss` omitempty), `Try` (`tier`, `reason`, `next_step`),
-  `Worker` (`handle`, `activity`), `Health` (`verdict`), `Cost` (`lines`) and
-  `Model` (`epic_title`, `recent`) fields, with the `PipelineStage`,
-  `TickFinding`, `TickReport`/`ReportDiff`, `WorkerActivity`,
-  `HealthVerdict`/`Recovery` and `CostLine` types.
-- **`internal/statusmodel/pipeline.go`** — `decorateTicks`: every tick gets
-  its role's stage list all pending, `findings: []`, and parent/duration and
-  the tries' tier/reason/next_step at null. Called from `Build` after
-  `buildWaves`.
-- **`internal/statusmodel/verdict.go`** — `buildHealth` moved here from
-  build.go unchanged; `buildVerdict` added, returning
-  `{healthy, "", recovered: []}`, called after `buildWaits`.
-- **`internal/statusmodel/cost.go`** — `buildCost` moved here unchanged,
-  additionally returning `lines: []`. `WorkerCostInput` lives here.
-- **`internal/statusmodel/activity.go`** — `decorateWorkers` (no-op leaving
-  activity and handle null) and the exported stub reader
-  `TranscriptActivity(home)`. `ActivityInput` lives here.
-- **`internal/statusmodel/report.go`** — `decorateReports` (no-op leaving
-  report null) and the exported stub reader `AttemptReports(repo, runID)`.
-  `ReportInput` lives here.
-- **`internal/statusmodel/build.go`** — `Sources` gains the nil-safe
-  `Activity`, `Report` and `WorkerCost` fields; `Build` fills `recent`,
-  `epic_title`, calls the four decorate/build functions (so no wave-2 tick
-  edits build.go); `buildTick` copies the graph task's `Gloss`.
-- **`internal/cli/status_model.go`** — `localStatusModel` passes
-  `Activity: statusmodel.TranscriptActivity(home)` and
-  `Report: statusmodel.AttemptReports(repo, runID)`; `cloudStatusModel`
-  passes nil for both and the factory's `cost_usd` as `WorkerCost`
-  (`Source: "gateway"`) when the record carries one.
-- **`internal/cli/cloud.go`** — `cloudRunRecord` gains
-  `CostUSD *float64 json:"cost_usd"` (the factory's row does carry it:
-  cloudflare/src/db.ts and migrations/0002_runs.sql).
-- **`contracts/status-model.json`** — every new field in the schema
-  (closed, additionalProperties false, required-and-null/empty per the
-  model's convention); the two existing goldens updated (null/empty values,
-  coherent 5-line `recent` tails, healthy verdicts, empty cost lines); ONE
-  new golden named **`dashboard`** carrying every new field populated — a
-  4-tick epic (closed implement all-done, in-flight at gate, repair child
-  with `parent_tick_id`, closeout at ci), 2 tries with tier/reason/next_step
-  on the rejected one, a worker with activity buckets and a herdr handle, a
-  healthy verdict with `recovered: [{what: "net", count: 14, seconds: null}]`,
-  one metered workers-ai line and one unmetered claude line (usd null), and 5
-  recent events; three new negatives (unknown pipeline stage, `metered: false`
-  with a number usd — pinned by an anyOf on the cost line — and an unknown
-  verdict state).
-- **Bundle re-cut to 1.1.0** (MINOR): `contracts/bundle.json` digests and
-  ledger entry, a `contracts/CHANGELOG.md` entry, and
-  `cloudflare/contracts.pin.json` `bundleVersion` moved to 1.1.0.
-- **`internal/cli/watch_view.go`** — one forced line (see Deviations).
-- **`internal/statusmodel/build_dashboard_test.go`** — the new test, plus
-  `TestThePipelineVocabularyIsClosed` and `TestRecentCarriesTheFeedEventShape`.
-- **`internal/statusmodel/build_test.go`** — the `Health` comparison switched
-  to `reflect.DeepEqual` (Health now carries a slice-bearing verdict, and the
-  tick named this file for exactly such compile fixes), and `testGraph()`
-  extended with the epic title and task glosses the new test asserts are
-  copied (no existing assertion touched).
+The audit of the pinned acceptance command found one real gap:
+`go test -run 'TestTheContract|TestTheGoType|TestBuildEmitsTheDashboardFieldsEmpty' ./internal/statusmodel/`
+is named to exercise the contract tests over the new golden, but since 4i8
+moved the golden/negative tests to `internal/contracts/parity`, nothing
+matching that pattern in that package covered the `dashboard` golden at all —
+the command passed on a pattern technicality while its substance (goldens
+admitted, negatives refused, the Go type round-tripped) ran only in the parity
+suite. `TestTheContractBindsTheDashboardGolden` (internal/statusmodel/
+contract_test.go, the file the tick's own list names) binds the golden in the
+package the command runs:
 
-## Deviations the tick did not spell, and why
+- the golden's NAME `dashboard` is pinned — nothing else in the repository
+  pins it (the parity suite iterates the goldens, the TS validator replays
+  them), and the wave-3 renderers and the phone page reference it by name;
+- the golden is admitted by the schema and round-tripped through the Go
+  Model — the `TestTheGoType` half the pinned command names, over the golden
+  this tick added;
+- the golden's populated anchors are guarded (pipeline stages beyond
+  pending, the parent_tick_id repair child, a try with tier and with
+  reason+next_step, worker activity buckets and handle, the healthy verdict
+  with a recovery, one metered line with a number beside one unmetered line
+  without one, the 5-line recent tail) — it is the rendering fixture for the
+  wave-3 ticks and the phone page, and a golden that quietly decayed into
+  valid-but-empty would leave them testing nothing while every suite stayed
+  green;
+- the closed vocabularies the contract spells (pipeline stage, pipeline
+  state, verdict state, cost source) are held to the Go spellings — the
+  contract's own "spelled once in the Go builder and once here, so the two
+  cannot drift", which nothing enforced until now.
 
-Two facts post-date the tick's file list, which was written as if the status
-contract still lived at `internal/statusmodel/contract.json`:
+Each guard leg was proven red on its own mutation (renamed golden,
+additively drifted stage enum, all-pending decayed golden) and green on the
+tree as it stands; the mutations were reverted, and the bundle's digests
+verify. No other file changed; nothing in watch/overview/cloudflare source
+was touched, and the bundle version stays at the r5i cut (1.1.0).
 
-1. **The contract lives in the ticfac-authored bundle** (tick 4i8 moved it),
-   so "do not touch cloudflare/" cannot hold literally: the bundle's own
-   changelog rule — bump, entry, digests, and "set `bundleVersion` in
-   `cloudflare/contracts.pin.json`" in the same commit — makes the one-line
-   pin move part of the contract edit. No cloudflare/ *source* was touched,
-   and the TS suite was run to prove the shared contract still agrees.
-2. **`watch_view.go:219` compared the whole `Health` struct**
-   (`h != (statusmodel.Health{}`), which cannot compile once `Health`
-   carries a verdict with a slice. I made the smallest behaviour-preserving
-   fix (counts > 0 — exactly equivalent to the old zero-struct check) rather
-   than leaving the watch UI silently changing: with the verdict always
-   populated, the old comparison would have been always-true and appended an
-   empty " · " segment to every healthy run's health line. One expression, no
-   renderer work; the wave-3 watch tick owns that file from here.
+## What I ran (all green, on tree d4215948)
 
-Also: the golden's key is exactly `dashboard`, as the tick names it — the
-first commit used `status_model_dashboard` and the second renames it, because
-the wave-3 renderers and the phone page reference the golden by name. The
-1.1.0 bundle cut was re-derived in that same second commit for the final
-bytes; 1.1.0 had never been published (it exists only in this unpushed wave),
-so no consumer ever pinned the earlier digest.
-
-## What I ran
-
-- `go test -short -timeout 20m -run 'TestTheContract|TestTheGoType|TestBuildEmitsTheDashboardFieldsEmpty' ./internal/statusmodel/` — ok (the acceptance command; `TestTheGoType`'s home is the parity suite below).
-- `go test -count=1 -short -run 'TestTheStatusModel' ./internal/contracts/parity/` — ok: goldens admitted (including `dashboard`), the Go Model round-trips every golden, all 10 negatives refused with the pinned refusals, boundary pinned.
-- `go test -short -timeout 20m ./internal/statusmodel/ ./internal/cli/` — ok.
-- `go run ./cmd/contracts check` — ok (bundle 1.1.0 verifies offline).
-- `make ts-gate` — ok (biome, `contracts:check` at 1.1.0, `tsc --noEmit`), and `vitest run test/status-model.test.ts` — 6 passed (the TS validator replays the new golden and negatives with Go's error strings).
-- `make gate` — ok (gofmt, `go vet ./...`, the whole short suite).
-- Every command above was run with `TICKS_FACTORY_URL` and `TICKS_FACTORY_TOKEN`
-  neutralized: this worker container carries real factory credentials, and
-  `internal/cli/TestCloudBranchNamesTheConsequenceOfANakedContainer` — a test
-  whose premise is a container with NO credential — fails on any tree when
-  they leak in (reproduced at the base commit c948bb7; see the finding). With
-  them neutralized the whole gate is green.
+- `go test -count=1 -short -timeout 20m -run 'TestTheContract|TestTheGoType|TestBuildEmitsTheDashboardFieldsEmpty' ./internal/statusmodel/` — ok (the pinned acceptance command; `TestTheGoType` matches nothing in this package since 4i8 — the round-trip lives in the parity suite, which is why this attempt added the golden round-trip under the command's `TestTheContract` arm).
+- `go test -count=1 -short -run 'TestTheStatusModel' ./internal/contracts/parity/` — ok (goldens admitted, Go Model round-trips, 10 negatives refused with the pinned refusals, boundary pinned).
+- `go test -count=1 -short -timeout 20m ./internal/statusmodel/ ./internal/cli/` — ok (the tick's regression surface).
+- `make gate` (GOTEST_PARALLEL=4, GOFLAGS=-p=2) — rc=0, 44 packages ok (gofmt, `go vet ./...`, the whole short suite). Run in this worker container, which carries the run's control plane in its environment — the exact shape that failed the previous run's integrated gate (gate-r5i-1-go.json, exit 1) before #123 scrubbed it from test binaries. `TestCloudBranchNamesTheConsequenceOfANakedContainer` passes here with live factory credentials present: #123's runenv scrubbing fixed the root cause behind the 9dy finding.
+- The gate's TypeScript half — `cd cloudflare && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit` — ok (biome clean, contracts verify at bundle 1.1.0, types clean), and `pnpm exec vitest run test/status-model.test.ts` — 6 passed.
+- `go run ./cmd/contracts check` — ok (the bundle verifies offline).
 
 ## What the next tick has to know
 
-- The wave-2 fill points are the five stub files, and only them:
-  `pipeline.go` (stage states from the durable records — `decorateTicks` has
-  the pointer loop already), `verdict.go` (`buildVerdict`, after
-  `buildWaits`, so the waits are readable on the `Model` it is handed),
-  `cost.go` (`buildCost` + `Sources.WorkerCost`), `activity.go`
-  (`decorateWorkers` + `TranscriptActivity`), `report.go` (`decorateReports` +
-  `AttemptReports`). `Build` already calls every one.
-- The per-role stage lists are exported (`PipelineImplement`, …Review,
-  …Closeout) and documented in the contract's `pipeline` description —
-  render from the list, never hand-spell it.
+- The wave-2 fill points are the five stub files and only them:
+  `pipeline.go` (`decorateTicks`), `verdict.go` (`buildVerdict`, after
+  `buildWaits`), `cost.go` (`buildCost` + `Sources.WorkerCost`),
+  `activity.go` (`decorateWorkers` + `TranscriptActivity`), `report.go`
+  (`decorateReports` + `AttemptReports`). `Build` already calls every one;
+  no wave-2 tick edits build.go.
 - The `dashboard` golden is the rendering fixture for the wave-3 ticks and
-  the phone page; the cost-line "usd must be null when metered is false" rule
-  is schema-pinned (anyOf) and refused by a negative — never print $0.00 for
+  the phone page; its name is now pinned Go-side by
+  `TestTheContractBindsTheDashboardGolden`, so a rename fails there first.
+  The cost-line "usd must be null when metered is false" rule is
+  schema-pinned (anyOf) and refused by a negative — never print $0.00 for
   unmetered spend.
-- `Health` and `Cost` are no longer comparable with `==` (slice-bearing
-  fields); compare the counters, as `build_test.go` now does.
+- `Health` and `Cost` are not comparable with `==` (slice-bearing fields);
+  compare the counters, as `build_test.go` does.
 - Cloud runs pass nil `Activity`/`Report` and their workers stay null; the
   wave-3 renderers must render the null honestly, not as "no activity".
+- Backlog tick 9dy (the previous attempt's finding, the naked-container
+  test) is superseded in substance by main's #123: the test passes in a
+  credentialed worker container today, and the root cause (the environment
+  leak) is what #123 fixed. Its disposition — close as superseded, or apply
+  the setenv anyway — belongs to its owner.
+- A worker container for a re-dispatched tick whose work is already in the
+  base collects as `no-commits` on this substrate unless it leaves a real
+  change beyond the base (the report-only branch is tick dyo's shape). The
+  carried-work rule (tick isp) covers attempts cut from a carried head, not
+  a fresh dispatch over an already-merged deliverable — see the finding
+  below.
 
 ```findings v2
 [
   {
-    "kind": "defect",
-    "title": "Naked-container cloud-branch test fails wherever factory creds exist",
-    "severity": "low",
-    "body": "TestCloudBranchNamesTheConsequenceOfANakedContainer (internal/cli/cloud_branch_test.go) asserts the no-credential refusal, but nothing neutralizes TICKS_FACTORY_URL/TICKS_FACTORY_TOKEN, so in any environment that carries factory credentials — every ticfac worker container does — the command talks to the real factory and the test fails. It fails at the base commit too (reproduced at c948bb7), so `make gate` goes red in worker containers through no fault of the tick being gated. It should setenv the two variables empty, as its sibling tests do.",
-    "evidence": "internal/cli/cloud_branch_test.go:113-121; reproduction: go test -run TestCloudBranchNamesTheConsequenceOfANakedContainer ./internal/cli/ at c948bb7 with TICKS_FACTORY_TOKEN set"
+    "kind": "proposal",
+    "title": "A re-dispatched tick whose work is already in its base cannot collect green",
+    "severity": "medium",
+    "body": "When a run is re-created after a stall and replays a wave whose tick it had already merged into the integration branch, the fresh dispatch (resumed_from null) cuts that tick from a base that already carries its deliverable. On the cloudflare-sandbox substrate a worker that verifies the tree and reports honestly still leaves only the report commit, which collect classifies as no-commits (the report-only branch), so the tick climbs the refusal ladder to a person unless the worker finds new in-scope work. The carried-work rule (tick isp, deliverCarriedWork) only recognises attempts cut from a carried head, not fresh re-dispatches over an already-merged tree. r5i of run_aaf6886d hit exactly this and worked around it by closing a real gap in the tick's own test surface.",
+    "evidence": "internal/exec/cloudflaresandbox/collect.go:344 reportIsOnlyChange and :389 the reportOnly no-commits case; internal/reconcile/dispatch.go:2918 deliverCarriedWork's resumed_from guard; this run's .ticfac/runs/run_aaf6886d67b5489a85fa1505239bad7e/attempts/1.json (resumed_from null, base 52d1a290, which already contains 82cf262d)"
   }
 ]
 ```
