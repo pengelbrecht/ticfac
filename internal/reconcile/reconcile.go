@@ -707,6 +707,10 @@ type Options struct {
 
 // Reconciler runs one epic.
 type Reconciler struct {
+	// adoptedFindingsOf is the dead runs whose untriaged findings this
+	// incarnation already adopted with a claim it took over (takeover.go).
+	adoptedFindingsOf map[string]bool
+
 	opts   Options
 	git    *repoGit
 	store  *runstate.Store

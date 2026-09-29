@@ -63,20 +63,26 @@ const cloudflareSandboxExecutor = "cloudflare-sandbox"
 // takeover record, and the holder's committed work to carry (nil when it left
 // none nothing has merged). Nil, nil when the entry is not a stale foreign
 // claim.
-func (r *Reconciler) takeOverClaim(entry planEntry) (*carriedWork, *takenOver) {
+func (r *Reconciler) takeOverClaim(entry planEntry) (*carriedWork, *takenOver, error) {
 	holder := entry.ClaimHolder
 	if !entry.StaleClaim || holder == "" || holder == r.runID {
-		return nil, nil
+		return nil, nil, nil
 	}
 	taken := &takenOver{RunID: holder, Evidence: entry.ClaimEvidence}
 	tick := entry.TickID
+
+	// The dead run's untriaged findings come with its claim: it will never
+	// reach the close-out that decides them, and this run will.
+	if err := r.adoptFindings(tick, holder, entry.ClaimEvidence); err != nil {
+		return nil, nil, err
+	}
 
 	attempts, err := r.store.ForeignAttempts()
 	if err != nil {
 		r.record(tick, StageClaimTakenOver,
 			"%s's claim is taken over from run %s, which ended (%s); its attempts could not be read (%v), so the "+
 				"next try starts fresh", tick, holder, entry.ClaimEvidence, err)
-		return nil, taken
+		return nil, taken, nil
 	}
 	var theirs []runstate.Attempt
 	for _, attempt := range attempts {
@@ -105,13 +111,79 @@ func (r *Reconciler) takeOverClaim(entry planEntry) (*carriedWork, *takenOver) {
 				"behind. Its attempt %d left work nothing merged (%s on %s), so the next try starts from it rather "+
 				"than redoing it; the gate still decides what merges",
 			tick, holder, entry.ClaimEvidence, marker.Attempt, short(head), branchOf(ref))
-		return &carriedWork{marker: carried, by: by, at: r.now().UTC().Format(time.RFC3339), runID: holder}, taken
+		return &carriedWork{marker: carried, by: by, at: r.now().UTC().Format(time.RFC3339), runID: holder}, taken, nil
 	}
 	r.record(tick, StageClaimTakenOver,
 		"%s's claim is taken over from run %s, which ended (%s): the run does not hold on a claim nobody is "+
 			"behind. None of its %d attempt(s) of %s left work nothing merged, so the next try starts fresh",
 		tick, holder, entry.ClaimEvidence, len(theirs), tick)
-	return nil, taken
+	return nil, taken, nil
+}
+
+// StageFindingAdopted is the line an adopted finding leaves: a finding a run
+// that ended left untriaged, taken into this run's own drafts with the claim
+// this run took over from it, for this run's close-out to decide.
+const StageFindingAdopted = "finding_adopted"
+
+// adoptFindings takes a dead run's untriaged findings into this run's own
+// drafts (the hn6 follow-up). A run that died never reaches its close-out, so
+// the drafts it left PROPOSED would sit under a run nothing will ever finish
+// — neither decided by the run's absorption rules nor held before a person.
+// Adopted, they are this run's: decided before its close-out
+// (decideUndecidedFindings) — absorbed, backlogged, routed — by exactly the
+// rules a finding of its own is, and held for a person by its close-out when
+// those leave one standing.
+//
+// Each draft keeps its discovery (the job that found it, the tick and
+// attempt, when it was proposed); only the provenance's run becomes this
+// one, as the store requires of anything in its directory. A decision the
+// dead run already RECORDED for a draft (an absorption or routing record it
+// wrote before it died, leaving the tick uncreated or the triage
+// unfinished) is adopted with it, so the close-out finishes behind that
+// decision rather than making it again. A key this run already has a draft
+// for is left alone: whatever this run knows of it — a triage included —
+// stands over a copy. Decided drafts are not adopted: their decision already
+// lives in the tracker.
+func (r *Reconciler) adoptFindings(tick, holder, evidence string) error {
+	if r.adoptedFindingsOf == nil {
+		r.adoptedFindingsOf = map[string]bool{}
+	}
+	if r.adoptedFindingsOf[holder] {
+		return nil
+	}
+	theirs, err := r.store.ForeignFindings(holder)
+	if err != nil {
+		return fmt.Errorf("reconcile: read the findings of run %s, whose claim on %s is taken over: %w", holder, tick, err)
+	}
+	for _, finding := range theirs {
+		if finding.Status != runstate.FindingProposed {
+			continue
+		}
+		if _, ok, err := r.store.Finding(finding.Key); err != nil {
+			return fmt.Errorf("reconcile: read this run's draft of finding %s: %w", finding.Key, err)
+		} else if ok {
+			continue
+		}
+		if decision, ok, err := r.store.ForeignAbsorption(holder, finding.Key); err != nil {
+			return fmt.Errorf("reconcile: read run %s's decision on finding %s: %w", holder, finding.Key, err)
+		} else if ok {
+			decision.Provenance.RunID = r.runID
+			if _, err := r.store.PutAbsorption(*decision); err != nil {
+				return fmt.Errorf("reconcile: adopt run %s's decision on finding %s: %w", holder, finding.Key, err)
+			}
+		}
+		adopted := finding
+		adopted.Provenance.RunID = r.runID
+		if _, err := r.store.PutFinding(adopted); err != nil {
+			return fmt.Errorf("reconcile: adopt finding %s of run %s: %w", finding.Key, holder, err)
+		}
+		r.record(finding.TickID, StageFindingAdopted,
+			"finding %s (%q, discovered by %s) was left untriaged by run %s, which ended (%s); it is adopted with "+
+				"the claim on %s this run took over, and this run's close-out decides it as its own",
+			finding.Key, finding.Title, finding.DiscoveredFrom, holder, evidence, tick)
+	}
+	r.adoptedFindingsOf[holder] = true
+	return nil
 }
 
 // foreignAttemptWork is where another run's attempt left its committed work:
