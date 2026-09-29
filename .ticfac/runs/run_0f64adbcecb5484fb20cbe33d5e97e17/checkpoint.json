@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_0f64adbcecb5484fb20cbe33d5e97e17",
   "epic_id": "hn6",
-  "sequence": 34,
-  "state": "dispatching",
-  "reason": "dispatching 7uv as attempt 6",
-  "updated_at": "2026-09-29T13:53:07Z",
+  "sequence": 35,
+  "state": "running",
+  "reason": "7uv is running as attempt 6",
+  "updated_at": "2026-09-29T13:53:23Z",
   "ticks": [
     {
       "tick_id": "r5i",
@@ -19,8 +19,8 @@
     },
     {
       "tick_id": "7uv",
-      "state": "ready",
-      "attempt": 3
+      "state": "dispatched",
+      "attempt": 6
     },
     {
       "tick_id": "ltg",
