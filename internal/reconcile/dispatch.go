@@ -2358,6 +2358,14 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 				status.State, overran.Round(time.Second), r.wallOf(marker), lastObservation(status))
 			return status, nil
 		}
+		if status.State != subprocess.StateSucceeded && len(status.Observations) > 0 {
+			// A failure's settle line carries the executor's last word — for a
+			// sandbox worker, its exit code and what the code means (epic hn6:
+			// "settled as failed" alone named no step of the container that
+			// died, and the log that would have was cut short).
+			r.record(marker.TickID, StageWaiting, "settled as %s: %s", status.State, lastObservation(status))
+			return status, nil
+		}
 		r.record(marker.TickID, StageWaiting, "settled as %s", status.State)
 		return status, nil
 	}
