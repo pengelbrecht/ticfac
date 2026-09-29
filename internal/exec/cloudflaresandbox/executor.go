@@ -294,6 +294,7 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		Epic:     e.opts.EpicID,
 		TickID:   tickID,
 		Attempt:  attempt,
+		JobID:    spec.JobID,
 		Role:     spec.Role,
 		WriteRef: spec.Source.WriteRef,
 		BaseRef:  e.opts.BaseRef,
@@ -314,9 +315,19 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	// this identity already finish?" is answered. An unreachable door or a
 	// door refusal here is an operational error, not a verdict: Start fails
 	// and the tick is neither claimed nor dispatched.
-	status, err := e.client.attemptStatus(ctx, tickID, attempt)
+	status, err := e.client.attemptStatus(ctx, tickID, attempt, spec.JobID)
 	if err != nil {
 		return nil, err
+	}
+	// The answer must be about THIS job. A door that answers for another —
+	// one that keys by (tick, attempt) alone and so answers for the implement
+	// attempt when asked about the repair of it — is not a verdict on this
+	// job, and reading its "settled" as this job's is the hn6 cloud-run
+	// stall: every repair refused before one ever booted.
+	if status.JobID != spec.JobID {
+		return nil, fmt.Errorf("the door answered for %s when asked about %s: a status for another job is no "+
+			"verdict on this one, and a start refused or adopted on it would be decided by another job's record",
+			status.JobID, spec.JobID)
 	}
 	if status.Terminal {
 		return nil, refuse(subprocess.RefusedSettled,
@@ -443,7 +454,7 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 
 // Inspect re-addresses a handle and reports what can be seen. It never
 // dispatches, and it asks the door BY IDENTITY: run from the credential, tick
-// and attempt from the path — so a handle survives the process that created
+// and attempt from the path, the full job id from the query — so a handle survives the process that created
 // it precisely because nothing about the answer depends on that process ever
 // having existed. This is the operation the acceptance criterion names: a
 // handle — even the minimal {"state": …} shape the reconciler's adoption
@@ -475,18 +486,20 @@ func (e *Executor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.
 		}
 		return nil, fmt.Errorf("the handle states no tick id: the door is addressed by identity, and this handle states none")
 	}
-	status, err := e.client.attemptStatus(context.Background(), tickID, h.Attempt)
-	if err != nil {
-		return nil, err
-	}
-	// The door derives the job id from the credential; the handle (or the
-	// record it resolved against) states what this client asked about. A
-	// disagreement is the client and the door differing about whose attempt
-	// this is, and it is never a status to act on.
+	// The handle (or the record it resolved against) states which job this
+	// is, and the door is asked about exactly that job: several jobs run
+	// under one attempt number, and each is its own container.
 	want := h.JobID
 	if want == "" && record != nil {
 		want = record.JobID
 	}
+	status, err := e.client.attemptStatus(context.Background(), tickID, h.Attempt, want)
+	if err != nil {
+		return nil, err
+	}
+	// The door derives the run from the credential; a job id it answers for
+	// that is not the one asked about is the client and the door differing
+	// about whose job this is, and it is never a status to act on.
 	if want != "" && status.JobID != want {
 		return nil, fmt.Errorf("the door answered for %s, not %s: the credential names a run this handle does not",
 			status.JobID, want)
