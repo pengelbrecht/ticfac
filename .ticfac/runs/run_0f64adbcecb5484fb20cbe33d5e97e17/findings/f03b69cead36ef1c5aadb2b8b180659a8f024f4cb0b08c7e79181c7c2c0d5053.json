@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "r5i",
   "attempt": 1,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-29T13:13:11Z",
+  "triaged_at": "2026-09-29T13:13:22Z",
+  "triaged_by": "ticfac run run_0f64adbcecb5484fb20cbe33d5e97e17 absorbing f91",
+  "promoted_as": "f91",
   "provenance": {
     "run_id": "run_0f64adbcecb5484fb20cbe33d5e97e17",
     "tick_id": "r5i",
