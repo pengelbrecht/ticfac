@@ -576,6 +576,9 @@ PROMPT
 }
 
 start_harness() {
+	# The run's control plane, not the machine's: a gate's command and a test
+	# binary never inherit these (internal/runenv names the list, and its test
+	# fails on an export here that nobody classified).
 	export TK_ACTOR="$ACTOR"
 	export TICKS_RUN_ID="$run_id"
 	export TICKS_PHASE="$phase"

@@ -15,6 +15,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
+	"github.com/pengelbrecht/ticfac/internal/runenv"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
@@ -1122,7 +1123,12 @@ func startShell(dir, command string, timeout time.Duration, now time.Time, hold 
 
 	cmd := exec.Command("sh", "-c", gateSentinelScript)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "TICFAC_GATE=1", "GIT_TERMINAL_PROMPT=0",
+	// The run's own control plane is not the command's (runenv): a gate run
+	// inside a cloud orchestrator inherited TICKS_SUBSTRATE=cloud and the
+	// run's factory token, and this repository's own tests switched into
+	// cloud mode under it. A gate answers the same wherever the run lives.
+	env, _ := runenv.Scrub(os.Environ())
+	cmd.Env = append(env, "TICFAC_GATE=1", "GIT_TERMINAL_PROMPT=0",
 		"TICFAC_GATE_COMMAND="+command, "TICFAC_GATE_DONE="+s.donePath, "TMPDIR="+tmp)
 	cmd.SysProcAttr = gateProcessGroup()
 	cmd.Stdout, cmd.Stderr = out, errOut
