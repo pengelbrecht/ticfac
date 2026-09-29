@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_0f64adbcecb5484fb20cbe33d5e97e17",
   "epic_id": "hn6",
-  "sequence": 37,
-  "state": "running",
-  "reason": "3gk try 2 (run dispatch #5) is rejected (missing-result): the container's branch tick/hn6/attempt-5/3gk carries no report and no commit beyond the base it was cut from: the push never landed, and this is neither running nor done",
-  "updated_at": "2026-09-29T13:53:31Z",
+  "sequence": 38,
+  "state": "failed",
+  "reason": "3gk try 2 (run dispatch #5) is missing-result: the container's branch tick/hn6/attempt-5/3gk carries no report and no commit beyond the base it was cut from: the push never landed, and this is neither running nor done",
+  "updated_at": "2026-09-29T13:53:33Z",
   "ticks": [
     {
       "tick_id": "r5i",
