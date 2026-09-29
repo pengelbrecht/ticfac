@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_0f64adbcecb5484fb20cbe33d5e97e17",
   "epic_id": "hn6",
-  "sequence": 6,
-  "state": "gating",
-  "reason": "running the integrated gate for r5i on b0fe8b6d0d9f",
-  "updated_at": "2026-09-29T13:18:38Z",
+  "sequence": 7,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-29T13:24:30Z",
   "ticks": [
     {
       "tick_id": "r5i",
@@ -58,7 +58,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/hn6",
-    "source_sha": "17422a23a49af70271dbaf591d1d4e5350899187",
+    "source_sha": "3a3692fcd4ce3f1d8f5412ab4336c3076c5871c6",
     "integration_ref": "refs/heads/epic/hn6",
     "phase": "worker",
     "executor": null,
