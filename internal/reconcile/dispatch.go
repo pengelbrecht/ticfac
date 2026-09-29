@@ -2854,9 +2854,11 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 			if redispatch != nil {
 				return nil, redispatch
 			}
-			if r.rejectedWorkHead(marker) == "" {
+			if marker.ResumedFrom == nil && r.rejectedWorkHead(marker) == "" {
 				// Nothing committed is on the attempt's ref, so there is no
-				// work to release and nothing for a person to decide: the
+				// work to release and nothing for a person to decide (a
+				// CARRIED try's violations are the carried commits', which
+				// are work, so it keeps the refusal below): the
 				// rejection is resumable exactly as a no-commits collect is,
 				// and the resume redispatches the tick fresh ("a rejected
 				// attempt that left nothing is redispatched"). Holding it for a
