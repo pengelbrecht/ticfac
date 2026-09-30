@@ -253,7 +253,7 @@ func confirmContainerRollout(
 	w *wrangler,
 	out io.Writer,
 	deployOut string,
-	timeout, poll time.Duration,
+	timeout, poll, extension time.Duration,
 	skip bool,
 ) (rolloutOutcome, error) {
 	ref, digest := parsePushedImage(deployOut)
@@ -286,6 +286,9 @@ func confirmContainerRollout(
 	if poll <= 0 {
 		poll = defaultRolloutPoll
 	}
+	if extension <= 0 {
+		extension = rolloutExtension
+	}
 
 	if digest == "" {
 		fmt.Fprintf(out, "wrangler skipped the image push; resolving the existing %s image from the container application\n",
@@ -299,6 +302,8 @@ func confirmContainerRollout(
 	deadline := started.Add(timeout)
 	var lastServing string
 	var lastState string
+	var lastAppID string
+	extended := false
 	var lastErr error
 	for attempt := 1; ; attempt++ {
 		apps, err := w.listContainerApps(ctx)
@@ -314,6 +319,7 @@ func confirmContainerRollout(
 			default:
 				lastServing = app.digest()
 				lastState = app.State
+				lastAppID = app.ID
 				if digest == "" && lastServing != "" {
 					// Wrangler intentionally omitted the image block because it did
 					// not push. The application record is the authoritative image
@@ -334,6 +340,27 @@ func confirmContainerRollout(
 		}
 
 		remaining := time.Until(deadline)
+		if remaining <= 0 && !extended && lastErr == nil && lastAppID != "" {
+			// The base bound is what a rollout takes when the new image pulls
+			// promptly (2-3 minutes through 2026-09-29). It is not what a
+			// rollout that is still progressing is entitled to: on 2026-09-30
+			// the managed registry served each freshly pushed ~200 MB layer at
+			// 0.07-0.16 MB/s for its first half hour or so, the runtime gave up
+			// each pull at exactly 10 minutes (ImagePullError) and retried, and
+			// the rollouts completed after 23-48 minutes. So while the platform
+			// still reports the rollout in progress, the wait extends once
+			// rather than calling a rollout that is going to land a failure.
+			extended = true
+			if health := w.containerHealth(ctx, lastAppID); health.RolloutActive {
+				fmt.Fprintf(out, "  the rollout is still in progress after %s; waiting up to %s more\n",
+					time.Since(started).Round(time.Second), extension.Round(time.Minute))
+				for _, e := range health.Errors {
+					fmt.Fprintf(out, "  the application reports: %s\n", e)
+				}
+				deadline = deadline.Add(extension)
+				remaining = time.Until(deadline)
+			}
+		}
 		if remaining <= 0 {
 			break
 		}
@@ -381,7 +408,114 @@ func confirmContainerRollout(
 	default:
 		failure.Reason = "the container application is still serving a different image"
 	}
+	// Why, when the application says: a new instance that cannot pull its
+	// image reports ImagePullError there and nowhere else the deploy looks
+	// (2026-09-30: rollouts timed out on it with nothing in the deploy's output
+	// to say so).
+	if lastErr == nil && lastAppID != "" {
+		health := w.containerHealth(ctx, lastAppID)
+		if len(health.Errors) > 0 {
+			failure.Reason += "; the application reports: " + strings.Join(health.Errors, "; ")
+		}
+		if health.RolloutActive {
+			failure.Reason += "; the rollout is still in progress and may yet land"
+		}
+	}
 	return outcome, failure
+}
+
+// rolloutExtension is how much longer the wait runs, once, when the base bound
+// is spent and the platform still reports the rollout in progress. Fifty
+// minutes on top of the base ten covers the slowest rollout observed (48
+// minutes, 2026-09-30) and stays inside the deploy workflow's job timeout.
+const rolloutExtension = 50 * time.Minute
+
+// containerHealth is what `wrangler containers info` says about the
+// application beyond its image.
+type containerHealth struct {
+	// Errors are the health errors — ImagePullError and the like — one line
+	// each.
+	Errors []string
+	// RolloutActive reports that a rollout is still in progress.
+	RolloutActive bool
+}
+
+// containerHealth reads the application's health, or the zero value when it
+// cannot. It is diagnosis around a wait, so it never fails anything itself.
+func (w *wrangler) containerHealth(ctx context.Context, id string) containerHealth {
+	out, err := w.run(ctx, "", "containers", "info", id)
+	if err != nil {
+		return containerHealth{}
+	}
+	raw, ok := jsonObject(out)
+	if !ok {
+		return containerHealth{}
+	}
+	var info struct {
+		ActiveRolloutID *string `json:"active_rollout_id"`
+		Health          struct {
+			Errors []json.RawMessage `json:"errors"`
+		} `json:"health"`
+	}
+	if json.Unmarshal([]byte(raw), &info) != nil {
+		return containerHealth{}
+	}
+	return containerHealth{
+		Errors:        renderHealthErrors(info.Health.Errors),
+		RolloutActive: info.ActiveRolloutID != nil && *info.ActiveRolloutID != "",
+	}
+}
+
+// registryAccountPattern is the account id inside a managed-registry image
+// reference. A health error carries the full reference, and the deploy's
+// output lands in a public CI log.
+var registryAccountPattern = regexp.MustCompile(`(registry\.cloudflare\.com/)[0-9a-f]{32}`)
+
+// renderHealthErrors turns the application's health errors into one line each.
+// The observed shape is {instance_id, event: {type, name, message, details:
+// {duration, image, ...}}}; a string is taken as is, and anything else as
+// compact JSON with the account id redacted.
+func renderHealthErrors(errs []json.RawMessage) []string {
+	var lines []string
+	for _, e := range errs {
+		var s string
+		if json.Unmarshal(e, &s) == nil {
+			lines = append(lines, redactAccount(s))
+			continue
+		}
+		var obj struct {
+			Event struct {
+				Name    string `json:"name"`
+				Message string `json:"message"`
+				Details struct {
+					Duration string `json:"duration"`
+				} `json:"details"`
+			} `json:"event"`
+			Name    string `json:"name"`
+			Message string `json:"message"`
+		}
+		if json.Unmarshal(e, &obj) == nil {
+			name, message := obj.Event.Name, obj.Event.Message
+			if name == "" && message == "" {
+				name, message = obj.Name, obj.Message
+			}
+			if name != "" || message != "" {
+				line := strings.TrimPrefix(name+": "+message, ": ")
+				line = strings.TrimSuffix(line, ": ")
+				if d := obj.Event.Details.Duration; d != "" {
+					line += " (after " + d + ")"
+				}
+				lines = append(lines, redactAccount(line))
+				continue
+			}
+		}
+		lines = append(lines, redactAccount(strings.TrimSpace(string(e))))
+	}
+	return lines
+}
+
+func redactAccount(s string) string {
+	return registryAccountPattern.ReplaceAllString(s, "${1}<account>")
 }
 
 func shortDigest(digest string) string {

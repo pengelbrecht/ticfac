@@ -75,10 +75,25 @@ type Options struct {
 	// in its output, that nothing was confirmed.
 	SkipRolloutWait bool
 
+	// SkipImagePrune leaves old ticks-orchestrator images in the managed
+	// registry. By default a deploy prunes all but the newest ImageKeep (and
+	// the served image) before it pushes and after a confirmed rollout, so
+	// the account's 50 GB image storage limit is never what stops a rollout
+	// (prune.go).
+	SkipImagePrune bool
+	// ImageKeep is how many of the newest orchestrator images a prune keeps
+	// besides the protected ones. Zero means imageKeepNewest.
+	ImageKeep int
+	// registryBaseURL replaces https://<registry host> (tests).
+	registryBaseURL string
+
 	// rolloutTimeout/rolloutPoll bound the wait for the container application
 	// to report the expected image (tests).
 	rolloutTimeout time.Duration
 	rolloutPoll    time.Duration
+	// rolloutExtension overrides the extension (rollout.go) a wait gets
+	// while the platform still reports the rollout in progress (tests).
+	rolloutExtension time.Duration
 
 	// onSecretPut runs after `wrangler secret put` returns, so the test
 	// harness can propagate the secret into its fake worker the way
@@ -365,6 +380,20 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 		return nil, fmt.Errorf("applying D1 migrations: %w", err)
 	}
 
+	// Make room for the image this deploy pushes, before it pushes it. The
+	// served image is protected; with no application (a first install) or a
+	// listing that cannot be read there is nothing known to protect, so
+	// nothing is pruned.
+	var servedBefore string
+	if apps, err := w.listContainerApps(ctx); err == nil {
+		if app, ok := findContainerApp(apps, ContainerAppName); ok {
+			servedBefore = app.digest()
+		}
+	}
+	if servedBefore != "" {
+		pruneOrchestratorImages(ctx, w, out, opts, servedBefore)
+	}
+
 	deployOut, err := w.deploy(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("deploying the factory worker: %w", err)
@@ -446,7 +475,7 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 	// without waiting for it, so this is where the deploy stops being allowed
 	// to claim readiness on the strength of an exit code (see rollout.go).
 	rollout, rolloutErr := confirmContainerRollout(
-		ctx, w, out, deployOut, opts.rolloutTimeout, opts.rolloutPoll, opts.SkipRolloutWait)
+		ctx, w, out, deployOut, opts.rolloutTimeout, opts.rolloutPoll, opts.rolloutExtension, opts.SkipRolloutWait)
 	result.ImageRef = rollout.Ref
 	result.ImageDigest = rollout.Digest
 	result.RolloutConfirmed = rollout.Confirmed
@@ -461,6 +490,8 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 		if err := recordDeploymentImage(ctx, w, rollout.Ref, rollout.Digest); err != nil {
 			return result, err
 		}
+		// The new image serves; the one it replaced stays as the rollback.
+		pruneOrchestratorImages(ctx, w, out, opts, rollout.Digest, servedBefore)
 	}
 
 	return result, nil

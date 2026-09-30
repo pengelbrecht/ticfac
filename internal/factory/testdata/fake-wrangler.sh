@@ -31,6 +31,13 @@
 #                         subcommand (an older wrangler)
 #   FAKE_WRANGLER_NO_SUCH_APP   when non-empty, the listing has other applications
 #                         but not this one
+#   FAKE_WRANGLER_HEALTH_ERROR  JSON list items `containers info` reports as
+#                         health.errors; unset, `containers info` is unsupported
+#   FAKE_WRANGLER_ROLLOUT_ACTIVE when non-empty, `containers info` reports a rollout in progress
+#   FAKE_WRANGLER_REGISTRY_HOST registry host `containers registries credentials`
+#                         names; unset, that command is unsupported (no prune)
+#                         `containers images delete` appends to
+#                         $FAKE_WRANGLER_STATE/deleted-images
 set -eu
 
 : "${FAKE_WRANGLER_STATE:?fake wrangler needs FAKE_WRANGLER_STATE}"
@@ -194,6 +201,35 @@ case "${1:-}" in
           printf '"updated_at":"2026-08-20T00:00:00Z","created_at":"2026-08-01T00:00:00Z"}'
         fi
         printf ']\n'
+        ;;
+      info)
+        if [ -z "${FAKE_WRANGLER_HEALTH_ERROR:-}" ] && [ -z "${FAKE_WRANGLER_ROLLOUT_ACTIVE:-}" ]; then
+          echo "fake wrangler: unsupported containers command: $*" >&2
+          exit 64
+        fi
+        rollout=null
+        [ -n "${FAKE_WRANGLER_ROLLOUT_ACTIVE:-}" ] && rollout='"rollout-1"'
+        printf '{"id":"%s","name":"ticks-orchestrator","active_rollout_id":%s,"health":{"errors":[%s],"instances":{"starting":1}}}\n' \
+          "${3:-}" "$rollout" "${FAKE_WRANGLER_HEALTH_ERROR:-}"
+        ;;
+      registries)
+        # `containers registries credentials <domain> --pull --json`: only
+        # when a test serves a registry; otherwise the prune is skipped with
+        # a warning, as it is for a wrangler that cannot mint credentials.
+        if [ "${3:-}" != "credentials" ] || [ -z "${FAKE_WRANGLER_REGISTRY_HOST:-}" ]; then
+          echo "fake wrangler: unsupported containers command: $*" >&2
+          exit 64
+        fi
+        printf '{"account_id":"acct","registry_host":"%s","username":"v1","password":"fake-registry-password"}\n' \
+          "$FAKE_WRANGLER_REGISTRY_HOST"
+        ;;
+      images)
+        if [ "${3:-}" != "delete" ]; then
+          echo "fake wrangler: unsupported containers command: $*" >&2
+          exit 64
+        fi
+        printf '%s\n' "${4:-}" >>"$FAKE_WRANGLER_STATE/deleted-images"
+        echo "Deleted ${4:-}"
         ;;
       *)
         echo "fake wrangler: unsupported containers command: $*" >&2
