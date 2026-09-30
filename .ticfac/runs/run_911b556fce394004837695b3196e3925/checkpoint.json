@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_911b556fce394004837695b3196e3925",
   "epic_id": "hn6",
-  "sequence": 17,
-  "state": "running",
-  "reason": "3gk is closed",
-  "updated_at": "2026-09-30T13:16:59Z",
+  "sequence": 18,
+  "state": "dispatching",
+  "reason": "dispatching 378 as attempt 5",
+  "updated_at": "2026-09-30T13:17:13Z",
   "ticks": [
     {
       "tick_id": "3gk",
@@ -48,6 +48,10 @@
     },
     {
       "tick_id": "qjl",
+      "state": "ready"
+    },
+    {
+      "tick_id": "378",
       "state": "ready"
     }
   ],
