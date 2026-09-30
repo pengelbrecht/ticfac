@@ -584,7 +584,17 @@ export type OrchestratorEnvInput = {
    */
   review_pr?: number;
   review_head_sha?: string;
+  /**
+   * The account's container ceiling, FACTORY_MAX_INSTANCES (hn6's cloud run),
+   * exported as `TICKS_FACTORY_MAX_INSTANCES`. `ticfac run-epic` keeps its
+   * live worker containers under it less its own, so a start never waits in
+   * the dispatch door for a slot the run could count itself out of.
+   */
+  factory_max_instances?: number;
 };
+
+/** The account's container ceiling, in the orchestrator's environment (hn6). */
+export const FACTORY_MAX_INSTANCES_ENV = "TICKS_FACTORY_MAX_INSTANCES";
 
 /** The pull request a `review` boot reads, in the container's environment. */
 export const REVIEW_PR_ENV = "TICKS_REVIEW_PR";
@@ -660,6 +670,13 @@ export function orchestratorEnv(input: OrchestratorEnvInput): Record<string, str
   }
   if (input.review_head_sha !== undefined && input.review_head_sha !== "") {
     env[REVIEW_HEAD_SHA_ENV] = input.review_head_sha;
+  }
+  if (
+    input.factory_max_instances !== undefined &&
+    Number.isInteger(input.factory_max_instances) &&
+    input.factory_max_instances > 0
+  ) {
+    env[FACTORY_MAX_INSTANCES_ENV] = String(input.factory_max_instances);
   }
   return env;
 }

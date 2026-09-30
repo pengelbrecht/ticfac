@@ -64,6 +64,10 @@ func knownExecutors() []reconcile.KnownExecutor {
 			Runners:      runconfig.KnownKinds(),
 			AcceptsModel: func(string) bool { return true },
 			PollInterval: cloudflaresandbox.PollInterval,
+			// The account's container ceiling less the orchestrator's own
+			// container: the window admits no worker past it, so a start
+			// never waits in the door for a slot (hn6's cloud run).
+			MaxLiveJobs: cloudflaresandbox.WorkerSlots(),
 		},
 	}
 }

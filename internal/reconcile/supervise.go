@@ -164,7 +164,7 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 func resumesWithoutAPerson(reason string) bool {
 	switch reason {
 	case RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
-		RefusedBlockedRedispatch, RefusedRejectedRedispatch, RefusedClaimHolderUnknown:
+		RefusedBlockedRedispatch, RefusedRejectedRedispatch, RefusedClaimHolderUnknown, RefusedNoCapacity:
 		return true
 	}
 	return waitsOnCI(reason)
@@ -197,7 +197,18 @@ func waitsOnCI(reason string) bool {
 // whose holder's host could not say whether it still runs — the answer comes
 // from that host, never from the branch. The continuation cap bounds them all.
 func waitsOnTheWorld(reason string) bool {
-	return waitsOnCI(reason) || reason == StoppedRemoteTransient || reason == RefusedClaimHolderUnknown
+	return waitsOnCI(reason) || reason == StoppedRemoteTransient || reason == RefusedClaimHolderUnknown ||
+		reason == RefusedNoCapacity
+}
+
+// spendsTheCap says whether a continuation across this stop counts against
+// the automatic-continuation cap. Every stop does except a substrate with no
+// room (capacity.go): a full account is not a run misbehaving, the wait
+// before it already spent CapacityWaitBound, and the factory's hourly reclaim
+// is what frees it — hn6's cloud run spent its whole cap of twelve on a start
+// waiting for a slot, and died of the wait rather than of anything it did.
+func spendsTheCap(reason string) bool {
+	return reason != RefusedNoCapacity
 }
 
 // supervisedStop is one incarnation's stop, reduced to the facts the decision
@@ -361,6 +372,9 @@ func (r *Reconciler) Supervise(ctx context.Context) (*Result, error) {
 	backoff := r.opts.AutoResumeBackoff
 	var resumes []Resume
 	var previous supervisedStop
+	// capped counts the continuations the cap bounds: every resume but the
+	// ones spendsTheCap exempts.
+	capped := 0
 
 	for {
 		result, err := incarnation.Run(ctx)
@@ -387,7 +401,7 @@ func (r *Reconciler) Supervise(ctx context.Context) (*Result, error) {
 			return result, err
 		}
 
-		if halt := haltReason(stop, previous, len(resumes), r.opts.AutoResumeCap); halt != "" {
+		if halt := haltReason(stop, previous, capped, r.opts.AutoResumeCap); halt != "" {
 			incarnation.record("", StageSupervisionHalted,
 				"the run stopped and will NOT be continued automatically: %s. What stopped it: %s%s. "+
 					"%d automatic continuation(s) preceded this stop",
@@ -406,18 +420,26 @@ func (r *Reconciler) Supervise(ctx context.Context) (*Result, error) {
 		// resume already appended a second incarnation's lines after the
 		// first's run_finished; the only thing that was ever missing from that
 		// picture is this line, saying a resume happened and nobody typed it.
+		count := fmt.Sprintf("number %d of at most %d", capped+1, r.opts.AutoResumeCap)
+		if !spendsTheCap(stop.Reason) {
+			count = fmt.Sprintf("intervention %d, NOT counted against the cap of %d: the substrate had no room, "+
+				"which is a wait on the world", len(resumes)+1, r.opts.AutoResumeCap)
+		}
 		incarnation.record("", StageResumedAutomatically,
 			"the run stopped over %s%s, which is resumable by construction: the next incarnation adopts the "+
 				"in-flight attempts by identity, re-derives and continues. Waiting %s first. THIS IS AN "+
-				"INTERVENTION and it is counted as one (number %d of at most %d): a resume nobody typed is "+
+				"INTERVENTION and it is counted as one (%s): a resume nobody typed is "+
 				"still a resume, and a run reported as unattended must report these beside that claim",
-			reasonOf(stop), detailOf(stop), backoff, len(resumes)+1, r.opts.AutoResumeCap)
+			reasonOf(stop), detailOf(stop), backoff, count)
 
 		incarnation.sleep(backoff)
 		if backoff *= 2; backoff > AutoResumeBackoffMax {
 			backoff = AutoResumeBackoffMax
 		}
 		resumes = append(resumes, resume)
+		if spendsTheCap(stop.Reason) {
+			capped++
+		}
 		previous = stop
 
 		next, newErr := New(incarnation.opts)

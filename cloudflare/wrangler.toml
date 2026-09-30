@@ -92,17 +92,25 @@ new_sqlite_classes = ["RepoRoom"]
 class_name = "Sandbox"
 name = "ticks-orchestrator"
 image = "../image/Dockerfile"
-# Phase 1 boots one container per run. The headroom is for the overlap a reboot
-# creates (the replacement is addressed before the dead one is destroyed) and
-# for a second project's run holding its own lease. Raising it is a deployment
-# decision bounded by the account's container limits, not a code change.
+# Every container this factory boots counts here: each run's orchestrator AND
+# each of its per-tick worker containers (the dispatch door's). 12 is sized as
+# the orchestrator + a full wave (max_parallel 4) + the overlap a reboot
+# creates (the replacement is addressed before the dead one is destroyed) + a
+# second concurrent run (operator decision, 2026-09-30, after hn6's cloud run
+# filled a ceiling of 3 with its orchestrator and two workers). The account's
+# own limit is far above it — about 750 standard-3 instances by vCPU (1,500
+# vCPU / 6 TiB / 30 TB per account) — but that is shared with the operator's
+# other container apps. Raising it is a deployment decision bounded by the
+# account's container limits, not a code change: the orchestrator reads the
+# mirror below and keeps its live workers under it, and the door answers
+# `503 no_capacity` rather than queue a start past it (container-capacity.ts).
 #
 # This is the SOURCE for [vars] FACTORY_MAX_INSTANCES below — the one copy a
 # maintainer raises (tick 7fl). The agreement is not a comment to remember:
 # `ticfac factory deploy` refuses to ship a config where the two disagree, and
 # the suite pins the mirror (and the Worker's compiled default) to this
 # number.
-max_instances = 3
+max_instances = 12
 # standard-3: 2 vCPU, 8 GiB memory, 16 GB disk. Disk is the binding constraint —
 # the batteries-included image is multi-GB before a checkout, a module cache or
 # a node_modules tree exists.
@@ -232,7 +240,7 @@ RUN_STOP_GRACE_MS = "300000"
 # numbers — never the silent serialization wave 3 measured for Phase 1.
 # Raise the ceiling, then this mirror, bounded by the account's real container
 # limit.
-FACTORY_MAX_INSTANCES = "3"
+FACTORY_MAX_INSTANCES = "12"
 
 # Which harness and model the cloud runs (tick 1cd added the vars; tick uqi
 # pinned them). The built-in defaults live in `src/worker-boot.ts`

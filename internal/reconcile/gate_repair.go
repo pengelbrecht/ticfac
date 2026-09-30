@@ -244,7 +244,10 @@ func (r *Reconciler) dispatchRepair(ctx context.Context, entry planEntry, marker
 			"the integrated gate on %s did not pass for %s (%s) and the repair job could not be started: build its "+
 				"executor: %v", short(merged.GateSHA), tick, failures, err)
 	}
-	handle, err := executor.Start(r.repairJobSpec(dispatch, marker, g.failed))
+	handle, err := r.startWithRoom(executor, tick, r.repairJobSpec(dispatch, marker, g.failed))
+	if capacityStop(err) {
+		return false, err
+	}
 	if err != nil {
 		// An earlier incarnation's repair under this same identity may have
 		// SETTLED — its work is on the branch above, and finishing from the

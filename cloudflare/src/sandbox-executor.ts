@@ -138,10 +138,26 @@ export function attemptSandboxName(
   attempt: number,
   jobID?: string,
 ): string {
-  const slot = attemptJobSlot(runID, tickID, attempt, jobID);
-  return slot === undefined
-    ? `${runID}-${tickID}-${attempt}`
-    : `${runID}-${tickID}-${attempt}-${slot}`;
+  return attemptSandboxNameForSlot(
+    runID,
+    tickID,
+    attempt,
+    attemptJobSlot(runID, tickID, attempt, jobID) ?? "",
+  );
+}
+
+/**
+ * The same name from a job's recorded SLOT ('' for the attempt's own job) —
+ * how the boot records (migration 0018) name the container they booted, which
+ * is what the reclaim (container-capacity.ts) addresses.
+ */
+export function attemptSandboxNameForSlot(
+  runID: string,
+  tickID: string,
+  attempt: number,
+  slot: string,
+): string {
+  return slot === "" ? `${runID}-${tickID}-${attempt}` : `${runID}-${tickID}-${attempt}-${slot}`;
 }
 
 /**

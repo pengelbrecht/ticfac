@@ -108,6 +108,8 @@ func (h *held) claims() int { return len(h.holders()) }
 func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, error) {
 	var failed []string
 	var window held
+	r.window = &window
+	defer func() { r.window = nil }()
 	queue, err := r.adoptionFirst(plan)
 	if err != nil {
 		return nil, err
@@ -1205,6 +1207,13 @@ func (r *Reconciler) mayAdmit(next planEntry, window *held, plan []planEntry) bo
 			}
 		}
 		return true
+	}
+	// The substrate's capacity (capacity.go): a NEW job is admitted only
+	// while the window's live jobs leave it a slot. It asks no door — a slot
+	// the run can count itself out of is never requested — and it is not a
+	// hold: the window polls what is live, and admits again when one settles.
+	if !r.roomForAJob(window) {
+		return false
 	}
 	if len(holders) == 0 {
 		// The window holds nothing of its own, so no boundary of its own can

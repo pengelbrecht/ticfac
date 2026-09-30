@@ -741,6 +741,13 @@ export async function recordSandboxAttemptBoot(
         "DELETE FROM sandbox_job_settled WHERE run_id = ? AND tick_id = ? AND attempt = ? AND job = ?",
       )
       .bind(boot.run_id, boot.tick_id, boot.attempt, boot.job),
+    // …and so is any reclaim of its previous container (migration 0021): the
+    // new one is holding a slot again.
+    db
+      .prepare(
+        "DELETE FROM sandbox_job_reclaimed WHERE run_id = ? AND tick_id = ? AND attempt = ? AND job = ?",
+      )
+      .bind(boot.run_id, boot.tick_id, boot.attempt, boot.job),
   ]);
 }
 

@@ -78,6 +78,7 @@ import {
 } from "./auth";
 import { BRANCH_CLAIM_PATH, branchOwnershipRoute, claimBranch } from "./branch-ownership";
 import { ciEscalationsRoute } from "./ci-escalations";
+import { reclaimOrphanedWorkers } from "./container-capacity";
 import { proxyGitRequest } from "./credentials";
 import {
   type EnrolledProject,
@@ -149,6 +150,7 @@ import {
   stopRun,
   submitRun,
 } from "./runs";
+import { sandboxBinding } from "./sandbox";
 import { sandboxAttemptRoute } from "./sandbox-dispatch";
 import { SignalInbox } from "./signal-inbox";
 import { parseSnapshotEnvelope, saveStatusSnapshot } from "./status";
@@ -1808,6 +1810,24 @@ export default {
         } catch (error) {
           console.error(
             `factory sweep: the ${controller.cron} trigger at ${at.toISOString()} failed: ${String(error)}`,
+          );
+        }
+        // The container reclaim (hn6's cloud run): any worker container whose
+        // run is not live is asked to stop and push, destroyed, and recorded —
+        // what a finalize that never reached its workers left holding the
+        // account's slots. Its own try, like the digest's: a reclaim that
+        // cannot run must not stop the sweeps, nor they it.
+        try {
+          const reclaimed = await reclaimOrphanedWorkers(env.DB, sandboxBinding(env));
+          if (reclaimed.length > 0) {
+            console.log(
+              `factory reclaim: the ${controller.cron} sweep reclaimed ${reclaimed.length} worker container(s) ` +
+                `of runs that are over: ${reclaimed.map((r) => r.sandbox).join(", ")}`,
+            );
+          }
+        } catch (error) {
+          console.error(
+            `factory reclaim: the ${controller.cron} trigger at ${at.toISOString()} threw: ${String(error)}`,
           );
         }
         try {

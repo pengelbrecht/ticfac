@@ -331,7 +331,10 @@ func (r *Reconciler) dispatchResolve(ctx context.Context, marker attemptHandle, 
 			"%s does not merge onto %s (%s) and the resolve-conflict job could not be started: build its executor: %v",
 			r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, err)
 	}
-	handle, err := executor.Start(r.resolveJobSpec(dispatch, marker, others))
+	handle, err := r.startWithRoom(executor, tick, r.resolveJobSpec(dispatch, marker, others))
+	if capacityStop(err) {
+		return "", nil, false, err
+	}
 	if err != nil {
 		// An earlier incarnation's resolve job under this same identity may
 		// already have SETTLED — its work is on the branch above, and the
