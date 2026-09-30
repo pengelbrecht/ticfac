@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
+	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/schema"
 )
 
@@ -166,7 +167,7 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 		doneStage, activeStage bool
 		parentUnder            bool
 		tryTier                bool
-		tryWhyAndNext          bool
+		tryRefusedReason       bool
 		activityDrawn          bool
 		handleNamed            bool
 		meteredNumber          bool
@@ -189,8 +190,8 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 				if try.Tier != nil {
 					tryTier = true
 				}
-				if try.Reason != nil && try.NextStep != nil {
-					tryWhyAndNext = true
+				if (try.Outcome == TryRejected || try.Outcome == TryGateFailed) && try.Reason != nil {
+					tryRefusedReason = true
 				}
 			}
 		}
@@ -218,10 +219,16 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 	if !parentUnder {
 		t.Error("no tick carries parent_tick_id: the repair-child row the tick's golden spec names is gone")
 	}
-	if !tryTier || !tryWhyAndNext {
-		t.Errorf("no try carries tier/reason/next_step (tier=%v reason+next=%v): the rejected-try vocabulary the first-use bugs name is unexercised",
-			tryTier, tryWhyAndNext)
+	if !tryTier || !tryRefusedReason {
+		t.Errorf("no try carries tier, or no refused try carries its reason (tier=%v reason=%v): the rejected-try vocabulary the first-use bugs name is unexercised",
+			tryTier, tryRefusedReason)
 	}
+	// The try anchor stops at the reason (tick 378): a next step is stated on
+	// the LAST try of a refusal only, and this golden's one refusal was
+	// superseded by a live try, so the derivation states no next step anywhere
+	// in it — demanding one here would force the fixture back into the
+	// contradiction this tick removed. WHERE a next step may exist is pinned
+	// by TestTheDashboardGoldenAgreesWithThePipelineDerivation below.
 	if !activityDrawn || !handleNamed {
 		t.Errorf("no worker carries activity buckets and a handle (activity=%v handle=%v): the workers panel's fixture is empty",
 			activityDrawn, handleNamed)
@@ -250,6 +257,136 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 		VerdictHealthy, VerdictDegraded, VerdictStopped)
 	enumAgrees(t, "$defs.cost_line.properties.source", defs["cost_line"].Properties["source"].Enum,
 		CostSourceDecisions, CostSourceWorkersAI, CostSourceClaude, CostSourcePiLocal, CostSourceOther)
+}
+
+// TestTheDashboardGoldenAgreesWithThePipelineDerivation: the golden is a
+// rendering fixture, not a Build output, so no suite derives it — the only
+// thing that keeps it saying what the wave-2 derivation (tick 3gk) actually
+// produces is the rule read back over it. Tick 378 found the gap: v7z's ci
+// cell read active beside the golden's own red CI, and 46x's superseded try
+// carried a next step, both values decorateTicks can never state — and the
+// wave-3 renderers and the phone page take this golden as THE shape fixture,
+// so the illustration and the model it illustrates disagreed, the exact
+// failure A5's one-model rule exists to prevent. Three agreements, each a
+// rule 3gk spelled:
+//
+//   - a cell is its role's own stage list, filled left to right — done
+//     stages first, at most one live stage, every stage behind the first
+//     non-done one pending;
+//   - a closeout's ci stage says what the model's own CI answer makes the
+//     derivation say — a red CI is that stage's FAILURE, not its activity;
+//   - a try's next step exists only on the last try of a refusal, and a
+//     reason only on a refusal.
+func TestTheDashboardGoldenAgreesWithThePipelineDerivation(t *testing.T) {
+	t.Parallel()
+	_, _, goldens := bundleFixture(t)
+	raw, ok := goldens[dashboardGoldenName]
+	if !ok {
+		t.Fatalf("the contract carries no golden named %q", dashboardGoldenName)
+	}
+	var model Model
+	if err := json.Unmarshal(raw, &model); err != nil {
+		t.Fatalf("the dashboard golden does not decode into the Go Model: %v", err)
+	}
+
+	for _, wave := range deref(model.Waves) {
+		for _, tick := range wave.Ticks {
+			if !stagesOf(tick.Pipeline, roleStages(tick.Role)) {
+				t.Errorf("%s's cell is %s, want the %v stages of its role",
+					tick.TickID, cellOf(tick.Pipeline), roleStages(tick.Role))
+				continue
+			}
+			filled, live := true, 0
+			for _, stage := range tick.Pipeline {
+				switch stage.State {
+				case StageStateDone:
+					if !filled {
+						t.Errorf("%s's cell is %s: %s is done behind a live stage",
+							tick.TickID, cellOf(tick.Pipeline), stage.Stage)
+					}
+				case StageStateActive, StageStateFailed:
+					if !filled {
+						t.Errorf("%s's cell is %s: %s is live behind another live stage",
+							tick.TickID, cellOf(tick.Pipeline), stage.Stage)
+					}
+					filled = false
+					live++
+				case StageStatePending:
+					filled = false
+				default:
+					t.Errorf("%s's %s stage carries the unknown state %q", tick.TickID, stage.Stage, stage.State)
+				}
+			}
+			if live > 1 {
+				t.Errorf("%s's cell is %s: a tick is IN one stage, never %d",
+					tick.TickID, cellOf(tick.Pipeline), live)
+			}
+			if ci := stageOf(tick.Pipeline, StageCI); ci != nil {
+				if want := goldenCIStateOf(model, tick); ci.State != want {
+					ciAnswer := "absent"
+					if model.CI != nil {
+						ciAnswer = model.CI.State
+					}
+					t.Errorf("%s's ci stage is %s, want %s: the model's own CI answer is %q, and the cell and the PR cannot say two things about one another",
+						tick.TickID, ci.State, want, ciAnswer)
+				}
+			}
+			for i := range tick.Tries {
+				try := &tick.Tries[i]
+				last := i == len(tick.Tries)-1
+				refused := try.Outcome == TryRejected || try.Outcome == TryGateFailed
+				if try.Reason != nil && !refused {
+					t.Errorf("%s's try %d closed as %s and still carries the reason %q: a reason is a refusal's own word",
+						tick.TickID, try.Try, try.Outcome, *try.Reason)
+				}
+				if try.NextStep != nil && (!last || !refused) {
+					t.Errorf("%s's try %d (attempt %d, %s) carries the next step %q: the derivation states one on the last try of a refusal only",
+						tick.TickID, try.Try, try.Attempt, try.Outcome, *try.NextStep)
+				}
+			}
+		}
+	}
+}
+
+// stageOf is one named stage's own entry in a cell, or nil when the role's
+// stage list does not carry it.
+func stageOf(cell []PipelineStage, name string) *PipelineStage {
+	for i := range cell {
+		if cell[i].Stage == name {
+			return &cell[i]
+		}
+	}
+	return nil
+}
+
+// goldenCIStateOf states what the pipeline derivation (pipeline.go's
+// ciState) makes of a closeout's ci stage over the model's own CI answer —
+// the same facts the phase bar and the cell render from, so the two cannot
+// say two things about one PR. The held-line branch reads the model's own
+// tail (recent) rather than the whole feed the derivation reads: the
+// goldens carry their CI, so the branch is here for a future golden that
+// does not.
+func goldenCIStateOf(model Model, tick Tick) string {
+	switch tick.State {
+	case tickClosed, tickIntegrated:
+		return StageStateDone
+	}
+	if model.CI != nil {
+		switch model.CI.State {
+		case "green":
+			return StageStateDone
+		case "red", "failure":
+			return StageStateFailed
+		case "pending":
+			return StageStateActive
+		}
+	}
+	for i := range model.Recent {
+		if model.Recent[i].Stage == reconcile.StageCloseoutHeld {
+			return StageStateActive
+		}
+	}
+	return StageStatePending
 }
 
 // derefWorkers keeps the range loop readable over the nullable workers

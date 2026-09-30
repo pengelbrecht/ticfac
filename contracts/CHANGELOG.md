@@ -53,6 +53,20 @@ loud.
 
 ---
 
+## 1.1.1
+
+PATCH: two values in `status-model.json`'s `dashboard` golden, corrected to
+what the wave-2 pipeline derivation (tick 3gk) actually produces — the
+fixture is a rendering fixture, not a Build output, and it had drifted into
+illustration values no Build can emit (tick 378): the closeout tick's ci
+stage read `active` beside the golden's own red `ci.state` (a red CI is that
+stage's `failed`), and a superseded try carried a `next_step` while a later
+try stood (a next step is stated on the last try of a refusal only). The
+schema, the rules and every other byte are unchanged, and both corrected
+values remain schema-admitted. No consumer has anything to do.
+
+---
+
 ## 1.1.0
 
 MINOR: `status-model.json` grows the dashboard vocabulary — additive fields
