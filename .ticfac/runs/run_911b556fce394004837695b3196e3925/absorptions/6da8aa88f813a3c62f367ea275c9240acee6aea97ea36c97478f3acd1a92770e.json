@@ -1,0 +1,32 @@
+{
+  "schema_version": 3,
+  "key": "6da8aa88f813a3c62f367ea275c9240acee6aea97ea36c97478f3acd1a92770e",
+  "tick_id": "378",
+  "gating": true,
+  "item_id": "A1",
+  "basis": "predicted",
+  "confidence": 0.18,
+  "model": "jev-1.13.0",
+  "reason": "the classifier put 0.59 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A1: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
+  "placement": "before-review",
+  "decided_at": "2026-09-30T13:00:58Z",
+  "provenance": {
+    "run_id": "run_911b556fce394004837695b3196e3925",
+    "tick_id": "3gk",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "8558ae1646f7a4a186d2d0e611e3d8ffda2f02b3",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:081a87517f0ab90d00a3d9fc0345b717df1255ffc33390f2bdfbd3e5cd4e6645",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
