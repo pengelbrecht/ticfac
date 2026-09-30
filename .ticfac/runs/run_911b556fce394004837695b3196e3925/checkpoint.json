@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_911b556fce394004837695b3196e3925",
   "epic_id": "hn6",
-  "sequence": 33,
-  "state": "running",
-  "reason": "378 is running as attempt 6",
-  "updated_at": "2026-09-30T13:36:17Z",
+  "sequence": 34,
+  "state": "dispatching",
+  "reason": "dispatching 7uv as attempt 7",
+  "updated_at": "2026-09-30T13:36:34Z",
   "ticks": [
     {
       "tick_id": "3gk",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "7uv",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 2
     },
     {
