@@ -12,8 +12,11 @@
   "attempt": 2,
   "done_item": "A1",
   "demonstrating_check": "go test -short -timeout 20m -run 'TestVerdict|TestCost|TestTheContract' ./internal/statusmodel/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-30T17:01:57Z",
+  "triaged_at": "2026-09-30T17:02:09Z",
+  "triaged_by": "ticfac run run_3f034e683faf4fdf9f6c0952fc158524 absorbing alf",
+  "promoted_as": "alf",
   "provenance": {
     "run_id": "run_3f034e683faf4fdf9f6c0952fc158524",
     "tick_id": "7uv",
