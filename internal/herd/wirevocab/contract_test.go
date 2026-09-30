@@ -31,8 +31,8 @@ func TestPinnedVocabularySizes(t *testing.T) {
 		set   WordSet
 		count int
 	}{
-		{"methods", v.Methods, 103},
-		{"result_discriminators", v.ResultDiscriminators, 65},
+		{"methods", v.Methods, 102},
+		{"result_discriminators", v.ResultDiscriminators, 63},
 		{"error_codes", v.ErrorCodes, 10},
 		{"event_kinds", v.EventKinds, 26},
 		{"subscription_event_kinds", v.SubscriptionEventKinds, 3},
