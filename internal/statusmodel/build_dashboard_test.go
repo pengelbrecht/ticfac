@@ -7,32 +7,26 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 )
 
-// The DASHBOARD vocabulary (epic hn6, wave 1 — tick r5i): this tick declares
-// every field the dashboard renders so the wave-2 ticks fill them in
-// parallel against a fixed shape. It computes NOTHING new beyond `recent`
-// and the two graph copies (`epic_title`, `gloss`); every other new field
-// comes out at its honest empty value, and THIS test pins exactly that
-// wave-1 half — the wave-2 ticks will replace the empty assertions with the
-// real derivations, and this test is the fence that says what the stubs
-// must not quietly leave out.
-
-// pendingPipeline is the wave-1 pipeline cell: the role's own stage list,
-// every stage pending — what a renderer lays the cell out from before
-// anything has happened.
-func pendingPipeline(stages []string) []PipelineStage {
-	cell := make([]PipelineStage, 0, len(stages))
-	for _, stage := range stages {
-		cell = append(cell, PipelineStage{Stage: stage, State: StageStatePending})
-	}
-	return cell
-}
+// The DASHBOARD vocabulary (epic hn6, wave 1 — tick r5i): wave 1 declared
+// every field the dashboard renders, and THIS test is the fence that says
+// what the stubs must not quietly leave out — the wave-2 ticks fill the
+// fields in parallel, each replacing the empty assertions for ITS half with
+// the real derivations while the empty ones stay as the fence for the ticks
+// still to come. The pipeline half is tick 3gk's (wave 2): the cells, the
+// parents, the durations, the findings and the try words below are the
+// derivations, while the worker activity, the handles, the verdict and the
+// cost lines stay at their honest empty values until their own wave-2 ticks
+// fill them.
 
 // TestBuildEmitsTheDashboardFieldsEmpty: a Build over the running-epic
-// fixture emits every dashboard field — pipeline per role all pending,
-// findings empty, the report and the parent unread, no worker activity, the
-// healthy verdict, no cost lines — and the three fields this tick fills for
-// real: `recent` holding the last five feed lines oldest first, `epic_title`
-// copied off the graph, and every tick's `gloss` copied off its graph task.
+// fixture emits every dashboard field — the role's own pipeline stage list
+// per tick with the states the records derive, the findings the ticks
+// reported, the durations the markers measure, the try words the feed
+// states — and beside them the fields no wave-2 tick has filled yet: no
+// report read, no worker activity, the healthy verdict, no cost lines.
+// The wave-1 half stays: `recent` holds the last five feed lines oldest
+// first, `epic_title` is copied off the graph, and every tick's `gloss` is
+// copied off its graph task.
 func TestBuildEmitsTheDashboardFieldsEmpty(t *testing.T) {
 	t.Parallel()
 	src := runningEpicSources()
@@ -42,7 +36,8 @@ func TestBuildEmitsTheDashboardFieldsEmpty(t *testing.T) {
 		t.Fatal("the fixture's graph answered and the model states no waves")
 	}
 
-	// One tick per role, each with the role's own stage list — all pending.
+	// One tick per role, each with the role's own stage list — the lists the
+	// renderer lays the cell out from, whatever the records state.
 	tickByID := map[string]Tick{}
 	for _, w := range *model.Waves {
 		for _, tick := range w.Ticks {
@@ -62,40 +57,89 @@ func TestBuildEmitsTheDashboardFieldsEmpty(t *testing.T) {
 			t.Fatalf("%s carries no pipeline cell at all", tickID)
 		}
 		if !stagesOf(got, want) {
-			t.Errorf("%s's pipeline cell is %s, want the %v stages all pending",
+			t.Errorf("%s's pipeline cell is %s, want the %v stages",
 				tickID, cellOf(got), want)
-		}
-		for _, stage := range got {
-			if stage.State != StageStatePending {
-				t.Errorf("%s's stage %s reads %q, want pending: wave 1 declares the cell, wave 2 fills it",
-					tickID, stage.Stage, stage.State)
-			}
 		}
 	}
 
-	// The per-tick fields a dashboard drills into: nothing read yet, so
-	// empty and null — never missing.
+	// The cells' states, from the fixture's own records (wave 2, tick 3gk):
+	// the closed tick done all the way, the in-flight tick at its work, and
+	// the untouched ticks pending everywhere. The left-to-right fill and the
+	// at-most-one live stage are what a dashboard draws from this.
+	for tickID, want := range map[string]string{
+		"nwj": "[claim:done work:done gate:done merged:done]",
+		"6dh": "[claim:done work:active gate:pending merged:pending]",
+		"89m": "[claim:pending work:pending gate:pending merged:pending]",
+		"152": "[claim:pending work:pending gate:pending merged:pending]",
+		"xbp": "[claim:pending review:pending closed:pending]",
+		"rrl": "[claim:pending work:pending ci:pending closed:pending]",
+	} {
+		if got := cellOf(tickByID[tickID].Pipeline); got != want {
+			t.Errorf("%s's pipeline cell is %s, want %s", tickID, got, want)
+		}
+	}
+
+	// The per-tick fields a dashboard drills into: the derivation's own
+	// answers for the ticks the fixture gave records to, and null — never
+	// missing — where nothing states a fact.
 	for _, tick := range tickByID {
 		if tick.Findings == nil {
 			t.Errorf("%s's findings are nil, want the empty list: the field is required, and nil marshals as null", tick.TickID)
 		}
-		if len(tick.Findings) != 0 {
-			t.Errorf("%s's findings are %+v, want empty: no wave-2 tick has filled them yet", tick.TickID, tick.Findings)
-		}
 		if tick.ParentTickID != nil {
-			t.Errorf("%s's parent is %+v, want null: the graph layering owns indentation, not this tick", tick.TickID, *tick.ParentTickID)
-		}
-		if tick.DurationSeconds != nil {
-			t.Errorf("%s's duration is %d, want null until the wave-2 tick measures it", tick.TickID, *tick.DurationSeconds)
+			t.Errorf("%s's parent is %q, want null: nothing places the row — the fixture's absorption names no source tick",
+				tick.TickID, *tick.ParentTickID)
 		}
 		if tick.Report != nil {
 			t.Errorf("%s carries a report %+v, want null: no report has been read", tick.TickID, *tick.Report)
 		}
-		for _, try := range tick.Tries {
-			if try.Tier != nil || try.Reason != nil || try.NextStep != nil {
-				t.Errorf("%s's try %d carries tier/reason/next_step (%v/%v/%v), want all null: the attempt vocabulary this tick declares, the wave-2 ticks fill",
-					tick.TickID, try.Try, try.Tier, try.Reason, try.NextStep)
-			}
+	}
+	// nwj reported one finding off its own attempt; the absorption the
+	// fixture carries decided a DIFFERENT finding, so the draft's gating is
+	// the honest no-answer.
+	nwjFindings := tickByID["nwj"].Findings
+	if len(nwjFindings) != 1 || nwjFindings[0].Key != "46b634a4f894acc04534dd6e9b70b677d68c39f3b66b98e820613ac7dd8c6ce2" ||
+		nwjFindings[0].Title != "README's command surface section predates the cobra+fang tree" ||
+		nwjFindings[0].Gating != nil {
+		t.Errorf("nwj's findings are %+v, want its own draft with gating null: no absorption decided it", nwjFindings)
+	}
+	// The durations: the closed tick to its gate's finish, the open one to
+	// the model's now, and null where no dispatch marker states a start.
+	for tickID, want := range map[string]*int64{
+		"nwj": durationPtr(2898), // 03:19:05 dispatch, 04:07:23 gate finish
+		"6dh": durationPtr(5400), // 04:00:00 dispatch, open: to the fixture's now
+		"89m": nil,
+		"152": nil,
+		"xbp": nil,
+		"rrl": nil,
+	} {
+		if got := tickByID[tickID].DurationSeconds; (got == nil) != (want == nil) || (got != nil && *got != *want) {
+			t.Errorf("%s's duration is %v, want %v", tickID, got, want)
+		}
+	}
+	// The try vocabulary: each try's tier off its own marker, the refused
+	// try's reason off the feed line that refused it, and no next step on a
+	// try that is in flight or closed.
+	if tries := tickByID["nwj"].Tries; len(tries) != 1 || tries[0].Tier == nil || *tries[0].Tier != "strong" ||
+		tries[0].Reason != nil || tries[0].NextStep != nil {
+		t.Errorf("nwj's closed try carries %+v, want the marker's tier and no reason or next step",
+			tickByID["nwj"].Tries)
+	}
+	if tries := tickByID["6dh"].Tries; len(tries) != 2 {
+		t.Errorf("6dh carries %+v tries, want its two dispatches", tries)
+	} else {
+		if tries[0].Tier == nil || *tries[0].Tier != "strong" {
+			t.Errorf("6dh's first try carries tier %v, want its marker's own strong", tries[0].Tier)
+		}
+		if tries[0].Reason == nil || *tries[0].Reason != "the integrated gate refused attempt 2 of 6dh" {
+			t.Errorf("6dh's first try reason is %v, want the gate_failed line's own detail",
+				tries[0].Reason)
+		}
+		if tries[0].NextStep != nil {
+			t.Errorf("6dh's first try carries next_step %q, want null: only the last try states one", *tries[0].NextStep)
+		}
+		if tries[1].Tier == nil || *tries[1].Tier != "strong" || tries[1].Reason != nil || tries[1].NextStep != nil {
+			t.Errorf("6dh's in-flight try carries %+v, want the marker's tier and nothing else", tries[1])
 		}
 	}
 
@@ -188,6 +232,9 @@ func TestBuildEmitsTheDashboardFieldsEmpty(t *testing.T) {
 		t.Errorf("a run with no graph states the epic title %q, want null", *model.EpicTitle)
 	}
 }
+
+// durationPtr is the nullable-duration helper the fence's map wants.
+func durationPtr(seconds int64) *int64 { return &seconds }
 
 // stagesOf answers whether the cell's stages are exactly the named list, in
 // order — the layout the renderer fills left to right.
