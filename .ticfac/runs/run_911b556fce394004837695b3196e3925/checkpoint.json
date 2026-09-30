@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_911b556fce394004837695b3196e3925",
   "epic_id": "hn6",
-  "sequence": 24,
-  "state": "gating",
-  "reason": "running the integrated gate for 3gk on 19bb87577ffb",
-  "updated_at": "2026-09-30T13:30:14Z",
+  "sequence": 25,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-30T13:34:23Z",
   "ticks": [
     {
       "tick_id": "3gk",
