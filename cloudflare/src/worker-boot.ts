@@ -117,6 +117,20 @@ export const WORKER_TRACE_ID_ENV = "TICKS_TRACE_ID";
 export const WORKER_ROLE_PROMPT_ENV = "TICKS_ROLE_PROMPT";
 
 /**
+ * For a CARRIED attempt, the base the carried work was cut from (epic hn6,
+ * run_3f034e68). A carried attempt boots AT the released attempt's head, so
+ * the container counts its own commits from there; a worker that finds the
+ * carried work complete and adds nothing would otherwise exit no-work and the
+ * attempt would settle failed. With this set the container measures the
+ * carried work too, and a carried-complete attempt settles succeeded.
+ *
+ * Pinned across the three readers by `contracts/worker-boot-contract.json`
+ * (`env.work_base`) — `internal/sandboximage.EnvWorkBaseSHA` and
+ * `image/worker.sh` are the other two.
+ */
+export const WORKER_WORK_BASE_ENV = "TICKS_WORK_BASE_SHA";
+
+/**
  * A cancellation reason, reduced to something safe to hand a shell.
  *
  * The reason travels from the stop that asked for the salvage — `budget:cost`,
@@ -265,6 +279,12 @@ export type WorkerBootInput = {
    * run's records digest, never one only the checkout knows.
    */
   prompt?: string;
+  /**
+   * For a CARRIED attempt, the base the carried work was cut from, exported
+   * as {@link WORKER_WORK_BASE_ENV}. Absent for every attempt that carries
+   * nothing.
+   */
+  work_base_sha?: string;
   /**
    * Whether this worker runs the repository's `[sandbox]` setup.
    *
@@ -484,6 +504,7 @@ export function workerBootEnv(input: WorkerBootInput): Record<string, string> {
     ["TICKS_FACTORY_PROJECT", input.factory_project],
     [WORKER_TRACE_ID_ENV, input.trace_id],
     [WORKER_ROLE_PROMPT_ENV, input.prompt],
+    [WORKER_WORK_BASE_ENV, input.work_base_sha],
   ];
   for (const [name, value] of optional) {
     if (value !== undefined && value !== "") env[name] = value;

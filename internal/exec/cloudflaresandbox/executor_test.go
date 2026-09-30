@@ -77,6 +77,11 @@ func TestStartReturnsAHandleWithoutBlocking(t *testing.T) {
 	if auth := h.door.lastAuthorization(); auth != "Bearer run-r1-token" {
 		t.Errorf("the door saw credential %q, want the run's own gateway token", auth)
 	}
+	// An attempt that carries nothing sends no work base: the container then
+	// counts its work exactly as it always did.
+	if _, ok := body["work_base_sha"]; ok {
+		t.Errorf("an uncarried start sent work_base_sha %v", body["work_base_sha"])
+	}
 
 	// A handle, not a result: the attempt is STILL RUNNING after Start came
 	// back, which is the whole shape — Start waited for a confirmed dispatch,
@@ -92,6 +97,33 @@ func TestStartReturnsAHandleWithoutBlocking(t *testing.T) {
 	}
 	if status.Terminal {
 		t.Error("a just-started attempt is terminal: Start blocked until the work finished, the exact thing nothing-waiting forbids")
+	}
+}
+
+// A CARRIED dispatch's work base crosses the door (epic hn6, run_3f034e68):
+// the container measures the carried work from it, so a worker that found it
+// complete and added nothing settles succeeded rather than no-work — and a
+// malformed one is refused before the door is asked anything.
+//
+// short: an httptest door and one state directory.
+func TestStartCarriesACarriedAttemptsWorkBase(t *testing.T) {
+	h := newHarness(t)
+	workBase := "fedcba9876543210fedcba9876543210fedcba98"
+	h.ex.opts.WorkBaseSHA = workBase
+	if _, err := h.start("keh"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if got := h.door.lastStartBody()["work_base_sha"]; got != workBase {
+		t.Errorf("the start body's work_base_sha is %v, want %s", got, workBase)
+	}
+
+	bad := newHarness(t)
+	bad.ex.opts.WorkBaseSHA = "abc123"
+	if _, err := bad.start("keh"); err == nil || !strings.Contains(err.Error(), "work_base_sha") {
+		t.Errorf("a malformed work base was not refused: %v", err)
+	}
+	if bad.door.startCount() != 0 {
+		t.Errorf("the door saw %d starts for a malformed work base, want 0", bad.door.startCount())
 	}
 }
 

@@ -1312,6 +1312,10 @@ export function sandboxExecutorDepsFromEnv(
           // attempt outranks the deployment's standing one.
           model: workerModel(spec.model ?? null, textVar(env, "RUN_WORKER_MODEL")),
           prompt: spec.prompt,
+          // A carried attempt's work base (epic hn6, run_3f034e68): the
+          // container measures the carried work from it, so a worker that
+          // found it complete and added nothing settles succeeded.
+          ...(spec.work_base_sha === undefined ? {} : { work_base_sha: spec.work_base_sha }),
           // The dispatch's wall, less the push margin (tick 86y): the door
           // bounded no worker's harness where the wave path bounded every one.
           ...(workerHarnessBudgetMs(spec.wall_seconds) === undefined

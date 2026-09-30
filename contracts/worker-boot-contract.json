@@ -28,7 +28,8 @@
     "worker_timeout": "TICKS_WORKER_TIMEOUT",
     "worker_setup": "TICKS_WORKER_SETUP",
     "worker_state_dir": "TICKS_WORKER_STATE_DIR",
-    "trace_id": "TICKS_TRACE_ID"
+    "trace_id": "TICKS_TRACE_ID",
+    "work_base": "TICKS_WORK_BASE_SHA"
   },
   "trace": {
     "why": [

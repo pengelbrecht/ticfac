@@ -178,6 +178,12 @@ cancel_kill_after="${TICKS_WORKER_CANCEL_KILL_S:-10}"
 # pushed to it. Empty until the checkout exists.
 worker_branch=""
 worker_branch_inherited=0
+# For a CARRIED attempt, the base the carried work was cut from (epic hn6,
+# run_3f034e68). A carried attempt boots AT the released attempt's head, so
+# $base_sha is that head and every count below it is the WORKER's alone; a
+# worker that finds the carried work complete and adds nothing is still
+# delivering it. Empty for every attempt that carries nothing.
+work_base_sha="${TICKS_WORK_BASE_SHA:-}"
 # Filled in by main: the report path relative to the checkout root.
 result_path=""
 
@@ -910,6 +916,38 @@ work_commits() {
 	printf '%s\n' "${count:-0}"
 }
 
+# carried_work_paths is how many paths the carried seed changes relative to the
+# base the carried work was cut from — the report excluded, because a released
+# attempt's own report is an account of work, not work. 0 when this attempt
+# carries nothing, or when the work base cannot be read: an unreadable base is
+# no evidence of work, and the collect, which reads the same fact from the
+# orchestrator's own records (reconcile's deliverCarriedWork), still decides.
+#
+# A TREE diff, not a commit count, on purpose: the checkout is a shallow clone
+# at $base_sha, and a count across the shallow boundary would count whatever
+# history happens to be present rather than the carried commits.
+carried_work_paths() {
+	local count
+	if [[ -z $work_base_sha || $work_base_sha == "$base_sha"* || $base_sha == "$work_base_sha"* ]]; then
+		printf '0\n'
+		return
+	fi
+	if [[ ! $work_base_sha =~ ^[0-9a-fA-F]{40}$ ]]; then
+		warn "TICKS_WORK_BASE_SHA is not a full commit SHA (${work_base_sha}); the carried work is not measured here, and the collect decides" >&2
+		printf '0\n'
+		return
+	fi
+	if ! git -C "$workdir" cat-file -e "${work_base_sha}^{commit}" 2>/dev/null &&
+		! git -C "$workdir" fetch -q --depth 1 origin "$work_base_sha" 2>/dev/null; then
+		warn "cannot fetch the work base ${work_base_sha}; the carried work is not measured here, and the collect decides" >&2
+		printf '0\n'
+		return
+	fi
+	count="$(git -C "$workdir" diff --name-only --no-renames "$work_base_sha" "$base_sha" -- . ":(exclude)${result_path}" 2>/dev/null | grep -c .)" ||
+		count=0
+	printf '%s\n' "${count:-0}"
+}
+
 uncommitted_files() {
 	local count
 	count="$(git -C "$workdir" status --porcelain 2>/dev/null | grep -c -v "^?? ${result_path}$")" || count=0
@@ -1114,6 +1152,10 @@ prepend_container_facts() {
 		printf 'agent'"'"'s report, including its STATUS line, is unchanged below. -->\n\n'
 		printf '_%s: branch `%s`, base `%s`, harness `%s` exited %s, %s work commit(s), %s uncommitted path(s)%s._\n\n' \
 			"$ME" "$worker_branch" "$base_sha" "$harness" "$status" "$commits" "$dirty" "$salvage_note"
+		if [[ -n $work_base_sha && $work_base_sha != "$base_sha" ]]; then
+			printf '_%s: a carried attempt — its base `%s` is the head of the work it continued, which was cut from `%s`; its work commits are counted from the carried head._\n\n' \
+				"$ME" "$base_sha" "$work_base_sha"
+		fi
 		[[ -z $cancelled ]] || cancel_section "$cancelled"
 		[[ -z $boundary ]] || boundary_section "$boundary"
 		cat "$workdir/$result_path"
@@ -1300,7 +1342,19 @@ main() {
 	# The salvage counts: this class is "the branch carries no work", and a
 	# rescued tree is work on the branch whoever the author was. What the AGENT
 	# did is in the report header, which is where that distinction belongs.
+	#
+	# A CARRIED attempt that added nothing still delivers the carried work (the
+	# reconciler's rule, tick isp): the worker found it complete, and "no work
+	# commits of its own" is true of the worker and false of the attempt — so
+	# the factory settles it succeeded and a run taking the claim over collects
+	# it rather than redoing it. The gate still decides what merges.
 	if ((commits == 0 && salvaged == 0)); then
+		local carried
+		carried="$(carried_work_paths)"
+		if ((carried > 0)); then
+			say "the harness exited 0 and added nothing to the carried work, so the attempt delivers the carried work: ${carried} path(s) between the work base ${work_base_sha} and ${base_sha}"
+			exit 0
+		fi
 		warn "the harness exited 0 and committed nothing to ${worker_branch}; the report is on origin and the tick is not implemented"
 		exit $EXIT_NO_WORK
 	fi

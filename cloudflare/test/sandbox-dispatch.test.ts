@@ -728,6 +728,25 @@ describe("start", () => {
     expect(work.env.TICKS_WORKER_TIMEOUT).toBeUndefined();
   });
 
+  // Epic hn6, run_3f034e68: a carried attempt boots at the released attempt's
+  // head, and the container needs the carried work's base to see that a
+  // worker which added nothing to complete carried work delivered it.
+  it("carries a carried attempt's work base into the container, and refuses a malformed one", async () => {
+    const bad = await postStart(runToken, startBody({ work_base_sha: "abc123" }));
+    expect(bad.status).toBe(400);
+    expect((await denialOf(bad)).detail).toContain("work_base_sha");
+    const workBase = "2222222222222222222222222222222222222222";
+    expect((await postStart(runToken, startBody({ work_base_sha: workBase }))).status).toBe(201);
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess()!;
+    expect(work.env.TICKS_WORK_BASE_SHA).toBe(workBase);
+  });
+
+  it("boots no work base for an attempt that carries nothing", async () => {
+    expect((await postStart(runToken, startBody())).status).toBe(201);
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess()!;
+    expect(work.env.TICKS_WORK_BASE_SHA).toBeUndefined();
+  });
+
   it("a second call with the same identity returns the SAME running attempt, not a rival", async () => {
     const first = await postStart(runToken, startBody());
     expect(first.status).toBe(201);

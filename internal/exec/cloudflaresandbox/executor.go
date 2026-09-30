@@ -98,6 +98,12 @@ type Options struct {
 	// that reached the worker. Required: the door refuses a start without one.
 	Prompt string
 
+	// WorkBaseSHA is, for a CARRIED dispatch, the base the carried work was
+	// cut from (reconcile.Dispatch.WorkBaseSHA), carried through the door as
+	// `work_base_sha` so the worker's container can see carried work it added
+	// nothing to. Empty for a dispatch that carries nothing.
+	WorkBaseSHA string
+
 	// Repo is the ORCHESTRATOR'S OWN CHECKOUT of the project the worker
 	// pushed to — the clone the reconciler runs in. It is not among the
 	// fields Start needs (that dispatch creates no worktree and runs no
@@ -312,6 +318,7 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		Harness:     e.opts.Harness,
 		Prompt:      e.opts.Prompt,
 		WallSeconds: spec.Limits.WallSeconds,
+		WorkBaseSHA: e.opts.WorkBaseSHA,
 	}
 	if err := validateDoorFields(req); err != nil {
 		return nil, err

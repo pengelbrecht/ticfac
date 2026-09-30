@@ -435,6 +435,13 @@ const (
 	// implement a tick — and a wave whose ticks touch no dependencies can opt
 	// out of paying it N times.
 	EnvWorkerSetup = "TICKS_WORKER_SETUP"
+	// EnvWorkBaseSHA is, for a CARRIED attempt, the base the carried work was
+	// cut from (epic hn6, run_3f034e68). A carried attempt boots AT the
+	// released attempt's head, so its own commits are counted from there; a
+	// worker that finds the carried work complete and adds nothing is still
+	// delivering work, and this is what lets the container see it and settle
+	// the attempt succeeded. Absent for every attempt that carries nothing.
+	EnvWorkBaseSHA = "TICKS_WORK_BASE_SHA"
 	// EnvTraceID is the identifier that joins the message which produced this
 	// tick to the container now working on it (D20, tick hyi).
 	//

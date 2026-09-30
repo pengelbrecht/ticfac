@@ -17,6 +17,7 @@ import {
   WORKER_PROBE_COMMAND,
   WORKER_PROBE_MARKER,
   WORKER_ROLE_PROMPT_ENV,
+  WORKER_WORK_BASE_ENV,
   workerBootEnv,
   workerBranch,
   workerCancelCommand,
@@ -180,6 +181,18 @@ describe("the boot environment", () => {
     expect(workerBootEnv({ ...boot, model: "" }).TICKS_MODEL).toBeUndefined();
     expect(workerBootEnv({ ...boot, model: "anthropic/claude-fable-5" }).TICKS_MODEL).toBe(
       "anthropic/claude-fable-5",
+    );
+  });
+
+  // Epic hn6, run_3f034e68: a carried attempt boots at the released attempt's
+  // head, and without the carried work's base the container settles a
+  // carried-complete attempt as no-work.
+  it("exports a carried attempt's work base, and nothing for an attempt that carries none", () => {
+    expect(WORKER_WORK_BASE_ENV).toBe(contract.env.work_base);
+    expect(WORKER_WORK_BASE_ENV in workerBootEnv(boot)).toBe(false);
+    const workBase = "1111111111111111111111111111111111111111";
+    expect(workerBootEnv({ ...boot, work_base_sha: workBase })[WORKER_WORK_BASE_ENV]).toBe(
+      workBase,
     );
   });
 
