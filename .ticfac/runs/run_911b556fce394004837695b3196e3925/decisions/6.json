@@ -1,0 +1,56 @@
+{
+  "schema_version": 3,
+  "decision": 6,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 2,
+    "attempt_head": "52af70615b2abf66299ed49b2087938f706ad4ad",
+    "conflict_files": [
+      "internal/statusmodel/build_dashboard_test.go"
+    ],
+    "conflicting_ticks": [
+      "7uv"
+    ],
+    "epic_id": "hn6",
+    "job_id": "run-run_911b556fce394004837695b3196e3925/tick-7uv/resolve-2-r2",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "resolve_branch": "ticfac/run-run_911b556fce394004837695b3196e3925/tick-7uv/resolve-2-r2",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "7uv"
+  },
+  "response": {
+    "conflict_detail": "1 conflict: content in internal/statusmodel/build_dashboard_test.go",
+    "conflict_files": [
+      "internal/statusmodel/build_dashboard_test.go"
+    ],
+    "failure": "operational",
+    "job_id": "run-run_911b556fce394004837695b3196e3925/tick-7uv/resolve-2-r2",
+    "merge": "",
+    "reason": "7uv try 1 (run dispatch #2) does not merge onto epic/hn6 (1 conflict: content in internal/statusmodel/build_dashboard_test.go) and the resolve-conflict job run-run_911b556fce394004837695b3196e3925/tick-7uv/resolve-2-r2 could not be started: the sandbox dispatch door refused (500 unreadable_refusal): the door answered 500 with a body that is not its documented {error, detail} shape",
+    "resolve_head": "",
+    "status": "failed"
+  },
+  "validated": true,
+  "requested_at": "2026-09-30T13:29:05Z",
+  "answered_at": "2026-09-30T13:29:05Z",
+  "provenance": {
+    "run_id": "run_911b556fce394004837695b3196e3925",
+    "tick_id": "7uv",
+    "attempt": 2,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "495ff6ef481dc9c3832d408d46f1509f57868ec4",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
