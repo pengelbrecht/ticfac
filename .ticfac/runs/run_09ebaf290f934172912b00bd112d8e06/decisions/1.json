@@ -1,0 +1,58 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "resolve-conflict",
+  "request": {
+    "base_branch": "main",
+    "base_head": "2eebdbec3cabeed240d2f7b0065f9d11bfb44816",
+    "conflict_files": [
+      "contracts/CHANGELOG.md",
+      "contracts/bundle.json"
+    ],
+    "epic_head": "173871a6e557e226ced6c56ca8391955d3eafa48",
+    "epic_id": "hn6",
+    "job_id": "run-run_09ebaf290f934172912b00bd112d8e06/base-fold-1",
+    "kind": "base-fold",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (cloudflare-sandbox/pi, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:2ec895ee2ea6b5afe4e77460bd5ea6902c6c290544d45c7d10f95905341927cb",
+    "resolve_branch": "ticfac/run-run_09ebaf290f934172912b00bd112d8e06/base-fold-1-2eebdbec3cab",
+    "role": "resolve-conflict",
+    "source_grade": "write"
+  },
+  "response": {
+    "conflict_detail": "2 conflicts: content in contracts/CHANGELOG.md; content in contracts/bundle.json",
+    "conflict_files": [
+      "contracts/CHANGELOG.md",
+      "contracts/bundle.json"
+    ],
+    "failure": "operational",
+    "job_id": "run-run_09ebaf290f934172912b00bd112d8e06/base-fold-1",
+    "merge": "",
+    "reason": "main at 2eebdbec3cab and epic/hn6 at 173871a6e557 do not fold together (2 conflicts: content in contracts/CHANGELOG.md; content in contracts/bundle.json) and the resolve-conflict job dispatched for the fold failed: it answered with no report the run could read and the run's verdict is missing-result (failed): the container's branch tick/hn6/attempt-1-base-fold-1-2e482d1a/hn6 carries no report and no commit beyond the base it was cut from: the push never landed, and this is neither running nor done. The tick is neither resolved nor re-dispatched. Its branch ticfac/run-run_09ebaf290f934172912b00…",
+    "resolve_head": "",
+    "status": "failed"
+  },
+  "validated": true,
+  "requested_at": "2026-09-30T22:29:08Z",
+  "answered_at": "2026-09-30T22:29:08Z",
+  "provenance": {
+    "run_id": "run_09ebaf290f934172912b00bd112d8e06",
+    "tick_id": "hn6",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "2eef539386945ec2936230d7bceff96b3dbd1f6a",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "strong",
+    "profile_digest": "sha256:2ec895ee2ea6b5afe4e77460bd5ea6902c6c290544d45c7d10f95905341927cb",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
