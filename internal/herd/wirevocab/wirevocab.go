@@ -96,8 +96,14 @@ func (w WordSet) validate(name string) error {
 
 // Source records how the live vocabulary was observed: the commands the drift
 // test re-runs, plus dated findings about what the schema can and cannot pin.
+//
+// HerdrVersion and Protocol name the herdr release this file was last diffed
+// against, so a drift test run on a host with a different herdr can say
+// "version mismatch" before it says "vocabulary drift".
 type Source struct {
 	Why               []string `json:"why"`
+	HerdrVersion      string   `json:"herdr_version"`
+	Protocol          int      `json:"protocol"`
 	SchemaCommand     string   `json:"schema_command"`
 	AgentKindsCommand string   `json:"agent_kinds_command"`
 	Observations      []string `json:"observations"`
@@ -148,6 +154,9 @@ func Load() (*Vocabulary, error) {
 	var v Vocabulary
 	if err := json.Unmarshal(raw, &v); err != nil {
 		return nil, fmt.Errorf("wirevocab: parsing embedded herd-vocabulary.json: %w", err)
+	}
+	if v.Source.HerdrVersion == "" || v.Source.Protocol <= 0 {
+		return nil, fmt.Errorf("wirevocab: source.herdr_version and source.protocol must name the herdr release the contract was diffed against")
 	}
 	for name, set := range map[string]WordSet{
 		"methods":                  v.Methods,

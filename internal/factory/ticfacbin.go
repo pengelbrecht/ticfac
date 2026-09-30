@@ -250,19 +250,20 @@ func fileSHA256(path string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-// tkModuleArgPattern is the last line of the Dockerfile's tk pins, and the
-// anchor the ticfac pins are inserted after: they belong IN the version block
-// at the top, beside the pins they move with, not appended somewhere a
-// rebuild's diff would not show them together.
-var tkModuleArgPattern = regexp.MustCompile(`(?m)^ARG TK_MODULE=\S*$`)
-
 // ticfacPinMarker identifies the inserted pin block, so a second application
 // is a refusal rather than a duplicate set of ARGs.
 const ticfacPinMarker = "ARG TICFAC_VERSION="
 
 // SetSandboxTicfacPins rewrites the STAGED Dockerfile so it carries ticfac:
-// the version and the four checksums pinned in the version block at the top,
-// and the install block that copies the staged binaries onto PATH at the end.
+// an install block appended at the end that declares the version and the four
+// checksums and copies the staged binaries onto PATH.
+//
+// The pins are declared THERE, not in the version block at the top. They
+// change on every deploy, and BuildKit keys every RUN on every ARG in scope
+// (the `RUN |27 TK_VERSION=... TICFAC_VERSION=...` in an image's history): a
+// TICFAC_VERSION declared at the top made every RUN below it — tk, the
+// toolchains, the batteries, ~0.8 GB of layers — a cache miss and a new blob
+// on every deploy (measured 2026-09-30: 22 of 46 layers new per deploy).
 //
 // Same contract as SetSandboxTkPins — the staged copy is edited and the
 // committed tree is not — with one addition it cannot share: the committed
@@ -294,20 +295,15 @@ func SetSandboxTicfacPins(dir, version string, sums map[string]string) error {
 	if strings.Contains(string(data), ticfacPinMarker) {
 		return fmt.Errorf("%s already pins ticfac — the staged Dockerfile is written fresh by MaterializeSandbox on every deploy, so a second insertion means the staging order is wrong", configPath)
 	}
-	anchor := tkModuleArgPattern.FindIndex(data)
-	if anchor == nil {
-		return fmt.Errorf("%s declares no ARG TK_MODULE to anchor the ticfac pins after", configPath)
-	}
-
 	var b strings.Builder
-	b.Write(data[:anchor[1]])
-	b.WriteString("\n\n")
-	b.WriteString(ticfacPinBlock(version, sums))
-	b.Write(data[anchor[1]:])
+	b.Write(data)
 	if !strings.HasSuffix(b.String(), "\n") {
 		b.WriteString("\n")
 	}
 	b.WriteString(ticfacInstallBlock)
+	b.WriteString("\n")
+	b.WriteString(ticfacPinBlock(version, sums))
+	b.WriteString(ticfacInstallSteps)
 
 	if err := os.WriteFile(configPath, []byte(b.String()), 0o644); err != nil {
 		return fmt.Errorf("writing %s: %w", configPath, err)
@@ -320,10 +316,12 @@ func SetSandboxTicfacPins(dir, version string, sums map[string]string) error {
 var validSHA256 = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 func ticfacPinBlock(version string, sums map[string]string) string {
-	return "# ticfac's own pins, inserted here by `ticfac factory deploy` (tick prs).\n" +
+	return "# ticfac's own pins, inserted by `ticfac factory deploy` (tick prs).\n" +
 		"# TICFAC_VERSION is what `ticfac version` reports inside the container, and the\n" +
-		"# checksums are of the binaries the deploy cross-compiled into this context — so a\n" +
-		"# rebuild is a diff of this block for ticfac exactly as it is for everything above.\n" +
+		"# checksums are of the binaries the deploy cross-compiled into this context.\n" +
+		"# Declared here, after every other layer, because they change on every deploy\n" +
+		"# and BuildKit keys each RUN on every ARG in scope: declared higher up, they\n" +
+		"# would rebuild everything below them.\n" +
 		"ARG TICFAC_VERSION=" + version + "\n" +
 		"ARG TICFAC_SHA256_AMD64=" + sums[stagedBinaryName(ticfacBinary, "amd64")] + "\n" +
 		"ARG TICFAC_SHA256_ARM64=" + sums[stagedBinaryName(ticfacBinary, "arm64")] + "\n" +
@@ -371,7 +369,10 @@ const ticfacInstallBlock = `
 # a RUN that rewrites the file would put a second copy of 15 MB of binary in a
 # second layer, and the image would grow by twice what it carries. The layer
 # below only READS them, so it adds nothing.
-ARG TARGETARCH
+`
+
+// ticfacInstallSteps follows the pins: the COPYs and the checks.
+const ticfacInstallSteps = `ARG TARGETARCH
 COPY --chmod=0755 ticfac-linux-${TARGETARCH} /usr/local/bin/ticfac
 COPY --chmod=0755 ticfac-exec-subprocess-linux-${TARGETARCH} /usr/local/bin/ticfac-exec-subprocess
 RUN set -euo pipefail; \

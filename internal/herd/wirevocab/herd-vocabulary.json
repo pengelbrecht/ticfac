@@ -4,7 +4,7 @@
     "the live server, via internal/herd/wirevocab's drift test that runs `herdr api schema --json` whenever a herdr binary is on PATH; the client, whose Go constants are pinned member-for-member by internal/herd/client/vocabulary_contract_test.go; and the herdtest fake, which is validated (constants, served replies, and a live dial of every builtin) by internal/herd/herdtest/vocabulary_test.go.",
     "The vocabulary drifts silently otherwise. herdr ships a schema but the client speaks hand-typed constants and the fake hand-writes its replies; a rename on either side is invisible until a run fails far from the cause. Every category that the live schema enumerates is compared for SET EQUALITY in both directions, so a server-side addition fails this test too, deliberately: extensibility means the counts grow, and the failure is the alarm that the client surface may want the new word. Bump this file consciously.",
     "The file follows the shape of contracts/collect-vocabulary.json (why prose up top, then one object per diffable category) but lives here, not there: contracts/ is a digest-pinned vendored bundle from pengelbrecht/ticks whose file set `contracts check` freezes on every go test — adding to it breaks the build by design.",
-    "Snapshot taken against herdr 0.9.0 (advertises protocol 22) on 2026-09-10. The client still pins protocol 20 / herdr 0.8.2; the 0.8.2→0.9.0 vocabulary change was additive, and the client's constants are a strict subset of this contract, so a pinned-20 client runs against a 0.9.0 server unchanged.",
+    "Snapshot taken against herdr 0.9.0 (advertises protocol 22) on 2026-09-10. The client still pins protocol 20 / herdr 0.8.2; the 0.8.2→0.9.0 vocabulary change was additive, and the client's constants are a strict subset of this contract, so a pinned-20 client runs against a 0.9.0 server unchanged. Last re-diffed against herdr 0.9.3 on 2026-09-30 (source.herdr_version; the graphics methods went away there, see source.observations).",
     "Two spellings of the same event world exist and both are pinned: the underscored `event` schema (kind repeated in a data `type` field) and the dotted `subscription_event` schema. herdr reuses the DOTTED subscription name verbatim as the subscription_event kind, and the three dotted kinds are exactly the three pane-scoped subscription types — the loader enforces both rules.",
     "Error codes are NOT enumerated by the schema (error_response's code is an open string), so that category cannot be live-diffed; its members are the observed set, each with provenance in `notes`, and the offline checks pin the client's constants and the fake's vocabulary to it.",
     "Agent kinds are not in the schema either; the 23 members are the `[possible values: ...]` list of `herdr agent start --help`, and the drift test re-reads that help text. This repo's .tick/runners.toml uses only pi, codex and claude; no Go code pins kinds as constants, so the category carries no client_used annotation.",
@@ -16,6 +16,8 @@
       "Every schema-enumerated category below was extracted verbatim from the live schema dump, and the drift test re-extracts with the same paths, so the provenance matters more than usual:",
       "methods from schemas.request.oneOf[].properties.method.const; result discriminators from schemas.success_response.$defs.ResponseResult.oneOf[].properties.type.const; underscored event kinds from schemas.event.$defs.EventKind.enum; dotted subscription-event kinds from schemas.subscription_event.$defs.SubscriptionEventKind.enum; subscription types and their pane-scoping (the variants whose `required` names pane_id) from schemas.request.$defs.Subscription.oneOf."
     ],
+    "herdr_version": "0.9.3",
+    "protocol": 22,
     "schema_command": "herdr api schema --json",
     "agent_kinds_command": "herdr agent start --help",
     "observations": [
@@ -24,7 +26,8 @@
       "error_response.code is an open string in the schema — error codes can only be observed, never diffed.",
       "state_labels keys are unrestricted in the schema, but herdr's rendering rule is one label per agent status, so the contract pins the key set to agent_statuses and the loader enforces the equality.",
       "report_metadata tokens: propertyNames pattern ^[A-Za-z0-9_-]{1,32}$, maxProperties 16; ttl_ms bounds 1 to 86400000 — one millisecond to one day, and zero is not a value (no expiry is expressed by OMITTING ttl_ms, which a painter should not want).",
-      "2026-09-16: pane.close result discriminator determined against the LIVE server (herdr 0.9.0, protocol 22), because pane_closed appears in the schema as an EVENT kind — the event and subscription-event enums and their EventData payloads — and NOT in ResponseResult.oneOf, the set this contract pins: pane.close answers a bare ok acknowledgement. Verified by closing a scratch pane through the socket; the workspace survived with a fresh shell pane in its place, so a close settles nothing by itself — the wall-clock enforcement confirms the agent is gone through agent.get, the positive answer it settles on."
+      "2026-09-16: pane.close result discriminator determined against the LIVE server (herdr 0.9.0, protocol 22), because pane_closed appears in the schema as an EVENT kind — the event and subscription-event enums and their EventData payloads — and NOT in ResponseResult.oneOf, the set this contract pins: pane.close answers a bare ok acknowledgement. Verified by closing a scratch pane through the socket; the workspace survived with a fresh shell pane in its place, so a close settles nothing by itself — the wall-clock enforcement confirms the agent is gone through agent.get, the positive answer it settles on.",
+      "2026-09-30: re-snapshot against herdr 0.9.3 (still protocol 22, schema_version 1). Versus 0.9.0: methods gained server.ssh_agent.register and pane.clear and lost pane.graphics.clear / pane.graphics.info / pane.graphics.set; result discriminators lost pane_graphics_frame_ack and pane_graphics_info (the schema no longer mentions graphics anywhere); pane.clear answers no new discriminator. 102 methods, 63 result discriminators; every other category unchanged. No Go code (client, fake, or elsewhere) used a removed word. herdr_version and protocol above name the release this file was last diffed against, and the drift test reports a mismatch with the installed herdr before any vocabulary diff."
     ]
   },
   "methods": {
@@ -57,6 +60,7 @@
       "layout.export",
       "layout.set_split_ratio",
       "notification.show",
+      "pane.clear",
       "pane.clear_agent_authority",
       "pane.close",
       "pane.copy_motion",
@@ -67,9 +71,6 @@
       "pane.focus",
       "pane.focus_direction",
       "pane.get",
-      "pane.graphics.clear",
-      "pane.graphics.info",
-      "pane.graphics.set",
       "pane.input.set",
       "pane.layout",
       "pane.link.activate",
@@ -113,6 +114,7 @@
       "server.live_handoff",
       "server.reload_agent_manifests",
       "server.reload_config",
+      "server.ssh_agent.register",
       "server.stop",
       "session.snapshot",
       "tab.close",
@@ -190,8 +192,6 @@
       "pane_current",
       "pane_edges",
       "pane_focus_direction",
-      "pane_graphics_frame_ack",
-      "pane_graphics_info",
       "pane_info",
       "pane_layout",
       "pane_link_activated",
