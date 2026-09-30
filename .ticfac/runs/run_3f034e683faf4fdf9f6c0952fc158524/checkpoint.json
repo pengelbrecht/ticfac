@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_3f034e683faf4fdf9f6c0952fc158524",
   "epic_id": "hn6",
-  "sequence": 10,
-  "state": "gating",
-  "reason": "running the integrated gate for ltg on 7945d1f045b8",
-  "updated_at": "2026-09-30T16:45:53Z",
+  "sequence": 11,
+  "state": "publishing",
+  "reason": "closing ltg behind the integrated gate on 7945d1f045b8",
+  "updated_at": "2026-09-30T17:01:08Z",
   "ticks": [
     {
       "tick_id": "378",
