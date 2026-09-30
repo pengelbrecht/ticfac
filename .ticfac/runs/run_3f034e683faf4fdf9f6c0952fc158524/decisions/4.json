@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 4,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "runstate.Attempt.JobHandle is the reconciler's attemptHandle.asMap(), which carries executor, job_id, write_ref, base_sha and model but no agent, pane or name key for any executor. herdr's agent_name/pane_id live only in the executor's own JobHandle (the nested handle object), which the run's attempt record never carries, so the dashboard's workers-panel handle cell renders null in every real run. Re-filed from the previous attempt's report so it is not lost with that run attempt; fix belongs where the marker or a reader learns where herdr's names live.\nevidence: internal/reconcile/dispatch.go:864 (JobHandle: marker.asMap()) and internal/exec/herdr/record.go:45-46 (agent_name/pane_id ride only herdr's own handle)\n\nticfac run run_3f034e683faf4fdf9f6c0952fc158524 created this tick by absorbing the finding 3d7a312b15e3a981bbc64fa9b2cc77ffc4a1e56678d80b7139f189ac23f4592b (reported by run-run_3f034e683faf4fdf9f6c0952fc158524/tick-ltg/attempt-3): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_3f034e683faf4fdf9f6c0952fc158524/absorptions/3d7a312b15e3a981bbc64fa9b2cc77ffc4a1e56678d80b7139f189ac23f4592b.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "zl1",
+    "title": "Worker.handle stays null: no executor names the worker on the attempt marker"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.38,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.02,
+      "design": 0.51,
+      "diagnosis": 0.32,
+      "mechanical": 0.13,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1454,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-09-30T17:01:27Z",
+  "answered_at": "2026-09-30T17:01:27Z",
+  "provenance": {
+    "run_id": "run_3f034e683faf4fdf9f6c0952fc158524",
+    "tick_id": "zl1",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "16fa9216bd4d3acf70fcc24beeffdcf69fec8c24",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
