@@ -239,7 +239,7 @@ Three layers, installed after the checkout and before the prompt is built:
 
 | Layer | Closes |
 |---|---|
-| A `tk` shim, first on the harness's `PATH` | Every route through the tracker CLI, including ones nobody enumerated |
+| A `tk` shim, first on the harness's `PATH` | Every WRITE through the tracker CLI to this checkout's tracker, including ones nobody enumerated. Reads (`version`, `show`, `list`, …) and calls against another repository's tracker — a test fixture's — pass through to the real `tk` and are not reported (epic hn6: the repository's own tests' `tk version --json` probes were being reported as violations, and failing) |
 | A `pre-commit` hook in the clone | A direct write to `.tick/` the agent then commits — invisible to any `PATH` edit |
 | A sweep of `.tick/` before the salvage | The container's own rescue commit laundering a violation into a commit it authored |
 
