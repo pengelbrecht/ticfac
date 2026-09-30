@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_911b556fce394004837695b3196e3925",
   "epic_id": "hn6",
-  "sequence": 23,
-  "state": "failed",
-  "reason": "7uv did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: 7uv try 1 (run dispatch #2) does not merge onto epic/hn6 (1 conflict: content in internal/statusmodel/build_dashboard_test.go) and 3 resolve-conflict jobs for this tick failed without delivering a resolution: ticfac/run-run_911b556fce394004837695b3196e3925/tick-7uv/resolve-2 (failed, operational: 7uv try 1 (run dispatch #2) does not merge onto epic/hn6 (1 conflict: content in internal/statusmodel/build_dashboard_test.go) and its resolve-conflict job failed: it answered with no report the run could read and the run's verdict is missing-result (failed): the container's branch tick/hn6/attempt-2-resolve-2-95e48dd2/7uv carries no report and no commit beyond the base it was cut from: the push never landed, and this is neither running nor done. The tick is neither resolved nor re-dispatched); ticfac/run-run_911b556fce394004837695b3196e3925/tick-7uv/resolve-2-r2 (failed, operational: 7uv try 1 (run dispatch #2) does not merge onto epic/hn6 (1 conflict: content in internal/statusmodel/build_dashboard_test.go) and the resolve-conflict job run-run_911b556fce394004837695b3196e3925/tick-7uv/resolve-2-r2 could not be started: the sandbox dispatch door refused (500 unreadable_refusal): the door answered 500 with a body that is not its documented {error, detail} shape); ticfac/run-run_911b556fce394004837695b3196e3925/tick-7uv/resolve-2-r3 (failed, operational: 7uv try 1 (run dispatch #2) does not merge onto epic/hn6 (1 conflict: content in internal/statusmodel/build_dashboard_test.go) and the resolve-conflict job run-run_911b556fce394004837695b3196e3925/tick-7uv/resolve-2-r3 could not be started: the sandbox dispatch door refused (500 unreadable_refusal): the door answered 500 with a body that is not its documented {error, detail} shape). 2 retries after the first is the bound, so the tick is neither resolved nor re-dispatched: read why the jobs did not answer, then release the attempt — `ticfac settle hn6 7uv 2 --release \"<who>\" --carry-work` — and run the epic again. This incarnation was reached after 1 AUTOMATIC CONTINUATION(S) of this run, each one an intervention nobody typed: the run did not reach here unattended",
-  "updated_at": "2026-09-30T13:29:19Z",
+  "sequence": 24,
+  "state": "gating",
+  "reason": "running the integrated gate for 3gk on 19bb87577ffb",
+  "updated_at": "2026-09-30T13:30:14Z",
   "ticks": [
     {
       "tick_id": "3gk",
@@ -61,7 +61,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/hn6",
-    "source_sha": "495ff6ef481dc9c3832d408d46f1509f57868ec4",
+    "source_sha": "19bb87577ffbbcdbe7f41cf5be2bb418fc0a3822",
     "integration_ref": "refs/heads/epic/hn6",
     "phase": "worker",
     "executor": null,
