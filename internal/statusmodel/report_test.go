@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
@@ -263,6 +264,55 @@ func TestReportCachesPerAttempt(t *testing.T) {
 	_ = reader("nwj", 2)
 	if got := atomic.LoadInt32(&calls); got != afterSecond {
 		t.Errorf("a second read of the same EMPTY answer ran git again (%d calls, were %d)", got, afterSecond)
+	}
+}
+
+// TestReportSummaryIsBoundedToOneLineOfRunes: the summary is the report's
+// first non-heading paragraph, flattened and bounded to 300 CHARACTERS — the
+// bound the tick states — cut on a rune boundary, never mid-rune into
+// invalid UTF-8: the summary rides the dashboard's JSON, and a byte-split
+// rune renders as replacement garbage. The rule skips every heading — a
+// heading is never the summary — while the branch's diff still answers.
+func TestReportSummaryIsBoundedToOneLineOfRunes(t *testing.T) {
+	repo := reportRepo(t, "branch", "epic/2jn")
+	stateRoot := t.TempDir()
+	t.Setenv("TICFAC_EXEC_STATE_DIR", stateRoot)
+
+	// A first paragraph whose byte length crosses 300 inside a multi-byte
+	// rune: 299 ASCII letters, then three-byte arrows.
+	long := strings.Repeat("a", 299) + strings.Repeat("\u25b8", 8)
+	archiveReport(t, stateRoot, "epic-2jn", "nwj", 1,
+		"# RESULT-nwj\n\n"+long+"\n\n## What changed\n\n- a file\n\nSTATUS: DONE\n")
+	input := AttemptReports(repo, "epic-2jn")("nwj", 1)
+	if input == nil {
+		t.Fatal("the report is archived and the branch stands, and the reader answered nothing")
+	}
+	if !utf8.ValidString(input.Summary) {
+		t.Errorf("the summary is not valid UTF-8: the cut split a rune — %q", input.Summary)
+	}
+	if got := len([]rune(input.Summary)); got > 300 {
+		t.Errorf("the summary is %d characters, want the tick's bound of 300", got)
+	}
+	if !input.DiffRead {
+		t.Error("the branch stands and its diff was not read")
+	}
+
+	// A report that opens with headings and a list: the first-paragraph rule
+	// skips every heading — a heading is never quoted — and the first
+	// non-heading paragraph answers, however little it says.
+	gitIn(t, repo, "branch", "ticfac/run-epic-2jn/tick-nwj/attempt-2",
+		"ticfac/run-epic-2jn/tick-nwj/attempt-1")
+	archiveReport(t, stateRoot, "epic-2jn", "nwj", 2,
+		"# RESULT-nwj\n\n## What changed\n\n- a file\n\nSTATUS: DONE\n")
+	input = AttemptReports(repo, "epic-2jn")("nwj", 2)
+	if input == nil {
+		t.Fatal("the branch stands and its diff was readable, and the reader answered nothing")
+	}
+	if input.Summary != "- a file" {
+		t.Errorf("a report of headings and a list quotes %q, want the first non-heading paragraph: a heading is never the summary", input.Summary)
+	}
+	if !input.DiffRead {
+		t.Error("the branch stands and its diff was not read")
 	}
 }
 
