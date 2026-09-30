@@ -196,6 +196,17 @@ type Executor interface {
 	Dispose(handle *subprocess.JobHandle, opts subprocess.DisposeOptions) error
 }
 
+// SettledReattacher is an executor that can re-address an attempt which
+// SETTLED while no incarnation of the run was watching it, when the local
+// state that would have addressed it is gone — the cloud orchestrator that
+// reboots on a fresh disk (epic hn6's cloud run). Start refuses such an
+// attempt as settled, which is right for a start and wrong for a resume: the
+// resume's question is "what did it do?", and ReattachSettled answers with a
+// handle Inspect and CollectDetail can rule on. It never boots anything.
+type SettledReattacher interface {
+	ReattachSettled(spec *subprocess.JobSpec) (*subprocess.JobHandle, error)
+}
+
 // Substrate is the versioned substrate a dispatch's executor observed at the
 // build that will run the job: its protocol version (herdr's API protocol,
 // the number between the client's hard floor and its warn line) and the

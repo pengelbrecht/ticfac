@@ -163,6 +163,7 @@ func sandboxExecutor(d reconcile.Dispatch) (reconcile.Executor, reconcile.Substr
 	executor, err := cloudflaresandbox.New(cloudflaresandbox.Options{
 		FactoryURL: os.Getenv("TICKS_FACTORY_URL"),
 		Token:      os.Getenv("TICKS_FACTORY_TOKEN"),
+		RunID:      d.RunID,
 		EpicID:     d.EpicID,
 		BaseRef:    d.BaseRef,
 		Title:      d.Title,

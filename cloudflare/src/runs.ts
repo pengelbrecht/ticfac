@@ -55,6 +55,7 @@ import {
 } from "./db";
 import { modelRoutingComplaint, revokeRunTokens } from "./gateway";
 import type { Env } from "./index";
+import { type OrchestratorKind, recordLocalOrchestrator } from "./local-orchestrator";
 import type {
   DispatchLeaseView,
   LeaseOrigin,
@@ -184,6 +185,13 @@ export type RunWorkflowParams = {
    * could be older than.
    */
   credential_grade?: RunCredentialGrade;
+  /**
+   * Where the orchestrator runs (migration 0022). Absent is the factory's own
+   * container, which is every run before the field existed; `local` is
+   * `ticfac run --cloud-workers` — the Workflow boots no orchestrator and
+   * supervises the operator's machine through its heartbeat instead.
+   */
+  orchestrator?: OrchestratorKind;
 };
 
 export type WorkflowInstanceStatus = { status: string; error?: unknown; output?: unknown };
@@ -270,6 +278,11 @@ export type RunSubmission = {
    * that some run's push should fail.
    */
   credential_grade?: RunCredentialGrade;
+  /**
+   * Where this run's orchestrator runs (see {@link RunWorkflowParams.orchestrator}).
+   * Absent means the factory's own container.
+   */
+  orchestrator?: OrchestratorKind;
 };
 
 export type SubmissionParse =
@@ -436,6 +449,31 @@ export function parseSubmission(body: unknown): SubmissionParse {
     grade = raw.credential_grade;
   }
 
+  // Where the orchestrator runs. Refused rather than defaulted for the same
+  // reason as the origin: a local run read as a container run would boot a
+  // second orchestrator beside the operator's. A local run cannot be queued:
+  // the parked record is shape-frozen (below), and a run that ignited later
+  // with no one at the machine to collect its credential would hold the
+  // project for nothing.
+  let orchestrator: OrchestratorKind | undefined;
+  if (raw.orchestrator !== undefined && raw.orchestrator !== null) {
+    if (raw.orchestrator !== "local" && raw.orchestrator !== "container") {
+      return {
+        ok: false,
+        detail: `orchestrator must be "local" or "container", got ${JSON.stringify(raw.orchestrator)}`,
+      };
+    }
+    orchestrator = raw.orchestrator;
+    if (orchestrator === "local" && raw.queue === true) {
+      return {
+        ok: false,
+        detail:
+          "a locally orchestrated run cannot be queued: its orchestrator is the machine that " +
+          "submitted it, and a run that ignited later would have nobody driving it",
+      };
+    }
+  }
+
   // The RunRoom's queued-submission record (D22) is shape-frozen; it never
   // carried a wave, and a wave is no longer a thing a submission can ask for
   // at all — see the tick_ids refusal above.
@@ -455,6 +493,7 @@ export function parseSubmission(body: unknown): SubmissionParse {
       ...(maxWallClock === undefined ? {} : { max_wall_clock_ms: maxWallClock }),
       ...(origin === undefined ? {} : { origin }),
       ...(grade === undefined ? {} : { credential_grade: grade }),
+      ...(orchestrator === undefined || orchestrator === "container" ? {} : { orchestrator }),
     },
   };
 }
@@ -528,6 +567,8 @@ export type StartRunInput = {
   lease_token: string;
   /** See {@link RunSubmission.credential_grade}. Absent means `write`. */
   credential_grade?: RunCredentialGrade;
+  /** See {@link RunSubmission.orchestrator}. Absent means the factory's container. */
+  orchestrator?: OrchestratorKind;
 };
 
 export type StartedRun = { run: Run; workflow: { id: string; status: string } };
@@ -547,8 +588,20 @@ async function bootRun(
   env: Env,
   run: Run,
   boot: () => Promise<{ id: string; status(): Promise<WorkflowInstanceStatus> }>,
+  mark?: () => Promise<void>,
 ): Promise<StartedRun> {
   await insertRun(env.DB, run);
+  // The orchestrator's placement is written with the row, BEFORE the instance
+  // exists: the Workflow's first step reads it, and a local run it read as a
+  // container run would boot a second orchestrator.
+  if (mark !== undefined) {
+    try {
+      await mark();
+    } catch (error) {
+      await deleteRun(env.DB, run.run_id);
+      throw error;
+    }
+  }
   let instance: { id: string; status(): Promise<WorkflowInstanceStatus> };
   try {
     instance = await boot();
@@ -629,27 +682,33 @@ export async function startRun(env: Env, input: StartRunInput): Promise<StartedR
 
   // The instance id IS the run id: one trace ID threads every layer (D20), and
   // it means status needs no workflow_id column to find the instance again.
-  return await bootRun(env, run, async () => {
-    const instance = await workflow.create({
-      id: run.run_id,
-      params: {
-        run_id: run.run_id,
-        project: run.project,
-        epic: run.epic,
-        base_sha: run.base_sha,
-        requested_by: run.requested_by,
-        ...(run.trace_id === null ? {} : { trace_id: run.trace_id }),
-        ...(input.notify === undefined ? {} : { notify: input.notify }),
-        ...(input.max_cost_usd === undefined ? {} : { max_cost_usd: input.max_cost_usd }),
-        ...(input.max_wall_clock_ms === undefined
-          ? {}
-          : { max_wall_clock_ms: input.max_wall_clock_ms }),
-        lease_token: input.lease_token,
-        credential_grade: run.credential_grade as RunCredentialGrade,
-      },
-    });
-    return instance;
-  });
+  return await bootRun(
+    env,
+    run,
+    async () => {
+      const instance = await workflow.create({
+        id: run.run_id,
+        params: {
+          run_id: run.run_id,
+          project: run.project,
+          epic: run.epic,
+          base_sha: run.base_sha,
+          requested_by: run.requested_by,
+          ...(run.trace_id === null ? {} : { trace_id: run.trace_id }),
+          ...(input.notify === undefined ? {} : { notify: input.notify }),
+          ...(input.max_cost_usd === undefined ? {} : { max_cost_usd: input.max_cost_usd }),
+          ...(input.max_wall_clock_ms === undefined
+            ? {}
+            : { max_wall_clock_ms: input.max_wall_clock_ms }),
+          lease_token: input.lease_token,
+          credential_grade: run.credential_grade as RunCredentialGrade,
+          ...(input.orchestrator === "local" ? { orchestrator: "local" as const } : {}),
+        },
+      });
+      return instance;
+    },
+    input.orchestrator === "local" ? () => recordLocalOrchestrator(env.DB, run.run_id) : undefined,
+  );
 }
 
 /**
@@ -797,7 +856,8 @@ export async function submitRun(env: Env, submission: RunSubmission): Promise<Su
     epic: submission.epic,
     // The lease is the same lease wherever the orchestrator sits (D19); the
     // origin only records which side asked for it.
-    origin: submission.origin ?? "cloud",
+    // A locally orchestrated run's arbiter IS the operator's machine.
+    origin: submission.origin ?? (submission.orchestrator === "local" ? "local" : "cloud"),
     requested_by: submission.requested_by,
     ttl_ms: BOOT_LEASE_TTL_MS,
   });
@@ -824,6 +884,9 @@ export async function submitRun(env: Env, submission: RunSubmission): Promise<Su
           ...(submission.credential_grade === undefined
             ? {}
             : { credential_grade: submission.credential_grade }),
+          ...(submission.orchestrator === undefined
+            ? {}
+            : { orchestrator: submission.orchestrator }),
         }),
       };
     } catch (error) {

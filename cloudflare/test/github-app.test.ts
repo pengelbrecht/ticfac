@@ -337,7 +337,7 @@ describe("which rung answers", () => {
       return github.fetcher(input, init);
     }) as typeof fetch;
     try {
-      await githubRepoRefs(env).list(PROJECT);
+      await githubRepoRefs(env).list(PROJECT, ["epic/x"]);
     } finally {
       globalThis.fetch = original;
     }

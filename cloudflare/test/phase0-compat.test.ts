@@ -628,6 +628,25 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     return declared[1];
   };
 
+  it("never lets a container rollout take a live run's container", () => {
+    // Epic hn6's cloud run: a rollout still in progress when the run started
+    // advanced to 100% and replaced the run's orchestrator. The platform may
+    // replace an instance only once it has been connected for
+    // rollout_active_grace_period seconds, so that grace must outlast the
+    // longest a run may live (RUN_MAX_WALL_CLOCK_MS).
+    const grace = /^\s*rollout_active_grace_period\s*=\s*(\d+)\s*$/m.exec(WRANGLER_TOML);
+    expect(
+      grace,
+      "wrangler.toml declares no [[containers]] rollout_active_grace_period",
+    ).not.toBeNull();
+    const wall = /^\s*RUN_MAX_WALL_CLOCK_MS\s*=\s*"(\d+)"\s*$/m.exec(WRANGLER_TOML);
+    expect(wall, "wrangler.toml declares no [vars] RUN_MAX_WALL_CLOCK_MS").not.toBeNull();
+    expect(
+      Number(grace![1]) * 1000,
+      "a rollout could replace a container a run within its wall is still using",
+    ).toBeGreaterThanOrEqual(Number(wall![1]));
+  });
+
   it("keeps the sandbox capacity and its [vars] mirror one number, not two", () => {
     // `[[containers]] max_instances` is the ceiling Cloudflare actually
     // enforces on concurrent containers — worker containers dispatched through

@@ -94,6 +94,7 @@ import {
 } from "./gateway";
 import { containerGitHub } from "./github-app";
 import type { Env } from "./index";
+import { heartbeatStale, LOCAL_HEARTBEAT_STALE_MS, lastHeartbeatMs } from "./local-orchestrator";
 import { notifyRunEnded } from "./notify";
 import {
   getReviewForRun,
@@ -105,6 +106,7 @@ import {
   compareSnapshots,
   type RefSnapshot,
   type RunProgress,
+  runRefPrefixes,
   snapshotRefs,
   unverifiedProgress,
 } from "./progress";
@@ -844,7 +846,7 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
   // Before anything boots: what the remote looked like with none of this run's
   // work on it. An unreadable remote is not a refusal — the run may still do
   // real work, and the record will say the evidence could not be read.
-  const refs = await snapshotRefs(env, params.project);
+  const refs = await snapshotRefs(env, params.project, runRefPrefixes(params.epic, params.run_id));
   if (!refs.ok) {
     console.error(
       `factory run-workflow: ${params.run_id} could not read the branches of ` +
@@ -953,7 +955,7 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
       epic: params.epic,
       run_id: params.run_id,
       ...(run.trace_id === null ? {} : { trace_id: run.trace_id }),
-      status: "one orchestrator container",
+      status: runShape(params),
     }),
   ]);
 
@@ -971,7 +973,7 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
     events: [
       runStartedFeedEvent({
         run_id: params.run_id,
-        detail: "run started: one orchestrator container",
+        detail: `run started: ${runShape(params)}`,
       }),
     ],
   });
@@ -1088,6 +1090,23 @@ type Observation = {
    */
   unanswered?: string;
 };
+
+/**
+ * The detail for an orchestrator whose PROCESS RECORD is gone rather than
+ * exited: the platform answered that no such process exists, which is the
+ * container instance being replaced or restarted under it — not the
+ * orchestrator deciding to stop, which always leaves an exit code. Epic hn6's
+ * cloud run lost boot 3 this way at 13:38Z, eight minutes after a stalled
+ * container rollout advanced to 100% of instances; "the sandbox died" said
+ * none of that, and read like the orchestrator's own failure.
+ */
+export function orchestratorContainerGone(boot: number): string {
+  return (
+    `the orchestrator's container was replaced under it (boot ${boot}): the platform reports its ` +
+    "process gone rather than exited — the instance was taken (a container rollout replacing " +
+    "instances, a host eviction, or the container running out of memory), not stopped by the orchestrator"
+  );
+}
 
 type ObserveInput = {
   params: RunWorkflowParams;
@@ -1296,7 +1315,7 @@ type TripCheck = { trip: Trip | null; cost_usd: number | null };
  */
 async function detectTrip(
   env: Env,
-  input: ObserveInput,
+  input: Pick<ObserveInput, "params" | "context">,
   at: number,
   leaseLost: { lost: LeaseLostReason; holder: string | null } | null,
 ): Promise<TripCheck> {
@@ -1864,7 +1883,7 @@ async function supervisePass(
           const code = seen.exit_code;
           lastDetail =
             seen.process === "gone"
-              ? `the orchestrator sandbox died (boot ${boot})`
+              ? orchestratorContainerGone(boot)
               : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})`;
           bootEnded = lastDetail;
           if (isTerminalExit(code)) {
@@ -2222,7 +2241,10 @@ export async function assessProgress(
   params: RunWorkflowParams,
   context: RunContext,
 ): Promise<RunProgress> {
-  return compareSnapshots(context.refs_baseline, await snapshotRefs(env, params.project));
+  return compareSnapshots(
+    context.refs_baseline,
+    await snapshotRefs(env, params.project, runRefPrefixes(params.epic, params.run_id)),
+  );
 }
 
 /**
@@ -2463,16 +2485,28 @@ export async function superviseRun(
       return await superviseReview(env, named.step, params, context, counter);
     }
 
+    // A LOCAL orchestrator (`ticfac run --cloud-workers`): nothing to boot.
+    // The operator's machine runs `ticfac run-epic` and dispatches every
+    // worker through the same per-tick sandbox door a container would; this
+    // Workflow holds the lease, the budgets and the stop for it, and ends the
+    // run when it reports done or stops heartbeating.
+    const local =
+      params.orchestrator === "local"
+        ? await superviseLocalOrchestrator(env, named.step, params, context)
+        : null;
+
     // One orchestrator container, supervised (tick l6t): the container runs
     // `ticfac run-epic` and dispatches every tick's worker itself, through the
     // cloudflare-sandbox executor and the per-tick sandbox door. The Workflow
     // boots, budgets, watches, retries and finalizes — it does not orchestrate.
-    const work = await supervisePass(env, named.step, params, context, counter, {
-      label: "work",
-      job: "orchestrator",
-      max_boots: MAX_SANDBOX_BOOTS,
-      on_exhausted: "stop",
-    });
+    const work =
+      local ??
+      (await supervisePass(env, named.step, params, context, counter, {
+        label: "work",
+        job: "orchestrator",
+        max_boots: MAX_SANDBOX_BOOTS,
+        on_exhausted: "stop",
+      }));
 
     let outcome: RunOutcome;
     if (work.kind === "completed") {
@@ -2553,6 +2587,183 @@ export async function superviseRun(
       return { finalized: true };
     });
     return outcome;
+  }
+}
+
+/** How a run's feed and board describe what hosts its orchestrator. */
+function runShape(params: RunWorkflowParams): string {
+  return params.orchestrator === "local"
+    ? "a local orchestrator on the operator's machine, with cloud workers"
+    : "one orchestrator container";
+}
+
+/** One look at a locally orchestrated run: the lease, the stop, the budgets, the heartbeat. */
+type LocalObservation = {
+  trip: Trip | null;
+  at_ms: number;
+  cost_usd: number | null;
+  /** The last heartbeat, or null when the orchestrator never beat. */
+  heartbeat_ms: number | null;
+  lease_reclaimed?: string;
+};
+
+async function observeLocal(
+  env: Env,
+  params: RunWorkflowParams,
+  context: RunContext,
+  pollMs: number,
+): Promise<LocalObservation> {
+  const renewal = await renewRunLease(env, params, renewalTtl(pollMs));
+  const leaseLost = renewal !== null && renewal.ok === false ? renewal : null;
+  const heartbeat = await lastHeartbeatMs(env.DB, params.run_id).catch(() => null);
+  const at = Date.now();
+  const checked = await detectTrip(env, { params, context }, at, leaseLost);
+  return {
+    trip: checked.trip,
+    at_ms: at,
+    cost_usd: checked.cost_usd,
+    heartbeat_ms: heartbeat,
+    ...(renewal?.ok === true && renewal.reclaimed ? { lease_reclaimed: renewal.detail } : {}),
+  };
+}
+
+/**
+ * The pass for a LOCAL orchestrator (`ticfac run --cloud-workers`,
+ * src/local-orchestrator.ts): no container is booted, so there is no process
+ * to ask and nothing to reboot. What the Workflow still owns is everything
+ * that must not depend on the operator's machine: the project's lease, the
+ * stop record, the cost and wall-clock budgets, and — at finalize — revoking
+ * the run's credentials and reclaiming its worker containers.
+ *
+ * It ends on the orchestrator's done signal (the same door a container
+ * posts), on a trip (the credential dies — at once for a hard trip, after the
+ * grace window for a clean one, which the machine learns at its next
+ * heartbeat and answers by flushing and exiting), or on a heartbeat gone
+ * stale: a machine that stopped saying it is alive is not driving the run,
+ * and its workers must not hold the account's slots for a day.
+ */
+async function superviseLocalOrchestrator(
+  env: Env,
+  step: WorkflowStep,
+  params: RunWorkflowParams,
+  context: RunContext,
+): Promise<PassOutcome> {
+  const label = "local";
+  const staleMs = positiveVar(env, "RUN_LOCAL_HEARTBEAT_STALE_MS", LOCAL_HEARTBEAT_STALE_MS, true);
+  await step.do(`${label}:start`, OBSERVE_RETRIES, async () => {
+    const wrote = await appendBootFeed(env, {
+      project: params.project,
+      run_id: params.run_id,
+      boot: 1,
+      slot: "a",
+      event: orchestratorBootFeedEvent(
+        params.run_id,
+        "the orchestrator runs on the operator's machine (ticfac run --cloud-workers); " +
+          "this factory boots its workers only",
+      ),
+    });
+    return { wrote };
+  });
+
+  let ended = "the local orchestrator's watch ended";
+  try {
+    const cadenceDeadline = context.started_at_ms + context.config.max_wall_clock_ms;
+    let spend: SpendSample | null = null;
+    let lastAt = context.started_at_ms;
+    for (let look = 0; look < context.config.max_observations; look++) {
+      const pollMs = pollDelay(context.config, look, {
+        now_ms: lastAt,
+        deadline_ms: cadenceDeadline,
+        spend,
+      });
+      const signal = await waitDoneSignal(step, label, 1, look, pollMs);
+      if (signal !== null) {
+        await step.do(`${label}:heard:${look}`, OBSERVE_RETRIES, async () => {
+          await logDispatch(env, {
+            run_id: params.run_id,
+            epic: params.epic,
+            decision: "signal:done",
+            reason: null,
+          });
+          return { heard: signal };
+        });
+        ended = "the local orchestrator reported that it finished";
+        return {
+          kind: "completed",
+          boots: 0,
+          detail: "the local orchestrator reported that it finished",
+        };
+      }
+
+      const seen = await step.do(`${label}:watch:${look}`, OBSERVE_RETRIES, () =>
+        observeLocal(env, params, context, pollMs),
+      );
+      spend = spendSample(spend, seen.cost_usd, seen.at_ms);
+      lastAt = seen.at_ms;
+
+      if (seen.trip !== null) {
+        const trip = seen.trip;
+        const reason = tripRevokeReason(trip);
+        const revoke = (name: string) =>
+          step.do(`${label}:${name}`, OBSERVE_RETRIES, async () => {
+            const revoked = await revokeRunTokens(env, params.run_id, reason);
+            return { revoked };
+          });
+        if (trip.hard) {
+          await revoke("revoke");
+        } else {
+          // The machine learns a clean stop at its next heartbeat (the run is
+          // `stopping`) and flushes; the window is its time to land that.
+          await step.do(`${label}:stopping`, OBSERVE_RETRIES, async () => {
+            await updateRunState(env.DB, params.run_id, "stopping");
+            return { stopping: true };
+          });
+          await step.sleep(`${label}:grace`, context.config.stop_grace_ms);
+          await revoke("revoke:clean");
+        }
+        ended = `the local orchestrator's run was stopped: ${trip.detail}`;
+        return { kind: "tripped", trip, boots: 0 };
+      }
+
+      if (
+        heartbeatStale({
+          now_ms: seen.at_ms,
+          started_at_ms: context.started_at_ms,
+          heartbeat_ms: seen.heartbeat_ms,
+          stale_ms: staleMs,
+        })
+      ) {
+        const last =
+          seen.heartbeat_ms === null
+            ? "never"
+            : `last at ${new Date(seen.heartbeat_ms).toISOString()}`;
+        const detail =
+          `the local orchestrator stopped heartbeating (${last}; the bound is ` +
+          `${Math.round(staleMs / 1000)}s) — nothing is driving the run, ` +
+          "so it ends here and its workers are reclaimed; `ticfac run <epic> --cloud-workers` resumes it";
+        ended = detail;
+        return { kind: "failed", detail, boots: 0 };
+      }
+    }
+    const detail = `the run outlived its observation budget (${context.config.max_observations} looks)`;
+    ended = `the local orchestrator's run was stopped: ${detail}`;
+    return {
+      kind: "tripped",
+      trip: { kind: "budget", budget: "wall_clock", hard: true, detail },
+      boots: 0,
+    };
+  } finally {
+    const line = ended;
+    await step.do(`${label}:ended`, OBSERVE_RETRIES, async () => {
+      const wrote = await appendBootFeed(env, {
+        project: params.project,
+        run_id: params.run_id,
+        boot: 1,
+        slot: "d",
+        event: orchestratorExitFeedEvent(params.run_id, line),
+      });
+      return { wrote };
+    });
   }
 }
 

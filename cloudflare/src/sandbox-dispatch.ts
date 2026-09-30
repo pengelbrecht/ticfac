@@ -693,6 +693,52 @@ export async function sandboxAttemptRoute(
   env: Env,
   segments: string[],
 ): Promise<SandboxDispatchResult> {
+  // Every answer is the door's documented {error, detail} shape — including
+  // the one for a throw nothing below anticipated (the container platform
+  // failing a start mid-rollout, a binding that rejects). Uncaught, a throw
+  // became the runtime's own 500 page, which the orchestrator could only
+  // read as `unreadable_refusal` with no reason in it (epic hn6's cloud run:
+  // two resolve-conflict starts lost that way at 13:29, while the container
+  // application was rolling out an image it could not pull).
+  try {
+    return await routeSandboxAttempt(request, env, segments);
+  } catch (error) {
+    return doorFault(request, error);
+  }
+}
+
+/** The class a throw inside the door answers with. */
+export const DOOR_FAULT = "door_fault";
+
+/** How much of a thrown error's message the door hands back. */
+const DOOR_FAULT_DETAIL_MAX = 400;
+
+/**
+ * A throw inside the door, answered typed: `500 door_fault`, with the throw's
+ * own first line (bounded) so the run's feed can say why. The caller is the
+ * run's own container, authenticated by its run token, so the reason is its
+ * to read; the full error goes to the Worker's log.
+ */
+export function doorFault(request: Request, error: unknown): SandboxDispatchResult {
+  const text =
+    error instanceof Error ? `${error.name}: ${error.message}` : String(error ?? "unknown error");
+  const line = (text.split("\n")[0] ?? "").slice(0, DOOR_FAULT_DETAIL_MAX);
+  console.error(
+    `factory sandbox door: ${request.method} ${new URL(request.url).pathname} threw: ${text}`,
+  );
+  return refuse(
+    500,
+    DOOR_FAULT,
+    `the sandbox dispatch door failed while answering this request (${line}); whatever it had ` +
+      "started is under this attempt's identity, so asking again adopts it rather than booting a rival",
+  );
+}
+
+async function routeSandboxAttempt(
+  request: Request,
+  env: Env,
+  segments: string[],
+): Promise<SandboxDispatchResult> {
   if (segments.length === 0) {
     if (request.method !== "POST") {
       return refuse(405, "method_not_allowed", "the start route is POST /api/sandbox/attempts");

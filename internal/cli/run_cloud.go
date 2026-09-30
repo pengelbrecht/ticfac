@@ -180,7 +180,7 @@ func runCloudCommand(ctx context.Context, epicID, repo string, fl *runFlags, std
 		fmt.Fprintf(prose, "no cloud run for epic %s in the factory — starting one\n", epicID)
 	}
 
-	runID, queued, err := submitCloudRun(ctx, client, repo, epicID, prose)
+	runID, queued, err := submitCloudRun(ctx, client, repo, epicID, "", prose)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run %s --cloud: %v\n", epicID, err)
 		return finish(action, agentStateFailed, "", err.Error())
@@ -243,23 +243,29 @@ func cloudRunsForEpic(ctx context.Context, client *cloudClient, project, epicID 
 // The returned queued answer is a submission the factory parked behind the
 // project lease (it answered with a queued record, not a run): there is
 // nothing to attach to yet.
-func submitCloudRun(ctx context.Context, client *cloudClient, repo, epicID string, stdout io.Writer) (runID string, queued bool, err error) {
+//
+// orchestrator is where the run's orchestrator runs: "" is the factory's own
+// container, "local" is `run --cloud-workers` (this machine), which the
+// factory records so it boots no orchestrator container for the run.
+func submitCloudRun(ctx context.Context, client *cloudClient, repo, epicID, orchestrator string, stdout io.Writer) (runID string, queued bool, err error) {
 	baseSHA, project, requestedBy, err := prepareCloudSubmission(ctx, repo, epicID)
 	if err != nil {
 		return "", false, err
 	}
 	submission := struct {
-		Project     string `json:"project"`
-		Epic        string `json:"epic"`
-		BaseSHA     string `json:"base_sha"`
-		RequestedBy string `json:"requested_by"`
-		Queue       bool   `json:"queue"`
+		Project      string `json:"project"`
+		Epic         string `json:"epic"`
+		BaseSHA      string `json:"base_sha"`
+		RequestedBy  string `json:"requested_by"`
+		Queue        bool   `json:"queue"`
+		Orchestrator string `json:"orchestrator,omitempty"`
 	}{
 		Project: project, Epic: epicID, BaseSHA: baseSHA, RequestedBy: requestedBy,
 		// The everyday surface has no queue flag: a lease another run holds is
 		// a fact to report, not a parking decision this command makes for the
 		// operator. The expert `cloud run --queue` stays the way in.
-		Queue: false,
+		Queue:        false,
+		Orchestrator: orchestrator,
 	}
 	data, err := client.request(ctx, http.MethodPost, "/api/runs", submission)
 	if err != nil {

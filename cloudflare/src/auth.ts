@@ -207,6 +207,14 @@ export const BRANCH_CLAIM_PREFIX = "/api/branches";
 export const FEED_RELAY_PATH = "/api/feed";
 
 /**
+ * The heartbeat door (src/local-orchestrator.ts), exempt for the same reason
+ * as the doors above: its caller is a LOCAL orchestrator — `ticfac run
+ * --cloud-workers` on the operator's machine — beating on its run's own
+ * token, never the operator's. The credential says which run is alive.
+ */
+export const HEARTBEAT_PATH = "/api/heartbeat";
+
+/**
  * The GitHub token door (epic dm6), exempt for the same reason as the doors
  * above: its caller is a write-grade container holding its run's own token,
  * never the operator's. It hands back a fresh installation token for the
@@ -432,6 +440,7 @@ export function isAuthExempt(pathname: string): boolean {
   if (pathname === BRANCH_CLAIM_PREFIX) return true;
   if (pathname === GITHUB_TOKEN_DOOR) return true;
   if (pathname === FEED_RELAY_PATH) return true;
+  if (pathname === HEARTBEAT_PATH) return true;
   if ((GITHUB_APP_FLOW_PAGES as readonly string[]).includes(pathname)) return true;
   if (pathname === STATUS_PAGE_PATH || pathname.startsWith(`${STATUS_PAGE_PATH}/`)) return true;
   return pathname === WEBHOOK_PREFIX || pathname.startsWith(`${WEBHOOK_PREFIX}/`);

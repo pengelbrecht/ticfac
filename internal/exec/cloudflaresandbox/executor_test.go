@@ -473,6 +473,19 @@ func TestDoorRefusalsArriveTyped(t *testing.T) {
 	if door.Class != "unreadable_refusal" {
 		t.Errorf("class is %q, want unreadable_refusal", door.Class)
 	}
+
+	// A throw inside the door arrives as its own typed class, with the
+	// reason, and is the remote's transient failure — never a stop for a
+	// person (epic hn6's cloud run).
+	h.door.refuseWith(http.StatusInternalServerError, DoorFaultClass, "Error: ImagePullError")
+	_, err = h.start("another")
+	door, ok = AsDoorError(err)
+	if !ok || door.Class != DoorFaultClass || !strings.Contains(door.Detail, "ImagePullError") {
+		t.Fatalf("a door fault did not arrive typed with its reason: %v", err)
+	}
+	if !door.TransientRemote() {
+		t.Error("a door fault is not read as the remote's transient failure")
+	}
 }
 
 // The three operations the door does not carry: refused, typed, and naming

@@ -77,6 +77,21 @@ const HerdrFSRoot = "profiles-herdr"
 // value always was.
 const EmbeddedHerdr = "herdr"
 
+// CloudFSRoot is the cloud profile set's directory as this repository
+// carries it (and as the embedded set is rooted): profiles-cloudflare-sandbox/,
+// the set whose profiles name the cloudflare-sandbox executor. Like
+// [HerdrFSRoot] it is also the provenance base of a resolution from the
+// embedded copy.
+const CloudFSRoot = "profiles-cloudflare-sandbox"
+
+// EmbeddedCloud is the virtual directory that resolves the cloud profile set
+// compiled into this binary: `ticfac run --cloud-workers` passes it (through
+// `--profiles cloudflare-sandbox`), so a laptop driving cloud workers
+// dispatches every role through the factory's per-tick sandbox door with the
+// same set the orchestrator image installs — the binary's own bytes, never a
+// path on disk. The name is the executor's, which is what the set is for.
+const EmbeddedCloud = "cloudflare-sandbox"
+
 // EmbeddedSets are the profile sets compiled into this binary, by the Dir
 // value that resolves each: the local set ("") and the herdr set. A caller
 // that must find the set whose profiles name a given executor — a dispatch
@@ -481,6 +496,13 @@ func declaredTiers(role Role, substrate string) string {
 // into this binary — the local set, or the herdr set through its virtual
 // name — or one on disk when a caller names it.
 func profileSource(dir string) (fs.FS, string, error) {
+	if dir == EmbeddedCloud {
+		sub, err := fs.Sub(ticfac.CloudProfiles(), CloudFSRoot)
+		if err != nil {
+			return nil, "", fmt.Errorf("profile: the compiled-in %s/ is unreadable: %w", CloudFSRoot, err)
+		}
+		return sub, CloudFSRoot, nil
+	}
 	if dir == EmbeddedHerdr {
 		sub, err := fs.Sub(ticfac.HerdrProfiles(), HerdrFSRoot)
 		if err != nil {
