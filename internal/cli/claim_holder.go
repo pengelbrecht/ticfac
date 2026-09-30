@@ -72,21 +72,7 @@ func claimHolderLiveness(repo string) func(context.Context, string) reconcile.Ho
 // run is known on this machine: registered here, or with a run directory in
 // this checkout.
 func localHolder(repo, runID string) (reconcile.HolderState, bool) {
-	checkout := ""
-	if reg, ok, err := runregistry.Lookup(runID); err == nil && ok && reg.Repo != "" {
-		host, _ := os.Hostname()
-		if reg.Host == "" || reg.Host == host {
-			checkout = reg.Repo
-		}
-	}
-	if checkout == "" && repo != "" {
-		// run.log, not the directory: the directory is also the feed's, and a
-		// cloud run watched from this checkout can have one. Only a local
-		// process that claimed the run writes its log.
-		if _, err := os.Stat(filepath.Join(runlife.Dir(repo, runID), runlife.LogName)); err == nil {
-			checkout = repo
-		}
-	}
+	checkout := localRunCheckout(repo, runID)
 	if checkout == "" {
 		return reconcile.HolderState{}, false
 	}
@@ -103,6 +89,30 @@ func localHolder(repo, runID string) (reconcile.HolderState, bool) {
 			Evidence: "no process holds the local run in " + checkout + ": its last process released it"}, true
 	}
 	return reconcile.HolderState{Evidence: "the local run's process could not be asked: " + status.Reason}, false
+}
+
+// localRunCheckout is the checkout on THIS machine whose process ran runID,
+// or "" when no process here ever did: the one the machine's registry names
+// for it, else repo when the run's log stands in it. It is also how a cloud
+// run whose orchestrator is this machine (`ticfac run --cloud-workers`, #151)
+// is told from one the factory's container drives: its id is the factory's,
+// but its process, pidfile and feed are here.
+func localRunCheckout(repo, runID string) string {
+	if reg, ok, err := runregistry.Lookup(runID); err == nil && ok && reg.Repo != "" {
+		host, _ := os.Hostname()
+		if reg.Host == "" || reg.Host == host {
+			return reg.Repo
+		}
+	}
+	if repo != "" {
+		// run.log, not the directory: the directory is also the feed's, and a
+		// cloud run watched from this checkout can have one. Only a local
+		// process that claimed the run writes its log.
+		if _, err := os.Stat(filepath.Join(runlife.Dir(repo, runID), runlife.LogName)); err == nil {
+			return repo
+		}
+	}
+	return ""
 }
 
 // claimHolderRunStatus is the part of GET /api/runs/<id> a holder verdict reads.

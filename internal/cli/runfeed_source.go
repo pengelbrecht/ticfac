@@ -229,6 +229,17 @@ func feedSource(ctx context.Context, repo, runID string, stderr io.Writer) (runf
 			// a quiet fallthrough: the run may be there.
 			return nil, "", "", err
 		case resolved != "":
+			// The factory's run for this epic, orchestrated on THIS machine
+			// (`ticfac run --cloud-workers`, #151): its feed is the local
+			// process's own, written here under the factory's run id.
+			if checkout := localRunCheckout(repo, resolved); checkout != "" {
+				local := runfeed.Path(checkout, resolved)
+				if _, err := os.Stat(local); err == nil {
+					fmt.Fprintf(stderr, "# %s is cloud run %s, orchestrated on this machine (--cloud-workers) — "+
+						"following its feed here\n", runID, resolved)
+					return runfeed.FileSource(local), "local", resolved, nil
+				}
+			}
 			fmt.Fprintln(stderr, note)
 			client, err := newCloudClient()
 			if err != nil {
@@ -246,6 +257,14 @@ func feedSource(ctx context.Context, repo, runID string, stderr io.Writer) (runf
 	// A truncated cloud run id is resolved before any read is made, the
 	// same rule `cloud logs` holds (tick c5i: a confident negative that is
 	// true of the prefix reads as a verdict on the run).
+	// A cloud run orchestrated on this machine from another checkout (the
+	// registry names it): its feed is that process's own, not the factory's.
+	if checkout := localRunCheckout(repo, runID); checkout != "" {
+		if _, err := os.Stat(runfeed.Path(checkout, runID)); err == nil {
+			return runfeed.FileSource(runfeed.Path(checkout, runID)), "local", runID, nil
+		}
+	}
+
 	resolved, note, err := resolveCloudRunID(ctx, runID)
 	if err != nil {
 		return nil, "", "", err

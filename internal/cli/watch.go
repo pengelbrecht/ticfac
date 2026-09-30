@@ -225,7 +225,9 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	}
 	// No spelling names a run here and the factory holds none for the epic:
 	// an id nobody found, answered as that — never as a run with no feed.
-	if kind == "local" && !resolution.Known {
+	// A local source under ANOTHER id is a resolution too: the factory's run
+	// for the epic, orchestrated on this machine (--cloud-workers, #151).
+	if kind == "local" && !resolution.Known && resolved == runID {
 		fmt.Fprintln(stderr, unknownRunMessage("watch", *repo, rest[0], resolution))
 		return 1
 	}
