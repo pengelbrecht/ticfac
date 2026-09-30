@@ -197,12 +197,59 @@ func TestRepoRunnersConfigLadderClimbsToClaudeOnlyLocally(t *testing.T) {
 
 // jevRoutedSubstrates are the worlds whose committed [tier_policy] routes a
 // recorded Jev classification (tick ms9). A world missing from this list is
-// one where the classification a run pays for changes nothing. The cloud is
-// that world today (2026-09-30: every tick classified, every dispatch still
-// `runs at tier ""`): its dear rung needs a Workers AI model stronger than
-// GLM 5.3, which is the operator's choice to make, and it joins this list
-// in the change that declares its [tier_policy].
-var jevRoutedSubstrates = []Substrate{SubstrateHerdr, SubstrateHarness}
+// one where the classification a run pays for changes nothing. The cloud
+// joined in tick 7l1 (operator decision 2026-09-30): its ladder starts on
+// GLM 5.3 Flash and its dear rung is GLM 5.3, both Workers AI.
+var jevRoutedSubstrates = []Substrate{SubstrateHerdr, SubstrateHarness, SubstrateCloud}
+
+// THE CLOUD'S LADDER (tick 7l1, the operator's option B): work starts on
+// GLM 5.3 Flash, a failed attempt climbs straight to GLM 5.3 and stops
+// there, and Jev's dear mass starts a tick on GLM 5.3. Every rung is a
+// Workers AI model through pi: the cloud rule holds on the ladder as well as
+// on the base cells.
+func TestRepoRunnersConfigCloudLadderIsFlashToGLM(t *testing.T) {
+	cfg, err := LoadRepoFor(repoRootForTest(t), SubstrateCloud)
+	if err != nil {
+		t.Fatalf("LoadRepoFor(cloud): %v", err)
+	}
+	p := cfg.TierPolicy
+	if p == nil || p.Default != TierEconomy || p.CeilingOrDefault() != TierStrong || p.DearTier != TierStrong {
+		t.Fatalf("cloud tier policy = %+v, want economy start, strong dear rung and ceiling", p)
+	}
+	const workersAI = "cloudflare-workers-ai/@cf/"
+	want := map[Tier]string{
+		TierEconomy: workersAI + "zai-org/glm-5.3-flash",
+		TierStrong:  workersAI + "zai-org/glm-5.3",
+	}
+	for tier, model := range want {
+		w, err := cfg.ResolveOn(SubstrateCloud, RoleImplement, tier)
+		if err != nil {
+			t.Fatalf("ResolveOn(cloud, implement, %q): %v", tier, err)
+		}
+		if w.Kind != "pi" || w.Model != model {
+			t.Errorf("cloud %q rung = %s/%s, want pi/%s", tier, w.Kind, w.Model, model)
+		}
+	}
+	// One failed attempt on Flash climbs to GLM 5.3, never to an
+	// intermediate rung the ladder does not declare, and never past it.
+	work := TickFacts{TickID: "w", Role: "implement-tick", Type: "task", Priority: 2, Wave: 1}
+	for _, tc := range []struct {
+		attempt DeriveAttempt
+		want    Tier
+	}{
+		{DeriveAttempt{Number: 1}, TierEconomy},
+		{DeriveAttempt{Number: 2, Failed: 1}, TierStrong},
+		{DeriveAttempt{Number: 3, Failed: 2}, TierStrong},
+	} {
+		got, err := p.Derive(work, tc.attempt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Tier != tc.want {
+			t.Errorf("cloud attempt %d (%d failed) derives %q (%s), want %q", tc.attempt.Number, tc.attempt.Failed, got.Tier, got.Reason, tc.want)
+		}
+	}
+}
 
 // massAt spells a distribution over the closed enum for the repo-policy tests.
 func massAt(mechanical, translation, construction, diagnosis, design float64) *DeriveClassification {
