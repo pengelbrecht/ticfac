@@ -12,7 +12,12 @@
  */
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { heldSlots, listReclaims, reclaimRunWorkers } from "../src/container-capacity";
+import {
+  heldSlots,
+  listReclaims,
+  reclaimOrphanedWorkers,
+  reclaimRunWorkers,
+} from "../src/container-capacity";
 import { insertRun, type Run, recordSandboxAttemptBoot, recordSandboxJobSettled } from "../src/db";
 import worker, { type Env } from "../src/index";
 import { finalize } from "../src/run-workflow";
@@ -50,6 +55,10 @@ class FakeWorker implements OrchestratorSandbox {
   readonly asked: string[] = [];
   destroyed = false;
   listed = 0;
+  /** Whether the container is up, as its Durable Object's record says. */
+  up = true;
+  /** A wedged container: its destroy returns and it stays up (hn6's 3gk-1). */
+  survivesDestroy = false;
   #next = 0;
   constructor(readonly name: string) {}
 
@@ -90,6 +99,10 @@ class FakeWorker implements OrchestratorSandbox {
   async killProcess(): Promise<void> {}
   async destroy(): Promise<void> {
     this.destroyed = true;
+    if (!this.survivesDestroy) this.up = false;
+  }
+  async isRunning(): Promise<boolean> {
+    return this.up;
   }
 }
 
@@ -261,6 +274,78 @@ describe("reclaiming a run's worker containers", () => {
       "7uv",
       "ltg",
     ]);
+  });
+
+  it("never asks a container that is not up — asking would boot it — and still destroys it", async () => {
+    const run = await aRun("failed");
+    const { live } = await workersOf(run);
+    const stopped = live[0]!;
+    stopped.up = false;
+
+    await reclaimRunWorkers(env.DB, binding, run.run_id, {
+      reason: "run_ended:failed",
+      sleep: instant,
+    });
+
+    expect(stopped.listed).toBe(0);
+    expect(stopped.asked).toEqual([]);
+    expect(stopped.destroyed).toBe(true);
+    const record = (await listReclaims(env.DB, run.run_id)).find((r) => r.tick_id === "3gk");
+    expect(record?.detail).toContain("not running");
+  });
+
+  it("does not record a reclaim whose container outlived its destroy, and the sweep tries again", async () => {
+    const run = await aRun("failed");
+    const { live } = await workersOf(run);
+    const wedged = live[0]!;
+    wedged.survivesDestroy = true;
+
+    await reclaimRunWorkers(env.DB, binding, run.run_id, {
+      reason: "run_ended:failed",
+      sleep: instant,
+    });
+    expect((await listReclaims(env.DB, run.run_id)).map((r) => r.tick_id).sort()).toEqual([
+      "7uv",
+      "ltg",
+    ]);
+
+    // The platform lets go of it; the hourly sweep finds it unrecorded and
+    // reclaims it.
+    wedged.survivesDestroy = false;
+    await reclaimOrphanedWorkers(env.DB, binding, { sleep: instant });
+    expect((await listReclaims(env.DB, run.run_id)).map((r) => r.tick_id).sort()).toEqual([
+      "3gk",
+      "7uv",
+      "ltg",
+    ]);
+    expect(wedged.up).toBe(false);
+  });
+
+  it("the sweep re-checks a recorded reclaim and reclaims again a container that is still up", async () => {
+    const run = await aRun("failed");
+    const { live } = await workersOf(run);
+    await reclaimRunWorkers(env.DB, binding, run.run_id, {
+      reason: "run_ended:failed",
+      sleep: instant,
+    });
+
+    // Recorded reclaimed, yet up again (what wrangler showed for hn6's
+    // workers an hour after their recorded reclaim).
+    const back = live[1]!;
+    back.up = true;
+    back.destroyed = false;
+    const gone = live[0]!;
+    gone.destroyed = false;
+
+    await reclaimOrphanedWorkers(env.DB, binding, { sleep: instant });
+
+    expect(back.destroyed).toBe(true);
+    expect(back.up).toBe(false);
+    // The one that stayed gone is not addressed again.
+    expect(gone.destroyed).toBe(false);
+    const record = (await listReclaims(env.DB, run.run_id)).find((r) => r.tick_id === "7uv");
+    expect(record?.reason).toBe("run_not_live");
+    expect(record?.detail).toContain("still running");
   });
 
   it("the hourly sweep reclaims the containers of a run that is over, and leaves a live run's alone", async () => {

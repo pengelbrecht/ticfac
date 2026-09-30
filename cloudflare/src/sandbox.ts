@@ -277,6 +277,13 @@ export interface OrchestratorSandbox {
   killProcess(id: string): Promise<void>;
   /** Tear the container down. Called once, at finalize. */
   destroy(): Promise<void>;
+  /**
+   * Whether the container is up, read from its Durable Object's own record —
+   * the one question that does NOT start a stopped container (every process
+   * call does). Optional: the reclaim (container-capacity.ts) asks it before
+   * it asks anything that would cold-boot a container just to destroy it.
+   */
+  isRunning?(): Promise<boolean>;
 }
 
 /**
@@ -371,6 +378,8 @@ export type SdkSandbox = {
   getProcessLogs(id: string): Promise<{ stdout: string; stderr: string }>;
   killProcess(id: string): Promise<void>;
   destroy(): Promise<void>;
+  /** The Container class's own state record — a storage read, never a start. */
+  getState?(): Promise<{ status: string }>;
 };
 
 /** What the SDK reports about one process. */
@@ -466,6 +475,11 @@ export function adaptSandbox(sandbox: SdkSandbox): OrchestratorSandbox {
     },
     async destroy() {
       await sandbox.destroy();
+    },
+    async isRunning() {
+      if (sandbox.getState === undefined) return true;
+      const state = await sandbox.getState();
+      return state.status === "running" || state.status === "healthy";
     },
   };
 }
