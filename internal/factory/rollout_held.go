@@ -106,6 +106,9 @@ type heldRollout struct {
 	Held int
 	// Updated/Total are the rollout's own instance counts.
 	Updated, Total int
+	// Finishing reports that no instance is held back: every instance runs
+	// the new version, and only the platform's completion mark is missing.
+	Finishing bool
 }
 
 // judgeHeldRollout decides whether the rollout serves new instances with only
@@ -145,7 +148,20 @@ func judgeHeldRollout(r rolloutRecord, digest string, instances []containerInsta
 		return heldRollout{}, "no instance has come up on the new version yet"
 	}
 	if held.Held == 0 {
-		return heldRollout{}, "no instance is held back; the rollout is finishing"
+		// Every instance is on the new version and the platform has not
+		// marked the rollout complete, so the application record still names
+		// the old image. Observed 2026-09-30 (deploy of e4b388e4, rollout
+		// d987f111): both steps completed at 17:53:33 with 7 of 7 instances
+		// updated and none active, and the record still reported the previous
+		// image at 17:57:27, when the wait gave up. A run started then booted
+		// the new image, which is the claim the deploy owes. The rollout's
+		// own count must say every instance is updated: the instance listing
+		// alone may not show an idle instance still to be replaced.
+		if held.Total == 0 || held.Updated < held.Total {
+			return heldRollout{}, fmt.Sprintf("the rollout has updated %d of %d instances", held.Updated, held.Total)
+		}
+		held.Finishing = true
+		return held, ""
 	}
 	for run := range runs {
 		held.Runs = append(held.Runs, run)

@@ -102,6 +102,31 @@ func TestJudgeHeldRollout(t *testing.T) {
 	}
 }
 
+// The e4b388e4 deploy (run 36753244907): rollout d987f111 finished both steps
+// at 17:53:33 with 7 of 7 instances updated and none held, and the application
+// record still named the previous image when the wait gave up at 17:57:27.
+// Every instance running the new version is a confirmed deploy; a rollout
+// whose own count says instances are still to go is not, whatever the listing
+// shows.
+func TestJudgeARolloutWithNothingHeldBack(t *testing.T) {
+	t.Parallel()
+	digest := "sha256:" + strings.Repeat("2", 64)
+	allNew := []containerInstance{
+		{ID: "c", Name: "run_8511bc66fe444bfaa4b5c9d6cd2073b4-1", State: "running", Version: intp(58)},
+		{ID: "d", Name: "run_911b556fce394004837695b3196e3925-3gk-3", State: "inactive"},
+	}
+	r := progressingRollout(digest)
+	r.Progress.UpdatedInstances, r.Progress.TotalInstances = 7, 7
+	held, why := judgeHeldRollout(r, digest, allNew)
+	if why != "" || !held.Finishing || len(held.Runs) != 0 {
+		t.Errorf("a rollout with every instance updated = (%+v, %q), want it finishing with no runs held", held, why)
+	}
+	r.Progress.UpdatedInstances = 5
+	if _, why := judgeHeldRollout(r, digest, allNew); !strings.Contains(why, "5 of 7") {
+		t.Errorf("a rollout at 5 of 7 with no old instance listed: why = %q, want it to say 5 of 7", why)
+	}
+}
+
 // rolloutsAPI serves one rollout and records how it was asked.
 type rolloutsAPI struct {
 	mu       sync.Mutex

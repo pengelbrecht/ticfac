@@ -366,10 +366,14 @@ func confirmContainerRollout(
 					if why == "" {
 						fmt.Fprintf(out, "container application %s serves %s to new instances (rollout %s, %d of %d instances updated)\n",
 							ContainerAppName, shortDigest(digest), held.RolloutID, held.Updated, held.Total)
-						fmt.Fprintf(out, "  %d instance(s) still on the previous image, held by live run(s): %s\n",
-							held.Held, strings.Join(held.Runs, ", "))
-						fmt.Fprintf(out, "  rollout_active_grace_period keeps a rollout from replacing a container a run holds; "+
-							"the platform replaces each once its run lets it go\n")
+						if held.Finishing {
+							fmt.Fprintf(out, "  every instance runs the new version; the platform has not marked the rollout complete yet\n")
+						} else {
+							fmt.Fprintf(out, "  %d instance(s) still on the previous image, held by live run(s): %s\n",
+								held.Held, strings.Join(held.Runs, ", "))
+							fmt.Fprintf(out, "  rollout_active_grace_period keeps a rollout from replacing a container a run holds; "+
+								"the platform replaces each once its run lets it go\n")
+						}
 						outcome.Confirmed = true
 						outcome.HeldBy = held.Runs
 						return outcome, nil
