@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "ltg",
   "attempt": 3,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-30T16:45:08Z",
+  "triaged_at": "2026-09-30T16:45:29Z",
+  "triaged_by": "ticfac run run_3f034e683faf4fdf9f6c0952fc158524 absorbing zl1",
+  "promoted_as": "zl1",
   "provenance": {
     "run_id": "run_3f034e683faf4fdf9f6c0952fc158524",
     "tick_id": "ltg",
