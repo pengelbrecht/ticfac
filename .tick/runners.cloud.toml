@@ -27,6 +27,39 @@ args = ["--approve"]
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
 effort = "medium"
 
+# The dear rung, named explicitly: GLM 5.3, the same model the role's base
+# cell runs. Both rungs are Workers AI models already proven through pi in
+# the container image.
+[roles.implement.tiers.strong]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+# The cloud's two-rung Workers AI ladder (tick 7l1; operator decision
+# 2026-09-30, option B): an implementation tick starts on GLM 5.3 Flash and
+# climbs to GLM 5.3 after a failed attempt, capped there. step = 2 so one
+# failure goes straight from economy to strong: balanced is not a rung this
+# ladder declares (in the cloud it would resolve GLM 5.3 anyway, under a
+# name that says less).
+#
+# Jev's mass rule mirrors the local one (tick ms9): a tick whose recorded
+# classification puts more than 0.75 of probability on design + diagnosis
+# starts at strong (GLM 5.3) instead of burning an attempt on Flash;
+# everything else, and every tick Jev could not classify, starts on Flash.
+# Role jobs (review, closeout, repair, resolve) are never classified, and
+# their cells above resolve GLM 5.3 at every tier.
+#
+# The risk the operator accepted: Phase 2 saw Flash finish 1 of 3 real
+# ticks, and most cloud ticks now start there. The ladder's escalation is
+# the safety net. Revisit (a stronger dear rung, or strong as the start) if
+# the recorded escalation rate from economy is high.
+[tier_policy]
+default = "economy"
+ceiling = "strong"
+step = 2
+dear_work_types = ["design", "diagnosis"]
+dear_tier = "strong"
+mass_threshold = 0.75
+
 [roles.review]
 kind = "pi"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
