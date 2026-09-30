@@ -147,18 +147,30 @@ type JobBoot = {
   job: string;
   at: string;
   settled: boolean;
+  /**
+   * Already recorded reclaimed — re-checked by the sweep, because a destroy
+   * that resolved is not proof the container went (hn6: two wedged workers
+   * were recorded reclaimed and still listed `running` an hour later).
+   */
+  reclaimed: boolean;
 };
 
 /** Booted and never reclaimed — settled ones too: a failed destroy wants another. */
 async function unreclaimedBoots(
   db: D1Database,
-  filter: { run_id?: string; orphaned?: boolean; limit?: number },
+  filter: { run_id?: string; orphaned?: boolean; limit?: number; recheckSince?: string },
 ): Promise<JobBoot[]> {
-  const where = [
-    `NOT EXISTS (SELECT 1 FROM sandbox_job_reclaimed r WHERE r.run_id = b.run_id
-       AND r.tick_id = b.tick_id AND r.attempt = b.attempt AND r.job = b.job)`,
-  ];
   const binds: unknown[] = [];
+  // Never reclaimed — or, for the sweep, reclaimed recently enough that the
+  // container might have outlived its destroy.
+  const where = [
+    filter.recheckSince === undefined
+      ? `NOT EXISTS (SELECT 1 FROM sandbox_job_reclaimed r WHERE r.run_id = b.run_id
+           AND r.tick_id = b.tick_id AND r.attempt = b.attempt AND r.job = b.job)`
+      : `NOT EXISTS (SELECT 1 FROM sandbox_job_reclaimed r WHERE r.run_id = b.run_id
+           AND r.tick_id = b.tick_id AND r.attempt = b.attempt AND r.job = b.job AND r."at" < ?)`,
+  ];
+  if (filter.recheckSince !== undefined) binds.push(filter.recheckSince);
   if (filter.run_id !== undefined) {
     where.push("b.run_id = ?");
     binds.push(filter.run_id);
@@ -175,14 +187,20 @@ async function unreclaimedBoots(
     .prepare(
       `SELECT b.run_id, b.tick_id, b.attempt, b.job, b."at" AS at,
          EXISTS (SELECT 1 FROM sandbox_job_settled s WHERE s.run_id = b.run_id
-           AND s.tick_id = b.tick_id AND s.attempt = b.attempt AND s.job = b.job) AS settled
+           AND s.tick_id = b.tick_id AND s.attempt = b.attempt AND s.job = b.job) AS settled,
+         EXISTS (SELECT 1 FROM sandbox_job_reclaimed rc WHERE rc.run_id = b.run_id
+           AND rc.tick_id = b.tick_id AND rc.attempt = b.attempt AND rc.job = b.job) AS reclaimed
        FROM sandbox_job_boot b LEFT JOIN runs ON runs.run_id = b.run_id
        WHERE ${where.join(" AND ")}
-       ORDER BY b."at" LIMIT ?`,
+       ORDER BY b."at" DESC LIMIT ?`,
     )
     .bind(...binds)
-    .all<Omit<JobBoot, "settled"> & { settled: number }>();
-  return rows.results.map((row) => ({ ...row, settled: row.settled === 1 }));
+    .all<Omit<JobBoot, "settled" | "reclaimed"> & { settled: number; reclaimed: number }>();
+  return rows.results.map((row) => ({
+    ...row,
+    settled: row.settled === 1,
+    reclaimed: row.reclaimed === 1,
+  }));
 }
 
 /** One reclaim, as recorded (migration 0021). */
@@ -203,7 +221,7 @@ export type SandboxJobReclaim = {
 async function recordReclaim(db: D1Database, reclaim: SandboxJobReclaim): Promise<void> {
   await db
     .prepare(
-      `INSERT OR IGNORE INTO sandbox_job_reclaimed
+      `INSERT OR REPLACE INTO sandbox_job_reclaimed
         (run_id, tick_id, attempt, job, reason, salvaged, detail, "at")
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
@@ -316,30 +334,52 @@ async function reclaimBoots(
       entry.detail = `the container could not be addressed: ${String(error)}`;
       continue;
     }
+    if (boot.reclaimed) {
+      // A re-check: only a container that still reads as up is reclaimed
+      // again; one that went is not addressed any further.
+      const up =
+        entry.sandbox.isRunning === undefined
+          ? false
+          : await bounded(entry.sandbox.isRunning(), askTimeout).catch(() => false);
+      if (up !== true) {
+        pending.pop();
+        continue;
+      }
+      entry.detail = "recorded reclaimed, but the container was still running; ";
+    }
     if (boot.settled) {
-      entry.detail = "the job had settled; its container is destroyed as a backstop";
+      entry.detail += "the job had settled; its container is destroyed as a backstop";
       continue;
     }
     if (Date.parse(boot.at) < recentSince) {
-      entry.detail = "booted too long ago to be running; destroyed without being asked";
+      entry.detail += "booted too long ago to be running; destroyed without being asked";
       continue;
     }
     try {
+      // A container that is not up has nothing to push, and asking it for its
+      // processes would start it just to be destroyed.
+      if (entry.sandbox.isRunning !== undefined) {
+        const up = await bounded(entry.sandbox.isRunning(), askTimeout);
+        if (up === false) {
+          entry.detail += "the container was not running; destroyed without being asked";
+          continue;
+        }
+      }
       const listed = await bounded(entry.sandbox.listProcesses(), askTimeout);
       if (listed === "timeout") {
-        entry.detail = "the container did not answer in time; destroyed without being asked";
+        entry.detail += "the container did not answer in time; destroyed without being asked";
         continue;
       }
       entry.work = liveWork(listed);
       if (entry.work === null) {
-        entry.detail = "no work process was running; nothing to push";
+        entry.detail += "no work process was running; nothing to push";
         continue;
       }
       await entry.sandbox.startProcess(workerCancelCommand(options.reason), { env: {} });
       entry.salvaged = true;
-      entry.detail = "the live worker was asked to stop and push";
+      entry.detail += "the live worker was asked to stop and push";
     } catch (error) {
-      entry.detail = `the container could not be asked to stop and push: ${String(error)}`;
+      entry.detail += `the container could not be asked to stop and push: ${String(error)}`;
     }
   }
 
@@ -381,10 +421,25 @@ async function reclaimBoots(
       continue;
     }
     try {
-      await entry.sandbox.destroy();
+      const destroyed = await bounded(entry.sandbox.destroy(), askTimeout);
+      if (destroyed === "timeout") throw new Error("the destroy did not return in time");
     } catch (error) {
       console.error(`factory reclaim: could not destroy ${entry.name}: ${String(error)}`);
       continue;
+    }
+    // A destroy that returned is not yet a container that went: one still
+    // reading as up is left unrecorded, so the next sweep tries again.
+    if (entry.sandbox.isRunning !== undefined) {
+      const up = await bounded(entry.sandbox.isRunning(), askTimeout).catch(
+        () => "timeout" as const,
+      );
+      if (up === true) {
+        console.error(
+          `factory reclaim: ${entry.name} still reads as running after its destroy; ` +
+            "left unrecorded for the next sweep",
+        );
+        continue;
+      }
     }
     const reclaim: SandboxJobReclaim = {
       run_id: entry.boot.run_id,
@@ -444,7 +499,8 @@ export async function reclaimOrphanedWorkers(
 ): Promise<SandboxJobReclaim[]> {
   if (binding === null) return [];
   try {
-    const orphaned = await unreclaimedBoots(db, { orphaned: true });
+    const recheckSince = new Date(Date.now() - RECLAIM_LOOKBACK_MS).toISOString();
+    const orphaned = await unreclaimedBoots(db, { orphaned: true, recheckSince });
     return await reclaimBoots(db, binding, orphaned, { ...options, reason: "run_not_live" });
   } catch (error) {
     console.error(`factory reclaim: the sweep could not run: ${String(error)}`);
