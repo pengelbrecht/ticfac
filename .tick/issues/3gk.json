@@ -14,6 +14,6 @@
   "acceptance_criteria": "[1] decorateTicks fills pipeline, parent_tick_id, duration_seconds, findings and try tier/reason/next_step per the rules in the description; `go test -short -timeout 20m -run 'TestPipeline|TestTheContract' ./internal/statusmodel/` passes all nine cases. [2] A rejected try with a feed line carries its reason, and the last rejected try carries a next step; no reason is invented when no line exists. [3] `make gate` passes.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-28T18:40:57.504107Z",
-  "updated_at": "2026-09-30T12:12:09.100445273Z",
+  "updated_at": "2026-09-30T12:14:20.581894833Z",
   "started_at": "2026-09-29T13:46:50.310005615Z"
 }
