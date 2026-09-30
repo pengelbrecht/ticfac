@@ -289,12 +289,17 @@ func TestACarriedNoWorkSettleIsNotReportedAsAFailure(t *testing.T) {
 
 	f.Runner = fakeRunnerArgv(t, "a1-adds-nothing")
 	options := f.options(f.Repo, fixtureOptions{})
+	workBases := map[string]bool{}
 	options.NewExecutor = func(d Dispatch) (Executor, Substrate, error) {
 		inner, substrate, err := f.newExecutor(d)
 		if err != nil {
 			return nil, substrate, err
 		}
-		return &noWorkSettleExecutor{Executor: inner, carried: d.TickID == "a1" && d.ResumedFrom != nil}, substrate, nil
+		carried := d.TickID == "a1" && d.ResumedFrom != nil
+		if carried {
+			workBases[d.WorkBaseSHA] = true
+		}
+		return &noWorkSettleExecutor{Executor: inner, carried: carried}, substrate, nil
 	}
 	r, err := New(options)
 	if err != nil {
@@ -309,6 +314,17 @@ func TestACarriedNoWorkSettleIsNotReportedAsAFailure(t *testing.T) {
 			result.State, result.Failure, r.Stages("a1"))
 	}
 	a1Carried(t, f, r, releasedHead)
+	// The carried dispatch names the base the RELEASED attempt was cut from,
+	// so an executor whose worker counts its own work (the sandbox container)
+	// can see the carried work too — on every leg that rebuilds the dispatch.
+	released := attemptMarker(t, f, "a1", 1)
+	if released.BaseSHA == "" || released.BaseSHA == releasedHead {
+		t.Fatalf("the released attempt's base %q proves nothing against the carried head %s", released.BaseSHA, releasedHead)
+	}
+	if len(workBases) != 1 || !workBases[released.BaseSHA] {
+		t.Errorf("the carried dispatch's work bases are %v, want only the released attempt's base %s",
+			workBases, released.BaseSHA)
+	}
 	settled := ""
 	for _, e := range r.Journal() {
 		if e.Tick == "a1" && e.Stage == StageWaiting && strings.HasPrefix(e.Detail, "settled") {

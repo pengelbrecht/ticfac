@@ -97,6 +97,13 @@ type startRequest struct {
 	// worker's harness just under it, so the container stops and pushes
 	// before the reconciler's wall fires. Omitted when unbounded.
 	WallSeconds int `json:"wall_seconds,omitempty"`
+	// WorkBaseSHA is, for a CARRIED attempt, the commit the carried work was
+	// cut from (epic hn6, run_3f034e68): BaseSHA is then the released
+	// attempt's head, and the container measures the carried work from this,
+	// so a worker that found it complete and added nothing settles succeeded.
+	// Omitted for an attempt that carries nothing; a door that predates the
+	// field ignores it.
+	WorkBaseSHA string `json:"work_base_sha,omitempty"`
 }
 
 // startResponse is the door's answer to a start: the handle, and whether the
@@ -508,6 +515,10 @@ func validateDoorFields(req *startRequest) error {
 	}
 	if !baseSHAPattern.MatchString(req.BaseSHA) {
 		return fmt.Errorf("base_sha %q is not the full 40-character commit the attempt's container clones at", req.BaseSHA)
+	}
+	if req.WorkBaseSHA != "" && !baseSHAPattern.MatchString(req.WorkBaseSHA) {
+		return fmt.Errorf("work_base_sha %q is not the full 40-character commit a carried attempt's work was cut from",
+			req.WorkBaseSHA)
 	}
 	return nil
 }

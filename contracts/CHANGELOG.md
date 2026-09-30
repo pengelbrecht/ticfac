@@ -53,6 +53,21 @@ loud.
 
 ---
 
+## 1.1.0
+
+MINOR: one environment variable added. `worker-boot-contract.json` gains
+`env.work_base`, `TICKS_WORK_BASE_SHA`: for a CARRIED attempt, the base the
+carried work was cut from (epic hn6, run_3f034e68). A carried attempt boots at
+the released attempt's head, so a worker that finds the carried work complete
+and adds nothing had no work commits of its own and the container exited
+no-work (10), settling a finished tick as failed. With the work base the
+container measures the carried work too and exits 0. The control plane
+(`worker-boot.ts`) sets it when the dispatch door's optional `work_base_sha`
+carries one; the container (`image/worker.sh`) reads it. An unchanged consumer
+is still correct: absent, the container behaves exactly as before.
+
+---
+
 ## 1.0.1
 
 PATCH: one description, no rule. `status-model.json`'s epic `phase`

@@ -1738,7 +1738,26 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 	// malformed labels were already refused at admission, so what is left
 	// here is only the parsed list the merge holds the worker to.
 	marker.Touch, _ = parseTouchLabels(entry.TickID, entry.Labels)
+	dispatch.WorkBaseSHA = r.dispatchWorkBase(marker)
 	return dispatch, marker, nil
+}
+
+// dispatchWorkBase is the base a CARRIED dispatch's work is measured from —
+// the base the original released attempt was cut from — for an executor
+// whose worker counts its own work (Dispatch.WorkBaseSHA). Empty for a
+// dispatch that carries nothing, and when the base cannot be read: the worker
+// then counts as it always did, and the collect (deliverCarriedWork), which
+// reads the same base itself, still decides. A base equal to the dispatched
+// one carries nothing to measure and is not passed.
+func (r *Reconciler) dispatchWorkBase(marker attemptHandle) string {
+	if marker.ResumedFrom == nil {
+		return ""
+	}
+	base, err := r.carriedBase(marker)
+	if err != nil || base == marker.BaseSHA {
+		return ""
+	}
+	return base
 }
 
 // attemptWriteRef is the ref ONE attempt of one tick may write, in SPEC
@@ -2074,6 +2093,10 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	// a later record of the same dispatch — a finding draft, a settle — says
 	// what the DISPATCH resumed from, never what this incarnation would.
 	dispatch.ResumedFrom = marker.ResumedFrom
+	// And the carried work's base, re-derived from the same marker chain: a
+	// dispatch rebuilt from its marker can still START the attempt, and the
+	// worker it boots needs it exactly as the first dispatch's would have.
+	dispatch.WorkBaseSHA = r.dispatchWorkBase(marker)
 	// The reports of the tick's earlier attempts (tick nvn) are re-derived
 	// rather than carried, because a dispatch rebuilt from the marker can
 	// still START the attempt — the marker landed, and nothing did — and the

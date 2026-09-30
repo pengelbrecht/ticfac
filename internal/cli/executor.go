@@ -172,13 +172,17 @@ func sandboxExecutor(d reconcile.Dispatch) (reconcile.Executor, reconcile.Substr
 		// on the model, bound to the harness and delivered the prompt, and the
 		// handle names the model and the harness back — so what the dispatch
 		// records is what ran.
-		Model:    d.Profile.Model,
-		Harness:  d.Profile.Runner,
-		Prompt:   d.Profile.Prompt,
-		Attempt:  d.Attempt,
-		StateDir: d.StateDir,
-		Repo:     d.Repo,
-		Remote:   d.Remote,
+		Model:   d.Profile.Model,
+		Harness: d.Profile.Runner,
+		Prompt:  d.Profile.Prompt,
+		// A carried dispatch's work base (epic hn6, run_3f034e68): the
+		// container measures the carried work from it, so a worker that found
+		// it complete and added nothing settles succeeded, not no-work.
+		WorkBaseSHA: d.WorkBaseSHA,
+		Attempt:     d.Attempt,
+		StateDir:    d.StateDir,
+		Repo:        d.Repo,
+		Remote:      d.Remote,
 	})
 	if err != nil {
 		return nil, reconcile.Substrate{}, err

@@ -334,6 +334,17 @@ type Dispatch struct {
 	// re-deriving what the run already knows.
 	BaseRef string
 
+	// WorkBaseSHA is, for a dispatch CARRIED from a released attempt, the base
+	// the carried work was cut from (carriedBase, followed through a chain of
+	// carries); empty for every dispatch that carries nothing, or when that
+	// base cannot be read. BaseSHA is then the carried head, so an executor
+	// whose worker counts its own work from its base needs this to see that a
+	// worker which added nothing to complete carried work delivered it (epic
+	// hn6, run_3f034e68: the sandbox container exited no-work and the factory
+	// settled two finished ticks failed). The collect's rule stays the
+	// reconciler's (deliverCarriedWork); this only lets the worker agree.
+	WorkBaseSHA string
+
 	// Title is the tick's title, read from the tracker at planning time and
 	// carried for the same reason BaseRef is: the sandbox dispatch door takes
 	// it per start, for a later boot's re-derivation, and a title the executor
