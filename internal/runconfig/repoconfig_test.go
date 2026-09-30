@@ -194,3 +194,124 @@ func TestRepoRunnersConfigLadderClimbsToClaudeOnlyLocally(t *testing.T) {
 		t.Errorf("a cloud run sees a ladder to frontier: %+v", cloud.TierPolicy)
 	}
 }
+
+// jevRoutedSubstrates are the worlds whose committed [tier_policy] routes a
+// recorded Jev classification (tick ms9). A world missing from this list is
+// one where the classification a run pays for changes nothing. The cloud is
+// that world today (2026-09-30: every tick classified, every dispatch still
+// `runs at tier ""`): its dear rung needs a Workers AI model stronger than
+// GLM 5.3, which is the operator's choice to make, and it joins this list
+// in the change that declares its [tier_policy].
+var jevRoutedSubstrates = []Substrate{SubstrateHerdr, SubstrateHarness}
+
+// massAt spells a distribution over the closed enum for the repo-policy tests.
+func massAt(mechanical, translation, construction, diagnosis, design float64) *DeriveClassification {
+	return &DeriveClassification{Probabilities: map[WorkType]float64{
+		WorkMechanical: mechanical, WorkTranslation: translation, WorkConstruction: construction,
+		WorkDiagnosis: diagnosis, WorkDesign: design,
+	}}
+}
+
+// THE REPOSITORY'S OWN ROUTING (tick ms9): a recorded classification moves
+// an implementation tick's first attempt to the dear tier on the PROBABILITY
+// MASS on design + diagnosis — not the argmax — against the threshold this
+// repository measured and declared, and the dear tier resolves to a different
+// worker than the start tier, so the classification changes what runs. Below
+// the threshold, with no classification at all (Jev unavailable, a recorded
+// no-answer), and for every role-carrying job, the start is exactly what it
+// was without a classifier.
+func TestRepoRunnersConfigRoutesTheFirstAttemptOnJevMass(t *testing.T) {
+	for _, sub := range jevRoutedSubstrates {
+		t.Run(string(sub), func(t *testing.T) {
+			cfg, err := LoadRepoFor(repoRootForTest(t), sub)
+			if err != nil {
+				t.Fatalf("LoadRepoFor(%s): %v", sub, err)
+			}
+			p := cfg.TierPolicy
+			if p == nil {
+				t.Fatalf("%s declares no [tier_policy]: a Jev classification changes nothing there, and every dispatch runs at the role's base values", sub)
+			}
+			if !p.MassThresholdDeclared() {
+				t.Errorf("%s leans on the provisional default threshold; ms9 measured one and the file must declare it", sub)
+			}
+			dear := map[WorkType]bool{}
+			for _, one := range p.DearWorkTypes {
+				dear[one] = true
+			}
+			if len(dear) != 2 || !dear[WorkDesign] || !dear[WorkDiagnosis] {
+				t.Fatalf("%s: dear_work_types = %v, want design and diagnosis", sub, p.DearWorkTypes)
+			}
+			threshold := p.MassThresholdOrDefault()
+			work := TickFacts{TickID: "w", Role: "implement-tick", Type: "task", Priority: 2, Wave: 1}
+			first := DeriveAttempt{Number: 1}
+
+			// The mass rule: construction is the argmax, but design and
+			// diagnosis together clear the threshold — the tick routes dear.
+			half := threshold/2 + 0.01
+			got, err := p.DeriveClassified(work, first, massAt(0, 0, 1-2*half, half, half))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got.Tier != p.DearTier {
+				t.Errorf("%s: %.2f of mass on design+diagnosis started at %q (%s), want the dear tier %q",
+					sub, 2*half, got.Tier, got.Reason, p.DearTier)
+			}
+			startWorker, err := cfg.ResolveOn(sub, RoleImplement, p.Default)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dearWorker, err := cfg.ResolveOn(sub, RoleImplement, p.DearTier)
+			if err != nil {
+				t.Fatalf("%s: the dear tier %q does not resolve: %v", sub, p.DearTier, err)
+			}
+			if startWorker.Kind == dearWorker.Kind && startWorker.Model == dearWorker.Model {
+				t.Errorf("%s: the dear tier %q resolves the same worker as the start tier %q (%s/%s): the classification would change nothing that runs",
+					sub, p.DearTier, p.Default, dearWorker.Kind, dearWorker.Model)
+			}
+
+			// Under the threshold — even with design as the argmax — the
+			// start is the policy's own.
+			under := threshold - 0.01
+			if got, err = p.DeriveClassified(work, first, massAt(0, 0, 1-under, 0, under)); err != nil {
+				t.Fatal(err)
+			}
+			if got.Tier != p.Default {
+				t.Errorf("%s: %.2f of dear mass started at %q (%s), want the start tier %q", sub, under, got.Tier, got.Reason, p.Default)
+			}
+
+			// Jev unavailable — no record, or a recorded no-answer that
+			// carries no distribution: the start tier, exactly as without a
+			// classifier.
+			for _, absent := range []*DeriveClassification{nil, {}} {
+				if got, err = p.DeriveClassified(work, first, absent); err != nil {
+					t.Fatal(err)
+				}
+				if got.Tier != p.Default {
+					t.Errorf("%s: an absent classification started at %q (%s), want the start tier %q", sub, got.Tier, got.Reason, p.Default)
+				}
+			}
+
+			// Role jobs are never routed by a classification, however much
+			// dear mass one would carry.
+			for _, role := range []string{"review-epic", "closeout-epic", "plan-epic"} {
+				plain, err := p.Derive(TickFacts{TickID: "r", Role: role}, first)
+				if err != nil {
+					t.Fatal(err)
+				}
+				routed, err := p.DeriveClassified(TickFacts{TickID: "r", Role: role}, first, massAt(0, 0, 0, 0.5, 0.5))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if routed.Tier != plain.Tier {
+					t.Errorf("%s: role %s moved from %q to %q on a classification (%s)", sub, role, plain.Tier, routed.Tier, routed.Reason)
+				}
+			}
+
+			// A failed dear start still has somewhere to go or is at the
+			// ceiling, where the next actor is a person: the ladder bounds it.
+			if tierIndex(p.DearTier) > tierIndex(p.CeilingOrDefault()) {
+				t.Errorf("%s: the dear tier %q sits above the ceiling %q", sub, p.DearTier, p.CeilingOrDefault())
+			}
+		})
+	}
+}

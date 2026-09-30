@@ -545,6 +545,20 @@ func TestTheMassRoutingCellsLoadCellForCell(t *testing.T) {
 	if undeclared.MassThresholdOrDefault() != 0.50 {
 		t.Errorf("an undeclared threshold defaulted to %v, want the provisional 0.50", undeclared.MassThresholdOrDefault())
 	}
+	// And the dispatch record says which of the two it cleared: the
+	// repository's declared number, or the default that is still only a
+	// starting point (tick ms9).
+	if !p.MassThresholdDeclared() || undeclared.MassThresholdDeclared() {
+		t.Errorf("MassThresholdDeclared: declared=%v undeclared=%v, want true and false",
+			p.MassThresholdDeclared(), undeclared.MassThresholdDeclared())
+	}
+	got, err := undeclared.DeriveClassified(workFacts(), DeriveAttempt{Number: 1}, distribution(0, 0, 0, 0.1, 0.9))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got.Reason, "the provisional mass threshold 0.50") {
+		t.Errorf("an undeclared threshold's reason = %q, want it named provisional", got.Reason)
+	}
 }
 
 // THE RULE ITSELF. The dear tier is chosen when the mass on the dear work
@@ -686,8 +700,8 @@ func TestAMassRoutedStartStillEarnsItsRungsBoundedByTheCeiling(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Tier != TierBalanced || !strings.Contains(got.Reason, "provisional mass threshold 0.50") {
-		t.Fatalf("a clearing classification started at %q (%q), want the dear tier and the provisional threshold named", string(got.Tier), got.Reason)
+	if got.Tier != TierBalanced || !strings.Contains(got.Reason, "declared mass threshold 0.50") {
+		t.Fatalf("a clearing classification started at %q (%q), want the dear tier and the declared threshold named", string(got.Tier), got.Reason)
 	}
 	// One failed attempt: a rung ABOVE the classified start.
 	got, err = p.DeriveClassified(workFacts(), DeriveAttempt{Number: 2, Failed: 1}, clears)

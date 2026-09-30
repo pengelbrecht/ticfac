@@ -385,6 +385,24 @@ func (p *TierPolicy) MassThresholdOrDefault() float64 {
 	return p.MassThreshold
 }
 
+// MassThresholdDeclared reports whether the policy declares its own mass
+// threshold — a number a repository measured (this one's was, by tick ms9)
+// — rather than leaning on the provisional default. The difference is what
+// the dispatch record says about the number: a declared threshold is the
+// repository's stated choice, the default is still only a starting point.
+func (p *TierPolicy) MassThresholdDeclared() bool {
+	return p != nil && p.MassThreshold > 0 && p.MassThreshold <= 1
+}
+
+// massThresholdName names the threshold the way a dispatch record reads it:
+// "the declared mass threshold 0.40" or "the provisional mass threshold 0.50".
+func (p *TierPolicy) massThresholdName() string {
+	if p.MassThresholdDeclared() {
+		return fmt.Sprintf("the declared mass threshold %.2f", p.MassThresholdOrDefault())
+	}
+	return fmt.Sprintf("the provisional mass threshold %.2f", p.MassThresholdOrDefault())
+}
+
 // classifiedStart is the mass rule (tick s45, epic wne): the recorded
 // distribution, summed over the policy's dear work types, against the mass
 // threshold — strictly greater routes the first attempt to the dear tier,
@@ -421,18 +439,19 @@ func (p *TierPolicy) classifiedStart(classification *DeriveClassification) (Tier
 		mass += classification.Probabilities[workType]
 	}
 	threshold := p.MassThresholdOrDefault()
+	thresholdName := p.massThresholdName()
 	if !(mass > threshold) {
 		return "", "", false
 	}
 	ceiling := p.CeilingOrDefault()
 	if tierIndex(p.DearTier) > tierIndex(ceiling) {
 		return ceiling, fmt.Sprintf(
-			"the ceiling %q, because the recorded classification puts %.2f of probability mass on the dear work types (%s), clearing the provisional mass threshold %.2f — and the policy's dear tier sits above the ceiling, which still bounds the result",
-			string(ceiling), mass, strings.Join(names, ", "), threshold), true
+			"the ceiling %q, because the recorded classification puts %.2f of probability mass on the dear work types (%s), clearing %s — and the policy's dear tier sits above the ceiling, which still bounds the result",
+			string(ceiling), mass, strings.Join(names, ", "), thresholdName), true
 	}
 	return p.DearTier, fmt.Sprintf(
-		"the dear tier %q, because the recorded classification puts %.2f of probability mass on the dear work types (%s), clearing the provisional mass threshold %.2f",
-		string(p.DearTier), mass, strings.Join(names, ", "), threshold), true
+		"the dear tier %q, because the recorded classification puts %.2f of probability mass on the dear work types (%s), clearing %s",
+		string(p.DearTier), mass, strings.Join(names, ", "), thresholdName), true
 }
 
 // isWorkRole reports whether a role is WORK — the thing the Default is the
