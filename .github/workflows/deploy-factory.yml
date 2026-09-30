@@ -375,11 +375,26 @@ jobs:
       # Its output is kept for the summary and filtered on its way to the
       # public log: any workers.dev host becomes <factory>, whatever the mask
       # above did or did not catch.
+      #
+      # The image build goes through .github/scripts/wrangler-docker.sh
+      # (WRANGLER_DOCKER_BIN): buildx on a docker-container builder with the
+      # GitHub Actions cache, so a layer that did not change keeps its digest
+      # and is neither pushed nor pulled again. Without it a fresh runner
+      # rebuilt ~0.8 GB of new blobs per deploy.
+      - name: Set up a buildx builder for the image build cache
+        if: steps.decide.outputs.deploy == 'true'
+        id: buildx
+        uses: docker/setup-buildx-action@v4
+      - name: Expose the Actions cache to the image build
+        if: steps.decide.outputs.deploy == 'true'
+        uses: crazy-max/ghaction-github-runtime@v4
       - name: Deploy the factory
         if: steps.decide.outputs.deploy == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WRANGLER_DOCKER_BIN: ${{ github.workspace }}/.github/scripts/wrangler-docker.sh
+          TICFAC_BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
         run: |
           set -o pipefail
           ./ticfac factory deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log" \
