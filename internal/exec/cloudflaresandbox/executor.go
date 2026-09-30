@@ -549,6 +549,73 @@ func (e *Executor) ReattachSettled(spec *subprocess.JobSpec) (*subprocess.JobHan
 	return handleFor(record), nil
 }
 
+// AdoptSettledElsewhere describes ANOTHER run's settled attempt as this run's
+// attempt `spec`, so the reconciler's collect can rule on the work it left.
+// It never boots anything and never asks the door, which answers only for the
+// credential's own run: the settlement comes in as evidence the caller read
+// from the factory's record, and Inspect answers from it.
+//
+// It is the cross-run half of ReattachSettled (hn6's ltg): run_911b's worker
+// settled succeeded with its work on `tick/hn6/attempt-4/ltg`, the run died
+// before collecting it, and the run that took its claim over dispatched a
+// fresh worker over finished work. The record names that attempt's landing
+// branch and base — the spec is cut at it — and the other run's id, so the
+// collect's per-run fallback (`…-<run id>`) is that run's too.
+func (e *Executor) AdoptSettledElsewhere(spec *subprocess.JobSpec, runID, jobID string, attempt int, branch, evidence string) (*subprocess.JobHandle, error) {
+	if err := spec.Validate(); err != nil {
+		return nil, err
+	}
+	if runID == "" || jobID == "" || attempt < 1 || branch == "" {
+		return nil, fmt.Errorf("a settled attempt of another run is addressed by its run, job, attempt and landing "+
+			"branch; got run %q, job %q, attempt %d, branch %q", runID, jobID, attempt, branch)
+	}
+	dir := e.stateDirFor(spec.JobID, e.opts.Attempt)
+	st := e.storeAt(dir)
+	if st.exists(fileAttempt) {
+		record, err := st.readAttempt()
+		if err != nil {
+			return nil, refuse(subprocess.RefusedUnknown,
+				"the attempt record at %s cannot be read (%v): this attempt is held for a person", dir, err)
+		}
+		if record.SettledElsewhere == nil || record.SettledElsewhere.JobID != jobID {
+			return nil, refuse(subprocess.RefusedLive,
+				"the attempt record at %s is %s's, not a ruling on %s: nothing is re-described over it",
+				dir, record.JobID, jobID)
+		}
+		return handleFor(record), nil
+	}
+	record := &attemptRecord{
+		SchemaVersion: stateSchemaVersion,
+		JobID:         spec.JobID,
+		Attempt:       e.opts.Attempt,
+		TickID:        tickOf(spec),
+		State:         dir,
+		BaseSHA:       spec.Source.BaseSHA,
+		Branch:        branch,
+		WriteRef:      spec.Source.WriteRef,
+		Detail: fmt.Sprintf("rules on run %s's attempt %d (%s), which settled succeeded before that run ended: %s",
+			runID, attempt, jobID, evidence),
+		// The run whose container pushed the branch: the collect's per-run
+		// landing fallback is spelled with it.
+		RunID:   runID,
+		EpicID:  e.opts.EpicID,
+		Role:    spec.Role,
+		BaseRef: e.opts.BaseRef,
+		Title:   e.opts.Title,
+		Model:   e.opts.Model,
+		Harness: e.opts.Harness,
+		Adopted: true,
+		Spec:    spec,
+		SettledElsewhere: &settledElsewhere{RunID: runID, JobID: jobID, Attempt: attempt,
+			State: subprocess.StateSucceeded, Evidence: evidence},
+		IssuedAt: e.stamp(),
+	}
+	if err := st.writeAttempt(record); err != nil {
+		return nil, err
+	}
+	return handleFor(record), nil
+}
+
 // attemptOwnJobID is the job id of an attempt's own job — the door's
 // attemptJobID (cloudflare/src/sandbox-executor.ts) and the reconciler's,
 // one spelling: `run-<run>/tick-<tick>/attempt-<n>`.
@@ -593,6 +660,17 @@ func (e *Executor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.
 		return nil, fmt.Errorf("handle carries attempt %d: the door addresses an attempt by a positive integer", h.Attempt)
 	}
 	full, record, resolveErr := payload.resolved()
+	// Another run's settled attempt this run's attempt rules on: the door
+	// answers only for its own run, and the settlement is already recorded.
+	if record != nil && record.SettledElsewhere != nil {
+		return &subprocess.JobStatus{
+			SchemaVersion: subprocess.SchemaVersion,
+			JobID:         h.JobID,
+			State:         record.SettledElsewhere.State,
+			Terminal:      true,
+			ObservedAt:    e.stamp(),
+		}, nil
+	}
 	tickID := full.TickID
 	if tickID == "" {
 		if resolveErr != nil {

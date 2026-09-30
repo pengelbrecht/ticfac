@@ -837,6 +837,49 @@ export async function sandboxJobSettled(
   return { state: row.state === "completed" ? "completed" : "failed", exit_code: row.exit_code };
 }
 
+/** One attempt's own job, as the factory recorded it settled (migration 0019). */
+export type SettledSandboxAttempt = {
+  tick_id: string;
+  attempt: number;
+  /** The work process's terminal state: `completed` exited, `failed` did not finish. */
+  state: "completed" | "failed";
+  exit_code: number | null;
+  at: string;
+};
+
+/**
+ * Every attempt of one run whose OWN job the factory recorded settled, oldest
+ * first. Role jobs under an attempt number (a repair, a resolve) are left out:
+ * this is the answer to "did the attempt itself finish?", which a run that
+ * takes over a dead run's claim asks before it redispatches work that is
+ * already done (takeover.go, hn6's ltg).
+ */
+export async function listSettledSandboxAttempts(
+  db: D1Database,
+  runID: string,
+): Promise<SettledSandboxAttempt[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT tick_id, attempt, state, exit_code, "at" FROM sandbox_job_settled ` +
+        `WHERE run_id = ? AND job = '' ORDER BY "at", tick_id, attempt`,
+    )
+    .bind(runID)
+    .all<{
+      tick_id: string;
+      attempt: number;
+      state: string;
+      exit_code: number | null;
+      at: string;
+    }>();
+  return (results ?? []).map((row) => ({
+    tick_id: row.tick_id,
+    attempt: row.attempt,
+    state: row.state === "completed" ? "completed" : "failed",
+    exit_code: row.exit_code,
+    at: row.at,
+  }));
+}
+
 /** One job's log cursor (migration 0020, tick 86y). */
 export type SandboxJobLogCursor = {
   /** The work process the cursor belongs to. */
