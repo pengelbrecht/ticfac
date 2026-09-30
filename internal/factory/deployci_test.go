@@ -118,9 +118,9 @@ func TestCIDeploysTheFactoryFromTicfac(t *testing.T) {
 
 // TestCIDeploysMainOnlyAfterCIPassed pins the operator's 2026-09-29 decision:
 // GitHub Actions is the normal way the factory is deployed, so main keeps it
-// current — but only a commit CI passed, one deploy at a time, never under a
-// live run without first waiting for it, and every deploy leaves a record of
-// what it shipped where the operator looks.
+// current — but only a commit CI passed, one deploy at a time, never taking a
+// live run's containers (the rollout grace period, not a wait), and every
+// deploy leaves a record of what it shipped where the operator looks.
 func TestCIDeploysMainOnlyAfterCIPassed(t *testing.T) {
 	t.Parallel()
 	workflow := readDeployWorkflow(t)
@@ -144,10 +144,30 @@ func TestCIDeploysMainOnlyAfterCIPassed(t *testing.T) {
 	workflowMustContain(t, workflow, "factory_deployment",
 		"the path check diffs against the commit the factory actually runs, so a superseded or skipped deploy is not lost")
 
-	workflowMustContain(t, workflow, "ticfac cloud status --json",
-		"the deploy asks the factory whether a run is live before deploying under it")
-	workflowMustContain(t, workflow, "limit=3600",
-		"the live-run wait is bounded: one long run must not pin the factory to old code")
+	// No live-run wait: the rollout grace period is what keeps a deploy off a
+	// live run's containers, and the deploy names the runs holding the old
+	// image instead. The guard that waited up to an hour checked once, before
+	// a rollout that outlived it, and could not see --cloud-workers runs.
+	workflowMustNotContain(t, workflow, "ticfac cloud status --json",
+		"the deploy must not wait on live runs: rollout_active_grace_period protects their containers, and the wait only delayed deploys")
+	workflowMustContain(t, workflow, "rollout_active_grace_period",
+		"the workflow must say what protects a live run now that it does not wait for one")
+	workflowMustContain(t, workflow, "held by live run",
+		"the summary must name the runs still holding instances on the previous image")
+	root, err := contracts.RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	toml, err := os.ReadFile(filepath.Join(root, "cloudflare", "wrangler.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(toml), "\nrollout_active_grace_period = 86400\n") {
+		t.Error("cloudflare/wrangler.toml no longer sets rollout_active_grace_period = 86400 — the deploy workflow " +
+			"deploys under live runs on the strength of it; restore it or restore a live-run wait")
+	}
+	workflowMustContain(t, workflow, "WRANGLER_DOCKER_BIN: ${{ github.workspace }}/.github/scripts/wrangler-docker.sh",
+		"the image push must go through the wrapper that logs in with a credential outliving the push (run 36735949343)")
 
 	workflowMustContain(t, workflow, "GITHUB_STEP_SUMMARY",
 		"the job summary records what was deployed")
