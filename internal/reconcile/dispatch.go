@@ -9,6 +9,7 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1202,7 +1203,53 @@ func (r *Reconciler) disposition(record runstate.Attempt, marker attemptHandle) 
 	if recorded := r.recordedAttemptHead(marker); recorded != "" && r.integrated(recorded) {
 		return integratedAttempt, ""
 	}
+	// Rejected only because a resume tried to START it after it had settled
+	// — and never collected (epic hn6's cloud run: ltg succeeded, and the
+	// next incarnation's start was refused "already settled" and recorded as
+	// the rejection). Its verdict was never read, so the empty write ref says
+	// nothing about its work: it is adopted, and adoption collects it.
+	if r.settledButNeverCollected(record.TickID, record.Attempt) {
+		return adoptAttempt, ""
+	}
 	return redispatchAttempt, ""
+}
+
+// settledStartRefusal is the reason a resume records when an executor refused
+// to START an attempt because it had already settled (startFailure's
+// RefusedCollect over RefusedSettled): the tick and the attempt number it
+// names.
+//
+// Anchored: the run's closing summary quotes the refusal that stopped it,
+// and a quote is not a second refusal.
+var settledStartRefusal = regexp.MustCompile(`^the executor refused to start (\S+): attempt (\d+) of \S+ already settled as`)
+
+// settledButNeverCollected says the run's only rejection of this attempt is a
+// start refused as settled — no collect verdict was ever recorded for it —
+// and that refusal was met once. A second one is a reattach that already
+// failed; adopting again would loop, so the attempt goes the ordinary way.
+func (r *Reconciler) settledButNeverCollected(tick string, attempt int) bool {
+	history, err := r.store.CheckpointHistory()
+	if err != nil {
+		return false
+	}
+	named := regexp.MustCompile(`(^|[^A-Za-z0-9_-])` + regexp.QuoteMeta(tick) + `($|[^A-Za-z0-9_-])`)
+	refusals, previous := 0, ""
+	for _, checkpoint := range history {
+		reason := checkpoint.Reason
+		if reason == previous || !named.MatchString(reason) {
+			previous = reason
+			continue
+		}
+		previous = reason
+		if m := recordedVerdict.FindStringSubmatch(reason); m != nil &&
+			strings.Contains(reason, r.attemptName(tick, attempt)) {
+			return false // a collect ruled on it
+		}
+		if m := settledStartRefusal.FindStringSubmatch(reason); m != nil && m[1] == tick && m[2] == strconv.Itoa(attempt) {
+			refusals++
+		}
+	}
+	return refusals == 1
 }
 
 // recordedAttemptHead is the attempt's head as the run's own durable records

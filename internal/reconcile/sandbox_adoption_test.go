@@ -104,6 +104,9 @@ type fakeSandboxDoor struct {
 	// and collects the collects the executor was asked for.
 	reattaches int
 	collects   int
+	// refuseReattach makes the client unable to reattach, which is the
+	// client before epic hn6's fix: the start refused as settled stands.
+	refuseReattach bool
 }
 
 // settle finishes the named container's work: it is terminal from now on,
@@ -567,6 +570,10 @@ func (e *doorExecutor) ReattachSettled(spec *subprocess.JobSpec) (*subprocess.Jo
 		return nil, fmt.Errorf("attempt %d of %s has not settled", id.attempt, id.tick)
 	}
 	e.door.mu.Lock()
+	if e.door.refuseReattach {
+		e.door.mu.Unlock()
+		return nil, fmt.Errorf("this client cannot reattach a settled attempt")
+	}
 	e.door.reattaches++
 	container := e.door.containers[id]
 	e.door.mu.Unlock()
@@ -783,6 +790,54 @@ func TestAnAttemptThatSettledWhileNobodyWatchedIsCollectedNotStarted(t *testing.
 	}
 	if collected == 0 {
 		t.Error("the settled attempt was never collected: its work is the verdict, not a refusal to start")
+	}
+}
+
+// TestARunThatRejectedASettledAttemptCollectsItOnRestart is the state epic
+// hn6's cloud run was left in: a resume STARTED the settled attempt, the
+// start was refused as settled, and the refusal was recorded as the
+// attempt's rejection — with its work on the container's landing branch and
+// nothing on its write ref. A restart must collect it, never redispatch it
+// and redo the work.
+func TestARunThatRejectedASettledAttemptCollectsItOnRestart(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{gate: cloudGate})
+	door := newFakeSandboxDoor("r-fixture")
+
+	_, _, err := runDoorIncarnation(t, f, f.Repo, door, f.StateRoot, stopAt("a1", StageDispatched))
+	killedAfter(t, err, "a1", StageDispatched)
+	var id doorIdentity
+	door.mu.Lock()
+	for key := range door.containers {
+		id = key
+	}
+	door.refuseReattach = true
+	door.mu.Unlock()
+	door.settle(id, subprocess.StateSucceeded)
+
+	// The incarnation that rejected it: the settled start refusal stands.
+	second := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "second"))
+	rejecting, _, _ := runDoorIncarnation(t, f, second, door, filepath.Join(f.Root, "second-state"), nil)
+	if got := rejecting.Stages("a1"); !contains(got, StageRejected) {
+		t.Fatalf("the fixture did not reach hn6's state (a1 rejected over a settled start): %v", got)
+	}
+
+	door.mu.Lock()
+	door.refuseReattach = false
+	door.mu.Unlock()
+	third := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "third"))
+	restarted, _, _ := runDoorIncarnation(t, f, third, door, filepath.Join(f.Root, "third-state"), nil)
+
+	got := restarted.Stages("a1")
+	if contains(got, StageRedispatched) || contains(got, StageDispatched) {
+		t.Errorf("the restart redispatched the settled attempt rather than collecting it: %v", got)
+	}
+	if boots := door.bootCount(); boots != 1 {
+		t.Errorf("the factory booted %d containers, want 1", boots)
+	}
+	if _, collected := door.reattachAndCollectCounts(); collected == 0 {
+		t.Errorf("the restart never collected the settled attempt: %v", got)
 	}
 }
 
