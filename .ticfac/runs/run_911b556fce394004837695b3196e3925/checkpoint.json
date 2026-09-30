@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_911b556fce394004837695b3196e3925",
   "epic_id": "hn6",
-  "sequence": 6,
+  "sequence": 7,
   "state": "failed",
-  "reason": "the executor refused to start 3gk: attempt 1 of run-run_911b556fce394004837695b3196e3925/tick-3gk/attempt-1 already settled as failed under this identity: a retry is a new attempt number, not this one again",
-  "updated_at": "2026-09-30T12:13:33Z",
+  "reason": "3gk did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: the executor refused to start 3gk: attempt 1 of run-run_911b556fce394004837695b3196e3925/tick-3gk/attempt-1 already settled as failed under this identity: a retry is a new attempt number, not this one again",
+  "updated_at": "2026-09-30T12:13:38Z",
   "ticks": [
     {
       "tick_id": "3gk",
