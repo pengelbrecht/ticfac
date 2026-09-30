@@ -18,6 +18,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runprogress"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/sandboximage"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -2573,6 +2574,10 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 				status.State, overran.Round(time.Second), r.wallOf(marker), lastObservation(status))
 			return status, nil
 		}
+		if line := r.carriedNoWorkSettle(marker, status); line != "" {
+			r.record(marker.TickID, StageWaiting, "%s", line)
+			return status, nil
+		}
 		if status.State != subprocess.StateSucceeded && len(status.Observations) > 0 {
 			// A failure's settle line carries the executor's last word — for a
 			// sandbox worker, its exit code and what the code means (epic hn6:
@@ -2695,6 +2700,46 @@ func (r *Reconciler) announceNudges(tick string, status *subprocess.JobStatus) {
 // only party that can see the substrate, and its observations are how it says
 // what it saw — "the interrupt was delivered but the agent has not exited" is
 // a different first move from "the supervisor is gone".
+// noWorkExit is the sandbox worker image's no-work exit as the executor's
+// settle observation spells it ("… exited 10 (…)").
+var noWorkExit = regexp.MustCompile(`\bexited ` + strconv.Itoa(sandboximage.ExitWorkerNoWork) + `\b`)
+
+// carriedNoWorkSettle is the settle line for a CARRIED attempt whose worker
+// container settled on its no-work exit, or "" for any other settle.
+//
+// The container counts its work commits from the base it was booted at, and a
+// carried attempt is booted AT the carried head (planDispatch): a worker that
+// finds the carried work complete and correctly adds nothing exits "no work
+// commits", and the door settles it failed. That is true of the worker and
+// false of the attempt — the collect delivers the carried work
+// (deliverCarriedWork) and the gate decides. Epic hn6, run_3f034e68: 7uv and
+// 378 each read "settled as failed" and were then delivered and merged, and
+// the settle line was the one a person took for two finished ticks lost.
+func (r *Reconciler) carriedNoWorkSettle(marker attemptHandle, status *subprocess.JobStatus) string {
+	if marker.ResumedFrom == nil || status == nil || status.State != subprocess.StateFailed {
+		return ""
+	}
+	last := lastObservation(status)
+	if !noWorkExit.MatchString(last) {
+		return ""
+	}
+	return fmt.Sprintf("settled with no commit of its own on the work it was carried from (%s): that is the "+
+		"worker's no-work exit, not a failed attempt — the work %s left on %s is this attempt's delivery, "+
+		"which the collect measures from the base that work was cut from, and the gate still decides what merges",
+		last, r.carriedFromName(marker), branchOf(marker.ResumedFrom.WriteRef))
+}
+
+// carriedFromName names the attempt a carried attempt continues: this run's
+// own name for it, or — for a claim taken over from another run — that run's
+// attempt, whose number in this run names a different attempt.
+func (r *Reconciler) carriedFromName(marker attemptHandle) string {
+	from := marker.ResumedFrom
+	if from.RunID != "" && from.RunID != r.runID {
+		return fmt.Sprintf("run %s's attempt %d of %s", from.RunID, from.Attempt, from.TickID)
+	}
+	return r.attemptName(from.TickID, from.Attempt)
+}
+
 func lastObservation(status *subprocess.JobStatus) string {
 	if status == nil || len(status.Observations) == 0 {
 		return "the executor recorded no observation about it"
@@ -3241,7 +3286,7 @@ func (r *Reconciler) deliverCarriedWork(marker attemptHandle, collected *subproc
 		"%s added no commit to the work it was carried from, so it delivers that work: %d commit(s) from %s to "+
 			"the carried head %s, measured from the base %s was cut from",
 		r.attemptName(marker.TickID, marker.Attempt), commits, short(base), short(carried),
-		r.attemptName(marker.ResumedFrom.TickID, marker.ResumedFrom.Attempt))
+		r.carriedFromName(marker))
 	return &delivered
 }
 

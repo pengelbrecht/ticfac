@@ -387,6 +387,21 @@ install_boundary_guard() {
 	# spawn. It finds its own ledger beside itself rather than through the
 	# environment, because an agent that unset a variable would otherwise get
 	# a refusal nobody hears about.
+	#
+	# What it refuses is a WRITE to THIS checkout's tracker, and only that
+	# (epic hn6, run_3f034e68). 7uv's report listed some seventy "the agent ran
+	# `tk version --json`" lines as a boundary violation: every one was the
+	# startup probe of ticfac's own tk client, run by the repository's tests
+	# under `make gate` — and the refusal made those tests run against a tk
+	# that does not answer. So a READ passes through to the real tk (the
+	# manifest's read commands and their read-only kin), and so does any call
+	# against a tracker that is not this checkout's (a test fixture's temporary
+	# repository): neither can write the state the orchestrator owns. The hook
+	# and the sweep below are unchanged, so a read that wrote anyway is still
+	# caught where it lands.
+	command -v tk >"$guard_dir/real-tk" 2>/dev/null || : >"$guard_dir/real-tk"
+	git -C "$workdir" rev-parse --path-format=absolute --git-common-dir >"$guard_dir/checkout" 2>/dev/null ||
+		: >"$guard_dir/checkout"
 	cat >"$guard_dir/tk" <<-'SHIM'
 		#!/usr/bin/env bash
 		# Installed by ticks-worker (tick dxk). The orchestrator owns tick state;
@@ -394,6 +409,29 @@ install_boundary_guard() {
 		# resolves to for the harness and everything it spawns.
 		set -u
 		_guard="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)"
+		_real="$(cat "${_guard}/real-tk" 2>/dev/null)"
+		_checkout="$(cat "${_guard}/checkout" 2>/dev/null)"
+		_pass=""
+		case "${1:-}" in
+		version | --version | help | --help | -h | show | list | ls | ready | next | deps | graph | status | \
+			blocked | notes | labels | stats | whoami)
+			_pass=1
+			;;
+		esac
+		for _a in "$@"; do
+			case "$_a" in --help | -h) _pass=1 ;; esac
+		done
+		if [ -z "$_pass" ] && [ -n "$_checkout" ]; then
+			_here="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"
+			[ "$_here" = "$_checkout" ] || _pass=1
+		fi
+		if [ -n "$_pass" ]; then
+			if [ -n "$_real" ] && [ -x "$_real" ]; then
+				exec "$_real" "$@"
+			fi
+			printf 'ticks-worker: tk is not installed in this container.\n' >&2
+			exit 127
+		fi
 		printf 'ran `tk %s`\n' "$*" >>"${_guard}/attempts" 2>/dev/null || true
 		{
 			printf 'ticks-worker: tk is not available to a worker agent.\n'
@@ -464,10 +502,15 @@ install_boundary_guard() {
 # salvage to find.
 boundary_attempts() {
 	local line paths
+	# One line per distinct attempt, in the order first made, with a count
+	# when it repeated: a wall of identical lines buries the one that differs.
 	if [[ -n $boundary_ledger && -r $boundary_ledger ]]; then
-		while IFS= read -r line; do
-			[[ -z $line ]] || printf 'the agent %s\n' "$line"
-		done <"$boundary_ledger"
+		awk 'NF { if (!($0 in n)) order[++k] = $0; n[$0]++ }
+			END { for (i = 1; i <= k; i++) {
+				line = "the agent " order[i]
+				if (n[order[i]] > 1) line = line " (" n[order[i]] " times)"
+				print line
+			} }' "$boundary_ledger"
 	fi
 	paths="$(git -C "$workdir" diff --name-only "${base_sha}...HEAD" -- .tick 2>/dev/null)"
 	while IFS= read -r line; do
