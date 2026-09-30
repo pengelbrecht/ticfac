@@ -233,3 +233,85 @@ func lastObservationDetail(status *JobStatus) string {
 	}
 	return status.Observations[len(status.Observations)-1].Detail
 }
+
+// The whole-tail read the dashboard's activity window answers from (hn6,
+// tick ltg): every dated line's stamp — the moments the worker was seen
+// doing something — and the LAST tool call as one bounded line, in both
+// harnesses' own block spellings.
+func TestReadTranscriptEventsAnswersTheWindowAndTheLastToolCall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(EnvTranscriptHome, home)
+	cwd := t.TempDir()
+
+	writeTranscript(t, "pi", cwd,
+		map[string]any{"type": "session", "timestamp": "2026-09-28T06:43:07.734Z"},
+		map[string]any{"type": "message", "timestamp": "2026-09-28T06:44:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "toolCall", "name": "bash", "arguments": map[string]any{"command": "ls -la"}},
+				map[string]any{"type": "toolCall", "name": "bash",
+					"arguments": map[string]any{"command": "go test ./internal/reconcile"}},
+			}}})
+	events, ok := ReadTranscriptEvents(home, "pi", cwd)
+	if !ok {
+		t.Fatal("the transcript stands and the tail reader answered nothing")
+	}
+	if len(events.Events) != 2 {
+		t.Errorf("the tail read %d dated events, want 2: every dated line is a moment", len(events.Events))
+	}
+	if at, err := time.Parse(time.RFC3339Nano, "2026-09-28T06:44:00.000Z"); err != nil || !events.Events[1].Equal(at) {
+		t.Errorf("the events read %v, want the lines' own stamps in file order", events.Events)
+	}
+	// The LAST tool call of the last message that carries one — the second
+	// block, not the first.
+	if events.LastToolCall != "bash: go test ./internal/reconcile" {
+		t.Errorf("the last tool call is %q, want the tool's own name plus its first argument", events.LastToolCall)
+	}
+	if at, err := time.Parse(time.RFC3339Nano, "2026-09-28T06:44:00.000Z"); err != nil || !events.LastToolAt.Equal(at) {
+		t.Errorf("the last tool call is stamped %v, want its own line's stamp", events.LastToolAt)
+	}
+
+	// Claude Code's own spellings: tool_use blocks, the arguments in "input".
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "assistant", "timestamp": "2026-09-28T08:39:19.791Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "tool_use", "name": "Bash", "input": map[string]any{"command": "go vet ./..."}},
+			}}})
+	events, ok = ReadTranscriptEvents(home, "claude", cwd)
+	if !ok || events.LastToolCall != "Bash: go vet ./..." {
+		t.Errorf("the claude tail read %q (ok %t), want the tool_use block's own name and first argument",
+			events.LastToolCall, ok)
+	}
+
+	// The line stays bounded however long the argument was.
+	long := strings.Repeat("word ", 40)
+	writeTranscript(t, "pi", cwd,
+		map[string]any{"type": "message", "timestamp": "2026-09-28T09:00:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "toolCall", "name": "bash", "arguments": map[string]any{"command": long}},
+			}}})
+	events, _ = ReadTranscriptEvents(home, "pi", cwd)
+	if len([]rune(events.LastToolCall)) > 80 {
+		t.Errorf("the last tool call line is %d runes, want it bounded to 80", len([]rune(events.LastToolCall)))
+	}
+	if !strings.HasPrefix(events.LastToolCall, "bash: ") || !strings.HasSuffix(events.LastToolCall, "…") {
+		t.Errorf("the bounded line %q lost the tool's name or the cut's ellipsis", events.LastToolCall)
+	}
+
+	// A tool call whose first argument is not text (a list) carries the tool's
+	// name alone: never a guessed argument.
+	writeTranscript(t, "pi", cwd,
+		map[string]any{"type": "message", "timestamp": "2026-09-28T09:01:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "toolCall", "name": "todoWrite",
+					"arguments": map[string]any{"todos": []any{map[string]any{"id": "1"}}}},
+			}}})
+	events, _ = ReadTranscriptEvents(home, "pi", cwd)
+	if events.LastToolCall != "todoWrite" {
+		t.Errorf("the last tool call is %q, want the tool's name alone for a non-text first argument", events.LastToolCall)
+	}
+
+	// Nothing to read: a working directory with no session at all.
+	if _, ok := ReadTranscriptEvents(home, "pi", t.TempDir()); ok {
+		t.Error("a worktree with no transcript answered events")
+	}
+}

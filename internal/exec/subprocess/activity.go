@@ -285,13 +285,19 @@ var claudeSlug = regexp.MustCompile(`[^A-Za-z0-9]`)
 //
 // codex keeps its rollouts by date, not by directory, and is not read.
 func TranscriptDir(kind, cwd string) string {
+	return transcriptDirIn(transcriptHome(), kind, cwd)
+}
+
+// transcriptDirIn is TranscriptDir against the home directory the caller
+// names — the whole-tail reader (ReadTranscriptEvents) passes its own, so a
+// reader's tests point a temp dir at it directly.
+func transcriptDirIn(home, kind, cwd string) string {
 	if cwd == "" {
 		return ""
 	}
 	if resolved, err := filepath.EvalSymlinks(cwd); err == nil {
 		cwd = resolved
 	}
-	home := transcriptHome()
 	switch kind {
 	case "pi":
 		agentDir := filepath.Join(home, ".pi", "agent")
@@ -319,9 +325,26 @@ func LastTranscriptEvent(kind, cwd string) (TranscriptEvent, bool) {
 	if dir == "" {
 		return TranscriptEvent{}, false
 	}
+	path, mod, ok := newestTranscript(dir)
+	if !ok {
+		return TranscriptEvent{}, false
+	}
+	event, ok := lastEventIn(path)
+	if !ok {
+		// A transcript with no dated event is still a file the harness
+		// wrote: its mtime is the honest fallback.
+		return TranscriptEvent{At: mod, Kind: "transcript written", Path: path}, true
+	}
+	event.Path = path
+	return event, true
+}
+
+// newestTranscript is the newest session transcript in one harness's session
+// directory, by the file's own mtime — the file the harness is writing now.
+func newestTranscript(dir string) (path string, mod time.Time, ok bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return TranscriptEvent{}, false
+		return "", time.Time{}, false
 	}
 	type candidate struct {
 		path string
@@ -339,17 +362,10 @@ func LastTranscriptEvent(kind, cwd string) (TranscriptEvent, bool) {
 		files = append(files, candidate{filepath.Join(dir, e.Name()), info.ModTime()})
 	}
 	if len(files) == 0 {
-		return TranscriptEvent{}, false
+		return "", time.Time{}, false
 	}
 	sort.Slice(files, func(i, j int) bool { return files[i].mod.After(files[j].mod) })
-	event, ok := lastEventIn(files[0].path)
-	if !ok {
-		// A transcript with no dated event is still a file the harness
-		// wrote: its mtime is the honest fallback.
-		return TranscriptEvent{At: files[0].mod, Kind: "transcript written", Path: files[0].path}, true
-	}
-	event.Path = files[0].path
-	return event, true
+	return files[0].path, files[0].mod, true
 }
 
 // transcriptLine is the union of the pi and claude line shapes this reads.
@@ -362,27 +378,59 @@ type transcriptLine struct {
 	} `json:"message"`
 }
 
-// lastEventIn reads the tail of a transcript and answers its last dated
-// event.
-func lastEventIn(path string) (TranscriptEvent, bool) {
+// transcriptBlock is one content block as far as the tail readers read it:
+// the block's own type — the same vocabulary classify names events by, so a
+// tool call is read here by the spelling the stuck watch already knows —
+// the tool a toolCall (pi) or tool_use (claude) block names, and the
+// arguments it was called with: pi spells the object "arguments", Claude
+// Code "input".
+type transcriptBlock struct {
+	Type      string          `json:"type"`
+	Name      string          `json:"name"`
+	Arguments json.RawMessage `json:"arguments"`
+	Input     json.RawMessage `json:"input"`
+}
+
+// transcriptTailBytes is how much of a session transcript is ever read: the
+// newest event is at the end and a whole-tail window reads minutes, and a
+// session can grow past what any status read should haul into memory.
+const transcriptTailBytes = 256 << 10
+
+// tailLines reads the last transcriptTailBytes of a transcript, aligned
+// forward to the next newline so only whole lines parse. A file smaller
+// than the bound reads whole.
+func tailLines(path string) ([][]byte, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return TranscriptEvent{}, false
+		return nil, err
 	}
 	defer f.Close()
-	const tail = 256 << 10
-	if info, err := f.Stat(); err == nil && info.Size() > tail {
-		_, _ = f.Seek(info.Size()-tail, io.SeekStart)
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	if info.Size() > transcriptTailBytes {
+		_, _ = f.Seek(info.Size()-transcriptTailBytes, io.SeekStart)
 	}
 	raw, err := io.ReadAll(f)
 	if err != nil {
-		return TranscriptEvent{}, false
+		return nil, err
 	}
 	var lines [][]byte
 	sc := bufio.NewScanner(bytes.NewReader(raw))
-	sc.Buffer(make([]byte, 0, 64<<10), tail+1)
+	sc.Buffer(make([]byte, 0, 64<<10), transcriptTailBytes+1)
 	for sc.Scan() {
 		lines = append(lines, append([]byte(nil), sc.Bytes()...))
+	}
+	return lines, nil
+}
+
+// lastEventIn reads the tail of a transcript and answers its last dated
+// event.
+func lastEventIn(path string) (TranscriptEvent, bool) {
+	lines, err := tailLines(path)
+	if err != nil {
+		return TranscriptEvent{}, false
 	}
 	for i := len(lines) - 1; i >= 0; i-- {
 		var line transcriptLine
@@ -397,6 +445,134 @@ func lastEventIn(path string) (TranscriptEvent, bool) {
 		return TranscriptEvent{At: at, Kind: kind, ToolInFlight: inFlight}, true
 	}
 	return TranscriptEvent{}, false
+}
+
+// TranscriptEvents is the whole-tail read of one worktree's newest session
+// transcript: the stamp of every dated line — the moments the worker was
+// seen doing something, which the status model buckets into its activity
+// window — and the LAST tool call as a person reads it: the tool's own name
+// plus its first argument, one bounded line, with its own stamp.
+type TranscriptEvents struct {
+	Events       []time.Time
+	LastToolCall string
+	LastToolAt   time.Time
+}
+
+// transcriptActionBound is the last-action line's own bound: one line a
+// person reads in a glance ("bash: go test ./internal/reconcile").
+const transcriptActionBound = 80
+
+// ReadTranscriptEvents reads the newest session transcript a harness of the
+// given kind kept for a working directory, under the home named — at most
+// the last transcriptTailBytes — and answers its dated events and its last
+// tool call. False when there is nothing to read: a harness whose layout is
+// not known, no session yet, or a session whose no line carries a stamp (a
+// transcript that states no moment states nothing about activity).
+func ReadTranscriptEvents(home, kind, cwd string) (TranscriptEvents, bool) {
+	if home == "" {
+		home = transcriptHome()
+	}
+	dir := transcriptDirIn(home, kind, cwd)
+	if dir == "" {
+		return TranscriptEvents{}, false
+	}
+	path, _, ok := newestTranscript(dir)
+	if !ok {
+		return TranscriptEvents{}, false
+	}
+	lines, err := tailLines(path)
+	if err != nil {
+		return TranscriptEvents{}, false
+	}
+	out := TranscriptEvents{}
+	for _, raw := range lines {
+		var line transcriptLine
+		if json.Unmarshal(raw, &line) != nil || line.Timestamp == "" {
+			continue
+		}
+		at, err := time.Parse(time.RFC3339Nano, line.Timestamp)
+		if err != nil {
+			continue
+		}
+		out.Events = append(out.Events, at)
+		if call, ok := lastToolCall(line); ok {
+			out.LastToolCall, out.LastToolAt = call, at
+		}
+	}
+	if len(out.Events) == 0 {
+		return TranscriptEvents{}, false
+	}
+	return out, true
+}
+
+// lastToolCall answers the LAST tool call one transcript line carries: the
+// last of its toolCall or tool_use blocks, rendered as the tool's own name
+// plus its first argument, bounded to one line. False when the line carries
+// no tool call at all.
+func lastToolCall(line transcriptLine) (string, bool) {
+	if line.Message == nil {
+		return "", false
+	}
+	var blocks []transcriptBlock
+	if json.Unmarshal(line.Message.Content, &blocks) != nil {
+		return "", false
+	}
+	for i := len(blocks) - 1; i >= 0; i-- {
+		block := blocks[i]
+		if block.Type != "toolCall" && block.Type != "tool_use" {
+			continue
+		}
+		name := block.Name
+		if name == "" {
+			name = "tool call"
+		}
+		args := block.Arguments
+		if len(args) == 0 {
+			args = block.Input
+		}
+		if arg := firstArgument(args); arg != "" {
+			return boundLine(name + ": " + arg), true
+		}
+		return boundLine(name), true
+	}
+	return "", false
+}
+
+// firstArgument reads the first argument of a tool call in the order the
+// transcript wrote it — the command a bash call carries, the path a read or
+// an edit carries — flattened to one line. An object whose first value is
+// not text (a list, a nested object), an empty object and a non-object all
+// answer "": the tool's own name is then the honest summary, never a guess
+// at which argument mattered.
+func firstArgument(raw json.RawMessage) string {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	tok, err := dec.Token()
+	if err != nil || tok != json.Delim('{') {
+		return ""
+	}
+	if _, err := dec.Token(); err != nil {
+		return ""
+	}
+	var value json.RawMessage
+	if err := dec.Decode(&value); err != nil {
+		return ""
+	}
+	var text string
+	if json.Unmarshal(value, &text) != nil {
+		return ""
+	}
+	return text
+}
+
+// boundLine flattens a snippet to a single line no longer than
+// transcriptActionBound characters, cut with an ellipsis when it had to be.
+func boundLine(text string) string {
+	text = strings.Join(strings.Fields(text), " ")
+	runes := []rune(text)
+	if len(runes) <= transcriptActionBound {
+		return text
+	}
+	return string(runes[:transcriptActionBound-1]) + "…"
 }
 
 // classify names one transcript event.
