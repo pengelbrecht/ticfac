@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_911b556fce394004837695b3196e3925",
   "epic_id": "hn6",
-  "sequence": 14,
-  "state": "integrating",
-  "reason": "integrating 3gk attempt 3 into epic/hn6",
-  "updated_at": "2026-09-30T13:01:20Z",
+  "sequence": 15,
+  "state": "gating",
+  "reason": "running the integrated gate for 3gk on 2a3b2195dcc4",
+  "updated_at": "2026-09-30T13:06:27Z",
   "ticks": [
     {
       "tick_id": "3gk",
-      "state": "dispatched",
+      "state": "integrated",
       "attempt": 3
     },
     {
