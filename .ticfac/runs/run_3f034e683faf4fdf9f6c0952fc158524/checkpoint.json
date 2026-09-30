@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_3f034e683faf4fdf9f6c0952fc158524",
   "epic_id": "hn6",
-  "sequence": 12,
-  "state": "running",
-  "reason": "ltg is closed",
-  "updated_at": "2026-09-30T17:01:19Z",
+  "sequence": 13,
+  "state": "dispatching",
+  "reason": "dispatching zl1 as attempt 4",
+  "updated_at": "2026-09-30T17:01:32Z",
   "ticks": [
     {
       "tick_id": "378",
@@ -48,6 +48,10 @@
     },
     {
       "tick_id": "qjl",
+      "state": "ready"
+    },
+    {
+      "tick_id": "zl1",
       "state": "ready"
     }
   ],
