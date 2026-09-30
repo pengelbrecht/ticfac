@@ -3,6 +3,7 @@ package wirevocab
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -85,14 +86,63 @@ func drift(contract, live []string) (onlyContract, onlyLive []string) {
 	return
 }
 
-func assertDiff(t *testing.T, name string, contract, live []string) {
+func assertDiff(t *testing.T, pin pinCheck, name string, contract, live []string) {
 	t.Helper()
 	onlyContract, onlyLive := drift(contract, live)
 	if len(onlyContract) == 0 && len(onlyLive) == 0 {
 		return
 	}
-	t.Errorf("wire vocabulary drift in %s — bump internal/herd/wirevocab/herd-vocabulary.json deliberately: only in contract: %v; only in live herdr: %v",
-		name, onlyContract, onlyLive)
+	if pin.mismatch != "" {
+		t.Errorf("herdr VERSION MISMATCH, not necessarily a vocabulary bug: %s. The difference in %s: only in contract: %v; only in live herdr: %v",
+			pin.mismatch, name, onlyContract, onlyLive)
+		return
+	}
+	t.Errorf("wire vocabulary drift in %s within the pinned release (herdr %s) — bump internal/herd/wirevocab/herd-vocabulary.json deliberately: only in contract: %v; only in live herdr: %v",
+		name, pin.pinned, onlyContract, onlyLive)
+}
+
+// pinCheck compares the installed herdr against the release the contract
+// names (source.herdr_version, source.protocol). A drift on a host whose
+// herdr differs from the pin is a version mismatch first: the fix is a
+// deliberate re-snapshot against the new release (or installing the pinned
+// one), and the failure says so instead of reading as a broken contract.
+type pinCheck struct {
+	pinned   string
+	mismatch string
+}
+
+func checkPin(t *testing.T, v *Vocabulary, liveProtocol int) pinCheck {
+	t.Helper()
+	pin := pinCheck{pinned: v.Source.HerdrVersion}
+	installed := installedHerdrVersion(t)
+	var diffs []string
+	if installed != v.Source.HerdrVersion {
+		diffs = append(diffs, fmt.Sprintf("installed herdr %s, contract diffed against herdr %s", installed, v.Source.HerdrVersion))
+	}
+	if liveProtocol > 0 && liveProtocol != v.Source.Protocol {
+		diffs = append(diffs, fmt.Sprintf("installed protocol %d, contract protocol %d", liveProtocol, v.Source.Protocol))
+	}
+	if len(diffs) > 0 {
+		pin.mismatch = strings.Join(diffs, "; ") +
+			" — re-snapshot herd-vocabulary.json against the installed herdr (update source.herdr_version, source.protocol and the members), or install the pinned release"
+		t.Logf("herdr version mismatch: %s", pin.mismatch)
+	}
+	return pin
+}
+
+// installedHerdrVersion is the version `herdr --version` prints ("herdr
+// 0.9.3" -> "0.9.3"), or the raw output when it has another shape.
+func installedHerdrVersion(t *testing.T) string {
+	t.Helper()
+	out, err := exec.Command("herdr", "--version").Output()
+	if err != nil {
+		return "unknown (herdr --version: " + err.Error() + ")"
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) == 2 && fields[0] == "herdr" {
+		return fields[1]
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func assertNoDupes(t *testing.T, name string, live []string) {
@@ -152,6 +202,9 @@ func TestLiveVocabularyMatchesContract(t *testing.T) {
 	v := MustLoad()
 	doc := herdrJSON(t, "api", "schema", "--json")
 
+	liveProtocol, _ := doc["protocol"].(float64)
+	pin := checkPin(t, v, int(liveProtocol))
+
 	schemas, ok := doc["schemas"].(map[string]any)
 	if !ok {
 		t.Fatalf("live schema: no schemas object")
@@ -164,19 +217,19 @@ func TestLiveVocabularyMatchesContract(t *testing.T) {
 	// Methods and result discriminators, from the request/success envelopes.
 	liveMethods := liveConsts(t, request["oneOf"], "method", "request.oneOf")
 	assertNoDupes(t, "methods", liveMethods)
-	assertDiff(t, "methods", v.Methods.Members, liveMethods)
+	assertDiff(t, pin, "methods", v.Methods.Members, liveMethods)
 
 	responseResult := defsOf(t, success, "success_response", "ResponseResult")
 	liveResults := liveConsts(t, responseResult["oneOf"], "type", "ResponseResult.oneOf")
 	assertNoDupes(t, "result_discriminators", liveResults)
-	assertDiff(t, "result_discriminators", v.ResultDiscriminators.Members, liveResults)
+	assertDiff(t, pin, "result_discriminators", v.ResultDiscriminators.Members, liveResults)
 
 	// Both event-kind spellings.
 	liveEventKinds := liveEnum(t, defsOf(t, event, "event", "EventKind"), "EventKind")
-	assertDiff(t, "event_kinds", v.EventKinds.Members, liveEventKinds)
+	assertDiff(t, pin, "event_kinds", v.EventKinds.Members, liveEventKinds)
 
 	liveSubEventKinds := liveEnum(t, defsOf(t, subEvent, "subscription_event", "SubscriptionEventKind"), "SubscriptionEventKind")
-	assertDiff(t, "subscription_event_kinds", v.SubscriptionEventKinds.Members, liveSubEventKinds)
+	assertDiff(t, pin, "subscription_event_kinds", v.SubscriptionEventKinds.Members, liveSubEventKinds)
 
 	// Subscription types, with pane scoping derived from the variants whose
 	// required names pane_id — the same rule the client validates before
@@ -184,7 +237,7 @@ func TestLiveVocabularyMatchesContract(t *testing.T) {
 	subDefs := defsOf(t, request, "request", "Subscription")
 	liveSubs := liveConsts(t, subDefs["oneOf"], "type", "Subscription.oneOf")
 	assertNoDupes(t, "subscription_types", liveSubs)
-	assertDiff(t, "subscription_types", v.SubscriptionTypes.Members, liveSubs)
+	assertDiff(t, pin, "subscription_types", v.SubscriptionTypes.Members, liveSubs)
 
 	var livePaneScoped []string
 	for _, variant := range subDefs["oneOf"].([]any) {
@@ -201,14 +254,14 @@ func TestLiveVocabularyMatchesContract(t *testing.T) {
 			}
 		}
 	}
-	assertDiff(t, "subscription_types.pane_scoped", v.SubscriptionTypes.PaneScoped, livePaneScoped)
+	assertDiff(t, pin, "subscription_types.pane_scoped", v.SubscriptionTypes.PaneScoped, livePaneScoped)
 
 	// Status words.
 	liveStatuses := liveEnum(t, defsOf(t, request, "request", "AgentStatus"), "AgentStatus")
-	assertDiff(t, "agent_statuses", v.AgentStatuses.Members, liveStatuses)
+	assertDiff(t, pin, "agent_statuses", v.AgentStatuses.Members, liveStatuses)
 
 	livePaneStates := liveEnum(t, defsOf(t, request, "request", "PaneAgentState"), "PaneAgentState")
-	assertDiff(t, "pane_agent_states", v.PaneAgentStates.Members, livePaneStates)
+	assertDiff(t, pin, "pane_agent_states", v.PaneAgentStates.Members, livePaneStates)
 
 	// The small enums the client speaks.
 	for _, tc := range []struct {
@@ -224,10 +277,10 @@ func TestLiveVocabularyMatchesContract(t *testing.T) {
 	} {
 		if tc.name == "output_match_types" {
 			live := liveConsts(t, defsOf(t, request, "request", "OutputMatch")["oneOf"], "type", "OutputMatch.oneOf")
-			assertDiff(t, tc.name, tc.set.Members, live)
+			assertDiff(t, pin, tc.name, tc.set.Members, live)
 			continue
 		}
-		assertDiff(t, tc.name, tc.set.Members,
+		assertDiff(t, pin, tc.name, tc.set.Members,
 			liveEnum(t, defsOf(t, request, "request", tc.def), tc.def))
 	}
 
@@ -253,6 +306,7 @@ func TestLiveVocabularyMatchesContract(t *testing.T) {
 func TestLiveAgentKindsMatchContract(t *testing.T) {
 	needHerdr(t)
 	v := MustLoad()
+	pin := checkPin(t, v, 0)
 
 	cmd := exec.Command("herdr", "agent", "start", "--help")
 	var stdout, stderr bytes.Buffer
@@ -270,7 +324,7 @@ func TestLiveAgentKindsMatchContract(t *testing.T) {
 	for _, kind := range strings.Split(m[1], ",") {
 		live = append(live, strings.TrimSpace(kind))
 	}
-	assertDiff(t, "agent_kinds", v.AgentKinds.Members, live)
+	assertDiff(t, pin, "agent_kinds", v.AgentKinds.Members, live)
 }
 
 // schemaOf fetches schemas.<name> from the live dump.
