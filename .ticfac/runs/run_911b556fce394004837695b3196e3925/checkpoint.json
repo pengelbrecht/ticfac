@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_911b556fce394004837695b3196e3925",
   "epic_id": "hn6",
-  "sequence": 4,
-  "state": "dispatching",
-  "reason": "dispatching 7uv as attempt 2",
-  "updated_at": "2026-09-30T12:12:33Z",
+  "sequence": 5,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-09-30T12:13:25Z",
   "ticks": [
     {
       "tick_id": "3gk",
@@ -54,7 +54,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/hn6",
-    "source_sha": "846d7ba658bef50e9b4dcf1101da1acdad710740",
+    "source_sha": "1fba95c36c42b416c2d33b571cfdd022febbe05c",
     "integration_ref": "refs/heads/epic/hn6",
     "phase": "worker",
     "executor": null,
