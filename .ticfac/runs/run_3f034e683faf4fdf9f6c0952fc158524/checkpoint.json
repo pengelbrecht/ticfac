@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_3f034e683faf4fdf9f6c0952fc158524",
   "epic_id": "hn6",
-  "sequence": 13,
-  "state": "dispatching",
-  "reason": "dispatching zl1 as attempt 4",
-  "updated_at": "2026-09-30T17:01:32Z",
+  "sequence": 14,
+  "state": "running",
+  "reason": "zl1 is running as attempt 4",
+  "updated_at": "2026-09-30T17:01:47Z",
   "ticks": [
     {
       "tick_id": "378",
@@ -52,7 +52,8 @@
     },
     {
       "tick_id": "zl1",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 4
     }
   ],
   "provenance": {
