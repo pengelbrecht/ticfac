@@ -1,6 +1,7 @@
 package statusmodel
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
@@ -12,9 +13,10 @@ import (
 // parallel against a fixed shape. It computes NOTHING new beyond `recent`
 // and the two graph copies (`epic_title`, `gloss`); every other new field
 // comes out at its honest empty value, and THIS test pins exactly that
-// wave-1 half — the wave-2 ticks will replace the empty assertions with the
-// real derivations, and this test is the fence that says what the stubs
-// must not quietly leave out.
+// wave-1 half — the wave-2 ticks replace the empty assertions with the real
+// derivations as they fill their files (the verdict and the cost lines, the
+// wave-2 fills of tick 7uv, already are), and this test is the fence that
+// says what the builder must not quietly leave out.
 
 // pendingPipeline is the wave-1 pipeline cell: the role's own stage list,
 // every stage pending — what a renderer lays the cell out from before
@@ -112,25 +114,37 @@ func TestBuildEmitsTheDashboardFieldsEmpty(t *testing.T) {
 		t.Errorf("the worker's handle is %q, want null: no executor named it yet", *worker.Handle)
 	}
 
-	// The verdict: healthy with nothing recovered and nothing to say — the
-	// stub's answer, which the wave-2 verdict tick grows into the real one.
+	// The verdict: the wave-2 derivation (tick 7uv) — the fence keeps
+	// fencing, now over the real values. This run is alive and nothing is
+	// wrong (its one stall warning is ninety minutes old, far outside the
+	// window that degrades), so healthy, with the recoveries it got past by
+	// itself stated beside the word. verdict_test.go pins every rule.
 	if model.Health.Verdict.State != VerdictHealthy {
 		t.Errorf("the verdict state is %q, want healthy", model.Health.Verdict.State)
 	}
-	if model.Health.Verdict.Summary != "" {
-		t.Errorf("the verdict summary is %q, want empty", model.Health.Verdict.Summary)
+	if model.Health.Verdict.Summary != VerdictHealthy {
+		t.Errorf("the verdict summary is %q, want the word itself", model.Health.Verdict.Summary)
 	}
-	if model.Health.Verdict.Recovered == nil || len(model.Health.Verdict.Recovered) != 0 {
-		t.Errorf("the verdict's recovered list is %+v, want the empty list", model.Health.Verdict.Recovered)
+	wantRecovered := []Recovery{
+		{What: "net", Count: 1},
+		{What: "interventions", Count: 1},
+		{What: "wall clocks", Count: 1},
+	}
+	if !reflect.DeepEqual(model.Health.Verdict.Recovered, wantRecovered) {
+		t.Errorf("the verdict's recovered list is %+v, want %+v: the feed's own recovery lines",
+			model.Health.Verdict.Recovered, wantRecovered)
 	}
 
-	// The cost lines: none yet — the recorded_usd half still answers, and
-	// the lines are the wave-2 cost tick's to fill.
-	if model.Cost.Lines == nil {
-		t.Error("the cost lines are nil, want the empty list: the field is required")
+	// The cost lines: the wave-2 split (tick 7uv) — the decisions' own
+	// usage metered, the local rivers unmetered and saying so. cost_test.go
+	// pins every rule, including the never-$0.00 one.
+	wantLines := []CostLine{
+		{Source: CostSourceDecisions, Metered: true, USD: float64Ptr(0.04), Attempts: 1, Basis: "usage recorded on decision records"},
+		{Source: CostSourceClaude, Metered: false, USD: nil, Attempts: 1, Basis: "not metered (subscription)"},
+		{Source: CostSourcePiLocal, Metered: false, USD: nil, Attempts: 2, Basis: "not metered"},
 	}
-	if len(model.Cost.Lines) != 0 {
-		t.Errorf("the cost lines are %+v, want empty", model.Cost.Lines)
+	if !reflect.DeepEqual(model.Cost.Lines, wantLines) {
+		t.Errorf("the cost lines are %+v, want %+v", model.Cost.Lines, wantLines)
 	}
 
 	// recent: the one field this tick fills for real. The fixture's feed has

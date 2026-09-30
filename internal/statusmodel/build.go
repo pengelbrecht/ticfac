@@ -176,7 +176,7 @@ func Build(src Sources) Model {
 	m.Health = buildHealth(src.Feed)
 	m.Gates = buildGates(recs.Evidence)
 	m.CI = buildCI(src.CI)
-	m.Cost = buildCost(recs)
+	m.Cost = buildCost(src, recs)
 	m.Lifecycle = buildLifecycle(src, recs, m)
 	m.WaitsOn, m.Attention = buildWaits(src, recs, m)
 	m.Health.Verdict = buildVerdict(src, m)
