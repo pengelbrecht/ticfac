@@ -139,9 +139,12 @@ class FakeSandboxes implements SandboxBinding {
   readonly #byName = new Map<string, FakeSandbox>();
   /** The names ever addressed — a second boot of a fresh name is a rival. */
   readonly addressed: string[] = [];
+  /** When set, addressing any container throws this — the platform failing under the door. */
+  failWith: Error | null = null;
 
   async get(name: string): Promise<OrchestratorSandbox> {
     this.addressed.push(name);
+    if (this.failWith !== null) throw this.failWith;
     let sandbox = this.#byName.get(name);
     if (sandbox === undefined) {
       sandbox = new FakeSandbox(name);
@@ -829,6 +832,18 @@ describe("start", () => {
     // The refusal names the gap in the response, not only on the Worker's
     // log: the caller is a container reading one answer.
     expect(denial.detail).toContain("SANDBOXES");
+  });
+
+  it("answers a throw under it typed — 500 door_fault with the reason — never the runtime's page", async () => {
+    // Epic hn6's cloud run: two resolve-conflict starts came back as a 500
+    // whose body was not {error, detail}, which the orchestrator could only
+    // call unreadable_refusal, with no reason in it.
+    binding.failWith = new Error("ImagePullError: the runtime couldn't pull the image");
+    const response = await postStart(runToken, startBody());
+    expect(response.status).toBe(500);
+    const denial = await denialOf(response);
+    expect(denial.error).toBe("door_fault");
+    expect(denial.detail).toContain("ImagePullError");
   });
 });
 

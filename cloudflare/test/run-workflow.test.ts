@@ -28,6 +28,7 @@ import {
   leaseLostTrip,
   MAX_SANDBOX_BOOTS,
   MAX_UNANSWERED_LOOKS,
+  orchestratorContainerGone,
   PROCESS_QUERY_ATTEMPTS,
   type RunOutcome,
 } from "../src/run-workflow";
@@ -1626,7 +1627,7 @@ describe("a container the supervisor cannot ask is unknown, never dead (tick 3ed
     // something: `getProcess` resolving null is the container SAYING the
     // process is gone, and that answer still costs the orchestrator its
     // reboot. Only the question FAILING is held.
-    const { runID } = await ignite();
+    const { runID, project } = await ignite();
     const first = await firstProcess();
     first.say("orchestrator: working\n");
     sandboxes.booted[0]!.vanished = true;
@@ -1642,6 +1643,11 @@ describe("a container the supervisor cannot ask is unknown, never dead (tick 3ed
     const run = await settled(runID);
     expect(run.state).toBe("completed");
     expect(sandboxes.booted).toHaveLength(2);
+    // Classified as the platform taking the instance, never as the
+    // orchestrator's own exit (epic hn6's cloud run: "the sandbox died").
+    const feed = await readRunFeed(env.ARTIFACTS, project, runID);
+    expect(feed).toContain("container was replaced under it (boot 1)");
+    expect(orchestratorContainerGone(1)).toContain("rollout");
   });
 
   it("holds a container it cannot ask, and watches on once the question answers again", async () => {

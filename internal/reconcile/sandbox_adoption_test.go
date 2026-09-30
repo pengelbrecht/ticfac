@@ -100,6 +100,25 @@ type fakeSandboxDoor struct {
 	// unreachable, and the door answers again after them.
 	darkCalls  int
 	containers map[doorIdentity]*doorContainer
+	// reattaches counts settled attempts re-addressed for their collect,
+	// and collects the collects the executor was asked for.
+	reattaches int
+	collects   int
+}
+
+// settle finishes the named container's work: it is terminal from now on,
+// whatever any orchestrator does.
+func (d *fakeSandboxDoor) settle(id doorIdentity, state string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	c := d.containers[id]
+	c.state, c.terminal = state, true
+}
+
+func (d *fakeSandboxDoor) reattachAndCollectCounts() (int, int) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.reattaches, d.collects
 }
 
 // doorContainer is one sandbox the factory booted and owns, still running
@@ -534,7 +553,36 @@ func (e *doorExecutor) Cancel(*subprocess.JobHandle) (*subprocess.CancelAck, err
 		"the container's teardown belongs to the factory that booted it"}
 }
 
+// ReattachSettled is the real executor's re-addressing of an attempt that
+// settled while no orchestrator watched it: the door says the identity is
+// terminal, the record the dead disk held is re-described, and the handle
+// comes back for the collect. It never boots anything.
+func (e *doorExecutor) ReattachSettled(spec *subprocess.JobSpec) (*subprocess.JobHandle, error) {
+	id := doorIdentity{run: e.runID, tick: tickOfSpec(spec), attempt: e.attempt}
+	status, err := e.door.status(id)
+	if err != nil {
+		return nil, err
+	}
+	if !status.Terminal {
+		return nil, fmt.Errorf("attempt %d of %s has not settled", id.attempt, id.tick)
+	}
+	e.door.mu.Lock()
+	e.door.reattaches++
+	container := e.door.containers[id]
+	e.door.mu.Unlock()
+	record := &doorRecord{JobID: spec.JobID, Attempt: id.attempt, TickID: id.tick,
+		Sandbox: container.name, ProcessID: container.processID, IssuedAt: time.Now().UTC().Format(time.RFC3339),
+		Adopted: true}
+	if err := e.writeRecord(record); err != nil {
+		return nil, err
+	}
+	return record.handle(), nil
+}
+
 func (e *doorExecutor) CollectDetail(*subprocess.JobHandle) (*subprocess.Collection, error) {
+	e.door.mu.Lock()
+	e.door.collects++
+	e.door.mu.Unlock()
 	return nil, &subprocess.Refusal{Reason: "no_collect_door", Message: "this fixture's executor does not " +
 		"collect: the tests it serves stop at adoption, and the real executor reads the durable layer from git " +
 		"(tick xev)"}
@@ -687,6 +735,54 @@ func TestAKilledOrchestratorAdoptsTheRunningSandboxByIdentity(t *testing.T) {
 	if executor != doorExecutorName {
 		t.Errorf("the marker names executor %q, want %q: the identity the adoption went through is the marker's own",
 			executor, doorExecutorName)
+	}
+}
+
+// TestAnAttemptThatSettledWhileNobodyWatchedIsCollectedNotStarted is epic
+// hn6's cloud run (run_911b…): ltg's attempt settled as SUCCEEDED while the
+// orchestrator that dispatched it was busy stopping for another tick, the
+// next orchestrator booted on a fresh disk, and its adoption asked Start —
+// which the door refused as "already settled", and the run rejected the
+// finished attempt as collect_failed instead of collecting its work. The
+// cold re-derivation must reach the collect: no start failure, no new
+// container, one reattach, and the executor asked to collect.
+func TestAnAttemptThatSettledWhileNobodyWatchedIsCollectedNotStarted(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{gate: cloudGate})
+	door := newFakeSandboxDoor("r-fixture")
+
+	_, _, err := runDoorIncarnation(t, f, f.Repo, door, f.StateRoot, stopAt("a1", StageDispatched))
+	killedAfter(t, err, "a1", StageDispatched)
+	// The worker finishes while no orchestrator is watching it.
+	var id doorIdentity
+	door.mu.Lock()
+	for key := range door.containers {
+		id = key
+	}
+	door.mu.Unlock()
+	door.settle(id, subprocess.StateSucceeded)
+
+	clone := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "restarted"))
+	cold := filepath.Join(f.Root, "cold-state")
+	restarted, _, _ := runDoorIncarnation(t, f, clone, door, cold, nil)
+
+	got := restarted.Stages("a1")
+	if contains(got, StageStartFailed) {
+		t.Errorf("the restart tried to START the settled attempt and failed: %v", got)
+	}
+	if contains(got, StageDispatched) {
+		t.Errorf("the restart dispatched a1 again: %v", got)
+	}
+	if boots := door.bootCount(); boots != 1 {
+		t.Errorf("the factory booted %d containers, want 1: a settled attempt is collected, never rebooted", boots)
+	}
+	reattached, collected := door.reattachAndCollectCounts()
+	if reattached != 1 {
+		t.Errorf("the settled attempt was reattached %d time(s), want 1", reattached)
+	}
+	if collected == 0 {
+		t.Error("the settled attempt was never collected: its work is the verdict, not a refusal to start")
 	}
 }
 

@@ -78,9 +78,20 @@ func (e *doorError) Error() string {
 // gateway page (a 502/504 from the platform in front of the Worker), which
 // is a pipe that did not answer, not a door that said no. A 5xx the door
 // itself wrote — sandbox_dispatch_not_wired — is a configuration it named.
+//
+// A door_fault is the door's own typed answer for a throw inside it (the
+// container platform failing a start mid-rollout — epic hn6's cloud run):
+// the door decided nothing, and a start under the same identity is adopted
+// rather than rivalled, so asking again is the same as for a gateway page.
 func (e *doorError) TransientRemote() bool {
-	return e.Status >= 500 && e.Class == "unreadable_refusal"
+	return e.Status >= 500 && (e.Class == "unreadable_refusal" || e.Class == DoorFaultClass)
 }
+
+// DoorFaultClass is the door's answer for a throw inside it
+// (sandbox-dispatch.ts DOOR_FAULT): typed, with the throw's reason in the
+// detail, where an uncaught throw used to reach this client as the
+// runtime's own 500 page.
+const DoorFaultClass = "door_fault"
 
 // doorUnreachable is the door not answering at all: a transport failure or
 // the client's own timeout (epic hn6's second cloud run: "context deadline
