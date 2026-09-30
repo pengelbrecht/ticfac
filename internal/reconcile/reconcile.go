@@ -235,6 +235,17 @@ type KnownExecutor struct {
 	// HOST makes when it wires the executors it can build (internal/cli), not
 	// a property of the name alone.
 	PollInterval time.Duration
+
+	// MaxLiveJobs is how many of this executor's jobs can be live at once —
+	// the substrate's own CAPACITY, which is not the epic's width (hn6's
+	// cloud run, 2026-09-30). A cloud worker is a container, and the account
+	// runs at most FACTORY_MAX_INSTANCES of them, the orchestrator's own
+	// among them: a window as wide as max_parallel booked a third worker
+	// beside the orchestrator and two workers on a ceiling of three, and the
+	// start waited in the door for a slot until the client timed out, twelve
+	// times over. Zero states no bound (the local substrates: a process is not
+	// a scarce slot). The window admits no new job past it (capacity.go).
+	MaxLiveJobs int
 }
 
 // theExecutors is the honoured set, defaulting to the one executor this
@@ -841,6 +852,13 @@ type Reconciler struct {
 	tierProfiles map[string]map[string]*profile.Profile
 	pinnedTier   string
 	hostWidth    int
+	// jobSlots is the substrate's capacity for live jobs (KnownExecutor.
+	// MaxLiveJobs over the executors the run's profiles route to), 0 for
+	// none stated. See capacity.go.
+	jobSlots int
+	// window is the dispatch window runPlan is working, while it works one:
+	// what a start waiting for room looks at (capacity.go lookAtLiveJobs).
+	window *held
 
 	// inFlightIDs is the width's raw material since tk 0.32.0 (tick dz1): the
 	// epic's claimed-and-not-closed children as the graph's
@@ -1480,6 +1498,7 @@ func New(opts Options) (*Reconciler, error) {
 	r.wipeThreshold = opts.WipeThreshold
 	r.stepCap = opts.StepCap
 	r.executors = theExecutors(opts.Executors)
+	r.jobSlots = jobSlotsFor(r.executors, profiles, r.tierProfiles)
 	r.feed = runfeed.Open(opts.Repo, opts.RunID)
 	r.progressProbe = opts.ProgressProbeEvery
 	r.gateHeartbeat = opts.GateHeartbeatEvery

@@ -59,8 +59,8 @@ const DefaultRequestTimeout = 90 * time.Second
 // with, the error class it named, and the detail it said. The classes are
 // the route's own vocabulary — run_token_required, run_token_unknown,
 // run_token_revoked, run_not_active, lease_lost, lease_held_by,
-// sandbox_dispatch_not_wired, invalid_request, and the truthful-adoption
-// refusal adoption_model_unknown (tick dyo) — and a caller that has to
+// sandbox_dispatch_not_wired, invalid_request, the truthful-adoption
+// refusal adoption_model_unknown (tick dyo), and no_capacity — and a caller that has to
 // recover which one fired by matching on prose is the failure Appendix A #9
 // is about.
 type doorError struct {
@@ -102,6 +102,18 @@ func (e *doorUnreachable) Unwrap() error { return e.err }
 
 // TransientRemote marks the failure as the remote's pipe, not its answer.
 func (e *doorUnreachable) TransientRemote() bool { return true }
+
+// NoCapacityClass is the door's answer to a start that would have to wait for
+// a container slot (hn6's cloud run, 2026-09-30): every instance the account
+// may run is held, so the door says so at once — 503 no_capacity — instead of
+// blocking until this client's timeout, which the supervisor could only read
+// as a transient remote and spent its continuation cap on.
+const NoCapacityClass = "no_capacity"
+
+// NoCapacity marks the refusal as the substrate having no room: retry later,
+// never a verdict and never a transient pipe. The reconciler recognises it by
+// this method (its capacityAnswer), not by this package.
+func (e *doorError) NoCapacity() bool { return e.Class == NoCapacityClass }
 
 // AsDoorError reports whether err is the door's own refusal, and which one.
 func AsDoorError(err error) (*doorError, bool) {

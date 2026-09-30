@@ -958,7 +958,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 				branchOf(marker.ResumedFrom.WriteRef), marker.ResumedFrom.ReleasedBy)
 		}
 
-		handle, err := executor.Start(r.jobSpec(dispatch))
+		handle, err := r.startWithRoom(executor, tick, r.jobSpec(dispatch))
 		if err != nil {
 			return nil, nil, marker, r.startFailure(tick, err)
 		}
@@ -1453,6 +1453,11 @@ func (r *Reconciler) rejectDurably(marker attemptHandle, verdict, message string
 // the claim. Without it a subscriber saw a claim and then nothing, with no
 // way to tell a failed start from a run that is still going.
 func (r *Reconciler) startFailure(tick string, err error) error {
+	// A start that waited out its bound for a free slot is its own stop,
+	// already recorded as the wait it was (capacity.go): not a start failure.
+	if capacityStop(err) {
+		return err
+	}
 	r.record(tick, StageStartFailed, "the start failed: %s", firstLine(err.Error()))
 	if refusal, ok := subprocess.AsRefusal(err); ok {
 		switch refusal.Reason {
@@ -1766,7 +1771,7 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 		// Nothing is running, so this one starts it. The resume note lands only
 		// if the start did: a start that failed is the failure the run records,
 		// and a resume that never happened is not a fact about the run.
-		handle, err := executor.Start(r.jobSpec(dispatch))
+		handle, err := r.startWithRoom(executor, marker.TickID, r.jobSpec(dispatch))
 		if err != nil {
 			return nil, nil, r.startFailure(marker.TickID, err)
 		}

@@ -107,6 +107,13 @@ const (
 	EnvFactoryURL     = "TICKS_FACTORY_URL"
 	EnvFactoryToken   = "TICKS_FACTORY_TOKEN"
 	EnvFactoryProject = "TICKS_FACTORY_PROJECT"
+	// EnvFactoryMaxInstances is the account's container ceiling — the
+	// factory's FACTORY_MAX_INSTANCES mirror of `[[containers]] max_instances`
+	// — handed to the ORCHESTRATOR container only, so the run it drives never
+	// dispatches more worker containers than the account can run beside it
+	// (hn6's cloud run: orchestrator + two workers filled a ceiling of three,
+	// and the third worker's start waited for a slot until it timed out).
+	EnvFactoryMaxInstances = "TICKS_FACTORY_MAX_INSTANCES"
 )
 
 // RunBranchPrefix is the namespace a run's own branch lives in. It is half of

@@ -23,6 +23,7 @@ import jobProtocol from "../../contracts/job-protocol.json";
 // prompt file's own text, em-dashes and all.
 import IMPLEMENT_TICK_PROFILE from "../../profiles-cloudflare-sandbox/implement-tick.md?raw";
 import { readWorkerLogTail } from "../src/artifacts";
+import { heldSlots } from "../src/container-capacity";
 import { insertRun, type Run } from "../src/db";
 import { issueWorkerRunToken, revokeRunTokens } from "../src/gateway";
 import { roomFor } from "../src/runs";
@@ -322,6 +323,11 @@ async function denialOf(response: Response): Promise<{ error: string; detail: st
 beforeEach(async () => {
   binding = new FakeSandboxes();
   set("SANDBOXES", binding);
+  // The D1 index persists across this file's tests, and every test leaves a
+  // live run — an orchestrator slot by the door's count. Capacity has its own
+  // describe below, which sets the ceiling against what is held; every other
+  // test runs under one no count of this file's own leftovers can reach.
+  set("FACTORY_MAX_INSTANCES", "100000");
   set("FACTORY_BASE_URL", BASE);
   set("GITHUB_TOKEN", "gh-operator-test-token");
   await liveRun();
@@ -1139,6 +1145,68 @@ describe("job identity", () => {
 });
 
 // ------------------------------------------------------------------ routing ---
+
+// hn6's cloud run run_8511bc66… (2026-09-30): the orchestrator plus two
+// workers held all three of the account's container slots, and the start of
+// a third worker addressed its container — which the platform queues for a
+// free instance — until the orchestrator's client timed out, twelve times.
+describe("capacity", () => {
+  /** The ceiling set so exactly `free` more containers fit beside what is held. */
+  async function leaveFree(free: number): Promise<void> {
+    set("FACTORY_MAX_INSTANCES", "100000");
+    const slots = await heldSlots(env.DB, env);
+    set("FACTORY_MAX_INSTANCES", String(slots.held + free));
+  }
+
+  it("answers a fresh start with no free slot AT ONCE, typed 503 no_capacity, addressing nothing", async () => {
+    await leaveFree(1);
+    const first = await postStart(runToken, startBody());
+    expect(first.status).toBe(201);
+
+    const second = await postStart(runToken, startBody({ tick_id: "7uv" }));
+    expect(second.status).toBe(503);
+    const denial = await denialOf(second);
+    expect(denial.error).toBe("no_capacity");
+    expect(denial.detail).toContain("nothing was started");
+    // Nothing was addressed for the refused start: addressing it is the very
+    // queue for a slot that outlasted the caller's client.
+    expect(binding.addressed).not.toContain(attemptSandboxName(RUN_ID, "7uv", 1));
+  });
+
+  it("never refuses an ADOPTION for capacity: the live container needs no new slot", async () => {
+    await leaveFree(1);
+    expect((await postStart(runToken, startBody())).status).toBe(201);
+
+    const again = await postStart(runToken, startBody());
+    expect(again.status).toBe(200);
+    expect(((await again.json()) as { adopted: boolean }).adopted).toBe(true);
+  });
+
+  it("frees the slot when the worker settles: the next start is admitted", async () => {
+    await leaveFree(1);
+    expect((await postStart(runToken, startBody())).status).toBe(201);
+    expect((await postStart(runToken, startBody({ tick_id: "7uv" }))).status).toBe(503);
+
+    // The worker finishes; its first terminal observation records it and
+    // reclaims its container, which is the slot given back.
+    binding
+      .named(attemptSandboxName(RUN_ID, TICK, 1))
+      .workProcess()
+      ?.finish(0);
+    const state = (await (await getState(runToken, TICK, 1)).json()) as { state: string };
+    expect(state.state).toBe("succeeded");
+
+    expect((await postStart(runToken, startBody({ tick_id: "7uv" }))).status).toBe(201);
+  });
+
+  it("counts a live run's orchestrator as holding a slot", async () => {
+    const before = await heldSlots(env.DB, env);
+    await liveRun();
+    const after = await heldSlots(env.DB, env);
+    expect(after.orchestrators).toBe(before.orchestrators + 1);
+    expect(after.held).toBe(before.held + 1);
+  });
+});
 
 describe("routing", () => {
   it("answers only the two documented paths, with their methods", async () => {

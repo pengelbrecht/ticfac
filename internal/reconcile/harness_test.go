@@ -1029,6 +1029,10 @@ type fixtureOptions struct {
 	// (Options.ClaimHolder): the factory or the process table, answering
 	// alive, dead or unknown. Nil keeps the records-only reading.
 	claimHolder func(ctx context.Context, runID string) HolderState
+	// jobSlots is the substrate capacity the fixture's executor states
+	// (KnownExecutor.MaxLiveJobs): the cloud's container ceiling less the
+	// orchestrator's own. Zero states none, the local default.
+	jobSlots int
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -1091,7 +1095,13 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 	if progressProbe <= 0 {
 		progressProbe = 200 * time.Millisecond
 	}
+	var executors []KnownExecutor
+	if opts.jobSlots > 0 {
+		executors = []KnownExecutor{{Name: subprocess.ExecutorName, Runners: subprocess.KnownRunners(),
+			AcceptsModel: subprocess.RunnerAcceptsModel, MaxLiveJobs: opts.jobSlots}}
+	}
 	return Options{
+		Executors:     executors,
 		Repo:          repo.Dir,
 		Remote:        "origin",
 		EpicID:        "qeu",

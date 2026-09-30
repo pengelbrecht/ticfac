@@ -232,7 +232,10 @@ func (r *Reconciler) dispatchBaseFold(ctx context.Context, base, baseHead, epicH
 	if err != nil {
 		return "", nil, false, failed("its executor could not be built: %v", err)
 	}
-	handle, err := executor.Start(r.baseFoldJobSpec(dispatch))
+	handle, err := r.startWithRoom(executor, "", r.baseFoldJobSpec(dispatch))
+	if capacityStop(err) {
+		return "", nil, false, err
+	}
 	if err != nil {
 		if refusal, ok := subprocess.AsRefusal(err); ok && refusal.Reason == subprocess.RefusedSettled {
 			if remote := r.settledJobHead(branch); remote != "" {
