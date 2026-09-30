@@ -707,6 +707,10 @@ type Options struct {
 
 // Reconciler runs one epic.
 type Reconciler struct {
+	// adoptedFindingsOf is the dead runs whose untriaged findings this
+	// incarnation already adopted with a claim it took over (takeover.go).
+	adoptedFindingsOf map[string]bool
+
 	opts   Options
 	git    *repoGit
 	store  *runstate.Store
@@ -1533,8 +1537,8 @@ func (r *Reconciler) remoteRetry() runstate.RemoteRetry {
 			if n.GaveUp {
 				r.record("", StageRemoteExhausted,
 					"%s was refused authentication %d time(s) running (%s); the run stops rather than "+
-						"retrying a credential: check ssh-agent (ssh-add -l), the key, the deploy key's access, "+
-						"and for https `gh auth status`: %v", n.What, n.Attempt, runstate.RemoteAuthRefusedClass, n.Err)
+						"retrying a credential: %s: %v", n.What, n.Attempt, runstate.RemoteAuthRefusedClass,
+					runstate.AuthRefusalRemedy(n.Err), n.Err)
 				return
 			}
 			r.record("", StageRemoteRetried,

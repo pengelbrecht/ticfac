@@ -788,7 +788,9 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	var taken *takenOver
 	if carry == nil && len(mine) == 0 {
 		var took *carriedWork
-		if took, taken = r.takeOverClaim(entry); took != nil {
+		if took, taken, err = r.takeOverClaim(entry); err != nil {
+			return nil, nil, attemptHandle{}, err
+		} else if took != nil {
 			carry = took
 		}
 	}

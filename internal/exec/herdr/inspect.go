@@ -62,8 +62,12 @@ func (e *Executor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.
 		}, nil
 	}
 
-	observations, next := st.observationsFrom(cursor)
+	// The state first, the stream after it (hol, subprocess/inspect.go): an
+	// observation written before the evidence that makes the attempt
+	// terminal is then in the terminal answer, which is the last one a
+	// reader asks for.
 	state, detail := e.observe(record)
+	observations, next := st.observationsFrom(cursor)
 	status := &subprocess.JobStatus{
 		SchemaVersion: subprocess.SchemaVersion,
 		JobID:         h.JobID,

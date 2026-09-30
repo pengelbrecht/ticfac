@@ -442,7 +442,24 @@ export type GitHubAppOptions = {
   fetcher?: typeof fetch;
   /** The clock, in ms. Tests move it to walk a token past its refresh margin. */
   now?: () => number;
+  /**
+   * How long a CACHED token must still have to live to be handed out; never
+   * less than {@link TOKEN_REFRESH_MARGIN_MS}. A container's boot token asks
+   * for {@link BOOT_TOKEN_MIN_LIFE_MS}: see {@link containerGitHub}.
+   */
+  minLifeMs?: number;
 };
+
+/**
+ * What a container's BOOT token must have left to live. The container's git
+ * credential helper asks the token door before every push, and falls back to
+ * the token it booted with only when the door does not answer — so the boot
+ * token is the fallback, and a fallback minted 55 minutes before the boot
+ * (the cache's own margin is five) dies five minutes in. Epic hn6's cloud run
+ * (2026-09-29) lost two orchestrator boots, 47 and 22 minutes in, to a 403 on
+ * its own pushes with nothing to say which token git had sent.
+ */
+export const BOOT_TOKEN_MIN_LIFE_MS = 45 * 60 * 1000;
 
 type CachedToken = InstallationToken & { expires_at_ms: number };
 
@@ -609,7 +626,8 @@ export async function installationToken(
 
   const cacheKey = `${config.app_id}:${project}:${permissionsKey(permissions)}`;
   const cached = tokenCache.get(cacheKey);
-  if (cached !== undefined && cached.expires_at_ms - now > TOKEN_REFRESH_MARGIN_MS) {
+  const minLife = Math.max(TOKEN_REFRESH_MARGIN_MS, options.minLifeMs ?? 0);
+  if (cached !== undefined && cached.expires_at_ms - now > minLife) {
     const { expires_at_ms: _unused, ...token } = cached;
     return { ok: true, cached: true, ...token };
   }
@@ -788,7 +806,10 @@ export async function containerGitHub(
   options: GitHubAppOptions = {},
 ): Promise<ContainerGitHub> {
   if (plan.token_source !== "operator") return { ok: true };
-  const credential = await githubCredentialFor(env, project, options);
+  const credential = await githubCredentialFor(env, project, {
+    minLifeMs: BOOT_TOKEN_MIN_LIFE_MS,
+    ...options,
+  });
   if (!credential.ok) return credential;
   return {
     ok: true,

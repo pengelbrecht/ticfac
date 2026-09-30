@@ -77,6 +77,22 @@ func (e *Executor) Cancel(h *JobHandle) (*CancelAck, error) {
 		}
 	}
 
+	// An attempt that has REPORTED is finished by its own word, and what is
+	// left of it is its tail: the runner exiting after its report, and the
+	// supervisor's closing push and settlement record. A teardown that lands
+	// in that tail is the reconciler releasing a worker it has just collected
+	// as succeeded (releaseWorker), not a person stopping one that spends.
+	// Recording a cancellation there renamed the finished attempt's verdict
+	// `cancelled` for every later reader: the resumed run of hol re-adopted
+	// the implement attempt it had collected ready-to-merge, collected it
+	// again as cancelled, and rejected it. So the credential dies first — the
+	// money rule does not wait — and then the tail gets a bounded grace to
+	// settle on its own. A worker still running past the grace is stopped,
+	// and that stop IS recorded (TestCancelStopsAWorkerThatWroteItsReportAndKeptRunning).
+	if !settled && !alreadyCancelled && e.hasReported(st) {
+		settled = e.awaitOwnSettlement(st, reportedSettleGrace)
+	}
+
 	if settled {
 		// Nothing to stop, and so nothing to record as stopped. A process that
 		// somehow outlived its own settlement is still stopped — a cancel that
@@ -172,6 +188,42 @@ func (e *Executor) hasSettled(st *store) bool {
 	}
 	state, _ := e.observe(st, record)
 	return terminalState(state)
+}
+
+// reportedSettleGrace bounds how long a cancel of an attempt that has
+// reported waits for it to settle on its own before stopping it. The tail it
+// waits out is a runner exiting and a supervisor's last push and settlement
+// record: seconds at most, even on a loaded CI runner. A variable only so a
+// test can shorten it.
+var reportedSettleGrace = 10 * time.Second
+
+// hasReported says the attempt's report is written with a status: the
+// evidence observe reads as `succeeded` without asking the operating system.
+func (e *Executor) hasReported(st *store) bool {
+	if !e.guarded("settle_from_evidence") {
+		return false
+	}
+	record, err := st.readAttempt()
+	if err != nil {
+		return false
+	}
+	report, ok := e.readReport(record)
+	return ok && report.Status != ""
+}
+
+// awaitOwnSettlement waits, up to grace, for the attempt to settle itself,
+// and says whether it did.
+func (e *Executor) awaitOwnSettlement(st *store, grace time.Duration) bool {
+	deadline := time.Now().Add(grace)
+	for {
+		if e.hasSettled(st) {
+			return true
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 // stopTree stops everything this attempt started, and says whether there was
