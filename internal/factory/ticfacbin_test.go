@@ -26,7 +26,7 @@ func TestTheReportCheckerShipsInTheSandboxImageAndEveryCloudPromptNamesIt(t *tes
 	if !staged {
 		t.Fatalf("%s is not among the staged binaries %v", subprocess.LintCommandName, ticfacStagedBinaries)
 	}
-	if !strings.Contains(ticfacInstallBlock, "/usr/local/bin/"+subprocess.LintCommandName) {
+	if !strings.Contains(ticfacInstallBlock+ticfacInstallSteps, "/usr/local/bin/"+subprocess.LintCommandName) {
 		t.Fatalf("the install block does not put %s on PATH", subprocess.LintCommandName)
 	}
 	root, err := contracts.RepoRoot()
@@ -118,20 +118,34 @@ func TestSetSandboxTicfacPinsTeachesTheDockerfileToInstallTicfac(t *testing.T) {
 		}
 	}
 
-	// The pins belong in the version block at the top, beside the pins they
-	// move with — not appended somewhere a rebuild's diff would not show them
-	// together. Everything that installs them belongs after it.
+	// The pins are declared after every other layer, just before the COPYs
+	// that use them: they change on every deploy, and BuildKit keys each RUN
+	// on every ARG in scope. Declared in the version block at the top (as they
+	// were until 2026-09-30) they rebuilt tk, the toolchains and the batteries
+	// — 22 of 46 layers, ~0.8 GB — on every deploy.
 	pins := strings.Index(got, "ARG TICFAC_VERSION=")
 	install := strings.Index(got, "COPY --chmod=0755 ticfac-linux-")
+	lastRunAbove := strings.LastIndex(got[:max(pins, 0)], "\nRUN ")
 	base := strings.Index(got, "ARG GO_VERSION=")
-	if pins == -1 || install == -1 || base == -1 {
+	if pins == -1 || install == -1 || base == -1 || lastRunAbove == -1 {
 		t.Fatalf("the staged Dockerfile lost its shape:\n%s", got)
 	}
-	if pins > base {
-		t.Errorf("the ticfac pins are below the version block: TICFAC_VERSION at %d, GO_VERSION at %d", pins, base)
+	if pins < base {
+		t.Errorf("the ticfac pins are in the version block at the top, where they bust every RUN's cache")
+	}
+	for _, other := range []string{"ARG TK_VERSION=", "ARG GO_VERSION=", "ARG PI_VERSION="} {
+		if i := strings.Index(got, other); i > pins {
+			t.Errorf("%s is below the ticfac pins", other)
+		}
+	}
+	if between := got[pins:install]; strings.Contains(between, "\nRUN ") {
+		t.Errorf("a RUN sits between the ticfac pins and the install COPYs:\n%s", between)
 	}
 	if install < pins {
 		t.Errorf("the ticfac install block is above its own pins")
+	}
+	if strings.Contains(got[:pins], "${TICFAC_") {
+		t.Errorf("something above the ticfac pins already refers to them")
 	}
 
 	// TARGETARCH has to be re-declared with NO default before the COPYs.

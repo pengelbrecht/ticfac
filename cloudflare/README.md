@@ -418,6 +418,15 @@ rollout replaced), and warns when what remains is still near the limit.
 `--keep-images N` changes the five; `--skip-image-prune` opts out (2026-09-30:
 59 tags, 45 GB, nothing had ever been deleted).
 
+A deploy should push only what changed. The ticfac pins (`TICFAC_VERSION` and
+the binaries' checksums), which change on every deploy, are declared at the end
+of the staged Dockerfile, right before the COPYs that use them. BuildKit keys
+every RUN on every ARG in scope, so declaring them in the version block at the
+top rebuilt every layer below it. CI also builds through buildx with the GitHub
+Actions cache (`.github/scripts/wrangler-docker.sh` as `WRANGLER_DOCKER_BIN`),
+because a fresh runner has no layer cache of its own. Before both fixes, each
+deploy pushed ~0.8 GB of new layers (22 of 46).
+
 The rollout wait is 10 minutes, extended once by up to 50 while the platform
 still reports the rollout in progress, and a rollout it cannot confirm names
 the application's health errors. On 2026-09-30 the managed registry served
