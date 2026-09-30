@@ -12,8 +12,11 @@
   "attempt": 2,
   "done_item": "A1",
   "demonstrating_check": "go test -short -timeout 20m -run 'TestVerdict|TestCost|TestTheContract' ./internal/statusmodel/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-30T13:17:42Z",
+  "triaged_at": "2026-09-30T13:17:54Z",
+  "triaged_by": "ticfac run run_911b556fce394004837695b3196e3925 absorbing qbp",
+  "promoted_as": "qbp",
   "provenance": {
     "run_id": "run_911b556fce394004837695b3196e3925",
     "tick_id": "7uv",
