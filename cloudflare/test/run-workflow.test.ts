@@ -9,6 +9,7 @@ import {
   listDispatchLogs,
   listRunGatewayTokens,
 } from "../src/db";
+import { relayFeedKey, STAGE_SUPERVISION_HALTED } from "../src/feed-relay";
 import { GATEWAY_PATH_PREFIX, proxyModelRequest } from "../src/gateway";
 import { orchestratorCredentialRoute } from "../src/local-orchestrator";
 import {
@@ -1464,6 +1465,34 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
     orchestratorPushedWork();
     replacement.exit(0);
     expect((await settled(runID)).state).toBe("completed");
+  });
+
+  it("does not reboot an orchestrator that exited after its supervisor halted — a decision, not a death", async () => {
+    // Epic hn6's cloud run: boots 1 and 2 each exited 1 right after a
+    // supervision_halted line and were rebooted, spending the run's boots on
+    // stops the orchestrator had already decided.
+    const { runID, project } = await ignite();
+    const first = await firstProcess();
+    await env.ARTIFACTS.put(
+      relayFeedKey(project, runID, 1, "feed", 0),
+      `${JSON.stringify({
+        schema_version: 1,
+        at: "2026-09-30T13:29:23Z",
+        run_id: runID,
+        tick_id: null,
+        attempt: null,
+        stage: STAGE_SUPERVISION_HALTED,
+        detail: "the run stopped and will NOT be continued automatically: it needs a person",
+      })}\n`,
+    );
+    first.exit(1);
+
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    expect(sandboxes.booted).toHaveLength(1);
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.detail).toContain("stopped deliberately (boot 1, exit 1)");
+    expect(record.detail).toContain("will NOT be continued automatically");
   });
 
   it("does not reboot on a configuration verdict from the entrypoint", async () => {

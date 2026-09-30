@@ -2462,6 +2462,13 @@ type Refusal struct {
 	Reason  string
 	TickID  string
 	Message string
+
+	// conflict marks a merge_failed that is the attempt's work not merging
+	// onto the integration branch — a conflict no resolve delivered, or one
+	// of a kind no resolve job takes — as opposed to an operational failure
+	// of the merge machinery. The finish hands it to the standing ladder
+	// (finishIntegrate) rather than halting the run for a person.
+	conflict bool
 }
 
 func (r *Refusal) Error() string { return r.Message }

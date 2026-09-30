@@ -260,14 +260,15 @@ func TestAFailedResolveJobIsAStopNamingTheFiles(t *testing.T) {
 	}
 }
 
-// A SECOND conflict on the same tick is the stop, as today — the recorded
-// resolve is the durable answer to "what already ran here", and the refusal
-// names the files and where that resolve's work is.
+// A SECOND conflict on the same try is not resolved again under it — the
+// recorded resolve is the durable answer to "what already ran here", and the
+// rejection names the files and where that resolve's work is — and it is not
+// a stop for a person: the try goes to the standing ladder.
 //
 // serial: this test states the process environment (CONFLICT_SYNC,
 // CONFLICT_TICKS) for the fake runner's workers to synchronise through, and
 // t.Setenv forbids a parallel test.
-func TestASecondConflictOnTheSameTickIsTheStop(t *testing.T) {
+func TestASecondConflictOnTheSameTryGoesToTheLadder(t *testing.T) {
 	conflictSync(t)
 	f := newFixture(t, fixtureOptions{mode: "conflict", gate: resolveGate})
 	seedSharedFile(t, f)
@@ -299,29 +300,37 @@ func TestASecondConflictOnTheSameTickIsTheStop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the run did not finish: %v", err)
 	}
-	if result.State != runstate.StateFailed {
-		t.Fatalf("the run ended %s: a second conflict on the same tick is a stop", result.State)
-	}
-	if r.failure == nil {
-		t.Fatal("the second conflict stopped the run with no refusal to read")
-	}
-	for _, want := range []string{"shared-work.txt", "resolve-conflict job already ran", "tick-a2/resolve-2"} {
-		if !strings.Contains(r.failure.Message, want) {
-			t.Errorf("the refusal does not name %q: %s", want, r.failure.Message)
+	// The try whose resolve already ran is not resolved again — and it is not
+	// a stop for a person either (epic hn6's cloud run: 7uv halted "needs a
+	// person" over its conflict): it goes to the standing ladder carrying its
+	// work, and the next try's conflict gets a resolve of its own.
+	var rejected string
+	for _, event := range r.Journal() {
+		if event.Tick == "a2" && event.Stage == StageRejected && rejected == "" {
+			rejected = event.Detail
 		}
 	}
-	// And no second job was dispatched: the recorded resolve is the answer.
+	for _, want := range []string{"shared-work.txt", "resolve-conflict job already ran", "tick-a2/resolve-2"} {
+		if !strings.Contains(rejected, want) {
+			t.Errorf("the rejection does not name %q: %s", want, rejected)
+		}
+	}
+	if got := r.Stages("a2"); !contains(got, StageRejectedWorkCarried) {
+		t.Errorf("the try whose resolve already ran was not handed to the ladder carrying its work: %v", got)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%s): the next try's conflict is resolved by a job of its own", result.State,
+			result.Reason)
+	}
+	// And no second job was dispatched under the try whose resolve is on
+	// record: the recorded resolve is that try's answer.
 	f.mu.Lock()
-	started := 0
 	for _, spec := range f.specs {
-		if spec != nil && spec.Role == RoleResolveConflict {
-			started++
+		if spec != nil && spec.Role == RoleResolveConflict && strings.HasSuffix(spec.JobID, "/resolve-2") {
+			t.Errorf("a second resolve-conflict job was dispatched over the recorded one: %s", spec.JobID)
 		}
 	}
 	f.mu.Unlock()
-	if started != 0 {
-		t.Errorf("a second resolve-conflict job was dispatched over the recorded one (%d)", started)
-	}
 }
 
 // readGitBlob reads one file's content as a ref holds it.

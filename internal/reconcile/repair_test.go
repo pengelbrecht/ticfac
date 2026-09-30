@@ -851,10 +851,17 @@ func TestAMergeRefusalIsHeldForAPersonRatherThanCollectedAgain(t *testing.T) {
 		}
 	}
 
+	// The first try's conflict went to the standing ladder carrying its work
+	// (conflictToLadder, epic hn6's cloud run); the stop is the second try's,
+	// the one further try at the ceiling this fixture's ladder has.
+	if !contains(stages, StageRejectedWorkCarried) {
+		t.Errorf("a1's first conflict was not handed to the ladder carrying its work: %v", stages)
+	}
+
 	// The teardown is still the rejected one's: the worktree goes, the BRANCH
 	// stays, because those commits are the only copy of what the conflict is
 	// about and a person is about to read them.
-	marker := attemptMarker(t, f, "a1", 1)
+	marker := attemptMarker(t, f, "a1", 2)
 	branch := branchOf(marker.WriteRef)
 	head := branchHead(f.Repo.Dir, branch)
 	if head == "" || head == marker.BaseSHA {
