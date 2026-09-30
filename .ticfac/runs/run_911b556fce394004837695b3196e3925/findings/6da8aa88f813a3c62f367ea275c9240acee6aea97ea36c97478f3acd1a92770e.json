@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "3gk",
   "attempt": 3,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-30T13:00:49Z",
+  "triaged_at": "2026-09-30T13:01:09Z",
+  "triaged_by": "ticfac run run_911b556fce394004837695b3196e3925 absorbing 378",
+  "promoted_as": "378",
   "provenance": {
     "run_id": "run_911b556fce394004837695b3196e3925",
     "tick_id": "3gk",
