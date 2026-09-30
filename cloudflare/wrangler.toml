@@ -115,6 +115,18 @@ max_instances = 12
 # the batteries-included image is multi-GB before a checkout, a module cache or
 # a node_modules tree exists.
 instance_type = "standard-3"
+# A container rollout must never take a LIVE run's container. The platform's
+# rule: during a rollout, an instance may be replaced only once it has been
+# connected to its Durable Object for at least this many seconds — so the
+# default of 0 lets a rollout take any live orchestrator or worker. Epic
+# hn6's cloud run (2026-09-30) died that way: a deploy's rollout could not pull
+# its image, so it was still in progress when the run started ten minutes
+# later (the deploy's live-run guard had checked before the rollout began),
+# and when it advanced to 100% of instances at 13:31Z it replaced the run's
+# orchestrator at 13:38Z. The grace is one day — RUN_MAX_WALL_CLOCK_MS, the
+# longest any run may live — so an instance is replaced only once no run can
+# still be using it; idle instances roll at once. The suite pins the two.
+rollout_active_grace_period = 86400
 
 # The Worker version this code is running as (its id, tag and upload time),
 # so GET /api/deployment can say which version the factory actually serves —

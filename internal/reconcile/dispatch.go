@@ -9,6 +9,7 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -1202,7 +1203,53 @@ func (r *Reconciler) disposition(record runstate.Attempt, marker attemptHandle) 
 	if recorded := r.recordedAttemptHead(marker); recorded != "" && r.integrated(recorded) {
 		return integratedAttempt, ""
 	}
+	// Rejected only because a resume tried to START it after it had settled
+	// — and never collected (epic hn6's cloud run: ltg succeeded, and the
+	// next incarnation's start was refused "already settled" and recorded as
+	// the rejection). Its verdict was never read, so the empty write ref says
+	// nothing about its work: it is adopted, and adoption collects it.
+	if r.settledButNeverCollected(record.TickID, record.Attempt) {
+		return adoptAttempt, ""
+	}
 	return redispatchAttempt, ""
+}
+
+// settledStartRefusal is the reason a resume records when an executor refused
+// to START an attempt because it had already settled (startFailure's
+// RefusedCollect over RefusedSettled): the tick and the attempt number it
+// names.
+//
+// Anchored: the run's closing summary quotes the refusal that stopped it,
+// and a quote is not a second refusal.
+var settledStartRefusal = regexp.MustCompile(`^the executor refused to start (\S+): attempt (\d+) of \S+ already settled as`)
+
+// settledButNeverCollected says the run's only rejection of this attempt is a
+// start refused as settled — no collect verdict was ever recorded for it —
+// and that refusal was met once. A second one is a reattach that already
+// failed; adopting again would loop, so the attempt goes the ordinary way.
+func (r *Reconciler) settledButNeverCollected(tick string, attempt int) bool {
+	history, err := r.store.CheckpointHistory()
+	if err != nil {
+		return false
+	}
+	named := regexp.MustCompile(`(^|[^A-Za-z0-9_-])` + regexp.QuoteMeta(tick) + `($|[^A-Za-z0-9_-])`)
+	refusals, previous := 0, ""
+	for _, checkpoint := range history {
+		reason := checkpoint.Reason
+		if reason == previous || !named.MatchString(reason) {
+			previous = reason
+			continue
+		}
+		previous = reason
+		if m := recordedVerdict.FindStringSubmatch(reason); m != nil &&
+			strings.Contains(reason, r.attemptName(tick, attempt)) {
+			return false // a collect ruled on it
+		}
+		if m := settledStartRefusal.FindStringSubmatch(reason); m != nil && m[1] == tick && m[2] == strconv.Itoa(attempt) {
+			refusals++
+		}
+	}
+	return refusals == 1
 }
 
 // recordedAttemptHead is the attempt's head as the run's own durable records
@@ -1440,6 +1487,35 @@ func (r *Reconciler) rejectDurably(marker attemptHandle, verdict, message string
 	_, err := r.checkpoint(runstate.StateRunning,
 		fmt.Sprintf("%s is rejected (%s): %s", r.attemptName(marker.TickID, marker.Attempt), verdict, firstLine(message)))
 	return err
+}
+
+// reattachSettled turns adopt's start of an attempt the executor reports
+// SETTLED into the collect it should have been: the executor re-addresses
+// the finished attempt (SettledReattacher) and the handle goes back to the
+// window, whose Inspect reads it terminal and whose collect rules on what it
+// left — a succeeded attempt reaches its verdict, a failed one the ordinary
+// failure path. Anything but a settled refusal, or an executor that cannot
+// reattach, is not this path's: false, and the start failure stands.
+func (r *Reconciler) reattachSettled(executor Executor, marker attemptHandle, spec *subprocess.JobSpec, startErr error) (*subprocess.JobHandle, bool) {
+	refusal, ok := subprocess.AsRefusal(startErr)
+	if !ok || refusal.Reason != subprocess.RefusedSettled {
+		return nil, false
+	}
+	reattacher, ok := executor.(SettledReattacher)
+	if !ok {
+		return nil, false
+	}
+	handle, err := reattacher.ReattachSettled(spec)
+	if err != nil {
+		r.record(marker.TickID, StageResumed,
+			"%s settled while no incarnation was watching it, and it could not be re-addressed for its collect: %s",
+			r.attemptName(marker.TickID, marker.Attempt), firstLine(err.Error()))
+		return nil, false
+	}
+	r.record(marker.TickID, StageResumed,
+		"%s settled while no incarnation was watching it (%s): it is collected from what it left, never started again",
+		r.attemptName(marker.TickID, marker.Attempt), firstLine(refusal.Message))
+	return handle, true
 }
 
 // startFailure keeps the executor's typed refusals typed. "Nobody can say
@@ -1771,8 +1847,21 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 		// Nothing is running, so this one starts it. The resume note lands only
 		// if the start did: a start that failed is the failure the run records,
 		// and a resume that never happened is not a fact about the run.
-		handle, err := r.startWithRoom(executor, marker.TickID, r.jobSpec(dispatch))
+		spec := r.jobSpec(dispatch)
+		handle, err := r.startWithRoom(executor, marker.TickID, spec)
 		if err != nil {
+			// The attempt SETTLED while nobody was watching it: the
+			// incarnation that dispatched it died (or stopped for another
+			// tick) after it finished and before it was collected, and this
+			// one holds no state for it. That is a collect, never a start —
+			// a succeeded attempt refused here threw away finished work
+			// (epic hn6's cloud run: ltg, rejected as collect_failed with its
+			// work on its landing branch).
+			if reattached, ok := r.reattachSettled(executor, marker, spec, err); ok {
+				r.noteAlive(marker.JobID)
+				r.setTick(marker.TickID, "dispatched")
+				return reattached, executor, nil
+			}
 			return nil, nil, r.startFailure(marker.TickID, err)
 		}
 		r.record(marker.TickID, StageResumed, "%s", note)

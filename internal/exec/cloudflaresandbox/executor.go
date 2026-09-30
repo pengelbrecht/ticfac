@@ -49,6 +49,14 @@ type Options struct {
 	// $TICKS_FACTORY_TOKEN.
 	Token string
 
+	// RunID is the run the dispatch belongs to — the run the credential
+	// names. Start never needs it (the door derives the run from the
+	// credential), but ReattachSettled does: an attempt whose record went
+	// with a dead orchestrator's disk is re-described from the dispatch, and
+	// the container's per-run fallback branch (collect.go attemptHead) is
+	// spelled from the run.
+	RunID string
+
 	// EpicID is the epic this run works on. The door checks it against the
 	// run's own row, so a container that has somehow drifted onto another
 	// epic is refused rather than silently dispatching this run's tick
@@ -449,6 +457,111 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		return nil, err
 	}
 	return handleFor(record), nil
+}
+
+// ------------------------------------------------------- reattach settled ---
+
+// ReattachSettled re-addresses an attempt that SETTLED while no orchestrator
+// was watching it, so it can be collected. It never boots anything.
+//
+// Start refuses a settled identity (RefusedSettled), and must: a retry is a
+// new attempt number. But a restarted orchestrator whose container came up
+// on a FRESH disk has no attempt record for what the previous incarnation
+// dispatched, so its adoption path asks Start — and an attempt that finished
+// in between (epic hn6's cloud run: ltg settled as succeeded at 13:06, the
+// orchestrator that dispatched it exited at 13:29, and the next one was
+// refused at 13:35 "already settled") was rejected as collect_failed rather
+// than collected, while its work sat on its landing branch. This is the
+// other half of that refusal: the door says the identity settled, so the
+// record the dead disk held is re-described from the dispatch — the same
+// spec, the same base, the landing branch the door derives for this
+// identity — and its handle is returned for Inspect (terminal) and
+// CollectDetail (the branch) to rule on, as if the record had survived.
+//
+// It is the attempt's OWN job only. A role job run under the attempt number
+// (a repair, a resolve) lands on a branch whose name carries a digest of its
+// job id, and the reconciler already finishes a settled role job from its
+// branch without this executor.
+func (e *Executor) ReattachSettled(spec *subprocess.JobSpec) (*subprocess.JobHandle, error) {
+	if err := spec.Validate(); err != nil {
+		return nil, err
+	}
+	attempt := e.opts.Attempt
+	tickID := tickOf(spec)
+	status, err := e.client.attemptStatus(context.Background(), tickID, attempt, spec.JobID)
+	if err != nil {
+		return nil, err
+	}
+	if status.JobID != spec.JobID {
+		return nil, fmt.Errorf("the door answered for %s when asked about %s: a status for another job is no "+
+			"verdict on this one", status.JobID, spec.JobID)
+	}
+	if !status.Terminal {
+		return nil, fmt.Errorf("attempt %d of %s has not settled (the door reads it %s): only a settled attempt is "+
+			"reattached for its collect, and a live one is adopted through Start", attempt, spec.JobID, status.State)
+	}
+	dir := e.stateDirFor(spec.JobID, attempt)
+	st := e.storeAt(dir)
+	if st.exists(fileAttempt) {
+		record, readErr := st.readAttempt()
+		if readErr != nil {
+			return nil, refuse(subprocess.RefusedUnknown,
+				"the attempt record at %s cannot be read (%v): this attempt is held for a person", dir, readErr)
+		}
+		return handleFor(record), nil
+	}
+	if e.opts.RunID == "" {
+		return nil, fmt.Errorf("attempt %d of %s settled and its record is gone, and this executor was given no "+
+			"run id to re-describe it from", attempt, spec.JobID)
+	}
+	if spec.JobID != attemptOwnJobID(e.opts.RunID, tickID, attempt) {
+		return nil, fmt.Errorf("%s is a role job under attempt %d of %s, not the attempt's own job: its landing "+
+			"branch is not re-derived here, and the reconciler finishes a settled role job from its branch",
+			spec.JobID, attempt, tickID)
+	}
+	record := &attemptRecord{
+		SchemaVersion: stateSchemaVersion,
+		JobID:         spec.JobID,
+		Attempt:       attempt,
+		TickID:        tickID,
+		State:         dir,
+		BaseSHA:       spec.Source.BaseSHA,
+		Branch:        attemptLandingBranch(e.opts.EpicID, attempt, tickID),
+		WriteRef:      spec.Source.WriteRef,
+		Launched:      true,
+		Detail: fmt.Sprintf("reattached for its collect: the door reads it settled as %s, and the record the "+
+			"orchestrator that dispatched it held went with that orchestrator's disk", status.State),
+		RunID:    e.opts.RunID,
+		EpicID:   e.opts.EpicID,
+		Role:     spec.Role,
+		BaseRef:  e.opts.BaseRef,
+		Title:    e.opts.Title,
+		Model:    e.opts.Model,
+		Harness:  e.opts.Harness,
+		Prompt:   e.opts.Prompt,
+		Adopted:  true,
+		Spec:     spec,
+		IssuedAt: e.stamp(),
+	}
+	if err := st.writeAttempt(record); err != nil {
+		return nil, err
+	}
+	return handleFor(record), nil
+}
+
+// attemptOwnJobID is the job id of an attempt's own job — the door's
+// attemptJobID (cloudflare/src/sandbox-executor.ts) and the reconciler's,
+// one spelling: `run-<run>/tick-<tick>/attempt-<n>`.
+func attemptOwnJobID(runID, tickID string, attempt int) string {
+	return fmt.Sprintf("run-%s/tick-%s/attempt-%d", runID, tickID, attempt)
+}
+
+// attemptLandingBranch is the branch an attempt's own worker container
+// pushes: `tick/<epic>/attempt-<n>/<tick>`, the door's attemptLandingBranch
+// (cloudflare/src/worker-boot.ts) for a job with no role slot. The
+// container's per-run fallback beside it is collect's to find.
+func attemptLandingBranch(epicID string, attempt int, tickID string) string {
+	return fmt.Sprintf("tick/%s/attempt-%d/%s", epicID, attempt, tickID)
 }
 
 // ---------------------------------------------------------------- inspect ---

@@ -1090,6 +1090,23 @@ type Observation = {
   unanswered?: string;
 };
 
+/**
+ * The detail for an orchestrator whose PROCESS RECORD is gone rather than
+ * exited: the platform answered that no such process exists, which is the
+ * container instance being replaced or restarted under it — not the
+ * orchestrator deciding to stop, which always leaves an exit code. Epic hn6's
+ * cloud run lost boot 3 this way at 13:38Z, eight minutes after a stalled
+ * container rollout advanced to 100% of instances; "the sandbox died" said
+ * none of that, and read like the orchestrator's own failure.
+ */
+export function orchestratorContainerGone(boot: number): string {
+  return (
+    `the orchestrator's container was replaced under it (boot ${boot}): the platform reports its ` +
+    "process gone rather than exited — the instance was taken (a container rollout replacing " +
+    "instances, a host eviction, or the container running out of memory), not stopped by the orchestrator"
+  );
+}
+
 type ObserveInput = {
   params: RunWorkflowParams;
   context: RunContext;
@@ -1865,7 +1882,7 @@ async function supervisePass(
           const code = seen.exit_code;
           lastDetail =
             seen.process === "gone"
-              ? `the orchestrator sandbox died (boot ${boot})`
+              ? orchestratorContainerGone(boot)
               : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})`;
           bootEnded = lastDetail;
           if (isTerminalExit(code)) {
