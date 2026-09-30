@@ -48,16 +48,18 @@ func newFactoryDeployCommand(stdout, stderr io.Writer) *cobra.Command {
 		rotateToken = fs.Bool("rotate-token", false, "mint a new factory token instead of reusing the stored one")
 		url         = fs.String("url", "", "the factory's base endpoint, when wrangler's output does not name it")
 		skipRollout = fs.Bool("skip-rollout-wait", false, "accept an unconfirmed container rollout")
+		skipPrune   = fs.Bool("skip-image-prune", false, "leave old ticks-orchestrator images in the managed registry (by default all but the newest few and the served one are deleted)")
+		keepImages  = fs.Int("keep-images", 0, "how many of the newest ticks-orchestrator images a prune keeps besides the served one (default 5)")
 		asJSON      = fs.Bool("json", false, "print one versioned document (ticfac.factory-deploy.v1) with the deployment's facts; the token is never in it")
 	)
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(factoryDeploy(args, bundleDir, rotateToken, url, skipRollout, asJSON, stdout, stderr))
+		return codeToErr(factoryDeploy(args, bundleDir, rotateToken, url, skipRollout, skipPrune, keepImages, asJSON, stdout, stderr))
 	}
 	return cmd
 }
 
-func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *string, skipRollout *bool, asJSON *bool, stdout, stderr io.Writer) int {
+func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *string, skipRollout, skipPrune *bool, keepImages *int, asJSON *bool, stdout, stderr io.Writer) int {
 	if len(args) != 0 {
 		fmt.Fprintf(stderr, "ticfac factory deploy: takes no positional arguments\n")
 		return 2
@@ -70,6 +72,8 @@ func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *str
 		URL:             *url,
 		Out:             stdout,
 		SkipRolloutWait: *skipRollout,
+		SkipImagePrune:  *skipPrune,
+		ImageKeep:       *keepImages,
 	})
 	if err != nil {
 		// Every failure is a stop with an explanation the operator can act

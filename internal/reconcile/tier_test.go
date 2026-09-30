@@ -494,13 +494,13 @@ func distributionOf(mechanical, translation, construction, diagnosis, design flo
 }
 
 // A dispatch selects its model from the RECORDED DISTRIBUTION: the mass on
-// the dear work types clears the provisional threshold for a1 and starts it
+// the dear work types clears the declared threshold for a1 and starts it
 // at the dear tier; a2's mass does not clear and it falls back to the start
 // policy's default; b1's mass sits exactly AT the threshold and does not
 // clear, because the rule is strictly greater. Every marker says so on
-// origin, and every derivation is in the journal with the mass, the
-// threshold and the word provisional — the one place a person tuning the
-// number reads what it still is.
+// origin, and every derivation is in the journal with the mass and the
+// threshold — and whether that threshold is declared or the provisional
+// default, the one thing a person tuning the number needs to read.
 func TestAMassRoutedDispatchSelectsItsModelFromTheRecord(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{gate: massGate})
@@ -553,14 +553,14 @@ func TestAMassRoutedDispatchSelectsItsModelFromTheRecord(t *testing.T) {
 		t.Fatal("a1's dispatch recorded no tier derivation")
 	}
 	if !strings.Contains(detail, "0.55 of probability mass on the dear work types (diagnosis, design)") ||
-		!strings.Contains(detail, "provisional mass threshold 0.50") {
-		t.Errorf("the derivation record does not name the mass and the provisional threshold: %q", detail)
+		!strings.Contains(detail, "declared mass threshold 0.50") {
+		t.Errorf("the derivation record does not name the mass and the declared threshold: %q", detail)
 	}
 	// And the run-level stance said so at admission, where an operator reads
 	// it while the run can still be cancelled cheaply.
 	var stance bool
 	for _, event := range r.Journal() {
-		if strings.Contains(event.Detail, "the mass threshold is PROVISIONAL") &&
+		if strings.Contains(event.Detail, "the mass threshold is the one [tier_policy].mass_threshold declares") &&
 			strings.Contains(event.Detail, "dear work types (diagnosis, design)") {
 			stance = true
 		}

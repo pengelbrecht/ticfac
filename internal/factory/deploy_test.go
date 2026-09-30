@@ -239,6 +239,16 @@ func (h *harness) logLines() []string {
 	return lines
 }
 
+// linesAfter returns the lines after the first one starting with prefix.
+func linesAfter(lines []string, prefix string) []string {
+	for i, l := range lines {
+		if strings.HasPrefix(l, prefix) {
+			return lines[i+1:]
+		}
+	}
+	return nil
+}
+
 func countLines(lines []string, prefix string) int {
 	n := 0
 	for _, l := range lines {
@@ -1032,6 +1042,107 @@ func (h *harness) execLog() string {
 	return string(data)
 }
 
+// A rollout whose new instance cannot pull its image says so: the health error
+// the application reports is in the failure, not only in the dashboard
+// (2026-09-30: two rollouts timed out on ImagePullError and the deploy said
+// only "still serving a different image").
+func TestDeployRolloutFailureNamesTheApplicationsHealthErrors(t *testing.T) {
+	h := newHarness(t)
+	t.Setenv("FAKE_WRANGLER_ROLLOUT_STUCK", "1")
+	t.Setenv("FAKE_WRANGLER_HEALTH_ERROR", observedImagePullError)
+
+	opts := h.rolloutOptions()
+	opts.rolloutTimeout = 30 * time.Millisecond
+	opts.Out = io.Discard
+
+	_, err := Deploy(context.Background(), opts)
+	var rollout *RolloutError
+	if !errors.As(err, &rollout) {
+		t.Fatalf("Deploy error = %T (%v), want a *RolloutError", err, err)
+	}
+	want := "the application reports: ImagePullError: the runtime couldn't pull the image"
+	if !strings.Contains(rollout.Reason, want) {
+		t.Errorf("rollout failure reason = %q, want it to contain %q", rollout.Reason, want)
+	}
+	if strings.Contains(rollout.Error(), strings.Repeat("ab", 16)) {
+		t.Errorf("the account id from the health error's image reached the message: %v", rollout)
+	}
+}
+
+// observedImagePullError is the health error `wrangler containers info`
+// reported on 2026-09-30, with a stand-in account id.
+var observedImagePullError = `{"instance_id":"d038dd4a","event":{"id":"2c0d1e4b","time":"2026-09-30T10:44:09.52Z",` +
+	`"type":"SystemError","name":"ImagePullError","message":"the runtime couldn't pull the image due to an internal issue ` +
+	`(e.g communication with the container image registry wasn't possible)","details":{"duration":"10m0.004s",` +
+	`"image":"registry.cloudflare.com/` + strings.Repeat("ab", 16) + `/ticks-orchestrator@sha256:` + strings.Repeat("d", 64) +
+	`","requested_disk_size":16000000000},"statusChange":{"health":"failed"}}}`
+
+// A rollout the platform still reports in progress is given longer than the
+// base bound: on 2026-09-30 freshly pushed layers pulled so slowly that the
+// runtime timed out each pull at 10 minutes and retried, and rollouts landed
+// after 23-48 minutes. The wait extends once instead of calling a rollout that
+// is going to land a failure.
+func TestDeployRolloutWaitExtendsWhileTheRolloutIsInProgress(t *testing.T) {
+	h := newHarness(t)
+	t.Setenv("FAKE_WRANGLER_ROLLOUT_LAG", "3")
+	t.Setenv("FAKE_WRANGLER_ROLLOUT_ACTIVE", "1")
+	t.Setenv("FAKE_WRANGLER_HEALTH_ERROR", observedImagePullError)
+
+	var out bytes.Buffer
+	opts := h.rolloutOptions()
+	opts.rolloutTimeout = time.Nanosecond // spent before the first look returns
+	opts.rolloutExtension = 2 * time.Minute
+	opts.Out = &out
+
+	result, err := Deploy(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Deploy: %v\n%s", err, out.String())
+	}
+	if !result.RolloutConfirmed {
+		t.Error("RolloutConfirmed = false after the extended wait saw the new image")
+	}
+	for _, want := range []string{"the rollout is still in progress", "ImagePullError", "(after 10m0.004s)"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("the extension's output lacks %q:\n%s", want, out.String())
+		}
+	}
+}
+
+// With no rollout in progress there is nothing to wait for: the base bound
+// holds.
+func TestDeployRolloutWaitDoesNotExtendWithoutARolloutInProgress(t *testing.T) {
+	h := newHarness(t)
+	t.Setenv("FAKE_WRANGLER_ROLLOUT_LAG", "3")
+	t.Setenv("FAKE_WRANGLER_HEALTH_ERROR", `"x"`)
+
+	opts := h.rolloutOptions()
+	opts.rolloutTimeout = time.Nanosecond
+	opts.rolloutExtension = 2 * time.Minute
+	opts.Out = io.Discard
+
+	_, err := Deploy(context.Background(), opts)
+	var rollout *RolloutError
+	if !errors.As(err, &rollout) {
+		t.Fatalf("Deploy error = %T (%v), want a *RolloutError: no rollout was in progress", err, err)
+	}
+}
+
+func TestRenderHealthErrorsToleratesAnyShape(t *testing.T) {
+	acct := strings.Repeat("ab", 16)
+	got := renderHealthErrors([]json.RawMessage{
+		json.RawMessage(`"plain string"`),
+		json.RawMessage(`{"name":"ImagePullError","message":"m"}`),
+		json.RawMessage(`{"event":{"name":"E","message":"m","details":{"duration":"10m"}}}`),
+		json.RawMessage(`{"unknown":"registry.cloudflare.com/` + acct + `/x"}`),
+		json.RawMessage(`42`),
+	})
+	want := []string{"plain string", "ImagePullError: m", "E: m (after 10m)",
+		`{"unknown":"registry.cloudflare.com/<account>/x"}`, "42"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("renderHealthErrors = %q, want %q", got, want)
+	}
+}
+
 // The whole point: a rollout that never lands must not exit 0. A green deploy
 // in front of a stale container is what made a correct fix look broken.
 func TestDeployFailsWhenTheRolloutNeverLands(t *testing.T) {
@@ -1141,7 +1252,9 @@ func TestDeploySkipRolloutWaitSaysNothingWasConfirmed(t *testing.T) {
 	if !strings.Contains(out.String(), "NOT confirmed") {
 		t.Errorf("the skipped wait is not reported in the output:\n%s", out.String())
 	}
-	if n := countLines(h.logLines(), "containers list"); n != 0 {
+	// The one listing before `deploy` is the prune's look at the served
+	// image; the rollout wait is what the escape hatch skips.
+	if n := countLines(linesAfter(h.logLines(), "deploy"), "containers list"); n != 0 {
 		t.Errorf("the container application was polled %d times despite --skip-rollout-wait", n)
 	}
 }

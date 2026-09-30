@@ -410,6 +410,22 @@ digest lands in `factory_deployment_image`, and each run is stamped with it in
 `run_image` as it ignites, which is what `tk cloud status <run>` reports as the
 image that run booted.
 
+Every deploy pushes a new ~1.2 GB `ticks-orchestrator` image, and the account's
+managed registry holds at most 50 GB of images. So the deploy prunes: before it
+pushes and again after a confirmed rollout, it deletes all but the newest five
+orchestrator images, never the one the application serves (nor the one a new
+rollout replaced), and warns when what remains is still near the limit.
+`--keep-images N` changes the five; `--skip-image-prune` opts out (2026-09-30:
+59 tags, 45 GB, nothing had ever been deleted).
+
+The rollout wait is 10 minutes, extended once by up to 50 while the platform
+still reports the rollout in progress, and a rollout it cannot confirm names
+the application's health errors. On 2026-09-30 the managed registry served
+each freshly pushed ~200 MB layer at under 0.2 MB/s for its first half hour or
+so; the runtime gave up each pull at exactly 10 minutes (`ImagePullError: the
+runtime couldn't pull the image due to an internal issue`), retried, and the
+rollouts landed after 23-48 minutes.
+
 Three prerequisites, each a stop with its own message rather than a deploy that
 half-works: a logged-in **wrangler**, a running **Docker** (the image), and
 **pnpm** (the Worker imports the Sandbox SDK, so the staged bundle is installed

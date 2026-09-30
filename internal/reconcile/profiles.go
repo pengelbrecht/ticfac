@@ -366,18 +366,24 @@ func (r *Reconciler) recordTierPolicy(plan []planEntry) {
 	// The classification-routing stance (tick s45), stated at admission so the
 	// operator reading the run can cancel cheaply: a recorded classification
 	// starts a first attempt dearer when the mass on the dear work types
-	// clears the threshold — and the threshold is PROVISIONAL, said here in
-	// the one place a person tuning it reads it, because 0.50 is a starting
-	// point from one measurement and not a finding.
+	// clears the threshold — and whether that threshold is the repository's
+	// own declared number or the PROVISIONAL default, said here in the one
+	// place a person tuning it reads it: 0.50 is a starting point from one
+	// measurement, a declared number is the repository's stated choice (this
+	// repository's was measured on history by tick ms9).
 	if len(r.tierPolicy.DearWorkTypes) > 0 {
 		names := make([]string, 0, len(r.tierPolicy.DearWorkTypes))
 		for _, workType := range r.tierPolicy.DearWorkTypes {
 			names = append(names, string(workType))
 		}
+		provenance := "the mass threshold is PROVISIONAL, a starting point from one measurement, to be re-tuned against the recorded distributions rather than re-affirmed"
+		if r.tierPolicy.MassThresholdDeclared() {
+			provenance = "the mass threshold is the one [tier_policy].mass_threshold declares, and a re-tune re-evaluates it against the recorded distributions"
+		}
 		r.record("", StagePolicyStated,
-			"a recorded classification starts a first attempt at tier %q when the probability mass on the dear work types (%s) clears %.2f — the mass threshold is PROVISIONAL, a starting point from one measurement, to be re-tuned against the recorded distributions rather than re-affirmed; the ceiling %q still bounds the result and a failed attempt still earns its rungs above whatever the classifier chose",
+			"a recorded classification starts a first attempt at tier %q when the probability mass on the dear work types (%s) clears %.2f — %s; the ceiling %q still bounds the result and a failed attempt still earns its rungs above whatever the classifier chose",
 			string(r.tierPolicy.DearTier), strings.Join(names, ", "), r.tierPolicy.MassThresholdOrDefault(),
-			string(r.tierPolicy.CeilingOrDefault()))
+			provenance, string(r.tierPolicy.CeilingOrDefault()))
 	}
 
 	// Per-wave width: derive each wave's tiers as a first attempt would (the
