@@ -64,8 +64,26 @@ func TestWorkerSlotsLeaveTheOrchestratorItsOwnContainer(t *testing.T) {
 		{"three", 0},
 		{"0", 0},
 	} {
-		if got := workerSlots(tc.ceiling); got != tc.want {
+		if got := workerSlots(tc.ceiling, ""); got != tc.want {
 			t.Errorf("workerSlots(%q) = %d, want %d", tc.ceiling, got, tc.want)
+		}
+	}
+}
+
+// short: pure arithmetic over an environment value.
+func TestWorkerSlotsGiveALocalOrchestratorTheWholeCeiling(t *testing.T) {
+	// `ticfac run --cloud-workers`: the orchestrator is the operator's
+	// machine, so no container of the ceiling is its own.
+	for _, tc := range []struct {
+		ceiling string
+		want    int
+	}{
+		{"3", 3},
+		{"12", 12},
+		{"", 0}, // no ceiling stated: the door's no_capacity bounds it
+	} {
+		if got := workerSlots(tc.ceiling, OrchestratorLocal); got != tc.want {
+			t.Errorf("workerSlots(%q, local) = %d, want %d", tc.ceiling, got, tc.want)
 		}
 	}
 }

@@ -90,13 +90,16 @@ const runClaimPoll = 250 * time.Millisecond
 // expert overrides the description keeps (--profiles, --wall). Everything
 // else the old incantation named is decided, not asked. --cloud is the one
 // cloud parity flag (tick ejw): the same command against the factory.
+// --cloud-workers is the placement between the two: the orchestrator here,
+// its workers in the factory.
 type runFlags struct {
-	repo     *string
-	noHerdr  *bool
-	profiles *string
-	wall     *int
-	cloud    *bool
-	asJSON   *bool
+	repo         *string
+	noHerdr      *bool
+	profiles     *string
+	wall         *int
+	cloud        *bool
+	cloudWorkers *bool
+	asJSON       *bool
 }
 
 func defineRunFlags(fs *flag.FlagSet) *runFlags {
@@ -113,6 +116,11 @@ func defineRunFlags(fs *flag.FlagSet) *runFlags {
 		cloud: fs.Bool("cloud", false,
 			"run the epic in your cloud factory: submit it to the configured factory and attach the same live view "+
 				"— the same verbs, view and triage as a local run (the expert `ticfac cloud ...` commands stay for the rest)"),
+		cloudWorkers: fs.Bool("cloud-workers", false,
+			"orchestrate the epic on THIS machine and run every worker in your cloud factory: the factory records "+
+				"the run and hands this machine its credential, every implement and role job boots in a worker "+
+				"container (the Workers AI cells of .tick/runners.cloud.toml), and the reconciler, its merges and "+
+				"the integrated gate run here — no environment to export"),
 		asJSON: fs.Bool("json", false,
 			"answer as one versioned document (ticfac.run.v1) when the command ends: what it did — attached, started, resumed — and how that ended, with the exit-table state word (done, running, held, failed, cancelled). The run's own prose goes to stderr, so stdout is the document's alone"),
 	}
@@ -153,7 +161,21 @@ view to the cloud run, and running it again attaches to this project's live
 cloud run or resumes a finished or frozen one with a new submission. The
 herdr detection, the profile set and the wall clock drive LOCAL jobs, so
 they do not apply; the expert ` + "`ticfac cloud ...`" + ` commands keep the rest (a
-queued submission, a budget ceiling, a hard stop).`,
+queued submission, a budget ceiling, a hard stop).
+
+With --cloud-workers, the orchestrator runs HERE and its workers run in the
+factory: the command records the run in the configured factory, collects
+the run's own credential for this machine, and starts ` + "`ticfac run-epic`" + ` in
+the background on the cloud profile set with the cloud substrate — every
+implement and role job boots one worker container through the factory's
+sandbox door, on the Workers AI cells of .tick/runners.cloud.toml, while the
+reconciler's git work, its merges, base folds and the integrated gate run on
+this machine. The run's feed is relayed to the factory, so ` + "`ticfac watch`" + `
+and ` + "`ticfac status`" + ` read it from anywhere; the run heartbeats, and the
+factory ends it (reclaiming its workers) if this machine goes quiet. Running
+the command again attaches to the live run, re-collects the credential for a
+run whose local process died, or starts a new run. --wall applies; herdr
+and --profiles do not.`,
 	}
 	fs := flag.NewFlagSet("run", flag.ContinueOnError)
 	fl := defineRunFlags(fs)
@@ -220,11 +242,22 @@ var runHerdrLive = func(ctx context.Context, repo string) (string, error) {
 // never stops" property rests on: the child the production value starts is
 // not in the invocation's session, which is what makes detaching free.
 var runStartDetached = func(argv []string, out io.Writer) (runChild, error) {
+	return startDetached(argv, nil, out)
+}
+
+// startDetached is runStartDetached's production body, with extra
+// environment for the child on top of this process's own: `--cloud-workers`
+// hands its child the factory credentials that way, so they never ride the
+// argv start.log records.
+func startDetached(argv, env []string, out io.Writer) (runChild, error) {
 	self, err := os.Executable()
 	if err != nil {
 		self = os.Args[0]
 	}
 	cmd := exec.Command(self, argv...)
+	if len(env) > 0 {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	cmd.Stdout, cmd.Stderr = out, out
 	// A session of its own: the foreground process group a terminal's Ctrl-C
 	// signals does not contain this child, and the hangup a closing terminal
@@ -361,12 +394,25 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 				"queue flags\n")
 			return 2
 		}
+		if *fl.cloudWorkers {
+			fmt.Fprintf(stderr, "ticfac run: --cloud puts the orchestrator in the factory and --cloud-workers "+
+				"keeps it on this machine; name one\n")
+			return 2
+		}
+	}
+	if *fl.cloudWorkers && (*fl.noHerdr || *fl.profiles != "") {
+		fmt.Fprintf(stderr, "ticfac run: --cloud-workers dispatches every job through the factory with the "+
+			"cloud profile set embedded in this binary, so --no-herdr and --profiles do not apply\n")
+		return 2
 	}
 	if parseOnly {
 		return 0
 	}
 	if *fl.cloud {
 		return runCloudCommand(ctx, epicID, repo, fl, stdout, stderr)
+	}
+	if *fl.cloudWorkers {
+		return runCloudWorkersCommand(ctx, epicID, repo, fl, stdout, stderr)
 	}
 
 	runID := runIDOfEpic(epicID)
@@ -446,6 +492,17 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	fmt.Fprintf(prose, "run %s starting in the background (pid %d; its first words are in %s)\n",
 		runID, child.Pid(), logPath)
 
+	return awaitClaimAndAttach(ctx, epicID, repo, runID, action, child, logPath, fl, finish, attachRun, prose, stdout, stderr)
+}
+
+// awaitClaimAndAttach is the second half of every background start — the
+// local run's and `--cloud-workers`' alike: wait for the started run to
+// CLAIM its life, then attach the live view. finish emits the --json
+// document for the run it was built for and returns the state's exit class.
+func awaitClaimAndAttach(ctx context.Context, epicID, repo, runID, action string, child runChild, logPath string,
+	fl *runFlags, finish func(action, state, note string) int,
+	attach func(ctx context.Context, epicID, repo, runID string, stdout, stderr io.Writer) int,
+	prose, stdout, stderr io.Writer) int {
 	// The attach waits on the CLAIM, never on a guess about the child: the
 	// run's own pidfile, checked until the run claims its life, the child
 	// exits without one, or the bound runs out. A child that refuses (no
@@ -456,7 +513,7 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 		if p := runlife.Probe(repo, runID, time.Now()); p.State == runlife.Alive {
 			fmt.Fprintf(prose, "run %s claimed its life (pid %d) — attaching; Ctrl-C detaches without stopping it\n",
 				runID, p.Record.PID)
-			code := attachRun(ctx, epicID, repo, runID, prose, stderr)
+			code := attach(ctx, epicID, repo, runID, prose, stderr)
 			return finish(action, runAttachState(repo, runID, code), "")
 		}
 		if child.Exited() {

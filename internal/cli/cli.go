@@ -525,6 +525,19 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(signals)
+
+	// A LOCAL orchestrator driving cloud workers (`ticfac run
+	// --cloud-workers`) says it is alive, because no platform answers for its
+	// process the way one answers for a container's. A factory that says the
+	// run is stopping, or no longer honours its credential, is answered the
+	// way a container answers the platform's SIGTERM — the handler below
+	// flushes the in-flight work and exits — so it is started only once that
+	// handler is listening. Nil for every other run.
+	heartbeat := runsignal.HeartbeatFromEnv(stderr, func(string) {
+		_ = syscall.Kill(os.Getpid(), syscall.SIGTERM)
+	})
+	heartbeat.Start()
+	defer heartbeat.Stop()
 	go func() {
 		select {
 		case <-finished:

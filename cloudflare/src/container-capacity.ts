@@ -77,7 +77,7 @@ export const RECLAIM_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
 /** Who holds the account's slots, as the door counts them. */
 export type HeldSlots = {
-  /** One per live run: its orchestrator's container. */
+  /** One per live container-orchestrated run: its orchestrator's container. */
   orchestrators: number;
   /** Worker containers booted and neither settled nor reclaimed. */
   workers: number;
@@ -94,7 +94,12 @@ export async function heldSlots(
   const since = new Date(now.getTime() - RECLAIM_LOOKBACK_MS).toISOString();
   const orchestrators = await db
     .prepare(
-      `SELECT COUNT(*) AS n FROM runs WHERE state IN (${ACTIVE_RUN_STATES.map(() => "?").join(", ")})`,
+      // A locally orchestrated run (`ticfac run --cloud-workers`, migration
+      // 0022) holds no container of its own: its orchestrator is the
+      // operator's machine, so only its workers are counted, below.
+      `SELECT COUNT(*) AS n FROM runs WHERE state IN (${ACTIVE_RUN_STATES.map(() => "?").join(", ")})
+         AND NOT EXISTS (SELECT 1 FROM run_orchestrator o WHERE o.run_id = runs.run_id
+           AND o.kind = 'local')`,
     )
     .bind(...ACTIVE_RUN_STATES)
     .first<{ n: number }>();
