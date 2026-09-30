@@ -25,6 +25,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -179,7 +180,7 @@ func TestDoctorWithEverythingPresentExitsZero(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("doctor with everything exits %d, want %d:\n%s", code, exitSuccess, stdout)
 	}
-	for _, check := range []string{runconfigFileName(), "tk", "herdr", "github", "git identity", "classifier"} {
+	for _, check := range []string{runconfigFileName(), "routing", "tk", "herdr", "github", "git identity", "classifier"} {
 		if !strings.Contains(stdout, "ok       "+check) {
 			t.Errorf("the report has no ok line for %s:\n%s", check, stdout)
 		}
@@ -221,6 +222,40 @@ func TestDoctorReportsAMissingRunnersTomlWithInitAsTheFix(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "fix: ticfac init") {
 		t.Errorf("the missing runners.toml does not name init as its fix:\n%s", stdout)
+	}
+}
+
+// TestDoctorReportsAJobThatCannotRoute (epic hn6, 2026-09-30): a cloud
+// ceiling the review cell declares no tier for leaves the resolve-conflict
+// job unroutable, which a run met only at its first merge conflict. doctor
+// resolves every job a run can dispatch and names the one that fails.
+func TestDoctorReportsAJobThatCannotRoute(t *testing.T) {
+	saveDoctorSeams(t, "", false)
+	repo := doctorFixture(t, true)
+	cloudFile := filepath.Join(repo, ".tick", "runners.cloud.toml")
+	raw, err := os.ReadFile(cloudFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw = append(raw, []byte(`
+[roles.implement.tiers.strong]
+effort = "high"
+
+[tier_policy]
+default = "strong"
+ceiling = "strong"
+`)...)
+	if err := os.WriteFile(cloudFile, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, _ := runDoctorOn(t, repo, false)
+	if code != exitGeneric {
+		t.Fatalf("doctor over an unroutable resolve-conflict job exits %d, want %d:\n%s", code, exitGeneric, stdout)
+	}
+	for _, want := range []string{"missing  routing", "resolve-conflict", `"strong"`, "fix: " + doctorFixRouting} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("the report does not say %q:\n%s", want, stdout)
+		}
 	}
 }
 

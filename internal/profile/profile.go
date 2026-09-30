@@ -113,7 +113,10 @@ var Roles = []string{"implement-tick", "review-epic", "closeout-epic"}
 // ON DEMAND — neither is one of [Roles], the set a run resolves at
 // construction, because a role that exists for the rare merge conflict or the
 // rare failed gate must not make every cloud run refuse at start over a cell
-// the operator was never asked to declare. Their candidates end at the
+// the operator was never asked to declare. (A run still checks, at start,
+// that they CAN route at the ceiling — see [OnDemandRoles] — and since their
+// candidates end at the review cell every config already declares, the only
+// cell that check can demand is the review cell's ceiling tier.) Their candidates end at the
 // REVIEW cell deliberately: both are judgement jobs the run routes at the
 // policy's CEILING tier, and the review cell is the frontier judgement routing
 // every config already declares — claude locally, a Workers AI model in the
@@ -141,6 +144,18 @@ const RoleResolveConflict = "resolve-conflict"
 // It is exported for the reconciler, which resolves it lazily rather than
 // through [ResolveAll], for the same reason the resolve-conflict role is.
 const RoleRepairGate = "plan-repair"
+
+// OnDemandRoles are the roles a run dispatches only when it meets a merge
+// conflict or a failed integrated gate. They are resolved when needed, and a
+// run also resolves them at the policy's ceiling before it starts
+// (reconcile.CheckRouting). Otherwise a routing that cannot serve them is
+// found hours into a run, at the first conflict (epic hn6, 2026-09-30).
+var OnDemandRoles = []string{RoleResolveConflict, RoleRepairGate}
+
+// EveryRole is every role a run can dispatch: [Roles] then [OnDemandRoles].
+func EveryRole() []string {
+	return append(append([]string{}, Roles...), OnDemandRoles...)
+}
 
 // RunnersRoleCandidates returns the roles-table names a profile role routes
 // through, first declared first — the same candidates route() walks. A caller

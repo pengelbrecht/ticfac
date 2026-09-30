@@ -548,7 +548,7 @@ func TestTheProfilesPromptAndModelReachEveryDispatchedJob(t *testing.T) {
 func TestAModelRoutedToARunnerThatCannotTakeOneIsRefused(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	for _, role := range profile.Roles {
+	for _, role := range profile.EveryRole() {
 		writeProfile(t, dir, role, `"executor": "local-subprocess", "runner": "claude", "model": "sonnet"`)
 	}
 	f := newFixture(t, fixtureOptions{})
@@ -607,7 +607,7 @@ func first(text string, n int) string {
 func TestProvenanceNamesTheMarkerExecutorNotTheReResolvedProfile(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	for _, role := range profile.Roles {
+	for _, role := range profile.EveryRole() {
 		writeProfile(t, dir, role, `"executor": "local-subprocess", "runner": "claude", "model": "sonnet"`)
 	}
 	f := newFixture(t, fixtureOptions{})

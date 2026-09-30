@@ -25,7 +25,7 @@ import (
 func TestADispatchGoesThroughTheExecutorItsProfileNames(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	for _, role := range profile.Roles {
+	for _, role := range profile.EveryRole() {
 		writeProfile(t, dir, role, `"executor": "herdr", "runner": "claude", "model": "sonnet"`)
 	}
 	f := newFixture(t, fixtureOptions{})
@@ -158,7 +158,7 @@ func TestADispatchGoesThroughTheExecutorItsProfileNames(t *testing.T) {
 func TestTheHonouredSetDecidesWhichExecutorAProfileMayName(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	for _, role := range profile.Roles {
+	for _, role := range profile.EveryRole() {
 		writeProfile(t, dir, role, `"executor": "herdr", "runner": "claude", "model": "sonnet"`)
 	}
 	f := newFixture(t, fixtureOptions{})

@@ -1532,6 +1532,16 @@ func New(opts Options) (*Reconciler, error) {
 			r.tierProfiles[role] = perRole
 		}
 	}
+	// The on-demand jobs — resolve-conflict at a merge conflict, plan-repair
+	// at a failed integrated gate — are dispatched only when needed and
+	// resolved then, but whether they CAN route is known now. Epic hn6's run
+	// found out at its first conflict, hours in, and stopped (a cloud ceiling
+	// the review cell declared no tier for): a routing defect is refused here.
+	for _, role := range profile.OnDemandRoles {
+		if _, err := routeOnDemandJob(role, opts.ProfileDir, opts.GateConfig, substrate, r.tierPolicy, opts.Executors); err != nil {
+			return nil, fmt.Errorf("reconcile: %w", err)
+		}
+	}
 
 	g := &repoGit{dir: opts.Repo, name: "ticfac", email: "ticfac@example.com", remote: opts.Remote,
 		retry: r.remoteRetry()}
