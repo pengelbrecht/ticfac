@@ -1,3 +1,118 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/hn6/attempt-4/ltg`, base `fa8273973613abee8959559bbf379e95d57d4e18`, harness `pi` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+
+> **BOUNDARY VIOLATION ATTEMPTED.** This agent tried to write tracker state, which the
+> orchestrator owns. The container refused it, so nothing under `.tick/`
+> should have reached this branch — but the attempt is reported rather than
+> silently cleaned, because a model that ignored an explicit instruction is
+> something a human has to see. What it did:
+>
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+> - the agent ran `tk version --json`
+
 # Status model reads worker activity and attempt reports (hn6, ltg)
 
 Wave 2 of epic hn6: the two per-attempt readers the dashboard shows from this
