@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "run_911b556fce394004837695b3196e3925",
   "epic_id": "hn6",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching 3gk as attempt 1",
-  "updated_at": "2026-09-30T12:12:03Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "3gk is running as attempt 1",
+  "updated_at": "2026-09-30T12:12:19Z",
   "ticks": [
     {
       "tick_id": "3gk",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "7uv",
