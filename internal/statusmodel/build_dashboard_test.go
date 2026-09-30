@@ -7,32 +7,27 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 )
 
-// The DASHBOARD vocabulary (epic hn6, wave 1 — tick r5i): this tick declares
-// every field the dashboard renders so the wave-2 ticks fill them in
-// parallel against a fixed shape. It computes NOTHING new beyond `recent`
-// and the two graph copies (`epic_title`, `gloss`); every other new field
-// comes out at its honest empty value, and THIS test pins exactly that
-// wave-1 half — the wave-2 ticks will replace the empty assertions with the
-// real derivations, and this test is the fence that says what the stubs
-// must not quietly leave out.
-
-// pendingPipeline is the wave-1 pipeline cell: the role's own stage list,
-// every stage pending — what a renderer lays the cell out from before
-// anything has happened.
-func pendingPipeline(stages []string) []PipelineStage {
-	cell := make([]PipelineStage, 0, len(stages))
-	for _, stage := range stages {
-		cell = append(cell, PipelineStage{Stage: stage, State: StageStatePending})
-	}
-	return cell
-}
+// The DASHBOARD vocabulary (epic hn6): this file pins what wave 1 declared
+// (tick r5i) and what its wave-2 fills have not yet reached. Wave 1 declared
+// every field the dashboard renders; the pipeline cell, the parent, the
+// duration, the findings and the tries' tier/reason/next_step are now
+// DERIVED (wave 2, tick 3gk — pinned case by case in pipeline_test.go, over
+// this file's running-epic fixture too), so what remains here is the other
+// half: the fields the remaining wave-2 ticks (7uv's verdict and cost, ltg's
+// worker activity and attempt reports) still answer at their honest empty
+// values, plus the three fields wave 1 filled for real (`recent`,
+// `epic_title`, `gloss`) and the vocabulary the contract's enums spell.
 
 // TestBuildEmitsTheDashboardFieldsEmpty: a Build over the running-epic
-// fixture emits every dashboard field — pipeline per role all pending,
-// findings empty, the report and the parent unread, no worker activity, the
-// healthy verdict, no cost lines — and the three fields this tick fills for
-// real: `recent` holding the last five feed lines oldest first, `epic_title`
-// copied off the graph, and every tick's `gloss` copied off its graph task.
+// fixture emits the dashboard fields the wave-2 fills have not reached at their
+// honest empty values — the role's own pipeline stage list (the SHAPE a
+// renderer lays the cell out from; the states are derived now, and
+// pipeline_test.go pins them over this same fixture), findings as the
+// required list (empty or carried, never nil), the report and the worker
+// activity unread, the healthy stub verdict, no cost lines — and the three
+// fields wave 1 filled for real: `recent` holding the last five feed lines
+// oldest first, `epic_title` copied off the graph, and every tick's `gloss`
+// copied off its graph task.
 func TestBuildEmitsTheDashboardFieldsEmpty(t *testing.T) {
 	t.Parallel()
 	src := runningEpicSources()
@@ -42,7 +37,9 @@ func TestBuildEmitsTheDashboardFieldsEmpty(t *testing.T) {
 		t.Fatal("the fixture's graph answered and the model states no waves")
 	}
 
-	// One tick per role, each with the role's own stage list — all pending.
+	// One tick per role, each with the role's own stage list — the fixed shape
+	// a renderer lays the cell out from. Which stage a tick is IN is a
+	// derivation pipeline_test.go pins; this holds the list itself.
 	tickByID := map[string]Tick{}
 	for _, w := range *model.Waves {
 		for _, tick := range w.Ticks {
@@ -62,40 +59,22 @@ func TestBuildEmitsTheDashboardFieldsEmpty(t *testing.T) {
 			t.Fatalf("%s carries no pipeline cell at all", tickID)
 		}
 		if !stagesOf(got, want) {
-			t.Errorf("%s's pipeline cell is %s, want the %v stages all pending",
+			t.Errorf("%s's pipeline cell is %s, want the %v stages the role carries",
 				tickID, cellOf(got), want)
-		}
-		for _, stage := range got {
-			if stage.State != StageStatePending {
-				t.Errorf("%s's stage %s reads %q, want pending: wave 1 declares the cell, wave 2 fills it",
-					tickID, stage.Stage, stage.State)
-			}
 		}
 	}
 
-	// The per-tick fields a dashboard drills into: nothing read yet, so
-	// empty and null — never missing.
+	// The per-tick fields a dashboard drills into: the findings list is
+	// required (never nil — the tick that drafted none and the tick that
+	// drafted some are both whole rows), and the report stays unread until
+	// the wave-2 report tick reads it. The derived halves — findings contents,
+	// parent, duration, the tries' tier/reason/next_step — are pipeline_test's.
 	for _, tick := range tickByID {
 		if tick.Findings == nil {
-			t.Errorf("%s's findings are nil, want the empty list: the field is required, and nil marshals as null", tick.TickID)
-		}
-		if len(tick.Findings) != 0 {
-			t.Errorf("%s's findings are %+v, want empty: no wave-2 tick has filled them yet", tick.TickID, tick.Findings)
-		}
-		if tick.ParentTickID != nil {
-			t.Errorf("%s's parent is %+v, want null: the graph layering owns indentation, not this tick", tick.TickID, *tick.ParentTickID)
-		}
-		if tick.DurationSeconds != nil {
-			t.Errorf("%s's duration is %d, want null until the wave-2 tick measures it", tick.TickID, *tick.DurationSeconds)
+			t.Errorf("%s's findings are nil, want the list: the field is required, and nil marshals as null", tick.TickID)
 		}
 		if tick.Report != nil {
 			t.Errorf("%s carries a report %+v, want null: no report has been read", tick.TickID, *tick.Report)
-		}
-		for _, try := range tick.Tries {
-			if try.Tier != nil || try.Reason != nil || try.NextStep != nil {
-				t.Errorf("%s's try %d carries tier/reason/next_step (%v/%v/%v), want all null: the attempt vocabulary this tick declares, the wave-2 ticks fill",
-					tick.TickID, try.Try, try.Tier, try.Reason, try.NextStep)
-			}
 		}
 	}
 
