@@ -21,13 +21,16 @@
  * ended — and that question is answerable without trusting a word the
  * orchestrator printed.
  *
- * The comparison is over ALL heads rather than over a naming convention
- * (`epic/<id>`, `tick/<id>`). Branch naming is an adapter's choice and the
- * reconcile protocol already treats git rather than a name as authoritative;
- * a convention baked in here would quietly stop recognising progress the day
- * a substrate deviated. The cost is that a human pushing an unrelated branch
- * mid-run reads as progress — the forgiving direction, and the one that cannot
- * turn a run that really did the work into a false negative.
+ * The comparison is over the branch families a run of this epic writes to,
+ * never over every head on origin (tick hn6's run ended `unknown` on exactly
+ * that: a whole-repository listing is a read whose cost grows with every
+ * branch anyone ever left behind, and it stopped answering at all). The
+ * families are {@link runRefPrefixes}: the epic branch, the run branches, the
+ * harness workers' `tick/<epic>/` branches and this run's own dispatch
+ * branches. Each is a PREFIX, not a name, so a run branch suffixed with a run
+ * id or a worker branch the harness names differently inside its epic's
+ * namespace still reads as progress, and the forgiving direction survives: a
+ * push to any of them — the run's, or a person's — counts.
  *
  * A probe that cannot answer says so. "Nothing moved" and "nobody could tell"
  * are different facts about a run, exactly as they are for `cost_usd`, and the
@@ -61,7 +64,29 @@ const NAMED_BRANCHES = 3;
 // ----------------------------------------------------------------- the seam ---
 
 /**
- * The remote's branch heads, as `branch -> sha`.
+ * The branch prefixes one run of `epic` writes to.
+ *
+ * - `epic/<epic>` — the integration branch the run merges ticks onto.
+ * - `tick-run/<epic>` — the run branch the orchestrator commits the tracker
+ *   to, and its `tick-run/<epic>-<run-id>` variant (branch-ownership.ts).
+ * - `tick/<epic>/` — a harness worker's per-tick branch (worker-boot.ts).
+ * - `ticfac/run-<run id>/` — this run's dispatched attempts, resolves and
+ *   repairs (internal/reconcile's job ids).
+ *
+ * Prefixes rather than names because GitHub's `matching-refs` is a prefix
+ * match, and so is the question: anything under the run's namespaces moving
+ * is the run's evidence.
+ */
+export function runRefPrefixes(epic: string, runId: string): string[] {
+  return [`epic/${epic}`, `tick-run/${epic}`, `tick/${epic}/`, `ticfac/run-${runId}/`];
+}
+
+/**
+ * The remote's branch heads under `prefixes`, as `branch -> sha`.
+ *
+ * Scoped by construction: there is no way to ask for every head, because a
+ * reader whose cost grows with every branch anybody left on origin is a reader
+ * that eventually stops answering.
  *
  * A seam for the same reason `SandboxBinding` is one: the finalize rule is what
  * needs testing, and a rule exercisable only by pushing to a real GitHub
@@ -69,7 +94,7 @@ const NAMED_BRANCHES = 3;
  * a test assigns its own to `env.REPO_REFS`.
  */
 export interface RepoRefs {
-  list(project: string): Promise<Record<string, string>>;
+  list(project: string, prefixes: readonly string[]): Promise<Record<string, string>>;
 }
 
 /** A read of the remote's heads, or the reason there isn't one. */
@@ -79,17 +104,36 @@ export type RefSnapshot =
 
 export const GITHUB_API_BASE_URL = "https://api.github.com";
 
-/** GitHub's maximum page size for the refs listing. */
-const REF_PAGE_SIZE = 100;
-
 /**
- * Pages a listing will walk before it gives up.
+ * Pages one prefix's listing will walk before it gives up.
  *
- * A truncated listing is worse than no listing: the branch that moved could be
- * the one past the cut, and a comparison over half the refs would answer "none"
- * with confidence it has not earned. So the cap is a refusal, not a trim.
+ * GitHub's `matching-refs` ignores `page` and `per_page`: it answers every
+ * matching ref at once and, when it does paginate, says so in a `Link`
+ * header. The reader this replaced asked for `page=1..20` and stopped on a
+ * short page, so a repository with 100 or more branches got the SAME full
+ * listing twenty times and was refused as having "more than 2000 branches"
+ * (tick hn6's run, with 281). So the walk follows `rel="next"` and nothing
+ * else, and a chain longer than this is a refusal, not a trim: a truncated
+ * listing is worse than none, because the branch that moved could be the one
+ * past the cut and the comparison would answer "none" with confidence it has
+ * not earned.
  */
 export const MAX_REF_PAGES = 20;
+
+/** The `rel="next"` target of a GitHub `Link` header, if it names one. */
+export function nextPageUrl(link: string | null): string | null {
+  if (link === null) return null;
+  for (const part of link.split(",")) {
+    const match = /<([^>]+)>\s*;\s*rel="?next"?/.exec(part);
+    if (match) return match[1]!;
+  }
+  return null;
+}
+
+/** A branch prefix as a URL path, slash-separated segments each encoded. */
+function prefixPath(prefix: string): string {
+  return prefix.split("/").map(encodeURIComponent).join("/");
+}
 
 /**
  * The reader this deployment uses: a test's fake, or GitHub.
@@ -104,7 +148,7 @@ export function repoRefs(env: Env): RepoRefs {
 }
 
 /**
- * GitHub's `matching-refs/heads/` listing.
+ * GitHub's `matching-refs/heads/<prefix>` listing, one per prefix.
  *
  * Unauthenticated for a public repository and authenticated when the factory
  * holds the PAT it clones with; either way this is a read, and the token it
@@ -119,49 +163,64 @@ export function githubRepoRefs(env: Env): RepoRefs {
   };
 
   return {
-    async list(project: string): Promise<Record<string, string>> {
+    async list(project: string, prefixes: readonly string[]): Promise<Record<string, string>> {
       const headers = { ...baseHeaders, ...(await githubAuthorization(env, project)) };
       const refs: Record<string, string> = {};
-      for (let page = 1; page <= MAX_REF_PAGES; page++) {
-        const url =
-          `${base}/repos/${project}/git/matching-refs/heads/` +
-          `?per_page=${REF_PAGE_SIZE}&page=${page}`;
-        const response = await fetch(url, { headers });
-        if (!response.ok) {
-          throw new Error(
-            `GitHub answered HTTP ${response.status} for the branch listing of ${project}`,
-          );
+      for (const prefix of prefixes) {
+        if (prefix === "") {
+          // An empty prefix is every head on origin: the read this reader
+          // exists to never make.
+          throw new Error(`refusing to list every branch of ${project}: no prefix was named`);
         }
-        const body = (await response.json()) as { ref?: string; object?: { sha?: string } }[];
-        if (!Array.isArray(body)) {
-          throw new Error(`GitHub returned a non-list branch listing for ${project}`);
-        }
-        for (const entry of body) {
-          const ref = entry.ref;
-          const sha = entry.object?.sha;
-          if (typeof ref === "string" && typeof sha === "string") {
-            refs[ref.replace(/^refs\/heads\//, "")] = sha;
+        let url: string | null =
+          `${base}/repos/${project}/git/matching-refs/heads/${prefixPath(prefix)}`;
+        let pages = 0;
+        while (url !== null) {
+          if (++pages > MAX_REF_PAGES) {
+            throw new Error(
+              `${project} answered more than ${MAX_REF_PAGES} pages of branches under ` +
+                `${prefix}, so its refs cannot be compared without truncating the listing`,
+            );
           }
+          const response: Response = await fetch(url, { headers });
+          if (!response.ok) {
+            throw new Error(
+              `GitHub answered HTTP ${response.status} for the branch listing of ${project} ` +
+                `under ${prefix}`,
+            );
+          }
+          const body = (await response.json()) as { ref?: string; object?: { sha?: string } }[];
+          if (!Array.isArray(body)) {
+            throw new Error(`GitHub returned a non-list branch listing for ${project}`);
+          }
+          for (const entry of body) {
+            const ref = entry.ref;
+            const sha = entry.object?.sha;
+            if (typeof ref === "string" && typeof sha === "string") {
+              refs[ref.replace(/^refs\/heads\//, "")] = sha;
+            }
+          }
+          url = nextPageUrl(response.headers.get("link"));
         }
-        if (body.length < REF_PAGE_SIZE) return refs;
       }
-      throw new Error(
-        `${project} has more than ${MAX_REF_PAGES * REF_PAGE_SIZE} branches, so its refs ` +
-          "cannot be compared without truncating the listing",
-      );
+      return refs;
     },
   };
 }
 
 /**
- * One read of the remote's heads.
+ * One read of the remote's heads under `prefixes`.
  *
  * Never throws: an unreadable remote is a fact about the record, not a reason
  * to fail a run that may well have done the work.
  */
-export async function snapshotRefs(env: Env, project: string): Promise<RefSnapshot> {
+export async function snapshotRefs(
+  env: Env,
+  project: string,
+  prefixes: readonly string[],
+): Promise<RefSnapshot> {
   try {
-    return { ok: true, refs: await repoRefs(env).list(project) };
+    return { ok: true, refs: await repoRefs(env).list(project, prefixes) };
   } catch (error) {
     return { ok: false, detail: String(error instanceof Error ? error.message : error) };
   }

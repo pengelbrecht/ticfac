@@ -305,11 +305,20 @@ class FakeRepo implements RepoRefs {
    */
   answersNothing = false;
 
-  async list(): Promise<Record<string, string>> {
+  /** Every prefix a read asked for, in order: a run never lists all of origin. */
+  prefixes: string[][] = [];
+
+  async list(_project: string, prefixes: readonly string[]): Promise<Record<string, string>> {
     this.reads += 1;
+    this.prefixes.push([...prefixes]);
     if (this.unreadable !== null) throw new Error(this.unreadable);
     if (this.answersNothing) return null as unknown as Record<string, string>;
-    return { ...this.refs };
+    // GitHub's matching-refs is a prefix match, and so is this.
+    return Object.fromEntries(
+      Object.entries(this.refs).filter(([branch]) =>
+        prefixes.some((prefix) => prefix !== "" && branch.startsWith(prefix)),
+      ),
+    );
   }
 
   /** What an orchestrator that did work leaves behind. */
@@ -1247,6 +1256,32 @@ describe("exit 0 is not completion (tick ehy)", () => {
     const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
     expect(record.progress).toBe("advanced");
     expect(record.progress_detail ?? "").toContain(`epic/${epic}`);
+  });
+
+  // Tick hn6's run read every head on origin and recorded `unknown` once the
+  // repository crowded past the reader. A run reads its own namespaces only,
+  // so other runs' leftovers neither break the read nor pass as its progress.
+  it("reads only the run's own branch namespaces from origin", async () => {
+    const { runID, project, epic } = await ignite();
+    const process = await firstProcess();
+
+    repo.push("ticfac/run-someone-else/tick-a/attempt-1", PUSHED_SHA);
+    repo.push(`ticfac/run-${runID}/tick-a/attempt-1`, PUSHED_SHA);
+    process.exit(0);
+
+    expect((await settled(runID)).state).toBe("completed");
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.progress_detail ?? "").toContain(`ticfac/run-${runID}/tick-a/attempt-1`);
+    expect(record.progress_detail ?? "").not.toContain("someone-else");
+    expect(repo.prefixes.length).toBeGreaterThanOrEqual(2);
+    for (const asked of repo.prefixes) {
+      expect(asked).toEqual([
+        `epic/${epic}`,
+        `tick-run/${epic}`,
+        `tick/${epic}/`,
+        `ticfac/run-${runID}/`,
+      ]);
+    }
   });
 
   it("counts an epic branch that was merged and cleaned up as progress", async () => {
