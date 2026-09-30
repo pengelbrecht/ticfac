@@ -19,3 +19,23 @@ args = []
 default = "strong"
 ceiling = "frontier"
 step = 1
+# Jev starts the work that needs it on the dear rung (tick ms9). An
+# implementation tick whose recorded classification puts more than
+# mass_threshold of probability on design + diagnosis starts at frontier
+# (claude opus) instead of burning an attempt on GLM first; everything else,
+# and every tick Jev could not classify, starts at strong as before. Role
+# jobs (review, closeout, repair, resolve) are never classified.
+#
+# 0.75 was measured on history, not guessed (tick ms9's notes carry the
+# table): 96 implement ticks of 9pd/dha/ncv/2jn/6in with known outcomes,
+# classified by the production client. Of the 10 that failed on the work
+# (wall-clock or stuck kill, rejected, escalated) the rule catches the same
+# 3 at every threshold from 0.15 to 0.84 (19l, 9fc, k7p: design at >= 0.84)
+# and misses the same 7 (big construction ticks such as 46x and dz1, dear
+# mass <= 0.14). So the threshold only sets how many ticks start dear, and
+# 0.75 is the fewest (22 of 96) that still holds every catch with margin
+# for Jev's measured run-to-run drift (max 0.09). The mass does NOT predict
+# long or failing construction work: size is what makes those hard.
+dear_work_types = ["design", "diagnosis"]
+dear_tier = "frontier"
+mass_threshold = 0.75

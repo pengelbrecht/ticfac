@@ -1,0 +1,14 @@
+{
+  "id": "7l1",
+  "title": "Cloud [tier_policy] ladder so Jev's classification changes what a cloud tick runs",
+  "gloss": "cloud Jev ladder",
+  "description": "Follow-up from ms9. The cloud (.tick/runners.cloud.toml) declares no [tier_policy], so every cloud dispatch runs at tier \"\" and the Jev classification each tick pays for changes nothing. The local ladder routes P(design)+P(diagnosis) \u003e 0.75 to frontier since ms9. The cloud needs a two-rung Workers AI ladder, and the operator has to choose it: (a) keep glm-5.3 as the start (default=strong) and add a stronger dear/ceiling rung (frontier). pi's Workers AI catalog carries moonshotai/kimi-k2.7-code and deepseek-ai/deepseek-v4-pro-0813, and neither has been proven in the container image; image/common.sh pi_model_overrides corrects only GLM. Or (b) economy=glm-5.3-flash start -\u003e strong=glm-5.3 dear. Both models are proven, but about 80% of cloud ticks would then start on flash, and Phase 2 saw flash converge on 1 of 3 real ticks. Once chosen: declare [tier_policy] (default, ceiling, dear_work_types=[design,diagnosis], dear_tier, mass_threshold=0.75) plus the tier cells, add SubstrateCloud to jevRoutedSubstrates in internal/runconfig/repoconfig_test.go, and prove a cloud boot of the new model through the harness probe.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "runners.cloud.toml declares a Workers AI-only ladder the operator chose; TestRepoRunnersConfigRoutesTheFirstAttemptOnJevMass covers the cloud; a cloud boot on the dear rung passes the harness probe",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-09-30T11:16:11.0233Z",
+  "updated_at": "2026-09-30T11:16:14.175774Z"
+}
