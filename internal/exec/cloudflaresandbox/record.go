@@ -321,6 +321,23 @@ type attemptRecord struct {
 	// what was asked for is a record collect cannot answer for.
 	Spec     *subprocess.JobSpec `json:"spec"`
 	IssuedAt string              `json:"issued_at"`
+
+	// SettledElsewhere marks a record that describes ANOTHER run's attempt
+	// this run's attempt rules on (AdoptSettledElsewhere): its worker settled
+	// before this run existed, and the door answers only for its own run, so
+	// Inspect answers from this record instead of asking it. Nil on every
+	// attempt this executor started.
+	SettledElsewhere *settledElsewhere `json:"settled_elsewhere,omitempty"`
+}
+
+// settledElsewhere is the other run's attempt a record rules on: whose, which
+// job, how it settled and the evidence that says so.
+type settledElsewhere struct {
+	RunID    string `json:"run_id"`
+	JobID    string `json:"job_id"`
+	Attempt  int    `json:"attempt"`
+	State    string `json:"state"`
+	Evidence string `json:"evidence"`
 }
 
 // payload is the record's handle half.

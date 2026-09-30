@@ -206,3 +206,55 @@ func cloudHolderVerdict(state, workflow string) reconcile.HolderState {
 	return reconcile.HolderState{Verdict: reconcile.HolderUnknown, Evidence: fmt.Sprintf(
 		"the factory's record says %s and it could read no Workflow instance for the run", stateOrUnknown(state))}
 }
+
+// claimHolderSettled is the part of GET /api/runs/<id> a settled-attempt
+// answer reads: the attempts whose own worker container the factory recorded
+// settled (migration 0019).
+type claimHolderSettled struct {
+	SettledAttempts []struct {
+		TickID   string `json:"tick_id"`
+		Attempt  int    `json:"attempt"`
+		State    string `json:"state"`
+		ExitCode *int   `json:"exit_code"`
+		At       string `json:"at"`
+	} `json:"settled_attempts"`
+}
+
+// settledAttemptOnFactory is the production reconcile.Options.SettledAttempt:
+// how another run's cloud attempt settled, as the factory recorded its worker
+// container (hn6's ltg). A container that completed with exit 0 settled
+// succeeded; one the factory has no settlement for — still running, never
+// observed, a factory that predates the record — is not Known, and the
+// takeover carries its work into a fresh worker as before.
+func settledAttemptOnFactory(ctx context.Context, runID, tickID string, attempt int) reconcile.SettledState {
+	client := cloudHolderClient()
+	if client == nil {
+		return reconcile.SettledState{}
+	}
+	askCtx, cancel := context.WithTimeout(ctx, claimHolderHTTPTimeout)
+	defer cancel()
+	data, err := client.request(askCtx, http.MethodGet, "/api/runs/"+url.PathEscape(runID), nil)
+	if err != nil {
+		return reconcile.SettledState{}
+	}
+	var status claimHolderSettled
+	if err := decodeCloudJSON(data, &status); err != nil {
+		return reconcile.SettledState{}
+	}
+	for _, settled := range status.SettledAttempts {
+		if settled.TickID != tickID || settled.Attempt != attempt {
+			continue
+		}
+		exit := "no exit code"
+		if settled.ExitCode != nil {
+			exit = fmt.Sprintf("exit %d", *settled.ExitCode)
+		}
+		return reconcile.SettledState{
+			Known:     true,
+			Succeeded: settled.State == "completed" && settled.ExitCode != nil && *settled.ExitCode == 0,
+			Evidence: fmt.Sprintf("the factory recorded its worker container %s with %s at %s",
+				settled.State, exit, settled.At),
+		}
+	}
+	return reconcile.SettledState{}
+}

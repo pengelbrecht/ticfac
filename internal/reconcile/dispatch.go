@@ -129,6 +129,12 @@ type attemptHandle struct {
 	// (takeover.go): the run, and the evidence it was read as ended on. Null
 	// when the dispatch took nothing over.
 	TakenOver *takenOver `json:"taken_over"`
+
+	// CollectedFrom says this attempt started NO worker: it is the ruling on
+	// another run's attempt that settled succeeded before that run ended
+	// (takeover.go, hn6's ltg). Null for every attempt that ran a worker of
+	// its own.
+	CollectedFrom *collectedFrom `json:"collected_from"`
 }
 
 // resumedFrom is one dispatch's answer to "this work came from a released
@@ -168,6 +174,9 @@ func (a attemptHandle) asMap() map[string]any {
 		// The claim this dispatch took over from a run that ended, null when
 		// it took none (takeover.go).
 		"taken_over": a.TakenOver,
+		// The settled attempt of a run that ended this attempt rules on
+		// instead of running a worker, null when it ran one (takeover.go).
+		"collected_from": a.CollectedFrom,
 		// The backstop the attempt was issued (tick wv2): what an adopting
 		// run measures it against.
 		"wall_seconds": a.WallSeconds,
@@ -246,6 +255,21 @@ func handleFromMap(raw map[string]any) attemptHandle {
 		taken.RunID, _ = fields["run_id"].(string)
 		taken.Evidence, _ = fields["evidence"].(string)
 	}
+	var collected *collectedFrom
+	if fields, ok := raw["collected_from"].(map[string]any); ok {
+		collected = &collectedFrom{}
+		collected.RunID, _ = fields["run_id"].(string)
+		collected.JobID, _ = fields["job_id"].(string)
+		switch value := fields["attempt"].(type) {
+		case float64:
+			collected.Attempt = int(value)
+		case int:
+			collected.Attempt = value
+		}
+		collected.WriteRef, _ = fields["write_ref"].(string)
+		collected.SHA, _ = fields["sha"].(string)
+		collected.Evidence, _ = fields["evidence"].(string)
+	}
 	wall := 0
 	switch value := raw["wall_seconds"].(type) {
 	case float64:
@@ -265,6 +289,7 @@ func handleFromMap(raw map[string]any) attemptHandle {
 		Touch:                  touch,
 		ResumedFrom:            resumed,
 		TakenOver:              taken,
+		CollectedFrom:          collected,
 	}
 }
 
@@ -827,6 +852,10 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	}
 
 	number := nextAttemptNumber(attempts)
+	// settled is the taken-over work this dispatch rules on instead of
+	// running a worker, asked once of the first executor built for it.
+	var settled *collectedFrom
+	probedSettled := false
 	for conflicts := 0; conflicts < maxDispatchConflicts; conflicts++ {
 		// The tick's own try for this dispatch (tick vw0): the same number the
 		// feed lines say, computed once here so the dispatch, the marker and
@@ -852,6 +881,21 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		}
 		dispatch.Substrate = substrate
 		marker.SubstrateProtocol, marker.SubstrateServerVersion = substrate.Protocol, substrate.ServerVersion
+
+		// The work a takeover carries may be FINISHED (takeover.go, hn6's
+		// ltg): the dead run's worker settled succeeded, as its host
+		// recorded, and the run died before it collected it. Then this
+		// attempt starts no worker — it is cut at that attempt's own base
+		// and rules on its work, and only a rejection dispatches a worker.
+		if taken != nil && carry != nil && carry.runID != "" && !probedSettled {
+			probedSettled = true
+			settled = r.settledElsewhere(ctx, executor, dispatch, carry)
+		}
+		if settled != nil {
+			dispatch.BaseSHA, marker.BaseSHA = carry.marker.BaseSHA, carry.marker.BaseSHA
+			dispatch.ResumedFrom, marker.ResumedFrom = nil, nil
+			marker.CollectedFrom = settled
+		}
 
 		r.setTick(tick, "ready")
 		if _, err := r.checkpoint(runstate.StateDispatching, fmt.Sprintf("dispatching %s as attempt %d", tick, number)); err != nil {
@@ -957,6 +1001,30 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 					"continues that work rather than redoing it, and the gate still decides what merges",
 				attemptLabel(tick, try, number), from,
 				branchOf(marker.ResumedFrom.WriteRef), marker.ResumedFrom.ReleasedBy)
+		}
+
+		if marker.CollectedFrom != nil {
+			// No worker: the handle addresses the settled work, and the
+			// window's collect rules on it like any attempt's.
+			handle, err := r.settledHandle(executor, dispatch, marker)
+			if err != nil {
+				return nil, nil, marker, r.startFailure(tick, err)
+			}
+			from := marker.CollectedFrom
+			r.noteAlive(dispatch.JobID)
+			r.setTick(tick, "dispatched")
+			r.record(tick, StageSettledWorkCollected,
+				"%s starts no worker: run %s's attempt %d of %s had already FINISHED (%s) with its work on %s at %s "+
+					"when that run ended, so it is collected and ruled on as it stands — report, boundary and gate — "+
+					"and a worker is dispatched only if that verdict rejects it",
+				attemptLabel(tick, try, number), from.RunID, from.Attempt, tick, from.Evidence,
+				branchOf(from.WriteRef), short(from.SHA))
+			if _, err := r.checkpoint(runstate.StateRunning,
+				fmt.Sprintf("%s is collected as attempt %d from run %s's settled attempt %d", tick, number,
+					from.RunID, from.Attempt)); err != nil {
+				return nil, nil, marker, err
+			}
+			return handle, executor, marker, nil
 		}
 
 		handle, err := r.startWithRoom(executor, tick, r.jobSpec(dispatch))
@@ -1796,6 +1864,19 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 	executor, _, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build the executor for %s: %w", marker.TickID, err)
+	}
+	// An attempt that rules on another run's SETTLED work (takeover.go) never
+	// had a worker to start: it is re-addressed where that work is, on every
+	// resume, whatever this host's state holds for it.
+	if marker.CollectedFrom != nil {
+		_ = r.replayClaim(ctx, marker.TickID)
+		handle, err := r.settledHandle(executor, dispatch, marker)
+		if err != nil {
+			return nil, nil, r.startFailure(marker.TickID, err)
+		}
+		r.noteAlive(marker.JobID)
+		r.setTick(marker.TickID, "dispatched")
+		return handle, executor, nil
 	}
 	// The marker and the claim are two effects, in that order, and adopting is
 	// what happens when a reconciler died between them — or when the tracker

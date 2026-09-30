@@ -207,6 +207,27 @@ type SettledReattacher interface {
 	ReattachSettled(spec *subprocess.JobSpec) (*subprocess.JobHandle, error)
 }
 
+// SettledElsewhereAdopter is an executor that can hand this run's attempt
+// `spec` the work of ANOTHER run's attempt that settled — the attempt a
+// claim taken over from a run that ended left finished on its landing branch
+// (takeover.go, hn6's ltg). It never boots anything: the handle it answers
+// reads terminal on the evidence given and collects from branch, so the
+// collect rules on work that is already done instead of a fresh worker
+// redoing it. Only the SettledReattacher's door cannot answer for another
+// run's job, which is why the settlement comes in as evidence.
+type SettledElsewhereAdopter interface {
+	AdoptSettledElsewhere(spec *subprocess.JobSpec, runID, jobID string, attempt int, branch, evidence string) (*subprocess.JobHandle, error)
+}
+
+// SettledState is how another run's attempt settled, as its host recorded
+// it: Known when the host has a settlement for it, Succeeded when the worker
+// finished cleanly, and the evidence the answer rests on.
+type SettledState struct {
+	Known     bool
+	Succeeded bool
+	Evidence  string
+}
+
 // Substrate is the versioned substrate a dispatch's executor observed at the
 // build that will run the job: its protocol version (herdr's API protocol,
 // the number between the client's hard floor and its warn line) and the
@@ -532,6 +553,16 @@ type Options struct {
 	// claim_holder_unknown, resumable without a person. Nil keeps the
 	// records-only reading: a non-terminal holder is live.
 	ClaimHolder func(ctx context.Context, runID string) HolderState
+
+	// SettledAttempt answers how ANOTHER run's attempt settled, as the host
+	// that ran its worker recorded it — the factory's settlement record of a
+	// cloud worker's container — asked only of the attempt whose claim this
+	// run takes over from a run that ended (takeover.go). An attempt that
+	// settled succeeded is collected and ruled on as it stands, never redone
+	// by a fresh worker. A local attempt is answered by its own record on
+	// this host through the executor, without this. Nil, or an answer that
+	// is not Known, carries the work into a fresh worker as before.
+	SettledAttempt func(ctx context.Context, runID, tickID string, attempt int) SettledState
 
 	// ReleaseOnly builds a reconciler that only releases attempts (`ticfac
 	// settle`): it never reaches the close-out, so the close-out rule's

@@ -1029,6 +1029,9 @@ type fixtureOptions struct {
 	// (Options.ClaimHolder): the factory or the process table, answering
 	// alive, dead or unknown. Nil keeps the records-only reading.
 	claimHolder func(ctx context.Context, runID string) HolderState
+	// settledAttempt is the fake factory record of how another run's
+	// attempt settled (Options.SettledAttempt). Nil asks nobody.
+	settledAttempt func(ctx context.Context, runID, tickID string, attempt int) SettledState
 	// jobSlots is the substrate capacity the fixture's executor states
 	// (KnownExecutor.MaxLiveJobs): the cloud's container ceiling less the
 	// orchestrator's own. Zero states none, the local default.
@@ -1138,6 +1141,7 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		proseFindingsForAPerson: opts.proseFindingsForAPerson,
 		notReadyForAPerson:      opts.notReadyForAPerson,
 		ClaimHolder:             opts.claimHolder,
+		SettledAttempt:          opts.settledAttempt,
 		AbsorptionDepthBound:    opts.absorptionDepth,
 		// A depth the test NAMES is explicit — the person's raise over the
 		// recorded bound — and zero adopts whatever the run branch records
