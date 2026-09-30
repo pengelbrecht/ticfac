@@ -189,6 +189,13 @@ declare namespace Cloudflare {
     RUN_MAX_COST_USD?: string;
     RUN_STOP_GRACE_MS?: string;
     /**
+     * How long a LOCAL orchestrator (`ticfac run --cloud-workers`) may go
+     * without a heartbeat before its run is ended (src/local-orchestrator.ts).
+     * Unset on a real deployment, which takes the module's default; tests
+     * shorten it.
+     */
+    RUN_LOCAL_HEARTBEAT_STALE_MS?: string;
+    /**
      * A fixed observation cadence, overriding the Workflow's own backoff. Unset
      * on a real deployment; set by tests and by an operator who wants a tighter
      * loop than the default 15s→5m ramp.

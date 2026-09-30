@@ -13,6 +13,7 @@
  *                             version, the confirmed image, the Worker version
  * - GET  /api/runs/:id     - one run: Workflow step state, lease, gates, queue
  * - POST /api/runs/:id/stop- a clean stop, enforced at the control plane (D15)
+ * - POST /api/runs/:id/orchestrator - a LOCAL orchestrator's run token
  * - GET  /api/runs/:id/logs- the run's harness output, streamed to R2 during
  *                             the run (read-only; it steers nothing — see D21)
  * - ANY  /api/gateway/*     - a run's model traffic, on its own run-scoped
@@ -121,6 +122,7 @@ import {
   runGitHubTokenRoute,
 } from "./github-app";
 import { GITHUB_WEBHOOK_PATH, githubWebhookRoute } from "./github-issues";
+import { HEARTBEAT_PATH, heartbeatRoute, orchestratorCredentialRoute } from "./local-orchestrator";
 import { runDailyDigest } from "./loop-digest";
 import { evaluateStatusAlerts } from "./notify";
 import { observeRoute } from "./observe";
@@ -1518,6 +1520,13 @@ export default {
       return await feedRelayRoute(request, env);
     }
 
+    // A local orchestrator's heartbeat (`ticfac run --cloud-workers`), on its
+    // run's own token (src/local-orchestrator.ts). Beside the other
+    // run-credential doors, for the same reason as each of them.
+    if (url.pathname === HEARTBEAT_PATH) {
+      return await heartbeatRoute(request, env);
+    }
+
     // A container recording the branch it just created (tick t4y). Placed
     // beside the other run-credential doors and authorized the same way,
     // because it is the same kind of
@@ -1753,6 +1762,13 @@ export default {
       if (segments.length === 4 && segments[3] === "stop") {
         if (request.method !== "POST") return methodNotAllowed(["POST"]);
         return await stopRoute(request, segments[2]!, env);
+      }
+      // /api/runs/:id/orchestrator — the run token for a LOCAL orchestrator
+      // (`ticfac run --cloud-workers`), minted for the operator who submitted
+      // it; refused for every container-orchestrated run.
+      if (segments.length === 4 && segments[3] === "orchestrator") {
+        if (request.method !== "POST") return methodNotAllowed(["POST"]);
+        return await orchestratorCredentialRoute(segments[2]!, env);
       }
       // /api/runs/:id/logs
       if (segments.length === 4 && segments[3] === "logs") {

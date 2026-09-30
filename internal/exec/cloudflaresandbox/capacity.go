@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/pengelbrecht/ticfac/internal/runsignal"
 	"github.com/pengelbrecht/ticfac/internal/sandboximage"
 )
 
@@ -18,19 +19,28 @@ import (
 // 2026-09-30: orchestrator + two workers filled a ceiling of three and the
 // third start waited for a container until its client timed out).
 //
-// Zero — no bound stated — when the variable is absent or unreadable: a
-// laptop driving cloud workers is not inside an orchestrator container, and
-// the door's own no_capacity answer is what bounds it. It is never less than
+// Zero — no bound stated — when the variable is absent or unreadable, and the
+// door's own no_capacity answer is what bounds the run. It is never less than
 // one when a ceiling is stated: a run that could dispatch nothing would hold
 // forever, and the door still refuses a start the account cannot host.
+//
+// A LOCAL orchestrator (`ticfac run --cloud-workers`, which sets the ceiling
+// from the factory's answer and runsignal.EnvOrchestrator to "local")
+// occupies no container, so the whole ceiling is its workers'.
 func WorkerSlots() int {
-	return workerSlots(os.Getenv(sandboximage.EnvFactoryMaxInstances))
+	return workerSlots(os.Getenv(sandboximage.EnvFactoryMaxInstances), os.Getenv(runsignal.EnvOrchestrator))
 }
 
-func workerSlots(ceiling string) int {
+// OrchestratorLocal is where a `ticfac run --cloud-workers` orchestrator runs.
+const OrchestratorLocal = runsignal.OrchestratorLocal
+
+func workerSlots(ceiling, orchestrator string) int {
 	n, err := strconv.Atoi(strings.TrimSpace(ceiling))
 	if err != nil || n <= 0 {
 		return 0
+	}
+	if strings.TrimSpace(orchestrator) == OrchestratorLocal {
+		return n
 	}
 	if n -= 1; n < 1 {
 		return 1

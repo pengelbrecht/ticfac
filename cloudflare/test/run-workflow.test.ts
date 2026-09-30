@@ -10,6 +10,7 @@ import {
   listRunGatewayTokens,
 } from "../src/db";
 import { GATEWAY_PATH_PREFIX, proxyModelRequest } from "../src/gateway";
+import { orchestratorCredentialRoute } from "../src/local-orchestrator";
 import {
   ingestPullRequestEvent,
   type PullRequestIngestResult,
@@ -670,6 +671,8 @@ async function ignite(
      * instead of raced against a real clock.
      */
     lapsed?: boolean;
+    /** A LOCAL orchestrator's run (`ticfac run --cloud-workers`). */
+    local?: boolean;
   } = {},
 ) {
   const project = overrides.project ?? `${PROJECT}-${++counter}`;
@@ -692,6 +695,7 @@ async function ignite(
     base_sha: BASE_SHA,
     requested_by: "operator",
     lease_token: lease.lease.token,
+    ...(overrides.local === true ? { orchestrator: "local" as const } : {}),
   });
   if (overrides.staleTickIDs !== undefined) {
     // A params blob from before tick l6t, replayed after it: the field is
@@ -3077,5 +3081,90 @@ describe("the completion signal (tick 7eq)", () => {
 
     const logged = await listDispatchLogs(env.DB, runID, epic);
     expect(logged.some((entry) => entry.decision === "signal:done")).toBe(true);
+  });
+});
+
+// ------------------------------------------- local orchestrator, cloud workers ---
+//
+// `ticfac run <epic> --cloud-workers`: the Go orchestrator runs on the
+// operator's machine and dispatches its workers through the per-tick sandbox
+// door. The Workflow boots NOTHING for such a run — it holds the lease, the
+// stop and the budgets, and ends the run on the machine's done signal or on
+// its heartbeat going stale, with finalize revoking and reclaiming as for any
+// run (src/local-orchestrator.ts).
+describe("a local orchestrator's run (ticfac run --cloud-workers)", () => {
+  async function credential(runID: string): Promise<string> {
+    const res = await orchestratorCredentialRoute(runID, env);
+    expect(res.status).toBe(201);
+    return ((await res.json()) as { token: string }).token;
+  }
+
+  it("boots no container and ends on the machine's done signal", async () => {
+    set("RUN_POLL_INTERVAL_MS", "2000");
+    const { runID, epic, project } = await ignite({ local: true });
+    const token = await credential(runID);
+
+    await waitFor("the run to be running", async () => {
+      const run = await getRun(env.DB, runID);
+      return run?.state === "running" ? run : null;
+    });
+    orchestratorPushedWork(epic);
+    const answered = await SELF.fetch(`${FACTORY}/api/done`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ branch: `epic/${epic}`, head: PUSHED_SHA }),
+    });
+    expect(answered.status).toBe(202);
+
+    const run = await settled(runID);
+    expect(run.state).toBe("completed");
+    // Nothing was booted for the orchestrator: the machine is the orchestrator.
+    expect(sandboxes.booted.filter((sandbox) => !fromAnEarlierTest(sandbox))).toHaveLength(0);
+    // The run's credentials died with it, the machine's included.
+    const tokens = await listRunGatewayTokens(env.DB, runID);
+    expect(tokens.length).toBeGreaterThan(0);
+    expect(tokens.every((t) => t.revoked_at !== null)).toBe(true);
+    // The lease went back to the project.
+    await expect(roomFor(env, project).leaseStatus()).resolves.toBeNull();
+    // And the feed says where the orchestrator ran.
+    const feed = await readRunFeed(env.ARTIFACTS, project, runID);
+    expect(feed).toContain("the orchestrator runs on the operator's machine");
+  });
+
+  it("ends a run whose machine stopped heartbeating, and says so", async () => {
+    set("RUN_LOCAL_HEARTBEAT_STALE_MS", "300");
+    const { runID } = await ignite({ local: true });
+    // The credential is never collected, and nothing ever beats.
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    expect(sandboxes.booted.filter((sandbox) => !fromAnEarlierTest(sandbox))).toHaveLength(0);
+    const record = await readRunRecord(env.ARTIFACTS, run.project, runID);
+    expect(JSON.stringify(record)).toMatch(/stopped heartbeating/);
+  });
+
+  it("stops cleanly when the operator asks, and the machine hears it at its next beat", async () => {
+    const { runID } = await ignite({ local: true });
+    const token = await credential(runID);
+    await waitFor("the run to be running", async () => {
+      const run = await getRun(env.DB, runID);
+      return run?.state === "running" ? run : null;
+    });
+
+    const stopped = await stopRun(env, runID, "operator");
+    expect(stopped.outcome).toBe("stopping");
+    const beat = await SELF.fetch(`${FACTORY}/api/heartbeat`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    // Either the beat lands while the run is stopping (and says so), or the
+    // grace window already ran out and the credential is dead: both tell the
+    // machine to flush and exit.
+    if (beat.status === 200) {
+      await expect(beat.json()).resolves.toMatchObject({ stopping: true });
+    } else {
+      expect(beat.status).toBe(403);
+    }
+    const run = await settled(runID);
+    expect(run.state).toBe("stopped");
   });
 });
