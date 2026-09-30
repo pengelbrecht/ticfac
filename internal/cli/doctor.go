@@ -44,6 +44,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/forge"
 	herdclient "github.com/pengelbrecht/ticfac/internal/herd/client"
 	"github.com/pengelbrecht/ticfac/internal/jev"
+	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/tk"
@@ -293,6 +294,10 @@ var (
 // The fix each missing check names. Kept beside the checks that use them, so
 // the remedy travels with its diagnosis.
 const (
+	// The routing check's fix: the failing line names the role, the tier
+	// and the cell, so the fix is to declare that cell.
+	doctorFixRouting = "declare the cell the line names in .tick/runners.toml, or in .tick/runners.local.toml / .tick/runners.cloud.toml for that substrate"
+
 	doctorFixTK          = "install tk (github.com/pengelbrecht/ticks) and make sure `tk version` answers"
 	doctorFixHerdr       = "start herdr in this checkout (`herdr`)"
 	doctorFixGitHub      = "gh auth login, or export GITHUB_TOKEN"
@@ -381,11 +386,43 @@ func runDoctor(ctx context.Context, fl *doctorFlags, stdout, stderr io.Writer) i
 			Detail: fmt.Sprintf("validates; gate declared; substrate %q", cfg.Substrate())}
 	}
 
+	// Every job a run can dispatch must route (epic hn6, 2026-09-30: a cloud
+	// ceiling the review cell declared no tier for stopped a run at its first
+	// merge conflict). The same resolution a run's construction performs, for
+	// the local substrate and, when the repository runs to the cloud, the
+	// cloud one — with the profile set each actually selects.
+	routingCheck := func() doctorCheck {
+		config := filepath.Join(repo, filepath.FromSlash(runconfig.FileName))
+		type target struct {
+			substrate runconfig.Substrate
+			profiles  string
+		}
+		targets := []target{{runconfig.SubstrateHerdr, profile.EmbeddedHerdr}}
+		if cloudish {
+			targets = append(targets, target{runconfig.SubstrateCloud, profile.EmbeddedCloud})
+		}
+		var routed []string
+		for _, tg := range targets {
+			jobs, err := reconcile.CheckRouting(tg.profiles, config, tg.substrate)
+			if err != nil {
+				return doctorCheck{Name: "routing", Problem: fmt.Sprintf("%s: %v", tg.substrate, err), Fix: doctorFixRouting}
+			}
+			routed = append(routed, fmt.Sprintf("%s: %d jobs", tg.substrate, len(jobs)))
+		}
+		return doctorCheck{Name: "routing", OK: true,
+			Detail: "every role job routes, the on-demand ones at the ceiling (" + strings.Join(routed, "; ") + ")"}
+	}
+
 	checks := []doctorCheck{
 		runnersCheck(),
+	}
+	if cfg != nil {
+		checks = append(checks, routingCheck())
+	}
+	checks = append(checks,
 		check("tk", doctorFixTK, func() (string, error) { return doctorTK(ctx, repo) }),
 		check("herdr", doctorFixHerdr, func() (string, error) { return doctorHerdr(ctx) }),
-	}
+	)
 	// The github line carries both halves the rule needs, each with its own
 	// fix: a missing remote is not cleared by `gh auth login`, and a missing
 	// credential is not cleared by a new origin.
