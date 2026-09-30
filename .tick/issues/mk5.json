@@ -2,6 +2,7 @@
   "id": "mk5",
   "title": "The two wave-1 status goldens still state the stub's verdict answers",
   "description": "status_model_running_wave and status_model_completed_awaiting_merge carry the wave-1 stub's verdict blocks (summary empty, recovered empty, no cost lines). After this fill those documents are unreachable from the builder — a healthy run always states the word 'healthy' as its summary and the empty summary is now only reachable in the stopped state — so the fixtures depict shapes no run can produce. They still validate and nothing pins their values, but wave-3 renders against these fixtures and should not meet stub-era answers; refresh their verdict and cost blocks once the phase-merge question above is decided.\nevidence: contracts/status-model.json goldens status_model_running_wave (alive true, verdict.state healthy, verdict.summary \"\", recovered []) and status_model_completed_awaiting_merge (same shape); internal/statusmodel/verdict.go buildVerdict returns VerdictHealthy as the summary for every healthy run\n\nticfac run run_3f034e683faf4fdf9f6c0952fc158524 filed this backlog tick from the finding 6977ca3ed377c71e1d7e35edd2a1786cc7823e99c5161fb84bc0ea53d676916a (reported by run-run_3f034e683faf4fdf9f6c0952fc158524/tick-7uv/attempt-2): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_3f034e683faf4fdf9f6c0952fc158524/absorptions/6977ca3ed377c71e1d7e35edd2a1786cc7823e99c5161fb84bc0ea53d676916a.json on the run branch.",
+  "notes": "2026-09-30 19:02 - ticfac run run_3f034e683faf4fdf9f6c0952fc158524: created by absorbing finding 6977ca3ed377c71e1d7e35edd2a1786cc7823e99c5161fb84bc0ea53d676916a — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/run_3f034e683faf4fdf9f6c0952fc158524/absorptions/6977ca3ed377c71e1d7e35edd2a1786cc7823e99c5161fb84bc0ea53d676916a.json on epic/hn6, and it says: the classifier put 0.31 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_3f034e683faf4fdf9f6c0952fc158524/tick-7uv/attempt-2",
   "created_by": "ticfac run run_3f034e683faf4fdf9f6c0952fc158524",
   "created_at": "2026-09-30T17:02:48Z",
-  "updated_at": "2026-09-30T17:02:48Z"
+  "updated_at": "2026-09-30T17:02:54.8446Z"
 }
