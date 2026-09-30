@@ -29,6 +29,7 @@ import {
   TELEGRAM_WEBHOOK_PATH,
   WEBHOOK_PREFIX,
 } from "../src/auth";
+import { DEFAULT_FACTORY_MAX_INSTANCES, factoryMaxInstances } from "../src/container-capacity";
 import { getDeploymentImage, getRunImage, insertRunImage, listRunGatewayTokens } from "../src/db";
 import { authorizeRunCredential, issueRunToken, revokeRunTokens } from "../src/gateway";
 import { effectiveRunBudget } from "../src/run-workflow";
@@ -641,6 +642,12 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     expect(mirror, "wrangler.toml declares no [vars] FACTORY_MAX_INSTANCES mirror").not.toBeNull();
 
     expect(mirror![1], "the [vars] copy of the container ceiling disagrees").toBe(ceiling);
+    // And the Worker's compiled fallback, used only when the var is missing
+    // (container-capacity.ts): a third copy that must not drift either.
+    expect(String(DEFAULT_FACTORY_MAX_INSTANCES), "the compiled default ceiling disagrees").toBe(
+      ceiling,
+    );
+    expect(factoryMaxInstances(env)).toBe(Number(ceiling));
   });
 
   it("names the container application wrangler.toml declares", () => {

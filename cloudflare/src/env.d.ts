@@ -253,7 +253,7 @@ declare namespace Cloudflare {
      * serialization wave 3 measured, just one layer up — which is why the two
      * are not kept in step by hand (tick 7fl): `ticfac factory deploy` refuses
      * to ship a config where they disagree, and the suite pins them together.
-     * Bounds and the default live in src/run-workflow.ts.
+     * The default and the capacity count live in src/container-capacity.ts.
      */
     FACTORY_MAX_INSTANCES?: string;
     /**

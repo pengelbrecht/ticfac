@@ -57,7 +57,7 @@ import { defaultSleeper, type Sleeper } from "./worker-dispatch";
  * (the deploy refuses a config without it), so this is a floor for a
  * misconfiguration, not a choice.
  */
-export const DEFAULT_FACTORY_MAX_INSTANCES = 3;
+export const DEFAULT_FACTORY_MAX_INSTANCES = 12;
 
 /** The account's container ceiling, from the deployment's mirror of it. */
 export function factoryMaxInstances(env: { FACTORY_MAX_INSTANCES?: string }): number {
