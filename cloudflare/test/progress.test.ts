@@ -6,7 +6,9 @@ import {
   compareSnapshots,
   githubRepoRefs,
   MAX_REF_PAGES,
+  nextPageUrl,
   type RepoRefs,
+  runRefPrefixes,
   snapshotRefs,
 } from "../src/progress";
 
@@ -100,12 +102,23 @@ describe("the verdict two reads support", () => {
 
 // ------------------------------------------------------------ the reader ---
 
-/** Stands in for GitHub's refs listing, one page at a time. */
-function stubGitHub(pages: { ref: string; object: { sha: string } }[][]): {
-  urls: string[];
-  headers: Record<string, string>[];
-  restore: () => void;
-} {
+type Ref = { ref: string; object: { sha: string } };
+
+function heads(names: string[], sha = SHA_A): Ref[] {
+  return names.map((name) => ({ ref: `refs/heads/${name}`, object: { sha } }));
+}
+
+/**
+ * Stands in for GitHub's `matching-refs`, the way GitHub actually answers it:
+ * a PREFIX match on the path, `page` and `per_page` ignored, and — only when
+ * `pageSize` is given — further pages offered through a `Link` header and
+ * nothing else. The reader tick hn6's run broke on asked for `page=1..20` and
+ * got the whole listing every time.
+ */
+function stubGitHub(
+  refs: Ref[],
+  pageSize: number | null = null,
+): { urls: string[]; headers: Record<string, string>[]; restore: () => void } {
   const urls: string[] = [];
   const headers: Record<string, string>[] = [];
   const original = globalThis.fetch;
@@ -114,29 +127,49 @@ function stubGitHub(pages: { ref: string; object: { sha: string } }[][]): {
     if (!url.startsWith("https://github.example.test")) return original(input as RequestInfo, init);
     urls.push(url);
     headers.push((init?.headers ?? {}) as Record<string, string>);
-    const page = Number(new URL(url).searchParams.get("page") ?? "1");
-    return Response.json(pages[page - 1] ?? []);
+    const parsed = new URL(url);
+    const marker = "/git/matching-refs/";
+    const prefix = decodeURIComponent(
+      parsed.pathname.slice(parsed.pathname.indexOf(marker) + marker.length),
+    );
+    const matching = refs.filter((entry) => entry.ref.startsWith(`refs/${prefix}`));
+    if (pageSize === null) return Response.json(matching);
+    const cursor = Number(parsed.searchParams.get("cursor") ?? "0");
+    const page = matching.slice(cursor, cursor + pageSize);
+    const next = cursor + pageSize;
+    const link =
+      next < matching.length
+        ? `<${parsed.origin}${parsed.pathname}?cursor=${next}>; rel="next"`
+        : null;
+    return Response.json(page, link === null ? {} : { headers: { link } });
   }) as typeof fetch;
   return { urls, headers, restore: () => void (globalThis.fetch = original) };
 }
 
+describe("the branches a run reads", () => {
+  it("are its epic's, its run branches, its workers' and its own dispatches", () => {
+    expect(runRefPrefixes("hn6", "run_abc")).toEqual([
+      "epic/hn6",
+      "tick-run/hn6",
+      "tick/hn6/",
+      "ticfac/run-run_abc/",
+    ]);
+  });
+});
+
 describe("reading the remote's heads", () => {
-  it("returns branch heads without the refs/heads/ prefix", async () => {
+  it("returns branch heads under the prefixes asked for, without refs/heads/", async () => {
     set("GITHUB_API_BASE_URL", "https://github.example.test");
     set("GITHUB_TOKEN", "ghp_repo_scoped");
-    const github = stubGitHub([
-      [
-        { ref: "refs/heads/main", object: { sha: SHA_A } },
-        { ref: "refs/heads/epic/ko8", object: { sha: SHA_B } },
-      ],
-    ]);
+    const github = stubGitHub([...heads(["main", "epic/ko9"]), ...heads(["epic/ko8"], SHA_B)]);
 
     try {
-      await expect(githubRepoRefs(env).list("acme/project")).resolves.toEqual({
-        main: SHA_A,
+      await expect(githubRepoRefs(env).list("acme/project", ["epic/ko8"])).resolves.toEqual({
         "epic/ko8": SHA_B,
       });
-      expect(github.urls[0]).toContain("/repos/acme/project/git/matching-refs/heads/");
+      expect(github.urls).toEqual([
+        "https://github.example.test/repos/acme/project/git/matching-refs/heads/epic/ko8",
+      ]);
       // GitHub rejects an API request with no user agent outright.
       expect(github.headers[0]!["user-agent"]).toBeTruthy();
       expect(github.headers[0]!.authorization).toBe("Bearer ghp_repo_scoped");
@@ -145,21 +178,96 @@ describe("reading the remote's heads", () => {
     }
   });
 
+  // Tick hn6's run: origin held 281 branches, GitHub answered all of them to
+  // every `page=N`, and the run's progress was recorded as unknown because the
+  // repository "has more than 2000 branches". A run reads its own namespaces,
+  // so how many branches other runs and people left behind does not enter.
+  it("reads a run's refs on a remote crowded with other runs' branches", async () => {
+    set("GITHUB_API_BASE_URL", "https://github.example.test");
+    const crowd = Array.from(
+      { length: 2500 },
+      (_unused, index) => `ticfac/run-old${index}/tick-a/attempt-1`,
+    );
+    const github = stubGitHub([
+      ...heads(["main", "epic/hn7", "tick-run/hn7", ...crowd]),
+      ...heads(
+        [
+          "epic/hn6",
+          "tick-run/hn6",
+          "tick-run/hn6-run_abc",
+          "tick/hn6/attempt-2/7uv",
+          "ticfac/run-run_abc/tick-3gk/attempt-1",
+        ],
+        SHA_B,
+      ),
+    ]);
+
+    try {
+      const snapshot = await snapshotRefs(env, "acme/project", runRefPrefixes("hn6", "run_abc"));
+      expect(snapshot).toEqual({
+        ok: true,
+        refs: {
+          "epic/hn6": SHA_B,
+          "tick-run/hn6": SHA_B,
+          "tick-run/hn6-run_abc": SHA_B,
+          "tick/hn6/attempt-2/7uv": SHA_B,
+          "ticfac/run-run_abc/tick-3gk/attempt-1": SHA_B,
+        },
+      });
+      // One request per namespace, and never the bare `heads/` listing.
+      expect(github.urls).toHaveLength(4);
+      for (const url of github.urls) expect(url).not.toMatch(/matching-refs\/heads\/$/);
+    } finally {
+      github.restore();
+    }
+  });
+
+  it("follows GitHub's Link header across pages", async () => {
+    set("GITHUB_API_BASE_URL", "https://github.example.test");
+    const attempts = Array.from(
+      { length: 250 },
+      (_unused, index) => `ticfac/run-r/tick-${index}/attempt-1`,
+    );
+    const github = stubGitHub(heads(attempts), 100);
+
+    try {
+      const refs = await githubRepoRefs(env).list("acme/project", ["ticfac/run-r/"]);
+      expect(Object.keys(refs)).toHaveLength(250);
+      expect(github.urls).toHaveLength(3);
+    } finally {
+      github.restore();
+    }
+  });
+
   // A truncated listing is worse than no listing: the branch that moved could
   // be the one past the cut, and the comparison would answer "none" with
   // confidence it has not earned.
-  it("refuses rather than truncating a repository with too many branches", async () => {
+  it("refuses rather than truncating a listing longer than the page cap", async () => {
     set("GITHUB_API_BASE_URL", "https://github.example.test");
-    const full = Array.from({ length: 100 }, (_unused, index) => ({
-      ref: `refs/heads/b${index}`,
-      object: { sha: SHA_A },
-    }));
-    const github = stubGitHub(Array.from({ length: MAX_REF_PAGES + 1 }, () => full));
+    const attempts = Array.from(
+      { length: MAX_REF_PAGES * 10 + 1 },
+      (_unused, index) => `ticfac/run-r/tick-${index}/attempt-1`,
+    );
+    const github = stubGitHub(heads(attempts), 10);
 
     try {
-      const snapshot = await snapshotRefs(env, "acme/project");
+      const snapshot = await snapshotRefs(env, "acme/project", ["ticfac/run-r/"]);
       expect(snapshot.ok).toBe(false);
-      expect(snapshot.ok === false && snapshot.detail).toContain("branches");
+      expect(snapshot.ok === false && snapshot.detail).toContain("ticfac/run-r/");
+      expect(github.urls).toHaveLength(MAX_REF_PAGES);
+    } finally {
+      github.restore();
+    }
+  });
+
+  it("refuses to list every branch when no prefix is named", async () => {
+    set("GITHUB_API_BASE_URL", "https://github.example.test");
+    const github = stubGitHub(heads(["main"]));
+
+    try {
+      const snapshot = await snapshotRefs(env, "acme/project", [""]);
+      expect(snapshot.ok).toBe(false);
+      expect(github.urls).toEqual([]);
     } finally {
       github.restore();
     }
@@ -173,8 +281,20 @@ describe("reading the remote's heads", () => {
     };
     set("REPO_REFS", failing);
 
-    const snapshot = await snapshotRefs(env, "acme/project");
+    const snapshot = await snapshotRefs(env, "acme/project", ["epic/x"]);
     expect(snapshot.ok).toBe(false);
     expect(snapshot.ok === false && snapshot.detail).toContain("503");
+  });
+});
+
+describe("the Link header", () => {
+  it("names the next page when there is one", () => {
+    expect(
+      nextPageUrl(
+        '<https://api.example.test/x?cursor=2>; rel="next", <https://api.example.test/x?cursor=9>; rel="last"',
+      ),
+    ).toBe("https://api.example.test/x?cursor=2");
+    expect(nextPageUrl('<https://api.example.test/x?cursor=1>; rel="prev"')).toBeNull();
+    expect(nextPageUrl(null)).toBeNull();
   });
 });

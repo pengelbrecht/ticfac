@@ -105,6 +105,7 @@ import {
   compareSnapshots,
   type RefSnapshot,
   type RunProgress,
+  runRefPrefixes,
   snapshotRefs,
   unverifiedProgress,
 } from "./progress";
@@ -844,7 +845,7 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
   // Before anything boots: what the remote looked like with none of this run's
   // work on it. An unreadable remote is not a refusal — the run may still do
   // real work, and the record will say the evidence could not be read.
-  const refs = await snapshotRefs(env, params.project);
+  const refs = await snapshotRefs(env, params.project, runRefPrefixes(params.epic, params.run_id));
   if (!refs.ok) {
     console.error(
       `factory run-workflow: ${params.run_id} could not read the branches of ` +
@@ -2222,7 +2223,10 @@ export async function assessProgress(
   params: RunWorkflowParams,
   context: RunContext,
 ): Promise<RunProgress> {
-  return compareSnapshots(context.refs_baseline, await snapshotRefs(env, params.project));
+  return compareSnapshots(
+    context.refs_baseline,
+    await snapshotRefs(env, params.project, runRefPrefixes(params.epic, params.run_id)),
+  );
 }
 
 /**

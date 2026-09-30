@@ -247,8 +247,8 @@ export function sweepBaseReader(env: Env): SweepBaseReader {
 }
 
 /**
- * The default branch's name from GitHub, its head from the refs listing this
- * bundle already has.
+ * The default branch's name from GitHub, its head from the refs listing scoped
+ * to that one name (never every head on origin).
  *
  * The default branch rather than a branch a policy names, and that is the
  * security argument as much as the ergonomic one: it is the branch the
@@ -268,7 +268,7 @@ export function githubSweepBase(env: Env): SweepBaseReader {
       const body = (await response.json()) as { default_branch?: unknown };
       const branch = typeof body.default_branch === "string" ? body.default_branch : "";
       if (branch === "") throw new Error(`${project} does not name a default branch`);
-      const refs = await repoRefs(env).list(project);
+      const refs = await repoRefs(env).list(project, [branch]);
       const sha = refs[branch];
       if (typeof sha !== "string" || sha === "") {
         throw new Error(`${project} has no head for its default branch ${branch}`);
