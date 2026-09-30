@@ -115,8 +115,10 @@ jobs:
        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     # The live-run guard waits up to 60 minutes; the deploy itself takes ~10
-    # (image build and push, then a rollout wait of up to 10).
-    timeout-minutes: 100
+    # (image build and push, then a rollout wait of up to 10 — up to 60 while
+    # the platform still reports the rollout in progress, as it does when fresh
+    # layers pull slowly: 23-48 minute rollouts on 2026-09-30).
+    timeout-minutes: 140
     concurrency:
       # One deploy at a time: two deploys racing one Cloudflare account is the
       # two-writers-one-name problem, and an upgrade must not cancel a deploy
