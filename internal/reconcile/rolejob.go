@@ -299,7 +299,7 @@ func (r *Reconciler) collectRole(ctx context.Context, entry planEntry, handle *s
 		fmt.Sprintf("collecting the %s job for %s", entry.Role, tick)); err != nil {
 		return nil, nil, err
 	}
-	collected, err := executor.CollectDetail(handle)
+	collected, err := r.collectDetail(executor, handle, tick)
 	if err != nil {
 		return nil, nil, fmt.Errorf("collect %s: %w", tick, err)
 	}

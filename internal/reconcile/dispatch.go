@@ -3045,7 +3045,7 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	if _, err := r.checkpoint(runstate.StateCollecting, fmt.Sprintf("collecting %s attempt %d", marker.TickID, marker.Attempt)); err != nil {
 		return nil, err
 	}
-	collected, err := executor.CollectDetail(handle)
+	collected, err := r.collectDetail(executor, handle, marker.TickID)
 	if err != nil {
 		return nil, fmt.Errorf("collect %s: %w", marker.TickID, err)
 	}

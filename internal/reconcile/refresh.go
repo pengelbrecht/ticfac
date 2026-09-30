@@ -44,7 +44,10 @@ import (
 //     fold; every other kind, and a resolve that fails, is the typed refusal
 //     it always was. A reconciler that skipped the fold on a conflict would
 //     be back to planning from a tracker that is missing ticks — silently,
-//     which is the failure this whole file exists to remove.
+//     which is the failure this whole file exists to remove. At RUN START
+//     that refusal is deferred out loud rather than halting: the run works
+//     its ticks on the unfolded branch and folds again once they are closed
+//     (refresh_defer.go, epic hn6 run_09ebaf29).
 
 // refreshFromBase folds the epic's base branch into the integration branch as
 // origin has both, and answers with a typed refusal when they do not merge.

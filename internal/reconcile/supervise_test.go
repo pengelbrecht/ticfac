@@ -314,7 +314,7 @@ func TestOnlyTheStopsThatNeedNobodyAreResumable(t *testing.T) {
 	t.Parallel()
 	for _, reason := range []string{RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient,
 		RefusedCloseoutOverRedCI, RefusedCloseoutCIPending, RefusedCloseoutCIAbsent, RefusedLandCIPending, RefusedClaimHolderUnknown,
-		StoppedRemoteTokenRefused} {
+		StoppedRemoteTokenRefused, RefusedFoldReplan} {
 		if !resumesWithoutAPerson(reason) {
 			t.Errorf("%s is resumable by construction and the supervisor refuses to continue across it", reason)
 		}

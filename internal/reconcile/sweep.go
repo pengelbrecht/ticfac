@@ -103,6 +103,7 @@ func (r *Reconciler) sweepLeftovers(ctx context.Context, tick string, sweepable 
 	// independent of every worktree and branch, and a snapshot this sweep
 	// takes before a forced removal retires with the rest of its tick's.
 	defer r.pruneWip(scope, say)
+	defer r.pruneStartRefs(sweepable, say)
 
 	// The substrate's half first: a workspace removed after its worktree is
 	// a workspace open on a directory that no longer exists.

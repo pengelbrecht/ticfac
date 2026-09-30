@@ -160,6 +160,10 @@ const StoppedRemoteTokenRefused = "remote_token_refused"
 //     admission answers the red CI with the repair job — the tree changes —
 //     and dispatches a new close-out over the green, carrying the rejected
 //     one's commits (its retro); nobody has anything to decide.
+//   - RefusedFoldReplan: a fold the run start deferred landed once every
+//     tick closed and brought ticks the run never planned (refresh_defer.go).
+//     The tree changed — the fold is on it — and the next incarnation plans
+//     them from it; nobody has anything to decide.
 //
 // And one hold is continued when the stopped incarnation finds the run can
 // decide it (supervisedStop.Decides): a close-out's RefusedRoleAnswer over a
@@ -177,7 +181,7 @@ func resumesWithoutAPerson(reason string) bool {
 	switch reason {
 	case RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
 		RefusedBlockedRedispatch, RefusedRejectedRedispatch, RefusedClaimHolderUnknown, RefusedNoCapacity,
-		StoppedRemoteTokenRefused:
+		StoppedRemoteTokenRefused, RefusedFoldReplan:
 		return true
 	}
 	return waitsOnCI(reason)

@@ -170,6 +170,23 @@ func (r *Reconciler) closeoutForLanding() (*landingCloseout, error) {
 // re-run resumes at the readying (every tick is closed, so it is all that is
 // left).
 func (r *Reconciler) finishReadying(ctx context.Context, done string) (*Result, error) {
+	// A run-start fold the run deferred is folded now, before anything is
+	// readied from the branch (refresh_defer.go).
+	if err := r.retryDeferredFold(ctx); err != nil {
+		var refusal *Refusal
+		if !asRefusal(err, &refusal) {
+			return nil, err
+		}
+		r.failure = refusal
+		r.recordRefusal(refusal.TickID, refusal)
+		reason := fmt.Sprintf("%s, and the epic branch is not ready to be readied: %s", done, refusal.Error()) +
+			autoResumeNote(r.priorResumes)
+		if _, err := r.checkpoint(runstate.StateFailed, reason); err != nil {
+			return nil, err
+		}
+		r.record("", StageRunFinished, "%s: %s", runstate.StateFailed, reason)
+		return r.result(runstate.StateFailed, reason), nil
+	}
 	rd, err := r.readyEpic(ctx)
 	if err != nil {
 		var refusal *Refusal
@@ -190,6 +207,11 @@ func (r *Reconciler) finishReadying(ctx context.Context, done string) (*Result, 
 		r.record("", StageRunFinished, "%s: %s", runstate.StateFailed, reason)
 		return r.result(runstate.StateFailed, reason), nil
 	}
+	// The completed run's end: every job's leftovers, the ones that name no
+	// tick included (a base fold's). This is the sweep runPlan's caller meant
+	// to make on completion — it returns here first, so without this line the
+	// "everything" sweep only ever ran for a run that was already terminal.
+	r.sweepClosed(ctx, true)
 	reason := done + rd.line() + autoResumeNote(r.priorResumes)
 	if _, err := r.checkpoint(runstate.StateCompleted, reason); err != nil {
 		return nil, err
