@@ -190,12 +190,40 @@ func (r *Reconciler) finishCollect(ctx context.Context, f *finishing) error {
 func (r *Reconciler) finishIntegrate(ctx context.Context, f *finishing) error {
 	merged, err := r.integrate(ctx, f.fl.marker, f.collected)
 	if err != nil {
+		err = r.conflictToLadder(ctx, f, err)
 		r.disposeFinished(f, err)
 		return err
 	}
 	f.merged = merged
 	f.stage = finishGating
 	return nil
+}
+
+// conflictToLadder hands an attempt whose work does not merge — a conflict no
+// resolve-conflict job delivered, or one of a kind no resolve job takes — to
+// the standing ladder instead of halting the run for a person (epic hn6's
+// cloud run: 7uv's conflict with 3gk, three resolves lost to a container
+// rollout, and the run stopped "needs a person" with the work intact). The
+// run releases the attempt CARRYING its commits and requeues the tick: the
+// next try starts from them — merged onto the epic as it is now where they
+// merge (carryOntoIntegration) — earns the ladder its rung, and gets a resolve
+// allowance of its own. It is the same disposal a rejected collect gets
+// (disposeRejectedWork), under the same bound: once the ceiling's one further
+// try is spent the conflict stands as the stop it was. Any other error is
+// returned as it arrived.
+func (r *Reconciler) conflictToLadder(ctx context.Context, f *finishing, err error) error {
+	var refusal *Refusal
+	if !asRefusal(err, &refusal) || !refusal.conflict {
+		return err
+	}
+	marker := f.fl.marker
+	redispatch := r.disposeRejectedWork(ctx, f.fl.entry, marker, "merge_failed: "+firstLine(refusal.Message), true)
+	if redispatch == nil {
+		return err
+	}
+	r.setTick(marker.TickID, "rejected")
+	r.record(marker.TickID, StageRejected, "%s: %s", refusal.Reason, refusal.Message)
+	return redispatch
 }
 
 // finishGate runs the integrated gate, a step at a time.
