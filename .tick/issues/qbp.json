@@ -1,0 +1,13 @@
+{
+  "id": "qbp",
+  "title": "A completed run awaiting its merge reads 'stopped' under 7uv's rule",
+  "description": "buildVerdict implements the tick's literal condition — stopped whenever the run is not alive and the lifecycle phase is neither done nor cancelled — so a run that finished cleanly and waits on the person's merge (phase 'merge', process gone) headlines as stopped, while the wave-1 golden for exactly that shape states a healthy verdict and the tick's own parenthetical says stopped means 'a dead run or a failed run'. Both renderers will show this shape to every reader at close-out time; the epic should decide deliberately whether phase merge joins done/cancelled as not-stopped, or the golden's verdict is the one to refresh. Nothing mechanical breaks either way today.\nevidence: internal/statusmodel/verdict.go buildVerdict (phase != done \u0026\u0026 != cancelled); contracts/status-model.json golden status_model_completed_awaiting_merge (alive false, lifecycle.phase merge, health.verdict.state healthy)\n\nticfac run run_911b556fce394004837695b3196e3925 filed this backlog tick from the finding fc693f8f745251144ed2fc895373ffdd6665602a1cdfe0fdccc939ceb72a233a (reported by run-run_911b556fce394004837695b3196e3925/tick-7uv/attempt-2): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_911b556fce394004837695b3196e3925/absorptions/fc693f8f745251144ed2fc895373ffdd6665602a1cdfe0fdccc939ceb72a233a.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-run_911b556fce394004837695b3196e3925/tick-7uv/attempt-2",
+  "created_by": "ticfac run run_911b556fce394004837695b3196e3925",
+  "created_at": "2026-09-30T13:17:50Z",
+  "updated_at": "2026-09-30T13:17:50Z"
+}
