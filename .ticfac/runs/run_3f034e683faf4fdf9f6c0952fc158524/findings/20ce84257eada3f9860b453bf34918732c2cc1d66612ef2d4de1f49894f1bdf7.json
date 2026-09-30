@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "7uv",
   "attempt": 2,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-09-30T17:02:18Z",
+  "triaged_at": "2026-09-30T17:02:31Z",
+  "triaged_by": "ticfac run run_3f034e683faf4fdf9f6c0952fc158524 absorbing omv",
+  "promoted_as": "omv",
   "provenance": {
     "run_id": "run_3f034e683faf4fdf9f6c0952fc158524",
     "tick_id": "7uv",
