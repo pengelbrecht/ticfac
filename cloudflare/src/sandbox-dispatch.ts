@@ -90,6 +90,14 @@
  *     older deployment booted) is refused `409 adoption_model_unknown`
  *     rather than adopted under a model nobody observed.
  *
+ *   - `503 no_capacity` — a FRESH start the account has no container slot
+ *     for: every one of FACTORY_MAX_INSTANCES is held by a live run's
+ *     orchestrator or a worker neither settled nor reclaimed
+ *     (container-capacity.ts). Answered at once, before any container is
+ *     addressed — addressing one queues it for a slot, which is the wait that
+ *     outlasted the caller's client in hn6's cloud run. Retry later; an
+ *     adoption is never refused for capacity.
+ *
  * `handle` is the pinned job-protocol `job_handle` record (`contracts/`
  * `$defs.job_handle`): the closed top level of identity and executor name
  * (`cloudflare-sandbox`), the issue time, and the one open `handle` object
@@ -189,12 +197,14 @@
  */
 
 import type { AttemptSpec } from "./attempt-protocol";
+import { heldSlots, mayBeAdoptable } from "./container-capacity";
 import { authorizeGatewayRequest, type GatewayDenial } from "./gateway";
 import type { Env } from "./index";
 import { BASE_SHA_PATTERN, roomFor } from "./runs";
 import { sandboxBinding } from "./sandbox";
 import {
   AdoptionModelUnknownError,
+  attemptJobSlot,
   d1JobLogs,
   d1JobRecords,
   namedAttemptStatus,
@@ -222,6 +232,14 @@ function refuse(status: number, error: string, detail: string): SandboxDispatchR
 function fromDenial(denial: GatewayDenial): SandboxDispatchResult {
   return refuse(denial.status, denial.error, denial.detail);
 }
+
+/**
+ * The door's answer to a fresh start the account has no container slot for
+ * (hn6's cloud run): `503 no_capacity`, at once. The Go client types it
+ * (cloudflaresandbox's NoCapacity) and the orchestrator waits and asks again —
+ * a full account is a fact about the world, never a failure of the run.
+ */
+export const NO_CAPACITY = "no_capacity";
 
 // ------------------------------------------------------------ the shapes ---
 
@@ -548,6 +566,34 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     prompt,
     ...(wallSeconds === undefined ? {} : { wall_seconds: wallSeconds }),
   };
+
+  // The account's capacity (hn6's cloud run, container-capacity.ts). A FRESH
+  // boot addresses a container that is not running, and the platform queues
+  // that for a free instance — a wait that outlasted the caller's client
+  // twelve times over, each read as a transient remote. So the slots are
+  // counted first and a full account is answered at once, typed: 503
+  // no_capacity, which the orchestrator treats as "wait and ask again" and
+  // never as a failure. A start under an identity whose container may still
+  // be live is an ADOPTION and needs no slot, so it is never refused for one.
+  const adoptable = await mayBeAdoptable(env.DB, {
+    run_id: run.run_id,
+    tick_id: tickID,
+    attempt,
+    job: attemptJobSlot(run.run_id, tickID, attempt, jobID) ?? "",
+  });
+  if (!adoptable) {
+    const slots = await heldSlots(env.DB, env);
+    if (slots.held >= slots.max) {
+      return refuse(
+        503,
+        NO_CAPACITY,
+        `every container slot this factory's account may run is held (${slots.held} of ${slots.max}: ` +
+          `${slots.orchestrators} run orchestrator(s), ${slots.workers} worker(s)) — nothing was started. ` +
+          "Ask again later: a slot frees when a worker settles, when a run ends, or when the hourly sweep " +
+          "reclaims a container whose run is over",
+      );
+    }
+  }
 
   // The machinery, not a copy of it: `startNamedAttempt` resolves the container
   // BY NAME, adopts a live work process instead of booting a rival beside it,

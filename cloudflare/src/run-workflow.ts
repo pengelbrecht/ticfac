@@ -74,6 +74,7 @@ import {
   writeReconcileRecord,
   writeRunRecord,
 } from "./artifacts";
+import { factoryMaxInstances, reclaimRunWorkers } from "./container-capacity";
 import {
   containerGitToken,
   credentialGrade,
@@ -1577,6 +1578,11 @@ async function supervisePass(
                     ...(context.config.model === null ? {} : { model: context.config.model }),
                   }),
               sandbox_image: image,
+              // The account's container ceiling (hn6's cloud run): the run the
+              // orchestrator drives keeps its live workers under it, less the
+              // orchestrator's own container, so it never asks the door for a
+              // slot it can count itself out of.
+              factory_max_instances: factoryMaxInstances(env),
               // The factory URL is given per BOOT (tick 7eq): every orchestrator
               // reports its own finish to the done door over it, and the same
               // URL is what its `ticfac run-epic` hands the per-tick sandbox
@@ -2154,6 +2160,16 @@ export async function finalize(
       );
     },
   );
+
+  // The run's WORKER containers first (hn6's cloud run: a failed run left two
+  // workers running, holding two of the account's three slots). Every ending
+  // lands here — completed, failed, stopped, the orchestrator dead — so this
+  // is where they are given back: each live worker is asked to stop and push
+  // (its gateway token is already revoked, so the push is all it can still
+  // do), given the grace window, destroyed, and the reclaim recorded.
+  await reclaimRunWorkers(env.DB, sandboxBinding(env), params.run_id, {
+    reason: `run_ended:${outcome.state}`,
+  });
 
   // Tear down every container this run booted — and only those. `destroy` on a
   // sandbox that is already gone is a no-op worth attempting (a leaked
