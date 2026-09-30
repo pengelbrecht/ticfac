@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_3f034e683faf4fdf9f6c0952fc158524",
   "epic_id": "hn6",
-  "sequence": 17,
+  "sequence": 18,
   "state": "failed",
-  "reason": "7uv try 1 (run dispatch #2) does not merge onto epic/hn6 (1 conflict: content in internal/statusmodel/build_dashboard_test.go) and its resolve-conflict job could not be routed at the ceiling: profile resolve-conflict: [roles.review] declares no tier \"strong\" (it declares frontier): a tier that silently falls back to the role is a tier an operator paid for and did not get. The tick is neither resolved nor re-dispatched; fix the routing and run the epic again",
-  "updated_at": "2026-09-30T17:08:10Z",
+  "reason": "7uv did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: 7uv try 1 (run dispatch #2) does not merge onto epic/hn6 (1 conflict: content in internal/statusmodel/build_dashboard_test.go) and its resolve-conflict job could not be routed at the ceiling: profile resolve-conflict: [roles.review] declares no tier \"strong\" (it declares frontier): a tier that silently falls back to the role is a tier an operator paid for and did not get. The tick is neither resolved nor re-dispatched; fix the routing and run the epic again",
+  "updated_at": "2026-09-30T17:08:15Z",
   "ticks": [
     {
       "tick_id": "378",
