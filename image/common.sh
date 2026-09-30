@@ -39,6 +39,13 @@ readonly EXIT_MODEL=7
 # forced this one had a GREEN model probe and then died at start with "No API
 # key found for cloudflare-ai-gateway": the route was never the fault.
 readonly EXIT_HARNESS=8
+# The start commit is not on origin: the fetch worked, and the SHA the job was
+# dispatched on is not among what origin serves. Its own class because it is
+# the DISPATCHER's failure, not this container's — a job cut at a commit only
+# the orchestrator's own clone holds (epic hn6, run_09ebaf29: a base fold's
+# conflicted merge, three resolve jobs lost to it as "missing-result") — and
+# because it is the one checkout failure a retry as-is can never survive.
+readonly EXIT_START_UNPUBLISHED=13
 
 say() { printf '%s: %s\n' "$ME" "$*"; }
 # The trace id as a banner fragment, or nothing. A container with no trace id
@@ -1021,6 +1028,9 @@ clone_at_sha() {
 		fi
 	fi
 	rm -f "$shallow_err"
+	if ! git -C "$workdir" cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
+		die $EXIT_START_UNPUBLISHED "the start commit $base_sha is not on $repo_url: origin serves it neither by SHA nor from any branch, so the job was dispatched on a commit only its dispatcher's clone holds (start commit not on origin; a retry as-is fails the same way — the dispatcher must publish it first)"
+	fi
 	git -C "$workdir" checkout -q --detach "$base_sha" || die $EXIT_CLONE "cannot check out $base_sha — is it pushed?"
 	local head
 	head="$(git -C "$workdir" rev-parse HEAD)"

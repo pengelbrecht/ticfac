@@ -50,6 +50,15 @@ type Collection struct {
 	// worker that never said it.
 	FindingsFolded []string
 
+	// StartNotOnOrigin is the start commit a job's executor could not check
+	// out because origin does not serve it — set only by an executor whose
+	// job runs off a checkout of origin rather than of the orchestrator's own
+	// repository (cloudflaresandbox, epic hn6 run_09ebaf29). The verdict stays
+	// the closed vocabulary's missing-result, because the job never answered;
+	// this is the typed fact beside it that says WHY, so the orchestrator
+	// publishes the commit rather than redispatching the same doomed job.
+	StartNotOnOrigin string
+
 	Message string
 }
 

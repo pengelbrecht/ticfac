@@ -266,6 +266,14 @@ const (
 	// a boot whose earlier attempt DID land with a refusal the container reads
 	// as success.
 	ExitReview = 12
+	// ExitStartUnpublished reports a start commit origin does not serve: the
+	// fetch worked, and the SHA the job was dispatched on is not among what it
+	// brought. It is the DISPATCHER's failure, not the container's — a job cut
+	// at a commit only the orchestrator's own clone holds (epic hn6,
+	// run_09ebaf29: a base fold's conflicted merge, and three resolve jobs
+	// lost to it as missing-result) — and it is distinct from ExitClone
+	// because it is the one checkout failure a retry as-is cannot survive.
+	ExitStartUnpublished = 13
 )
 
 // Script names the files the image installs.

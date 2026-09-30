@@ -13,6 +13,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
+	"github.com/pengelbrecht/ticfac/internal/sandboximage"
 )
 
 // The executor: start and inspect over the door, collect from git (the
@@ -703,9 +704,27 @@ func (e *Executor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.
 		return nil, fmt.Errorf("the door answered for %s, not %s: the credential names a run this handle does not",
 			status.JobID, want)
 	}
+	// A container that could not check out its start commit (the commit is
+	// not on origin) is marked in the attempt's state before the exit is
+	// named, so the collect that follows says so rather than reading the
+	// empty landing branch as a job that answered nothing (epic hn6,
+	// run_09ebaf29). Best effort: the observation carries the same fact.
+	if payload.State != "" && exitedWith(status, sandboximage.ExitStartUnpublished) {
+		_ = e.storeAt(payload.State).writeJSON(fileStartUnpublished, map[string]any{
+			"observed_at": status.ObservedAt, "exit_code": sandboximage.ExitStartUnpublished,
+		})
+	}
 	nameExitClasses(status)
 	return status, nil
 }
+
+// ChecksOutFromOrigin says this executor's jobs run off a checkout of the
+// REMOTE, never of the orchestrator's own repository: the container clones
+// origin at the dispatched start commit, so a commit only the orchestrator's
+// clone holds is one it cannot start from (epic hn6, run_09ebaf29). The
+// reconciler asks, and publishes every start commit before it dispatches here
+// (reconcile.RemoteCheckout).
+func (e *Executor) ChecksOutFromOrigin() bool { return true }
 
 // ------------------------------------- the operations decided elsewhere ---
 

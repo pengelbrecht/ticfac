@@ -39,6 +39,8 @@ func exitClass(code int) string {
 		return "the container could not call its model (the gateway probe failed)"
 	case sandboximage.ExitHarness:
 		return "the harness could not use the model route (the harness probe failed)"
+	case sandboximage.ExitStartUnpublished:
+		return "the start commit is not on origin: the job was dispatched on a commit only its dispatcher's clone holds"
 	case sandboximage.ExitWorkerPush:
 		return "commits exist and origin would not take them"
 	case sandboximage.ExitWorkerNoWork:
@@ -54,6 +56,27 @@ func exitClass(code int) string {
 	}
 	return ""
 }
+
+// exitedWith reports whether a terminal status says the container's work
+// process exited with `code`.
+func exitedWith(status *subprocess.JobStatus, code int) bool {
+	if status == nil || !status.Terminal {
+		return false
+	}
+	for _, o := range status.Observations {
+		if m := exitedPattern.FindStringSubmatch(o.Detail); m != nil && m[1] == strconv.Itoa(code) {
+			return true
+		}
+	}
+	return false
+}
+
+// fileStartUnpublished marks an attempt whose container could not check out
+// its start commit because origin does not serve it (ExitStartUnpublished):
+// written by the Inspect that observed the settle, read by the collect, which
+// otherwise has only an empty landing branch to go on — and an empty branch
+// reads as a job that answered nothing.
+const fileStartUnpublished = "start-unpublished.json"
 
 // nameExitClasses appends the class to every "exited N" observation the door
 // answered with, so the settled line a person reads says which step died.

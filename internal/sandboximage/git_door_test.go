@@ -262,6 +262,7 @@ type doorFixture struct {
 	token string
 	work  string
 	home  string
+	seed  string
 }
 
 func newDoorFixture(t *testing.T, challenge bool) *doorFixture {
@@ -300,6 +301,7 @@ func newDoorFixture(t *testing.T, challenge bool) *doorFixture {
 		token: token,
 		work:  filepath.Join(root, "work"),
 		home:  home,
+		seed:  seed,
 	}
 }
 
@@ -368,6 +370,31 @@ func TestReadOnlyRunClonesThroughTheGitDoorWithItsOwnCredential(t *testing.T) {
 	lines := strings.Split(helpers, "\n")
 	if len(lines) != 1 || !strings.Contains(lines[0], "username=x-access-token") {
 		t.Errorf("git resolved %d credential helpers, want only the one clone_at_sha installs:\n%s", len(lines), helpers)
+	}
+}
+
+// A start commit origin does not serve is its own exit class (epic hn6,
+// run_09ebaf29): a base fold's resolve job was dispatched on a conflicted merge
+// that existed only in the orchestrator's clone, and three containers died on
+// "is it pushed?" under the generic clone code — which the run read as three
+// jobs that answered nothing, and redispatched identically. The container must
+// say the commit is not on origin, with the code that means exactly that.
+func TestAStartCommitOriginDoesNotServeIsItsOwnExitClass(t *testing.T) {
+	f := newDoorFixture(t, true)
+	if err := os.WriteFile(filepath.Join(f.seed, "local-only.txt"), []byte("never pushed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	doorGit(t, f.home, f.seed, "add", "-A")
+	doorGit(t, f.home, f.seed, "commit", "-q", "-m", "a commit only the dispatcher's clone holds")
+	f.sha = doorGit(t, f.home, f.seed, "rev-parse", "HEAD")
+
+	out, code := f.clone(t)
+	if code != ExitStartUnpublished {
+		t.Fatalf("clone_at_sha of a commit origin does not have exited %d, want %d (ExitStartUnpublished)\n%s",
+			code, ExitStartUnpublished, out)
+	}
+	if !strings.Contains(out, "start commit not on origin") || !strings.Contains(out, f.sha) {
+		t.Errorf("the container did not say the start commit %s is not on origin:\n%s", f.sha, out)
 	}
 }
 

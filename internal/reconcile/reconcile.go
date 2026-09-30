@@ -786,6 +786,12 @@ type Reconciler struct {
 	// folded is the merge commit the last refreshFrom pushed, "" when the
 	// branch already carried the base: the one fold a run start must gate.
 	folded string
+	// foldDeferred is the run-start fold's refusal when the run deferred it
+	// and works its ticks on the unfolded branch; foldRetrying is set while
+	// the deferred fold is retried before the run finishes, when its resolve
+	// jobs get a fresh operational allowance (refresh_defer.go).
+	foldDeferred *Refusal
+	foldRetrying bool
 
 	// ciSilentSince and ciDispatched are dispatchSilentCI's memory: when this
 	// incarnation first saw a commit's code with no CI run, and which commits
@@ -1100,6 +1106,17 @@ const (
 	// refusal returned to the caller — the line says when to look, never
 	// what happened.
 	StageStartFailed = "start_failed"
+
+	// StageStartPublished is a job whose executor could not check out its
+	// start commit because origin did not serve it, answered: the commit is
+	// published, so the next job is not a repeat of the one that died on its
+	// checkout (start_publish.go, epic hn6 run_09ebaf29).
+	StageStartPublished = "start_published"
+
+	// StageRefreshDeferred is a run-start fold of the base branch that did
+	// not land, deferred rather than halting: the run works its ticks on the
+	// unfolded epic branch and folds again before it finishes (refresh.go).
+	StageRefreshDeferred = "base_refresh_deferred"
 
 	// StageRunHeld is the line a run owes a person: it stopped holding one
 	// tick for a decision only a person can make (an attempt nobody can
@@ -1905,7 +1922,9 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	// base after the branch forked is one this run cannot see until the fold
 	// happens (refresh.go).
 	err = r.refreshFromBase(ctx)
-	if err == nil {
+	if r.deferRunStartFold(err) {
+		err = nil
+	} else if err == nil {
 		err = r.gateRunStartFold(ctx)
 	}
 	if err != nil {
@@ -1993,6 +2012,15 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			r.settleClosedTicks(ctx, plan)
 			r.record("", StageResumed, "every tick of %s is closed; the run resumes at keeping the epic PR ready",
 				r.opts.EpicID)
+			return r.finishReadying(ctx, fmt.Sprintf("every tick of %s is closed behind the integrated gate",
+				r.opts.EpicID))
+		}
+		if r.foldDeferred != nil {
+			// Every tick was closed on the unfolded branch by an earlier
+			// incarnation, and the fold it deferred is what is left: retried
+			// by the finish (refresh_defer.go), never an error over the work
+			// being done.
+			r.settleClosedTicks(ctx, plan)
 			return r.finishReadying(ctx, fmt.Sprintf("every tick of %s is closed behind the integrated gate",
 				r.opts.EpicID))
 		}

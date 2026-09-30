@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/sandboximage"
 )
 
 // collect: read the branch, parse the report, diff the attempt against its
@@ -189,6 +190,20 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 		Message: collectMessage(reason, class, record, head,
 			append(append([]string{}, violations...), artifactViolations...),
 			subprocess.ReportRefusal(record.Spec.Role, report)),
+	}
+
+	// A container that never got past its checkout because origin does not
+	// serve the start commit (Inspect marked it from the exit code): the
+	// branch is empty because the job never RAN, not because its push failed,
+	// and the typed fact travels beside the verdict so the orchestrator
+	// publishes the commit instead of redispatching the same doomed job
+	// (epic hn6, run_09ebaf29).
+	if head == "" && collected.Verdict == subprocess.VerdictMissingResult && st.exists(fileStartUnpublished) {
+		result.FailureClass = subprocess.FailureInfrastructure
+		collected.StartNotOnOrigin = record.BaseSHA
+		collected.Message = fmt.Sprintf("the container could not check out its start commit %s: it is not on origin "+
+			"(exit %d), so the job never ran — it was dispatched on a commit only the dispatcher's clone holds, and "+
+			"a retry as-is fails the same way", shortSHA(record.BaseSHA), sandboximage.ExitStartUnpublished)
 	}
 
 	// A PREVENTED boundary attempt is invisible in the diff — the container's
