@@ -1,0 +1,56 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 2,
+    "attempt_head": "3fa3bbbbe7a89dce474c869964734e6832eab235",
+    "conflict_files": [
+      "RESULT-378.md"
+    ],
+    "conflicting_ticks": [
+      "378"
+    ],
+    "epic_id": "hn6",
+    "job_id": "run-run_37b36bfe525c411b902e85dc01a16a52/tick-378/resolve-2",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "resolve_branch": "ticfac/run-run_37b36bfe525c411b902e85dc01a16a52/tick-378/resolve-2",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "378"
+  },
+  "response": {
+    "conflict_detail": "1 conflict: content in RESULT-378.md",
+    "conflict_files": [
+      "RESULT-378.md"
+    ],
+    "failure": "operational",
+    "job_id": "run-run_37b36bfe525c411b902e85dc01a16a52/tick-378/resolve-2",
+    "merge": "",
+    "reason": "378 try 1 (run dispatch #2) does not merge onto epic/hn6 (1 conflict: content in RESULT-378.md) and its resolve-conflict job failed: it answered with no report the run could read and the run's verdict is missing-result (failed): the container's branch tick/hn6/attempt-2-resolve-2-684cca10/378 carries no report and no commit beyond the base it was cut from: the push never landed, and this is neither running nor done. The tick is neither resolved nor re-dispatched",
+    "resolve_head": "",
+    "status": "failed"
+  },
+  "validated": true,
+  "requested_at": "2026-10-01T05:16:23Z",
+  "answered_at": "2026-10-01T05:16:23Z",
+  "provenance": {
+    "run_id": "run_37b36bfe525c411b902e85dc01a16a52",
+    "tick_id": "378",
+    "attempt": 2,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "84610d563484bbdb360ef1d557714d77b9433158",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
