@@ -137,6 +137,16 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 				"%s reported a finding this reconciler cannot draft: %v", r.attemptName(marker.TickID, marker.Attempt), err)
 		}
 		key := findingKey(finding)
+		// An EARLIER run of this epic may already have decided this very
+		// finding (hn6: run_6d88 absorbed f519ea4e as oro, and run_ee8e,
+		// collecting the same report again, absorbed it a second time as
+		// log). The key is the finding's identity across runs, so a decided
+		// one is linked to its decision, never proposed or absorbed again.
+		if linked, err := r.linkDecidedElsewhere(marker, finding, key); err != nil {
+			return err
+		} else if linked {
+			continue
+		}
 		draft := runstate.Finding{
 			Key:            key,
 			Source:         findingSource,
@@ -217,6 +227,85 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 		}
 	}
 	return nil
+}
+
+// linkDecidedElsewhere is the dedup ACROSS runs of one epic. The draft store
+// is per run, so the create-if-absent that deduplicates a finding within a
+// run says nothing about a run before it, and a new run that collects a
+// report an earlier run already drafted from — a claim taken over, the same
+// worker report read again — would propose, decide and absorb the finding a
+// second time, as a second tick.
+//
+// It reports whether the finding is LINKED: an earlier run's draft under the
+// same key is promoted (to a tick, open or closed) or discarded, so the
+// decision stands where it was made and this run proposes nothing. An earlier
+// run that recorded its absorption decision but never finished the triage —
+// it died between the two — has that decision and its draft adopted into this
+// run, exactly as a taken-over claim's findings are, and the ordinary path
+// finishes behind the recorded decision (its tick, never a new one). A FIXED
+// original is not linked: a repeat is the proof the fix did not hold (tick
+// her). This run's own draft, when it has one, is the within-run dedup's.
+func (r *Reconciler) linkDecidedElsewhere(marker attemptHandle, finding subprocess.Finding, key string) (bool, error) {
+	if _, ok, err := r.store.Finding(key); err != nil {
+		return false, fmt.Errorf("read this run's draft of finding %s: %w", key, err)
+	} else if ok {
+		return false, nil
+	}
+	earlier, err := r.store.ForeignFindingsByKey(key)
+	if err != nil {
+		return false, fmt.Errorf("read earlier runs' drafts of finding %s: %w", key, err)
+	}
+	var decided *runstate.Finding
+	for i := range earlier {
+		one := &earlier[i]
+		if one.Status != runstate.FindingPromoted && one.Status != runstate.FindingDiscarded {
+			continue
+		}
+		if decided == nil || one.TriagedAt > decided.TriagedAt {
+			decided = one
+		}
+	}
+	if decided != nil {
+		where := "discarded by " + decided.TriagedBy
+		if decided.Status == runstate.FindingPromoted {
+			where = "promoted as tick " + decided.PromotedAs
+		}
+		r.record(marker.TickID, StageFindingDuplicate,
+			"finding %s (%q), reported again by %s, was already decided by run %s (discovered by %s): %s. It is "+
+				"linked to that decision and nothing new is proposed or absorbed",
+			key, finding.Title, r.attemptName(marker.TickID, marker.Attempt), decided.Provenance.RunID,
+			decided.DiscoveredFrom, where)
+		return true, nil
+	}
+	for _, one := range earlier {
+		if one.Status != runstate.FindingProposed {
+			continue
+		}
+		run := one.Provenance.RunID
+		decision, ok, err := r.store.ForeignAbsorption(run, key)
+		if err != nil {
+			return false, fmt.Errorf("read run %s's decision on finding %s: %w", run, key, err)
+		}
+		if !ok || decision.TickID == "" {
+			continue
+		}
+		adopted := *decision
+		adopted.Provenance.RunID = r.runID
+		if _, err := r.store.PutAbsorption(adopted); err != nil {
+			return false, fmt.Errorf("adopt run %s's decision on finding %s: %w", run, key, err)
+		}
+		draft := one
+		draft.Provenance.RunID = r.runID
+		if _, err := r.store.PutFinding(draft); err != nil {
+			return false, fmt.Errorf("adopt finding %s of run %s: %w", key, run, err)
+		}
+		r.record(marker.TickID, StageFindingAdopted,
+			"finding %s (%q), reported again by %s, was already decided by run %s as tick %s, which never finished "+
+				"its triage; the decision is adopted and finished behind, never made a second time",
+			key, finding.Title, r.attemptName(marker.TickID, marker.Attempt), run, decision.TickID)
+		return false, nil
+	}
+	return false, nil
 }
 
 // untriagedFindings is every finding this run's attempts reported that is

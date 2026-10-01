@@ -813,9 +813,13 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	// and on what evidence. Only a first dispatch of the tick under this run
 	// can be a takeover — any later one is under this run's own claim.
 	var taken *takenOver
+	// finished is the holder's attempt whose work is ALREADY merged into the
+	// integration branch (hn6 run_ee8e's 378): this dispatch starts no worker
+	// and collects nothing — the tick is finished from the integration branch.
+	var finished *collectedFrom
 	if carry == nil && len(mine) == 0 {
 		var took *carriedWork
-		if took, taken, err = r.takeOverClaim(entry); err != nil {
+		if took, taken, finished, err = r.takeOverClaim(entry); err != nil {
 			return nil, nil, attemptHandle{}, err
 		} else if took != nil {
 			carry = took
@@ -846,7 +850,7 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	// the classifier chose. A nil classification here is that fallback, not
 	// an error: the exchange's degradations are by design.
 	var classification *RecordedClassification
-	if entry.Role == "implement-tick" {
+	if entry.Role == "implement-tick" && finished == nil {
 		if classification, err = r.classificationFor(ctx, entry, len(mine) == 0); err != nil {
 			return nil, nil, attemptHandle{}, err
 		}
@@ -892,7 +896,13 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 			probedSettled = true
 			settled = r.settledElsewhere(ctx, executor, dispatch, carry)
 		}
-		if settled != nil {
+		if finished != nil {
+			// Cut at the merged delivery itself: there is nothing to start
+			// from and nothing to collect, only a gate and a close.
+			dispatch.BaseSHA, marker.BaseSHA = finished.SHA, finished.SHA
+			dispatch.ResumedFrom, marker.ResumedFrom = nil, nil
+			marker.CollectedFrom = finished
+		} else if settled != nil {
 			dispatch.BaseSHA, marker.BaseSHA = carry.marker.BaseSHA, carry.marker.BaseSHA
 			dispatch.ResumedFrom, marker.ResumedFrom = nil, nil
 			marker.CollectedFrom = settled
@@ -1002,6 +1012,25 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 					"continues that work rather than redoing it, and the gate still decides what merges",
 				attemptLabel(tick, try, number), from,
 				branchOf(marker.ResumedFrom.WriteRef), marker.ResumedFrom.ReleasedBy)
+		}
+
+		if finished != nil {
+			// No worker and no collect: the holder's work is on the
+			// integration branch, so the attempt joins the window settled and
+			// integrated, and the finish proves the containment, gates the
+			// epic head and closes — exactly a resume's already-integrated
+			// attempt.
+			r.record(tick, StageAdopted,
+				"%s starts no worker and collects nothing: run %s's attempt %d of %s is already merged into %s "+
+					"at %s, so the tick is finished from there (gated on the epic head and closed) rather than "+
+					"redone", attemptLabel(tick, try, number), finished.RunID, finished.Attempt, tick, r.branch,
+				short(finished.SHA))
+			if _, err := r.checkpoint(runstate.StateRunning,
+				fmt.Sprintf("%s is finished as attempt %d from run %s's merged attempt %d", tick, number,
+					finished.RunID, finished.Attempt)); err != nil {
+				return nil, nil, marker, err
+			}
+			return nil, nil, marker, nil
 		}
 
 		if marker.CollectedFrom != nil {
@@ -1441,6 +1470,11 @@ func (r *Reconciler) integratedHead(marker attemptHandle) (string, error) {
 		// local branch's, or the one the run recorded (epic-2jn's retired
 		// attempt branch). Whether it is merged is asked of origin below.
 		head = r.offOriginAttemptHead(marker)
+	}
+	if head == "" && marker.CollectedFrom != nil {
+		// An attempt that rules on another run's work has none of its own:
+		// that work's commit is the head, merged or not (takeover.go).
+		head = marker.CollectedFrom.SHA
 	}
 	if head == "" {
 		return "", nil
@@ -1890,6 +1924,16 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 	// resume, whatever this host's state holds for it.
 	if marker.CollectedFrom != nil {
 		_ = r.replayClaim(ctx, marker.TickID)
+		// Work already on the integration branch — a takeover's merged
+		// attempt, or settled work this run merged before it stopped — is
+		// finished from there, never collected again: nil is the answer for
+		// an attempt with nothing to address.
+		if head, err := r.integratedHead(marker); err != nil {
+			return nil, nil, err
+		} else if head != "" {
+			r.setTick(marker.TickID, "dispatched")
+			return nil, nil, nil
+		}
 		handle, err := r.settledHandle(executor, dispatch, marker)
 		if err != nil {
 			return nil, nil, r.startFailure(marker.TickID, err)
