@@ -130,6 +130,14 @@ factory_project="${TICKS_FACTORY_PROJECT:-}"
 # How long the pre-flight model probe may take before it is a failure. Bounded
 # by construction: an unbounded probe for a hang is itself a hang.
 probe_timeout="${TICKS_MODEL_PROBE_TIMEOUT:-30}"
+# A probe that got NO answer (a timeout, a refused connection) or a gateway's
+# transient 429/502/504 is asked again, this many times in all, waiting
+# backoff × the try number seconds between: a Workers AI model that is cold
+# can take longer than one bounded call to answer its first token, and one
+# such silence used to end the boot (hn6 run_ee8e: 378's resolve job exited
+# at its probe, pushed nothing, and was counted a job that never answered).
+probe_tries="${TICKS_MODEL_PROBE_TRIES:-3}"
+probe_backoff="${TICKS_MODEL_PROBE_BACKOFF:-10}"
 # The same bound for the harness's own round-trip. Larger, because this one
 # starts a whole agent CLI rather than one curl.
 harness_probe_timeout="${TICKS_HARNESS_PROBE_TIMEOUT:-120}"
@@ -417,31 +425,41 @@ probe_model() {
 		die $EXIT_MODEL "no curl in the container, so the model route cannot be proved before the harness starts — the image is broken"
 	fi
 
-	local url payload body status curl_error
+	local url payload body status curl_error try=1
 	# Body and curl's own diagnostics go to separate files: -o truncates its
 	# target, so appending stderr to the same path would eat the response.
 	local out="${TMPDIR:-/tmp}/ticks-model-probe.$$"
 	local err="$out.err"
 	payload="$(printf '{"model":"%s","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}' "$model_id")"
-	if [[ $model_provider == "anthropic" ]]; then
-		url="$model_base_url/v1/messages"
-		status="$(curl -sS -o "$out" -w '%{http_code}' --max-time "$probe_timeout" \
-			-X POST "$url" \
-			-H 'content-type: application/json' \
-			-H 'anthropic-version: 2023-06-01' \
-			-H "x-api-key: $gateway_token" \
-			--data "$payload" 2>"$err")"
-	else
-		url="$model_base_url/chat/completions"
-		status="$(curl -sS -o "$out" -w '%{http_code}' --max-time "$probe_timeout" \
-			-X POST "$url" \
-			-H 'content-type: application/json' \
-			-H "authorization: Bearer $gateway_token" \
-			--data "$payload" 2>"$err")"
-	fi
-	body="$(head -c 400 "$out" 2>/dev/null)"
-	curl_error="$(head -c 200 "$err" 2>/dev/null)"
-	rm -f "$out" "$err"
+	while :; do
+		if [[ $model_provider == "anthropic" ]]; then
+			url="$model_base_url/v1/messages"
+			status="$(curl -sS -o "$out" -w '%{http_code}' --max-time "$probe_timeout" \
+				-X POST "$url" \
+				-H 'content-type: application/json' \
+				-H 'anthropic-version: 2023-06-01' \
+				-H "x-api-key: $gateway_token" \
+				--data "$payload" 2>"$err")"
+		else
+			url="$model_base_url/chat/completions"
+			status="$(curl -sS -o "$out" -w '%{http_code}' --max-time "$probe_timeout" \
+				-X POST "$url" \
+				-H 'content-type: application/json' \
+				-H "authorization: Bearer $gateway_token" \
+				--data "$payload" 2>"$err")"
+		fi
+		body="$(head -c 400 "$out" 2>/dev/null)"
+		curl_error="$(head -c 200 "$err" 2>/dev/null)"
+		rm -f "$out" "$err"
+		case "$status" in
+		"" | 000 | 429 | 502 | 504) ;;
+		*) break ;;
+		esac
+		((try < probe_tries)) || break
+		warn "model probe try $try of $probe_tries got ${status:-no answer} (${curl_error:-no diagnostic}); asking again in $((probe_backoff * try))s"
+		sleep "$((probe_backoff * try))"
+		try=$((try + 1))
+	done
 
 	case "$status" in
 	2*)
@@ -451,7 +469,7 @@ probe_model() {
 	"" | 000)
 		# No HTTP answer at all: a timeout, DNS, or a refused connection.
 		# Distinct from a status, and it needs the opposite investigation.
-		die $EXIT_MODEL "the gateway did not answer a one-token request within ${probe_timeout}s.
+		die $EXIT_MODEL "the gateway did not answer a one-token request within ${probe_timeout}s (asked $try time(s)).
   POST $url
   model: $model_id (provider $model_provider, routed from '$model')
   curl: ${curl_error:-no diagnostic}
