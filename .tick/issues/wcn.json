@@ -1,0 +1,17 @@
+{
+  "id": "wcn",
+  "title": "Agents see what a TUI looks like: emulator-rendered screens + screenshots judged by a vision model, in a self-improvement loop",
+  "gloss": "agents see the TUI",
+  "description": "Operator, 2026-10-01, after hn6's WIP dashboard rendered as a staircase in a real terminal with wrong counts (r3x, gmo): 'is there a way an agent can see a tui and have a self evaluation/improvement loop?' z7w covers property tests (Bombadil terminal driver, Hegel for --json); this tick adds SEEING it.\n1. Text view: run the TUI in a pty through a terminal emulator library (Go: charmbracelet/x/vt or vt10x) and expose the screen grid (cells + colours) as test helpers: assert no line starts mid-row (staircase), every frame fits WxH at 80x24 / 120x40 / 200x60, key-driven views (j/k, enter, e, esc) render. herdr `pane read` for live panes.\n2. Image view: scripted sessions with Charm's `vhs` (tape files per view) producing PNGs; a vision-capable model judges each frame against the spec's target layout and a rubric (alignment, truncation, hierarchy: needs-you first, calm headline) and lists concrete defects. Locally any vision model; in the cloud a Workers AI vision model only (never claude in the cloud).\n3. Loop + workflow: UI ticks carry a standard 'render evidence' requirement — emulator tests pass and the screenshots are attached to the worker report (linked from RESULT, stored as run artifacts); the worker iterates (fix → re-render → re-judge, bounded); the final-review job is given the screenshots and the vision verdict; the operator sees them from watch/status. Wire into the report linter (4m6) so a UI tick without render evidence is pushed back.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "after": [
+    "z7w"
+  ],
+  "acceptance_criteria": "[1] An emulator-backed render test helper exists and the ticfac watch dashboard has frame tests at three sizes that would have caught r3x. [2] `make render-evidence` (or equivalent) produces vhs screenshots for watch's views and a vision verdict JSON. [3] A UI tick's worker report without render evidence is pushed back by the linter; the review job receives the screenshots. [4] make gate passes.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-01T11:02:43.46145Z",
+  "updated_at": "2026-10-01T11:02:43.46145Z"
+}
