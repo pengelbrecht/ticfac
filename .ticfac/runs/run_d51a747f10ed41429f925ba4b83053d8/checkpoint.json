@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
   "epic_id": "hn6",
-  "sequence": 9,
-  "state": "publishing",
-  "reason": "closing 378 behind the integrated gate on d6ae0854624f",
-  "updated_at": "2026-10-01T06:28:37Z",
+  "sequence": 10,
+  "state": "running",
+  "reason": "378 is closed",
+  "updated_at": "2026-10-01T06:28:46Z",
   "ticks": [
     {
       "tick_id": "0rx",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "378",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 2
     },
     {
