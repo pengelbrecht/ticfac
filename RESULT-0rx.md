@@ -1,3 +1,18 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/hn6/attempt-1/0rx`, base `709813e32bc71f84e398305f77054db0cc1c2537`, harness `pi` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
+_ticks-worker: a carried attempt — its base `709813e32bc71f84e398305f77054db0cc1c2537` is the head of the work it continued, which was cut from `ddf3cec1f5096fd8da9886f573a3c15a910c316c`; its work commits are counted from the carried head._
+
+> **BOUNDARY VIOLATION ATTEMPTED.** This agent tried to write tracker state, which the
+> orchestrator owns. The container refused it, so nothing under `.tick/`
+> should have reached this branch — but the attempt is reported rather than
+> silently cleaned, because a model that ignored an explicit instruction is
+> something a human has to see. What it did:
+>
+> - the agent ran `tk --json list`
+
 # Phone page renders the dashboard model (tick 0rx, hn6/attempt-1)
 
 ## The state I inherited, and what my attempt did
