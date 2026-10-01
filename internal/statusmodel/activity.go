@@ -17,8 +17,10 @@ import (
 // inferred: the events and the last action come from the worker's own
 // session transcript (the same reader internal/exec/subprocess keeps for the
 // stuck watch, read over its whole tail here), the nudges are the run's own
-// typed feed lines, and the handle is the attempt record's job handle — the
-// word a person uses to find the worker on the machine. Where nothing
+// typed feed lines, and the handle is the worker's own name wherever this
+// machine spells it (tick zl1) — the executor's attempt record read through
+// the Sources.Handle seam first, the durable marker's job handle under it —
+// the word a person uses to find the worker on the machine. Where nothing
 // measured a worker and nobody nudged it, the window is null: the honest
 // not-measured, not a zeroed shape that renders as quiet-since-forever.
 
@@ -100,6 +102,19 @@ func decorateWorkers(src Sources, recs Records, m *Model) {
 		}
 		if attempt, ok := attempts[key]; ok {
 			w.Handle = handleOf(attempt.JobHandle)
+		}
+		// The worker's name, from wherever this machine spells it (zl1): the
+		// injected reader first — the executor's own attempt record in the
+		// dispatch's state directory, herdr's agent name or a supervisor's
+		// pid, the LIVE word a person finds the worker by — over the durable
+		// record's dispatch-time copy read above, which no executor writes
+		// today (the marker is cut before the start) but which is honoured
+		// wherever a record does spell it, and answers wherever the reader
+		// says nothing.
+		if src.Handle != nil {
+			if named := src.Handle(w.TickID, w.Attempt); named != nil {
+				w.Handle = named
+			}
 		}
 	}
 }

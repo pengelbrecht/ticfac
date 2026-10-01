@@ -624,10 +624,13 @@ func captureStatusSources(t *testing.T) *statusmodel.Sources {
 // TestStatusModelLocalWiringPassesTheDashboardReaders (hn6 wave 1, tick r5i):
 // a LOCAL run's gathering passes the two dashboard readers the wave-2
 // ticks fill — the runner-transcript activity window and the attempt
-// reports. Both answer nil today, so an unwired gathering would leave every
-// wave-2 fill invisible in `status --json` while every suite stays green
-// (the package tests pin the readers, the renderer tests pin the golden);
-// this pin is the only thing that holds the wire in place.
+// reports — and, since zl1, the worker-handle reader: no executor names the
+// worker on the durable attempt marker, so the handle cell is null in every
+// real run until a reader is wired. All three answer nil where nothing
+// names an answer, so an unwired gathering would leave every wave-2 fill
+// invisible in `status --json` while every suite stays green (the package
+// tests pin the readers, the renderer tests pin the golden); this pin is
+// the only thing that holds the wire in place.
 func TestStatusModelLocalWiringPassesTheDashboardReaders(t *testing.T) {
 	captured := captureStatusSources(t)
 
@@ -665,6 +668,9 @@ func TestStatusModelLocalWiringPassesTheDashboardReaders(t *testing.T) {
 	}
 	if captured.Report == nil {
 		t.Error("localStatusModel passes no Report reader: the wave-2 report tick would fill a reader no gathering calls")
+	}
+	if captured.Handle == nil {
+		t.Error("localStatusModel passes no Handle reader: the workers panel's handle cell renders null in every real run (zl1)")
 	}
 }
 
@@ -721,10 +727,12 @@ func TestStatusModelCloudWiringCarriesTheHostCost(t *testing.T) {
 			}
 
 			// A cloud run's runners and reports are not on this machine: the
-			// readers pass nil and the model states the honest not-measured.
-			if captured.Activity != nil || captured.Report != nil {
-				t.Errorf("a cloud run's gathering passes readers (activity=%v report=%v), want nil: its worktrees belong to the factory's containers",
-					captured.Activity != nil, captured.Report != nil)
+			// readers pass nil and the model states the honest not-measured —
+			// the worker's handle among them, which this machine's state
+			// directories cannot name (zl1).
+			if captured.Activity != nil || captured.Report != nil || captured.Handle != nil {
+				t.Errorf("a cloud run's gathering passes readers (activity=%v report=%v handle=%v), want nil: its worktrees belong to the factory's containers",
+					captured.Activity != nil, captured.Report != nil, captured.Handle != nil)
 			}
 			switch {
 			case leg.carry && captured.WorkerCost == nil:

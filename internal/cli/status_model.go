@@ -264,11 +264,13 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 		},
 		Session: session,
 		// The dashboard's per-worker and per-tick readers (hn6 wave 1): the
-		// activity window from the runner's transcript and the attempt reports
-		// from the run's records. Both are stub constructors in their own
-		// files, answering nil until the wave-2 ticks fill them.
+		// activity window from the runner's transcript, the attempt reports
+		// from the run's records, and — since zl1 — the worker's executor-own
+		// name from the attempt record in the dispatch's state directory on
+		// this machine. All are nil-safe stubs where nothing answers.
 		Activity: statusmodel.TranscriptActivity(home),
 		Report:   statusmodel.AttemptReports(repo, runID),
+		Handle:   statusmodel.WorkerHandles(runID),
 		CI:       ci,
 	})
 }

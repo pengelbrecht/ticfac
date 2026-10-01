@@ -75,6 +75,17 @@ type Sources struct {
 	// every caller is nil-safe, and the model leaves activity null.
 	Activity func(executor, worktree string) *ActivityInput
 
+	// Handle answers one (tick, attempt) worker's executor-own name from
+	// where this machine keeps it: the attempt record in the dispatch's
+	// state directory — herdr's agent name, the pane it runs in, a local
+	// supervisor's pid (zl1). The durable attempt marker cannot carry the
+	// name: it is cut before the start, and the executor's own handle is
+	// host paths a public repository must never commit. Nil when there is
+	// no reader — a cloud run's workers are not on this machine — and the
+	// model falls back to whatever the attempt record's own job handle
+	// spells, null when nothing names the worker.
+	Handle func(tickID string, attempt int) *string
+
 	// Report answers one (tick, attempt) report: its summary and its diff
 	// stats. Nil when there is no reader — the model leaves report null,
 	// which is the honest "the report was not read".

@@ -168,6 +168,53 @@ func TestActivityIsNullWithNothingToSay(t *testing.T) {
 	}
 }
 
+// TestTheHandleReaderNamesTheWorkerTheMarkerCannot (zl1): the attempt
+// marker's job handle never carries a worker's name — it is cut before the
+// start, and its existence is the dispatch's compare-and-swap — so the
+// panel's handle comes from the injected reader, the executor's own record
+// on this machine. The reader's answer wins over the durable record's copy
+// (it is the LIVE worker the panel points a person at, and the record is the
+// frozen dispatch-time one), and the record still answers where the reader
+// says nothing: a record that names the worker is read, never ignored.
+func TestTheHandleReaderNamesTheWorkerTheMarkerCannot(t *testing.T) {
+	durable := map[string]any{
+		"executor": "herdr",
+		"handle":   map[string]any{"agent_name": "tick-6dh-a2"},
+	}
+
+	// The reader answers: its name for the live worker wins, even over a
+	// durable record that spells one.
+	src := runningEpicSources()
+	src.Activity = nil
+	for i, a := range src.Records.Attempts {
+		if a.TickID == "6dh" && a.Attempt == 3 {
+			src.Records.Attempts[i].JobHandle = durable
+		}
+	}
+	src.Handle = func(tickID string, attempt int) *string {
+		name := "tick-6dh-a3"
+		return &name
+	}
+	worker := (*Build(src).Workers)[0]
+	if worker.Handle == nil || *worker.Handle != "tick-6dh-a3" {
+		t.Errorf("the handle reads %+v, want the reader's name for the live worker", worker.Handle)
+	}
+
+	// The reader answers nothing: the durable record's own copy answers.
+	src.Handle = func(tickID string, attempt int) *string { return nil }
+	worker = (*Build(src).Workers)[0]
+	if worker.Handle == nil || *worker.Handle != "tick-6dh-a2" {
+		t.Errorf("the handle reads %+v, want the durable record's own name", worker.Handle)
+	}
+
+	// No reader at all: the record answers, as before the reader existed.
+	src.Handle = nil
+	worker = (*Build(src).Workers)[0]
+	if worker.Handle == nil || *worker.Handle != "tick-6dh-a2" {
+		t.Errorf("the handle reads %+v, want the durable record's own name", worker.Handle)
+	}
+}
+
 // TestActivityCarriesTheWorkersExecutorHandle: the handle is the executor's
 // own name for the worker, read off the attempt record's job handle map —
 // a herdr agent name or pane id, wherever the record spells them, and null
