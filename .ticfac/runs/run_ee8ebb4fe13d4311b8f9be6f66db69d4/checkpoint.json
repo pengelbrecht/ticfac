@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
   "epic_id": "hn6",
-  "sequence": 16,
-  "state": "running",
-  "reason": "7uv is closed",
-  "updated_at": "2026-10-01T03:37:56Z",
+  "sequence": 17,
+  "state": "dispatching",
+  "reason": "dispatching yjq as attempt 5",
+  "updated_at": "2026-10-01T03:38:09Z",
   "ticks": [
     {
       "tick_id": "378",
@@ -56,6 +56,18 @@
     },
     {
       "tick_id": "qjl",
+      "state": "ready"
+    },
+    {
+      "tick_id": "dvv",
+      "state": "ready"
+    },
+    {
+      "tick_id": "log",
+      "state": "ready"
+    },
+    {
+      "tick_id": "qrl",
       "state": "ready"
     }
   ],
