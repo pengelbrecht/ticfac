@@ -1,0 +1,49 @@
+{
+  "schema_version": 3,
+  "attempt": 6,
+  "tick_id": "zl1",
+  "dispatched_at": "2026-10-01T03:38:36Z",
+  "job_handle": {
+    "attempt": 6,
+    "base_sha": "a81788298d8c49a5705477d2c31aebacffbfc1c0",
+    "collected_from": null,
+    "executor": "cloudflare-sandbox",
+    "job_id": "run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-zl1/attempt-6",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "prompt_digest": "sha256:c25d77e407a584a3674741ad2476828c148e64504bdd1d523b44641b216e8784",
+    "remote": "origin",
+    "resumed_from": null,
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "taken_over": {
+      "run_id": "run_6d88e3de89ca466c8dab3841185931c1",
+      "evidence": "its checkpoint on the integration branch reads failed"
+    },
+    "tick_id": "zl1",
+    "tier": "strong",
+    "touch": null,
+    "try": 1,
+    "wall_seconds": 28800,
+    "write_ref": "refs/heads/ticfac/run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-zl1/attempt-6"
+  },
+  "provenance": {
+    "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
+    "tick_id": "zl1",
+    "attempt": 6,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "a81788298d8c49a5705477d2c31aebacffbfc1c0",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:081a87517f0ab90d00a3d9fc0345b717df1255ffc33390f2bdfbd3e5cd4e6645",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
