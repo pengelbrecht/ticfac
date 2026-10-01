@@ -1951,6 +1951,13 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		return nil, fmt.Errorf("reconcile: read the run state: %w", err)
 	}
 
+	// A finding promoted to two ticks — by two runs, before cross-run dedup
+	// held (dupes.go) — is closed down to its earliest tick before anything
+	// is planned, so the duplicate is neither worked nor gates the review.
+	if err := r.closeDuplicatePromotions(ctx); err != nil {
+		return nil, fmt.Errorf("reconcile: close duplicate finding ticks: %w", err)
+	}
+
 	graph, err := r.tracker.Graph(ctx, r.opts.EpicID)
 	if err != nil {
 		// The one read failure that is a VERDICT ABOUT THE SUBMISSION and not

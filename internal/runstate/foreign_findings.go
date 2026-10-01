@@ -89,6 +89,79 @@ func (s *Store) ForeignFindingsByKey(key string) ([]Finding, error) {
 	return out, nil
 }
 
+// EpicPromotions is every promotion of a finding to a tick that ANY run on
+// this integration branch recorded — this run's and every other's: each
+// run's absorption decisions, and each promoted draft's promoted_as. A key
+// that appears with two tick ids is one finding promoted twice (hn6: oro and
+// log, yjq and qrl), which the run closes down to its earliest tick.
+// Ordered by run id, then key; a draft and a decision naming the same tick
+// are both returned, and the caller collapses them.
+func (s *Store) EpicPromotions() ([]Promotion, error) {
+	if err := s.ensureFetched(); err != nil {
+		return nil, err
+	}
+	prefix := Root + "/runs/"
+	type file struct{ run, kind, key string }
+	files := []file{}
+	for path := range s.view {
+		rest, ok := strings.CutPrefix(path, prefix)
+		if !ok {
+			continue
+		}
+		parts := strings.Split(rest, "/")
+		if len(parts) != 3 || (parts[1] != "absorptions" && parts[1] != "findings") {
+			continue
+		}
+		key, ok := strings.CutSuffix(parts[2], ".json")
+		if !ok || checkSegment("run id", parts[0]) != nil || checkSegment("finding key", key) != nil {
+			continue
+		}
+		files = append(files, file{run: parts[0], kind: parts[1], key: key})
+	}
+	sort.Slice(files, func(i, j int) bool {
+		if files[i].run != files[j].run {
+			return files[i].run < files[j].run
+		}
+		if files[i].key != files[j].key {
+			return files[i].key < files[j].key
+		}
+		return files[i].kind < files[j].kind
+	})
+	out := []Promotion{}
+	for _, one := range files {
+		if one.kind == "absorptions" {
+			var a Absorption
+			ok, err := s.load(AbsorptionPath(one.run, one.key), &a)
+			if err != nil {
+				return nil, err
+			}
+			if ok && a.TickID != "" {
+				out = append(out, Promotion{Key: one.key, TickID: a.TickID, RunID: one.run, At: a.DecidedAt})
+			}
+			continue
+		}
+		var f Finding
+		ok, err := s.load(FindingPath(one.run, one.key), &f)
+		if err != nil {
+			return nil, err
+		}
+		if ok && f.Status == FindingPromoted && f.PromotedAs != "" {
+			out = append(out, Promotion{Key: one.key, TickID: f.PromotedAs, RunID: one.run, At: f.TriagedAt})
+		}
+	}
+	return out, nil
+}
+
+// Promotion is one recorded promotion of a finding to a tick: the finding's
+// key, the tick (`<tick-id>`, or `<owner/name>:<tick-id>` for a routed one),
+// the run that recorded it, and when (RFC3339).
+type Promotion struct {
+	Key    string
+	TickID string
+	RunID  string
+	At     string
+}
+
 // ForeignAbsorption returns another run's absorption decision for one
 // finding, when it recorded one: the decision a run adopting that finding
 // adopts with it, so a decision made once is never made again and its tick
