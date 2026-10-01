@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
   "epic_id": "hn6",
-  "sequence": 31,
-  "state": "collecting",
-  "reason": "collecting yjq attempt 5",
-  "updated_at": "2026-10-01T07:23:44Z",
+  "sequence": 32,
+  "state": "running",
+  "reason": "yjq try 1 (run dispatch #5) is rejected (ready-to-merge): BLOCKED: the fix is still a one-field tracker-record re-flow of hn6's acceptance_criteria (one [A<n>] item per line, exact text in this report); the worker boundary forbids .tick/ writes and tk, the tick itself says no code change is needed, and the field still reads 0 newlines on epic/hn6 and main after three BLOCKED attempts — the run's tracker authority or the operator must apply it, after which Parse yields six items and the review unblocks.",
+  "updated_at": "2026-10-01T07:24:07Z",
   "ticks": [
     {
       "tick_id": "0rx",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "yjq",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 5
     },
     {
