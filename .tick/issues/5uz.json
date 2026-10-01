@@ -1,0 +1,13 @@
+{
+  "id": "5uz",
+  "title": "The bundle's recovery.seconds prose says 'the last one'; the fill sums the spans",
+  "description": "The bundle's $defs.recovery.seconds description (\"How long the last one took, where anything measured it\") describes a per-occurrence span, while the tick's rule — and this fill, whose Go doc comment this attempt corrected (9b8ac2ae) — state the SUM of the stated suspension durations across the counted host_suspended lines. A renderer reading the contract prose would print the wrong number for any run that slept twice; the bundle's wording should be re-cut to name the sum the fill states (or the fill changed, if the prose is what binds).\nevidence: contracts/status-model.json:466 $defs.recovery.seconds description; internal/statusmodel/verdict.go buildRecovered's sleep accumulation\n\nticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4 filed this backlog tick from the finding f676d3fdb08d7875fcb71ca27f624aa66c0b7cc00ef3296c1748bf2b9e4e58b9 (reported by run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-7uv/attempt-2): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_ee8ebb4fe13d4311b8f9be6f66db69d4/absorptions/f676d3fdb08d7875fcb71ca27f624aa66c0b7cc00ef3296c1748bf2b9e4e58b9.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-7uv/attempt-2",
+  "created_by": "ticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4",
+  "created_at": "2026-10-01T03:19:55Z",
+  "updated_at": "2026-10-01T03:19:55Z"
+}
