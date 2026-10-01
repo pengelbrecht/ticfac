@@ -214,13 +214,13 @@ func (r *Reconciler) mergeInWorktree(tick string, attempt int, branch, head, epi
 
 	message := fmt.Sprintf("Merge branch '%s' into %s\n\nticfac run %s: tick %s attempt %d",
 		branch, r.branch, r.runID, tick, attempt)
-	if stdout, stderr, err := r.git.try(dir, "merge", "--no-ff", "--no-edit", "-m", message, head); err != nil {
-		// The unmerged paths are read BEFORE the abort, which is what erases
-		// them. They are the index's answer to "which files", and they back up
-		// git's printed CONFLICT lines rather than replace them (see
-		// describeMergeFailure).
-		unmerged, _ := r.git.run(dir, "diff", "--name-only", "--diff-filter=U")
-		_, _, _ = r.git.try(dir, "merge", "--abort")
+	// Worker reports are kept out of the merge (report_merge.go): a report
+	// never lands on the integration branch and never conflicts. The
+	// unmerged paths come back read BEFORE the abort, which is what erases
+	// them. They are the index's answer to "which files", and they back up
+	// git's printed CONFLICT lines rather than replace them (see
+	// describeMergeFailure).
+	if stdout, stderr, unmerged, err := r.mergeKeepingReportsOut(dir, epicHead, message, head); err != nil {
 		if conflict := classifyMergeFailure(stdout, stderr, unmerged, err); conflict != nil && conflict.resolvable() {
 			// Two same-wave intents (content, add/add): the resolve-conflict
 			// job's kinds, decided by integrate — not here, where the refusal
