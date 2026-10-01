@@ -2,6 +2,7 @@
   "id": "t2m",
   "title": "A resolve-conflict job never sees the current attempt's own report",
   "description": "The resolve job dispatched for an integrate conflict is handed the tick's PRIOR attempts' reports, not the report of the attempt that just collected ready-to-merge — the intent that actually hit the conflict (priorReports iterates attempt-1 down to 1, so the current attempt is excluded by construction). On a carried attempt this is acute: the priors are predecessors' reports, which may be stale, and the worker unioning the files is not told so. Concretely on this tick: the resolve job for the carried delivery will read run_6d88e3de attempt 1's report, whose fold prescription has already landed at bundle 1.2.1. Bounded today by the bundle ledger's re-cut refusal and the resolve job's file-scoped deliverable, so it costs at most a wasted resolution. Fix shape: include the current attempt's collected report in the resolve job's context.\nevidence: internal/reconcile/resolve.go:315 (PriorReports built from priorReports(tick, marker.Attempt)) and internal/reconcile/dispatch.go:2054 (the loop starts at attempt-1, excluding the current attempt)\n\nticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4 filed this backlog tick from the finding 643ef03776c6d31045101dca265c28d086ae31da5310a53ae230517ade170d84 (reported by run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-378/attempt-4): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_ee8ebb4fe13d4311b8f9be6f66db69d4/absorptions/643ef03776c6d31045101dca265c28d086ae31da5310a53ae230517ade170d84.json on the run branch.",
+  "notes": "2026-10-01 06:00 - ticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4: created by absorbing finding 643ef03776c6d31045101dca265c28d086ae31da5310a53ae230517ade170d84 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/run_ee8ebb4fe13d4311b8f9be6f66db69d4/absorptions/643ef03776c6d31045101dca265c28d086ae31da5310a53ae230517ade170d84.json on epic/hn6, and it says: the classifier put 0.06 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-378/attempt-4",
   "created_by": "ticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4",
   "created_at": "2026-10-01T04:00:41Z",
-  "updated_at": "2026-10-01T04:00:41Z"
+  "updated_at": "2026-10-01T04:00:46.467251Z"
 }
