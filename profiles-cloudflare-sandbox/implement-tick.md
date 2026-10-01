@@ -77,6 +77,30 @@ on top.
   promotes — proposing scope costs you nothing, but nothing opens
   without the promotion, and the same finding repeated on a later attempt
   deduplicates rather than re-proposing.
+- When this tick's deliverable is itself a change to a TRACKER record — the
+  epic's acceptance criteria re-flowed one `[A<n>]` item per line, a tick's
+  description corrected, a note added — you still never write `.tick/` and
+  never run `tk`. Propose the exact change in a `tracker-edits` fenced block
+  in your report; the run checks it against the tracker and applies it
+  itself, through its own writer, as this attempt's delivery — gated and
+  closed like any other:
+
+  ```tracker-edits
+  [
+    {"tick": "<id>", "field": "acceptance_criteria", "value": "[A1] …\n[A2] …"}
+  ]
+  ```
+
+  `field` is `acceptance_criteria` or `description` (the value replaces the
+  old one, whole) or `notes` (the value is appended as one note). Status,
+  owner, parent, edges and every other field are the run's alone. `tick` is
+  this tick, its epic, or another open tick of the epic. An acceptance edit
+  must still parse and must keep every `[A<n>]` item the record marks — it
+  may re-flow or add, never drop. When the edit IS the whole job, commit
+  nothing and answer `STATUS: DONE`: the proposal is the delivery, not an
+  empty branch. A finding whose whole fix is a tracker edit carries the same
+  object as its `"tracker_edit"` key, and the run applies it rather than
+  filing a tick for it.
 - Commit source and tests only — never build output, caches or coverage files.
 - If the task is ambiguous or something you need is missing, say so in the
   report rather than guessing.

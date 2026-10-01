@@ -74,6 +74,11 @@ type findingDecision struct {
 	// the refusal owns the decision, or a routed finding's filing failed
 	// transiently and the close-out files it. Empty when the run decided.
 	Left string
+	// FixedAs is the integration-branch commit the run applied the finding's
+	// own tracker edit at (tracker_edits.go), and Edit names that edit: the
+	// finding was fixed by the run, not absorbed. Empty otherwise.
+	FixedAs string
+	Edit    string
 }
 
 // findingLeftNote is what the tick whose attempt discovered the finding says
@@ -83,6 +88,13 @@ type findingDecision struct {
 // because a person reading the tracker, not only the run state, needs to see
 // which finding became whose work.
 func (r *Reconciler) findingLeftNote(marker attemptHandle, finding subprocess.Finding, key string, decided findingDecision) string {
+	if decided.FixedAs != "" {
+		return fmt.Sprintf("ticfac run %s: %s reported a finding whose fix is a tracker edit it carried — %s %q "+
+			"(key %s, severity %s). The run applied the edit of the %s itself, onto %s at %s, and the draft is "+
+			"triaged as fixed by that commit.",
+			r.runID, r.attemptName(marker.TickID, marker.Attempt), finding.Kind, finding.Title, key,
+			finding.Severity, decided.Edit, r.branch, short(decided.FixedAs))
+	}
 	if decided.TickID != "" {
 		what := fmt.Sprintf("absorbed into the running epic as tick %s, with nobody triaging", decided.TickID)
 		if decided.Backlog {

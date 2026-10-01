@@ -3202,6 +3202,9 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	if err != nil {
 		return nil, err
 	}
+	// A proposed tracker edit is held to the tracker here, and a DONE whose
+	// only deliverable is the edit is a delivery (tracker_edits.go, hn6 yjq).
+	collected = r.acceptTrackerEdits(ctx, marker, collected)
 	r.setTick(marker.TickID, "reported")
 	// Tick 19l: what the worker answered and what the run concluded are two
 	// claims by two parties, stated separately — never one sentence that reads
