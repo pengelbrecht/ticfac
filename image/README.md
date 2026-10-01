@@ -941,6 +941,14 @@ distinct, because these are read from a log after the sandbox is gone:
 | 15 | Origin did not answer the fetch through the whole retry window (`TICKS_FETCH_WINDOW`). Infrastructure, handled like 14. |
 | other | The harness's own exit status — the entrypoint `exec`s it. |
 
+On a **worker**, none of 2–8, 14 or 15 is a verdict on the tick: the harness
+never ran, so the orchestrator spends no rung of the tier ladder on it. 14 and
+15 are transient, and the job is dispatched again at the same tier (at most
+three times per tick). 2, 4, 5, 6, 7 and 8 are deterministic environment
+faults: a retry boots the same image on the same repository, at any tier, and
+stops the same way. So the run stops at once with `worker_boot_fault`, naming
+the cause, the boot's own reason and what to fix.
+
 A **worker** that stops in its boot, after its worker branch exists and before
 its harness starts, leaves the reason on origin: one commit on top of its base,
 adding only `BOOT-STOPPED-<tick>.md` (`exit:` and `reason:`), pushed to

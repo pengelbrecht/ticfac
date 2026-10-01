@@ -126,7 +126,14 @@ func TestAWorkerWhoseGatewayNeverAnsweredCollectsAsInfrastructure(t *testing.T) 
 	}{
 		{sandboximage.ExitGatewayUnavailable, "the model gateway", false},
 		{sandboximage.ExitOriginUnavailable, "origin", false},
+		// The deterministic environment faults: a retry boots the same image on
+		// the same repository, so they are persistent, and each names its fix.
+		{sandboximage.ExitConfig, "the worker's boot inputs", true},
 		{sandboximage.ExitTkVersion, "the worker image's tk", true},
+		{sandboximage.ExitPreflight, "the repository's environment pre-flight", true},
+		{sandboximage.ExitSetup, "the repository's [sandbox] setup", true},
+		{sandboximage.ExitModel, "the model route", true},
+		{sandboximage.ExitHarness, "the harness's model wiring", true},
 	} {
 		h, _, handle, _ := newCollectHarness(t)
 		h.door.setStatus("keh", 1, doorStatus{
@@ -159,29 +166,39 @@ func TestAWorkerWhoseGatewayNeverAnsweredCollectsAsInfrastructure(t *testing.T) 
 		if !strings.Contains(collected.Message, tc.service) {
 			t.Errorf("the message does not name %s: %s", tc.service, collected.Message)
 		}
+		if collected.Infrastructure.Fix == "" {
+			t.Errorf("exit %d names no fix: the stop it becomes must say what to do", tc.code)
+		}
 	}
 }
 
-// A model verdict (exit 7: the gateway ANSWERED no) is not infrastructure: it
-// is the failure it always was.
+// Exits after the harness started are the agent's, not the boot's: a push that
+// failed, a branch with no work, a harness that failed. They stay the verdicts
+// they were, with no boot fault beside them.
 //
 // short: an httptest door and local throwaway git repositories; no container.
-func TestAModelVerdictIsNotCollectedAsInfrastructure(t *testing.T) {
-	h, _, handle, _ := newCollectHarness(t)
-	h.door.setStatus("keh", 1, doorStatus{
-		state:    subprocess.StateFailed,
-		terminal: true,
-		observations: []subprocess.Observation{{At: "2026-10-01T04:49:30Z", Kind: subprocess.ObsExited,
-			Detail: fmt.Sprintf("the container's work process exited %d", sandboximage.ExitModel)}},
-	})
-	if _, err := h.ex.Inspect(handle, ""); err != nil {
-		t.Fatalf("Inspect: %v", err)
-	}
-	collected, err := h.ex.CollectDetail(handle)
-	if err != nil {
-		t.Fatalf("CollectDetail: %v", err)
-	}
-	if collected.Infrastructure != nil {
-		t.Errorf("exit %d collected as infrastructure %+v", sandboximage.ExitModel, collected.Infrastructure)
+func TestAnExitAfterTheHarnessStartedIsNotABootFault(t *testing.T) {
+	for _, code := range []int{sandboximage.ExitWorkerPush, sandboximage.ExitWorkerNoWork, sandboximage.ExitWorkerAgent,
+		sandboximage.ExitStartUnpublished, 137} {
+		if fault := bootFault(code); fault != nil {
+			t.Errorf("exit %d reads as a boot fault %+v", code, fault)
+		}
+		h, _, handle, _ := newCollectHarness(t)
+		h.door.setStatus("keh", 1, doorStatus{
+			state:    subprocess.StateFailed,
+			terminal: true,
+			observations: []subprocess.Observation{{At: "2026-10-01T04:49:30Z", Kind: subprocess.ObsExited,
+				Detail: fmt.Sprintf("the container's work process exited %d", code)}},
+		})
+		if _, err := h.ex.Inspect(handle, ""); err != nil {
+			t.Fatalf("Inspect: %v", err)
+		}
+		collected, err := h.ex.CollectDetail(handle)
+		if err != nil {
+			t.Fatalf("CollectDetail: %v", err)
+		}
+		if collected.Infrastructure != nil {
+			t.Errorf("exit %d collected as a boot fault %+v", code, collected.Infrastructure)
+		}
 	}
 }

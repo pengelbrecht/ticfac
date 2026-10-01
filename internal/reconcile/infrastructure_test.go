@@ -7,6 +7,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/sandboximage"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // Epic hn6, run_37b36bfe (2026-10-01): 0rx's worker container probed the model
@@ -110,35 +111,63 @@ func TestAGatewayThatStaysDownStopsTheRunNamingIt(t *testing.T) {
 	}
 }
 
-// A worker whose tk is not the one its image pins dies in its boot the same
-// way, and no retry or tier fixes it: every container of the run boots the same
-// image. It spends no rung and is not redispatched — the run stops at once,
-// naming the image.
-func TestAWorkerImageWithTheWrongTkStopsTheRunWithoutSpendingARung(t *testing.T) {
+// A boot that stops on a DETERMINISTIC environment fault — the inputs the
+// factory sent, the image's tk, the repository's pre-flight or setup, a model
+// route the gateway refused, a harness that cannot use the route — failed the
+// same way before (missing-result, a rung spent: the ladder climbed to a tier
+// that boots the same image on the same repository and stops the same way).
+// It spends no rung and is not redispatched: the run stops at once on
+// worker_boot_fault, naming the cause, the boot's reason and the fix.
+func TestABootThatStopsOnAnEnvironmentFaultStopsTheRunWithoutSpendingARung(t *testing.T) {
 	t.Parallel()
-	f := newFixture(t, fixtureOptions{gate: tierGate})
-	wrongTk := func(tick string, try int, collected *subprocess.Collection) {
-		gatewayDownFor(1000)(tick, try, collected)
-		if collected.Infrastructure != nil {
-			collected.Infrastructure = &subprocess.InfrastructureFailure{Service: "the worker image's tk",
-				ExitCode: sandboximage.ExitTkVersion, Persistent: true}
-		}
-	}
-	r, err := New(f.landingOptions(fixtureOptions{}, wrongTk))
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, err := r.Supervise(t.Context())
-	if err != nil {
-		t.Fatalf("the supervised run did not finish: %v", err)
-	}
-	if result.Failure == nil || result.Failure.Reason != RefusedInfrastructure {
-		t.Fatalf("the run ended %s (%+v), want it stopped over %s", result.State, result.Failure, RefusedInfrastructure)
-	}
-	if !strings.Contains(result.Failure.Message, "tk") {
-		t.Errorf("the stop does not name the image's tk: %s", result.Failure.Message)
-	}
-	if got := len(tickAttempts(t, r, "a1")); got != 1 {
-		t.Errorf("a1 was dispatched %d times, want once: a retry boots the same image", got)
+	shorttest.EndToEnd(t)
+	for _, tc := range []struct {
+		code    int
+		service string
+	}{
+		{sandboximage.ExitConfig, "the worker's boot inputs"},
+		{sandboximage.ExitTkVersion, "the worker image's tk"},
+		{sandboximage.ExitPreflight, "the repository's environment pre-flight"},
+		{sandboximage.ExitSetup, "the repository's [sandbox] setup"},
+		{sandboximage.ExitModel, "the model route"},
+		{sandboximage.ExitHarness, "the harness's model wiring"},
+	} {
+		t.Run(tc.service, func(t *testing.T) {
+			t.Parallel()
+			f := newFixture(t, fixtureOptions{gate: tierGate})
+			const fix = "fix the named thing, then run the epic again"
+			const said = "the boot's own words about what stopped it"
+			fault := func(tick string, try int, collected *subprocess.Collection) {
+				gatewayDownFor(1000)(tick, try, collected)
+				if collected.Infrastructure != nil {
+					collected.Infrastructure = &subprocess.InfrastructureFailure{Service: tc.service,
+						ExitCode: tc.code, Persistent: true, Fix: fix}
+					collected.Message = said
+				}
+			}
+			r, err := New(f.landingOptions(fixtureOptions{}, fault))
+			if err != nil {
+				t.Fatal(err)
+			}
+			result, err := r.Supervise(t.Context())
+			if err != nil {
+				t.Fatalf("the supervised run did not finish: %v", err)
+			}
+			if result.Failure == nil || result.Failure.Reason != RefusedWorkerBootFault {
+				t.Fatalf("the run ended %s (%+v), want it stopped over %s", result.State, result.Failure,
+					RefusedWorkerBootFault)
+			}
+			for _, want := range []string{tc.service, said, fix} {
+				if !strings.Contains(result.Failure.Message, want) {
+					t.Errorf("the stop does not carry %q: %s", want, result.Failure.Message)
+				}
+			}
+			if got := len(tickAttempts(t, r, "a1")); got != 1 {
+				t.Errorf("a1 was dispatched %d times, want once: a retry boots the same environment", got)
+			}
+			if got := markerTierOfTry(t, r, "a1", 1); got != "balanced" {
+				t.Errorf("a1 ran at tier %q, want balanced", got)
+			}
+		})
 	}
 }

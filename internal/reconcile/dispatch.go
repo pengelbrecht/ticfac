@@ -648,8 +648,8 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 				// and the ladder earns no rung — nothing about the tick was
 				// tried.
 				r.record(tick, StageRedispatched,
-					"%s never reached its harness (%s did not answer) and was rejected as infrastructure; a new "+
-						"try is dispatched at the same tier",
+					"%s never reached its harness (its boot stopped on %s) and was rejected as infrastructure, "+
+						"not a failed try; a new try is dispatched at the same tier",
 					attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), service)
 				continue
 			}
