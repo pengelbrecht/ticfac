@@ -53,6 +53,34 @@ loud.
 
 ---
 
+## 1.2.3
+
+PATCH: values in three `status-model.json` goldens, corrected to what the
+wave-2 derivations actually produce — the same fixture-drift class 1.2.2
+removed from two pipeline cells, still live in values the agreement guard
+did not read (tick fq0): `status_model_running_wave`'s nwj and 6dh carried
+`duration_seconds` null beside stamps that measure 2898 (nwj's try stamp to
+its gate record's finish) and 4912 (6dh's, to generated_at, open), and 6dh
+carried `elapsed_seconds` 4892 where generated_at minus its own dispatch is
+4912 — the workers panel's 4892 the same drift; `status_model_completed_awaiting_merge`
+counted 14 closed ticks and 3 waves beside a waves list that lists none of
+them, where `buildWaves` counts progress in the same loop that lays the
+waves out and answers an empty tracker with null waves and null counters —
+so its `waves` list is now null, not `[]`, and its progress null; the
+`dashboard` golden's v7z carried `elapsed_seconds` null beside a reported
+state with a stamped current try (2400 to generated_at), and its gates array
+backed only 46x of its closed ticks — gate records for 060 and 823 are now
+in it, pass records whose finished stamps are the closes 060's 2940 and
+823's 2070 measure; and the running wave's progress now counts the four
+ticks its waves list carries. The schema, the rules and every other byte
+are unchanged, and every corrected value remains schema-admitted. The
+agreement guard now also reads the values: duration, elapsed (tick and
+worker), progress (with the wave states it counts) and gates (sorted, and
+backing the closed ticks' durations), each derivable from the document
+alone. No consumer has anything to do.
+
+---
+
 ## 1.2.2
 
 PATCH: two values in `status-model.json`'s `status_model_running_wave` golden,
