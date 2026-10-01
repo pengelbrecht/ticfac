@@ -18,7 +18,6 @@ import {
   PROCESS_RUNNER,
   parseRunnerState,
   READ_CHUNK_BYTES,
-  READY_POLL_MS,
   READY_TIMEOUT_MS,
   runnerView,
   type SandboxState,
@@ -198,6 +197,15 @@ function fakeState(container: DoContainer | undefined) {
     async getAlarm() {
       return alarm;
     },
+    async list<T>(options: { prefix?: string; limit?: number } = {}) {
+      const found = new Map<string, T>();
+      for (const [k, v] of store) {
+        if (options.prefix !== undefined && !k.startsWith(options.prefix)) continue;
+        if (options.limit !== undefined && found.size >= options.limit) break;
+        found.set(k, v as T);
+      }
+      return found;
+    },
   };
   const state = {
     container,
@@ -279,39 +287,89 @@ describe("FactorySandbox: starting a process", () => {
     expect(a.id).not.toBe(b.id);
   });
 
-  it("waits for a fresh container to answer before it starts work in it", async () => {
+  it("never waits for a cold container: the process is pending until the alarm starts it", async () => {
+    // umq proof run run_6b9f…: a Workflow boot step (5 minutes) waited inline
+    // for a cold image pull and timed out. The start must return at once.
     const c = fakeContainer({ notReadyFor: 3 });
     const s = fakeState(c.container);
-    const waits: number[] = [];
-    const object = new FactorySandboxCore(s.state, async (ms) => {
-      waits.push(ms);
+    const object = new FactorySandboxCore(s.state);
+
+    const view = await object.startProcess("ticks-orchestrator", { TOKEN: "t" });
+
+    expect(view).toMatchObject({
+      state: "running",
+      exit_code: null,
+      command: "ticks-orchestrator",
     });
+    expect(c.processes.size).toBe(0);
+    expect(s.alarm).not.toBeNull();
+    expect(await object.getProcess(view.id)).toMatchObject({ state: "running" });
+    expect(await object.readOutput(view.id, 0)).toEqual({ text: "", offset: 0 });
+    expect((await object.listProcesses()).map((p) => p.id)).toEqual([view.id]);
 
-    const view = await object.startProcess("ticks-worker", {});
+    await object.alarm(); // still not answering
+    await object.alarm(); // still not answering
+    expect(c.processes.size).toBe(0);
+    await object.alarm(); // answers: started with its own env, and the env is dropped
+    expect(c.processes.has(view.id)).toBe(true);
+    expect(c.execs.find((e) => e.argv.includes("start"))?.env).toEqual({ TOKEN: "t" });
+    expect([...s.store.keys()].some((k) => k.startsWith("pending:"))).toBe(false);
+    expect(await object.getProcess(view.id)).toMatchObject({ state: "running" });
 
-    expect(view.state).toBe("running");
-    expect(waits).toEqual([READY_POLL_MS, READY_POLL_MS * 2, READY_POLL_MS * 4]);
-    // Ready once per instance: the next start asks nothing first.
+    // Ready once per instance: the next start goes straight to the runner.
     const before = c.execs.length;
     await object.startProcess("again", {});
     expect(c.execs.slice(before).some((e) => e.argv[0] === "test")).toBe(false);
   });
 
-  it("destroys a container that never answers, so the next boot starts fresh", async () => {
+  it("fails a pending process with the reason, and destroys a container that never answers", async () => {
     const c = fakeContainer({ notReadyFor: 1_000_000 });
     const s = fakeState(c.container);
-    let clock = 0;
-    const object = new FactorySandboxCore(
-      s.state,
-      async (ms) => {
-        clock += ms;
-      },
-      () => clock,
-    );
+    let clock = 1_000;
+    const object = new FactorySandboxCore(s.state, () => clock);
+    const { id } = await object.startProcess("ticks-orchestrator", {});
 
-    await expect(object.startProcess("x", {})).rejects.toThrow(/did not answer within/);
+    await object.alarm();
+    expect(await object.getProcess(id)).toMatchObject({ state: "running" });
+    clock += READY_TIMEOUT_MS;
+    await object.alarm();
+
     expect(c.destroyed).toBe(1);
-    expect(clock).toBeGreaterThanOrEqual(READY_TIMEOUT_MS);
+    expect(await object.getProcess(id)).toEqual({
+      id,
+      command: "ticks-orchestrator",
+      state: "failed",
+      exit_code: null,
+    });
+    const why = await object.readOutput(id, 0);
+    expect(why.text).toMatch(/did not answer within 20 minutes of its start/);
+    expect(await object.readOutput(id, why.offset)).toEqual({ text: "", offset: why.offset });
+  });
+
+  it("fails a pending process at once when its container stops while starting", async () => {
+    const c = fakeContainer({ notReadyFor: 1_000_000 });
+    const { object, state } = sandbox(c);
+    const { id } = await object.startProcess("x", {});
+    state.store.set("last_stop", { at: "t", how: "stopped: image pull failed" });
+
+    c.stop();
+    await object.alarm();
+
+    expect(await object.getProcess(id)).toMatchObject({ state: "failed", exit_code: null });
+    expect((await object.readOutput(id, 0)).text).toMatch(
+      /stopped before it answered.*image pull failed/,
+    );
+  });
+
+  it("re-arms a pending process's alarm after a restart", async () => {
+    const c = fakeContainer({ notReadyFor: 1_000_000 });
+    const first = sandbox(c);
+    await first.object.startProcess("x", {});
+    const restarted = fakeState(c.container);
+    for (const [k, v] of first.state.store) restarted.store.set(k, v);
+    new FactorySandboxCore(restarted.state);
+    await restarted.settled();
+    expect(restarted.alarm).not.toBeNull();
   });
 
   it("refuses a boot with no image instead of starting an empty one", async () => {
