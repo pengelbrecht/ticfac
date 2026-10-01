@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 10,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "yjq's fix is a one-field re-flow of hn6's acceptance_criteria that no worker can apply: .tick/issues/ is a protected prefix and implement-tick workers are forbidden tk. Three attempts (run_3f034e683's, attempt-4, this one) reported BLOCKED with the exact fix in hand and the field still reads 0 newlines on epic/hn6 and main; the blocked ladder only converges after two more redispatches into the same boundary wall, ending in a hold — while the epic's final review waits behind yjq. Proposal: when an implement-tick report is BLOCKED and its named fix is a tracker-record write, the orchestrator applies it itself through tk (the same authority that writes the epic's notes) and closes the tick, instead of redispatching.\nevidence: internal/exec/subprocess/report.go:171-188 (issues not exempt); internal/acceptance/acceptance.go:18 (line-leading marks only); Parse on the record returns 1 item, the re-flow 6; lint-report refuses breaks.item A2 with \"the epic's items are A1\"\n\nticfac run run_d51a747f10ed41429f925ba4b83053d8 created this tick by absorbing the finding ef854dcf26d24dfc0d4db02a100ced36924d4649b993b839fca0a6535fd4cf08 (reported by run-run_d51a747f10ed41429f925ba4b83053d8/tick-yjq/attempt-5): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_d51a747f10ed41429f925ba4b83053d8/absorptions/ef854dcf26d24dfc0d4db02a100ced36924d4649b993b839fca0a6535fd4cf08.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "l89",
+    "title": "Blocked tracker-record fixes need an orchestrator-applied disposition"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.65,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.06,
+      "design": 0.72,
+      "diagnosis": 0.02,
+      "mechanical": 0.19,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1524,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-01T07:46:37Z",
+  "answered_at": "2026-10-01T07:46:37Z",
+  "provenance": {
+    "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
+    "tick_id": "l89",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "bc37d7ff9f6c9850bc6a834c971355bc051f603c",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
