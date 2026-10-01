@@ -301,6 +301,10 @@ func (r *Reconciler) dispatchRepair(ctx context.Context, entry planEntry, marker
 			}
 		}
 		recorded := r.disposeRepair(handle, executor, repairMarker, g, rerr, failureOperational, repairHead)
+		if fault := r.roleJobBootFault(tick, "the repair job for "+r.attemptName(tick, marker.Attempt),
+			collected); fault != nil {
+			return false, fault
+		}
 		return recorded && ctx.Err() == nil, rerr
 	}
 	if rerr == nil && roleJobAnsweredNothing(repairHead, base, carried, ledger, "repair_head") {
