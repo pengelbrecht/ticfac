@@ -2083,3 +2083,4 @@
 {"ts":"2026-10-01T04:48:16.854472Z","tick":"0lq","action":"close","actor":"peter@engelbrecht.dk","data":{"title":"A completed run awaiting its merge reads 'stopped' under 7uv's rule"}}
 {"ts":"2026-10-01T06:28:40.684799Z","tick":"378","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-01 08:28 - ticfac run run_d51a747f10ed41429f925ba4b83053d8: 378 try 1 (run dispatch #2) merged into epic/hn6 as d6ae0854624f; the integrated gate (go, ts) passed.","title":"The dashboard golden's ci cell and try next_step contradict the wave-2 rules"}}
 {"ts":"2026-10-01T06:28:43.851321Z","tick":"378","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"The dashboard golden's ci cell and try next_step contradict the wave-2 rules"}}
+{"ts":"2026-10-01T06:29:03.714484Z","tick":"fq0","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"The goldens carry more values the wave-2 derivation can never produce"}}
