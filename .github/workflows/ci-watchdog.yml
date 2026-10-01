@@ -1,0 +1,38 @@
+name: CI watchdog
+
+# Main's head must have a CI run, or nothing deploys it (deploy-factory.yml
+# runs on CI's workflow_run). GitHub does not always start one: on 2026-10-01
+# the merge of #178 (03f56af4) got no push event and no CI run at all, and the
+# fix sat undeployed until a person dispatched CI by hand. This checks main's
+# head on a schedule and dispatches CI when it has none
+# (.github/scripts/main-ci-watchdog.sh says when that is).
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # To dispatch ci.yml. A workflow_dispatch made with GITHUB_TOKEN does start
+  # the workflow (it is one of the two events the token may trigger).
+  actions: write
+
+concurrency:
+  group: ci-watchdog
+  cancel-in-progress: false
+
+jobs:
+  main-head-has-ci:
+    name: main head has CI
+    if: github.repository == 'pengelbrecht/ticfac'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+      - name: Dispatch CI on a main head GitHub never ran it on
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/main-ci-watchdog.sh
