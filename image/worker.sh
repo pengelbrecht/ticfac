@@ -1201,6 +1201,61 @@ push_branch() {
 	return 0
 }
 
+# ---------------------------------------------------------------------------
+# A boot that stops before the harness starts says why, on origin
+# ---------------------------------------------------------------------------
+# Every stop between the worker branch and the harness — the model probe, the
+# harness probe, the toolchain, the repository's setup, the pre-flight — is a
+# `die` whose message reached only this container's log. Its worker branch is
+# never pushed, so the collect could only say "the push never landed" (hn6
+# run_ee8e: 378's resolve job exited 7 at its gateway probe, and the run read
+# it as a job that answered nothing).
+#
+# So the EXIT trap armed across those steps pushes one commit on top of the
+# base, adding only BOOT-STOPPED-<tick>.md (`exit:` and `reason:`), to the
+# branch BESIDE the worker branch (sandboximage.WorkerBootStoppedBranch). Never
+# the worker branch itself: an empty worker branch is what the collect's
+# verdicts and the infrastructure class are keyed on. The commit is built with
+# plumbing in a throwaway index, so nothing in the checkout is touched, and the
+# push is bounded and best-effort: when origin is what failed, the marker
+# cannot land, and the exit code — the boot's own, never changed here — is all
+# there is.
+boot_stopped() {
+	local code="$1"
+	trap - EXIT
+	if ((code == 0)) || [[ -z ${worker_branch:-} ]] || ! git -C "$workdir" rev-parse -q --verify HEAD >/dev/null 2>&1; then
+		exit "$code"
+	fi
+	local marker_branch="${worker_branch}-boot-stopped" file="BOOT-STOPPED-${tick_id}.md"
+	local index="${TMPDIR:-/tmp}/ticks-boot-stopped.$$.index" blob tree commit reason
+	reason="${die_reason:-the boot stopped without a message}"
+	blob="$(
+		{
+			printf '# %s: the boot stopped before the harness started\n\n' "$tick_id"
+			printf 'exit: %s\n' "$code"
+			printf 'reason: %s\n\n' "${reason%%$'\n'*}"
+			printf 'run: %s\nworker branch: %s\nbase: %s\nharness: %s\n\n' "$run_id" "$worker_branch" "$base_sha" "$harness"
+			printf 'The whole message, as the boot printed it:\n\n'
+			printf '%s\n' "$reason" | sed 's/^/    /'
+		} | git -C "$workdir" hash-object -w --stdin 2>/dev/null
+	)" &&
+		GIT_INDEX_FILE="$index" git -C "$workdir" read-tree HEAD 2>/dev/null &&
+		GIT_INDEX_FILE="$index" git -C "$workdir" update-index --add --cacheinfo "100644,${blob},${file}" 2>/dev/null &&
+		tree="$(GIT_INDEX_FILE="$index" git -C "$workdir" write-tree 2>/dev/null)" &&
+		commit="$(git -C "$workdir" commit-tree "$tree" -p HEAD -m "tick ${tick_id}: the boot stopped (exit ${code})" 2>/dev/null)" || {
+		rm -f "$index"
+		warn "could not build the boot-stopped marker; the reason above is in this log only"
+		exit "$code"
+	}
+	rm -f "$index"
+	if bounded 90 git -C "$workdir" push -q -f origin "${commit}:refs/heads/${marker_branch}" 2>/dev/null; then
+		say "the boot stopped (exit ${code}); its reason is on origin at ${marker_branch}"
+	else
+		warn "could not push the boot-stopped marker to ${marker_branch}; the reason above is in this log only"
+	fi
+	exit "$code"
+}
+
 main() {
 	if [[ ${1:-} == "--probe" ]]; then
 		harness="${TICKS_HARNESS:-pi}"
@@ -1224,6 +1279,10 @@ main() {
 	configure_caches
 	clone_at_sha
 	adopt_worker_branch
+	# From here to the harness, a stop leaves its reason on origin
+	# (boot_stopped); disarmed before the harness runs, whose exit is the
+	# agent's and is reported on the worker branch as it always was.
+	trap 'boot_stopped $?' EXIT
 	cd "$workdir" || die $EXIT_CLONE "cannot enter $workdir"
 	verify_tk
 	# Settled and proved BEFORE the slow, expensive steps, exactly as the
@@ -1257,6 +1316,7 @@ main() {
 		fi
 		;;
 	esac
+	trap - EXIT
 	local harness_started=$SECONDS
 	run_harness "$prompt_text" "$session_id" 0
 	local harness_status=$?

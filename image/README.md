@@ -941,6 +941,16 @@ distinct, because these are read from a log after the sandbox is gone:
 | 15 | Origin did not answer the fetch through the whole retry window (`TICKS_FETCH_WINDOW`). Infrastructure, handled like 14. |
 | other | The harness's own exit status — the entrypoint `exec`s it. |
 
+A **worker** that stops in its boot, after its worker branch exists and before
+its harness starts, leaves the reason on origin: one commit on top of its base,
+adding only `BOOT-STOPPED-<tick>.md` (`exit:` and `reason:`), pushed to
+`<worker branch>-boot-stopped`. It goes beside the worker branch, never on it,
+because an empty worker branch is what the collect's verdicts and the
+infrastructure class are keyed on. The collect reads it into the run's line
+in place of "the push never landed". The push is bounded and best-effort. When
+origin is what failed, the marker cannot land and the exit code is all there
+is. The exit code is never changed by it.
+
 Output streams to stdout as it is produced. The entrypoint prints directly and
 `exec`s the harness, so nothing is buffered until exit: a sandbox that dies
 mid-run still leaves its logs behind, which is the point of streaming to R2

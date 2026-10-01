@@ -63,9 +63,13 @@ say() { printf '%s: %s\n' "$ME" "$*"; }
 # id, and a line that always matches is a line that never answers.
 trace_note() { [[ -n ${trace_id:-} ]] && printf ' ticks-trace: %s' "$trace_id"; return 0; }
 warn() { printf '%s: warning: %s\n' "$ME" "$*"; }
+# The message the last `die` stopped on, kept for an EXIT trap that has to say
+# why (image/worker.sh boot_stopped): stderr dies with the container.
+die_reason=""
 die() {
 	local code="$1"
 	shift
+	die_reason="$*"
 	printf '%s: %s\n' "$ME" "$*" >&2
 	exit "$code"
 }
