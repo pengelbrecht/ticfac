@@ -35,11 +35,15 @@
     "ticfac-run-state.json": "a1cf745f00b4982c4b59a3aa7a6dac3766365e4b479ece03ef5d8f0280f15ca7",
     "tk-json-manifest.json": "01ea3a1956cec3bab40b4f79880665eb906653e59427fb8c2c07930aa2311678",
     "tracker-layout.json": "ce015d8d7fd5b788e09f491b4b69e6af6f78f823be092a5c73a99fead2bb3a4c",
-    "worker-boot-contract.json": "7326ba972f6d8b16bd5f127d644586082da0cf2a8ff78281ff411c366df7ca27"
+    "worker-boot-contract.json": "45e06d5281ac4e4468675e209c72c8df75ee29bcc158ae61d030f4f852793105"
   },
   "version_digests": {
     "1.0.0": "4f25c9ef0f3da37693c249194cbcfefd5b86c2890543bad6f50c422661d9aa86",
     "1.0.1": "810ce72251a93f4db9668f4397973195763bb619099f3ee2e787a164f763dd78",
+<<<<<<< HEAD
     "1.1.0": "db0bbc96b5753a17c58e18dd1d5b26b3c8de9b90c30e46c9bc836b023778a616"
+=======
+    "1.1.0": "b3c50e1c412e3d8b903fb671f701b6dd5717d4225e6c8254e7c8c939988b3eab"
+>>>>>>> 3e88ca73ab5c1c611d87e45e930396572bfa2f19
   }
 }

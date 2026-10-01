@@ -70,6 +70,7 @@
  * | `model` | the model the caller's profile RESOLVED for this attempt (tick a08) — a FRESH container is booted on exactly this (`TICKS_MODEL`), outranking the deployment's `RUN_WORKER_MODEL`. Required: a start with no model would boot on the factory's own default, and the caller's record would name a model that never ran. The handle's `model` names the model the container it ANSWERS FOR is on: for a fresh boot, this field; for an adoption, the recorded model of the boot that started the running work process (tick dyo) — never an echo of what this request carried. |
  * | `harness` | the harness the caller's profile RESOLVED for this attempt (tick 9iz) — the worker container binds exactly this (`TICKS_HARNESS`), outranking the deployment's `RUN_WORKER_HARNESS`, and the handle's `harness` names it back. Required, for the model's reason verbatim: a start with no harness would boot on the factory's own default, and the caller's record would name a harness that never ran. |
  * | `prompt` | the RENDERED role prompt the caller's profile resolved (tick 9iz) — the profile's own prompt text, not a filename and not a reference. The worker container's entrypoint renders its worker prompt from the checkout's tracker and never sees the factory's prompt otherwise; the door delivers it into the container's boot environment (`TICKS_ROLE_PROMPT`, beside the harness and the model the same boot carries), so the worker runs on the prompt the run's records digest into `prompt_digest`. Required: PROSE — any UTF-8 text with no control character but tab, LF and CR, at most 64 KiB (65536 UTF-8 bytes) — a start with no prompt would boot a worker on a prompt nobody chose. |
+ * | `work_base_sha` | OPTIONAL: for a CARRIED attempt, the FULL 40-hex commit the carried work was cut from (epic hn6, run_3f034e68). `base_sha` is then the released attempt's head; the container (`TICKS_WORK_BASE_SHA`) measures the carried work from this, so a worker that finds it complete and adds nothing settles succeeded rather than no-work. Absent for every attempt that carries nothing. |
  * | `wall_seconds` | OPTIONAL: the dispatch's wall clock in whole seconds (tick 86y). The worker's harness is bounded just under it (`TICKS_WORKER_TIMEOUT`, the wall less the push margin — worker-boot.ts `workerHarnessBudgetMs`), so the container stops its harness, commits, reports and pushes before the reconciler's wall fires. Absent boots an unbounded harness. |
  *
  * The response NEVER blocks until the attempt finishes — nothing waits. What
@@ -506,6 +507,22 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     );
   }
 
+  // A carried attempt's work base (epic hn6, run_3f034e68), optional: the
+  // commit the carried work was cut from, which the worker's container
+  // measures the carried work against. Full 40-hex, like base_sha.
+  const workBaseSHA = raw.work_base_sha;
+  if (
+    workBaseSHA !== undefined &&
+    (typeof workBaseSHA !== "string" || !BASE_SHA_PATTERN.test(workBaseSHA))
+  ) {
+    return refuse(
+      400,
+      "invalid_request",
+      "work_base_sha, when present, must be the full 40-character commit a carried attempt's " +
+        "work was cut from",
+    );
+  }
+
   // The arbiter (D4). Not acquired — verified, exactly as the wave door
   // verifies it: the in-run orchestrator is the holder, and a holder does not
   // take a second lease. Anything that is not the holder is refused here
@@ -565,6 +582,7 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     harness,
     prompt,
     ...(wallSeconds === undefined ? {} : { wall_seconds: wallSeconds }),
+    ...(workBaseSHA === undefined ? {} : { work_base_sha: workBaseSHA }),
   };
 
   // The account's capacity (hn6's cloud run, container-capacity.ts). A FRESH

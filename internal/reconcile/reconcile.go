@@ -207,6 +207,27 @@ type SettledReattacher interface {
 	ReattachSettled(spec *subprocess.JobSpec) (*subprocess.JobHandle, error)
 }
 
+// SettledElsewhereAdopter is an executor that can hand this run's attempt
+// `spec` the work of ANOTHER run's attempt that settled — the attempt a
+// claim taken over from a run that ended left finished on its landing branch
+// (takeover.go, hn6's ltg). It never boots anything: the handle it answers
+// reads terminal on the evidence given and collects from branch, so the
+// collect rules on work that is already done instead of a fresh worker
+// redoing it. Only the SettledReattacher's door cannot answer for another
+// run's job, which is why the settlement comes in as evidence.
+type SettledElsewhereAdopter interface {
+	AdoptSettledElsewhere(spec *subprocess.JobSpec, runID, jobID string, attempt int, branch, evidence string) (*subprocess.JobHandle, error)
+}
+
+// SettledState is how another run's attempt settled, as its host recorded
+// it: Known when the host has a settlement for it, Succeeded when the worker
+// finished cleanly, and the evidence the answer rests on.
+type SettledState struct {
+	Known     bool
+	Succeeded bool
+	Evidence  string
+}
+
 // Substrate is the versioned substrate a dispatch's executor observed at the
 // build that will run the job: its protocol version (herdr's API protocol,
 // the number between the client's hard floor and its warn line) and the
@@ -312,6 +333,17 @@ type Dispatch struct {
 	// the executor that asks that door reads it from here rather than
 	// re-deriving what the run already knows.
 	BaseRef string
+
+	// WorkBaseSHA is, for a dispatch CARRIED from a released attempt, the base
+	// the carried work was cut from (carriedBase, followed through a chain of
+	// carries); empty for every dispatch that carries nothing, or when that
+	// base cannot be read. BaseSHA is then the carried head, so an executor
+	// whose worker counts its own work from its base needs this to see that a
+	// worker which added nothing to complete carried work delivered it (epic
+	// hn6, run_3f034e68: the sandbox container exited no-work and the factory
+	// settled two finished ticks failed). The collect's rule stays the
+	// reconciler's (deliverCarriedWork); this only lets the worker agree.
+	WorkBaseSHA string
 
 	// Title is the tick's title, read from the tracker at planning time and
 	// carried for the same reason BaseRef is: the sandbox dispatch door takes
@@ -533,6 +565,16 @@ type Options struct {
 	// records-only reading: a non-terminal holder is live.
 	ClaimHolder func(ctx context.Context, runID string) HolderState
 
+	// SettledAttempt answers how ANOTHER run's attempt settled, as the host
+	// that ran its worker recorded it — the factory's settlement record of a
+	// cloud worker's container — asked only of the attempt whose claim this
+	// run takes over from a run that ended (takeover.go). An attempt that
+	// settled succeeded is collected and ruled on as it stands, never redone
+	// by a fresh worker. A local attempt is answered by its own record on
+	// this host through the executor, without this. Nil, or an answer that
+	// is not Known, carries the work into a fresh worker as before.
+	SettledAttempt func(ctx context.Context, runID, tickID string, attempt int) SettledState
+
 	// ReleaseOnly builds a reconciler that only releases attempts (`ticfac
 	// settle`): it never reaches the close-out, so the close-out rule's
 	// surface is not required to build it — and Run refuses, so the
@@ -744,6 +786,12 @@ type Reconciler struct {
 	// folded is the merge commit the last refreshFrom pushed, "" when the
 	// branch already carried the base: the one fold a run start must gate.
 	folded string
+	// foldDeferred is the run-start fold's refusal when the run deferred it
+	// and works its ticks on the unfolded branch; foldRetrying is set while
+	// the deferred fold is retried before the run finishes, when its resolve
+	// jobs get a fresh operational allowance (refresh_defer.go).
+	foldDeferred *Refusal
+	foldRetrying bool
 
 	// ciSilentSince and ciDispatched are dispatchSilentCI's memory: when this
 	// incarnation first saw a commit's code with no CI run, and which commits
@@ -1058,6 +1106,17 @@ const (
 	// refusal returned to the caller — the line says when to look, never
 	// what happened.
 	StageStartFailed = "start_failed"
+
+	// StageStartPublished is a job whose executor could not check out its
+	// start commit because origin did not serve it, answered: the commit is
+	// published, so the next job is not a repeat of the one that died on its
+	// checkout (start_publish.go, epic hn6 run_09ebaf29).
+	StageStartPublished = "start_published"
+
+	// StageRefreshDeferred is a run-start fold of the base branch that did
+	// not land, deferred rather than halting: the run works its ticks on the
+	// unfolded epic branch and folds again before it finishes (refresh.go).
+	StageRefreshDeferred = "base_refresh_deferred"
 
 	// StageRunHeld is the line a run owes a person: it stopped holding one
 	// tick for a decision only a person can make (an attempt nobody can
@@ -1490,6 +1549,16 @@ func New(opts Options) (*Reconciler, error) {
 			r.tierProfiles[role] = perRole
 		}
 	}
+	// The on-demand jobs — resolve-conflict at a merge conflict, plan-repair
+	// at a failed integrated gate — are dispatched only when needed and
+	// resolved then, but whether they CAN route is known now. Epic hn6's run
+	// found out at its first conflict, hours in, and stopped (a cloud ceiling
+	// the review cell declared no tier for): a routing defect is refused here.
+	for _, role := range profile.OnDemandRoles {
+		if _, err := routeOnDemandJob(role, opts.ProfileDir, opts.GateConfig, substrate, r.tierPolicy, opts.Executors); err != nil {
+			return nil, fmt.Errorf("reconcile: %w", err)
+		}
+	}
 
 	g := &repoGit{dir: opts.Repo, name: "ticfac", email: "ticfac@example.com", remote: opts.Remote,
 		retry: r.remoteRetry()}
@@ -1853,7 +1922,9 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	// base after the branch forked is one this run cannot see until the fold
 	// happens (refresh.go).
 	err = r.refreshFromBase(ctx)
-	if err == nil {
+	if r.deferRunStartFold(err) {
+		err = nil
+	} else if err == nil {
 		err = r.gateRunStartFold(ctx)
 	}
 	if err != nil {
@@ -1941,6 +2012,15 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			r.settleClosedTicks(ctx, plan)
 			r.record("", StageResumed, "every tick of %s is closed; the run resumes at keeping the epic PR ready",
 				r.opts.EpicID)
+			return r.finishReadying(ctx, fmt.Sprintf("every tick of %s is closed behind the integrated gate",
+				r.opts.EpicID))
+		}
+		if r.foldDeferred != nil {
+			// Every tick was closed on the unfolded branch by an earlier
+			// incarnation, and the fold it deferred is what is left: retried
+			// by the finish (refresh_defer.go), never an error over the work
+			// being done.
+			r.settleClosedTicks(ctx, plan)
 			return r.finishReadying(ctx, fmt.Sprintf("every tick of %s is closed behind the integrated gate",
 				r.opts.EpicID))
 		}
@@ -2431,6 +2511,13 @@ type Refusal struct {
 	Reason  string
 	TickID  string
 	Message string
+
+	// conflict marks a merge_failed that is the attempt's work not merging
+	// onto the integration branch — a conflict no resolve delivered, or one
+	// of a kind no resolve job takes — as opposed to an operational failure
+	// of the merge machinery. The finish hands it to the standing ladder
+	// (finishIntegrate) rather than halting the run for a person.
+	conflict bool
 }
 
 func (r *Refusal) Error() string { return r.Message }

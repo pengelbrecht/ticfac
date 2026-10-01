@@ -82,7 +82,12 @@ import {
   type SandboxGitPlan,
 } from "./credentials";
 import { getRun, recordRunProgress, updateRunState } from "./db";
-import { appendBootFeed, orchestratorBootFeedEvent, orchestratorExitFeedEvent } from "./feed-relay";
+import {
+  appendBootFeed,
+  orchestratorBootFeedEvent,
+  orchestratorExitFeedEvent,
+  supervisionHaltOf,
+} from "./feed-relay";
 import {
   factoryBaseURL,
   issueRunToken,
@@ -1899,6 +1904,28 @@ async function supervisePass(
               detail: `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)}), so no sandbox was rebooted`,
               boots: counter.next - 1,
             };
+          }
+          // An orchestrator that EXITED after its supervisor halted is a
+          // decision, not a death (epic hn6's cloud run: boots 1 and 2 both
+          // exited 1 right after a supervision_halted line, and each was
+          // rebooted and spent a boot). The halt's own line is on the run
+          // feed, relayed before the process exited; a replacement would only
+          // re-derive the stop the halt already made.
+          if (seen.process !== "gone") {
+            const halted = await step.do(
+              `${options.label}:halted:${attempt}`,
+              OBSERVE_RETRIES,
+              async () => ({
+                detail: await supervisionHaltOf(env.ARTIFACTS, params.project, params.run_id, boot),
+              }),
+            );
+            if (halted.detail !== null) {
+              const detail =
+                `the orchestrator stopped deliberately (boot ${boot}, exit ${code ?? "unknown"}): its ` +
+                `supervisor halted rather than continue — ${halted.detail} — so no sandbox was rebooted`;
+              bootEnded = detail;
+              return { kind: "failed", detail, boots: counter.next - 1 };
+            }
           }
           lastSeen = { state: seen.process, exit_code: code };
           ending = "dead";

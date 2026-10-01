@@ -252,8 +252,14 @@ func (r *Reconciler) recordSubstrateRouting() {
 // operator was never asked to declare, and refusing a run over it would be a
 // refusal nothing in the policy justified.
 func (r *Reconciler) derivableTiers(role string) (map[runconfig.Tier]bool, error) {
+	return derivableTiersFor(r.tierPolicy, role)
+}
+
+// derivableTiersFor is [Reconciler.derivableTiers] over a policy alone, so a
+// check that has no reconciler (doctor, the repository guard) derives exactly
+// the set a run pre-resolves.
+func derivableTiersFor(p *runconfig.TierPolicy, role string) (map[runconfig.Tier]bool, error) {
 	out := map[runconfig.Tier]bool{}
-	p := r.tierPolicy
 	if p == nil {
 		return out, nil
 	}
@@ -264,10 +270,22 @@ func (r *Reconciler) derivableTiers(role string) (map[runconfig.Tier]bool, error
 	if ceilingIdx < 0 {
 		return nil, fmt.Errorf("[tier_policy] declares a ceiling this vocabulary has no tier for")
 	}
+	// The rungs a ladder from start actually visits: start, then step rungs
+	// per failed attempt, clamped to the ceiling (runconfig's Derive). A
+	// rung the step jumps over is never dispatched, so it is not demanded.
+	step := p.StepOrDefault()
+	if step < 1 {
+		step = 1
+	}
 	addLadder := func(start runconfig.Tier) {
-		for i := tierIndexOf(start); i >= 0 && i <= ceilingIdx; i++ {
+		i := tierIndexOf(start)
+		if i < 0 || i > ceilingIdx {
+			return
+		}
+		for ; i < ceilingIdx; i += step {
 			out[runconfig.TierNames[i]] = true
 		}
+		out[runconfig.TierNames[ceilingIdx]] = true
 	}
 	// The rungs a FAILED attempt can climb from each start a rule can give
 	// this role — a rule matches it when it states no roles or states one of
@@ -297,6 +315,11 @@ func (r *Reconciler) derivableTiers(role string) (map[runconfig.Tier]bool, error
 		// Only WORK starts at the default; a process role without a route
 		// runs at base values (tierpolicy.go's isWorkRole rule).
 		addLadder(p.Default)
+		// Jev's dear rule can start work at the dear tier, which a policy
+		// may put below the default; the ceiling still bounds it.
+		if p.DearTier != "" && isKnownTier(string(p.DearTier)) {
+			addLadder(p.DearTier)
+		}
 	}
 	return out, nil
 }
@@ -667,4 +690,98 @@ func phaseFor(role string) runstate.Phase {
 	default:
 		return runstate.PhaseWorker
 	}
+}
+
+// ceilingTierFor is the tier the on-demand jobs (resolve-conflict,
+// plan-repair) are routed at: the policy's ceiling, or the role's own values
+// when no policy is declared (or an operator's --tier pinned the run, which
+// loads none).
+func ceilingTierFor(p *runconfig.TierPolicy) string {
+	if p == nil {
+		return ""
+	}
+	return string(p.CeilingOrDefault())
+}
+
+// routeOnDemandJob resolves one on-demand role at the ceiling, exactly as
+// resolve.go and gate_repair.go resolve it when the run meets a conflict or a
+// failed gate. executors nil skips the executor check (a check with no build
+// to honour it).
+func routeOnDemandJob(role, profileDir, runnersConfig string, substrate runconfig.Substrate,
+	policy *runconfig.TierPolicy, executors []KnownExecutor) (*profile.Profile, error) {
+	tier := ceilingTierFor(policy)
+	resolved, err := profile.Resolve(role, profile.Options{
+		Dir: profileDir, RunnersConfig: runnersConfig, Tier: tier, Substrate: string(substrate),
+	})
+	if err == nil && executors != nil {
+		err = usableProfile(executors, resolved)
+	}
+	if err != nil {
+		at := fmt.Sprintf("the ceiling tier %q", tier)
+		if tier == "" {
+			at = "the role's own values (no tier policy)"
+		}
+		return nil, fmt.Errorf("the %s job a run dispatches on demand cannot be routed at %s on the %s substrate: %w. "+
+			"A run refuses at start rather than stopping the first time it needs the job: declare the cell the error names",
+			role, at, substrate, err)
+	}
+	return resolved, nil
+}
+
+// RoutedJob is one job [CheckRouting] resolved: a role at a tier ("" is the
+// role's own values).
+type RoutedJob struct {
+	Role    string
+	Tier    string
+	Profile *profile.Profile
+}
+
+// CheckRouting resolves every job a run on this substrate can dispatch —
+// every role at its own values, every tier the declared ladder can reach for
+// it, and the on-demand resolve-conflict and plan-repair jobs at the ceiling —
+// exactly as a run's construction does, without a build's executors. It is
+// what `ticfac doctor` and this repository's own guard ask; a run asks the
+// same questions in [New] and refuses to start on the first failure.
+func CheckRouting(profileDir, runnersConfig string, substrate runconfig.Substrate) ([]RoutedJob, error) {
+	var jobs []RoutedJob
+	opts := profile.Options{Dir: profileDir, RunnersConfig: runnersConfig, Substrate: string(substrate)}
+	base, err := profile.ResolveAll(opts)
+	if err != nil {
+		return nil, err
+	}
+	for _, role := range profile.Roles {
+		jobs = append(jobs, RoutedJob{Role: role, Profile: base[role]})
+	}
+	cfg, err := runconfig.LoadFor(runnersConfig, substrate)
+	if err != nil {
+		return nil, err
+	}
+	for _, role := range profile.Roles {
+		tiers, err := derivableTiersFor(cfg.TierPolicy, role)
+		if err != nil {
+			return nil, err
+		}
+		names := make([]string, 0, len(tiers))
+		for tier := range tiers {
+			names = append(names, string(tier))
+		}
+		sort.Strings(names)
+		for _, tier := range names {
+			tierOpts := opts
+			tierOpts.Tier = tier
+			resolved, err := profile.Resolve(role, tierOpts)
+			if err != nil {
+				return nil, err
+			}
+			jobs = append(jobs, RoutedJob{Role: role, Tier: tier, Profile: resolved})
+		}
+	}
+	for _, role := range profile.OnDemandRoles {
+		resolved, err := routeOnDemandJob(role, profileDir, runnersConfig, substrate, cfg.TierPolicy, nil)
+		if err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, RoutedJob{Role: role, Tier: ceilingTierFor(cfg.TierPolicy), Profile: resolved})
+	}
+	return jobs, nil
 }

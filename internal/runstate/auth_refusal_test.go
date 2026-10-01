@@ -2,6 +2,7 @@ package runstate
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -60,7 +61,7 @@ func TestAnHTTPSTokenRefusalIsRetriedABoundAndThenNamedForTheToken(t *testing.T)
 			t.Fatalf("a persistent token refusal is not a RemoteAuthRefusedError: %v", err)
 		}
 		first, _, _ := strings.Cut(err.Error(), "\n")
-		for _, want := range []string{RemoteAuthRefusedClass, "3 times", "https remote refused this run's token",
+		for _, want := range []string{RemoteAuthRefusedClass, fmt.Sprintf("%d times", AuthRefusalAttempts), "https remote refused this run's token",
 			"contents: write", "workflows: write", "credential helper", "ticfac factory status",
 			"denied to ticfac[bot]"} {
 			if !strings.Contains(first, want) {
@@ -142,7 +143,7 @@ func assertNamedAuthRefusal(t *testing.T, err error, underlying string) {
 		t.Errorf("the named refusal lost what the remote said (%q): %v", underlying, err)
 	}
 	first, _, _ := strings.Cut(err.Error(), "\n")
-	for _, want := range []string{RemoteAuthRefusedClass, "3 times", "ssh-agent", "ssh-add -l",
+	for _, want := range []string{RemoteAuthRefusedClass, fmt.Sprintf("%d times", AuthRefusalAttempts), "ssh-agent", "ssh-add -l",
 		"deploy key", "gh auth status"} {
 		if !strings.Contains(first, want) {
 			t.Errorf("the refusal's first line does not say %q: %s", want, first)

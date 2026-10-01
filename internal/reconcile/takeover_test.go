@@ -3,11 +3,13 @@ package reconcile
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -159,6 +161,246 @@ func TestANewRunTakesOverADeadRunsClaimAndCarriesItsWork(t *testing.T) {
 	if marker.ResumedFrom == nil || marker.ResumedFrom.RunID != holder || marker.ResumedFrom.SHA != head ||
 		marker.ResumedFrom.Attempt != 1 {
 		t.Errorf("the marker's resumed_from is %+v, want run %s's attempt 1 at %s", marker.ResumedFrom, holder, head)
+	}
+}
+
+// hn6's ltg: the dead run's worker had FINISHED — it settled succeeded with its
+// report and its commits — and the run died before it collected it. The run
+// that takes the claim over must not dispatch a fresh worker "starting from"
+// that work: it rules on the work as it stands, through the ordinary collect
+// (report, boundary, gate), with no worker at all, and closes the tick.
+func TestATakeoverCollectsADeadRunsFinishedAttemptWithoutAWorker(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f := newFixture(t, fixtureOptions{mode: "report"})
+	_, _, err := f.run(f.Repo, fixtureOptions{mode: "report", stopAfter: stopAt("a1", StageDispatched)})
+	killedAfter(t, err, "a1", StageDispatched)
+	holder := "r-fixture"
+
+	// The dead run's worker runs to its end without the run: wait for its own
+	// record to say it settled, the fact the takeover reads.
+	dead := f.dispatch("a1")
+	executor, _, err := f.newExecutor(dead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, found := "", false
+	waitUntil(t, 30*time.Second, "the dead run's worker to settle", func() bool {
+		if state == "" {
+			state, found = findAttemptState(dead.StateDir)
+			if !found {
+				return false
+			}
+		}
+		status, err := executor.Inspect(&subprocess.JobHandle{SchemaVersion: subprocess.SchemaVersion,
+			JobID: dead.JobID, Attempt: dead.Attempt, Handle: map[string]any{"state": state}}, "")
+		return err == nil && status.Terminal
+	})
+	_, _, head := waitHeldWork(t, f, "a1")
+	if containsCommit(t, f, head, "origin/epic/qeu") {
+		t.Fatal("the dead run's work is already on the integration branch; this fixture proves nothing")
+	}
+
+	host := &hostSays{run: holder, verdict: HolderDead}
+	r, result, err := f.run(f.Repo, fixtureOptions{runID: "r-next", mode: "report", claimHolder: host.ask})
+	if err != nil {
+		t.Fatalf("the new run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted || !contains(result.Closed, "a1") {
+		t.Fatalf("the new run ended %s (failure %+v) with a1 not closed; a1's stages %v",
+			result.State, result.Failure, r.Stages("a1"))
+	}
+	if n := f.startCount(attemptJobID("r-next", "a1", 1)); n != 0 {
+		t.Fatalf("the new run started %d worker(s) for a1 over work the dead run's worker had already finished; "+
+			"a1's stages %v", n, r.Stages("a1"))
+	}
+	if !containsCommit(t, f, head, "origin/epic/qeu") {
+		t.Error("the dead run's finished work never reached the integration branch behind the gate")
+	}
+	line, ok := journalLine(r, "a1", StageSettledWorkCollected)
+	if !ok {
+		t.Fatalf("no %s line: a collect of another run's work nobody can see\n%s",
+			StageSettledWorkCollected, journalText(r))
+	}
+	for _, want := range []string{holder, "reads succeeded", short(head)} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the %s line does not name %q: %s", StageSettledWorkCollected, want, line)
+		}
+	}
+
+	store := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-next")
+	record, ok, err := store.Attempt(1)
+	if err != nil || !ok {
+		t.Fatalf("the new run left no marker for its attempt of a1: %v", err)
+	}
+	marker := handleFromMap(record.JobHandle)
+	if marker.CollectedFrom == nil || marker.CollectedFrom.RunID != holder || marker.CollectedFrom.Attempt != 1 ||
+		marker.CollectedFrom.SHA != head {
+		t.Errorf("the marker's collected_from is %+v, want run %s's attempt 1 at %s", marker.CollectedFrom, holder, head)
+	}
+	if marker.ResumedFrom != nil || marker.BaseSHA != dead.BaseSHA {
+		t.Errorf("the collecting attempt is cut at %s resuming %+v, want the dead attempt's own base %s and no "+
+			"carry: it rules on that attempt's work, measured from where that work began",
+			marker.BaseSHA, marker.ResumedFrom, dead.BaseSHA)
+	}
+	if marker.TakenOver == nil || marker.TakenOver.RunID != holder {
+		t.Errorf("the marker's taken_over is %+v, want run %s", marker.TakenOver, holder)
+	}
+}
+
+// crossRunExecutor stands in for the cloudflare-sandbox executor's two
+// cross-run facts: its door will not answer for another run's job (so the
+// dead run's own record cannot be read through it), and it adopts another
+// run's settled attempt from the evidence it is handed. The adoption points
+// at the state the dead run's worker left, which is where this fixture's
+// work can be collected from.
+type crossRunExecutor struct {
+	Executor
+	foreignRun string
+	state      string
+	mu         sync.Mutex
+	adopted    []string
+}
+
+func (e *crossRunExecutor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.JobStatus, error) {
+	if strings.HasPrefix(h.JobID, "run-"+e.foreignRun+"/") {
+		return nil, fmt.Errorf("the door answers only for the credential's own run, not %s", h.JobID)
+	}
+	return e.Executor.Inspect(h, cursor)
+}
+
+func (e *crossRunExecutor) AdoptSettledElsewhere(spec *subprocess.JobSpec, runID, jobID string, attempt int,
+	branch, evidence string) (*subprocess.JobHandle, error) {
+	e.mu.Lock()
+	e.adopted = append(e.adopted, fmt.Sprintf("%s %s %d %s: %s", runID, jobID, attempt, branch, evidence))
+	e.mu.Unlock()
+	return &subprocess.JobHandle{SchemaVersion: subprocess.SchemaVersion, JobID: spec.JobID, Attempt: attempt,
+		Handle: map[string]any{"state": e.state}}, nil
+}
+
+// The hn6 shape through the cloud seams: the dead run's worker ran in the
+// factory, so nothing on this host can say how it settled — the executor's
+// door refuses another run's job — and the evidence is the factory's record
+// (Options.SettledAttempt). A clean finish there is adopted and collected with
+// no worker; the executor is handed the branch the work is on and the
+// factory's own words.
+func TestATakeoverCollectsACloudWorkersFinishedAttemptOnTheFactorysRecord(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f := newFixture(t, fixtureOptions{mode: "report"})
+	_, _, err := f.run(f.Repo, fixtureOptions{mode: "report", stopAfter: stopAt("a1", StageDispatched)})
+	killedAfter(t, err, "a1", StageDispatched)
+	holder := "r-fixture"
+
+	dead := f.dispatch("a1")
+	executor, _, err := f.newExecutor(dead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := ""
+	waitUntil(t, 30*time.Second, "the dead run's worker to settle", func() bool {
+		found := false
+		if state, found = findAttemptState(dead.StateDir); !found {
+			return false
+		}
+		status, err := executor.Inspect(&subprocess.JobHandle{SchemaVersion: subprocess.SchemaVersion,
+			JobID: dead.JobID, Attempt: dead.Attempt, Handle: map[string]any{"state": state}}, "")
+		return err == nil && status.Terminal
+	})
+	_, _, head := waitHeldWork(t, f, "a1")
+
+	cloud := &crossRunExecutor{foreignRun: holder, state: state}
+	f.wrap = func(inner Executor) Executor {
+		cloud.Executor = inner
+		return cloud
+	}
+	var asked []string
+	factory := func(_ context.Context, runID, tickID string, attempt int) SettledState {
+		asked = append(asked, fmt.Sprintf("%s/%s/%d", runID, tickID, attempt))
+		return SettledState{Known: true, Succeeded: true,
+			Evidence: "the factory recorded its worker container completed with exit 0"}
+	}
+	host := &hostSays{run: holder, verdict: HolderDead}
+	r, result, err := f.run(f.Repo, fixtureOptions{runID: "r-next", mode: "report", claimHolder: host.ask,
+		settledAttempt: factory})
+	if err != nil {
+		t.Fatalf("the new run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted || !contains(result.Closed, "a1") {
+		t.Fatalf("the new run ended %s (failure %+v) with a1 not closed; a1's stages %v",
+			result.State, result.Failure, r.Stages("a1"))
+	}
+	if n := f.startCount(attemptJobID("r-next", "a1", 1)); n != 0 {
+		t.Fatalf("the new run started %d worker(s) over a cloud worker's finished work", n)
+	}
+	if len(asked) == 0 || asked[0] != holder+"/a1/1" {
+		t.Errorf("the factory was asked about %v, want %s/a1/1", asked, holder)
+	}
+	cloud.mu.Lock()
+	adopted := append([]string{}, cloud.adopted...)
+	cloud.mu.Unlock()
+	if len(adopted) == 0 || !strings.Contains(adopted[0], "completed with exit 0") ||
+		!strings.Contains(adopted[0], "run-"+holder+"/tick-a1/attempt-1") {
+		t.Errorf("the executor adopted %v, want the dead run's job on the factory's evidence", adopted)
+	}
+	if line, ok := journalLine(r, "a1", StageSettledWorkCollected); !ok ||
+		!strings.Contains(line, "completed with exit 0") {
+		t.Errorf("the %s line does not carry the factory's evidence: %q", StageSettledWorkCollected, line)
+	}
+	if !containsCommit(t, f, head, "origin/epic/qeu") {
+		t.Error("the cloud worker's finished work never reached the integration branch behind the gate")
+	}
+}
+
+// The dead run's finished work is RULED ON, not waved through: its worker
+// settled succeeded, but it wrote under the tracker's authority. The collect
+// rejects it on the merits exactly as it would any attempt's, and only then
+// is a worker dispatched — fresh, without the rejected work — and the tick
+// closes on that worker's clean try.
+func TestATakeoverDispatchesAWorkerOnlyWhenTheDeadRunsFinishedWorkIsRejected(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f := newFixture(t, fixtureOptions{mode: "boundary-first"})
+	_, _, err := f.run(f.Repo, fixtureOptions{mode: "boundary-first", stopAfter: stopAt("a1", StageDispatched)})
+	killedAfter(t, err, "a1", StageDispatched)
+
+	dead := f.dispatch("a1")
+	executor, _, err := f.newExecutor(dead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitUntil(t, 30*time.Second, "the dead run's worker to settle", func() bool {
+		state, found := findAttemptState(dead.StateDir)
+		if !found {
+			return false
+		}
+		status, err := executor.Inspect(&subprocess.JobHandle{SchemaVersion: subprocess.SchemaVersion,
+			JobID: dead.JobID, Attempt: dead.Attempt, Handle: map[string]any{"state": state}}, "")
+		return err == nil && status.Terminal
+	})
+
+	host := &hostSays{run: "r-fixture", verdict: HolderDead}
+	r, result, err := f.run(f.Repo, fixtureOptions{runID: "r-next", mode: "boundary-first", claimHolder: host.ask})
+	if err != nil {
+		t.Fatalf("the new run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted || !contains(result.Closed, "a1") {
+		t.Fatalf("the new run ended %s (failure %+v) with a1 not closed; a1's stages %v",
+			result.State, result.Failure, r.Stages("a1"))
+	}
+	if _, ok := journalLine(r, "a1", StageSettledWorkCollected); !ok {
+		t.Fatalf("the dead run's finished work was not collected before a worker was dispatched; a1's stages %v",
+			r.Stages("a1"))
+	}
+	if n := f.startCount(attemptJobID("r-next", "a1", 1)); n != 0 {
+		t.Errorf("the collecting attempt started %d worker(s)", n)
+	}
+	if n := f.startCount(attemptJobID("r-next", "a1", 2)); n != 1 {
+		t.Errorf("the rejection of the dead run's work dispatched %d worker(s), want exactly one; a1's stages %v",
+			n, r.Stages("a1"))
+	}
+	if line, ok := journalLine(r, "a1", StageRejected); !ok || !strings.Contains(line, "boundary") {
+		t.Errorf("the dead run's work was not rejected on its boundary violation: %q", line)
 	}
 }
 

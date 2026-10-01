@@ -37,6 +37,17 @@ func resolveStartsIn(t *testing.T, file string) []string {
 	return strings.Fields(string(raw))
 }
 
+// filterStage is the stages equal to one stage.
+func filterStage(stages []string, stage string) []string {
+	var out []string
+	for _, s := range stages {
+		if s == stage {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 // resolveDecisionsOf is the recorded resolve decisions of one tick.
 func resolveDecisionsOf(t *testing.T, r *Reconciler, tick string) []runstate.Decision {
 	t.Helper()
@@ -121,8 +132,9 @@ func TestAResolveThatExitsWithoutAReportIsRetriedFromItsCommittedResolution(t *t
 }
 
 // The operational retries are bounded: a resolve worker that never answers is
-// started 1+maxOperationalRetries times, and then the run stops naming every
-// job and a remedy that parses.
+// started 1+maxOperationalRetries times per try of the tick, each spent try
+// goes to the standing ladder carrying its work, and once the ladder is spent
+// the run stops naming every job and a remedy that parses.
 //
 // serial: t.Setenv, as above.
 func TestResolvesThatNeverAnswerAreBoundedAndTheStopNamesEveryOne(t *testing.T) {
@@ -138,9 +150,19 @@ func TestResolvesThatNeverAnswerAreBoundedAndTheStopNamesEveryOne(t *testing.T) 
 	if result.State != runstate.StateFailed {
 		t.Fatalf("the run ended %s: resolves that never answer are bounded, and the bound is a stop", result.State)
 	}
+	// Each try of the tick gets its own allowance of 1+maxOperationalRetries
+	// resolves, and a try whose allowance is spent goes to the standing
+	// ladder carrying its work (epic hn6's cloud run: 7uv halted "needs a
+	// person" here) — escalated, then the one further try at the ceiling,
+	// and only then the stop. Three tries under this fixture's policy.
+	const tries = 3
 	starts := resolveStartsIn(t, filepath.Join(os.Getenv("CONFLICT_SYNC"), "resolve.starts"))
-	if len(starts) != 1+maxOperationalRetries {
-		t.Fatalf("the run started %d resolve jobs (%v), want %d", len(starts), starts, 1+maxOperationalRetries)
+	if len(starts) != tries*(1+maxOperationalRetries) {
+		t.Fatalf("the run started %d resolve jobs (%v), want %d: %d per try over %d tries", len(starts), starts,
+			tries*(1+maxOperationalRetries), 1+maxOperationalRetries, tries)
+	}
+	if n := len(filterStage(r.Stages("a2"), StageRejectedWorkCarried)); n != tries-1 {
+		t.Errorf("%d tries were handed to the ladder carrying their work, want %d", n, tries-1)
 	}
 	if r.failure == nil {
 		t.Fatal("the bound stopped the run with no refusal to read")

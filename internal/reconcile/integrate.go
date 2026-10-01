@@ -93,7 +93,7 @@ func (r *Reconciler) integrate(ctx context.Context, marker attemptHandle, collec
 		var finalize func() error
 		merged, conflict, err := r.mergeInWorktree(tick, marker.Attempt, branch, head, epicHead)
 		if err != nil {
-			return merge{}, err
+			return merge{}, markConflict(err)
 		}
 		if conflict != nil {
 			// A content or add/add conflict between an attempt and the branch
@@ -101,10 +101,12 @@ func (r *Reconciler) integrate(ctx context.Context, marker attemptHandle, collec
 			// worker holding BOTH descriptions can make (tick 2p6): the run
 			// dispatches a resolve-conflict job instead of stopping for a
 			// person. Every other conflict, and every failure of the resolve,
-			// is the stop it always was — naming the files, as ky5 made it.
+			// is marked as the conflict it is, and the finish hands it to the
+			// standing ladder (finishIntegrate) — naming the files, as ky5
+			// made it.
 			merged, finalize, err = r.resolveConflict(ctx, marker, head, epicHead, conflict)
 			if err != nil {
-				return merge{}, err
+				return merge{}, markConflict(err)
 			}
 		}
 		_, stderr, pushErr := r.git.try("", "push",
@@ -140,6 +142,17 @@ func (r *Reconciler) integrate(ctx context.Context, marker attemptHandle, collec
 	return merge{}, r.refuse(RefusedMerge, tick,
 		"%s moved under this reconciler %d times running while merging %s; that is an operational problem, "+
 			"not a conflict to spin on", r.branch, maxMergePushes, tick)
+}
+
+// markConflict marks a merge_failed raised by the merge of the attempt's work
+// or by the resolve of its conflict as the conflict it is. Anything else —
+// an operational error, another refusal — passes through untouched.
+func markConflict(err error) error {
+	var refusal *Refusal
+	if asRefusal(err, &refusal) && refusal.Reason == RefusedMerge {
+		refusal.conflict = true
+	}
+	return err
 }
 
 // integratedAlready is the merge of an attempt this run has already merged.

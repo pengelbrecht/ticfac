@@ -395,9 +395,11 @@ func TestBothSidesOfTheActivityLogMergeThroughTheTrackersOwnDriver(t *testing.T)
 // (refresh_resolve.go) — and a resolve that does not resolve it is a
 // REFUSAL, with a reason of its own. The fake worker here is the plain one: it
 // commits work of its own and leaves README.md's markers where they are, which
-// is a resolution that did not happen. Skipping the fold would put the run
-// back where the gate run found it — planning from a tracker that is missing
-// ticks — and folding markers in would be a merge nobody made.
+// is a resolution that did not happen. Skipping the fold SILENTLY would put the
+// run back where the gate run found it — planning from a tracker that is
+// missing ticks without saying so — and folding markers in would be a merge
+// nobody made. So the fold is deferred out loud, retried once every tick is
+// closed, and the stop is the retry's (refresh_defer.go).
 func TestASourceConflictRefusesTheRunWithItsOwnReason(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
@@ -435,12 +437,24 @@ func TestASourceConflictRefusesTheRunWithItsOwnReason(t *testing.T) {
 		}
 	}
 
-	// The resolve job is the ONLY thing dispatched: no tick was planned over
-	// a base branch the run could not fold in.
+	// The fold is DEFERRED rather than halting the run with every tick open
+	// (epic hn6, run_09ebaf29): the feed says so, the tick is worked on the
+	// unfolded branch, and the stop comes when the fold, retried once every
+	// tick is closed, still does not land.
+	deferred := false
 	for _, event := range r.Journal() {
-		if event.Stage == StageDispatched && event.Tick != "" {
-			t.Errorf("the run dispatched %s over a base branch it could not fold in", event.Tick)
+		if event.Stage == StageRefreshDeferred {
+			deferred = true
 		}
+	}
+	if !deferred {
+		t.Errorf("the feed never says the fold was deferred (%s)", StageRefreshDeferred)
+	}
+	if len(result.Closed) != 1 || result.Closed[0] != "a1" {
+		t.Errorf("closed %v, want a1 worked on the unfolded branch while the fold was deferred", result.Closed)
+	}
+	if !strings.Contains(result.Failure.Message, "still does not land") {
+		t.Errorf("the stop does not say the deferred fold was retried: %s", result.Failure.Message)
 	}
 	// The branch moved — the refusal's own checkpoint landed on it, because
 	// that is where `.ticfac/` lives — but it does not carry main: a fold that

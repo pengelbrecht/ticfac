@@ -90,3 +90,37 @@ func TestAClaimHolderIsAskedOfTheFactoryOnTheRunsOwnCredential(t *testing.T) {
 		}
 	}
 }
+
+// hn6's ltg: how a dead run's cloud attempt settled is the factory's record
+// of its worker container, read on the run's own credential. Exit 0 is a
+// clean finish the takeover collects; any other settlement is known but not
+// succeeded; an attempt the factory recorded nothing for is not known.
+func TestADeadRunsSettledAttemptIsReadFromTheFactorysRecord(t *testing.T) {
+	factory := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/runs/run_dead" {
+			http.Error(w, `{"error":"not_found"}`, http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`{"run":{"run_id":"run_dead","state":"failed"},"settled_attempts":[` +
+			`{"tick_id":"ltg","attempt":4,"state":"completed","exit_code":0,"at":"2026-09-30T13:06:00Z"},` +
+			`{"tick_id":"378","attempt":6,"state":"completed","exit_code":1,"at":"2026-09-30T13:20:00Z"}]}`))
+	}))
+	defer factory.Close()
+	t.Setenv("TICKS_FACTORY_URL", factory.URL)
+	t.Setenv("TICKS_FACTORY_TOKEN", "tkr_run-scoped-token")
+	ctx := context.Background()
+
+	if got := settledAttemptOnFactory(ctx, "run_dead", "ltg", 4); !got.Known || !got.Succeeded ||
+		!strings.Contains(got.Evidence, "completed with exit 0") {
+		t.Errorf("ltg's clean exit reads %+v, want known and succeeded with the factory's evidence", got)
+	}
+	if got := settledAttemptOnFactory(ctx, "run_dead", "378", 6); !got.Known || got.Succeeded {
+		t.Errorf("a non-zero exit reads %+v, want known and not succeeded", got)
+	}
+	if got := settledAttemptOnFactory(ctx, "run_dead", "7uv", 7); got.Known {
+		t.Errorf("an attempt the factory recorded nothing for reads %+v, want not known", got)
+	}
+	if got := settledAttemptOnFactory(ctx, "run_unheard", "ltg", 4); got.Known {
+		t.Errorf("a run the factory has never heard of reads %+v, want not known", got)
+	}
+}

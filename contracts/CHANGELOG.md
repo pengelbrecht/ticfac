@@ -55,6 +55,7 @@ loud.
 
 ## 1.1.0
 
+<<<<<<< HEAD
 MINOR: `status-model.json` grows the dashboard vocabulary — additive fields
 within schema_version 1, which does not move (the phone page's snapshot parser
 refuses any other version, and every reader of this contract lives in this
@@ -70,6 +71,18 @@ every new field populated — it is the fixture the wave-3 renderers and the
 phone page test against — and three new negatives refuse an unknown pipeline
 stage, an unmetered line with a number, and an unknown verdict state.
 An unchanged consumer is still correct but no longer complete.
+=======
+MINOR: one environment variable added. `worker-boot-contract.json` gains
+`env.work_base`, `TICKS_WORK_BASE_SHA`: for a CARRIED attempt, the base the
+carried work was cut from (epic hn6, run_3f034e68). A carried attempt boots at
+the released attempt's head, so a worker that finds the carried work complete
+and adds nothing had no work commits of its own and the container exited
+no-work (10), settling a finished tick as failed. With the work base the
+container measures the carried work too and exits 0. The control plane
+(`worker-boot.ts`) sets it when the dispatch door's optional `work_base_sha`
+carries one; the container (`image/worker.sh`) reads it. An unchanged consumer
+is still correct: absent, the container behaves exactly as before.
+>>>>>>> 3e88ca73ab5c1c611d87e45e930396572bfa2f19
 
 ---
 

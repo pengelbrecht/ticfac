@@ -351,3 +351,26 @@ func TestAnAnswerWaitingCannotChangeIsNotRetried(t *testing.T) {
 		}
 	}
 }
+
+// Epic hn6's cloud run (2026-09-30): the first orchestrator boot died of a
+// claim push GitHub took and then failed to apply, "! [remote rejected] <sha>
+// -> epic/hn6 (failed)", read as a stop nobody classified; the next boot's
+// identical push went through. A bare failed ref update is transient; one
+// whose parentheses name a reason — a hook, a stale lease — is not.
+//
+// short: a pure classification over synthesised stderr
+func TestAFailedRefUpdateIsTransientAndANamedRejectionIsNot(t *testing.T) {
+	failed := errors.New("claim 7uv: git push --force-with-lease=refs/heads/epic/e1:" + strings.Repeat("a", 40) +
+		" origin " + strings.Repeat("b", 40) + ":refs/heads/epic/e1: exit status 1: To https://github.com/example/repo.git\n" +
+		" ! [remote rejected]   " + strings.Repeat("b", 40) + " -> epic/e1 (failed)\n" +
+		"error: failed to push some refs to 'https://github.com/example/repo.git'")
+	if got := ClassifyRemote(failed); got != RemoteTransient {
+		t.Errorf("a bare failed ref update is class %v, want transient", got)
+	}
+	for _, reason := range []string{"pre-receive hook declined", "stale info", "protected branch hook declined"} {
+		named := errors.New("git push: exit status 1: ! [remote rejected] main -> main (" + reason + ")")
+		if got := ClassifyRemote(named); got == RemoteTransient {
+			t.Errorf("a rejection naming %q was read as transient", reason)
+		}
+	}
+}

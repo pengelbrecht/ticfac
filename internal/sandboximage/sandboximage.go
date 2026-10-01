@@ -266,6 +266,14 @@ const (
 	// a boot whose earlier attempt DID land with a refusal the container reads
 	// as success.
 	ExitReview = 12
+	// ExitStartUnpublished reports a start commit origin does not serve: the
+	// fetch worked, and the SHA the job was dispatched on is not among what it
+	// brought. It is the DISPATCHER's failure, not the container's — a job cut
+	// at a commit only the orchestrator's own clone holds (epic hn6,
+	// run_09ebaf29: a base fold's conflicted merge, and three resolve jobs
+	// lost to it as missing-result) — and it is distinct from ExitClone
+	// because it is the one checkout failure a retry as-is cannot survive.
+	ExitStartUnpublished = 13
 )
 
 // Script names the files the image installs.
@@ -435,6 +443,13 @@ const (
 	// implement a tick — and a wave whose ticks touch no dependencies can opt
 	// out of paying it N times.
 	EnvWorkerSetup = "TICKS_WORKER_SETUP"
+	// EnvWorkBaseSHA is, for a CARRIED attempt, the base the carried work was
+	// cut from (epic hn6, run_3f034e68). A carried attempt boots AT the
+	// released attempt's head, so its own commits are counted from there; a
+	// worker that finds the carried work complete and adds nothing is still
+	// delivering work, and this is what lets the container see it and settle
+	// the attempt succeeded. Absent for every attempt that carries nothing.
+	EnvWorkBaseSHA = "TICKS_WORK_BASE_SHA"
 	// EnvTraceID is the identifier that joins the message which produced this
 	// tick to the container now working on it (D20, tick hyi).
 	//

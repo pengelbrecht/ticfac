@@ -1,10 +1,13 @@
 package reconcile
 
 import (
+	"context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/sandboximage"
 )
@@ -247,4 +250,144 @@ func carryKey(run string, from *resumedFrom) string {
 		run = from.RunID
 	}
 	return fmt.Sprintf("%s#%d", run, from.Attempt)
+}
+
+// Collecting a dead run's FINISHED attempt (hn6's ltg).
+//
+// A claim taken over from a run that ended carries the holder's committed
+// work into a fresh worker. That is right for work the holder's worker was
+// cut off in the middle of, and wasteful — and a gamble on a worker that may
+// undo it — for work its worker FINISHED: hn6's run_911b dispatched ltg as
+// attempt 4, the worker settled succeeded with its report on
+// `tick/hn6/attempt-4/ltg`, and the run died before it collected it. The
+// next run took the claim over and dispatched ltg again, "starting from"
+// work that only needed a verdict.
+//
+// So when the holder's attempt with the work SETTLED SUCCEEDED, as the host
+// that ran its worker recorded it — its own attempt record on this host (a
+// local worker, read through the executor), or the factory's settlement
+// record of its container (a cloud worker, Options.SettledAttempt) — this
+// run's next attempt of the tick starts no worker. It is cut at the holder
+// attempt's own base, and its handle addresses the settled work: the collect
+// rules on it exactly as it rules on any attempt — the report linter, the
+// boundary, the base check, the gate — and only a rejection there dispatches
+// a worker, through the ordinary rejection paths. Nothing is ever guessed
+// from the branch alone: a holder whose settlement nobody recorded is
+// carried as before.
+
+// collectedFrom is the settled attempt of another run an attempt rules on
+// instead of running a worker: the run, its attempt and job, the ref its work
+// is on, the commit it had there when this run took it, and the evidence it
+// settled succeeded. It rides the marker (collected_from), so a restart
+// re-addresses the same work rather than starting a worker.
+type collectedFrom struct {
+	RunID    string `json:"run_id"`
+	JobID    string `json:"job_id"`
+	Attempt  int    `json:"attempt"`
+	WriteRef string `json:"write_ref"`
+	SHA      string `json:"sha"`
+	Evidence string `json:"evidence"`
+}
+
+// StageSettledWorkCollected is the line an attempt that rules on another
+// run's settled work leaves in place of a dispatch: whose work, where, and the
+// evidence it had settled succeeded.
+const StageSettledWorkCollected = "settled_work_collected"
+
+// foreignStateRoot is where a run that ran on THIS host kept one attempt's
+// executor state: execStateDir under that run's id.
+func (r *Reconciler) foreignStateRoot(runID, tickID string, attempt int) string {
+	if r.opts.ExecStateRoot == "" || runID == "" {
+		return ""
+	}
+	return filepath.Join(r.opts.ExecStateRoot, runID, tickID, fmt.Sprintf("%d", attempt))
+}
+
+// foreignLocalHandle addresses another run's attempt through the executor
+// state it left on this host, or nil when it left none here.
+func (r *Reconciler) foreignLocalHandle(executor, runID, jobID, tickID string, attempt int) *subprocess.JobHandle {
+	state, found := findAttemptState(r.foreignStateRoot(runID, tickID, attempt))
+	if !found {
+		return nil
+	}
+	return &subprocess.JobHandle{
+		SchemaVersion: subprocess.SchemaVersion,
+		JobID:         jobID,
+		Attempt:       attempt,
+		Executor:      executor,
+		Handle:        map[string]any{"state": state},
+	}
+}
+
+// settledElsewhere answers whether the work a takeover carries is a FINISHED
+// attempt this run's dispatch can rule on without a worker: the collectedFrom
+// to put on the marker, or nil — carry it into a worker, as before. It is
+// asked with the executor this dispatch was built with, because that is the
+// executor that will address the work, and it never guesses: an attempt of
+// another executor, or one no host recorded settled succeeded, is nil.
+func (r *Reconciler) settledElsewhere(ctx context.Context, executor Executor, dispatch Dispatch, carry *carriedWork) *collectedFrom {
+	if carry == nil || carry.runID == "" || isRoleJob(dispatch.Role) {
+		return nil
+	}
+	foreign := carry.marker
+	if foreign.Executor == "" || foreign.Executor != dispatch.Executor || foreign.BaseSHA == "" {
+		return nil
+	}
+	head, err := r.carryHead(foreign)
+	if err != nil || head == "" {
+		return nil
+	}
+	from := &collectedFrom{RunID: carry.runID, JobID: foreign.JobID, Attempt: foreign.Attempt,
+		WriteRef: foreign.WriteRef, SHA: head}
+
+	// The holder ran its worker on this host: its own record says how it
+	// settled. A record that reads anything but a clean finish is not
+	// evidence of one; a record this executor cannot read is asked of the
+	// factory below.
+	if handle := r.foreignLocalHandle(foreign.Executor, carry.runID, foreign.JobID, foreign.TickID, foreign.Attempt); handle != nil {
+		status, err := executor.Inspect(handle, "")
+		if err == nil && status.Terminal {
+			if status.State != subprocess.StateSucceeded {
+				return nil
+			}
+			from.Evidence = fmt.Sprintf("its worker's own record on this host reads %s", status.State)
+			return from
+		}
+	}
+
+	// The holder's worker ran in the factory: the factory recorded how its
+	// container settled, and this executor can hand the settled work to a
+	// collect without asking a door that answers only for its own run.
+	if _, ok := executor.(SettledElsewhereAdopter); !ok || r.opts.SettledAttempt == nil {
+		return nil
+	}
+	answer := r.opts.SettledAttempt(ctx, carry.runID, foreign.TickID, foreign.Attempt)
+	if !answer.Known || !answer.Succeeded {
+		return nil
+	}
+	from.Evidence = answer.Evidence
+	return from
+}
+
+// settledHandle addresses the settled work an attempt rules on (its marker's
+// collected_from): the holder's own state on this host when it ran here, else
+// the executor's adoption of it from its branch. It starts nothing.
+func (r *Reconciler) settledHandle(executor Executor, dispatch Dispatch, marker attemptHandle) (*subprocess.JobHandle, error) {
+	from := marker.CollectedFrom
+	// The holder's own state on this host addresses its work only when this
+	// executor can read it: a cloud executor's door answers for its own run
+	// alone, so a dead local orchestrator's cloud record is adopted below.
+	if handle := r.foreignLocalHandle(marker.Executor, from.RunID, from.JobID, marker.TickID, from.Attempt); handle != nil {
+		if status, err := executor.Inspect(handle, ""); err == nil && status.Terminal {
+			return handle, nil
+		}
+	}
+	adopter, ok := executor.(SettledElsewhereAdopter)
+	if !ok {
+		return nil, fmt.Errorf("%s rules on run %s's settled attempt %d, and neither does this host hold that "+
+			"attempt's state nor can the %s executor address it from its branch",
+			r.attemptName(marker.TickID, marker.Attempt), from.RunID, from.Attempt, marker.Executor)
+	}
+	return adopter.AdoptSettledElsewhere(r.jobSpec(dispatch), from.RunID, from.JobID, from.Attempt,
+		branchOf(from.WriteRef), from.Evidence)
 }

@@ -2,7 +2,13 @@ import { env, SELF } from "cloudflare:test";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
-import { type DispatchLog, getRun, listDispatchLogs, listRunGatewayTokens } from "../src/db";
+import {
+  type DispatchLog,
+  getRun,
+  listDispatchLogs,
+  listRunGatewayTokens,
+  recordSandboxJobSettled,
+} from "../src/db";
 import { GATEWAY_PATH_PREFIX, issueRunToken } from "../src/gateway";
 import type { QueuedSubmission } from "../src/run-room";
 import {
@@ -774,6 +780,51 @@ describe("status", () => {
     expect(body.queued[0]).toMatchObject({ epic: "afj" });
     expect(body.gates.map((g) => g.id)).toEqual([`gate-${run.run_id}`]);
     expect(body.stop).toBeNull();
+  });
+
+  it("names the attempts whose own worker settled, so a run taking over its claim collects them", async () => {
+    const project = await enrolled("status-settled");
+    const { run } = (await (await post("/api/runs", submission(project))).json()) as {
+      run: { run_id: string };
+    };
+    const at = "2026-09-30T13:06:00.000Z";
+    await recordSandboxJobSettled(env.DB, {
+      run_id: run.run_id,
+      tick_id: "ltg",
+      attempt: 4,
+      job: "",
+      state: "completed",
+      exit_code: 0,
+      at,
+    });
+    // A role job under the same attempt is not the attempt's own verdict.
+    await recordSandboxJobSettled(env.DB, {
+      run_id: run.run_id,
+      tick_id: "ltg",
+      attempt: 4,
+      job: "repair-1-0badf00d",
+      state: "failed",
+      exit_code: 1,
+      at,
+    });
+    // Another run's settlement is never this run's.
+    await recordSandboxJobSettled(env.DB, {
+      run_id: "run_other",
+      tick_id: "ltg",
+      attempt: 4,
+      job: "",
+      state: "failed",
+      exit_code: 2,
+      at,
+    });
+
+    const body = (await (await get(`/api/runs/${run.run_id}`)).json()) as {
+      settled_attempts: unknown[];
+    };
+
+    expect(body.settled_attempts).toEqual([
+      { tick_id: "ltg", attempt: 4, state: "completed", exit_code: 0, at },
+    ]);
   });
 
   it("404s an unknown run", async () => {

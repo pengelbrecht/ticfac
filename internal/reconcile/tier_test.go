@@ -39,6 +39,16 @@ model = "sonnet"
 [roles.implement.tiers.strong]
 model = "opus"
 
+# The review cell's ceiling overlay: the on-demand resolve-conflict and
+# plan-repair jobs route at the ceiling through it, and a run refuses at
+# start when they cannot.
+[roles.review]
+kind = "claude"
+model = "opus"
+
+[roles.review.tiers.strong]
+model = "opus"
+
 [tier_policy]
 default = "balanced"
 ceiling = "strong"
@@ -451,6 +461,16 @@ model = "haiku"
 model = "sonnet"
 
 [roles.implement.tiers.strong]
+model = "opus"
+
+# The review cell's ceiling overlay: the on-demand resolve-conflict and
+# plan-repair jobs route at the ceiling through it, and a run refuses at
+# start when they cannot.
+[roles.review]
+kind = "claude"
+model = "opus"
+
+[roles.review.tiers.strong]
 model = "opus"
 
 [tier_policy]

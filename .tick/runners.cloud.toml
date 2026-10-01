@@ -65,6 +65,19 @@ kind = "pi"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
 
+# The ceiling-tier overlay of the review cell: the resolve-conflict and
+# plan-repair jobs route at [tier_policy].ceiling THROUGH this cell (see
+# runners.toml's [roles.review.tiers.frontier]), so the cloud's ceiling,
+# "strong", must be a tier this cell declares. Without it the hn6 run
+# (2026-09-30) stopped at its first merge conflict; ticfac now refuses a run
+# (and doctor, and CI) whose on-demand jobs cannot route. GLM 5.3 through pi,
+# a Workers AI model: nothing in the cloud runs claude, and this cell's
+# kind/model above apply over the common file's claude frontier tier.
+[roles.review.tiers.strong]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
 [roles.closeout]
 kind = "pi"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"

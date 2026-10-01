@@ -390,6 +390,10 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 		// do not say it is over (claim_holder.go): the process table for a
 		// local holder, the factory for a cloud one.
 		ClaimHolder: claimHolderLiveness(repoDir),
+		// How a dead holder's cloud attempt settled, as the factory recorded
+		// its worker (claim_holder.go): a clean finish is collected, not
+		// redone by a fresh worker.
+		SettledAttempt: settledAttemptOnFactory,
 	}
 	if classifier != nil {
 		opts.Classifier = classifier

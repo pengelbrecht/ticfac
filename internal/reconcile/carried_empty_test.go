@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/sandboximage"
 )
 
 // A carried attempt that adds nothing delivers the carried work (tick isp).
@@ -251,5 +253,93 @@ func TestACarriedDeliveryMergedBeforeAKillIsFinishedOnResume(t *testing.T) {
 	}
 	if !contains(stages, StageGatePassed) {
 		t.Errorf("a1 was closed without the per-tick gate: %v", stages)
+	}
+}
+
+// noWorkSettleExecutor answers a CARRIED attempt's terminal status the way a
+// sandbox worker container settles when its worker added nothing to the
+// carried work: failed, on the image's no-work exit (epic hn6, run_3f034e68 —
+// 7uv and 378, whose carried work was complete).
+type noWorkSettleExecutor struct {
+	Executor
+	carried bool
+}
+
+func (e *noWorkSettleExecutor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.JobStatus, error) {
+	status, err := e.Executor.Inspect(h, cursor)
+	if err != nil || status == nil || !status.Terminal || !e.carried {
+		return status, err
+	}
+	failed := *status
+	failed.State = subprocess.StateFailed
+	failed.Observations = append(append([]subprocess.Observation{}, status.Observations...), subprocess.Observation{
+		Kind: subprocess.ObsExited, Detail: fmt.Sprintf("the container's work process exited %d "+
+			"(the branch and report reached origin with no work commits)", sandboximage.ExitWorkerNoWork)})
+	return &failed, nil
+}
+
+// A carried attempt the container settles on its no-work exit is not a failed
+// attempt: the collect delivers the carried work (tick isp), and the settle
+// line says so rather than "settled as failed", which read to a person on
+// epic hn6 as two finished ticks lost.
+func TestACarriedNoWorkSettleIsNotReportedAsAFailure(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{mode: "hang"})
+	releasedRef, releasedHead := releaseCarryingA1(t, f)
+
+	f.Runner = fakeRunnerArgv(t, "a1-adds-nothing")
+	options := f.options(f.Repo, fixtureOptions{})
+	workBases := map[string]bool{}
+	options.NewExecutor = func(d Dispatch) (Executor, Substrate, error) {
+		inner, substrate, err := f.newExecutor(d)
+		if err != nil {
+			return nil, substrate, err
+		}
+		carried := d.TickID == "a1" && d.ResumedFrom != nil
+		if carried {
+			workBases[d.WorkBaseSHA] = true
+		}
+		return &noWorkSettleExecutor{Executor: inner, carried: carried}, substrate, nil
+	}
+	r, err := New(options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := r.RunProtected(t.Context())
+	if err != nil {
+		t.Fatalf("the run after the carrying release did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted || !contains(result.Closed, "a1") {
+		t.Fatalf("the run ended %s (%+v) with a1 not closed: a1's stages %v",
+			result.State, result.Failure, r.Stages("a1"))
+	}
+	a1Carried(t, f, r, releasedHead)
+	// The carried dispatch names the base the RELEASED attempt was cut from,
+	// so an executor whose worker counts its own work (the sandbox container)
+	// can see the carried work too — on every leg that rebuilds the dispatch.
+	released := attemptMarker(t, f, "a1", 1)
+	if released.BaseSHA == "" || released.BaseSHA == releasedHead {
+		t.Fatalf("the released attempt's base %q proves nothing against the carried head %s", released.BaseSHA, releasedHead)
+	}
+	if len(workBases) != 1 || !workBases[released.BaseSHA] {
+		t.Errorf("the carried dispatch's work bases are %v, want only the released attempt's base %s",
+			workBases, released.BaseSHA)
+	}
+	settled := ""
+	for _, e := range r.Journal() {
+		if e.Tick == "a1" && e.Stage == StageWaiting && strings.HasPrefix(e.Detail, "settled") {
+			settled = e.Detail
+		}
+	}
+	if settled == "" {
+		t.Fatalf("no settle line for a1:\n%s", journalText(r))
+	}
+	if strings.HasPrefix(settled, "settled as failed") {
+		t.Errorf("the carried attempt that added nothing is reported as a failure: %s", settled)
+	}
+	for _, want := range []string{"carried", "exited 10", branchOf(releasedRef)} {
+		if !strings.Contains(settled, want) {
+			t.Errorf("the settle line does not name %q: %s", want, settled)
+		}
 	}
 }

@@ -87,6 +87,18 @@ const StoppedRemoteTransient = "remote_transient"
 // agent or an access grant, and those are a person's to fix.
 const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 
+// StoppedRemoteTokenRefused is an auth refusal past runstate's bound whose
+// refused credential was an HTTPS TOKEN — the factory's per-run GitHub App
+// installation token, in the cloud — rather than an ssh key. It is resumable:
+// on the App rung every observed one was the token, not the grant (epic
+// hn6's cloud runs, 2026-09-29 and -30: "Permission to <repo> denied to
+// <app>[bot]" on the run's own pushes, and the identical push went through
+// seconds or a boot later), and the next incarnation asks the token door
+// afresh. A grant that is really missing is not a loop: the second identical
+// stop over an unchanged tree is a spin, and the supervisor halts on it with
+// the remedy in the line.
+const StoppedRemoteTokenRefused = "remote_token_refused"
+
 // resumesWithoutAPerson is the closed set of stops the run may continue across
 // by itself: the ones that are resumable BY CONSTRUCTION, where the next
 // incarnation adopts by identity, re-derives, and continues, and where no
@@ -148,6 +160,10 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 //     admission answers the red CI with the repair job — the tree changes —
 //     and dispatches a new close-out over the green, carrying the rejected
 //     one's commits (its retro); nobody has anything to decide.
+//   - RefusedFoldReplan: a fold the run start deferred landed once every
+//     tick closed and brought ticks the run never planned (refresh_defer.go).
+//     The tree changed — the fold is on it — and the next incarnation plans
+//     them from it; nobody has anything to decide.
 //
 // And one hold is continued when the stopped incarnation finds the run can
 // decide it (supervisedStop.Decides): a close-out's RefusedRoleAnswer over a
@@ -164,7 +180,8 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 func resumesWithoutAPerson(reason string) bool {
 	switch reason {
 	case RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
-		RefusedBlockedRedispatch, RefusedRejectedRedispatch, RefusedClaimHolderUnknown, RefusedNoCapacity:
+		RefusedBlockedRedispatch, RefusedRejectedRedispatch, RefusedClaimHolderUnknown, RefusedNoCapacity,
+		StoppedRemoteTokenRefused, RefusedFoldReplan:
 		return true
 	}
 	return waitsOnCI(reason)
@@ -301,6 +318,9 @@ func errorStopReason(err error) string {
 	case runstate.RemoteTransient:
 		return StoppedRemoteTransient
 	case runstate.RemoteAuthRefused:
+		if runstate.IsHTTPSTokenRefusal(err) {
+			return StoppedRemoteTokenRefused
+		}
 		return StoppedRemoteAuthRefused
 	}
 	return ""
