@@ -836,7 +836,7 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 		// The frame, redrawn in place: up over the last frame, clear to the
 		// end of the screen, write. A table that scrolls is a log, and a log
 		// is what `events --follow` is for.
-		frame := renderWatchFrame(model, styles, width, height)
+		frame := renderWatchFrame(model, styles, width, height, "")
 		if previous > 0 {
 			fmt.Fprintf(stdout, "\x1b[%dA\r\x1b[J", previous)
 		}

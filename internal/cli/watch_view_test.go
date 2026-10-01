@@ -1,58 +1,109 @@
 package cli
 
-// The renderer half of `ticfac watch` (tick 89m): the live view renders the
-// status model (ticfac.status.v1, tick 6dh) as one frame — attention first,
-// then health, then the whole epic compressed by distance from now — and
-// this file pins the frame's CONTENT. The wiring tests (watch_block_test.go)
-// pin that the frame is redrawn in place; these pin what the frame says,
-// because the frame is what a person actually reads.
+// The dashboard half of `ticfac watch` (epic hn6, wave 3 — tick u5n): the
+// frame this file pins is the spec's dashboard — the headline (identity,
+// progress with the health verdict, phase bar with the needs-you answer),
+// one fixed row per tick in plan order with a per-tick pipeline cell, the
+// live workers with their activity, the CI and cost lines, and the two-line
+// recent tail.
 //
-// The renderer is a pure function of the model: nothing here reads a file,
-// spawns a process or measures a host, so a renderer defect fails here
-// without a live run, and a wiring defect cannot hide behind content.
+// The renderer is a pure function of the model plus the pane's width and
+// height: nothing here reads a run's own records, spawns a process or
+// measures a host — so the frame is pinned BYTE FOR BYTE against the
+// contract bundle's `dashboard` golden (the fixture wave 1 cut, tick r5i) at
+// the widths the tick names, and every rule the tick states has its own
+// test: rows never move, needs-you is quiet when empty, an unmetered cost
+// never wears a number, the verdict has colours, narrow panes drop columns
+// in the fixed order, and a short pane collapses closed rows in place.
+//
+// The wiring (the redraw loop, the keep lines, the exit codes) stays in
+// watch_block_test.go.
 
 import (
+	"encoding/json"
+	"flag"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/pengelbrecht/ticfac/internal/contracts"
+	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 )
+
+// updateGoldens regenerates the dashboard golden files from the current
+// renderer: `go test -run TestDashboardGolden ./internal/cli/ -update`.
+var updateGoldens = flag.Bool("update", false, "rewrite the watch dashboard golden files from the current renderer")
 
 // plainStyles is the identity style set: every line comes back exactly as it
 // was built, so a content assertion reads the words and not the escape
 // codes. The colour tests use ansiWatchStyles() instead.
 func plainStyles() watchStyles {
 	id := func(s string) string { return s }
-	return watchStyles{dim: id, amber: id, red: id, bold: id}
+	return watchStyles{dim: id, amber: id, red: id, green: id, bold: id}
 }
 
 // ptr is the one-line pointer helper the model fixtures lean on.
 func ptr[T any](v T) *T { return &v }
 
-// watchModelFixture is one mid-run epic as the model states it: wave 1 done
-// (t1), wave 2 active with one dispatched tick (t2, try 2 in flight after a
-// gate-failed try, a live worker with a two-minute silence) and one ready
-// tick (t3), wave 3 upcoming (t4, t5). The run is alive, waits on its
-// workers, and nothing needs a person.
-func watchModelFixture() statusmodel.Model {
-	t1a, t2a := 1, 2
-	try := 1
-	elapsed := int64(31 * 60)
-	silence := int64(2 * 60)
-	lastTurn := "assistant: read"
-	tier, workerModel, executor := "strong", "@cf/zai-org/glm-5.3", "local-subprocess"
+// dashboardContractGolden decodes the contract bundle's `dashboard` golden —
+// the rendering fixture wave 1 cut (tick r5i): every dashboard field
+// populated, admitted by the schema and held to its anchors by the
+// statusmodel suite, so the byte-for-byte goldens below render a model that
+// is the shape the whole epic agreed on.
+func dashboardContractGolden(t *testing.T) statusmodel.Model {
+	t.Helper()
+	dir, err := contracts.Dir()
+	if err != nil {
+		t.Fatalf("locate the contract bundle: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "status-model.json"))
+	if err != nil {
+		t.Fatalf("read the status model contract: %v", err)
+	}
+	var fixture struct {
+		Golden map[string]json.RawMessage `json:"golden"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatalf("the status model contract does not parse: %v", err)
+	}
+	golden, ok := fixture.Golden["dashboard"]
+	if !ok {
+		t.Fatal("the status model contract carries no dashboard golden — the wave-3 renderers and the phone page reference it by name")
+	}
+	var m statusmodel.Model
+	if err := json.Unmarshal(golden, &m); err != nil {
+		t.Fatalf("the dashboard golden does not decode into the status model: %v", err)
+	}
+	return m
+}
+
+// dashboardFixture is one mid-run epic as the model states it, with every
+// field the dashboard renders populated: wave 1 done (t1 closed, its
+// absorbed repair child t1c closed under it), wave 2 active (t2 dispatched
+// at its gate with a live worker, t3 ready), wave 3 upcoming (t4, a review
+// tick at its review stage). Healthy with recoveries, both kinds of cost
+// line, a CI with one check running and one green, and a recent tail.
+func dashboardFixture() statusmodel.Model {
+	strong, frontier := "strong", "frontier"
+	attempt := 2
+	duration := int64(2940)
+	childDuration := int64(2070)
+	live := int64(3600)
+	t1, t2 := 1, 2
 	return statusmodel.Model{
 		SchemaVersion: statusmodel.SchemaVersion,
 		RunID:         "epic-rmod",
 		EpicID:        "rmod",
 		Host:          statusmodel.HostLocal,
-		GeneratedAt:   "2026-09-27T05:00:00Z",
+		GeneratedAt:   "2026-09-28T19:20:00Z",
 		Degraded:      []string{},
 		Liveness: statusmodel.Liveness{
-			Alive: true, State: "alive",
-			LastEventAgeSeconds: ptr(int64(120)),
+			Alive: true, State: "alive", Reason: "pid 4242", Source: "run.pid",
+			LastEventAgeSeconds: ptr(int64(300)),
 		},
 		Lifecycle: statusmodel.Lifecycle{
 			Phase: statusmodel.PhaseWaves,
@@ -70,318 +121,535 @@ func watchModelFixture() statusmodel.Model {
 			Ticks: &statusmodel.TickProgress{Total: 5, Closed: 2, Open: 3},
 			Waves: &statusmodel.WaveProgress{Total: 3, Done: 1, Active: 2},
 		},
+		EpicTitle: ptr("a takeover of what ticks drops"),
+		Recent: []runfeed.Event{
+			{SchemaVersion: 1, At: "2026-09-28T18:49:00Z", RunID: "epic-rmod",
+				TickID: ptr("t2"), Attempt: ptr(t2), Stage: "gate_failed",
+				Detail: "the integrated gate refused attempt 2 of t2 (go)"},
+			{SchemaVersion: 1, At: "2026-09-28T18:58:02Z", RunID: "epic-rmod",
+				TickID: ptr("t2"), Attempt: ptr(t2), Stage: "dispatched",
+				Detail: "t2 try 2 dispatched"},
+			{SchemaVersion: 1, At: "2026-09-28T19:04:12Z", RunID: "epic-rmod",
+				Stage: "closeout_held", Detail: "the close-out waits for CI green on the PR"},
+		},
 		Waves: &[]statusmodel.Wave{
-			{Wave: 1, State: statusmodel.WaveDone, Ticks: []statusmodel.Tick{{
-				TickID: "t1", Title: "the first tick", State: "closed",
-				Try: &try, Attempt: &t1a,
-				Tries: []statusmodel.Try{{Try: 1, Attempt: 1, Outcome: statusmodel.TryClosed,
-					DispatchedAt: "2026-09-27T02:00:00Z"}},
-			}}},
-			{Wave: 2, State: statusmodel.WaveActive, Ticks: []statusmodel.Tick{
+			{Wave: 1, State: statusmodel.WaveDone, Ticks: []statusmodel.Tick{
 				{
-					TickID: "t2", Title: "the second tick", State: "dispatched",
-					Try: &t2a, Attempt: &t2a,
+					TickID: "t1", Title: "the first tick", Gloss: "the first tick's gloss",
+					State: "closed",
+					Pipeline: []statusmodel.PipelineStage{
+						{Stage: statusmodel.StageClaim, State: statusmodel.StageStateDone},
+						{Stage: statusmodel.StageWork, State: statusmodel.StageStateDone},
+						{Stage: statusmodel.StageGate, State: statusmodel.StageStateDone},
+						{Stage: statusmodel.StageMerged, State: statusmodel.StageStateDone},
+					},
+					DurationSeconds: &duration,
+					Try:             &t1, Attempt: &t1,
+					Tries: []statusmodel.Try{{Try: 1, Attempt: 1, Outcome: statusmodel.TryClosed,
+						DispatchedAt: "2026-09-28T17:11:00Z", Tier: &strong}},
+					Tier: &strong,
+				},
+				{
+					TickID: "t1c", Title: "the repair the run absorbed", Gloss: "a repair child",
+					State: "closed", ParentTickID: ptr("t1"), Absorbed: true,
+					Pipeline: []statusmodel.PipelineStage{
+						{Stage: statusmodel.StageClaim, State: statusmodel.StageStateDone},
+						{Stage: statusmodel.StageWork, State: statusmodel.StageStateDone},
+						{Stage: statusmodel.StageGate, State: statusmodel.StageStateDone},
+						{Stage: statusmodel.StageMerged, State: statusmodel.StageStateDone},
+					},
+					DurationSeconds: &childDuration,
 					Tries: []statusmodel.Try{
 						{Try: 1, Attempt: 1, Outcome: statusmodel.TryGateFailed,
-							DispatchedAt: "2026-09-27T04:00:00Z"},
-						{Try: 2, Attempt: 2, Outcome: statusmodel.TryInFlight,
-							DispatchedAt: "2026-09-27T04:29:00Z"},
+							DispatchedAt: "2026-09-28T18:00:30Z", Tier: &frontier},
+						{Try: 2, Attempt: 2, Outcome: statusmodel.TryClosed,
+							DispatchedAt: "2026-09-28T18:18:00Z", Tier: &frontier},
 					},
-					Tier: &tier, Model: &workerModel, Executor: &executor,
-					ElapsedSeconds: &elapsed,
+					Tier: &frontier,
 				},
-				{TickID: "t3", Title: "the third tick", State: "ready"},
+			}},
+			{Wave: 2, State: statusmodel.WaveActive, Ticks: []statusmodel.Tick{
+				{
+					TickID: "t2", Title: "the second tick", Gloss: "the second tick's gloss",
+					State: "dispatched", Attempt: &attempt, Try: &attempt,
+					Model: ptr("cloudflare-workers-ai/@cf/zai-org/glm-5.3"), Executor: ptr("herdr"),
+					Pipeline: []statusmodel.PipelineStage{
+						{Stage: statusmodel.StageClaim, State: statusmodel.StageStateDone},
+						{Stage: statusmodel.StageWork, State: statusmodel.StageStateDone},
+						{Stage: statusmodel.StageGate, State: statusmodel.StageStateActive},
+						{Stage: statusmodel.StageMerged, State: statusmodel.StageStatePending},
+					},
+					DurationSeconds: &live,
+					Tries: []statusmodel.Try{
+						{Try: 1, Attempt: 1, Outcome: statusmodel.TryRejected,
+							DispatchedAt: "2026-09-28T18:20:00Z", Tier: &strong,
+							Reason: ptr("gofmt drifted in two files")},
+						{Try: 2, Attempt: 2, Outcome: statusmodel.TryInFlight,
+							DispatchedAt: "2026-09-28T18:58:02Z", Tier: &frontier},
+					},
+					Tier: &frontier,
+				},
+				{
+					TickID: "t3", Title: "the third tick", Gloss: "the third tick's gloss", State: "ready",
+				},
 			}},
 			{Wave: 3, State: statusmodel.WaveUpcoming, Ticks: []statusmodel.Tick{
-				{TickID: "t4", Title: "the fourth tick", State: "ready"},
-				{TickID: "t5", Title: "the fifth tick", State: "ready"},
+				{
+					TickID: "t4", Title: "the review tick", Gloss: "the review tick's gloss",
+					Role: "review", State: "dispatched",
+					Pipeline: []statusmodel.PipelineStage{
+						{Stage: statusmodel.StageClaim, State: statusmodel.StageStateDone},
+						{Stage: statusmodel.StageReview, State: statusmodel.StageStateActive},
+						{Stage: statusmodel.StageClosed, State: statusmodel.StageStatePending},
+					},
+					Tries: []statusmodel.Try{{Try: 1, Attempt: 3, Outcome: statusmodel.TryInFlight,
+						DispatchedAt: "2026-09-28T19:00:00Z", Tier: &frontier}},
+					Tier: &frontier,
+				},
 			}},
 		},
 		Workers: &[]statusmodel.Worker{{
-			TickID: "t2", Attempt: 2,
-			SilenceSeconds: &silence, LastTurn: &lastTurn,
+			TickID: "t2", Attempt: 2, Branch: "refs/heads/ticfac/run-epic-rmod/tick-t2/attempt-2",
+			Handle: ptr("herdr pane tick-t2-a2"),
+			Activity: &statusmodel.WorkerActivity{
+				WindowSeconds: 600,
+				Buckets:       []int{1, 3, 5, 8, 7, 5, 3, 1, 2, 5},
+				LastAction:    ptr("ran go test ./internal/reconcile"),
+				LastActionAt:  ptr("2026-09-28T19:18:31Z"),
+				Nudges:        1,
+			},
+			ElapsedSeconds: ptr(int64(1318)),
 		}},
 		WaitsOn: &statusmodel.Wait{
 			Kind: statusmodel.WaitWorkers, What: "1 in-flight attempt(s)",
 		},
 		Attention: []statusmodel.Attention{},
-		Cost:      statusmodel.Cost{RecordedUSD: 0.02, Attempts: 2, Basis: "usage recorded on decision records"},
+		Health: statusmodel.Health{
+			Verdict: statusmodel.HealthVerdict{
+				State: statusmodel.VerdictHealthy,
+				Recovered: []statusmodel.Recovery{
+					{What: "net", Count: 14},
+					{What: "sleep", Count: 2, Seconds: ptr(int64(2460))},
+				},
+			},
+		},
+		CI: &statusmodel.CI{
+			State: "red",
+			PR: &statusmodel.PR{Number: 98, URL: "https://github.com/example/ticfac/pull/98",
+				HeadRef: "epic/rmod", HeadSHA: "9f2ab6e0e8f96fc3fdc87c2f681519bb0d191a7", BaseRef: "main"},
+			Checks: []statusmodel.CheckState{
+				{Name: "go", Status: "in_progress", Conclusion: "", StartedAt: "2026-09-28T19:14:00Z"},
+				{Name: "ts", Status: "completed", Conclusion: "success", StartedAt: "2026-09-28T18:44:00Z"},
+			},
+		},
+		Cost: statusmodel.Cost{
+			RecordedUSD: 0.41, Attempts: 6,
+			Basis: "usage recorded on decision records",
+			Lines: []statusmodel.CostLine{
+				{Source: statusmodel.CostSourceWorkersAI, Metered: true, USD: ptr(0.41), Attempts: 4,
+					Basis: "gateway usage for 4 dispatches"},
+				{Source: statusmodel.CostSourceClaude, Metered: false, USD: nil, Attempts: 2,
+					Basis: "local claude on a Max subscription — not metered"},
+			},
+		},
 	}
 }
 
-// TestTheFrameAnswersAttentionFirst: the first question — does anything need
-// me — is the first line, only when the answer is yes, and it names the one
-// command that moves the hold on. A frame with nothing to need a person
-// starts with the run's identity instead.
-func TestTheFrameAnswersAttentionFirst(t *testing.T) {
+// dashboardSuccessor is the fixture one wave later: t2 closed behind its
+// gate, t3 dispatched, t4's review still going. Same ticks, advanced states.
+func dashboardSuccessor() statusmodel.Model {
+	raw, err := json.Marshal(dashboardFixture())
+	if err != nil {
+		panic(err)
+	}
+	var m statusmodel.Model
+	if err := json.Unmarshal(raw, &m); err != nil {
+		panic(err)
+	}
+	frontier := "frontier"
+	for wi := range *m.Waves {
+		for ti := range (*m.Waves)[wi].Ticks {
+			tick := &(*m.Waves)[wi].Ticks[ti]
+			switch tick.TickID {
+			case "t2":
+				tick.State = "closed"
+				for si := range tick.Pipeline {
+					tick.Pipeline[si].State = statusmodel.StageStateDone
+				}
+				tick.Tries = append(tick.Tries, statusmodel.Try{Try: 3, Attempt: 3,
+					Outcome: statusmodel.TryClosed, DispatchedAt: "2026-09-28T19:40:00Z", Tier: &frontier})
+			case "t3":
+				tick.State = "dispatched"
+				tick.Pipeline = []statusmodel.PipelineStage{
+					{Stage: statusmodel.StageClaim, State: statusmodel.StageStateDone},
+					{Stage: statusmodel.StageWork, State: statusmodel.StageStateActive},
+					{Stage: statusmodel.StageGate, State: statusmodel.StageStatePending},
+					{Stage: statusmodel.StageMerged, State: statusmodel.StageStatePending},
+				}
+				tick.Tries = []statusmodel.Try{{Try: 1, Attempt: 4, Outcome: statusmodel.TryInFlight,
+					DispatchedAt: "2026-09-28T19:30:00Z", Tier: &frontier}}
+				tick.Tier = &frontier
+				tick.DurationSeconds = ptr(int64(1800))
+			}
+		}
+	}
+	m.Progress.Ticks.Closed = 3
+	m.Progress.Ticks.Open = 2
+	m.Workers = &[]statusmodel.Worker{{
+		TickID: "t3", Attempt: 4, Handle: ptr("herdr pane tick-t3-a4"),
+	}}
+	return m
+}
+
+// dashRowNames says whether one rendered frame line is the row of one named
+// tick — the mark cursor, then the id (with the absorbed "+" when the run
+// absorbed it), in the format dashTickRow writes. Matching is by the row's
+// own head, never by content the row could share with another line.
+func dashRowNames(line, id string) bool {
+	rest, ok := strings.CutPrefix(line, "  └")
+	if !ok {
+		rest = line
+	}
+	for _, mark := range []string{" ", "▸"} {
+		for _, prefix := range []string{mark + id + " ", mark + "+" + id + " "} {
+			if strings.HasPrefix(rest, prefix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// dashRowIDs is the sequence in which the named ticks' rows appear in the
+// frame — the tick-id column the order test reads.
+func dashRowIDs(frame []string, ids []string) []string {
+	order := []string{}
+	for _, line := range frame {
+		for _, id := range ids {
+			if dashRowNames(line, id) {
+				order = append(order, id)
+				break
+			}
+		}
+	}
+	return order
+}
+
+// dashRowLine is the frame line one named tick's row rendered on, or -1.
+func dashRowLine(frame []string, id string) int {
+	for i, line := range frame {
+		if dashRowNames(line, id) {
+			return i
+		}
+	}
+	return -1
+}
+
+// TestDashboardGolden: the contract's `dashboard` golden renders at width
+// 120 and at width 60, and both frames match the pinned testdata files byte
+// for byte — the whole layout, glyphs, spacing and truncation included,
+// because a dashboard a person reads is a layout, and a layout that drifts
+// silently is a layout nobody agreed on. `-update` regenerates the files.
+func TestDashboardGolden(t *testing.T) {
 	t.Parallel()
-	m := watchModelFixture()
+	m := dashboardContractGolden(t)
+	for _, tc := range []struct {
+		width int
+		file  string
+	}{
+		{120, "watch_dashboard_120.txt"},
+		{60, "watch_dashboard_60.txt"},
+	} {
+		frame := renderWatchFrame(m, plainStyles(), tc.width, 0, "")
+		got := strings.Join(frame, "\n") + "\n"
+		path := filepath.Join("testdata", tc.file)
+		if *updateGoldens {
+			if err := os.WriteFile(path, []byte(got), 0o644); err != nil {
+				t.Fatalf("write %s: %v", path, err)
+			}
+			continue
+		}
+		want, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s (regenerate with -update): %v", path, err)
+		}
+		if got != string(want) {
+			t.Errorf("the dashboard at width %d does not match %s byte for byte:\n--- got ---\n%s\n--- want ---\n%s",
+				tc.width, path, got, want)
+		}
+	}
+}
 
-	// Nothing needs a person: no attention line at all, and the frame leads
-	// with the run's identity.
-	plain := renderWatchFrame(m, plainStyles(), 0, 0)
-	if len(plain) == 0 {
-		t.Fatal("the frame is empty")
+// TestDashboardRowsKeepTheirOrder: one row per tick, in plan order — and the
+// order is a property of the PLAN, not of the states. A successor with every
+// state advanced renders the tick ids in the same sequence, on the same
+// lines: a tick moves forward by its cells changing, never by its row
+// moving, because a table that jumps around cannot be read at a glance.
+func TestDashboardRowsKeepTheirOrder(t *testing.T) {
+	t.Parallel()
+	ids := []string{"t1", "t1c", "t2", "t3", "t4"}
+	now := renderWatchFrame(dashboardFixture(), plainStyles(), 0, 0, "")
+	later := renderWatchFrame(dashboardSuccessor(), plainStyles(), 0, 0, "")
+
+	if got := dashRowIDs(now, ids); strings.Join(got, " ") != strings.Join(ids, " ") {
+		t.Errorf("the rows are not in plan order: %v\n%s", got, strings.Join(now, "\n"))
 	}
-	if strings.Contains(plain[0], "needs you") {
-		t.Errorf("a run that needs nobody raised the attention line: %q", plain[0])
+	if got := dashRowIDs(later, ids); strings.Join(got, " ") != strings.Join(ids, " ") {
+		t.Errorf("a successor frame reordered the rows: %v\n%s", got, strings.Join(later, "\n"))
 	}
-	if !strings.Contains(plain[0], "epic rmod") || !strings.Contains(plain[0], "run epic-rmod") {
-		t.Errorf("the frame's first line does not name the run: %q", plain[0])
+	for _, id := range ids {
+		a, b := dashRowLine(now, id), dashRowLine(later, id)
+		if a < 0 || b < 0 {
+			t.Fatalf("tick %s lost its row (now %d, later %d):\n%s\n%s", id, a, b,
+				strings.Join(now, "\n"), strings.Join(later, "\n"))
+		}
+		if a != b {
+			t.Errorf("tick %s moved from line %d to %d between frames:\n%s\n%s", id, a, b,
+				strings.Join(now, "\n"), strings.Join(later, "\n"))
+		}
+	}
+	// The states did advance between the two frames — the order is pinned
+	// with real change, not with two renders of one model.
+	if strings.Join(now, "\n") == strings.Join(later, "\n") {
+		t.Error("the successor frame is identical to its predecessor: the pin tested nothing")
+	}
+}
+
+// TestDashboardNeedsYou: the first question. Nothing needs a person and the
+// header says so, dim and quiet, at the phase bar's right. A hold shows in
+// the header, amber, on its own line, with the one command that clears it.
+func TestDashboardNeedsYou(t *testing.T) {
+	t.Parallel()
+	m := dashboardFixture()
+	frame := renderWatchFrame(m, plainStyles(), 0, 0, "")
+	joined := strings.Join(frame, "\n")
+	if !strings.Contains(joined, "needs you: nothing") {
+		t.Errorf("nothing-needs-you is not shown when true:\n%s", joined)
+	}
+	coloured := strings.Join(renderWatchFrame(m, ansiWatchStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(coloured, "\x1b[2mneeds you: nothing\x1b[0m") {
+		t.Errorf("nothing-needs-you is not quiet (dim):\n%s", coloured)
 	}
 
-	// A hold only a person releases: first line, the what and the command.
 	m.Attention = []statusmodel.Attention{{
 		Kind:           statusmodel.WaitHeldForPerson,
-		What:           "attempt_unaddressed: nobody can say whether the attempt is running",
+		What:           "attempt 2 of t2 struck out: the refusal the run recorded",
 		NeedsPerson:    true,
 		UnblockCommand: ptr(`ticfac settle rmod t2 2 --release "<who>"`),
 	}}
-	frame := renderWatchFrame(m, plainStyles(), 0, 0)
-	if !strings.Contains(frame[0], "needs you") ||
-		!strings.Contains(frame[0], "attempt_unaddressed: nobody can say whether the attempt is running") ||
-		!strings.Contains(frame[0], `ticfac settle rmod t2 2 --release "<who>"`) {
-		t.Errorf("the attention line does not name what and the command:\n%s", strings.Join(frame, "\n"))
-	}
-	// Attention is amber, so a person glancing at a busy terminal sees it.
-	coloured := renderWatchFrame(m, ansiWatchStyles(), 0, 0)
-	if !strings.Contains(coloured[0], "\x1b[33m") {
-		t.Errorf("the attention line is not amber:\n%q", coloured[0])
-	}
-}
-
-// TestTheFrameRendersTheLifecycleAsAProgressBar: per epic, the lifecycle —
-// plan, the waves with their k/n, review, close-out, ci, merge — as one
-// progress bar, with the run's elapsed and its cost beside it.
-func TestTheFrameRendersTheLifecycleAsAProgressBar(t *testing.T) {
-	t.Parallel()
-	frame := renderWatchFrame(watchModelFixture(), plainStyles(), 0, 0)
-	joined := strings.Join(frame, "\n")
-	for _, want := range []string{
-		"✓ plan", "● waves 2/3", "○ review", "○ close-out", "○ ci", "○ merge",
-		"2/5 ticks", "elapsed 3h", "cost $0.02 recorded (2 attempts)",
-	} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("the progress bar does not carry %q:\n%s", want, joined)
-		}
-	}
-}
-
-// TestTheFrameCompressesTheEpicByDistance: the whole epic is always visible —
-// done waves one line each, the active wave expanded to one fixed row per
-// tick, upcoming waves one line each — and the order never changes: a tick
-// that moves forward does so by its mark changing, not by its row moving.
-func TestTheFrameCompressesTheEpicByDistance(t *testing.T) {
-	t.Parallel()
-	frame := renderWatchFrame(watchModelFixture(), plainStyles(), 0, 0)
-	var wave1, active, wave3 int
-	var t2row, t3row, w1, w3 int
-	for _, line := range frame {
-		switch {
-		case strings.Contains(line, "wave 1") && strings.Contains(line, "done"):
-			wave1++
-			w1 = len(line)
-		case strings.Contains(line, "wave 2") && strings.Contains(line, "active"):
-			active++
-		case strings.Contains(line, "wave 3"):
-			wave3++
-			w3 = len(line)
-		case strings.HasPrefix(line, "  t2"):
-			t2row++
-		case strings.HasPrefix(line, "  t3"):
-			t3row++
-		}
-	}
-	if wave1 != 1 || w1 == 0 {
-		t.Errorf("a done wave is not one line each (saw %d): %v", wave1, frame)
-	}
-	if wave3 != 1 || w3 == 0 {
-		t.Errorf("an upcoming wave is not one line each (saw %d): %v", wave3, frame)
-	}
-	if active != 1 || t2row != 1 || t3row != 1 {
-		t.Errorf("the active wave is not one fixed row per tick (header %d, t2 %d, t3 %d):\n%s",
-			active, t2row, t3row, strings.Join(frame, "\n"))
-	}
-	// Rows never reorder: wave 1's line stands before the active wave's
-	// header, which stands before its rows, which stand before wave 3.
-	orders := map[string]int{}
-	for i, line := range frame {
-		switch {
-		case strings.Contains(line, "wave 1"):
-			orders["wave1"] = i
-		case strings.Contains(line, "wave 2"):
-			orders["wave2"] = i
-		case strings.HasPrefix(line, "  t2"):
-			orders["t2"] = i
-		case strings.Contains(line, "wave 3"):
-			orders["wave3"] = i
-		}
-	}
-	if !(orders["wave1"] < orders["wave2"] && orders["wave2"] < orders["t2"] && orders["t2"] < orders["wave3"]) {
-		t.Errorf("the waves are not in the tracker's own order: %v\n%s", orders, strings.Join(frame, "\n"))
-	}
-	// A re-render of the same model puts every id on the same line index:
-	// positions are stable, because a frame that jumps around cannot be
-	// read at a glance.
-	again := renderWatchFrame(watchModelFixture(), plainStyles(), 0, 0)
-	if len(again) != len(frame) {
-		t.Fatalf("two renders of one model differ in height: %d then %d", len(frame), len(again))
-	}
-	for i := range frame {
-		if frame[i] != again[i] {
-			t.Errorf("line %d moved between renders: %q then %q", i, frame[i], again[i])
-		}
-	}
-}
-
-// TestTheFrameShowsTryHistoryAsMarks: a tick's row carries its whole try
-// history as marks — a failed try then a running one — and an absorbed tick
-// appears as a marked new row, not a surprise.
-func TestTheFrameShowsTryHistoryAsMarks(t *testing.T) {
-	t.Parallel()
-	m := watchModelFixture()
-	frame := renderWatchFrame(m, plainStyles(), 0, 0)
-	joined := strings.Join(frame, "\n")
-	if !strings.Contains(joined, "dispatched x*") {
-		t.Errorf("t2's row does not show a failed try then a running one:\n%s", joined)
-	}
-	// The failed mark is red and the running one amber: the history a
-	// person glances at is colour-graded too.
-	coloured := renderWatchFrame(m, ansiWatchStyles(), 0, 0)
-	cJoined := strings.Join(coloured, "\n")
-	if !strings.Contains(cJoined, "\x1b[31mx\x1b[0m") {
-		t.Errorf("the failed try's mark is not red:\n%s", cJoined)
-	}
-	if !strings.Contains(cJoined, "\x1b[33m*\x1b[0m") {
-		t.Errorf("the running try's mark is not amber:\n%s", cJoined)
-	}
-
-	// An absorbed tick: a marked new row.
-	m = watchModelFixture()
-	(*m.Waves)[1].Ticks[1].Absorbed = true
-	(*m.Waves)[1].Ticks[1].State = "dispatched"
-	frame = renderWatchFrame(m, plainStyles(), 0, 0)
+	frame = renderWatchFrame(m, plainStyles(), 0, 0, "")
 	joined = strings.Join(frame, "\n")
-	if !strings.Contains(joined, "+t3 ") {
-		t.Errorf("an absorbed tick is not a marked new row:\n%s", joined)
+	if strings.Contains(joined, "needs you: nothing") {
+		t.Errorf("a held run still says nothing needs a person:\n%s", joined)
+	}
+	want := "needs you: attempt 2 of t2 struck out: the refusal the run recorded — ticfac settle rmod t2 2 --release \"<who>\""
+	if !strings.Contains(joined, want) {
+		t.Errorf("the hold does not show what and the clearing command:\n%s", joined)
+	}
+	coloured = strings.Join(renderWatchFrame(m, ansiWatchStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(coloured, "\x1b[33m"+want+"\x1b[0m") {
+		t.Errorf("the hold line is not amber:\n%s", coloured)
 	}
 }
 
-// TestTheFrameCarriesTheWorkerColumns: the active wave's row carries the
-// state, the elapsed, the tier and model, and the worker's silence and last
-// turn — the facts a person reads to answer "what is happening now".
-func TestTheFrameCarriesTheWorkerColumns(t *testing.T) {
+// TestDashboardNeverPrintsZeroForUnmetered: honest cost (hn6 rule 7). A
+// metered line prints its measured number; an unmetered line says "not
+// metered" — an unmetered line wearing a $0.00 is a fabricated spend. A
+// metered zero is a measured zero and prints as one. No lines at all and
+// the whole cost says so.
+func TestDashboardNeverPrintsZeroForUnmetered(t *testing.T) {
 	t.Parallel()
-	frame := renderWatchFrame(watchModelFixture(), plainStyles(), 0, 0)
-	joined := strings.Join(frame, "\n")
-	for _, want := range []string{
-		"elapsed 31m", "quiet 2m", "strong/@cf/zai-org/glm-5.3", "last: assistant: read",
-	} {
+	m := dashboardFixture()
+	joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	for _, want := range []string{"Workers AI $0.41", "claude not metered"} {
 		if !strings.Contains(joined, want) {
-			t.Errorf("the active row does not carry %q:\n%s", want, joined)
+			t.Errorf("the cost line does not carry %q:\n%s", want, joined)
 		}
 	}
+	if strings.Contains(joined, "$0.00") {
+		t.Errorf("an unmetered cost wears a fabricated $0.00:\n%s", joined)
+	}
+
+	// No lines at all: the cost is honestly unmetered, not silently zero.
+	m.Cost.Lines = nil
+	joined = strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(joined, "cost not metered") {
+		t.Errorf("a run with no cost lines does not say the cost is not metered:\n%s", joined)
+	}
+
+	// A metered zero is a measured zero: it keeps its number.
+	m.Cost.Lines = []statusmodel.CostLine{{
+		Source: statusmodel.CostSourceWorkersAI, Metered: true, USD: ptr(0.0), Attempts: 4,
+		Basis: "gateway usage for 4 dispatches",
+	}}
+	joined = strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(joined, "Workers AI $0.00") {
+		t.Errorf("a metered zero does not print its measured number:\n%s", joined)
+	}
 }
 
-// TestTheFrameGradesSilenceAmberThenRed: a worker's silence is a signal —
-// plain while the runner is taking turns, amber when it has been quiet a
-// while, red when it has been quiet too long. A number a person must
-// interpret is a number the frame already interpreted.
-func TestTheFrameGradesSilenceAmberThenRed(t *testing.T) {
+// TestDashboardVerdictColours: health as a verdict, coloured as the verdict
+// it is (hn6 rule 3) — green healthy, amber degraded with its why, red
+// stopped with its why — and what the run recovered from by itself riding in
+// brackets as calm, with a measured span through the frame's own clock and a
+// count as "×n" where no span was stated.
+func TestDashboardVerdictColours(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		silence int64
-		grade   int
+		verdict statusmodel.HealthVerdict
+		word    string
+		code    string
 	}{
-		{silence: 5 * 60, grade: 0},
-		{silence: 10 * 60, grade: 1},
-		{silence: 29 * 60, grade: 1},
-		{silence: 30 * 60, grade: 2},
-		{silence: 45 * 60, grade: 2},
+		{statusmodel.HealthVerdict{State: statusmodel.VerdictHealthy}, "● healthy", "32"},
+		{statusmodel.HealthVerdict{State: statusmodel.VerdictDegraded,
+			Summary: "degraded: t2 nudged as stuck (5m ago)"}, "● degraded: t2 nudged as stuck (5m ago)", "33"},
+		{statusmodel.HealthVerdict{State: statusmodel.VerdictStopped,
+			Summary: "pid 4242 is gone without its own terminal line"}, "● stopped: pid 4242 is gone without its own terminal line", "31"},
 	} {
-		if got := silenceGrade(tc.silence); got != tc.grade {
-			t.Errorf("silenceGrade(%ds) = %d, want %d", tc.silence, got, tc.grade)
+		m := dashboardFixture()
+		m.Health.Verdict = tc.verdict
+		m.Health.Verdict.Recovered = nil
+		coloured := strings.Join(renderWatchFrame(m, ansiWatchStyles(), 0, 0, ""), "\n")
+		if !strings.Contains(coloured, "\x1b["+tc.code+"m"+tc.word+"\x1b[0m") {
+			t.Errorf("the %s verdict is not in its colour:\n%s", tc.word, coloured)
+		}
+		plain := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+		if !strings.Contains(plain, tc.word) {
+			t.Errorf("the verdict word %q does not render with identity styles:\n%s", tc.word, plain)
 		}
 	}
 
-	render := func(silence int64, st watchStyles) string {
-		m := watchModelFixture()
-		(*m.Workers)[0].SilenceSeconds = &silence
-		return strings.Join(renderWatchFrame(m, st, 0, 0), "\n")
-	}
-	if got := render(5*60, ansiWatchStyles()); strings.Contains(got, "quiet 5m\x1b[0m") {
-		t.Errorf("a five-minute silence is graded, want plain:\n%s", got)
-	}
-	if got := render(5*60, plainStyles()); !strings.Contains(got, "quiet 5m") {
-		t.Errorf("the silence is not shown at all:\n%s", got)
-	}
-	if got := render(15*60, ansiWatchStyles()); !strings.Contains(got, "\x1b[33mquiet 15m\x1b[0m") {
-		t.Errorf("a fifteen-minute silence is not amber:\n%s", got)
-	}
-	if got := render(45*60, ansiWatchStyles()); !strings.Contains(got, "\x1b[31mquiet 45m\x1b[0m") {
-		t.Errorf("a forty-five-minute silence is not red:\n%s", got)
+	// The recovered list, both shapes: a count where no span was stated,
+	// a span through humanDuration where one was.
+	m := dashboardFixture()
+	plain := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(plain, "(recovered: net ×14, sleep 41m)") {
+		t.Errorf("the recoveries do not render as counts and spans:\n%s", plain)
 	}
 }
 
-// TestTheFrameDropsColumnsWhenNarrow: the pane's width decides the columns —
-// the last turn goes first, the model next — so a narrow pane drops detail
-// rather than wrapping into an unreadable tangle.
-func TestTheFrameDropsColumnsWhenNarrow(t *testing.T) {
+// TestDashboardNarrowWidths: the pane's width drops columns in the tick's
+// fixed order, and no line is ever wider than the pane. At 99 the pipeline
+// cell is one glyph per stage and the worker's LAST action moves under its
+// row; at 63 the TIER and ATTEMPTS columns are gone; at 47 the work's own
+// name is gone too — and the tick's identity never goes at any width.
+func TestDashboardNarrowWidths(t *testing.T) {
 	t.Parallel()
-	wide := strings.Join(renderWatchFrame(watchModelFixture(), plainStyles(), 120, 0), "\n")
-	mid := strings.Join(renderWatchFrame(watchModelFixture(), plainStyles(), 90, 0), "\n")
-	narrow := strings.Join(renderWatchFrame(watchModelFixture(), plainStyles(), 60, 0), "\n")
+	m := dashboardContractGolden(t)
+	ids := []string{"060", "823", "46x", "v7z"}
 
-	if !strings.Contains(wide, "last: assistant: read") || !strings.Contains(wide, "@cf/zai-org/glm-5.3") {
-		t.Errorf("a wide pane does not show every column:\n%s", wide)
+	w99 := renderWatchFrame(m, plainStyles(), 99, 0, "")
+	joined99 := strings.Join(w99, "\n")
+	if strings.Contains(joined99, "claim ▸") {
+		t.Errorf("a 99-column pane still spells the pipeline out in words:\n%s", joined99)
 	}
-	if strings.Contains(mid, "last: assistant: read") {
-		t.Errorf("a 90-column pane still shows the last turn:\n%s", mid)
+	if !strings.Contains(joined99, "✓ ✓ ✓ ✓") {
+		t.Errorf("a 99-column pane does not render one glyph per stage:\n%s", joined99)
 	}
-	if !strings.Contains(mid, "@cf/zai-org/glm-5.3") {
-		t.Errorf("a 90-column pane dropped the model too early:\n%s", mid)
+	if worker := dashWorkerPanelLine(w99, "herdr pane tick-46x-a6"); worker < 0 ||
+		strings.Contains(w99[worker], "ran go test ./internal/reconcile") {
+		t.Errorf("a 99-column pane still seats the worker's LAST action on its row:\n%s", joined99)
+	} else if !strings.Contains(w99[worker+1], "ran go test ./internal/reconcile") {
+		t.Errorf("a 99-column pane did not move the worker's LAST action under its row:\n%s", joined99)
 	}
-	if strings.Contains(narrow, "@cf/zai-org/glm-5.3") {
-		t.Errorf("a 60-column pane still shows the model:\n%s", narrow)
+
+	w63 := renderWatchFrame(m, plainStyles(), 63, 0, "")
+	joined63 := strings.Join(w63, "\n")
+	if strings.Contains(joined63, "ATTEMPTS") || strings.Contains(joined63, "frontier") {
+		t.Errorf("a 63-column pane still shows the TIER and ATTEMPTS columns:\n%s", joined63)
 	}
-	if !strings.Contains(narrow, "strong") {
-		t.Errorf("a 60-column pane dropped the tier as well as the model:\n%s", narrow)
+	if !strings.Contains(joined63, "port sandbox verbs to ticfac") {
+		t.Errorf("a 63-column pane dropped the WHAT column too early:\n%s", joined63)
 	}
-	// Whatever the width, the identity of a row never goes: a pane that
-	// cannot say WHICH tick is running says nothing.
-	for _, width := range []int{90, 60, 40} {
-		joined := strings.Join(renderWatchFrame(watchModelFixture(), plainStyles(), width, 0), "\n")
-		if !strings.Contains(joined, "t2") {
-			t.Errorf("a %d-column frame does not name the running tick:\n%s", width, joined)
+
+	w47 := renderWatchFrame(m, plainStyles(), 47, 0, "")
+	joined47 := strings.Join(w47, "\n")
+	if strings.Contains(joined47, "port sandbox verbs to ticfac") || strings.Contains(joined47, "WHAT") {
+		t.Errorf("a 47-column pane still shows the WHAT column:\n%s", joined47)
+	}
+	if !strings.Contains(joined47, "TICK") {
+		t.Errorf("a 47-column pane dropped the table's identity column:\n%s", joined47)
+	}
+
+	for _, tc := range []struct {
+		width int
+		frame []string
+	}{
+		{99, w99}, {63, w63}, {47, w47},
+	} {
+		for i, line := range tc.frame {
+			if got := ansi.StringWidth(line); got > tc.width {
+				t.Errorf("line %d is %d cells wide in a %d-column pane: %q", i, got, tc.width, line)
+			}
+		}
+		if got := dashRowIDs(tc.frame, ids); len(got) != len(ids) {
+			t.Errorf("a %d-column pane lost tick rows: %v\n%s", tc.width, got, strings.Join(tc.frame, "\n"))
 		}
 	}
 }
 
-// TestTheFrameReflowsTheBarWhenNarrow: a pane the one progress line does
-// not fit gets the bar alone with the detail under it, rather than a bar
-// whose cost was truncated away — elapsed and cost are answers, not
-// columns, and a narrow pane drops detail it can reflow, never answers it
-// was asked for.
-func TestTheFrameReflowsTheBarWhenNarrow(t *testing.T) {
-	t.Parallel()
-	frame := renderWatchFrame(watchModelFixture(), plainStyles(), 100, 0)
-	var bar, detail string
-	for _, line := range frame {
-		switch {
-		case strings.Contains(line, "✓ plan"):
-			bar = line
-		case strings.Contains(line, "cost $0.02"):
-			detail = line
+// dashWorkerPanelLine is the frame line one worker's row rendered on, or -1.
+func dashWorkerPanelLine(frame []string, handle string) int {
+	for i, line := range frame {
+		if strings.Contains(line, handle) {
+			return i
 		}
 	}
-	if bar == "" {
-		t.Fatalf("the bar is missing from the frame:\n%s", strings.Join(frame, "\n"))
+	return -1
+}
+
+// TestDashboardFitsHeight: a pane shorter than the frame keeps the headline
+// and the tail, and compresses the middle in place — contiguous runs of
+// closed rows collapse into one dim "✓ N closed" line standing where the
+// run's first row stood, so no row moves relative to another — and whatever
+// still does not fit is counted by one "+N more" at the fold, the whole
+// frame never taller than the pane.
+func TestDashboardFitsHeight(t *testing.T) {
+	t.Parallel()
+	m := dashboardContractGolden(t)
+	full := renderWatchFrame(m, plainStyles(), 120, 0, "")
+	frame := renderWatchFrame(m, plainStyles(), 120, 12, "")
+	joined := strings.Join(frame, "\n")
+
+	if len(frame) > 12 {
+		t.Errorf("a 12-line pane rendered %d lines:\n%s", len(frame), joined)
 	}
-	if strings.Contains(bar, "cost") {
-		t.Errorf("the bar line still carries the cost at a width it does not fit:\n%s", bar)
+	if !strings.Contains(joined, "✓ 2 closed") {
+		t.Errorf("the closed rows did not collapse in place:\n%s", joined)
 	}
-	if detail == "" || !strings.Contains(detail, "elapsed 3h") || !strings.Contains(detail, "cost $0.02 recorded (2 attempts)") {
-		t.Errorf("the detail line does not carry elapsed and cost:\n%s", strings.Join(frame, "\n"))
+	if !strings.Contains(joined, "+5 more") {
+		t.Errorf("the fold does not count what it dropped:\n%s", joined)
+	}
+	// In place: the collapsed line stands where the run's FIRST row stood
+	// (060's), and the rows the collapse left keep their order around it —
+	// 46x after the run, v7z after 46x, exactly as they were.
+	if got := dashRowLine(frame, "46x"); got != dashRowLine(full, "060")+1 {
+		t.Errorf("the collapsed run did not stand in 060's place: the 46x row sits at %d, want %d:\n%s",
+			got, dashRowLine(full, "060")+1, joined)
+	}
+	if a, b := dashRowLine(frame, "46x"), dashRowLine(frame, "v7z"); !(0 <= a && a < b) {
+		t.Errorf("the rows the collapse kept reordered:\n%s", joined)
+	}
+	// The headline and the tail always survive the cut.
+	for _, want := range []string{
+		m.EpicID + " " + *m.EpicTitle,
+		"2/4 ticks",
+		"● healthy",
+		"needs you: nothing",
+		"─ recent",
+		"[e] events  [enter] tick",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("a 12-line pane dropped %q:\n%s", want, joined)
+		}
+	}
+	if strings.Contains(joined, "herdr pane tick-46x-a6") {
+		t.Errorf("a 12-line pane kept the workers panel while claiming +5 more:\n%s", joined)
+	}
+
+	// Unknown height (0): everything, nothing collapsed or counted.
+	if len(renderWatchFrame(m, plainStyles(), 120, 0, "")) != len(full) {
+		t.Error("an unknown height changed the frame")
 	}
 }
 
@@ -389,8 +657,8 @@ func TestTheFrameReflowsTheBarWhenNarrow(t *testing.T) {
 // honest even after styling, so a frame never wraps into the rows below it.
 func TestTheFrameTruncatesToThePane(t *testing.T) {
 	t.Parallel()
-	for _, width := range []int{80, 40, 20} {
-		frame := renderWatchFrame(watchModelFixture(), ansiWatchStyles(), width, 0)
+	for _, width := range []int{120, 80, 40, 20} {
+		frame := renderWatchFrame(dashboardFixture(), ansiWatchStyles(), width, 0, "")
 		for i, line := range frame {
 			if got := ansi.StringWidth(line); got > width {
 				t.Errorf("line %d is %d cells wide in a %d-column pane: %q", i, got, width, line)
@@ -399,93 +667,206 @@ func TestTheFrameTruncatesToThePane(t *testing.T) {
 	}
 }
 
-// TestTheFrameFitsThePaneHeight: more rows than the pane is tall keeps the
-// active rows first and says "+N more"; a short pane collapses to "+N
-// running"; attention always survives, because it is the first question.
-func TestTheFrameFitsThePaneHeight(t *testing.T) {
+// TestTheFrameSaysAnUnreadableTracker: a tracker that could not be read is a
+// fact the frame says, never a silence a reader could mistake for an empty
+// epic — and the health verdict carries the degraded source, because a
+// renderer that silently skipped it would be a renderer that looked healthy
+// while guessing.
+func TestTheFrameSaysAnUnreadableTracker(t *testing.T) {
 	t.Parallel()
-	m := watchModelFixture()
-	full := renderWatchFrame(m, plainStyles(), 0, 0)
-
-	// No height known (0): everything, the whole epic.
-	if len(renderWatchFrame(m, plainStyles(), 0, 0)) != len(full) {
-		t.Error("an unknown height changed the frame")
-	}
-	// Tall enough: everything, no more-line.
-	if got := renderWatchFrame(m, plainStyles(), 0, len(full)+3); len(got) != len(full) || strings.Contains(strings.Join(got, "\n"), "+") {
-		t.Errorf("a tall pane did not show the whole epic:\n%s", strings.Join(got, "\n"))
-	}
-
-	// One line short: active rows kept, the dropped waves counted.
-	short := renderWatchFrame(m, plainStyles(), 0, len(full)-1)
-	joined := strings.Join(short, "\n")
-	if !strings.Contains(joined, "  t2") || !strings.Contains(joined, "  t3") {
-		t.Errorf("a short pane dropped an active row:\n%s", joined)
-	}
-	if !strings.Contains(joined, "+2 more (wave 1, wave 3)") {
-		t.Errorf("a short pane does not count what it dropped:\n%s", joined)
-	}
-	if len(short) != len(full)-1 {
-		t.Errorf("a pane %d tall rendered %d lines", len(full)-1, len(short))
-	}
-
-	// Short: collapse to "+N running".
-	collapsed := renderWatchFrame(m, plainStyles(), 0, 5)
-	joined = strings.Join(collapsed, "\n")
-	if !strings.Contains(joined, "+1 running") || !strings.Contains(joined, "t2") {
-		t.Errorf("a short pane did not collapse to +N running:\n%s", joined)
-	}
-
-	// Attention survives every cut.
-	m.Attention = []statusmodel.Attention{{
-		Kind: statusmodel.WaitHeldForPerson, What: "the run holds t2 for a person",
-		NeedsPerson:    true,
-		UnblockCommand: ptr(`ticfac settle rmod t2 2 --release "<who>"`),
-	}}
-	attention := strings.Join(renderWatchFrame(m, plainStyles(), 0, 2), "\n")
-	if !strings.Contains(attention, "needs you") {
-		t.Errorf("a two-line pane dropped the attention line:\n%s", attention)
-	}
-}
-
-// TestTheFrameSaysWhatTheRunWaitsOn: under the header, one line names the
-// run's wait and how long it has waited — the "what the run waits on and
-// since when" a person reads first.
-func TestTheFrameSaysWhatTheRunWaitsOn(t *testing.T) {
-	t.Parallel()
-	m := watchModelFixture()
-	m.WaitsOn = &statusmodel.Wait{
-		Kind:           statusmodel.WaitHeldForPerson,
-		What:           "attempt 2 of t2 struck out: the refusal the run recorded",
-		Since:          ptr("2026-09-27T04:45:00Z"),
-		NeedsPerson:    true,
-		UnblockCommand: ptr(`ticfac settle rmod t2 2 --release "<who>"`),
-	}
-	joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0), "\n")
-	if !strings.Contains(joined, "waiting on held-for-person: attempt 2 of t2 struck out") {
-		t.Errorf("the wait line does not name the wait:\n%s", joined)
-	}
-	if !strings.Contains(joined, "since 15m") {
-		t.Errorf("the wait line does not say for how long:\n%s", joined)
-	}
-}
-
-// TestTheFrameNamesDegradedSources: a source that could not be read is said,
-// on the frame, in red — a renderer that silently skipped it would be a
-// renderer that looked healthy while guessing.
-func TestTheFrameNamesDegradedSources(t *testing.T) {
-	t.Parallel()
-	m := watchModelFixture()
+	m := dashboardFixture()
 	m.Degraded = []string{"tracker"}
 	m.Waves = nil
 	m.Progress = statusmodel.Progress{}
-	m.Lifecycle = statusmodel.Lifecycle{Phase: statusmodel.PhaseWaves}
-	joined := strings.Join(renderWatchFrame(m, ansiWatchStyles(), 0, 0), "\n")
-	if !strings.Contains(joined, "\x1b[31mdegraded: tracker\x1b[0m") {
-		t.Errorf("a degraded tracker is not said in red:\n%s", joined)
+	m.Health.Verdict = statusmodel.HealthVerdict{
+		State:   statusmodel.VerdictDegraded,
+		Summary: "degraded: tracker unreadable",
 	}
-	if !strings.Contains(joined, "could not be read") {
-		t.Errorf("an unreadable epic shape shows nothing at all:\n%s", joined)
+	coloured := strings.Join(renderWatchFrame(m, ansiWatchStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(coloured, "● degraded: tracker unreadable") {
+		t.Errorf("a degraded source is not carried by the health verdict:\n%s", coloured)
+	}
+	plain := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(plain, "the epic's shape could not be read (the tracker did not answer)") {
+		t.Errorf("an unreadable epic shape shows nothing at all:\n%s", plain)
+	}
+}
+
+// TestTheFrameSeatsTheDrillInMarker: the selected tick's row renders with
+// the "▸" marker — the cursor the drill-in keys move — and no other row
+// does, so a row's id never shifts when the cursor moves onto or off it.
+func TestTheFrameSeatsTheDrillInMarker(t *testing.T) {
+	t.Parallel()
+	noMarker := func(frame []string) bool {
+		for _, line := range frame {
+			rest, _ := strings.CutPrefix(line, "  └")
+			if strings.HasPrefix(rest, "▸") || strings.HasPrefix(line, "▸") {
+				return false
+			}
+		}
+		return true
+	}
+	frame := renderWatchFrame(dashboardFixture(), plainStyles(), 0, 0, "t2")
+	joined := strings.Join(frame, "\n")
+	if !strings.Contains(joined, "▸t2") {
+		t.Errorf("the selected tick does not carry the cursor marker:\n%s", joined)
+	}
+	other := renderWatchFrame(dashboardFixture(), plainStyles(), 0, 0, "")
+	if !noMarker(other) {
+		t.Errorf("a frame with no selection still carries a cursor marker:\n%s", strings.Join(other, "\n"))
+	}
+	if dashRowLine(frame, "t2") != dashRowLine(other, "t2") {
+		t.Errorf("the selected row moved lines:\n%s", joined)
+	}
+}
+
+// TestTheFrameWorkersPanel: one row per live worker with its model,
+// executor and handle, its sparkline scaled to the window's own maximum and
+// a dot per bucket where nothing happened, its last action with its age,
+// and the nudge count in amber when the run nudged it as stuck. A census
+// this machine cannot take is said; a census that read and found nothing
+// shows no panel at all.
+func TestTheFrameWorkersPanel(t *testing.T) {
+	t.Parallel()
+	m := dashboardFixture()
+	joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	for _, want := range []string{
+		"WORKERS",
+		"ACTIVITY (10m)",
+		"LAST",
+		"t2  glm-5.3 · herdr · herdr pane tick-t2-a2",
+		"▁▃▅█▇▅▃▁▂▅",
+		"ran go test ./internal/reconcile (1m ago)",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the workers panel does not carry %q:\n%s", want, joined)
+		}
+	}
+	coloured := strings.Join(renderWatchFrame(m, ansiWatchStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(coloured, "\x1b[33mnudged ×1\x1b[0m") {
+		t.Errorf("the nudge count is not amber:\n%s", coloured)
+	}
+
+	// An empty window reads as dots, one per bucket.
+	m.Workers = &[]statusmodel.Worker{{
+		TickID: "t2", Attempt: 2, Handle: ptr("herdr pane tick-t2-a2"),
+		Activity: &statusmodel.WorkerActivity{WindowSeconds: 600,
+			Buckets: []int{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}},
+	}}
+	joined = strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(joined, "··········") {
+		t.Errorf("an empty activity window does not read as dots:\n%s", joined)
+	}
+
+	// A census this machine cannot take is said, not faked.
+	m.Workers = nil
+	joined = strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(joined, "workers run in the cloud — not visible from here") {
+		t.Errorf("a cloud run's workers are not said to be invisible:\n%s", joined)
+	}
+
+	// A census that read and found nothing stands behind no empty panel.
+	m.Workers = &[]statusmodel.Worker{}
+	joined = strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if strings.Contains(joined, "WORKERS") {
+		t.Errorf("an empty census still renders a workers panel:\n%s", joined)
+	}
+}
+
+// TestTheFrameCILine: the forge's answer on the epic PR's head, per check —
+// a running check with its age, a green one plain, a red one red — and no PR
+// yet said dimly, because a run that has not opened its PR is a fact, not a
+// silence.
+func TestTheFrameCILine(t *testing.T) {
+	t.Parallel()
+	m := dashboardFixture()
+	joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(joined, "CI #98 go ◐ 6m · ts ✓") {
+		t.Errorf("the CI line does not name the PR and its checks:\n%s", joined)
+	}
+	coloured := strings.Join(renderWatchFrame(m, ansiWatchStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(coloured, "\x1b[33m◐ 6m\x1b[0m") {
+		t.Errorf("a running check is not amber:\n%s", coloured)
+	}
+
+	m.CI = nil
+	joined = strings.Join(renderWatchFrame(m, ansiWatchStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(joined, "\x1b[2mCI: no PR yet\x1b[0m") {
+		t.Errorf("a run without a PR does not say so dimly:\n%s", joined)
+	}
+}
+
+// TestTheFrameTailIsTheFeedOwnWords: the tail is the feed's last two lines
+// through the same one-line form the stream path prints — the same words on
+// both paths — under the "─ recent" rule, with the key hint at the right.
+func TestTheFrameTailIsTheFeedOwnWords(t *testing.T) {
+	t.Parallel()
+	m := dashboardFixture()
+	frame := renderWatchFrame(m, plainStyles(), 0, 0, "")
+	joined := strings.Join(frame, "\n")
+
+	var tries runfeed.Tries
+	for _, e := range m.Recent {
+		tries.Observe(e)
+	}
+	seen := 0
+	for _, e := range m.Recent[len(m.Recent)-2:] {
+		if !strings.Contains(joined, watchEventLine(e, &tries)) {
+			t.Errorf("the tail does not carry the feed's own line for %s:\n%s", e.Stage, joined)
+		}
+		seen++
+	}
+	if seen != 2 {
+		t.Errorf("the tail is not two lines: saw %d of the model's recent events\n%s", seen, joined)
+	}
+	if !strings.Contains(joined, "─ recent") {
+		t.Errorf("the tail does not carry its section rule:\n%s", joined)
+	}
+	if !strings.Contains(joined, "[e] events  [enter] tick") {
+		t.Errorf("the tail does not carry the key hint:\n%s", joined)
+	}
+
+	// An empty feed still carries the rule and the hint.
+	m.Recent = nil
+	joined = strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(joined, "─ recent") || !strings.Contains(joined, "[e] events  [enter] tick") {
+		t.Errorf("an empty feed lost the rule or the hint:\n%s", joined)
+	}
+}
+
+// TestTheFrameShowsTheETAOnlyWhenMeasured: the approximate time left shows
+// as "ETA ~…" only where the model measured it — a number nobody measured
+// is a number that lies.
+func TestTheFrameShowsTheETAOnlyWhenMeasured(t *testing.T) {
+	t.Parallel()
+	m := dashboardFixture()
+	m.Remaining = &statusmodel.Remaining{ApproximateSeconds: 2400, Basis: "3 open ticks × the 20m median of closed ones"}
+	joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(joined, "ETA ~40m") {
+		t.Errorf("a measured remaining time does not render as an ETA:\n%s", joined)
+	}
+
+	m.Remaining = nil
+	joined = strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if strings.Contains(joined, "ETA") {
+		t.Errorf("an unmeasured run still claims an ETA:\n%s", joined)
+	}
+}
+
+// TestTheFrameMarksChildrenAndAbsorbedRows: a child renders indented under
+// the row its parent_tick_id names, and a tick the run absorbed by absorbing
+// a finding is a marked new row — the epic's shape changed mid-run, and a
+// renderer hides that from nobody.
+func TestTheFrameMarksChildrenAndAbsorbedRows(t *testing.T) {
+	t.Parallel()
+	frame := renderWatchFrame(dashboardFixture(), plainStyles(), 0, 0, "")
+	line := dashRowLine(frame, "t1c")
+	if line < 0 || !strings.HasPrefix(frame[line], "  └ +t1c") {
+		t.Errorf("an absorbed child does not render as an indented marked row:\n%s", strings.Join(frame, "\n"))
+	}
+	selected := renderWatchFrame(dashboardFixture(), plainStyles(), 0, 0, "t1c")
+	if line := dashRowLine(selected, "t1c"); line < 0 || !strings.HasPrefix(selected[line], "  └▸+t1c") {
+		t.Errorf("a selected child does not render as an indented marked row:\n%s", strings.Join(selected, "\n"))
 	}
 }
 
@@ -508,6 +889,30 @@ func TestHumanDurationRoundsForAPerson(t *testing.T) {
 	} {
 		if got := humanDuration(tc.seconds); got != tc.want {
 			t.Errorf("humanDuration(%d) = %q, want %q", tc.seconds, got, tc.want)
+		}
+	}
+}
+
+// TestWatchPluralRetries: the first-use bug's fix, pinned. A word ending in
+// consonant+y pluralizes as "ies" — "remote retry" reads "remote retries",
+// never "remote retrys" — while a vowel keeps the plain s, and the rest of
+// the frame's counts are untouched by the rule.
+func TestWatchPluralRetries(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		n    int
+		what string
+		want string
+	}{
+		{1, "remote retry", "1 remote retry"},
+		{2, "remote retry", "2 remote retries"},
+		{14, "remote retry", "14 remote retries"},
+		{2, "party", "2 parties"},
+		{3, "day", "3 days"},
+		{2, "attempt", "2 attempts"},
+	} {
+		if got := watchPlural(tc.n, tc.what); got != tc.want {
+			t.Errorf("watchPlural(%d, %q) = %q, want %q", tc.n, tc.what, got, tc.want)
 		}
 	}
 }
