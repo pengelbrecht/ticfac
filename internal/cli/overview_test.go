@@ -16,6 +16,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -503,6 +505,22 @@ func lineOf(out, runID string) string {
 	return ""
 }
 
+// lineAfter returns the line that follows a run's first line, for the tests
+// that pin what a row carries under itself. Empty when the run is not
+// listed or carries nothing under it.
+func lineAfter(out, runID string) string {
+	lines := strings.Split(out, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, runID+":") || strings.HasPrefix(line, runID+" ") {
+			if i+1 < len(lines) {
+				return lines[i+1]
+			}
+			return ""
+		}
+	}
+	return ""
+}
+
 // overviewLiveRunFixture writes the shape the operator's machine actually
 // holds while a run is live (tick 9ss): TWO checkouts of one origin — the
 // one the run works in and the one the operator glances at — where the
@@ -792,5 +810,308 @@ func TestTheBareOverviewDoesNotReadThisRepoRecordsForAnotherProjectsRun(t *testi
 		if a.NeedsPerson {
 			t.Errorf("the foreign run claims a person's attention from this repo's records: %+v", a)
 		}
+	}
+}
+
+// overviewHeadlineFixture writes one checkout that knows the two runs the
+// dashboard headline is about (epic hn6, deliverable (c) — tick 3rc):
+//
+//   - epic-hd5 is running: five of its six ticks closed behind it and the
+//     sixth dispatched by a live process — progress 5/6 and a healthy
+//     verdict, the words the headline owes the glance;
+//   - epic-hdh is held for a person: the run_held line names the tick and
+//     the attempt, and the settle command is addressed by them.
+//
+// The names order alphabetically hd5 before hdh — the OPPOSITE of the
+// attention-first order the listing owes — so the held run's block is found
+// above the running one's, not by luck.
+func overviewHeadlineFixture(t *testing.T, now time.Time) (repo string, release func()) {
+	t.Helper()
+	repo = t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		execTestCmd(t, repo, "git", args...)
+	}
+	git("init", "--quiet", "-b", "main")
+	git("config", "user.email", "overview@example.com")
+	git("config", "user.name", "overview test")
+	if err := os.WriteFile(filepath.Join(repo, "base.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "-A")
+	git("commit", "--quiet", "-m", "base")
+
+	checkpoint := func(runID, epicID, state, reason, tickID, tickState string) {
+		t.Helper()
+		raw, err := json.MarshalIndent(map[string]any{
+			"schema_version": 3, "run_id": runID, "epic_id": epicID,
+			"sequence": 1, "state": state, "reason": reason,
+			"updated_at": now.Add(-2 * time.Hour).UTC().Format(time.RFC3339),
+			"ticks":      []any{map[string]any{"tick_id": tickID, "state": tickState, "attempt": 1}},
+			"provenance": map[string]any{
+				"run_id": runID, "tick_id": "", "attempt": 0,
+				"source_ref":      "refs/heads/epic/" + epicID,
+				"source_sha":      "0fc09212e0e8f96fc3fdc87c2f681519bb0d191a",
+				"integration_ref": nil, "phase": "worker", "executor": "local-subprocess",
+				"workspace_id": nil, "backend": nil, "substrate_protocol": nil, "substrate_server_version": nil,
+				"role": "implement-tick", "tier": "strong", "profile_digest": nil,
+				"model": "@cf/zai-org/glm-5.3", "context_manifest_digest": nil,
+			},
+		}, "", "  ")
+		if err != nil {
+			t.Fatalf("marshal the checkpoint for %s: %v", runID, err)
+		}
+		dir := filepath.Join(repo, ".ticfac", "runs", runID)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "checkpoint.json"), raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	say := func(runID string, events ...runfeed.Event) {
+		t.Helper()
+		feed := runfeed.Open(repo, runID)
+		for _, event := range events {
+			if err := feed.Append(event); err != nil {
+				t.Fatalf("append %s to %s's feed: %v", event.Stage, runID, err)
+			}
+		}
+	}
+	one, two := 1, 2
+
+	// epic-hd5: running, five of six ticks closed — the sixth is the one
+	// the checkpoint names dispatched, and the tracker's graph is the seam
+	// the graph fake below answers.
+	checkpoint("epic-hd5", "hd5", "running", "t6 is dispatched", "t6", "dispatched")
+	say("epic-hd5", runfeed.NewEvent(now.Add(-10*time.Minute), "epic-hd5", "t6", &one,
+		reconcile.StageDispatched, "t6 try 1 dispatched"))
+	life, err := runlife.Claim(repo, "epic-hd5")
+	if err != nil {
+		t.Fatalf("claim the running run: %v", err)
+	}
+	release = func() { life.Release("overview test") }
+
+	// epic-hdh: held for a person.
+	checkpoint("epic-hdh", "hdh", "failed", "attempt 2 of t1 was struck out: the report names no status", "t1", "dispatched")
+	say("epic-hdh",
+		runfeed.NewEvent(now.Add(-40*time.Minute), "epic-hdh", "t1", &two,
+			reconcile.StageRunHeld, "attempt_struck_out: the report names no status"),
+		runfeed.NewEvent(now.Add(-30*time.Minute), "epic-hdh", "", nil,
+			reconcile.StageRunFinished, "failed: attempt 2 of t1 was struck out: the report names no status"))
+
+	return repo, release
+}
+
+// headlineGraph swaps the tracker's seams for the two the headline tests
+// need: an epic of six ticks, five of them closed — progress 5/6 — and an
+// epic-status seam that leaves every epic open, so no run reads history.
+func headlineGraph(t *testing.T) {
+	t.Helper()
+	tasks := make([]tk.GraphTask, 0, 6)
+	for i := 1; i <= 6; i++ {
+		status := "closed"
+		if i == 6 {
+			status = "open"
+		}
+		tasks = append(tasks, tk.GraphTask{ID: fmt.Sprintf("t%d", i), Status: status})
+	}
+	realGraph := epicGraph
+	t.Cleanup(func() { epicGraph = realGraph })
+	epicGraph = func(context.Context, string, string) *tk.Graph {
+		return &tk.Graph{Waves: []tk.GraphWave{{Wave: 1, Tasks: tasks}}}
+	}
+	realClosed := overviewEpicClosed
+	t.Cleanup(func() { overviewEpicClosed = realClosed })
+	overviewEpicClosed = func(context.Context, string, string) (bool, bool) { return false, true }
+}
+
+// overviewBlock returns one run's row as the listing draws it: the first
+// line, and the lines the row carries under it — the dashboard headline a
+// gathered model renders (tick 3rc). Empty when the run is not listed.
+func overviewBlock(out, runID string) (first string, block []string) {
+	lines := strings.Split(out, "\n")
+	for i, line := range lines {
+		if !strings.HasPrefix(line, runID+":") && !strings.HasPrefix(line, runID+" ") {
+			continue
+		}
+		first = line
+		for _, under := range lines[i+1:] {
+			if !strings.HasPrefix(under, "  ") {
+				break
+			}
+			block = append(block, under)
+		}
+		return first, block
+	}
+	return "", nil
+}
+
+// TestTheBareOverviewShowsTheDashboardHeadline: every row the bare overview
+// lists with a gathered model carries the dashboard's own headline under its
+// unchanged first line (epic hn6, deliverable (c) — tick 3rc). A person
+// glancing at the listing sees the same progress, health verdict and
+// needs-you that `ticfac watch` shows for that run — and a held run keeps
+// its "clear with:" suffix on the first line while the headline names the
+// same command again.
+func TestTheBareOverviewShowsTheDashboardHeadline(t *testing.T) {
+	now := time.Now()
+	t.Setenv("HOME", t.TempDir()) // no factory: the headline is a local question
+	ownRegistry(t)
+	repo, release := overviewHeadlineFixture(t, now)
+	defer release()
+	headlineGraph(t)
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"--repo", repo}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("the bare overview exits %d, want %d:\n%s\n%s",
+			code, exitSuccess, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+
+	// The running run: its first line exactly as it ever was — the state
+	// word and the reason, no progress in it — and the dashboard's progress
+	// bar and health verdict under it.
+	first, block := overviewBlock(out, "epic-hd5")
+	if first == "" {
+		t.Fatalf("the running run is not listed:\n%s", out)
+	}
+	if !strings.Contains(first, "running") || strings.Contains(first, "5/6") {
+		t.Errorf("the running run's first line changed shape: %q", first)
+	}
+	joined := strings.Join(block, "\n")
+	if !strings.Contains(joined, "5/6 ticks") {
+		t.Errorf("the running run's headline does not carry the progress bar's count:\n%s", joined)
+	}
+	if !strings.Contains(joined, "● healthy") {
+		t.Errorf("the running run's headline does not carry the health verdict:\n%s", joined)
+	}
+
+	// The held run: the needs-you command in the headline, and the
+	// "clear with:" suffix still on the first line.
+	first, block = overviewBlock(out, "epic-hdh")
+	if first == "" {
+		t.Fatalf("the held run is not listed:\n%s", out)
+	}
+	if !strings.Contains(first, `clear with: ticfac settle hdh t1 2 --release "<who>"`) {
+		t.Errorf("the held run's first line lost its clearing command: %q", first)
+	}
+	joined = strings.Join(block, "\n")
+	if !strings.Contains(joined, "needs you:") {
+		t.Errorf("the held run's headline does not say what needs a person:\n%s", joined)
+	}
+	if !strings.Contains(joined, `ticfac settle hdh t1 2 --release "<who>"`) {
+		t.Errorf("the held run's headline does not carry the unblocking command:\n%s", joined)
+	}
+}
+
+// TestTheBareOverviewHeadlineMatchesWatch: the one-model-two-renderers
+// guarantee. For the same status model, the overview's headline lines are
+// dashboardHeadline's own at the fallback width, indented two spaces — the
+// progress and verdict line, the phase bar with the needs-you answer, and
+// every hold's own line after it. The overview and the watch render with the
+// same functions, so they cannot drift apart.
+func TestTheBareOverviewHeadlineMatchesWatch(t *testing.T) {
+	now := time.Now()
+	t.Setenv("HOME", t.TempDir())
+	ownRegistry(t)
+	repo, release := overviewHeadlineFixture(t, now)
+	defer release()
+	headlineGraph(t)
+
+	// The models the listing renders: --json carries one per run.
+	var jsonOut, jsonErr bytes.Buffer
+	if code := Run([]string{"--repo", repo, "--json"}, &jsonOut, &jsonErr); code != exitSuccess {
+		t.Fatalf("the bare overview --json exits %d, want %d:\n%s\n%s",
+			code, exitSuccess, jsonOut.String(), jsonErr.String())
+	}
+	var doc overviewModel
+	if err := json.Unmarshal(jsonOut.Bytes(), &doc); err != nil {
+		t.Fatalf("the overview JSON does not decode: %v\n%s", err, jsonOut.String())
+	}
+	models := map[string]statusmodel.Model{}
+	for _, run := range doc.Runs {
+		models[run.RunID] = run.Model
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"--repo", repo}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("the bare overview exits %d, want %d:\n%s\n%s",
+			code, exitSuccess, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+
+	for _, runID := range []string{"epic-hd5", "epic-hdh"} {
+		model, ok := models[runID]
+		if !ok {
+			t.Fatalf("%s is not in the overview JSON:\n%s", runID, jsonOut.String())
+		}
+		_, block := overviewBlock(out, runID)
+		// The watch's own lines for the same model, at the width the
+		// non-TTY stdout lays out at — the headline, then the attention
+		// lines the watch shows under it.
+		want := dashboardHeadline(model, plainStyles(), overviewHeadlineFallbackWidth)
+		want = append(want, dashboardAttentionLines(model, plainStyles())...)
+		if len(block) != len(want)-1 {
+			t.Fatalf("%s's row carries %d headline lines, want the watch's %d:\n got %q\nwant %q",
+				runID, len(block), len(want)-1, block, want[1:])
+		}
+		for i, line := range want[1:] {
+			if block[i] != "  "+line {
+				t.Errorf("%s's headline line %d is not the watch's own, indented:\n got %q\nwant %q",
+					runID, i, block[i], "  "+line)
+			}
+		}
+	}
+}
+
+// TestTheBareOverviewHeadlineStylesAndWidth: the headline renders with the
+// terminal's own styles and width when stdout is one — the same seams the
+// watch's live view reads — and with the identity set at the fallback width
+// when it is not, so a piped listing never carries escape codes (tick 3rc).
+func TestTheBareOverviewHeadlineStylesAndWidth(t *testing.T) {
+	now := time.Now()
+	t.Setenv("HOME", t.TempDir())
+	ownRegistry(t)
+	repo, release := overviewHeadlineFixture(t, now)
+	defer release()
+	headlineGraph(t)
+
+	// A terminal 40 columns wide: the progress bar cannot seat itself beside
+	// its answers, and the verdict keeps its colour.
+	realTTY, realSize := watchIsTerminal, watchTerminalSize
+	t.Cleanup(func() { watchIsTerminal, watchTerminalSize = realTTY, realSize })
+	watchIsTerminal = func(io.Writer) bool { return true }
+	watchTerminalSize = func(io.Writer) (int, int, bool) { return 40, 24, true }
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"--repo", repo}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("the bare overview exits %d, want %d:\n%s\n%s",
+			code, exitSuccess, stdout.String(), stderr.String())
+	}
+	_, block := overviewBlock(stdout.String(), "epic-hd5")
+	joined := strings.Join(block, "\n")
+	if strings.Contains(joined, "█") {
+		t.Errorf("a 40-column terminal still gets the progress bar it cannot seat:\n%s", joined)
+	}
+	if !strings.Contains(joined, "\x1b[32m● healthy\x1b[0m") {
+		t.Errorf("a terminal's headline is not in the verdict's own colour:\n%s", joined)
+	}
+
+	// Not a terminal — a pipe, a log: the identity set at the fallback
+	// width, where the bar fits, and no escape codes anywhere.
+	watchIsTerminal, watchTerminalSize = realTTY, realSize
+	stdout.Reset()
+	if code := Run([]string{"--repo", repo}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("the bare overview exits %d, want %d:\n%s\n%s",
+			code, exitSuccess, stdout.String(), stderr.String())
+	}
+	_, block = overviewBlock(stdout.String(), "epic-hd5")
+	joined = strings.Join(block, "\n")
+	if !strings.Contains(joined, "█") {
+		t.Errorf("the fallback width drops the progress bar it can seat:\n%s", joined)
+	}
+	if strings.Contains(joined, "\x1b[") {
+		t.Errorf("a piped listing carries escape codes:\n%s", joined)
 	}
 }
