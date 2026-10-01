@@ -2,6 +2,7 @@
   "id": "7as",
   "title": "Two versions of 7uv's fill exist; the pushed tip is the stale one",
   "description": "origin/tick/hn6/attempt-2/7uv (work commit 3938d669) carries an earlier version of this fill whose degraded summaries lack the 'degraded: ' prefix the tick's examples and epic rule 3 state, detects the claude river by substring (an openrouter claude id would read as subscription claude, not pi-local), and resolves stuck nudges by a blacklist; its tests pin summaries with loose Contains so most of this is not caught. The squashed seed 2fa0a4f1 this branch carries is the corrected version. Both pass the gate, so the fold must choose deliberately: fold this branch's four tick files whole, not the pushed tip. Since this attempt's commit 9b8ac2ae the claude-river half is caught mechanically (the new cost test fails at the pushed tip); the degraded prefix and the nudge resolver set are still guarded only by this branch's exact assertions.\nevidence: git show 65dc23f7:internal/statusmodel/verdict.go — degradedCause returns 'forge unreadable' with no prefix; git show 2fa0a4f1:internal/statusmodel/verdict.go — 'degraded: forge unreadable'; namesClaude (substring) vs isClaudeModel (runconfig claudeFamily) in the respective cost.go; TestCostAProviderQualifiedClaudeIdIsPiLocalNotTheSubscription fails at 65dc23f7\n\nticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4 filed this backlog tick from the finding 30621531bdf01710efd4c62aa2e7be48dd7fcb616660563c0c9f6041e1ce1a13 (reported by run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-7uv/attempt-2): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_ee8ebb4fe13d4311b8f9be6f66db69d4/absorptions/30621531bdf01710efd4c62aa2e7be48dd7fcb616660563c0c9f6041e1ce1a13.json on the run branch.",
+  "notes": "2026-10-01 05:19 - ticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4: created by absorbing finding 30621531bdf01710efd4c62aa2e7be48dd7fcb616660563c0c9f6041e1ce1a13 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/run_ee8ebb4fe13d4311b8f9be6f66db69d4/absorptions/30621531bdf01710efd4c62aa2e7be48dd7fcb616660563c0c9f6041e1ce1a13.json on epic/hn6, and it says: the classifier put 0.25 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-7uv/attempt-2",
   "created_by": "ticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4",
   "created_at": "2026-10-01T03:19:18Z",
-  "updated_at": "2026-10-01T03:19:18Z"
+  "updated_at": "2026-10-01T03:19:23.918098Z"
 }
