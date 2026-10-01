@@ -53,7 +53,24 @@ loud.
 
 ---
 
-<<<<<<< HEAD
+## 1.2.1
+
+PATCH: the fold of tick 378's attempt into epic/hn6 — two parallel cuts
+become one, again, for the same reason as 1.2.0. Tick 378 had branched from
+the epic's 1.1.0 and corrected two values in `status-model.json`'s
+`dashboard` golden at 1.1.1 (full text below); the epic folded main at
+1.2.0 (full text below); and each ledger entry binds bytes the other cut
+never saw, so the union cannot be re-cut at either — a version string must
+never mean two different sets of bytes. Both bindings stay in
+`version_digests`, and the union re-cuts here. It is the next PATCH over
+1.2.0, not the next MINOR: the fold's half is already in 1.2.0, so all this
+adds to it is the 1.1.1 corrections, and both corrected values remain
+schema-admitted. A consumer pinned to 1.2.0 has nothing to do; a consumer
+pinned to 1.1.1 adopts the fold's `worker-boot-contract.json` half by moving
+here — the 1.2.0 entry says what that costs.
+
+---
+
 ## 1.2.0
 
 MINOR: the fold of main into epic/hn6 — two parallel cuts of 1.1.0 become one.
@@ -74,7 +91,9 @@ own cut of the same version,
 b3c50e1c412e3d8b903fb671f701b6dd5717d4225e6c8254e7c8c939988b3eab, is
 recorded here instead. A consumer pinned to either 1.1.0 adopts both halves
 by moving to this version.
-=======
+
+---
+
 ## 1.1.1
 
 PATCH: two values in `status-model.json`'s `dashboard` golden, corrected to
@@ -86,7 +105,6 @@ stage's `failed`), and a superseded try carried a `next_step` while a later
 try stood (a next step is stated on the last try of a refusal only). The
 schema, the rules and every other byte are unchanged, and both corrected
 values remain schema-admitted. No consumer has anything to do.
->>>>>>> e43a19cb3d78a994eadd10153cfd8d31ca3ef181
 
 ---
 
