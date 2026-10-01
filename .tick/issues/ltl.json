@@ -1,0 +1,13 @@
+{
+  "id": "ltl",
+  "title": "The blocked ladder's question never reaches a cloud worker's prompt",
+  "description": "blocked.go's ladder escalates a stopped tick 'with the worker's question and its report in the new prompt' (escalation.go's section), but on the cloud substrate — the only one this epic runs on — that prompt never carries them: the door delivers only the rendered role profile, worker.sh prefers it over the checkout's composition, and `ticfac sandbox worker-prompt` composes no question either. Every escalate/decide rung therefore starts blind (this one re-derived the situation from .ticfac state), and the decide rung's 'decide under the standing orders' instruction cannot reach the worker at all; the same missing composition also drops the local prompt's boundary statement and report-path section. The ladder still converges through the report's STATUS line, so the cost is rungs spent blind and answers that may diverge, not a lost answer.\nevidence: image/worker.sh:572 (the dispatch's role prompt wins over the checkout's composition); internal/exec/cloudflaresandbox/executor.go:92 (Options.Prompt is the only prompt the door carries — no Escalation or PriorReports field exists in that package); internal/exec/subprocess/escalation.go:52 renders the section no cloud prompt carries; internal/reconcile/blocked.go:24 is the ladder that promises it. This attempt's prompt is the bare profiles-cloudflare-sandbox/implement-tick.md, prompt_digest sha256:c25d77e… identical to the stopped attempt's.\n\nticfac run run_d51a747f10ed41429f925ba4b83053d8 filed this backlog tick from the finding b7d8fe1ea19a800d45bf16b66f840d2661a825858310ba083911fad5683fc99f (reported by run-run_d51a747f10ed41429f925ba4b83053d8/tick-yjq/attempt-8): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_d51a747f10ed41429f925ba4b83053d8/absorptions/b7d8fe1ea19a800d45bf16b66f840d2661a825858310ba083911fad5683fc99f.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-run_d51a747f10ed41429f925ba4b83053d8/tick-yjq/attempt-8",
+  "created_by": "ticfac run run_d51a747f10ed41429f925ba4b83053d8",
+  "created_at": "2026-10-01T07:52:18Z",
+  "updated_at": "2026-10-01T07:52:18Z"
+}
