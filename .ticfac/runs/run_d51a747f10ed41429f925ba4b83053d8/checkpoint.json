@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
   "epic_id": "hn6",
-  "sequence": 56,
-  "state": "running",
-  "reason": "lh4 is closed",
-  "updated_at": "2026-10-01T08:17:43Z",
+  "sequence": 57,
+  "state": "collecting",
+  "reason": "collecting yjq attempt 11",
+  "updated_at": "2026-10-01T08:17:52Z",
   "ticks": [
     {
       "tick_id": "0rx",
