@@ -558,6 +558,25 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		marker := handleFromMap(existing.JobHandle)
 		marker.StateRoot = r.execStateDir(marker.TickID, marker.Attempt)
 		if was, ok := released[attemptKey(existing.TickID, existing.Attempt)]; ok {
+			if was.byRun && was.step == rejectedStepUnanswered {
+				// The RUN released it because the factory could not answer
+				// for it (factory_unanswered.go): nothing about the tick was
+				// tried and failed, only the substrate, so it earns no rung.
+				// A new try is dispatched — from its commits, when it left any.
+				label := attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt)
+				r.tearDownSettled(marker, label+" was released by the run: the factory could not answer for it", true)
+				if was.carry && (carry == nil || existing.Attempt > carry.marker.Attempt) {
+					carry = &carriedWork{marker: marker, by: runReleaser + " (" + was.reason + ")", at: was.at}
+				}
+				how := "fresh: it left no work"
+				if was.carry {
+					how = "from its work on " + branchOf(marker.WriteRef)
+				}
+				r.record(tick, StageSettled,
+					"%s was released by the run (%s: the factory could not answer for it); a new try is dispatched %s, "+
+						"at the same tier", label, was.reason, how)
+				continue
+			}
 			if was.byRun {
 				// The RUN released it, by its rejection's class
 				// (rejected_work.go): the attempt ran and was rejected, so
@@ -2606,6 +2625,11 @@ type inflightAttempt struct {
 	// this attempt `lost` and is being re-asked (jobsLiveAtFactory). Cleared
 	// when the answer changes, so a second spell of `lost` is said again.
 	lostNoted bool
+
+	// factoryWaits is how many times the factory, asked again about an
+	// attempt the run could no longer address, answered that it is still
+	// running and the run waited on (factory_unanswered.go). Bounded.
+	factoryWaits int
 }
 
 // FactoryJobs is an executor whose jobs live in a FACTORY that keeps its own
@@ -2774,7 +2798,7 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 			// ran 26 minutes past its wall clock while the interrupt was
 			// re-delivered at every poll, and a refusal about a dead supervisor
 			// sent the reader at the wrong problem (tick emk).
-			return nil, r.refuse(RefusedUnaddressed, marker.TickID,
+			refusal := r.refuse(RefusedUnaddressed, marker.TickID,
 				"%s still reads %s %s past the wall clock of %ds it was issued, and this run has "+
 					"watched it for %s without it settling. Its executor could not settle it: %s. Nobody can say "+
 					"it is finished; look at it, stop whatever is still running, then release it with "+
@@ -2782,15 +2806,26 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 				r.attemptName(marker.TickID, marker.Attempt), status.State, over.Round(time.Second),
 				r.wallOf(marker), watched.Round(time.Second), lastObservation(status),
 				r.opts.EpicID, marker.TickID, marker.Attempt)
+			// An attempt whose job lives at the factory is asked of the
+			// factory first (factory_unanswered.go).
+			if settled, answered := r.askFactoryAgain(ctx, fl, refusal); answered {
+				return settled, nil
+			}
+			return nil, refusal
 		}
 
 		// The poll IS the keepalive. Its answer is about the substrate, not
 		// about the job: a job that went unaddressed past the threshold is
-		// gone, whatever the last status said.
+		// gone, whatever the last status said — unless the factory that keeps
+		// the job's records, asked again, answers for it.
 		if r.Poll(marker.JobID) == Wiped {
-			return nil, r.refuse(RefusedWiped, marker.TickID,
+			refusal := r.refuse(RefusedWiped, marker.TickID,
 				"%s went unaddressed for longer than the substrate's wipe threshold of %s",
 				r.attemptName(marker.TickID, marker.Attempt), r.wipeThreshold)
+			if settled, answered := r.askFactoryAgain(ctx, fl, refusal); answered {
+				return settled, nil
+			}
+			return nil, refusal
 		}
 
 	}
