@@ -3,7 +3,7 @@
   "title": "Route worker containers through FactorySandbox per run; per-job instance size",
   "gloss": "workers on new path",
   "description": "Per-run substrate flag set at submit so a run never straddles namespaces. Instance size per job kind (implement/resolve/repair/review). Capacity count is the only cap now.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -14,5 +14,7 @@
   "acceptance_criteria": "a cloud run's workers start via SANDBOXES_V1; old runs unaffected",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-01T08:24:24.651903Z",
-  "updated_at": "2026-10-01T08:24:24.651903Z"
+  "updated_at": "2026-10-01T09:01:30.975357Z",
+  "closed_at": "2026-10-01T09:01:30.975357Z",
+  "closed_reason": "#192 (1f469364): per-run substrate do_v1 routes workers via SANDBOXES_V1 at per-job instance size"
 }
