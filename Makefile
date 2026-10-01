@@ -25,8 +25,9 @@ GOTEST_PARALLEL ?= 12
 # Now internal/reconcile, internal/exec/herdr and internal/runstate skip under
 # -short at their harness constructors, so the short suite is the readers, the
 # parsers, the drift guards and the negative controls. Nothing stops running:
-# `test` below has no -short and CI runs BOTH targets on every push and pull
-# request, so everything the gate skips is still refused before main.
+# `test` below has no -short and CI runs BOTH targets, whole, on every push to
+# main and to an epic branch (a pull request runs its affected packages), so
+# everything the gate skips is still refused before a deploy.
 # internal/shorttest holds the guard that keeps a new test from forgetting.
 .PHONY: build vet test-short test test-race gate release
 
@@ -39,13 +40,19 @@ vet:
 test-short:
 	go test -short -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
 
+# PKGS and GOTEST_RUN (an environment variable: a -run regexp, read by the
+# shell so make never expands its `$`) narrow the suite for CI's affected-only
+# pull-request runs and main's sharded run (.github/scripts/go-test-shard.sh).
+# Plain `make test` is the whole suite, as it always was.
+PKGS ?= ./...
+
 test:
-	go test -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
+	go test -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) $${GOTEST_RUN:+-run "$$GOTEST_RUN"} $(PKGS)
 
 # The short suite under the race detector — CI's `go race` job. -count=1
 # because a cached pass from a non-race build says nothing about races.
 test-race:
-	go test -race -short -count=1 -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
+	go test -race -short -count=1 -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) $(PKGS)
 
 # What the integrated gate runs, kept here so a human and CI run exactly what
 # gates a tick. The authoritative copy is .tick/runners.toml — that file is what
