@@ -608,6 +608,19 @@ func WorkerBranch(epic, tick string) string {
 // an add/add conflict on the second merge.
 func WorkerResultFile(tick string) string { return "RESULT-" + tick + ".md" }
 
+// WorkerBootStoppedBranch is where a worker container that stopped in its
+// boot — before its harness started — leaves the reason: BESIDE its worker
+// branch, never on it, because an empty worker branch is what the collect's
+// verdicts and the infrastructure class read, and a marker on it would read
+// as a report-only answer (hn6 run_ee8e: 378's resolve job exited 7 at its
+// model probe and the collect could only say "the push never landed").
+func WorkerBootStoppedBranch(workerBranch string) string { return workerBranch + "-boot-stopped" }
+
+// WorkerBootStoppedFile is the one file the boot marker adds to the base:
+// `exit: <code>` and `reason: <the boot's own stop message>`. Not a RESULT
+// file and no STATUS line, so no report reader takes it for an answer.
+func WorkerBootStoppedFile(tick string) string { return "BOOT-STOPPED-" + tick + ".md" }
+
 // Exit codes the worker entrypoint adds to the shared 2-8. Each is a different
 // thing to do about it, which is why they are not one code.
 const (

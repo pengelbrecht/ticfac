@@ -232,6 +232,28 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 		}
 	}
 
+	// A container that stopped in its boot left its reason BESIDE its worker
+	// branch (image/worker.sh boot_stopped): read it, so the line says why
+	// the job never reached its harness. The verdict and the class stay what
+	// the exit code made them — the marker is the reason, never an answer
+	// (hn6 run_ee8e: 378's resolve job exited 7 at its gateway probe and the
+	// run could only say "the push never landed").
+	if head == "" && collected.Verdict == subprocess.VerdictMissingResult {
+		if code, reason, ok := e.bootStopped(record); ok {
+			stopped := fmt.Sprintf("the container's boot stopped before its harness started (exit %d", code)
+			if class := exitClass(code); class != "" {
+				stopped += ": " + class
+			}
+			stopped += "): " + reason
+			if collected.Infrastructure != nil {
+				collected.Message += ". " + stopped
+			} else {
+				collected.Message = stopped + ". Nothing reached " + record.Branch +
+					"; the reason is on " + sandboximage.WorkerBootStoppedBranch(record.Branch)
+			}
+		}
+	}
+
 	// A PREVENTED boundary attempt is invisible in the diff — the container's
 	// guard refused the write and swept it, so the branch reads clean — and
 	// the marker its guard prepends to the report is the only durable trace.
