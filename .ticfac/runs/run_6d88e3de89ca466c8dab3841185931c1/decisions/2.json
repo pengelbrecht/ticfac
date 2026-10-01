@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Two values in the wave-1 `dashboard` golden (contracts/status-model.json) illustrate the layout with data the wave-2 derivation can never produce: v7z's ci cell reads active while the golden's own ci.state is red (the 3gk rule, and the hn6 phase it mirrors, make a red CI the ci stage's FAILURE), and 46x's first try carries a non-null next_step while a later try stands (the 3gk rule states a next step on the last try only). The golden is a rendering fixture rather than a Build output, so no suite fails today, but u5n and 0rx render it as THE shape fixture, and a fixture that contradicts the rules it exists to exercise is the disagreement A5's one-model rule exists to prevent. The fix is two field values in the golden, and the file belongs to the finished wave 1 / the contract bundle, not to a wave-2 tick's Files list.\nevidence: contracts/status-model.json golden 'dashboard': v7z pipeline carries {stage: ci, state: active} beside ci.state 'red'; 46x tries[0] carries next_step 'reformat and re-push on the next try' with tries[1] in-flight\n\nticfac run run_911b556fce394004837695b3196e3925 created this tick by absorbing the finding 6da8aa88f813a3c62f367ea275c9240acee6aea97ea36c97478f3acd1a92770e (reported by run-run_911b556fce394004837695b3196e3925/tick-3gk/attempt-3): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_911b556fce394004837695b3196e3925/absorptions/6da8aa88f813a3c62f367ea275c9240acee6aea97ea36c97478f3acd1a92770e.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "378",
+    "title": "The dashboard golden's ci cell and try next_step contradict the wave-2 rules"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.93,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.03,
+      "design": 0.01,
+      "diagnosis": 0.02,
+      "mechanical": 0.94,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1549,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-01T00:24:30Z",
+  "answered_at": "2026-10-01T00:24:30Z",
+  "provenance": {
+    "run_id": "run_6d88e3de89ca466c8dab3841185931c1",
+    "tick_id": "378",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "58c447941657bc9eb267b1393ddd07036a4ac8a0",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
