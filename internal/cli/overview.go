@@ -9,9 +9,12 @@ package cli
 // entry carries the same versioned model `ticfac status --json <run>` emits,
 // built by the same gathering, and the overview adds only the listing's own
 // half — which runs exist (enumeration, a question the per-run model cannot
-// answer), the attention-first order, and the one line a person reads: the
-// state word, the reason, and the single command that clears a stop. What a
-// run is held or failed BY is the model's own wait: the reason and the
+// answer), the attention-first order, and the lines a person reads: the
+// state word, the reason, and the single command that clears a stop, and —
+// since epic hn6's dashboard (tick 3rc) — the run's own headline under it:
+// the same progress, health verdict and needs-you `ticfac watch` shows for
+// that run, rendered by the same functions, so the two cannot disagree. What
+// a run is held or failed BY is the model's own wait: the reason and the
 // unblocking command come from [statusmodel], never from a second opinion
 // the overview would have to keep in agreement with the first.
 //
@@ -777,18 +780,47 @@ func overviewStateWord(state string) string {
 	return state
 }
 
+// overviewHeadlineFallbackWidth is the width the headline lines lay out at
+// when the terminal does not say how wide it is — the width the dashboard
+// goldens pin, wide enough for every column the headline names.
+const overviewHeadlineFallbackWidth = 100
+
+// overviewIdentityStyles is the identity style set — the words, no escape
+// codes — for a stdout that is not a terminal (a pipe, a log): a reader of
+// a listing must not find ANSI codes in it.
+func overviewIdentityStyles() watchStyles {
+	identity := func(s string) string { return s }
+	return watchStyles{dim: identity, amber: identity, red: identity, green: identity, bold: identity}
+}
+
 // renderOverview draws the prose listing the JSON answers with: one line per
 // run, the state word, the reason, and — for a stop a person clears — the
-// one command that clears it. A stop with no command (the merge, which is a
-// person's by design and has no ticfac verb) is named by its reason, which
-// already says what is wanted. The glance is the whole point, so the rows
-// that need nobody — history (markOverviewHistory) — are one summary line
-// naming the flag that lists them; with all, they are listed after the rest,
-// each saying why it is history.
+// one command that clears it; and, under every run whose model was gathered,
+// the run's dashboard headline (tick 3rc): dashboardHeadline's progress and
+// health verdict, the phase bar and the needs-you answer, and the holds'
+// own lines — indented two spaces, the same functions the watch renders
+// with. A stop with no command (the merge, which is a person's by design
+// and has no ticfac verb) is named by its reason, which already says what is
+// wanted. The glance is the whole point, so the rows that need nobody —
+// history (markOverviewHistory) — are one summary line naming the flag that
+// lists them, printed exactly as they ever were; with all, they are listed
+// after the rest, each saying why it is history, still one line each.
 func renderOverview(stdout io.Writer, doc overviewModel, cloudNote string, all bool) {
 	if len(doc.Runs) == 0 {
 		fmt.Fprintln(stdout, "No runs.")
 	}
+	// The headline's styles and width are the watch's own seams (tick 3rc):
+	// a terminal gets the ANSI set and its own width; anything else the
+	// identity set at the fallback width — the words, no codes.
+	styles := overviewIdentityStyles()
+	width := overviewHeadlineFallbackWidth
+	if watchIsTerminal(stdout) {
+		styles = ansiWatchStyles()
+		if w, _, ok := watchTerminalSize(stdout); ok && w > 0 {
+			width = w
+		}
+	}
+
 	hidden := 0
 	for _, run := range doc.Runs {
 		if run.History && !all {
@@ -805,6 +837,24 @@ func renderOverview(stdout io.Writer, doc overviewModel, cloudNote string, all b
 			line += fmt.Sprintf(" — clear with: %s", *run.ClearWith)
 		}
 		fmt.Fprintln(stdout, line)
+		if !run.History && !run.provisional {
+			// The run's own headline under it (epic hn6, deliverable (c)):
+			// the dashboard's progress and health verdict, the phase bar
+			// and the needs-you answer — dashboardHeadline's lines 2 and 3
+			// (and the reflowed fourth when the pane cannot seat them),
+			// plus the attention lines the watch shows under the same
+			// headline. The words come from the same functions the watch
+			// renders with, so the two cannot disagree. History rows and
+			// the cheap rows whose model was never gathered print exactly
+			// as they did.
+			headline := dashboardHeadline(run.Model, styles, width)
+			for _, hl := range headline[1:] {
+				fmt.Fprintln(stdout, "  "+hl)
+			}
+			for _, al := range dashboardAttentionLines(run.Model, styles) {
+				fmt.Fprintln(stdout, "  "+al)
+			}
+		}
 	}
 	if hidden > 0 {
 		noun := "runs"
