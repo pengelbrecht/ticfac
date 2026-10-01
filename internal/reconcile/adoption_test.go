@@ -153,6 +153,7 @@ func TestAdoptionTakesTheLatestAttemptOfATickNotTheFirst(t *testing.T) {
 func TestAHeldAttemptStopsTheRunEvenWhenANewerAttemptIsAdoptable(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{mode: "empty-first", gate: failingGate})
+	chainedFixture(t, f) // each run ends on ONE tick's refusal: what follows waits behind it
 
 	// Attempt 1 answers DONE_WITH_CONCERNS and commits nothing: rejected with nothing
 	// anywhere, the run fails, and the attempt's disposition on a resume is

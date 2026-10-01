@@ -254,6 +254,23 @@ for a in "$@"; do
   esac
   prev="$a"
 done
+# TICKS_TEST_CURL_SILENT_FIRST: the first N model probes get no answer at
+# all (curl's 000), the cold-model silence a retry exists for.
+case "$url" in
+  */api/review) ;;
+  *)
+    if [ -n "${TICKS_TEST_CURL_SILENT_FIRST:-}" ]; then
+      n=$(( $(cat "$TICKS_TEST_CURL_RECORD.count" 2>/dev/null || echo 0) + 1 ))
+      echo "$n" > "$TICKS_TEST_CURL_RECORD.count"
+      if [ "$n" -le "$TICKS_TEST_CURL_SILENT_FIRST" ]; then
+        printf 'URL=%s\n' "$url" >> "$TICKS_TEST_CURL_RECORD"
+        echo "curl: (28) Operation timed out" >&2
+        printf '000'
+        exit 28
+      fi
+    fi
+    ;;
+esac
 {
   printf 'URL=%s\n' "$url"
   printf 'DATA=%s\n' "$data"
@@ -1434,15 +1451,40 @@ func TestEntrypointStopsWhenTheGatewayNeverAnswersTheProbe(t *testing.T) {
 	f := newFixture(t, "- `true`\n")
 	f.env["TICKS_TEST_CURL_STATUS"] = "000"
 	f.env[EnvModelProbeTimeout] = "3"
+	f.env[EnvModelProbeBackoff] = "0"
 	out, code := f.run()
 	if code != ExitModel {
 		t.Fatalf("exit %d, want %d\n%s", code, ExitModel, out)
 	}
 	mustContain(t, out, "did not answer", "the stop names the silence")
 	mustContain(t, out, "3s", "the stop names the bound it waited")
+	mustContain(t, out, "asked 3 time(s)", "the stop says it asked as often as it may")
 	mustContain(t, f.probeCalls(), "--max-time", "the probe honoured the configured bound")
 	if f.harnessStarted() {
 		t.Error("the harness started against a gateway that never answered")
+	}
+}
+
+// One silence is not a dead gateway. hn6 run_ee8e: 378's resolve job booted,
+// its one-token probe to a cold Workers AI model got nothing in 30s, and the
+// container exited before the harness started — no report, nothing pushed,
+// a job counted as never having answered. A probe that got no answer is asked
+// again, and a gateway that answers the second time is a green boot.
+func TestEntrypointAsksAgainWhenTheGatewayIsSilentOnce(t *testing.T) {
+	f := newFixture(t, "- `true`\n")
+	f.env["TICKS_TEST_CURL_SILENT_FIRST"] = "1"
+	f.env[EnvModelProbeBackoff] = "0"
+	out, code := f.run()
+	if code != 0 {
+		t.Fatalf("exit %d, want 0 (the second probe answered)\n%s", code, out)
+	}
+	mustContain(t, out, "model probe try 1 of 3", "the retry is said, not silent")
+	mustContain(t, out, "model probe green", "the second answer is the green boot")
+	if got := strings.Count(f.probeCalls(), "URL="); got != 2 {
+		t.Errorf("the probe was asked %d times, want 2:\n%s", got, f.probeCalls())
+	}
+	if !f.harnessStarted() {
+		t.Error("the harness never started after the gateway answered")
 	}
 }
 

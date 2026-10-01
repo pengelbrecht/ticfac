@@ -32,6 +32,7 @@ func TestAStoppedAttemptSPreservedWorkReachesTheNextAttempt(t *testing.T) {
 
 	wip := fixtureOptions{mode: "wallwip"}
 	f := newFixture(t, wip)
+	chainedFixture(t, f) // each run ends on ONE tick's refusal: what follows waits behind it
 	opts := f.options(f.Repo, wip)
 	// A bound of real seconds — the supervisor's own timer is what fires —
 	// and the reconciler's settlement deadline (bound + wipe threshold) sits

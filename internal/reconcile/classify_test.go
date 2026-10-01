@@ -659,6 +659,7 @@ func TestALaterAttemptWithNoRecordIsNeverAsked(t *testing.T) {
 func TestALaterAttemptWithNoClassificationRecordFallsBackWithoutAsking(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{gate: massGate, mode: "empty-first"})
+	chainedFixture(t, f) // each run ends on ONE tick's refusal: what follows waits behind it
 	// a1's answer WOULD clear the mass threshold (0.55) — the point is that
 	// the later attempt never sends it, not that it could not answer.
 	answer := func(tick string) jev.Result {

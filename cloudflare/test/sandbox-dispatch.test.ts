@@ -159,6 +159,11 @@ class FakeSandboxes implements SandboxBinding {
     this.addressed.push(name);
     if (options?.keepAlive === true) this.keptAlive.add(name);
     if (this.failWith !== null) throw this.failWith;
+    // The SDK's own rule (sanitizeSandboxId), so a name the platform would
+    // refuse is refused here too rather than booting in a fake (hn6 run_ee8e).
+    if (name === "" || name.length > 63) {
+      throw new Error("SandboxSecurityError: Sandbox ID must be 1-63 characters long.");
+    }
     let sandbox = this.#byName.get(name);
     if (sandbox === undefined) {
       sandbox = new FakeSandbox(name);

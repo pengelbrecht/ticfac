@@ -460,6 +460,8 @@ starts a command in a sandbox.
 | `TICKS_HARNESS` | no | `pi` (default), `omp` or `claude`. The factory always sets it, so the default is a last resort only; it is `pi` because the cloud runs pi on GLM. |
 | `TICKS_MODEL` | no | The model the harness runs on. When unset, the entrypoint asks the checkout (`ticfac sandbox model`); when nothing routes one, the boot is refused with exit 7 rather than started. |
 | `TICKS_MODEL_PROBE_TIMEOUT` | no | Seconds the one-token gateway probe may take (default 30). |
+| `TICKS_MODEL_PROBE_TRIES` | no | How many times the gateway probe is asked in all when it gets no answer or a transient 429/502/504 (default 3). |
+| `TICKS_MODEL_PROBE_BACKOFF` | no | Seconds × the try number waited between those tries (default 10). |
 | `TICKS_HARNESS_PROBE_TIMEOUT` | no | Seconds the harness's own pre-flight round-trip may take (default 120). Larger than the gateway probe's because it starts a whole agent CLI. |
 | `TICKS_SUBSTRATE` | no | The dispatch substrate this run uses: `harness` (default), `herdr`, `auto` or `cloud`. It **overrides** `[orchestration].substrate` in the checkout, which a repository pins for its LOCAL runs; the checkout is read, never rewritten. A value that is not a substrate is exit 2. The default is load-bearing: a checkout may now declare `cloud`, and a container that inherited that declaration would dispatch worker containers from inside a container. See *The substrate, and why a container is told* below. |
 | `TICKS_MAX_TIME` | no | Passed through to the harness. |
