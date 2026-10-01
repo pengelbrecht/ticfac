@@ -1,0 +1,13 @@
+{
+  "id": "pa0",
+  "title": "The live view's interrupted-on-a-live-run exit contradicts the exit table, the command's own help and the pipe path",
+  "description": "The exit table (README and `ticfac watch --help`) says 5 running for 'a watch interrupted on a live run — the work continues, nothing is wrong', and the pipe path answers exactly that (finish(agentStateRunning) after watchRunStillAlive). The live path does not: watchLive's ctx.Done branch — the branch a terminal's SIGINT takes, and since c2u also the branch q and Ctrl-C take — returns 1 (failed) when nothing is held and 3 when a hold stands, never 5. A person or script that branches on the code reads a healthy, still-going epic as a failure on a terminal and as running on a pipe, and run.go's attachRun already has to compensate for it (its `ctx.Err() != nil \u0026\u0026 code == 1` probe fallback exists only because the live view answers 1). Fix shape: in watchLive's interrupt branch, ask the run's own claim — the same watchRunStillAlive the stream path asks — and return the running class when the run is alive and nothing is held, keeping held (3) ahead of it; move run.go's detach mapping with it (attachRun's exitRunning branch already handles 5, so the compensation branch can retire). Reproduces at the base: interrupt a terminal watch of a live run, watch the exit code.\nevidence: internal/cli/watch.go watchLive select ctx.Done branch (returns 1); stream path: `if watchRunStillAlive(...) { return finish(agentStateRunning, nil) }`; table: README.md exit row 5 and newWatchCommand's Long help; the compensating probe: internal/cli/run.go attachRun\n\nticfac run run_d51a747f10ed41429f925ba4b83053d8 filed this backlog tick from the finding 8bd0b44ae999cb120ff46867cd0ce455ad7927df28cc19c6d00e4ba5a9be42ff (reported by run-run_d51a747f10ed41429f925ba4b83053d8/tick-c2u/attempt-14): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_d51a747f10ed41429f925ba4b83053d8/absorptions/8bd0b44ae999cb120ff46867cd0ce455ad7927df28cc19c6d00e4ba5a9be42ff.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-run_d51a747f10ed41429f925ba4b83053d8/tick-c2u/attempt-14",
+  "created_by": "ticfac run run_d51a747f10ed41429f925ba4b83053d8",
+  "created_at": "2026-10-01T09:17:39Z",
+  "updated_at": "2026-10-01T09:17:39Z"
+}
