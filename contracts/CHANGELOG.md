@@ -53,9 +53,37 @@ loud.
 
 ---
 
+## 1.2.0
+
+MINOR: the fold of main into epic/hn6 — two parallel cuts of 1.1.0 become one.
+Main and the epic had each bumped 1.0.1 to 1.1.0 with DIFFERENT bytes: main's
+cut gave `worker-boot-contract.json` `env.work_base` / `TICKS_WORK_BASE_SHA`
+(#158, hn6 run_3f034e68 — full text under 1.1.0), and the epic's cut gave
+`status-model.json` the dashboard vocabulary (hn6 wave 1, tick r5i — full text
+under 1.1.0). Both halves are additive and unrelated, so the union is still
+a MINOR bump — but it cannot be re-cut at 1.1.0: a version string must never
+mean two different sets of bytes, and `version_digests` already binds 1.1.0,
+once per side. The fold therefore re-cuts both halves here, at the next MINOR
+version. An unchanged consumer is still correct but no longer complete —
+twice over. The ledger holds one binding per version and never rewrites an
+entry, so `version_digests["1.1.0"]` keeps the epic's cut, the entry the
+fold's surviving line had already written
+(db0bbc96b5753a17c58e18dd1d5b26b3c8de9b90c30e46c9bc836b023778a616); main's
+own cut of the same version,
+b3c50e1c412e3d8b903fb671f701b6dd5717d4225e6c8254e7c8c939988b3eab, is
+recorded here instead. A consumer pinned to either 1.1.0 adopts both halves
+by moving to this version.
+
+---
+
 ## 1.1.0
 
-<<<<<<< HEAD
+Cut twice, in parallel, from the same 1.0.1 bytes: main and epic/hn6 each
+bumped the bundle to 1.1.0 without knowing of the other, and the fold above
+re-cut the pair as 1.2.0. Both cuts were MINOR; both texts follow verbatim.
+
+The epic's cut (hn6 wave 1, tick r5i):
+
 MINOR: `status-model.json` grows the dashboard vocabulary — additive fields
 within schema_version 1, which does not move (the phone page's snapshot parser
 refuses any other version, and every reader of this contract lives in this
@@ -71,7 +99,9 @@ every new field populated — it is the fixture the wave-3 renderers and the
 phone page test against — and three new negatives refuse an unknown pipeline
 stage, an unmetered line with a number, and an unknown verdict state.
 An unchanged consumer is still correct but no longer complete.
-=======
+
+Main's cut (#158, hn6 run_3f034e68):
+
 MINOR: one environment variable added. `worker-boot-contract.json` gains
 `env.work_base`, `TICKS_WORK_BASE_SHA`: for a CARRIED attempt, the base the
 carried work was cut from (epic hn6, run_3f034e68). A carried attempt boots at
@@ -82,7 +112,6 @@ container measures the carried work too and exits 0. The control plane
 (`worker-boot.ts`) sets it when the dispatch door's optional `work_base_sha`
 carries one; the container (`image/worker.sh`) reads it. An unchanged consumer
 is still correct: absent, the container behaves exactly as before.
->>>>>>> 3e88ca73ab5c1c611d87e45e930396572bfa2f19
 
 ---
 
