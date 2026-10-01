@@ -2,6 +2,7 @@
   "id": "dvv",
   "title": "The two wave-1 status goldens still state the stub's verdict answers",
   "description": "status_model_running_wave and status_model_completed_awaiting_merge carry the wave-1 stub's verdict blocks (summary empty, recovered empty, no cost lines). After this fill those documents are unreachable from the builder — a healthy run always states the word 'healthy' as its summary and the empty summary is now only reachable in the stopped state — so the fixtures depict shapes no run can produce. They still validate and nothing pins their values, but wave-3 renders against these fixtures and should not meet stub-era answers; refresh their verdict and cost blocks once the phase-merge question above is decided.\nevidence: contracts/status-model.json goldens status_model_running_wave and status_model_completed_awaiting_merge (verdict.summary \"\", recovered [], cost.lines []); internal/statusmodel/verdict.go buildVerdict returns VerdictHealthy as the summary for every healthy run\n\nticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4 created this tick by absorbing the finding 6977ca3ed377c71e1d7e35edd2a1786cc7823e99c5161fb84bc0ea53d676916a (reported by run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-7uv/attempt-2): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_ee8ebb4fe13d4311b8f9be6f66db69d4/absorptions/6977ca3ed377c71e1d7e35edd2a1786cc7823e99c5161fb84bc0ea53d676916a.json on the run branch.",
+  "notes": "2026-10-01 05:20 - ticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4: created by absorbing finding 6977ca3ed377c71e1d7e35edd2a1786cc7823e99c5161fb84bc0ea53d676916a — placed before the final review, which is blocked-by dvv. The decision record is .ticfac/runs/run_ee8ebb4fe13d4311b8f9be6f66db69d4/absorptions/6977ca3ed377c71e1d7e35edd2a1786cc7823e99c5161fb84bc0ea53d676916a.json on epic/hn6, and it says: the classifier put 0.36 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A1: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -10,5 +11,5 @@
   "discovered_from": "run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-7uv/attempt-2",
   "created_by": "ticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4",
   "created_at": "2026-10-01T03:20:15Z",
-  "updated_at": "2026-10-01T03:20:15Z"
+  "updated_at": "2026-10-01T03:20:25.283409Z"
 }
