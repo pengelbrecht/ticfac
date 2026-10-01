@@ -160,6 +160,27 @@ func (r *Reconciler) answerInfrastructure(marker attemptHandle, handle *subproce
 		name, failure.Service, failure.ExitCode, n, tick, infrastructureRemedy(failure))
 }
 
+// roleJobBootFault is the stop for a job the run dispatches for itself — a
+// resolve-conflict job (a tick's or a base fold's) or a repair job — whose boot
+// stopped on a deterministic environment fault (Persistent). Such a job's
+// missing-result is otherwise an operational failure the allowance retries
+// (role_allowance.go); retrying one would boot the same image on the same
+// repository and stop the same way, twice more, before a stop that says only
+// that the allowance ran out. It returns nil for anything else, which keeps
+// its operational retry: a transient boot fault (the gateway, origin) is
+// exactly what that retry is for, and a role job has no tier ladder to spend.
+func (r *Reconciler) roleJobBootFault(tick, job string, collected *subprocess.Collection) *Refusal {
+	if collected == nil || collected.Infrastructure == nil || !collected.Infrastructure.Persistent {
+		return nil
+	}
+	failure := collected.Infrastructure
+	return r.refuse(RefusedWorkerBootFault, tick,
+		"%s never reached its harness: its boot stopped on %s (exit %d). Every job of this run boots the same "+
+			"image on the same repository and would stop the same way, so it is not dispatched again and the run "+
+			"stops here. What the boot said: %s. To fix: %s",
+		job, failure.Service, failure.ExitCode, collected.Message, infrastructureRemedy(failure))
+}
+
 // infrastructureRemedy is where a person looks: the fix the executor named,
 // or a general one for a service that stays down.
 func infrastructureRemedy(failure *subprocess.InfrastructureFailure) string {
