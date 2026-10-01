@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
   "epic_id": "hn6",
-  "sequence": 85,
-  "state": "running",
-  "reason": "lkq is running as attempt 16",
-  "updated_at": "2026-10-01T09:20:18Z",
+  "sequence": 86,
+  "state": "gating",
+  "reason": "running the integrated gate for c2u on 8ee9435bf267",
+  "updated_at": "2026-10-01T09:49:11Z",
   "ticks": [
     {
       "tick_id": "0rx",
@@ -81,7 +81,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/hn6",
-    "source_sha": "95ce22ed82fe58c02e15f1d968c11e47bbd28e91",
+    "source_sha": "8ee9435bf267944982f0f1b4a53274cef4e72ef6",
     "integration_ref": "refs/heads/epic/hn6",
     "phase": "worker",
     "executor": null,
