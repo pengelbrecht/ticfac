@@ -1,0 +1,60 @@
+{
+  "schema_version": 3,
+  "decision": 5,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 1,
+    "attempt_head": "e43a19cb3d78a994eadd10153cfd8d31ca3ef181",
+    "conflict_files": [
+      "cloudflare/contracts.pin.json",
+      "contracts/CHANGELOG.md",
+      "contracts/bundle.json"
+    ],
+    "conflicting_ticks": [
+      "378"
+    ],
+    "epic_id": "hn6",
+    "job_id": "run-run_6d88e3de89ca466c8dab3841185931c1/tick-378/resolve-1",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (cloudflare-sandbox/pi, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:2ec895ee2ea6b5afe4e77460bd5ea6902c6c290544d45c7d10f95905341927cb",
+    "resolve_branch": "ticfac/run-run_6d88e3de89ca466c8dab3841185931c1/tick-378/resolve-1",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "378"
+  },
+  "response": {
+    "conflict_detail": "3 conflicts: content in cloudflare/contracts.pin.json; content in contracts/CHANGELOG.md; content in contracts/bundle.json",
+    "conflict_files": [
+      "cloudflare/contracts.pin.json",
+      "contracts/CHANGELOG.md",
+      "contracts/bundle.json"
+    ],
+    "job_id": "run-run_6d88e3de89ca466c8dab3841185931c1/tick-378/resolve-1",
+    "merge": "d2f01b18673b1a4b7100cc981db9f93fd9800336",
+    "resolve_head": "120384a77864d528e417b654add22d5e06dceae9",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-10-01T01:02:19Z",
+  "answered_at": "2026-10-01T01:02:19Z",
+  "provenance": {
+    "run_id": "run_6d88e3de89ca466c8dab3841185931c1",
+    "tick_id": "378",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "8a63938d49de7c8d10f47726a4580b0f9e40aede",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "strong",
+    "profile_digest": "sha256:2ec895ee2ea6b5afe4e77460bd5ea6902c6c290544d45c7d10f95905341927cb",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
