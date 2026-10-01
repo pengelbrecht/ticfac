@@ -346,7 +346,8 @@ describe("FactorySandbox: lifetime", () => {
 
     expect(c.timeouts).toEqual([IDLE_TIMEOUT_MS]);
     expect(state.alarm).toBeNull();
-    expect(c.monitored).toBe(0);
+    // Watched from its start, so a failed start leaves its reason.
+    expect(c.monitored).toBe(1);
   });
 
   it("keeps a keepAlive boot alive with an alarm heartbeat, and watches it", async () => {

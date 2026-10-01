@@ -519,6 +519,11 @@ export class FactorySandboxCore {
    * container is running. The proof that a deploy did not move a live
    * container (umq [A2]).
    */
+  /** How the last kept-alive container stopped, as monitor() saw it; null when none has. */
+  async lastStop(): Promise<{ at: string; how: string } | null> {
+    return (await this.ctx.storage.get<{ at: string; how: string }>(STORAGE.lastStop)) ?? null;
+  }
+
   async runningImage(): Promise<string | null> {
     const container = this.container();
     if (container === undefined || !container.running) return null;
@@ -576,6 +581,9 @@ export class FactorySandboxCore {
       this.ready = false;
       await this.ctx.storage.put(STORAGE.startedImage, image);
       await this.ctx.storage.delete(STORAGE.lastStop);
+      // Every new container is watched from its start, so a start that fails
+      // (a bad image, an entrypoint that exits) leaves its reason behind.
+      this.watch(container);
     }
     if (!this.ready) await this.waitReady(container);
     const keepAlive =
@@ -594,7 +602,6 @@ export class FactorySandboxCore {
     if (keepAlive && (await this.ctx.storage.get<boolean>(STORAGE.keepAlive)) !== true) {
       await this.ctx.storage.put(STORAGE.keepAlive, true);
       await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_MS);
-      this.watch(container);
     }
     return container;
   }
@@ -714,6 +721,9 @@ export class FactorySandbox extends DurableObject<Env> {
   imageRef(): Promise<string | null> {
     return this.core.imageRef();
   }
+  lastStop(): Promise<{ at: string; how: string } | null> {
+    return this.core.lastStop();
+  }
   runningImage(): Promise<string | null> {
     return this.core.runningImage();
   }
@@ -746,6 +756,7 @@ export type FactorySandboxStub = Pick<
   | "isRunning"
   | "imageRef"
   | "runningImage"
+  | "lastStop"
 >;
 
 /** The SANDBOXES_V1 namespace, structurally. */

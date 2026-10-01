@@ -75,6 +75,7 @@ export async function stagingFetch(request: Request, env: StagingEnv): Promise<R
       return Response.json({
         running: await stub.isRunning(),
         running_image: await stub.runningImage(),
+        last_stop: await stub.lastStop(),
         deployed_image: await stub.imageRef(),
       });
     default:
