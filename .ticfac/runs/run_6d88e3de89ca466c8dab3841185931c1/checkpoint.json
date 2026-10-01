@@ -2,19 +2,19 @@
   "schema_version": 3,
   "run_id": "run_6d88e3de89ca466c8dab3841185931c1",
   "epic_id": "hn6",
-  "sequence": 9,
-  "state": "integrating",
-  "reason": "integrating 378 attempt 1 into epic/hn6",
-  "updated_at": "2026-10-01T00:36:54Z",
+  "sequence": 10,
+  "state": "failed",
+  "reason": "7uv try 1 (run dispatch #2) cannot be addressed and has not settled: nobody can say whether it is running, which is not the same as nothing running",
+  "updated_at": "2026-10-01T01:02:23Z",
   "ticks": [
     {
       "tick_id": "378",
-      "state": "dispatched",
+      "state": "integrated",
       "attempt": 1
     },
     {
       "tick_id": "7uv",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 2
     },
     {
