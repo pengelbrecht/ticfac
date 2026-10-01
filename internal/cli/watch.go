@@ -34,20 +34,22 @@ const ExitHeld = 3
 // now; what happened and what is next.
 //
 // On a TERMINAL it is a LIVE BLOCK REDRAWN IN PLACE (the docker compose /
-// BuildKit pattern), not a stream of lines: the whole epic is always visible,
-// compressed by distance from now — done waves one line each, the active
-// wave expanded to one FIXED row per tick (a tick never moves, its mark
-// changes; absorbed ticks appear as marked new rows), upcoming waves one dim
-// line each. The lifecycle rides the header as a progress bar with the run's
-// elapsed and cost; each live worker's silence is a colour-graded timer
-// (plain, then amber, then red); and the events worth remembering — a gate
-// failed, a finding drafted, a hold — are kept as plain lines ABOVE the
-// block, so scrollback, copy, select and links keep working. NO alternate
+// BuildKit pattern), not a stream of lines: a dashboard of the whole epic —
+// attention first, the lifecycle as a progress bar with elapsed, ETA and the
+// health verdict, one FIXED row per tick in plan order with its pipeline
+// cell, the live workers with their activity, CI and cost, and the feed
+// shrunk to a two-line tail under the "─ recent" rule. The block keeps its
+// place: nothing above it but the attention alert's one durable copy per
+// episode, because the feed's lines live in the tail and behind the keys —
+// j/k move a cursor over the rows, enter opens the tick's own story (every
+// try with its tier, outcome and the run's own reason and next step; the
+// report summary and diff stats; the gate evidence; the findings), e opens
+// the whole feed scrollable, and esc or q comes back down to the dashboard,
+// where q or Ctrl-C ends the watch the way SIGINT always has. NO alternate
 // screen, for the reason the full-screen TUIs' users taught: a tool that
 // takes over the pane is a tool its users fall back to streams around. The
 // frame fits the pane it is given — narrow drops columns (the last turn
-// first, then the model), short keeps the active rows and counts the rest,
-// shorter still collapses to "+N running".
+// first, then the model), short keeps the active rows and counts the rest.
 //
 // When stdout is NOT a terminal — a pipe, a log, a test buffer — there is no
 // place to redraw into, and the watch streams PLAIN LINES instead: the same
@@ -100,33 +102,6 @@ const defaultWatchInterval = defaultStatusFollowInterval
 // marked new row when it happens, not half a minute after.
 const watchSourceTTL = 30 * time.Second
 
-// watchKeepStages is the closed set of feed events worth a plain line kept
-// ABOVE the live block: the events a person comes back to the scrollback
-// for. Everything else is a hint the frame already renders (state, waits,
-// health) or noise (the block exists so that noise does not scroll).
-var watchKeepStages = map[string]bool{
-	reconcile.StageGateFailed:   true,
-	reconcile.StageFindingFiled: true,
-	reconcile.StageAbsorbed:     true,
-	reconcile.StageRunHeld:      true,
-	reconcile.StageWallClock:    true,
-	reconcile.StageStallWarned:  true,
-	// The stuck watch (tick wv2): a nudge and a stop are both worth coming
-	// back to.
-	reconcile.StageStuckNudged:  true,
-	reconcile.StageStuckStopped: true,
-	// A worker that stopped to ask (tick tyd): each step names the question.
-	reconcile.StageBlockedEscalated: true,
-	reconcile.StageBlockedDecide:    true,
-	reconcile.StageBlockedHeld:      true,
-	// A tick held on its own refusal while the run goes on (hn6 run_ee8e).
-	reconcile.StageTickHeld: true,
-	// A rejected attempt with work, disposed by the run (epic-6in 823):
-	// where the work went is worth coming back to.
-	reconcile.StageRejectedWorkCarried:  true,
-	reconcile.StageRejectedWorkReleased: true,
-}
-
 // watchIsTerminal says whether a writer is a terminal: the seam the live
 // view's tests fake, and the fact that decides the frame from the stream.
 var watchIsTerminal = func(w io.Writer) bool {
@@ -160,18 +135,22 @@ func newWatchCommand(stdout, stderr io.Writer) *cobra.Command {
 		Long: `The run is named by its run id (epic-6in) or by the epic id it was started
 with (6in, as in 'ticfac run 6in'); 'ticfac' alone lists the runs there are.
 
-The whole epic at a glance, redrawn in place: attention first (only when
+The whole epic as a dashboard, redrawn in place: attention first (only when
 a person is needed, naming the command that moves it on), the lifecycle as a
-progress bar with elapsed and cost, done waves one line each, the active wave
-one fixed row per tick with its silence graded amber then red, upcoming waves
-one line each — fitting the pane it is given, keeping the events worth
-remembering above the block, and never taking over the screen (scrollback,
-copy and links keep working).
+progress bar with elapsed, ETA and the health verdict, one fixed row per tick
+with its pipeline, the live workers with their activity, CI and cost, and the
+event feed shrunk to a two-line tail — fitting the pane it is given and never
+taking over the screen (scrollback, copy and links keep working).
 
-When stdout is not a terminal — a pipe, a log — the same command streams plain
-lines, one per event, and says, to a human, when the run stops holding
-something for one: which tick, which attempt, why, and the command that moves
-it on.
+When stdin is a terminal too, the dashboard answers the keys: j/k move a
+cursor over the tick rows, enter opens the cursor's tick — every try with its
+tier, outcome and the run's own reason and next step, the report summary and
+its diff stats, the gate evidence, the findings — e opens the whole feed
+(j/k scroll it), and esc or q comes back down to the dashboard. On the
+dashboard, q or Ctrl-C ends the watch the way SIGINT does. When stdout is not
+a terminal — a pipe, a log — the same command streams plain lines, one per
+event, and says, to a human, when the run stops holding something for one:
+which tick, which attempt, why, and the command that moves it on.
 
 Exit codes: 0 the run ended done (the last line says how), 7 it ended
 CANCELLED — stopped deliberately, its terminal line naming the stop —
@@ -698,10 +677,13 @@ func emitWatchJSON(ctx context.Context, source runfeed.Source, kind, repo, runID
 // watchLive is the live view: one frame of the status model per interval,
 // redrawn in place, until the run reaches its own end. The frame is the
 // renderer's (watch_view.go); everything here is the mechanics the frame
-// needs — the model rebuilt from the run's own sources, the lines worth
-// keeping inserted above the block, the attention alert kept once per
-// episode, and the end decided by the run's own last word, never by the
-// watcher's patience.
+// needs — the model rebuilt from the run's own sources, the drill-in views
+// the keys open (watch_keys.go, watch_drill.go), the attention alert kept
+// once per episode, and the end decided by the run's own last word, never
+// by the watcher's patience. The feed itself is NOT replayed as lines above
+// the block any more: the frame's own two-line tail carries it (epic hn6,
+// rule 6), and `e` opens the whole feed — so the block stays one block, and
+// a person who wants the stream has the stream path.
 func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID string, interval time.Duration, stdout, stderr io.Writer) int {
 	if interval <= 0 {
 		interval = defaultWatchInterval
@@ -711,6 +693,17 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 		width, height = w, h
 	}
 	styles := ansiWatchStyles()
+
+	// The keyboard, when the watch is running on one: raw mode so j/k and
+	// the drill-in keys reach the program, restored on every exit path this
+	// function can take — return, context cancellation, panic — by the
+	// defer, and the keys themselves read on their own goroutine into a
+	// channel the loop drains. A keyboard that is not a terminal (or will
+	// not go raw) leaves the watch keyless, exactly as it always was.
+	keys, restoreKeys, keyed := watchAttachKeys(ctx)
+	if keyed {
+		defer restoreKeys()
+	}
 
 	// The per-watch source caches: a frame every two seconds must not spawn
 	// a tracker subprocess or ask a forge every two seconds (the rule
@@ -750,57 +743,95 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 			cloudRecordBelongsToRepo(repoProject, record.Project)), nil
 	}
 
-	// Where the standing feed ends TODAY: history is not replayed as keep
-	// lines — the block starts at now, and what lands after prints above it.
+	// Where the standing feed ends TODAY: history is not replayed — the
+	// block starts at now. The standing lines are counted for the try
+	// numbers the lines' own prefixes name, and kept whole for the feed
+	// view the `e` key opens.
 	var tries runfeed.Tries
 	seen := int64(0)
+	var feedEvents []runfeed.Event
 	if standing, _, err := feedStanding(ctx, source); err == nil {
+		feedEvents = make([]runfeed.Event, 0, len(standing))
 		for _, line := range standing {
 			tries.Observe(line.Event)
 			if line.End > seen {
 				seen = line.End
 			}
+			feedEvents = append(feedEvents, line.Event)
 		}
 	}
 
+	// The interrupted end: the one end a watch that is still subscribed to a
+	// live run can reach without the run's own word — the caller's context,
+	// or, since the keys, the person's own q or Ctrl-C on the dashboard.
+	// Same words, same codes, whatever interrupted it.
+	interrupted := func(model statusmodel.Model) int {
+		fmt.Fprintf(stderr, "ticfac watch: the watch was interrupted before run %s said it ended; "+
+			"`ticfac status %s` asks whether it is still alive\n", runID, runID)
+		if watchHoldAttention(model) != nil {
+			return ExitHeld
+		}
+		return 1
+	}
+
+	// The draw: the view the interaction state names, over the last frame,
+	// clear to the end of the screen, write. The dashboard is the frame; the
+	// drill views are its keys' answers.
+	ui := watchUI{view: watchViewDashboard}
 	previous := 0
+	draw := func(model statusmodel.Model) {
+		var frame []string
+		switch ui.view {
+		case watchViewFeed:
+			frame = renderFeedView(feedEvents, &tries, &model, ui.scroll, width, height)
+		case watchViewTick:
+			frame = renderTickView(model, ui.selected, styles, width, height)
+		default:
+			frame = renderWatchFrame(model, styles, width, height, ui.selected)
+		}
+		if previous > 0 {
+			fmt.Fprintf(stdout, "\x1b[%dA\r\x1b[J", previous)
+		}
+		for _, line := range frame {
+			fmt.Fprintf(stdout, "%s\n", line)
+		}
+		previous = len(frame)
+	}
+
 	attentionRaised := false
 	for {
-		// The feed, for the lines worth keeping and the end the run itself
-		// writes. A read that fails here is a blip: the frame still renders
-		// (the model degrades "feed" and says so), and the keep cursor keeps
-		// what it had.
+		// The feed, for the shape changes that invalidate the graph cache
+		// and the full feed the drill views read. A read that fails here is
+		// a blip: the frame still renders (the model degrades "feed" and
+		// says so), and the feed view keeps the lines it had.
 		var located []runfeed.Located
+		readOK := false
 		if standing, _, err := feedStanding(ctx, source); err == nil {
 			located = standing
+			readOK = true
 		}
-		var keeps []string
 		maxEnd := seen
-		for _, line := range located {
-			tries.Observe(line.Event)
-			if line.End > maxEnd {
-				maxEnd = line.End
-			}
-			if line.End <= seen {
-				continue
-			}
-			if watchKeepStages[line.Event.Stage] {
-				keeps = append(keeps, watchEventLine(line.Event, &tries))
-			}
-			// The epic's shape changed mid-run: an absorbed finding became a
-			// tick, or a replan moved one between waves. The cached graph is
-			// stale from this line on, so the marked new row appears in the
-			// next frame, not at the TTL's pleasure.
-			if line.Event.Stage == reconcile.StageAbsorbed || line.Event.Stage == reconcile.StageReplanned {
-				graphCache.invalidate()
+		if readOK {
+			// The feed is append-only, so a good read replaces the lines the
+			// drill views show wholesale; a failed one is the blip that
+			// keeps them.
+			feedEvents = make([]runfeed.Event, 0, len(located))
+			for _, line := range located {
+				tries.Observe(line.Event)
+				if line.End > maxEnd {
+					maxEnd = line.End
+				}
+				feedEvents = append(feedEvents, line.Event)
+				// The epic's shape changed mid-run: an absorbed finding became a
+				// tick, or a replan moved one between waves. The cached graph is
+				// stale from this line on, so the marked new row appears in the
+				// next frame, not at the TTL's pleasure.
+				if line.End > seen && (line.Event.Stage == reconcile.StageAbsorbed || line.Event.Stage == reconcile.StageReplanned) {
+					graphCache.invalidate()
+				}
 			}
 		}
 		seen = maxEnd
-		if len(keeps) > 0 {
-			// The lines worth remembering, kept above the block: log lines
-			// above, status below.
-			insertAboveBlock(stdout, previous, keeps)
-		}
 
 		// The model: the frame's whole content, rebuilt from the run's own
 		// durable sources.
@@ -833,17 +864,7 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 			attentionRaised = false
 		}
 
-		// The frame, redrawn in place: up over the last frame, clear to the
-		// end of the screen, write. A table that scrolls is a log, and a log
-		// is what `events --follow` is for.
-		frame := renderWatchFrame(model, styles, width, height, "")
-		if previous > 0 {
-			fmt.Fprintf(stdout, "\x1b[%dA\r\x1b[J", previous)
-		}
-		for _, line := range frame {
-			fmt.Fprintf(stdout, "%s\n", line)
-		}
-		previous = len(frame)
+		draw(model)
 
 		if watchRunEnded(model) {
 			// The run's own last word, in the scrollback below the final
@@ -858,15 +879,49 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 			// Neither "ended" nor an error, and not exit 0: a caller waiting
 			// on this command must not read an interrupted watch as a
 			// finished run — the same contract the stream path holds.
-			fmt.Fprintf(stderr, "ticfac watch: the watch was interrupted before run %s said it ended; "+
-				"`ticfac status %s` asks whether it is still alive\n", runID, runID)
-			if watchHoldAttention(model) != nil {
-				return ExitHeld
-			}
-			return 1
+			return interrupted(model)
 		case <-time.After(interval):
+		case key, ok := <-keys:
+			if !ok {
+				// The keyboard is gone (the reader ended); watch on without
+				// it, the way a keyless watch runs.
+				keys = nil
+				continue
+			}
+			if key == watchKeyCtrlC || (key == watchKeyQuit && ui.view == watchViewDashboard) {
+				// q on the dashboard and Ctrl-C anywhere end the watch the
+				// way SIGINT always has — the same words, the same exit
+				// code — while in a drill view q only comes back down.
+				return interrupted(model)
+			}
+			ui = ui.key(key, model)
+			if ui.view == watchViewFeed {
+				ui.scroll = watchClampScroll(ui.scroll, len(feedEvents), height)
+			}
+			// Redrawn immediately: a key is a person waiting, not a timer.
+			draw(model)
 		}
 	}
+}
+
+// watchClampScroll bounds the feed view's scroll to what the window can
+// show: no further up than the feed's oldest line, never below zero. An
+// unknown height shows everything, and there is nothing to scroll.
+func watchClampScroll(scroll, events, height int) int {
+	if height <= 0 {
+		return 0
+	}
+	top := events - height
+	if top < 0 {
+		top = 0
+	}
+	if scroll > top {
+		return top
+	}
+	if scroll < 0 {
+		return 0
+	}
+	return scroll
 }
 
 // watchRunEnded is the run's own answer to "is there anything left to
@@ -911,11 +966,18 @@ func watchLastWord(model statusmodel.Model) string {
 	return ""
 }
 
-// watchEventLine is the one-line form the stream path prints and the keep
-// lines above the block share: the line's own clock, the tick's own try, the
-// typed stage and the detail — the same words on both paths, so a person
-// reading a log and a person reading the block read one vocabulary.
+// watchEventLine is the one-line form the drill views' lines share: the
+// line's own clock, the tick's own try, the typed stage and the detail —
+// the same words everywhere a feed line is printed for a person, so a
+// person reading a log and a person reading the block read one vocabulary.
 func watchEventLine(event runfeed.Event, tries *runfeed.Tries) string {
+	return fmt.Sprintf("%s %-12s %s: %s", clockOf(event.At), watchEventWho(event, tries), event.Stage, event.Detail)
+}
+
+// watchEventWho is the line's own "who": the run, or the tick with its own
+// try number when the count has one (tick h58) — never the run-wide
+// dispatch number the line's attempt field carries.
+func watchEventWho(event runfeed.Event, tries *runfeed.Tries) string {
 	who := "run"
 	if event.TickID != nil && *event.TickID != "" {
 		who = *event.TickID
@@ -925,7 +987,7 @@ func watchEventLine(event runfeed.Event, tries *runfeed.Tries) string {
 			}
 		}
 	}
-	return fmt.Sprintf("%s %-12s %s: %s", clockOf(event.At), who, event.Stage, event.Detail)
+	return who
 }
 
 // insertAboveBlock writes lines ABOVE the live block, so the block keeps its
