@@ -348,7 +348,7 @@ describe("the phone page renders the dashboard model (hn6, tick 0rx)", () => {
     return await (await page(await login())).text();
   }
 
-  it("renders the golden: every tick in plan order, the ✗ on the rejected try's tick, the healthy verdict with its recovery, needs-you and honest cost", async () => {
+  it("renders the golden: every tick in plan order, the ✗ on the refused try's tick, the healthy verdict with its recovery, needs-you and honest cost", async () => {
     const body = await renderedPage(golden);
 
     // Every tick id, in the golden's own plan order (060, its child 823,
@@ -374,11 +374,16 @@ describe("the phone page renders the dashboard model (hn6, tick 0rx)", () => {
         '<td class="c-what" data-label="what">re-run holds the stopped claim</td>' +
         '<td class="c-pipeline" data-label="pipeline">✓ ✓ ✓ ✓</td>' +
         '<td class="c-time" data-label="time">34m</td>' +
-        '<td class="c-attempts" data-label="attempts">✗✓</td></tr>',
+        // 823's first try was superseded with no refusal behind it — the
+        // gates array names no record for its attempt — so its mark is the
+        // ○ of a dispatch the records state and no evidence answers, not
+        // the ✗ of a refusal.
+        '<td class="c-attempts" data-label="attempts">○✓</td></tr>',
     );
 
-    // The rejected try's tick: 46x's row carries the ✗ on its first try (and
-    // the ● of the try now in flight), with its pipeline at the gate.
+    // The refused try's tick: 46x's row carries the ✗ on its first try (a
+    // gate refusal — the gates array's own fail record names its attempt)
+    // and the ● of the try now in flight, with its pipeline at the gate.
     const row46x = body.slice(at[2], at[3]);
     expect(row46x).toContain('<td class="c-pipeline" data-label="pipeline">✓ ✓ ● …</td>');
     expect(row46x).toContain('<td class="c-attempts" data-label="attempts">✗●</td>');

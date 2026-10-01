@@ -53,6 +53,34 @@ loud.
 
 ---
 
+## 1.2.4
+
+PATCH: four values in `status-model.json`'s `dashboard` golden, corrected to
+what the wave-2 derivations actually produce — the same fixture-drift class
+1.2.3 removed from durations, elapsed, progress and gates, still live in the
+try vocabulary the agreement guard did not read (tick lh4): 46x's superseded
+try carried outcome `rejected` beside the gates array's own fail record
+naming its attempt (`gate-46x-4-go`), where `tryOutcome` reads the evidence
+before the census for a non-current try and answers `gate-failed`, and its
+reason carried the refusal line's tail (`gofmt drifted in two files`) where
+`decorateTries` copies the line's detail whole ("attempt 4 of 46x struck out:
+gofmt drifted in two files"); 823's and v7z's tries carried outcomes
+`gate-failed` and `reported` beside an evidence array that names no record
+for either attempt and a census that stands none of them behind, where the
+derivation answers `dispatched`. The schema, the rules and every other byte
+are unchanged, and every corrected value remains schema-admitted. The
+agreement guard now also reads the try outcomes and reasons: a try's outcome
+is `tryOutcome`'s own branch run over the document's inputs (the checkpoint's
+word, the gates array's evidence, the census — the array is the complete
+evidence inventory, so the outcome is demanded of every try), and a refused
+try's reason is the newest refusal line's detail, cut at 160 the way
+`decorateTries` cuts it, demanded where the document's tail carries the line.
+The phone page's own test follows the one glyph the correction moves: 823's
+first try renders ○, the mark of a dispatch the records state and no evidence
+answers, not the ✗ of a refusal. No consumer has anything to do.
+
+---
+
 ## 1.2.3
 
 PATCH: values in three `status-model.json` goldens, corrected to what the
