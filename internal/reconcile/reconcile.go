@@ -2552,6 +2552,17 @@ type Refusal struct {
 	// such a tick again in-run (redispatchesInRun) rather than holding it for
 	// the next incarnation.
 	neverAnswered bool
+
+	// factoryUnanswered marks an attempt_unaddressed or wiped on an attempt
+	// whose job lives at the factory (FactoryJobs), raised only after the
+	// factory was asked again and still could not answer for it
+	// (factory_unanswered.go). The window releases the attempt and
+	// dispatches the tick again in-run, bounded, rather than holding it for
+	// a person.
+	factoryUnanswered bool
+	// unanswered is the attempt a factoryUnanswered refusal is about: the
+	// one the run releases before it dispatches the tick again.
+	unanswered *attemptHandle
 }
 
 func (r *Refusal) Error() string { return r.Message }

@@ -185,12 +185,30 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			return false
 		}
 		if redispatchesInRun(refusal) && retried[entry.TickID] < maxOperationalRetries {
+			if refusal.factoryUnanswered {
+				// The factory was asked and could not answer for the attempt
+				// (factory_unanswered.go): the run releases it — durably, as
+				// `ticfac settle` would, carrying whatever it committed — and
+				// only then dispatches the tick again. A release that cannot
+				// be recorded leaves nothing to dispatch over, so it is held.
+				if !r.releaseUnanswered(refusal) {
+					park(entry.TickID, refusal)
+					return true
+				}
+			}
 			retried[entry.TickID]++
 			r.recordRefusal(entry.TickID, refusal)
-			r.record(entry.TickID, StageRedispatched,
-				"%s never answered and left nothing to carry (%s), so it is dispatched again in this run rather than held for "+
-					"the next one (%d of at most %d)", entry.TickID, refusal.Message, retried[entry.TickID],
-				maxOperationalRetries)
+			if refusal.factoryUnanswered {
+				r.record(entry.TickID, StageRedispatched,
+					"the factory could not answer for %s when asked again (%s), so the run released it and dispatches "+
+						"the tick again in this run rather than holding it for a person (%d of at most %d)",
+					entry.TickID, refusal.Message, retried[entry.TickID], maxOperationalRetries)
+			} else {
+				r.record(entry.TickID, StageRedispatched,
+					"%s never answered and left nothing to carry (%s), so it is dispatched again in this run rather than held for "+
+						"the next one (%d of at most %d)", entry.TickID, refusal.Message, retried[entry.TickID],
+					maxOperationalRetries)
+			}
 			// The claim is this run's own (dz1, tick 823), as for every
 			// in-run redispatch.
 			entry.Claimed, entry.OwnClaim, entry.StaleClaim, entry.InFlight = true, true, false, false
@@ -1685,7 +1703,19 @@ func (r *Reconciler) restWindow(live []*inflightAttempt) error {
 // died in its boot on the gateway or origin never gets here: it is
 // infrastructure, requeued by infrastructure.go at the same tier.
 func redispatchesInRun(refusal *Refusal) bool {
-	return refusal != nil && refusal.Reason == RefusedCollect && refusal.neverAnswered
+	if refusal == nil {
+		return false
+	}
+	switch refusal.Reason {
+	case RefusedCollect:
+		return refusal.neverAnswered
+	case RefusedUnaddressed, RefusedWiped:
+		// Only one the factory was asked about and could not answer for
+		// (factory_unanswered.go). A local executor's has nobody to ask, and
+		// stays held.
+		return refusal.factoryUnanswered
+	}
+	return false
 }
 
 // neverAnswered says a collect is a worker that never answered for a reason
