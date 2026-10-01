@@ -1,53 +1,57 @@
 <!-- ticks-worker: container facts, prepended after the harness exited. The
 agent's report, including its STATUS line, is unchanged below. -->
 
-_ticks-worker: branch `tick/hn6/attempt-5/yjq`, base `53b3c22e385a575f74ba649ea97c85efab8248a2`, harness `pi` exited 0, 0 work commit(s), 0 uncommitted path(s)._
+_ticks-worker: branch `tick/hn6/attempt-5/yjq`, base `b6c2c10f37575df80cc57a4c5f291655f18dd086`, harness `pi` exited 0, 0 work commit(s), 1 uncommitted path(s)._
 
-# yjq — hn6's acceptance list parses as one item: A2–A6 are unaddressable
+_ticks-worker: a carried attempt — its base `b6c2c10f37575df80cc57a4c5f291655f18dd086` is the head of the work it continued, which was cut from `53b3c22e385a575f74ba649ea97c85efab8248a2`; its work commits are counted from the carried head._
 
-Epic hn6, absorbed tick yjq (finding `1a69054b…`, promoted as `qrl`, placed before the final
-review, which is blocked-by yjq). The tick's own text: *the record is the tracker's to re-flow
-one [A<n>] item per line; no code change is needed.* This attempt verified the defect at the
-current tree and hands the exact fix to the authority that owns the record. It commits nothing,
-because the fix is a tracker-record write and the worker boundary forbids exactly that.
+# yjq (attempt 5) — hn6's acceptance list still parses as one item: A2–A6 unaddressable, fix not landed
+
+Resumed dispatch: this run took over the claim of `run_ee8ebb4fe13d4311b8f9be6f66db69d4` (its
+checkpoint reads failed) and re-dispatched yjq fresh at tier economy, base `b6c2c10` — the commit
+that carries attempt-4's BLOCKED report. Attempt-4's instruction to this attempt was: check
+whether the fix landed; if not, report BLOCKED again with the same text. **It has not landed.**
+This attempt re-verified everything itself rather than trusting the prior report, and adds one
+new piece of evidence: the broken record now demonstrably reaches the findings channel too.
 
 ## What this attempt verified
 
-- **The defect is live at the epic's current head.** `git show origin/epic/hn6:.tick/issues/hn6.json`
-  (head `41863426`, after the oro attempt-3 fold) and `origin/main` both carry an
-  `acceptance_criteria` with **zero newlines** — all six `[A<n>]` marks on one line.
-- **Reproduced with the production parser.** A probe (`go run`, scratch program, deleted after
-  the run) calling `acceptance.Parse` on the record's field returns **exactly one item, A1**;
-  the mark regex `^[ \t]*\[A([^\]]*)\]`
-  (internal/acceptance/acceptance.go:18, Parse at :107) takes a mark only where a line begins
-  with one. This is the same evidence the finding recorded; still true today.
-- **The re-flow is a pure line-split and parses clean.** The same six facts with one mark per
-  line (full text below) parse as **six items A1–A6, no error**, each item's text its own fact.
+1. **The defect is live on every ref.** `hn6`'s `acceptance_criteria` carries **0 newlines** on
+   this worktree, on `origin/epic/hn6` (head `a998148`) and on `origin/main` (head `10930a3`):
+   6 `[A<n>]` marks in the text, 1 line-leading. The production parser
+   (`acceptance.Parse`, internal/acceptance/acceptance.go:18 — `attemptedMark` matches only where
+   a line begins with one) returns **exactly one item, A1**.
+2. **The re-flow is still a pure line-split.** Derived programmatically from the CURRENT record
+   (newline inserted before each mark; whitespace-only change, checked with
+   `' '.join(as_held.split()) == ' '.join(reflowed.split())` → True), it parses with
+   `acceptance.Parse` as **six items A1–A6, no error**, each item's text its own fact.
+3. **The broken record reaches the findings channel.** `ticfac-exec-subprocess lint-report` on a
+   scratch report whose finding claims `breaks.item: "A2"` refuses it (exit 1):
+   `"A2" is not an acceptance item of the epic; the epic's items are A1`. Until the record is
+   re-flowed, no worker can even claim A2–A6 in a findings block — the linter's item context is
+   `LoadLintContext` → `epicItems` → `acceptance.Parse` on the same broken field
+   (internal/exec/subprocess/lint.go:362, epicItems).
 
 ## Why the fix is not this attempt's to apply
 
-- `.tick/` and `.ticfac/` are protected prefixes for a worker
-  (internal/exec/subprocess/report.go:174; the only exemptions are `.tick/config.md`,
-  `.tick/runners.toml`, `.tick/learnings.md`), workers are told not to run `tk`
-  (internal/exec/subprocess/prompt.go:105), and every attempt is diffed against its base and
-  refused on a boundary write (internal/exec/subprocess/collect.go:92-98). Precedent in this
-  epic: RESULT-7uv.md records a BOUNDARY VIOLATION report for an attempt that ran even a
-  read-only `tk` command.
-- The tracker's writes are made durable by the run's own tracker writer, not by a worker
-  (internal/reconcile/tracker.go: durable means pushed — every tk write is committed onto the
-  integration branch in the same step). An uncommitted edit in this worktree would reach nobody.
-- My prompt says commit source and tests only, and the tick says no code change is needed.
-  Committing the record would be refused as `boundary-violation`; a DONE without the fix would
-  close yjq with the record still parsing as one item — the exact false-negative the finding
-  warns about. BLOCKED with the exact fix is the honest answer.
+Re-confirmed at this tree, not copied from attempt-4:
+
+- `.tick/` and `.ticfac/` are protected prefixes; the exemptions are `.tick/config.md`,
+  `.tick/runners.toml`, `.tick/learnings.md` — and the code says of the records:
+  ".tick/issues and .tick/activity are the tracker's authority and are never a worker's to write"
+  (internal/exec/subprocess/report.go:171–188). Workers are told not to run `tk`
+  (internal/exec/subprocess/prompt.go:103–105), and collect diffs every attempt against its base
+  and refuses a boundary write (internal/exec/subprocess/collect.go:92–98).
+- The tick's own words: "The record is the tracker's to re-flow one [A<n>] item per line; no code
+  change is needed." There is no source or test to commit, and an uncommitted edit in this
+  worktree reaches nobody — tracker writes are durable only through the run's own writer,
+  committed onto the integration branch (internal/reconcile/tracker.go).
 
 ## The exact fix — for the run's tracker authority or the operator
 
-Re-flow `hn6`'s `acceptance_criteria` to one `[A<n>]` item per line, **same words, same order,
-nothing added or removed**. The write goes through the tracker's durable writer (the
-orchestrator session's tk path — the same machinery that closed 7uv and recorded the
-absorptions — commits it onto `epic/hn6` and pushes; it folds to main with the epic). From a
-checkout that holds the tracker, the command shape is:
+One field, `hn6`'s `acceptance_criteria`, re-flowed to one `[A<n>]` item per line, **same words,
+same order, nothing added or removed** (text below is derived from the record as it stands, not
+hand-copied). From a checkout that holds the tracker:
 
 ```
 tk update hn6 --acceptance "$(cat <<'EOF'
@@ -61,51 +65,65 @@ EOF
 )"
 ```
 
-**Observable that it landed**: reading `.tick/issues/hn6.json` (reads are allowed — only writes
-are refused) shows ≥5 newlines in `acceptance_criteria`, and the parser returns six items. A
-worker-visible proof: the report linter stops refusing `breaks.item: A2..A6` with
-"the epic's items are A1".
+**Observable that it landed**: `acceptance_criteria` carries ≥5 newlines, and `acceptance.Parse`
+on it returns six items A1–A6. A worker-visible proof: `lint-report` stops refusing
+`breaks.item: A2..A6` with "the epic's items are A1".
 
-## What the review and close-out get once it lands
+## Confirmed downstream: no code change is needed once it lands
 
-- Per-item review binding (internal/reconcile/pr_reviewer.go:167) and close-out scoring
-  (internal/reconcile/score.go:96) reach A2–A6; findings can name them.
-- This repo's runner config carries no `[evidence.acceptance]` table, so all six items are
-  Unverified — the classifier's to predict, per the gvc two-tier. That is the designed state,
-  and matches the absorption record's `basis: predicted`. Nothing else needs to change for the
-  close-out to bind all six.
-- The absorption records that named `done_item: A1` remain as recorded history; the review
-  derives its items fresh from the record.
+- The review binds items fresh from the record: internal/reconcile/pr_reviewer.go `doneEvidence`
+  does `tracker.Show(epic)` → `acceptance.Parse(epic.AcceptanceCriteria)` on every pass.
+- The close-out scores predictions against the record fresh: internal/reconcile/score.go calls
+  `acceptance.Decide(epic.AcceptanceCriteria, evidence)` on the epic as it stands NOW.
+- So A2–A6 become addressable with today's code the moment the record lands; the absorption
+  records that named `done_item: A1` remain recorded history, and the review derives its items
+  fresh.
 
 ## What the next attempt of yjq has to know
 
-- The re-flowed text is in this report — do not re-derive it, do not attempt tracker writes,
-  and do not commit anything for this tick: there is no code change to make.
-- First check whether the fix landed (read the record; zero newlines = still broken). If it
-  landed and yjq is still open, this attempt's work is done — report DONE pointing at the
-  landed record. If it did not land, report BLOCKED again with this same text; the question
-  then holds for the person the ladder reaches.
+- First check whether the fix landed: read `.tick/issues/hn6.json` (reads are allowed); 0
+  newlines = still broken. If it landed and yjq is still open, report DONE pointing at the landed
+  record. If not, report BLOCKED again with this same text — do not re-derive, do not attempt
+  tracker writes, do not commit anything: there is no code change to make.
+- Three attempts have now reported BLOCKED with the exact fix (run_3f034e683's attempt,
+  attempt-4, this one) and the record is unchanged on epic/hn6 and main. This attempt filed a
+  typed proposal finding (below) asking the orchestrator to apply the re-flow itself rather than
+  redispatch into the same boundary wall. A redispatched worker should expect to confirm-and-
+  re-report, not to fix.
 
 ## What I ran
 
-- The parse probe above (scratch `go run` against `internal/acceptance`, deleted after use;
-  nothing from it committed).
-- `git fetch origin epic/hn6 main` + `git show` of both branches' `hn6.json` acceptance fields.
+- Parse probes against `internal/acceptance` (scratch `go run` inside the module, deleted after
+  use; nothing from it committed): as-held → 1 item; re-flowed → 6 items, no error.
+- `python3` counts on the record: 0 newlines, 6 marks, 1 line-leading; whitespace-equality of the
+  re-flow against the original.
+- `git fetch origin epic/hn6 main` + `git show` of both refs' `hn6.json` (newlines: 0 on both).
+- `ticfac-exec-subprocess lint-report /tmp/scratch-report.md --role implement-tick --tick yjq
+  --repo /work/repo` → the A2 refusal quoted above, exit 1 (scratch report deleted after).
 - `ticfac-exec-subprocess lint-report RESULT-yjq.md --role implement-tick --tick yjq` (clean).
-- No commits were made on `tick/hn6/attempt-5/yjq`: the tick's fix is not source or test, and
-  the substrate refuses tracker writes. The attempt is deliberately a blocked-first question
-  (tick tyd's shape): nothing to merge, the tick not closed, the question carried up.
+- No gate run: no source or test was touched — the tick names no command, the tree is the base
+  commit `b6c2c10` plus this uncommitted report.
 
 ## Disclosures
 
-- Before I had read the boundary code I ran three read-only CLI probes: `tk --version`,
-  `tk --help`, `tk update --help`. No state command was ever run and nothing under `.tick/` or
-  `.ticfac/` was written, by tool or by hand. I flag them myself because reads have been
-  reported as violation attempts in this epic before (RESULT-7uv.md), and the difference between
-  a usage probe and a state attempt should come from me, not be inferred.
+- No `tk` command was run at any point this attempt. The only `ticfac-exec-subprocess` uses were
+  the prompt's own `lint-report` checks and its `--help`.
+- Read-only remote reads: `git ls-remote` / `git fetch origin` (epic/hn6, main, and the run's own
+  state branch refs) and `git show` of run-state records under
+  `.ticfac/runs/run_d51a747f…/` on `origin/epic/hn6`, to establish this attempt's shape (resumed
+  dispatch, tier economy, base `b6c2c10`) and confirm the fix had not landed upstream. No tracker
+  or run-state write was made by tool or by hand.
 
 ```findings v2
-[]
+[
+  {
+    "kind": "proposal",
+    "title": "Blocked tracker-record fixes need an orchestrator-applied disposition",
+    "severity": "medium",
+    "body": "yjq's fix is a one-field re-flow of hn6's acceptance_criteria that no worker can apply: .tick/issues/ is a protected prefix and implement-tick workers are forbidden tk. Three attempts (run_3f034e683's, attempt-4, this one) reported BLOCKED with the exact fix in hand and the field still reads 0 newlines on epic/hn6 and main; the blocked ladder only converges after two more redispatches into the same boundary wall, ending in a hold — while the epic's final review waits behind yjq. Proposal: when an implement-tick report is BLOCKED and its named fix is a tracker-record write, the orchestrator applies it itself through tk (the same authority that writes the epic's notes) and closes the tick, instead of redispatching.",
+    "evidence": "internal/exec/subprocess/report.go:171-188 (issues not exempt); internal/acceptance/acceptance.go:18 (line-leading marks only); Parse on the record returns 1 item, the re-flow 6; lint-report refuses breaks.item A2 with \"the epic's items are A1\""
+  }
+]
 ```
 
-STATUS: BLOCKED — the fix is a one-field tracker-record re-flow of hn6's acceptance_criteria (one [A<n>] item per line, exact text in this report); the worker boundary forbids .tick/ writes and tk, and the tick itself says no code change is needed — the run's tracker authority or the operator must apply it, after which Parse yields six items and the review unblocks.
+STATUS: BLOCKED — the fix is still a one-field tracker-record re-flow of hn6's acceptance_criteria (one [A<n>] item per line, exact text in this report); the worker boundary forbids .tick/ writes and tk, the tick itself says no code change is needed, and the field still reads 0 newlines on epic/hn6 and main after three BLOCKED attempts — the run's tracker authority or the operator must apply it, after which Parse yields six items and the review unblocks.
