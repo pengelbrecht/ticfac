@@ -1981,7 +1981,10 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 	if err != nil {
 		return nil, nil, fmt.Errorf("inspect the adopted attempt of %s: %w", marker.TickID, err)
 	}
-	if status.State == subprocess.StateLost && r.guarded(guardSettleFromEvidence) {
+	// A factory's `lost` is adopted and re-asked by the wait, never a hold for
+	// a person here (FactoryJobs): the factory settles what it can no longer
+	// run, and the wait reads that settlement at the attempt's cadence.
+	if status.State == subprocess.StateLost && r.guarded(guardSettleFromEvidence) && !jobsLiveAtFactory(executor) {
 		return nil, nil, r.refuse(RefusedUnaddressed, marker.TickID,
 			"%s cannot be addressed and has not settled: it is held, never redispatched",
 			r.attemptName(marker.TickID, marker.Attempt))
@@ -2535,6 +2538,29 @@ type inflightAttempt struct {
 	// the window already settled and goes straight to the finish, which proves
 	// the containment again, gates the epic head and closes.
 	integrated bool
+
+	// lostNoted says the run has already said, once, that a factory answers
+	// this attempt `lost` and is being re-asked (jobsLiveAtFactory). Cleared
+	// when the answer changes, so a second spell of `lost` is said again.
+	lostNoted bool
+}
+
+// FactoryJobs is an executor whose jobs live in a FACTORY that keeps its own
+// records of them — boots, settlements, reclaims — and answers for them by
+// identity (the cloud sandbox door). For such an executor `lost` is the
+// factory's answer for one look, not "nobody can say": the factory is the one
+// party that can say, and it settles a job whose container went (the door
+// answers a stopped container `failed`). So the run re-asks it rather than
+// stopping for a person.
+type FactoryJobs interface {
+	JobsLiveAtFactory() bool
+}
+
+// jobsLiveAtFactory reports whether the executor's jobs live in a factory
+// that answers for them (FactoryJobs).
+func jobsLiveAtFactory(executor Executor) bool {
+	factory, ok := executor.(FactoryJobs)
+	return ok && factory.JobsLiveAtFactory()
 }
 
 func (r *Reconciler) newInflight(entry planEntry, handle *subprocess.JobHandle, executor Executor, marker attemptHandle) *inflightAttempt {
@@ -2621,9 +2647,28 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 		r.probeProgress(fl)
 
 		if status.State == subprocess.StateLost && r.guarded(guardSettleFromEvidence) {
-			return nil, r.refuse(RefusedUnaddressed, marker.TickID,
-				"%s cannot be addressed and has not settled: nobody can say whether it is running, "+
-					"which is not the same as nothing running", r.attemptName(marker.TickID, marker.Attempt))
+			if !jobsLiveAtFactory(fl.executor) {
+				return nil, r.refuse(RefusedUnaddressed, marker.TickID,
+					"%s cannot be addressed and has not settled: nobody can say whether it is running, "+
+						"which is not the same as nothing running", r.attemptName(marker.TickID, marker.Attempt))
+			}
+			// A factory's `lost` is the factory's answer for THIS look, and the
+			// factory is the party that keeps the job's records and settles
+			// them (epic hn6, run_6d88e3de: one `lost` for 7uv halted the run
+			// for a person while zl1 was still running and seven ticks were
+			// ready). It is re-asked at the attempt's own cadence, only this
+			// tick waits on it, and the bounds below — the wall clock, this
+			// run's patience past it — stay the backstop.
+			if !fl.lostNoted {
+				fl.lostNoted = true
+				r.record(marker.TickID, StageWaiting,
+					"%s reads lost at the factory (%s): the factory keeps this job's records and is the party "+
+						"that can settle it, so the run keeps asking it at the attempt's own cadence and holds "+
+						"only this tick — nothing is redispatched over it, and the other ticks go on",
+					r.attemptName(marker.TickID, marker.Attempt), lastObservation(status))
+			}
+		} else {
+			fl.lostNoted = false
 		}
 
 		// The wall clock's FIRING is a feed event, not only an observation in

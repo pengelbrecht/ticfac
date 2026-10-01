@@ -76,6 +76,12 @@ class FakeProcess {
 class FakeSandbox implements OrchestratorSandbox {
   readonly processes: FakeProcess[] = [];
   destroyed = false;
+  /**
+   * Whether the container is up. False is a container that STOPPED — idled
+   * out, evicted — with whatever ran in it gone; addressing it with any
+   * process call would cold-boot it empty, which the fake refuses to do.
+   */
+  running = true;
   #next = 0;
 
   constructor(readonly name: string) {}
@@ -109,7 +115,12 @@ class FakeSandbox implements OrchestratorSandbox {
     // cold boot, which under full capacity waits for a free instance.
     if (this.destroyed)
       throw new Error(`listProcesses cold-booted destroyed container ${this.name}`);
+    if (!this.running) throw new Error(`listProcesses cold-booted stopped container ${this.name}`);
     return this.processes.map((p) => ({ ...p.view }));
+  }
+
+  async isRunning(): Promise<boolean> {
+    return this.running && !this.destroyed;
   }
 
   async readOutput(id: string, offset: number): Promise<SandboxOutput> {
@@ -141,9 +152,12 @@ class FakeSandboxes implements SandboxBinding {
   readonly addressed: string[] = [];
   /** When set, addressing any container throws this — the platform failing under the door. */
   failWith: Error | null = null;
+  /** The names ever addressed with keepAlive: containers whose life is not the observer's. */
+  readonly keptAlive = new Set<string>();
 
-  async get(name: string): Promise<OrchestratorSandbox> {
+  async get(name: string, options?: { keepAlive?: boolean }): Promise<OrchestratorSandbox> {
     this.addressed.push(name);
+    if (options?.keepAlive === true) this.keptAlive.add(name);
     if (this.failWith !== null) throw this.failWith;
     let sandbox = this.#byName.get(name);
     if (sandbox === undefined) {
@@ -1032,6 +1046,37 @@ describe("state", () => {
     };
     expect(status.state).toBe("lost");
     expect(status.terminal).toBe(false);
+  });
+
+  // Epic hn6, run_6d88e3de: the orchestrator sat 25 minutes in one
+  // resolve-conflict job's wait, and the two workers it was not polling idled
+  // out under `sleepAfter` with pi mid-tick. A worker's container must live
+  // as long as its worker, not as long as someone keeps asking about it.
+  it("keeps a launched worker's container alive: its life is the worker's, not its observer's", async () => {
+    expect((await postStart(runToken, startBody())).status).toBe(201);
+    expect(binding.keptAlive.has(attemptSandboxName(RUN_ID, TICK, 1))).toBe(true);
+  });
+
+  // The same run: the next read of 7uv cold-booted its stopped container,
+  // found no work process in it, and answered `lost` — which halted the run
+  // for a person. A stopped container is the factory's own knowledge: the
+  // work process went with it.
+  it("answers a booted worker whose container STOPPED as failed, without booting it to ask", async () => {
+    await postStart(runToken, startBody());
+    const container = binding.named(attemptSandboxName(RUN_ID, TICK, 1));
+    container.running = false;
+
+    const status = (await (await getState(runToken, TICK, 1)).json()) as Record<string, unknown> & {
+      observations: Array<{ kind: string; detail: string }>;
+    };
+    expect(validate(jobStatusSchema, protocolDefs, status)).toEqual([]);
+    expect(status).toMatchObject({ state: "failed", terminal: true });
+    expect(status.observations[0]?.kind).toBe("exited");
+    expect(status.observations[0]?.detail).toContain("stopped under it");
+
+    // Settled in the records: the next read answers the same, from them.
+    const again = (await (await getState(runToken, TICK, 1)).json()) as Record<string, unknown>;
+    expect(again).toMatchObject({ state: "failed", terminal: true });
   });
 
   it("refuses a malformed identity in the path", async () => {
