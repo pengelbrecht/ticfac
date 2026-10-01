@@ -249,9 +249,135 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 		return failed, nil
 	}
 
+	// admitted takes one admission's answer: the attempt joins the window, or
+	// its error is answered — a blocked tick requeued behind its blocker, a
+	// question the run answers itself, or the refusal that stops the run.
+	// halt says the admission loop is over; fatal is an error the run returns
+	// as it arrived.
+	admitted := func(entry planEntry, fl *inflightAttempt, err error) (halt bool, fatal error) {
+		if err != nil {
+			// A tick the tracker still holds behind an open blocker (tick
+			// 3h0) is not the tick's refusal: it is the run's own
+			// sequencing catching up with an edge the plan did not carry,
+			// and the answer is to honour it — requeue the tick behind the
+			// blocker and dispatch the blocker first — not to stop.
+			var blocked *blockedTickErr
+			if errors.As(err, &blocked) {
+				plan, queue, err = r.requeueBlocked(ctx, plan, queue, entry, blocked, window.holders())
+				if err == nil {
+					return false, nil
+				}
+			}
+			if again(entry, err) {
+				return false, nil
+			}
+			var refusal *Refusal
+			if !asRefusal(err, &refusal) {
+				return true, err
+			}
+			stopped = true
+			if cErr := reject(entry.TickID, refusal); cErr != nil {
+				return true, cErr
+			}
+			return true, nil
+		}
+		switch {
+		case fl == nil:
+		case fl.integrated:
+			// Already merged by somebody else: nothing to poll, so it
+			// waits its turn to be finished like any settled attempt.
+			window.settled = append(window.settled, &settledAttempt{fl: fl})
+		default:
+			window.live = append(window.live, fl)
+		}
+		return false, nil
+	}
+
+	// What a turn taken INSIDE a finish step learned and could not act on
+	// there: a refusal raised while addressing a live attempt (the attempt
+	// stays in the live half until the loop stops for it), and an admission
+	// that answered with an error. The loop answers both the moment the step
+	// returns, exactly as it would have had it learned them itself.
+	var turnStop *inflightAttempt
+	var turnStopErr error
+	var turnAdmit *planEntry
+	var turnAdmitErr error
+
+	// The window's turn while a finish step WAITS (epic hn6, run_6d88e3de).
+	// A finish step can block for as long as a job it dispatched runs — a
+	// resolve-conflict job, a gate's repair — and the window used to get
+	// nothing for that whole wait: 378's resolve ran 25 minutes, 7uv and zl1
+	// were not asked about once, and the factory let both containers idle out
+	// with their workers inside. The wait now hands the window its turn
+	// between its own polls: every live attempt is addressed once — a settled
+	// one moves to the settled half to be finished after this one, finishing
+	// being serial — and whatever the window may admit is admitted. Nothing
+	// here finishes anything, and nothing here stops the run: what would stop
+	// it is held for the loop.
+	turn := func(ctx context.Context) {
+		polledAt = r.now()
+		if stopped || turnStop != nil || turnAdmit != nil {
+			return
+		}
+		for i := 0; i < len(window.live); {
+			fl := window.live[i]
+			status, err := r.addressOnce(ctx, fl)
+			if err != nil {
+				turnStop, turnStopErr = fl, err
+				return
+			}
+			if status != nil {
+				window.live = append(window.live[:i], window.live[i+1:]...)
+				window.settled = append(window.settled, &settledAttempt{fl: fl, status: status})
+				continue
+			}
+			i++
+		}
+		for len(queue) > 0 && !behindParked(queue[0]) && r.mayAdmit(queue[0], &window, plan) {
+			entry := queue[0]
+			queue = queue[1:]
+			fl, err := r.admit(ctx, entry)
+			if err != nil {
+				turnAdmit, turnAdmitErr = &entry, err
+				return
+			}
+			_, _ = admitted(entry, fl, nil)
+		}
+	}
+	// answerTurn acts on what a turn held for the loop. done says runPlan
+	// returns (out, err).
+	answerTurn := func() (done bool, out []string, err error) {
+		if turnStop != nil {
+			fl, stopErr := turnStop, turnStopErr
+			turnStop, turnStopErr = nil, nil
+			for i, live := range window.live {
+				if live == fl {
+					window.live = append(window.live[:i], window.live[i+1:]...)
+					break
+				}
+			}
+			out, err = stop(fl.entry.TickID, stopErr)
+			return true, out, err
+		}
+		if turnAdmit != nil {
+			entry, admitErr := *turnAdmit, turnAdmitErr
+			turnAdmit, turnAdmitErr = nil, nil
+			if halt, fatal := admitted(entry, nil, admitErr); fatal != nil {
+				return true, nil, fatal
+			} else if halt {
+				r.announceAbandonedWindow(&window)
+				return true, failed, nil
+			}
+		}
+		return false, nil, nil
+	}
+
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
+		}
+		if done, out, err := answerTurn(); done {
+			return out, err
 		}
 
 		for !stopped && len(queue) > 0 {
@@ -271,40 +397,12 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			entry := queue[0]
 			queue = queue[1:]
 			fl, err := r.admit(ctx, entry)
-			if err != nil {
-				// A tick the tracker still holds behind an open blocker (tick
-				// 3h0) is not the tick's refusal: it is the run's own
-				// sequencing catching up with an edge the plan did not carry,
-				// and the answer is to honour it — requeue the tick behind the
-				// blocker and dispatch the blocker first — not to stop.
-				var blocked *blockedTickErr
-				if errors.As(err, &blocked) {
-					plan, queue, err = r.requeueBlocked(ctx, plan, queue, entry, blocked, window.holders())
-					if err == nil {
-						continue
-					}
-				}
-				if again(entry, err) {
-					continue
-				}
-				var refusal *Refusal
-				if !asRefusal(err, &refusal) {
-					return nil, err
-				}
-				stopped = true
-				if cErr := reject(entry.TickID, refusal); cErr != nil {
-					return nil, cErr
-				}
-				break
+			halt, fatal := admitted(entry, fl, err)
+			if fatal != nil {
+				return nil, fatal
 			}
-			switch {
-			case fl == nil:
-			case fl.integrated:
-				// Already merged by somebody else: nothing to poll, so it
-				// waits its turn to be finished like any settled attempt.
-				window.settled = append(window.settled, &settledAttempt{fl: fl})
-			default:
-				window.live = append(window.live, fl)
+			if halt {
+				break
 			}
 		}
 
@@ -328,7 +426,9 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 		// above and the poll below happen through a gate instead of after it.
 		if window.finish != nil {
 			f := window.finish
+			r.windowTurn = turn
 			done, err := r.advanceFinish(ctx, f)
+			r.windowTurn = nil
 			if err != nil {
 				window.finish = nil
 				if again(f.fl.entry, err) {
@@ -1407,6 +1507,19 @@ func (r *Reconciler) pollWindow(ctx context.Context, live []*inflightAttempt) (i
 		}
 	}
 	return -1, nil, nil
+}
+
+// takeWindowTurn gives the dispatch window its turn from inside a wait that a
+// finish step is blocked in (runPlan's turn): the live attempts are addressed
+// and the window admits what it may, between the wait's own polls. Outside a
+// finish step, and inside a turn already being taken, it does nothing.
+func (r *Reconciler) takeWindowTurn(ctx context.Context) {
+	if r.windowTurn == nil || r.inWindowTurn {
+		return
+	}
+	r.inWindowTurn = true
+	defer func() { r.inWindowTurn = false }()
+	r.windowTurn(ctx)
 }
 
 // restWindow is the pause between rounds of polling.

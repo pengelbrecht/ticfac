@@ -2446,6 +2446,10 @@ func (r *Reconciler) awaitInflight(ctx context.Context, fl *inflightAttempt) (*s
 		if status != nil {
 			return status, nil
 		}
+		// The window's turn, when this wait is one a finish step is blocked
+		// in (takeWindowTurn): the run's other attempts are not left
+		// unaddressed for as long as this one runs.
+		r.takeWindowTurn(ctx)
 		if err := r.restBetweenPolls(fl); err != nil {
 			return nil, err
 		}
