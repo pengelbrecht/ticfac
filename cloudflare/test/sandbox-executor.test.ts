@@ -656,12 +656,16 @@ describe("collect", () => {
       },
     ]);
     // And the collect READS the attempt's write_ref, never the landing
-    // branch: the reconciler's settle and the collect look at one ref.
+    // branch: the reconciler's settle and the collect look at one ref. The
+    // landing branch and run ride along only so a boot that stopped before
+    // its harness can be read from beside it (#176).
     expect(collector.asked).toEqual([
       {
         tick_id: "k4s",
         branch: "ticfac/run-run-x/tick-k4s/attempt-3",
         base_sha: BASE_SHA,
+        landing_branch: "tick/ncv/attempt-3/k4s",
+        run_id: RUN_ID,
       },
     ]);
     expect(report.outcome).toBe("done");
@@ -695,6 +699,8 @@ describe("collect", () => {
         tick_id: "k4s",
         branch: "ticfac/run-run-x/tick-k4s/attempt-3",
         base_sha: BASE_SHA,
+        landing_branch: "tick/ncv/attempt-3/k4s",
+        run_id: RUN_ID,
       },
     ]);
   });

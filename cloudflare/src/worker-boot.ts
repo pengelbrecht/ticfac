@@ -215,6 +215,23 @@ export function workerResultFile(tick: string): string {
   return `RESULT-${tick}.md`;
 }
 
+/**
+ * Where a worker container that stopped in its boot, before its harness, pushes
+ * its exit code and reason (image/worker.sh `boot_stopped`, #176): a branch
+ * BESIDE its worker branch, never the worker branch itself, whose emptiness is
+ * what the collect's verdicts are keyed on. Mirrors
+ * `sandboximage.WorkerBootStoppedBranch`; test/worker-collect.test.ts reads
+ * both other spellings so the three cannot drift.
+ */
+export function workerBootStoppedBranch(workerBranch: string): string {
+  return `${workerBranch}-boot-stopped`;
+}
+
+/** The one file the boot-stopped marker adds to the base. Mirrors `sandboximage.WorkerBootStoppedFile`. */
+export function workerBootStoppedFile(tick: string): string {
+  return `BOOT-STOPPED-${tick}.md`;
+}
+
 // ---------------------------------------------------------- the exit codes ---
 
 /**
@@ -231,6 +248,36 @@ export const WORKER_EXIT = {
   /** The harness failed or ran out of time; whatever it committed was pushed first. */
   agent: 11,
 } as const;
+
+/**
+ * What every exit code a worker container can end with means, in the Go
+ * collect's own words (internal/exec/cloudflaresandbox/exitclass.go
+ * `exitClass`), so a boot-stopped marker reads the same from either collect.
+ * test/worker-collect.test.ts parses the Go source and holds this table to it.
+ */
+export const WORKER_EXIT_CLASSES: Readonly<Record<number, string>> = {
+  2: "a required input was missing or malformed",
+  3: "the checkout of the base or its worker branch failed",
+  4: "tk is absent or not the version the image pins",
+  5: "an [environment.commands] pre-flight check failed",
+  6: "the repository's [sandbox] setup failed",
+  7: "the container could not call its model (the gateway probe failed)",
+  8: "the harness could not use the model route (the harness probe failed)",
+  13: "the start commit is not on origin: the job was dispatched on a commit only its dispatcher's clone holds",
+  14: "the model gateway did not answer through the boot's retry window (infrastructure, not the tick)",
+  15: "origin did not answer the fetch through the boot's retry window (infrastructure, not the tick)",
+  [WORKER_EXIT.push]: "commits exist and origin would not take them",
+  [WORKER_EXIT.no_work]: "the branch and report reached origin with no work commits",
+  [WORKER_EXIT.agent]: "the harness failed, ran out of time, or left no report",
+  124: "a bounded step timed out",
+  137: "the process was killed (SIGKILL: out of memory, or the container was stopped)",
+  143: "the process was terminated (SIGTERM)",
+};
+
+/** One exit code's class, or "" for a code the image does not assign. */
+export function workerExitClass(code: number): string {
+  return WORKER_EXIT_CLASSES[code] ?? "";
+}
 
 // --------------------------------------------------------------- the boot ---
 

@@ -1,11 +1,20 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
+import WORKER_SH from "../../image/worker.sh?raw";
+import EXITCLASS_GO from "../../internal/exec/cloudflaresandbox/exitclass.go?raw";
+import SANDBOXIMAGE_GO from "../../internal/sandboximage/sandboximage.go?raw";
+import {
+  WORKER_EXIT_CLASSES,
+  workerBootStoppedBranch,
+  workerBootStoppedFile,
+  workerExitClass,
+} from "../src/worker-boot";
 import {
   BOUNDARY_REPORT_MARKER,
   collectFromGithub,
   githubWorkerCollector,
   needsHuman,
+  parseBootStopped,
   parseStatus,
   resultFile,
   STATUS_BLOCKED,
@@ -44,6 +53,12 @@ const BRANCH = "tick/1vn/0ds";
 type StubRoute = {
   compare?: { status: number; body: unknown };
   contents?: { status: number; body: unknown };
+  /**
+   * Per-file answers keyed `<path>@<ref>`, consulted before `contents`: the
+   * boot-stopped marker sits on a branch of its own, and the report on the
+   * worker branch must not answer for it.
+   */
+  files?: Record<string, { status: number; body: unknown }>;
 };
 
 /** Stands in for GitHub's compare and contents endpoints. */
@@ -56,6 +71,15 @@ function stubGithub(route: StubRoute): { calls: string[]; restore: () => void } 
     calls.push(url);
     if (url.includes("/compare/") && route.compare !== undefined) {
       return Response.json(route.compare.body, { status: route.compare.status });
+    }
+    if (url.includes("/contents/") && route.files !== undefined) {
+      const parsed = new URL(url);
+      const path = decodeURIComponent(parsed.pathname.split("/contents/")[1] ?? "");
+      const answer = route.files[`${path}@${parsed.searchParams.get("ref") ?? ""}`];
+      if (answer !== undefined) return Response.json(answer.body, { status: answer.status });
+      if (path.startsWith("BOOT-STOPPED-")) {
+        return Response.json({ message: "Not Found" }, { status: 404 });
+      }
     }
     if (url.includes("/contents/") && route.contents !== undefined) {
       return Response.json(route.contents.body, { status: route.contents.status });
@@ -483,5 +507,191 @@ describe("githubWorkerCollector", () => {
     } finally {
       github.restore();
     }
+  });
+});
+
+// ------------------------------------------------- the boot-stopped marker ---
+
+/**
+ * A worker that stopped in its boot, before its harness, pushes its exit code
+ * and the boot's own reason BESIDE its worker branch (image/worker.sh
+ * boot_stopped, #176), never on it. The Go collect reads it (internal/exec/
+ * cloudflaresandbox/boot_stopped.go); this one must say the same thing about
+ * the same branch, or a cloud-side reader is left with "has no commits beyond
+ * the base" for a container that told origin exactly why it stopped (hn6
+ * run_ee8e: 378's resolve job exited 7 at its gateway probe).
+ */
+describe("the boot-stopped marker", () => {
+  const LANDING = "tick/1vn/attempt-2/0ds";
+  const RUN = "run_8ty_boot";
+  const marker = (exit: number, reason: string) => ({
+    status: 200,
+    body: {
+      content: b64(
+        `# 0ds: the boot stopped before the harness started\n\nexit: ${exit}\nreason: ${reason}\n\n` +
+          `run: ${RUN}\nworker branch: ${LANDING}\n`,
+      ),
+      encoding: "base64",
+    },
+  });
+
+  it("names the exit code, its class and the reason when the worker branch is empty", async () => {
+    const github = stubGithub({
+      compare: compareOK(0),
+      contents: { status: 404, body: { message: "Not Found" } },
+      files: {
+        [`${workerBootStoppedFile("0ds")}@${workerBootStoppedBranch(LANDING)}`]: marker(
+          7,
+          "the gateway did not answer a one-token request within 30s.",
+        ),
+      },
+    });
+    try {
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+        landing_branch: LANDING,
+        run_id: RUN,
+      });
+      // The verdict is the branch's; the marker only says why.
+      expect(report.verdict).toBe("no-commits");
+      expect(report.boot_stopped).toEqual({
+        exit_code: 7,
+        reason: "the gateway did not answer a one-token request within 30s.",
+      });
+      expect(report.detail).toBe(
+        "the container's boot stopped before its harness started (exit 7: the container could not call its " +
+          "model (the gateway probe failed)): the gateway did not answer a one-token request within 30s.. " +
+          `Nothing reached ${LANDING}; the reason is on ${LANDING}-boot-stopped`,
+      );
+    } finally {
+      github.restore();
+    }
+  });
+
+  it("finds the marker beside the per-run landing branch too, as the Go collect does", async () => {
+    const fallback = `${LANDING}-${RUN}`;
+    const github = stubGithub({
+      compare: { status: 404, body: { message: "Not Found" } },
+      files: {
+        [`${workerBootStoppedFile("0ds")}@${workerBootStoppedBranch(fallback)}`]: marker(
+          15,
+          "origin did not answer the fetch",
+        ),
+      },
+    });
+    try {
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+        landing_branch: LANDING,
+        run_id: RUN,
+      });
+      expect(report.verdict).toBe("no-commits");
+      expect(report.boot_stopped?.exit_code).toBe(15);
+      expect(report.detail).toContain("(exit 15: origin did not answer the fetch through");
+      expect(report.detail).toContain("): origin did not answer the fetch.");
+    } finally {
+      github.restore();
+    }
+  });
+
+  it("says what it always said when there is no marker", async () => {
+    const github = stubGithub({
+      compare: compareOK(0),
+      contents: { status: 404, body: { message: "Not Found" } },
+    });
+    try {
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+        landing_branch: LANDING,
+        run_id: RUN,
+      });
+      expect(report.verdict).toBe("no-commits");
+      expect(report.boot_stopped).toBeUndefined();
+      expect(report.detail).toBe(`${BRANCH} has no commits beyond ${BASE.slice(0, 8)}`);
+    } finally {
+      github.restore();
+    }
+  });
+
+  it("is not read for a worker that reached its harness", async () => {
+    const github = stubGithub({
+      compare: compareOK(1, ["work.go", RESULT_PATH]),
+      contents: { status: 200, body: { content: b64("STATUS: DONE"), encoding: "base64" } },
+      files: {
+        [`${workerBootStoppedFile("0ds")}@${workerBootStoppedBranch(LANDING)}`]: marker(7, "stale"),
+      },
+    });
+    try {
+      const report = await collectFromGithub(env, PROJECT, {
+        tick_id: "0ds",
+        branch: BRANCH,
+        base_sha: BASE,
+        landing_branch: LANDING,
+        run_id: RUN,
+      });
+      expect(report.verdict).toBe("ready-to-merge");
+      expect(report.boot_stopped).toBeUndefined();
+      expect(github.calls.some((url) => url.includes("BOOT-STOPPED-"))).toBe(false);
+    } finally {
+      github.restore();
+    }
+  });
+
+  it("refuses a marker without both lines, like the Go parseBootStopped", () => {
+    expect(parseBootStopped("exit: 7\nreason: the probe failed\n")).toEqual({
+      exit_code: 7,
+      reason: "the probe failed",
+    });
+    expect(parseBootStopped("exit: 7\n")).toBeNull();
+    expect(parseBootStopped("reason: x\n")).toBeNull();
+    expect(parseBootStopped("exit: seven\nreason: x\n")).toBeNull();
+  });
+});
+
+/**
+ * The spellings and the exit classes have three homes — the image that writes
+ * the marker, the Go collect and this one — and nothing compiles across them.
+ * The image's own text and the Go sources are read here, so a rename on any
+ * side fails this suite rather than silently leaving one collect blind.
+ */
+describe("the boot-stopped marker agrees with the image and the Go collect", () => {
+  it("is spelled as image/worker.sh pushes it and sandboximage names it", () => {
+    // The shell's own spelling, `${…}` and all, assembled so it reads as
+    // the literal text of image/worker.sh rather than a template.
+    const dollar = "$";
+    expect(WORKER_SH).toContain(
+      `local marker_branch="${dollar}{worker_branch}-boot-stopped" file="BOOT-STOPPED-${dollar}{tick_id}.md"`,
+    );
+    expect(workerBootStoppedBranch("tick/e/attempt-1/t")).toBe("tick/e/attempt-1/t-boot-stopped");
+    expect(workerBootStoppedFile("t")).toBe("BOOT-STOPPED-t.md");
+    expect(SANDBOXIMAGE_GO).toContain('return workerBranch + "-boot-stopped"');
+    expect(SANDBOXIMAGE_GO).toContain('return "BOOT-STOPPED-" + tick + ".md"');
+  });
+
+  it("names every exit code with the Go collect's own sentence", () => {
+    const values = new Map<string, number>();
+    for (const m of SANDBOXIMAGE_GO.matchAll(/^\s*(Exit[A-Za-z]+)\s*=\s*(\d+)/gm)) {
+      values.set(m[1], Number(m[2]));
+    }
+    const classes = new Map<number, string>();
+    for (const m of EXITCLASS_GO.matchAll(
+      /case (?:sandboximage\.(Exit[A-Za-z]+)|(\d+)):\s*\n\s*return "([^"]+)"/g,
+    )) {
+      const code = m[1] !== undefined ? values.get(m[1]) : Number(m[2]);
+      expect(code, m[0]).toBeDefined();
+      classes.set(code as number, m[3]);
+    }
+    expect(classes.size).toBeGreaterThan(10);
+    for (const [code, sentence] of classes) {
+      expect(workerExitClass(code), `exit ${code}`).toBe(sentence);
+    }
+    expect(Object.keys(WORKER_EXIT_CLASSES).length).toBe(classes.size);
+    expect(workerExitClass(99)).toBe("");
   });
 });
