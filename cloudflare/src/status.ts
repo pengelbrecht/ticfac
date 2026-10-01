@@ -65,7 +65,80 @@ export type StatusAttention = {
   unblock_command?: string | null;
 };
 
-/** The fields of `ticfac.status.v1` this factory reads. */
+/**
+ * One stop of a tick's pipeline cell — the stages this role's tick passes
+ * through, each with its own state (hn6, wave 1). A stage the tick has not
+ * reached reads `pending`; the cell fills left to right and a renderer
+ * draws one glyph per stage.
+ */
+export type StatusPipelineStage = { stage: string; state: string };
+
+/**
+ * One try of a tick's attempt history (hn6, wave 1): the outcome the durable
+ * records state, the tier it dispatched at, and — for a try the records
+ * refused — the reason the feed states and, on the last try only, the run's
+ * own next step. All optional because a pre-hn6 snapshot carries none of
+ * them and every field the records do not state stays null.
+ */
+export type StatusTry = {
+  try?: number;
+  attempt?: number;
+  outcome?: string;
+  tier?: string | null;
+  reason?: string | null;
+  next_step?: string | null;
+  dispatched_at?: string;
+};
+
+/**
+ * One tick of the model's wave listing. The pre-hn6 shape — id, title,
+ * state — stays; the hn6 fields (gloss, the pipeline cell, the parent row,
+ * the duration, the tries) are optional because older snapshots lack them.
+ */
+export type StatusTick = {
+  tick_id: string;
+  title?: string;
+  gloss?: string;
+  state: string;
+  pipeline?: StatusPipelineStage[];
+  parent_tick_id?: string | null;
+  duration_seconds?: number | null;
+  tries?: StatusTry[];
+};
+
+/**
+ * One cost line (hn6, wave 2): which river the spend ran through, whether
+ * anything measured it, the number where one exists. An unmetered line
+ * carries usd null and says so — never a fabricated $0.00.
+ */
+export type StatusCostLine = {
+  source: string;
+  metered: boolean;
+  usd?: number | null;
+  attempts?: number;
+  basis?: string | null;
+};
+
+/** One feed event of the model's recent tail — the run's own last words. */
+export type StatusRecentEvent = {
+  at: string;
+  tick_id?: string | null;
+  attempt?: number | null;
+  stage: string;
+  detail: string;
+};
+
+/**
+ * The fields of `ticfac.status.v1` this factory reads.
+ *
+ * The hn6 dashboard fields (progress, remaining, health.verdict, the
+ * lifecycle's own phases, the per-tick pipeline cell and try history, the
+ * cost lines, the recent tail) are ALL optional: an older snapshot carries
+ * none of them and the cloud-composed doc carries only what the factory's
+ * own records state, and a reader that guessed at an absent field would be
+ * a second opinion, not a reader. A doc without them renders exactly as it
+ * did before they existed.
+ */
 export type StatusDoc = {
   schema_version: number;
   run_id: string;
@@ -79,6 +152,9 @@ export type StatusDoc = {
   };
   lifecycle: {
     phase: string;
+    /** Each phase's own state (plan, waves, review, close-out, ci, merge). */
+    phases?: { phase: string; state: string }[];
+    wave?: { active: number; total: number } | null;
   };
   attention: StatusAttention[];
   /**
@@ -94,9 +170,46 @@ export type StatusDoc = {
     | {
         wave: number;
         state: string;
-        ticks: { tick_id: string; title?: string; state: string }[];
+        ticks: StatusTick[];
       }[]
     | null;
+  /** The epic's children and waves counted; null when the tracker was unreadable. */
+  progress?: {
+    ticks?: { total: number; closed: number; open?: number } | null;
+    waves?: { total: number; done: number; active: number } | null;
+  } | null;
+  /**
+   * The approximate time left, only where measured tick durations support
+   * it — the ETA the dashboard shows as `~`. Null everywhere else.
+   */
+  remaining?: { approximate_seconds?: number | null; basis?: string } | null;
+  /**
+   * The health counts and — the hn6 addition — the verdict: the headline a
+   * dashboard answers "is it healthy" with, so a person reads a word rather
+   * than four counters. Its presence is the page's marker for a doc built
+   * after hn6: the model made the verdict required, so every hn6 snapshot
+   * carries one and every older snapshot carries none.
+   */
+  health?: {
+    remote_retries?: number;
+    interventions?: number;
+    stall_warnings?: number;
+    wall_clocks_fired?: number;
+    verdict?: {
+      state: string;
+      summary?: string;
+      recovered?: { what: string; count: number; seconds?: number | null }[];
+    };
+  };
+  /** The spend split per source; `lines` is what a renderer draws. */
+  cost?: {
+    recorded_usd?: number | null;
+    attempts?: number;
+    basis?: string | null;
+    lines?: StatusCostLine[];
+  } | null;
+  /** The run's own last words: the tail of its feed, oldest first. */
+  recent?: StatusRecentEvent[];
 };
 
 /** What a local run pushes: the model, plus the labels the page names ticks by. */
@@ -304,6 +417,12 @@ export async function listStatusSnapshots(db: D1Database): Promise<StoredSnapsho
  * `lastEvent` is the room's forwarded tail the observe read already draws
  * (tick bne); null means the room held nothing, and the document says no
  * reason rather than echoing the state word it already said.
+ *
+ * `cost` is the one hn6 dashboard field the factory's own records can state
+ * for a cloud run: the measured Workers AI spend the run row carries, as one
+ * metered line named for where the number came from. The rest of the
+ * dashboard fields stay absent — the composed doc claims nothing the
+ * factory's records do not state — and `waves` stays null.
  */
 export function cloudStatusDoc(
   run: Run,
@@ -355,6 +474,19 @@ export function cloudStatusDoc(
         ? { kind: "workers", what: "the orchestrator container is working" }
         : null,
     waves: null,
+    cost: {
+      lines:
+        typeof run.cost_usd === "number"
+          ? [
+              {
+                source: "workers-ai",
+                metered: true,
+                usd: run.cost_usd,
+                basis: "AI Gateway logs",
+              },
+            ]
+          : [],
+    },
   };
 }
 

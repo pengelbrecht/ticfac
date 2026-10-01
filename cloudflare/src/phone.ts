@@ -3,6 +3,18 @@
  * factory Worker itself serves at `/status` — the same attention-first view a
  * bare `ticfac` prints (tick 2qz), from a phone, with the laptop closed.
  *
+ * ## The dashboard model, rendered (hn6, tick 0rx)
+ *
+ * A run card answers the terminal dashboard's questions from the SAME status
+ * model, never a second opinion: how far along (a progress bar and `n/m
+ * ticks` from progress, the ETA only where remaining states one), is it
+ * healthy (the verdict with its coloured dot and its recovered facts), does
+ * anything need me (needs-you, quiet when nothing does), then the per-tick
+ * table (plan order, children indented, one glyph per pipeline stage and
+ * per try), the honest cost line and the last two feed events. Every section
+ * is conditional on the model stating its facts, so a snapshot from before
+ * hn6 renders exactly as it always did.
+ *
  * ## One model, two hosts
  *
  * Every run the page lists is answered by the 6dh status model
@@ -55,6 +67,10 @@ import {
   cloudStatusDoc,
   LOCAL_SNAPSHOT_STALE_MS,
   listStatusSnapshots,
+  type StatusDoc,
+  type StatusPipelineStage,
+  type StatusTick,
+  type StatusTry,
   type StoredSnapshot,
   tickRef,
 } from "./status";
@@ -177,6 +193,16 @@ function badRequestForm(detail: string): Response {
 
 // ------------------------------------------------------------- the page ---
 
+/**
+ * One tick row of the card's fold-out. `label` is the pre-hn6 spelling —
+ * `tickRef`, the id plus the pusher's label map — and `label_text` the bare
+ * label; the hn6 table prefers the model's own gloss and title.
+ */
+type RunRowTick = StatusTick & {
+  label: string;
+  label_text: string;
+};
+
 type RunRow = {
   run_id: string;
   epic_id: string;
@@ -185,10 +211,17 @@ type RunRow = {
   reason: string;
   clear_with: string | null;
   /** The model's own wave/tick listing, for the fold-out. */
-  ticks: { tick_id: string; label: string; state: string }[];
+  ticks: RunRowTick[];
   /** The age sentence for a LOCAL run's snapshot, or null for a live cloud row. */
   snapshot_note: string | null;
   stale: boolean;
+  /**
+   * The run's whole status document — every field the dashboard renders
+   * reads it, never a second opinion the page would have to keep in
+   * agreement. A doc without the hn6 fields renders exactly as it did
+   * before they existed.
+   */
+  model: StatusDoc;
 };
 
 async function overviewPage(request: Request, env: Env): Promise<Response> {
@@ -261,13 +294,20 @@ function localRow(snapshot: StoredSnapshot, now: number): RunRow {
   // the age is shown, the run is not said to be paused.
   const stale =
     (Number.isNaN(ageMs) ? true : ageMs > LOCAL_SNAPSHOT_STALE_MS) && snapshot.model.liveness.alive;
-  const ticks: RunRow["ticks"] = [];
+  const ticks: RunRowTick[] = [];
   for (const wave of snapshot.model.waves ?? []) {
     for (const tick of wave.ticks) {
       ticks.push({
         tick_id: tick.tick_id,
         label: tickRef(tick.tick_id, snapshot.tick_labels),
+        label_text: snapshot.tick_labels?.[tick.tick_id] ?? "",
         state: tick.state,
+        gloss: tick.gloss,
+        title: tick.title,
+        pipeline: tick.pipeline,
+        parent_tick_id: tick.parent_tick_id,
+        duration_seconds: tick.duration_seconds,
+        tries: tick.tries,
       });
     }
   }
@@ -284,6 +324,7 @@ function localRow(snapshot: StoredSnapshot, now: number): RunRow {
     ticks,
     snapshot_note: stale ? `${ageSentence} — PAUSED/STALE` : ageSentence,
     stale,
+    model: snapshot.model,
   };
 }
 
@@ -299,6 +340,7 @@ function cloudRow(doc: ReturnType<typeof cloudStatusDoc>): RunRow {
     ticks: [],
     snapshot_note: null,
     stale: false,
+    model: doc,
   };
 }
 
@@ -333,10 +375,54 @@ h1 { font-size: 1.1rem; margin: .4rem 0 1rem; }
          overflow-wrap: anywhere; }
 .note { color: #9aa3b2; font-size: .85rem; margin: .4rem 0 0; }
 .stale { color: #ffb27a; }
+.headline { margin: .5rem 0 0; }
+.bar { height: .45rem; border-radius: 999px; background: #262c38; overflow: hidden; }
+.bar-fill { height: 100%; background: #2563eb; border-radius: 999px; }
+.headline-line { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center;
+                 margin: .35rem 0 0; font-size: .9rem; }
+.hcount { font-weight: 600; }
+.heta { color: #9aa3b2; }
+.verdict { font-weight: 600; }
+.verdict .dot { display: inline-block; width: .55rem; height: .55rem; border-radius: 50%;
+                margin-right: .3rem; background: #7c8494; }
+.verdict-healthy .dot { background: #4ade80; }
+.verdict-degraded .dot { background: #ffb27a; }
+.verdict-stopped .dot { background: #ff9c9c; }
+.phases { margin: .4rem 0 0; font-size: .85rem; }
+.ph { margin-right: .35rem; white-space: nowrap; }
+.ph-done { color: #9aa3b2; }
+.ph-active { color: #8fd0ff; font-weight: 700; }
+.ph-pending { color: #7c8494; }
+.needs-you { margin: .4rem 0 0; color: #ffb27a; overflow-wrap: anywhere; }
+.needs-you.quiet { color: #7c8494; }
+.cost { margin: .4rem 0 0; font-size: .85rem; color: #9aa3b2; }
+.recent { margin: .25rem 0 0; font-size: .8rem; color: #9aa3b2;
+          overflow-wrap: anywhere; }
 details { margin-top: .5rem; }
 summary { cursor: pointer; color: #9aa3b2; font-size: .9rem; }
 .ticklist { margin: .4rem 0 0; padding-left: 1rem; font-size: .9rem; }
 .ticklist li { margin: .15rem 0; }
+table.ticks-table { border-collapse: collapse; margin: .4rem 0 0; width: 100%;
+                   font-size: .85rem; }
+.ticks-table th { text-align: left; color: #7c8494; font-weight: 400; font-size: .75rem;
+                  padding: .2rem .4rem .2rem 0; border-bottom: 1px solid #262c38; }
+.ticks-table td { padding: .2rem .4rem .2rem 0; vertical-align: top;
+                  overflow-wrap: anywhere; }
+.ticks-table .c-pipeline, .ticks-table .c-attempts { white-space: nowrap;
+  font-family: ui-monospace, monospace; }
+.ticks-table tr.child .c-tick { padding-left: .9rem; }
+@media (max-width: 480px) {
+  /* The table collapses to stacked rows: one row per tick becomes one block
+     per cell, labelled by its own data-label, so a phone width reads the
+     same facts the table columns carry. */
+  .ticks-table thead { display: none; }
+  .ticks-table, .ticks-table tbody, .ticks-table tr, .ticks-table td { display: block; }
+  .ticks-table tr { border-top: 1px solid #262c38; padding: .25rem 0; }
+  .ticks-table td::before { content: attr(data-label) ": "; color: #7c8494; }
+  .ticks-table td.c-tick { font-weight: 700; }
+  .ticks-table td.c-tick::before { content: ""; }
+  .ticks-table tr.child .c-tick { padding-left: 0; }
+}
 footer { color: #7c8494; font-size: .8rem; margin: 1.2rem 0 2rem; }
 form.login { display: flex; flex-direction: column; gap: .7rem; margin-top: 2rem; }
 input { padding: .7rem; border-radius: .5rem; border: 1px solid #3a4250;
@@ -444,19 +530,292 @@ function runCardHTML(row: RunRow): string {
     row.snapshot_note === null
       ? ""
       : `<p class="note${row.stale ? " stale" : ""}">${escapeHTML(row.snapshot_note)}</p>`;
+  const dashboard = dashboardHTML(row.model);
   const ticks =
     row.ticks.length === 0
       ? ""
       : `<details><summary>ticks (${row.ticks.length})</summary>
-<ul class="ticklist">${row.ticks
-          .map((tick) => `<li>${escapeHTML(tick.label)} — ${escapeHTML(tick.state)}</li>`)
-          .join("")}</ul></details>`;
+${tickListHTML(row)}</details>`;
   return `<section class="run ${escapeHTML(row.state)}">
 <div class="run-head"><span class="run-id">${escapeHTML(row.run_id)}</span>
 <span class="state ${escapeHTML(row.state)}">${escapeHTML(stateWord)}</span></div>
 <p class="note">${escapeHTML(row.host)} run · epic ${escapeHTML(row.epic_id)}</p>
-${reason}${clear}${note}${ticks}
+${dashboard.headline}${dashboard.phases}${dashboard.needsYou}${reason}${clear}${note}${ticks}${dashboard.cost}${dashboard.recent}
 </section>`;
+}
+
+// ---------------------------------------------- the dashboard sections ---
+
+/**
+ * The hn6 dashboard sections of one run card, as a doc states them.
+ *
+ * The sections answer the same three questions the terminal dashboard asks,
+ * in its order — how far along (the headline's progress and ETA), is it
+ * healthy (the verdict), does anything need me (needs-you) — then the table,
+ * the cost and the tail. Every section is conditional on the model stating
+ * its facts, so a doc without the hn6 fields renders every one of them as
+ * the empty string and the card is exactly the card it always was:
+ *
+ *  - the whole dashboard block (headline, phase row, needs-you, tick
+ *    table, recent tail) renders only for a doc that carries a health
+ *    verdict — the field hn6 made required, so it is the marker that
+ *    separates a post-hn6 snapshot from an older one, and an older one
+ *    renders as it did before hn6 rather than half-painted;
+ *  - the cost line renders whenever the doc carries cost LINES — the one
+ *    hn6 field the factory's own cloud composition states — because cost is
+ *    the one thing a cloud row can answer without the model's richer half.
+ */
+function dashboardHTML(doc: StatusDoc): {
+  headline: string;
+  phases: string;
+  needsYou: string;
+  cost: string;
+  recent: string;
+} {
+  const isDashboardDoc = doc.health?.verdict !== undefined;
+  return {
+    headline: isDashboardDoc ? headlineHTML(doc) : "",
+    phases: isDashboardDoc ? phasesHTML(doc) : "",
+    needsYou: isDashboardDoc ? needsYouHTML(doc) : "",
+    cost: costHTML(doc),
+    recent: isDashboardDoc ? recentHTML(doc) : "",
+  };
+}
+
+/**
+ * The headline's progress and verdict. The bar is a CSS width percentage —
+ * closed over total, never a guess when the model states no counts — with
+ * `n/m ticks` beside it, the ETA only where the model states one, and the
+ * health verdict with its coloured dot and, where it recovered things on
+ * its own, that calm fact rather than an alarm.
+ */
+function headlineHTML(doc: StatusDoc): string {
+  const ticks = doc.progress?.ticks;
+  const total = ticks?.total ?? 0;
+  const closed = ticks?.closed ?? 0;
+  const pct = total > 0 ? Math.round((closed / total) * 100) : 0;
+  const count =
+    ticks === undefined || ticks === null
+      ? ""
+      : `<span class="hcount">${escapeHTML(`${closed}/${total} ticks`)}</span>`;
+  const remaining = doc.remaining?.approximate_seconds;
+  const eta =
+    remaining === undefined || remaining === null
+      ? ""
+      : `<span class="heta">ETA ~${escapeHTML(humanDuration(remaining))}</span>`;
+  const verdict = doc.health?.verdict;
+  const state = verdict?.state ?? "";
+  const word = state === "healthy" ? state : `${state}: ${verdict?.summary ?? ""}`;
+  const recovered = (verdict?.recovered ?? [])
+    .map((entry) =>
+      entry.seconds === undefined || entry.seconds === null
+        ? `${entry.what} ×${entry.count}`
+        : `${entry.what} ${humanDuration(entry.seconds)}`,
+    )
+    .join(", ");
+  const verdictText = recovered === "" ? word : `${word} (recovered: ${escapeHTML(recovered)})`;
+  return `<div class="headline">
+<div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
+<div class="headline-line">${count}${eta}<span class="verdict verdict-${escapeHTML(state)}"><span class="dot"></span>${escapeHTML(verdictText)}</span></div>
+</div>`;
+}
+
+/**
+ * The phase row: one chip per lifecycle phase the model states, each with
+ * its own state glyph — ✓ done, ● active, ○ pending — in the model's own
+ * order. `closeout` reads "close-out", the way every operator surface
+ * spells it.
+ */
+function phasesHTML(doc: StatusDoc): string {
+  const phases = doc.lifecycle?.phases ?? [];
+  if (phases.length === 0) return "";
+  const chips = phases.map((phase) => {
+    const glyph = phase.state === "done" ? "✓" : phase.state === "active" ? "●" : "○";
+    const name = phase.phase === "closeout" ? "close-out" : phase.phase;
+    const cls =
+      phase.state === "done" ? "ph-done" : phase.state === "active" ? "ph-active" : "ph-pending";
+    return `<span class="ph ${cls}">${escapeHTML(name)} ${glyph}</span>`;
+  });
+  return `<p class="phases">${chips.join(" ")}</p>`;
+}
+
+/**
+ * Needs-you: quiet when nothing needs a person — "needs you: nothing",
+ * dim — and one line per thing that does, each naming the one command
+ * that moves it on, where the model states one.
+ */
+function needsYouHTML(doc: StatusDoc): string {
+  const needs = (doc.attention ?? []).filter((entry) => entry.needs_person === true);
+  if (needs.length === 0) return `<p class="needs-you quiet">needs you: nothing</p>`;
+  return needs
+    .map((entry) => {
+      const command = entry.unblock_command ?? "";
+      const line =
+        command === "" ? `needs you: ${entry.what}` : `needs you: ${entry.what} — ${command}`;
+      return `<p class="needs-you">${escapeHTML(line)}</p>`;
+    })
+    .join("");
+}
+
+/**
+ * The honest cost line: one segment per cost line the model states, the
+ * river's own name with the measured number where one exists and "not
+ * metered" where none does — never a fabricated $0.00. A doc that carries
+ * a cost with no lines at all says "cost: not metered"; a doc that carries
+ * no cost field says nothing (that is the pre-hn6 doc's honest answer).
+ */
+function costHTML(doc: StatusDoc): string {
+  const lines = doc.cost?.lines;
+  if (!Array.isArray(lines)) return "";
+  if (lines.length === 0) return `<p class="cost">cost: not metered</p>`;
+  const segments = lines.map((line) => {
+    const amount =
+      line.usd === undefined || line.usd === null || line.metered === false
+        ? "not metered"
+        : `$${line.usd.toFixed(2)}`;
+    return `${escapeHTML(costSourceName(line.source))} ${escapeHTML(amount)}`;
+  });
+  return `<p class="cost">cost: ${segments.join(" · ")}</p>`;
+}
+
+/** The cost vocabulary's own names, the way the cost row reads them. */
+function costSourceName(source: string): string {
+  switch (source) {
+    case "workers-ai":
+      return "Workers AI";
+    case "pi-local":
+      return "pi (local)";
+    default:
+      return source;
+  }
+}
+
+/**
+ * The tail: the model's own last words, the last two feed events — the tail
+ * a dashboard shows where a watcher once drowned in the whole stream. The
+ * clock is the event's own stamp; a tick the event does not name is the
+ * run itself.
+ */
+function recentHTML(doc: StatusDoc): string {
+  const events = doc.recent ?? [];
+  return events
+    .slice(-2)
+    .map((event) => {
+      const clock = event.at.slice(11, 16);
+      const who = event.tick_id === undefined || event.tick_id === null ? "run" : event.tick_id;
+      const line = `${clock} ${who} ${event.stage}: ${event.detail}`;
+      return `<p class="recent">${escapeHTML(line)}</p>`;
+    })
+    .join("");
+}
+
+/**
+ * The fold-out's tick listing. A doc with the hn6 fields gets the table —
+ * one row per tick in the tracker's own plan order, children indented under
+ * the parent the model names, the pipeline cell with the same glyphs the
+ * terminal draws (✓ done, ● active, ✗ failed, one … for the pending tail
+ * behind the live stage), the tick's measured time, and one glyph per try
+ * so a refusal is history a person can see, not an alarm. An older doc
+ * keeps the list it always had, so old snapshots render as before.
+ */
+function tickListHTML(row: RunRow): string {
+  if (row.model.health?.verdict === undefined) {
+    return `<ul class="ticklist">${row.ticks
+      .map((tick) => `<li>${escapeHTML(tick.label)} — ${escapeHTML(tick.state)}</li>`)
+      .join("")}</ul>`;
+  }
+  const body = row.ticks
+    .map((tick) => {
+      const child = tick.parent_tick_id !== undefined && tick.parent_tick_id !== null;
+      const id = child ? `└ ${tick.tick_id}` : tick.tick_id;
+      const what = tick.gloss ?? tick.title ?? tick.label_text;
+      return (
+        `<tr class="trow${child ? " child" : ""}">` +
+        `<td class="c-tick">${escapeHTML(id)}</td>` +
+        `<td class="c-what" data-label="what">${escapeHTML(what)}</td>` +
+        `<td class="c-pipeline" data-label="pipeline">${escapeHTML(pipelineGlyphs(tick.pipeline))}</td>` +
+        `<td class="c-time" data-label="time">${escapeHTML(
+          tick.duration_seconds === undefined || tick.duration_seconds === null
+            ? ""
+            : humanDuration(tick.duration_seconds),
+        )}</td>` +
+        `<td class="c-attempts" data-label="attempts">${escapeHTML(tryGlyphs(tick.tries))}</td>` +
+        "</tr>"
+      );
+    })
+    .join("");
+  return `<table class="ticks-table">
+<thead><tr><th>tick</th><th>what</th><th>pipeline</th><th>time</th><th>attempts</th></tr></thead>
+<tbody>${body}</tbody>
+</table>`;
+}
+
+/**
+ * The pipeline cell's glyphs: ✓ per done stage, the live stage's own glyph
+ * (● active, ✗ failed) where it stands, and ONE … for every pending stage
+ * behind it — the cell states where a tick IS, and the stages nobody
+ * reached are a tail, not a row of circles. A cell with no stages at all
+ * is a single …: a cell nobody filled says nothing stronger than that.
+ */
+function pipelineGlyphs(stages: StatusPipelineStage[] | undefined): string {
+  if (stages === undefined || stages.length === 0) return "…";
+  const glyphs: string[] = [];
+  for (let i = 0; i < stages.length; i++) {
+    const state = stages[i]?.state;
+    if (state === "done") {
+      glyphs.push("✓");
+      continue;
+    }
+    if (state === "active" || state === "failed") {
+      glyphs.push(state === "active" ? "●" : "✗");
+      if (i < stages.length - 1) glyphs.push("…");
+    } else {
+      glyphs.push("…");
+    }
+    break;
+  }
+  return glyphs.join(" ");
+}
+
+/**
+ * One glyph per try, in try order, so a refusal is history a person can
+ * see: ✓ closed, ✗ rejected or gate-refused, ● in flight, ○ anything the
+ * records have out but not judged.
+ */
+function tryGlyphs(tries: StatusTry[] | undefined): string {
+  return (tries ?? [])
+    .map((try_) => {
+      switch (try_.outcome) {
+        case "closed":
+          return "✓";
+        case "rejected":
+        case "gate-failed":
+          return "✗";
+        case "in-flight":
+          return "●";
+        default:
+          return "○";
+      }
+    })
+    .join("");
+}
+
+/**
+ * A person's clock for the card's timers — the same grades the terminal
+ * renders: seconds under a minute, minutes under an hour, hours and minutes
+ * under a day, days and hours past that. Rounded for glancing, because the
+ * exact numbers live in the model.
+ */
+function humanDuration(seconds: number): string {
+  if (seconds < 60) return `${Math.max(0, Math.round(seconds))}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86_400) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor(seconds / 60) % 60;
+    return minutes === 0 ? `${hours}h` : `${hours}h${minutes}m`;
+  }
+  const days = Math.floor(seconds / 86_400);
+  return `${days}d${Math.floor((seconds % 86_400) / 3600)}h`;
 }
 
 // ----------------------------------------------------------- PWA assets ---
