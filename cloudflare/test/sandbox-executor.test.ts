@@ -329,6 +329,52 @@ describe("the container's name", () => {
     expect(attemptSandboxName("run-x", "k4s", 1)).toBe("run-x-k4s-1");
     expect(attemptSandboxName("run-x", "k4s", 2)).not.toBe(attemptSandboxName("run-x", "k4s", 1));
   });
+
+  /**
+   * hn6 run_ee8e: 378's resolve-conflict job `…/resolve-4` booted as
+   * `<run>-378-4-resolve-4-<hash>` (61 characters), and both of its retries
+   * (`…/resolve-4-r2`, `…/resolve-4-r3`) were refused by the SDK before they
+   * booted — "Sandbox ID must be 1-63 characters long." — so the tick's
+   * resolve allowance was spent in six seconds without a second job running.
+   * A real run id is `run_` and 32 hex digits; every job a run can name must
+   * fit, and stay distinct.
+   */
+  it("fits the SDK's 63-character sandbox id for every job a real run names", () => {
+    const run = "run_ee8ebb4fe13d4311b8f9be6f66db69d4";
+    const names = new Set<string>();
+    for (const tick of ["378", "zl1", "a1b2c3"]) {
+      for (const attempt of [1, 4, 12, 107]) {
+        const jobs = [
+          undefined,
+          `run-${run}/tick-${tick}/resolve-${attempt}`,
+          `run-${run}/tick-${tick}/resolve-${attempt}-r2`,
+          `run-${run}/tick-${tick}/resolve-${attempt}-r3`,
+          `run-${run}/tick-${tick}/repair-${attempt}`,
+          `run-${run}/tick-${tick}/repair-${attempt}-r2`,
+          `run-${run}/tick-${tick}/repair-${attempt}-r3`,
+          `run-${run}/base-fold-0123456789ab-r3`,
+        ];
+        for (const job of jobs) {
+          const name = attemptSandboxName(run, tick, attempt, job);
+          expect(name.length, name).toBeLessThanOrEqual(63);
+          expect(name.endsWith("-"), name).toBe(false);
+          names.add(name);
+        }
+      }
+    }
+    expect(names.size).toBe(3 * 4 * 8);
+  });
+
+  it("keeps the name every job that already fitted was booted under", () => {
+    // A live container is re-addressed by this name: shortening a name that
+    // already fitted would orphan it.
+    const run = "run_ee8ebb4fe13d4311b8f9be6f66db69d4";
+    const slot = attemptJobSlot(run, "378", 4, `run-${run}/tick-378/resolve-4`);
+    expect(slot).toMatch(/^resolve-4-[0-9a-f]{8}$/);
+    expect(attemptSandboxName("run-x", "k4s", 1, "run-run-x/tick-k4s/repair-1-r2")).toMatch(
+      /^run-x-k4s-1-repair-1-r2-[0-9a-f]{8}$/,
+    );
+  });
 });
 
 // ------------------------------------------------------------------ start ---

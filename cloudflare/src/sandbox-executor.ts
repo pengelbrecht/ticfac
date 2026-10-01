@@ -222,14 +222,31 @@ export function attemptJobSlot(
   if (tail.startsWith(runPrefix)) tail = tail.slice(runPrefix.length);
   const tickPrefix = `tick-${tickID}/`;
   if (tail.startsWith(tickPrefix)) tail = tail.slice(tickPrefix.length);
+  // The readable part gives way first: the container's name is
+  // `<run>-<tick>-<attempt>-<slot>`, and the SDK refuses a sandbox id longer
+  // than SANDBOX_ID_MAX before it boots anything (hn6 run_ee8e: both retries
+  // of 378's resolve job, `…/resolve-4-r2` and `-r3`, came to 64 characters
+  // and were refused in seconds, spending the tick's resolve allowance
+  // without a job running). A slot that already fitted keeps its spelling,
+  // so a container booted under it is still re-addressed by it; the hash of
+  // the whole job id is what keeps a shortened slot distinct.
+  const digest = fnv1a32(jobID);
+  const room = SANDBOX_ID_MAX - `${runID}-${tickID}-${attempt}-`.length - `-${digest}`.length;
   const readable = tail
     .replace(/[^A-Za-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 40)
+    .slice(0, Math.max(0, Math.min(40, room)))
     .replace(/-+$/, "");
-  const digest = fnv1a32(jobID);
-  return readable === "" ? `job-${digest}` : `${readable}-${digest}`;
+  if (readable === "") return room >= "job".length ? `job-${digest}` : digest;
+  return `${readable}-${digest}`;
 }
+
+/**
+ * The longest sandbox id the Cloudflare Sandbox SDK accepts
+ * (`sanitizeSandboxId`: "Sandbox ID must be 1-63 characters long." — a DNS
+ * label's bound).
+ */
+export const SANDBOX_ID_MAX = 63;
 
 /**
  * FNV-1a over the UTF-16 code units, as 8 hex digits: a synchronous,
