@@ -125,17 +125,27 @@ export const HEARTBEAT_MS = 60 * 1000;
 export const READ_CHUNK_BYTES = 512 * 1024;
 
 /**
- * How long a fresh container may take to answer its first command. `start()`
- * returns before the container is ready, and an `exec` that arrives too early
- * is refused outright (staging, 2026-10-01: "Command `sh` was not found in
- * the container" on a container's first request) rather than waited for; a
- * cold multi-GB image pull is minutes, not seconds.
+ * How long a fresh container may take to answer its first command.
+ *
+ * `start()` returns before the container is ready, and an `exec` that arrives
+ * too early is refused outright ("Command `sh` was not found in the
+ * container") rather than waited for. The first container on a freshly
+ * deployed image is a cold pull of a multi-GB image: on 2026-10-01 one took
+ * longer than five minutes on staging, and the umq proof run's orchestrator
+ * (run_6b9f…) failed because its Workflow boot step — five minutes — waited
+ * on that pull inline. So the wait is never inline any more (see
+ * {@link FactorySandboxCore.startProcess}): a process asked for before the
+ * container answers is recorded as PENDING and started by the object's own
+ * alarm once it does, and this deadline is sized for a cold pull, not for a
+ * request.
  */
-export const READY_TIMEOUT_MS = 5 * 60 * 1000;
+export const READY_TIMEOUT_MS = 20 * 60 * 1000;
 
-/** The first wait between readiness checks; it doubles up to {@link READY_POLL_MAX_MS}. */
-export const READY_POLL_MS = 250;
-export const READY_POLL_MAX_MS = 5_000;
+/** How often a container that has not answered yet is asked again. */
+export const READY_POLL_MS = 5_000;
+
+/** The most one readiness question may take before it counts as "not yet". */
+export const READY_PROBE_TIMEOUT_MS = 10_000;
 
 const STORAGE = {
   keepAlive: "keep_alive",
@@ -143,6 +153,14 @@ const STORAGE = {
   command: (id: string) => `command:${id}`,
   lastStop: "last_stop",
   startedImage: "started_image",
+  /** A process asked for before the container answered: its command and env. */
+  pending: (id: string) => `pending:${id}`,
+  pendingPrefix: "pending:",
+  /** A process that could never be started, and why. */
+  failed: (id: string) => `failed:${id}`,
+  failedPrefix: "failed:",
+  /** When the starting container must have answered by. */
+  readyBy: "ready_by",
 } as const;
 
 // --------------------------------------------------------------- types ---
@@ -208,8 +226,10 @@ export type DoExecProcess = {
 /** The storage subset this class uses. */
 type DoStorage = Pick<
   DurableObjectStorage,
-  "get" | "put" | "delete" | "setAlarm" | "deleteAlarm" | "getAlarm"
+  "get" | "put" | "delete" | "setAlarm" | "deleteAlarm" | "getAlarm" | "list"
 >;
+
+type PendingProcess = { command: string; env: Record<string, string> };
 
 /** What the runner says about one process directory. */
 export type RunnerState =
@@ -369,10 +389,6 @@ export type SandboxState = {
   waitUntil(promise: Promise<unknown>): void;
 };
 
-/** How the core waits between readiness checks (a test passes its own). */
-export type Sleep = (ms: number) => Promise<void>;
-const realSleep: Sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 /** The class's behaviour, over a {@link SandboxState} (tested directly). */
 export class FactorySandboxCore {
   /**
@@ -383,7 +399,6 @@ export class FactorySandboxCore {
 
   constructor(
     private readonly ctx: SandboxState,
-    private readonly sleep: Sleep = realSleep,
     private readonly now: () => number = Date.now,
   ) {
     // A deploy restarts every Durable Object, and an inactivity timeout does
@@ -401,7 +416,18 @@ export class FactorySandboxCore {
 
   // ---------------------------------------------------------------- RPC ---
 
-  /** Starts `command` as a background process, booting the container first. */
+  /**
+   * Starts `command` as a background process, booting the container first.
+   *
+   * Never waits for a cold container: when the container has not answered
+   * yet, the process is recorded PENDING and this returns at once with its id
+   * in state `running` — a boot is under way. The object's alarm starts it
+   * the moment the container answers, or fails it (with the reason, readable
+   * as the process's output) when the container never does within
+   * {@link READY_TIMEOUT_MS}. A caller with its own short deadline (a
+   * Workflow step, an HTTP door) is therefore never the thing a cold image
+   * pull has to fit inside.
+   */
   async startProcess(
     command: string,
     env: Record<string, string>,
@@ -409,6 +435,24 @@ export class FactorySandboxCore {
   ): Promise<SandboxProcessView> {
     const container = await this.ensureRunning(options);
     const id = crypto.randomUUID();
+    await this.ctx.storage.put(STORAGE.command(id), command);
+    if (this.ready || (await this.answers(container))) {
+      this.ready = true;
+      await this.startNow(container, id, command, env);
+      return { id, state: "running", exit_code: null, command };
+    }
+    await this.ctx.storage.put(STORAGE.pending(id), { command, env } satisfies PendingProcess);
+    await this.scheduleAlarm(this.now() + READY_POLL_MS);
+    return { id, state: "running", exit_code: null, command };
+  }
+
+  /** Starts one process through the runner in a container that answers. */
+  private async startNow(
+    container: DoContainer,
+    id: string,
+    command: string,
+    env: Record<string, string>,
+  ): Promise<void> {
     const argv = [
       "sh",
       "-c",
@@ -431,12 +475,12 @@ export class FactorySandboxCore {
           decoder.decode(out.stdout).trim().slice(0, 400),
       );
     }
-    await this.ctx.storage.put(STORAGE.command(id), command);
-    return { id, state: "running", exit_code: null, command };
   }
 
   /** The process's state, or null when this container does not know it. */
   async getProcess(id: string): Promise<SandboxProcessView | null> {
+    const early = await this.notStarted(id);
+    if (early !== null) return early;
     const container = this.container();
     // Never boots: a stopped container knows no process, which is what the
     // seam's null means.
@@ -447,10 +491,16 @@ export class FactorySandboxCore {
 
   /** Every process this container knows — the live list, never a remembered one. */
   async listProcesses(): Promise<SandboxProcessView[]> {
-    const container = this.container();
-    if (container === undefined || !container.running) return [];
-    const listed = await run(container, runner.list());
     const views: SandboxProcessView[] = [];
+    for (const prefix of [STORAGE.pendingPrefix, STORAGE.failedPrefix]) {
+      for (const key of (await this.ctx.storage.list({ prefix })).keys()) {
+        const view = await this.notStarted(key.slice(prefix.length));
+        if (view !== null) views.push(view);
+      }
+    }
+    const container = this.container();
+    if (container === undefined || !container.running || !this.ready) return views;
+    const listed = await run(container, runner.list());
     for (const id of listed.stdout.split("\n").map((l) => l.trim())) {
       if (id === "") continue;
       const view = runnerView(
@@ -466,11 +516,21 @@ export class FactorySandboxCore {
   /**
    * Output after byte `offset`, at most {@link READ_CHUNK_BYTES} of it, and
    * the cursor to resume from. A container that is not running has nothing
-   * new to say: the cursor stays where it was.
+   * new to say: the cursor stays where it was. A process that could never be
+   * started says why, as its whole output.
    */
   async readOutput(id: string, offset: number): Promise<SandboxOutput> {
-    const container = this.container();
     const start = Number.isInteger(offset) && offset > 0 ? offset : 0;
+    const failed = await this.ctx.storage.get<string>(STORAGE.failed(id));
+    if (failed !== undefined) {
+      const bytes = new TextEncoder().encode(`${failed}\n`);
+      if (start >= bytes.length) return { text: "", offset: start };
+      return { text: decoder.decode(bytes.subarray(start)), offset: bytes.length };
+    }
+    if ((await this.ctx.storage.get(STORAGE.pending(id))) !== undefined) {
+      return { text: "", offset: start };
+    }
+    const container = this.container();
     if (container === undefined || !container.running) return { text: "", offset: start };
     const process = await container.exec(runner.read(id, start, READ_CHUNK_BYTES), {
       stdout: "pipe",
@@ -485,6 +545,11 @@ export class FactorySandboxCore {
 
   /** Signals the process's group. A process that is not running is left alone. */
   async killProcess(id: string): Promise<void> {
+    if ((await this.ctx.storage.get(STORAGE.pending(id))) !== undefined) {
+      await this.ctx.storage.delete(STORAGE.pending(id));
+      await this.ctx.storage.put(STORAGE.failed(id), "killed before its container answered");
+      return;
+    }
     const container = this.container();
     if (container === undefined || !container.running) return;
     await run(container, runner.kill(id));
@@ -492,6 +557,7 @@ export class FactorySandboxCore {
 
   /** Tears the container down and stops the heartbeat. */
   async destroy(): Promise<void> {
+    await this.failPending("the container was destroyed before it answered");
     await this.ctx.storage.delete(STORAGE.keepAlive);
     await this.ctx.storage.deleteAlarm();
     const container = this.container();
@@ -539,14 +605,107 @@ export class FactorySandboxCore {
    * destroy, or after the container stopped on its own.
    */
   async alarm(): Promise<void> {
+    const waiting = await this.drainPending();
     const keepAlive = (await this.ctx.storage.get<boolean>(STORAGE.keepAlive)) === true;
     const container = this.container();
-    if (!keepAlive || container === undefined || !container.running) {
-      await this.ctx.storage.delete(STORAGE.keepAlive);
-      return;
+    const alive = keepAlive && container?.running;
+    if (!alive) await this.ctx.storage.delete(STORAGE.keepAlive);
+    if (alive) await container.setInactivityTimeout(KEEPALIVE_TIMEOUT_MS);
+    const next = Math.min(
+      waiting ? this.now() + READY_POLL_MS : Number.POSITIVE_INFINITY,
+      alive ? Date.now() + HEARTBEAT_MS : Number.POSITIVE_INFINITY,
+    );
+    if (Number.isFinite(next)) await this.ctx.storage.setAlarm(next);
+  }
+
+  /**
+   * Starts every pending process once the container answers, or fails them
+   * all — with the reason — once it has stopped or its deadline has passed.
+   * True while some are still waiting.
+   */
+  private async drainPending(): Promise<boolean> {
+    const pending = await this.ctx.storage.list<PendingProcess>({ prefix: STORAGE.pendingPrefix });
+    if (pending.size === 0) return false;
+    const container = this.container();
+    if (container === undefined || !container.running) {
+      const stop = await this.lastStop();
+      await this.failPending(
+        "factory sandbox: the container stopped before it answered" +
+          (stop === null ? "" : ` (${stop.how}, ${stop.at})`),
+      );
+      return false;
     }
-    await container.setInactivityTimeout(KEEPALIVE_TIMEOUT_MS);
-    await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_MS);
+    if (!(await this.answers(container))) {
+      const readyBy = (await this.ctx.storage.get<number>(STORAGE.readyBy)) ?? 0;
+      if (this.now() < readyBy) return true;
+      const stop = await this.lastStop();
+      await this.failPending(
+        `factory sandbox: the container did not answer within ${READY_TIMEOUT_MS / 60_000} ` +
+          `minutes of its start (image ${(await this.ctx.storage.get<string>(STORAGE.startedImage)) ?? "unknown"})` +
+          (stop === null ? "" : `; it stopped: ${stop.how}`) +
+          "; it was destroyed so the next boot starts fresh",
+      );
+      await container.destroy().catch(() => {});
+      return false;
+    }
+    this.ready = true;
+    for (const [key, process] of pending) {
+      const id = key.slice(STORAGE.pendingPrefix.length);
+      try {
+        await this.startNow(container, id, process.command, process.env);
+      } catch (error) {
+        await this.ctx.storage.put(STORAGE.failed(id), String(error).slice(0, 600));
+      }
+      // The env holds the run's credentials: kept only as long as it is needed.
+      await this.ctx.storage.delete(key);
+    }
+    return false;
+  }
+
+  /** Fails every pending process with `reason`. */
+  private async failPending(reason: string): Promise<void> {
+    const pending = await this.ctx.storage.list({ prefix: STORAGE.pendingPrefix });
+    for (const key of pending.keys()) {
+      await this.ctx.storage.put(STORAGE.failed(key.slice(STORAGE.pendingPrefix.length)), reason);
+      await this.ctx.storage.delete(key);
+    }
+  }
+
+  /** A pending process is running (its boot is); a failed one is failed. */
+  private async notStarted(id: string): Promise<SandboxProcessView | null> {
+    const command = await this.ctx.storage.get<string>(STORAGE.command(id));
+    const base = command === undefined ? { id } : { id, command };
+    if ((await this.ctx.storage.get(STORAGE.failed(id))) !== undefined) {
+      return { ...base, state: "failed", exit_code: null };
+    }
+    if ((await this.ctx.storage.get(STORAGE.pending(id))) !== undefined) {
+      return { ...base, state: "running", exit_code: null };
+    }
+    return null;
+  }
+
+  /** Whether the container answers a command now (bounded; never throws). */
+  private async answers(container: DoContainer): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const probe = await Promise.race([
+        run(container, ["test", "-s", IMAGE_ENV_FILE]),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), READY_PROBE_TIMEOUT_MS);
+        }),
+      ]);
+      return probe !== null && probe.exitCode === 0;
+    } catch {
+      return false;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
+  /** Sets the alarm for `at` unless one is already due sooner. */
+  private async scheduleAlarm(at: number): Promise<void> {
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || current > at) await this.ctx.storage.setAlarm(at);
   }
 
   // ----------------------------------------------------------- internals ---
@@ -580,12 +739,12 @@ export class FactorySandboxCore {
       });
       this.ready = false;
       await this.ctx.storage.put(STORAGE.startedImage, image);
+      await this.ctx.storage.put(STORAGE.readyBy, this.now() + READY_TIMEOUT_MS);
       await this.ctx.storage.delete(STORAGE.lastStop);
       // Every new container is watched from its start, so a start that fails
       // (a bad image, an entrypoint that exits) leaves its reason behind.
       this.watch(container);
     }
-    if (!this.ready) await this.waitReady(container);
     const keepAlive =
       options.keepAlive === true ||
       (await this.ctx.storage.get<boolean>(STORAGE.keepAlive)) === true;
@@ -601,45 +760,9 @@ export class FactorySandboxCore {
     }
     if (keepAlive && (await this.ctx.storage.get<boolean>(STORAGE.keepAlive)) !== true) {
       await this.ctx.storage.put(STORAGE.keepAlive, true);
-      await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_MS);
+      await this.scheduleAlarm(Date.now() + HEARTBEAT_MS);
     }
     return container;
-  }
-
-  /**
-   * Waits until the container answers a command and its entrypoint has
-   * written the image's environment. A container that never does is
-   * destroyed, so the next boot starts a fresh one rather than queueing
-   * behind a broken start.
-   */
-  private async waitReady(container: DoContainer): Promise<void> {
-    const deadline = this.now() + READY_TIMEOUT_MS;
-    let wait = READY_POLL_MS;
-    let last = "no answer";
-    for (;;) {
-      try {
-        const probe = await run(container, ["test", "-s", IMAGE_ENV_FILE]);
-        if (probe.exitCode === 0) {
-          this.ready = true;
-          return;
-        }
-        last = `the entrypoint has not written ${IMAGE_ENV_FILE} (exit ${probe.exitCode})`;
-      } catch (error) {
-        last = String(error);
-      }
-      if (!container.running) {
-        throw new Error(`factory sandbox: the container stopped while starting: ${last}`);
-      }
-      if (this.now() >= deadline) {
-        await container.destroy().catch(() => {});
-        throw new Error(
-          `factory sandbox: the container did not answer within ${READY_TIMEOUT_MS / 1000}s ` +
-            `of its start: ${last}`,
-        );
-      }
-      await this.sleep(wait);
-      wait = Math.min(wait * 2, READY_POLL_MAX_MS);
-    }
   }
 
   /** The constructor's half of the lifetime: re-arm what a restart dropped. */
@@ -649,6 +772,11 @@ export class FactorySandboxCore {
       await container.setInactivityTimeout(timeout);
     } catch (error) {
       console.error(`factory sandbox: could not re-arm the inactivity timeout: ${String(error)}`);
+    }
+    // A restart can land between a pending process and its alarm; the alarm
+    // is what starts it, so it must exist.
+    if ((await this.ctx.storage.list({ prefix: STORAGE.pendingPrefix, limit: 1 })).size > 0) {
+      await this.scheduleAlarm(this.now() + READY_POLL_MS);
     }
     if ((await this.ctx.storage.get<boolean>(STORAGE.keepAlive)) === true) {
       if ((await this.ctx.storage.getAlarm()) === null) {
