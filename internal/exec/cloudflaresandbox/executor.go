@@ -718,7 +718,7 @@ func (e *Executor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.
 	// it — the gateway, origin (epic hn6, run_37b36bfe): the collect says so
 	// rather than reading a job that never reached its harness as a failed
 	// attempt at the tick.
-	if code := infrastructureExit(status); payload.State != "" && code != 0 {
+	if code := bootExit(status); payload.State != "" && code != 0 {
 		_ = e.storeAt(payload.State).writeJSON(fileInfrastructure, map[string]any{
 			"observed_at": status.ObservedAt, "exit_code": code,
 		})

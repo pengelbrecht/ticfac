@@ -74,16 +74,19 @@ type Collection struct {
 // InfrastructureFailure is a job that died in its boot on a service outside
 // it, before any work on the tick.
 type InfrastructureFailure struct {
-	// Service names what did not answer, in words a person reads in a stop:
-	// "the model gateway", "origin".
+	// Service names what stopped the boot, in words a person reads in a
+	// stop: "the model gateway", "origin", "the repository's [sandbox] setup".
 	Service string
 	// ExitCode is the container's exit, the evidence the class was read from.
 	ExitCode int
-	// Persistent says a retry reaches the same answer: the container itself
-	// is wrong (its tk is not the one the image pins), so the job is not
-	// dispatched again at all — and still no rung is spent, because a higher
-	// tier boots the same image.
+	// Persistent says a retry reaches the same answer: a deterministic
+	// environment fault (the inputs, the image's tk, the repository's
+	// pre-flight or setup, a refused model route, the harness's wiring), so
+	// the job is not dispatched again at all — and still no rung is spent,
+	// because a higher tier boots the same image on the same repository.
 	Persistent bool
+	// Fix is what a person does about it, for the stop that names it.
+	Fix string
 }
 
 // Collect returns the protocol record.

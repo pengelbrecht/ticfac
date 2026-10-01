@@ -39,11 +39,15 @@ import (
 // incarnation. The next one is a run-level refusal naming the service — the
 // fix is the factory's (deploy it, check its gateway), never the tick's.
 //
-// THE OTHER BOOT FAULT. A worker whose tk is not the one the image pins
-// (sandboximage.ExitTkVersion) failed the same way — missing-result, a rung
-// spent — but no retry and no tier fixes it: every container of the run boots
-// the same image. It is collected as a PERSISTENT infrastructure failure: no
-// rung, no redispatch, and the run-level refusal at once, naming the image.
+// THE OTHER BOOT FAULTS. Every other stop before the harness — the inputs the
+// factory sent (2), the image's tk (4), the repository's pre-flight (5) or
+// setup (6), a model route the gateway refused (7), a harness that cannot use
+// the route (8) — failed the same way: missing-result, a rung spent. But they
+// are DETERMINISTIC environment faults: a retry as-is reaches the same answer,
+// and a higher tier boots the same image on the same repository. They are
+// collected as PERSISTENT: no rung, no redispatch, and the run stops at once
+// on RefusedWorkerBootFault, naming the cause, the boot's own reason (the
+// worker's boot-stopped marker, #176) and what to fix.
 
 const (
 	// RefusedInfrastructureRedispatch is a collect whose job died in its boot
@@ -57,6 +61,14 @@ const (
 	// a stop, not a hold: nothing about the tick waits on a person, the
 	// factory does, and running the epic again once it answers is the repair.
 	RefusedInfrastructure = "worker_infrastructure_unavailable"
+
+	// RefusedWorkerBootFault is a job whose boot stopped on a deterministic
+	// environment fault (subprocess.InfrastructureFailure.Persistent): every
+	// container of the run would stop the same way at every tier, so the run
+	// stops at once — no redispatch, no rung — naming the cause and its fix.
+	// Not resumable: nothing changes between incarnations until a person (or
+	// a deploy) fixes the environment.
+	RefusedWorkerBootFault = "worker_boot_fault"
 
 	// StageInfrastructureRedispatched: a job never reached its harness
 	// because a service outside it did not answer; it is dispatched again at
@@ -105,24 +117,26 @@ func (r *Reconciler) answerInfrastructure(marker attemptHandle, handle *subproce
 	tick := marker.TickID
 	name := r.attemptName(tick, marker.Attempt)
 	if err := r.recordInfrastructure(marker, failure); err != nil {
-		r.record(tick, StageRejected, "%s never reached its harness (%s did not answer), and that could not be "+
+		r.record(tick, StageRejected, "%s never reached its harness (its boot stopped on %s), and that could not be "+
 			"recorded (%v): it is collected as the failed attempt it reads as", name, failure.Service, err)
 		return nil
 	}
 	if err := r.rejectDurably(marker, collected.Verdict, collected.Message); err != nil {
 		return err
 	}
-	r.disposeRejected(handle, executor, marker, fmt.Sprintf("%s never reached its harness: %s did not answer",
+	r.disposeRejected(handle, executor, marker, fmt.Sprintf("%s never reached its harness: its boot stopped on %s",
 		name, failure.Service))
 
 	if failure.Persistent {
-		// The container itself is wrong, so every container of the run would
-		// die the same way at every tier: no redispatch, and no rung spent.
-		return r.refuse(RefusedInfrastructure, tick,
-			"%s never reached its harness: %s is not what the image pins (exit %d). Every worker of this run "+
-				"boots the same image and would die the same way, at any tier, so the run stops here; nothing "+
-				"about the tick was tried and no rung of its ladder was spent: %s",
-			name, failure.Service, failure.ExitCode, infrastructureRemedy(failure.Service))
+		// The environment itself is wrong, so every container of the run
+		// would stop the same way at every tier: no redispatch, and no rung
+		// spent.
+		return r.refuse(RefusedWorkerBootFault, tick,
+			"%s never reached its harness: its boot stopped on %s (exit %d). Every worker of this run boots the "+
+				"same image on the same repository and would stop the same way at any tier, so the run stops here; "+
+				"nothing about the tick was tried and no rung of its ladder was spent. What the boot said: %s. To "+
+				"fix: %s",
+			name, failure.Service, failure.ExitCode, collected.Message, infrastructureRemedy(failure))
 	}
 	n, again := r.infrastructure.take(tick)
 	if again {
@@ -143,20 +157,16 @@ func (r *Reconciler) answerInfrastructure(marker attemptHandle, handle *subproce
 		"%s never reached its harness: %s did not answer through the container's retry window (exit %d), and "+
 			"that is %d jobs of %s in a row. The run stops here rather than paying for containers that die in "+
 			"their boot. Nothing about the tick was tried and no rung of its ladder was spent: %s",
-		name, failure.Service, failure.ExitCode, n, tick, infrastructureRemedy(failure.Service))
+		name, failure.Service, failure.ExitCode, n, tick, infrastructureRemedy(failure))
 }
 
-// infrastructureRemedy is where a person looks when a service stays down.
-func infrastructureRemedy(service string) string {
-	switch service {
-	case "the model gateway":
-		return "check that the factory is deployed and its model gateway answers (`ticfac factory status`, " +
-			"and the factory's deploy workflow), then run the epic again"
-	case "the worker image's tk":
-		return "the factory's worker image carries a tk other than the one it pins — deploy a factory whose " +
-			"image is consistent (`ticfac factory status`), then run the epic again"
+// infrastructureRemedy is where a person looks: the fix the executor named,
+// or a general one for a service that stays down.
+func infrastructureRemedy(failure *subprocess.InfrastructureFailure) string {
+	if failure.Fix != "" {
+		return failure.Fix
 	}
-	return "check that " + service + " is reachable from the factory's containers, then run the epic again"
+	return "check that " + failure.Service + " is reachable from the factory's containers, then run the epic again"
 }
 
 // recordInfrastructure lands one infrastructure failure as a decision record.
