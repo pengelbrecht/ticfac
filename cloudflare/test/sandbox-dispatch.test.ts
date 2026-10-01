@@ -883,6 +883,40 @@ describe("start", () => {
     expect(denial.error).toBe("door_fault");
     expect(denial.detail).toContain("ImagePullError");
   });
+
+  /**
+   * hn6 run_ee8e: the SDK refused a 64-character container name, the door
+   * answered 500 door_fault, and the orchestrator read that as "ask again" —
+   * twice, each refused the same way in seconds, until the tick's resolve
+   * allowance was spent. A name the SDK will not take is the same name on
+   * every ask: a permanent, typed refusal naming the container and the SDK's
+   * reason, never a fault worth retrying.
+   */
+  it("answers a container name the SDK rejects as 422 invalid_sandbox_name, naming it", async () => {
+    binding.failWith = Object.assign(new Error("Sandbox ID must be 1-63 characters long."), {
+      name: "SandboxSecurityError",
+      code: "INVALID_SANDBOX_ID_LENGTH",
+    });
+    const response = await postStart(runToken, startBody());
+    expect(response.status).toBe(422);
+    const denial = await denialOf(response);
+    expect(denial.error).toBe("invalid_sandbox_name");
+    expect(denial.detail).toContain("Sandbox ID must be 1-63 characters long.");
+    expect(denial.detail).toContain(attemptSandboxName(RUN_ID, TICK, 1));
+  });
+
+  it("answers the SDK's rejection on the state route typed too", async () => {
+    await postStart(runToken, startBody());
+    binding.failWith = Object.assign(
+      new Error("Sandbox ID cannot start or end with hyphens (DNS requirement)."),
+      { name: "SandboxSecurityError", code: "INVALID_SANDBOX_ID_HYPHENS" },
+    );
+    const response = await getState(runToken, TICK, 1);
+    expect(response.status).toBe(422);
+    const denial = await denialOf(response);
+    expect(denial.error).toBe("invalid_sandbox_name");
+    expect(denial.detail).toContain("hyphens");
+  });
 });
 
 // ------------------------------------------------------------------- state ---

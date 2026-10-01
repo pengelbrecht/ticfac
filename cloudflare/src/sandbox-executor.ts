@@ -423,6 +423,35 @@ export class AdoptionModelUnknownError extends Error {
 }
 
 /**
+ * The SDK's refusal of a container NAME (`sanitizeSandboxId`: longer than 63
+ * characters, a leading or trailing hyphen, a reserved name), as the SDK's
+ * own reason — or null for any other error. The same name is refused on
+ * every ask, so this is a permanent answer, never a fault to retry (hn6
+ * run_ee8e: two resolve retries were refused this way in seconds, each read
+ * as a door fault worth asking again, until the tick's allowance was spent).
+ */
+export function sandboxNameRejection(error: unknown): string | null {
+  if (!(error instanceof Error) || error.name !== "SandboxSecurityError") return null;
+  const code = (error as { code?: unknown }).code;
+  if (typeof code !== "string" || !code.includes("SANDBOX_ID")) return null;
+  return error.message;
+}
+
+/** A start whose container name the SDK refused: the name, and the SDK's reason. */
+export class InvalidSandboxNameError extends Error {
+  constructor(
+    readonly sandbox: string,
+    readonly reason: string,
+  ) {
+    super(
+      `the container name ${sandbox} is one the Sandbox SDK refuses (${reason}); the name is derived ` +
+        "from the job's identity, so asking again under the same identity is refused the same way",
+    );
+    this.name = "InvalidSandboxNameError";
+  }
+}
+
+/**
  * What the executor is built from. Every dependency is a seam for the same
  * reason `SANDBOXES` is one: the four operations' mapping is the thing worth
  * testing, and a lifecycle exercisable only by starting a real container is
@@ -605,6 +634,22 @@ async function findWorkProcess(sandbox: OrchestratorSandbox): Promise<{ id: stri
  * records and must not be guessed back out of the handle's detail text.
  */
 export async function startNamedAttempt(
+  deps: SandboxExecutorDeps,
+  spec: AttemptSpec,
+): Promise<{ handle: SandboxJobHandle; adopted: boolean }> {
+  try {
+    return await startNamedAttemptUnchecked(deps, spec);
+  } catch (error) {
+    const reason = sandboxNameRejection(error);
+    if (reason === null) throw error;
+    throw new InvalidSandboxNameError(
+      attemptSandboxName(spec.run_id, spec.tick_id, spec.attempt, spec.job_id),
+      reason,
+    );
+  }
+}
+
+async function startNamedAttemptUnchecked(
   deps: SandboxExecutorDeps,
   spec: AttemptSpec,
 ): Promise<{ handle: SandboxJobHandle; adopted: boolean }> {
