@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
   "epic_id": "hn6",
-  "sequence": 69,
-  "state": "running",
-  "reason": "c2u is running as attempt 14",
-  "updated_at": "2026-10-01T08:22:22Z",
+  "sequence": 70,
+  "state": "collecting",
+  "reason": "collecting yjq attempt 12",
+  "updated_at": "2026-10-01T08:43:55Z",
   "ticks": [
     {
       "tick_id": "0rx",
