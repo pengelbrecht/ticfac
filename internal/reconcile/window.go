@@ -119,7 +119,8 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 	// finish's own start, because a finish no longer stops the polling.
 	polledAt := r.now()
 	// A refusal STOPS the run — it does not finish the rest of the window
-	// first.
+	// first — unless nothing of the refused tick reached the integration
+	// branch (holdsOnlyItsTick): that one is held, below, and the run goes on.
 	//
 	// The temptation is to drain: those attempts are paid for, why abandon
 	// them? Because finishing them would mean integrating and gating on a tree
@@ -137,13 +138,14 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 	// incarnation and adopted, collected and closed by the next.
 	stopped := false
 
-	// parked are the ticks whose worker's question HOLDS for a person (tick
-	// tyd): an always-ask question, or one asked again after the run told the
-	// worker to decide it. Unlike every other refusal a held question stops
-	// only its own tick. Nothing it did reached the integration branch — the
-	// question is answered before anything merges — so the tree every other
-	// tick gates on is the tree the refusal says nothing about, and the run
-	// keeps working every tick that does not wait behind the held one. It
+	// parked are the ticks the run HOLDS while it works the rest: a worker's
+	// question that holds for a person (tick tyd) — an always-ask question,
+	// or one asked again after the run told the worker to decide it — and a
+	// refusal raised before the tick's work reached the integration branch
+	// (holdsOnlyItsTick: epic hn6, run_ee8e, where 378's spent ladder stopped
+	// zl1, 0rx and yjq with it). Neither says anything about the tree every
+	// other tick gates on — nothing of the held tick merged — so the run
+	// keeps working every tick that does not wait behind the held one, and
 	// ends held once nothing else is left to do.
 	parked := map[string]*Refusal{}
 	var parkOrder []string
@@ -155,9 +157,30 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 		parkOrder = append(parkOrder, tick)
 		failed = append(failed, tick)
 		r.setTick(tick, refusedTickState(refusal))
-		r.record(tick, StageRunHeld, "%s: %s", refusal.Reason, refusal.Message)
+		// The vocabulary reject uses: a hold for a person is StageRunHeld
+		// (0z0), every other refusal reaches the feed in its own words (emk).
+		if holdsForAPerson(refusal.Reason) {
+			r.record(tick, StageRunHeld, "%s: %s", refusal.Reason, refusal.Message)
+		} else {
+			r.recordRefusal(tick, refusal)
+		}
+		r.record(tick, StageTickHeld,
+			"%s is held on %s and the run goes on without it: nothing of it reached %s, so every tick that "+
+				"does not wait behind it is worked to the end, and the run ends naming it once nothing else can "+
+				"progress", tick, refusal.Reason, r.branch)
 	}
-	// behindParked says a queued entry cannot run while a question holds: the
+	// holdOnly parks a refusal that holds only its own tick and says so;
+	// anything else is left for the stop.
+	holdOnly := func(entry planEntry, err error) bool {
+		var refusal *Refusal
+		if isRoleJob(entry.Role) || !asRefusal(err, &refusal) || refusal.TickID != entry.TickID ||
+			!holdsOnlyItsTick(refusal) {
+			return false
+		}
+		park(entry.TickID, refusal)
+		return true
+	}
+	// behindParked says a queued entry cannot run while a tick is held: the
 	// held tick itself (a replan re-adds it), a tick sequenced behind it or
 	// behind one already dropped for it, and the role jobs, which run over the
 	// whole epic.
@@ -356,6 +379,9 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 					break
 				}
 			}
+			if holdOnly(fl.entry, stopErr) {
+				return false, nil, nil
+			}
 			out, err = stop(fl.entry.TickID, stopErr)
 			return true, out, err
 		}
@@ -387,7 +413,7 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 				if _, held := parked[entry.TickID]; !held && !waiting[entry.TickID] {
 					waiting[entry.TickID] = true
 					r.record(entry.TickID, StageWaitsBehindHeld,
-						"not dispatched: it waits behind the question held on %s", strings.Join(parkOrder, ", "))
+						"not dispatched: it waits behind the hold on %s", strings.Join(parkOrder, ", "))
 				}
 				continue
 			}
@@ -432,6 +458,13 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			if err != nil {
 				window.finish = nil
 				if again(f.fl.entry, err) {
+					continue
+				}
+				// A refusal raised before the attempt's work merged — its
+				// collect, or its merge — holds only its tick. Once the
+				// merge has landed (the gate, the close) the tree itself is
+				// in question, and the run stops as it always did.
+				if (f.stage == finishCollecting || f.stage == finishIntegrating) && holdOnly(f.fl.entry, err) {
 					continue
 				}
 				return stop(f.fl.entry.TickID, err)
@@ -617,6 +650,9 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 		fl := window.live[settled]
 		window.live = append(window.live[:settled], window.live[settled+1:]...)
 		if err != nil {
+			if holdOnly(fl.entry, err) {
+				continue
+			}
 			return stop(fl.entry.TickID, err)
 		}
 		window.settled = append(window.settled, &settledAttempt{fl: fl, status: status})
@@ -705,6 +741,32 @@ func (r *Reconciler) adoptionFirst(plan []planEntry) ([]planEntry, error) {
 	}
 	sort.SliceStable(out, func(i, j int) bool { return rank(out[i]) < rank(out[j]) })
 	return out, nil
+}
+
+// holdsOnlyItsTick says a refusal raised about an attempt before its work
+// reached the integration branch holds that tick alone rather than stopping
+// the run (epic hn6, run_ee8e). Each of these is a verdict on ONE attempt's
+// work that left the integration branch exactly as it was: its collect did
+// not produce mergeable work, it wrote under an authority not its own or
+// outside its declaration, nobody can say whether it still runs, or it does
+// not merge. The ticks that do not wait behind it gate on a tree the refusal
+// says nothing about.
+//
+// Everything else still stops the run: a failing gate (its merge is on the
+// branch, so every later gate would fail for a reason that is not its own),
+// a refusal about the run's own machinery or the epic, and anything this
+// list does not name — a new refusal stops until somebody decides it is
+// local.
+func holdsOnlyItsTick(refusal *Refusal) bool {
+	if refusal == nil {
+		return false
+	}
+	switch refusal.Reason {
+	case RefusedMerge, RefusedCollect, RefusedBoundary, RefusedUndeclaredTouch,
+		RefusedWiped, RefusedUnaddressed, RefusedRejectedWork, RefusedFindingInvalid:
+		return true
+	}
+	return false
 }
 
 // refusedTickState is the checkpoint state a refusal leaves its tick in.
