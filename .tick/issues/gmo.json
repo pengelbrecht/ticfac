@@ -1,0 +1,15 @@
+{
+  "id": "gmo",
+  "title": "watch dashboard shows the epic's state, not only the latest run's",
+  "gloss": "dashboard counts across runs",
+  "description": "Operator screenshot 2026-10-01: after many runs closed 13 of hn6's ticks, `ticfac watch hn6` answered for the newest cloud run (which failed at orchestrator boot before doing anything) and showed '0/11 ticks', every row with attempts 0 and empty tier/pipeline/time, while closed ticks r5i 3gk 7uv ltg 0rx 378 oro fq0 zl1 lh4 u5n 3rc c2u exist and open ones (yjq held, lkq, u4l, l89, review, close-out) are missing or wrong. The dashboard must derive tick rows and the progress bar from the epic's tracker state on the integration branch plus every run's records for it (closed ticks show done with their last run's pipeline/time/attempts), and the run section (alive, workers, cost, feed) from the newest run. Count only real ticks (exclude duplicates closed as duplicates, or show them dimmed).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "hn6",
+  "acceptance_criteria": "Golden + model tests over a fixture epic with ticks closed by two earlier runs and a failed newest run: the progress bar and rows reflect the closed ticks, held ticks show held, and the run header says the newest run failed. make gate passes.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-01T11:01:25.106459Z",
+  "updated_at": "2026-10-01T11:01:25.106459Z"
+}

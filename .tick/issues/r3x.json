@@ -1,0 +1,15 @@
+{
+  "id": "r3x",
+  "title": "watch dashboard renders as a staircase in a real terminal: raw mode needs CRLF",
+  "gloss": "dashboard staircase in raw tty",
+  "description": "Operator screenshot 2026-10-01 (ticfac watch hn6 in iTerm/herdr, stdin+stdout a terminal): every line after the first starts where the previous ended — rows, headers, the feed tail and the end message all drift right and wrap. Cause (verify): the key-reading mode puts the terminal in raw mode, where \\n no longer returns the carriage, so every newline the dashboard (and the final summary) writes must be \\r\\n while raw mode is on — or render through a frame writer that positions each line absolutely. Also the closing message printed after the watch ends must restore the terminal first. Header columns (TICK WHAT TIER PIPELINE TIME ATTEMPTS) were also laid out across the full pane width with huge gaps — size columns to content.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "hn6",
+  "acceptance_criteria": "A pty-driven test (github.com/creack/pty or equivalent) renders the dashboard with keys on at 120x40 and 80x24 and asserts every frame line starts at column 0 (no staircase) and fits the width; the same test covers the end-of-watch message. make gate passes.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-01T11:01:25.071301Z",
+  "updated_at": "2026-10-01T11:01:25.071301Z"
+}
