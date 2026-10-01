@@ -610,7 +610,7 @@
         "wave": { "active": 1, "total": 3 }
       },
       "progress": {
-        "ticks": { "total": 14, "closed": 1, "open": 13 },
+        "ticks": { "total": 4, "closed": 1, "open": 3 },
         "waves": { "total": 3, "done": 0, "active": 1 }
       },
       "epic_title": "ticfac devex: one command to run, watch and triage an epic, locally and in the cloud",
@@ -677,7 +677,7 @@
                 { "stage": "merged", "state": "done" }
               ],
               "parent_tick_id": null,
-              "duration_seconds": null,
+              "duration_seconds": 2898,
               "findings": [],
               "report": null,
               "absorbed": false,
@@ -702,7 +702,7 @@
                 { "stage": "merged", "state": "pending" }
               ],
               "parent_tick_id": null,
-              "duration_seconds": null,
+              "duration_seconds": 4912,
               "findings": [],
               "report": null,
               "absorbed": false,
@@ -714,7 +714,7 @@
               "tier": "strong",
               "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
               "executor": "local-subprocess",
-              "elapsed_seconds": 4892
+              "elapsed_seconds": 4912
             }
           ]
         },
@@ -785,7 +785,7 @@
           "worktree": "/worktrees/run-epic-2jn/tick-6dh/attempt-2",
           "handle": null,
           "activity": null,
-          "elapsed_seconds": 4892,
+          "elapsed_seconds": 4912,
           "branch_idle_seconds": 300,
           "worktree_idle_seconds": 120,
           "wall_clock": null,
@@ -869,8 +869,8 @@
         "wave": null
       },
       "progress": {
-        "ticks": { "total": 14, "closed": 14, "open": 0 },
-        "waves": { "total": 3, "done": 3, "active": 0 }
+        "ticks": null,
+        "waves": null
       },
       "epic_title": "ticfac devex: one command to run, watch and triage an epic, locally and in the cloud",
       "recent": [
@@ -920,7 +920,7 @@
           "detail": "completed: every tick closed behind the integrated gate"
         }
       ],
-      "waves": [],
+      "waves": null,
       "workers": null,
       "waits_on": {
         "kind": "merge",
@@ -1190,7 +1190,7 @@
               "tier": "closeout",
               "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
               "executor": "local-subprocess",
-              "elapsed_seconds": null
+              "elapsed_seconds": 2400
             }
           ]
         }
@@ -1241,6 +1241,19 @@
       },
       "gates": [
         {
+          "key": "gate-060-1-go",
+          "check": "go",
+          "result": "pass",
+          "acceptance": "required",
+          "phase": "integrated",
+          "head": "1a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d",
+          "integration_ref": "refs/heads/epic/6in",
+          "tick_id": "060",
+          "attempt": 1,
+          "started_at": "2026-09-28T17:59:15Z",
+          "finished_at": "2026-09-28T18:00:00Z"
+        },
+        {
           "key": "gate-46x-4-go",
           "check": "go",
           "result": "fail",
@@ -1252,6 +1265,19 @@
           "attempt": 4,
           "started_at": "2026-09-28T18:49:00Z",
           "finished_at": "2026-09-28T18:49:58Z"
+        },
+        {
+          "key": "gate-823-3-go",
+          "check": "go",
+          "result": "pass",
+          "acceptance": "required",
+          "phase": "integrated",
+          "head": "9f8e7d6c5b4a39281f8e7d6c5b4a39281f8e7d6c",
+          "integration_ref": "refs/heads/epic/6in",
+          "tick_id": "823",
+          "attempt": 3,
+          "started_at": "2026-09-28T18:34:15Z",
+          "finished_at": "2026-09-28T18:35:00Z"
         }
       ],
       "ci": {

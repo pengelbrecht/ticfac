@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
@@ -297,6 +299,34 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 //     behind, and a done merged or closed stage names a tick the records
 //     closed (a role tick's close stays pending behind a mere integration).
 //
+// Tick fq0 added the four VALUE rules the cell rules never read — duration,
+// elapsed, progress and gates — after finding the same drift live in values
+// no rule read: durations null beside stamps that measure them, an elapsed
+// that contradicted the document's own generated_at, progress that counted
+// fourteen ticks beside a waves list that lists none of them, and a gates
+// array that backed no closed tick's duration. Each mirrors one builder
+// branch and reads only what the golden document itself states — the try
+// stamps, the gates array, the workers panel, the waves list, generated_at:
+//
+//   - a tick's duration is its earliest parseable try stamp to its close —
+//     the latest gate record naming the tick, else its closed line, else
+//     generated_at while it is open — and null when no stamp states a start;
+//   - a tick's elapsed is its current attempt's dispatch stamp to
+//     generated_at while that attempt is live (a standing worker answers
+//     for it, or the state says dispatched or reported), null otherwise —
+//     and a worker's elapsed is the same span for the attempt the census
+//     names;
+//   - progress counts the ticks and waves the document lists, in the same
+//     loop that lists them: a null or empty waves list answers null
+//     counters — never numbers — and a wave is done when every tick in it
+//     closed, the first wave that is not done is the active frontier, and
+//     the waves behind it are upcoming;
+//   - the gates array is sorted by key then started_at, and every closed
+//     tick's duration traces to a stamp the document states — a gate
+//     record naming the tick, or its closed line — because the array is
+//     every evidence record and durationOf measures the close to the
+//     latest one naming the tick.
+//
 // The rules read the RENDERED cell, and the fill can only ever downgrade a
 // stage to pending (pipelineCell): a rendered done, active or failed stage is
 // always the derivation's own answer, while a rendered pending one is the
@@ -322,9 +352,16 @@ func TestEveryGoldenAgreesWithThePipelineDerivation(t *testing.T) {
 			if err := json.Unmarshal(goldens[name], &model); err != nil {
 				t.Fatalf("the golden %s does not decode into the Go Model: %v", name, err)
 			}
+			now, err := time.Parse(time.RFC3339, model.GeneratedAt)
+			if err != nil {
+				t.Fatalf("the golden %s carries generated_at %q, which does not parse: every duration and elapsed the guard derives is measured against it", name, model.GeneratedAt)
+			}
+			goldenProgressAgreesWithTheWaves(t, name, &model)
+			goldenGatesAgreeWithTheRecords(t, name, &model)
+			goldenWorkersAgreeWithTheStamps(t, name, &model, now)
 			for _, wave := range deref(model.Waves) {
 				for i := range wave.Ticks {
-					goldenTickAgreesWithTheDerivation(t, name, &model, wave.Ticks[i])
+					goldenTickAgreesWithTheDerivation(t, name, &model, wave.Ticks[i], now)
 				}
 			}
 		})
@@ -335,7 +372,7 @@ func TestEveryGoldenAgreesWithThePipelineDerivation(t *testing.T) {
 // pipeline derivation's rules. Every rule names the branch it mirrors
 // (pipeline.go), and every fact it reads is one the golden document itself
 // carries, so a rule fires only on a value the derivation can never produce.
-func goldenTickAgreesWithTheDerivation(t *testing.T, golden string, model *Model, tick Tick) {
+func goldenTickAgreesWithTheDerivation(t *testing.T, golden string, model *Model, tick Tick, now time.Time) {
 	t.Helper()
 	where := fmt.Sprintf("golden %s, tick %s", golden, tick.TickID)
 
@@ -493,6 +530,11 @@ func goldenTickAgreesWithTheDerivation(t *testing.T, golden string, model *Model
 				where, end.State, tick.State)
 		}
 	}
+
+	// The value agreements (tick fq0): the durations, the elapsed and the
+	// worker spans the stamps the document itself carries measure.
+	goldenDurationAgreesWithTheStamps(t, golden, model, tick, now)
+	goldenElapsedAgreesWithTheStamps(t, golden, model, tick, now)
 }
 
 // stageOf is one named stage's own entry in a cell, or nil when the role's
@@ -638,4 +680,366 @@ func enumAgrees(t *testing.T, where string, got []any, want ...string) {
 			t.Errorf("%s does not carry the Go vocabulary's %q: the two spellings of one closed set have drifted", where, word)
 		}
 	}
+}
+
+// --------------------------------------------- the value rules (tick fq0) ---
+
+// goldenDurationAgreesWithTheStamps mirrors durationOf (pipeline.go): a
+// tick's duration is its earliest parseable try stamp to its close — for a
+// closed or integrated tick the latest gate record naming it, else its
+// closed line, else generated_at while it is open — and null when no stamp
+// states a start. The tries are the dispatch markers one per marker and the
+// gates array is every evidence record, so both ends are document-complete
+// facts the rule can demand from; where a closed tick's end appears NOWHERE
+// the rule stays silent here and the gates rule speaks (its trace demand is
+// the fixture-side standard the tick sets: a golden's every value must
+// re-derive from the document's own bytes).
+func goldenDurationAgreesWithTheStamps(t *testing.T, golden string, model *Model, tick Tick, now time.Time) {
+	t.Helper()
+	where := fmt.Sprintf("golden %s, tick %s", golden, tick.TickID)
+	got := tick.DurationSeconds
+	start, ok := goldenEarliestDispatch(tick)
+	if !ok {
+		if got != nil {
+			t.Errorf("%s's duration is %d, want null: no try carries a parseable dispatch stamp, and durationOf states no span it cannot start",
+				where, *got)
+		}
+		return
+	}
+	var end time.Time
+	endKnown := false
+	closedEnd := tick.State == tickClosed || tick.State == tickIntegrated
+	if closedEnd {
+		var latest time.Time
+		for i := range model.Gates {
+			gate := &model.Gates[i]
+			if gate.TickID == nil || *gate.TickID != tick.TickID || gate.FinishedAt == "" {
+				continue
+			}
+			at, err := time.Parse(time.RFC3339, gate.FinishedAt)
+			if err != nil {
+				continue
+			}
+			if latest.IsZero() || at.After(latest) {
+				latest = at
+			}
+		}
+		if !latest.IsZero() {
+			end, endKnown = latest, true
+		}
+	}
+	if !endKnown && !closedEnd {
+		end, endKnown = now, true
+	}
+	if !endKnown {
+		if line := goldenNewestLineFor(model, tick.TickID, reconcile.StageClosed); line != nil {
+			if at, err := time.Parse(time.RFC3339, line.At); err == nil {
+				end, endKnown = at, true
+			}
+		}
+	}
+	if !endKnown {
+		// The gates rule demands the stamp; demanding a number here too
+		// would demand the degenerate no-evidence fallback, which is the
+		// live-run tolerance, not a fixture's answer.
+		return
+	}
+	want := int64(end.Sub(start).Round(time.Second).Seconds())
+	if want < 0 {
+		want = 0
+	}
+	if got == nil || *got != want {
+		t.Errorf("%s's duration is %s, want %d: durationOf measures the tick's earliest dispatch (%s) to %s",
+			where, nullableSeconds(got), want, start.Format(time.RFC3339), end.Format(time.RFC3339))
+	}
+}
+
+// goldenElapsedAgreesWithTheStamps mirrors the elapsed rule (build.go's
+// buildTick): the tick's elapsed is its CURRENT attempt's dispatch stamp to
+// generated_at while that attempt is live — a standing worker answers for
+// it, or the tick's own state says dispatched or reported — and null
+// otherwise.
+func goldenElapsedAgreesWithTheStamps(t *testing.T, golden string, model *Model, tick Tick, now time.Time) {
+	t.Helper()
+	where := fmt.Sprintf("golden %s, tick %s", golden, tick.TickID)
+	got := tick.ElapsedSeconds
+	current := 0
+	if tick.Attempt != nil {
+		current = *tick.Attempt
+	}
+	if current == 0 {
+		if got != nil {
+			t.Errorf("%s's elapsed is %d, want null: the document names no current attempt, and the elapsed rule states one only for a stamped current attempt",
+				where, *got)
+		}
+		return
+	}
+	var marker time.Time
+	markerKnown := false
+	for _, try := range tick.Tries {
+		if try.Attempt != current {
+			continue
+		}
+		if at, err := time.Parse(time.RFC3339, try.DispatchedAt); err == nil {
+			marker, markerKnown = at, true
+			break
+		}
+	}
+	if !markerKnown {
+		if got != nil {
+			t.Errorf("%s's elapsed is %d, want null: the current attempt's dispatch stamp states nothing parseable",
+				where, *got)
+		}
+		return
+	}
+	if !isLive(tick.State, goldenStandsFor(model, tick.TickID, current)) {
+		if got != nil {
+			t.Errorf("%s's elapsed is %d, want null: the current attempt is not live — no standing worker answers for it and the state is %q",
+				where, *got, tick.State)
+		}
+		return
+	}
+	want := int64(now.Sub(marker).Round(time.Second).Seconds())
+	if got == nil || *got != want {
+		t.Errorf("%s's elapsed is %s, want %d: the current attempt (attempt %d) dispatched at %s, and the elapsed rule measures it to generated_at (%s)",
+			where, nullableSeconds(got), want, current, marker.Format(time.RFC3339), now.Format(time.RFC3339))
+	}
+}
+
+// goldenWorkersAgreeWithTheStamps mirrors buildWorkers's elapsed: one
+// standing attempt's elapsed is its dispatch marker's stamp to generated_at,
+// and null where no parseable marker states one. The marker map is the
+// listed ticks' tries — one try per dispatch marker — so a worker whose tick
+// the waves list does not carry is a census the document cannot check, and
+// the rule stays silent about it.
+func goldenWorkersAgreeWithTheStamps(t *testing.T, golden string, model *Model, now time.Time) {
+	t.Helper()
+	stamps := map[string]time.Time{}
+	listed := map[string]bool{}
+	for _, wave := range deref(model.Waves) {
+		for _, tick := range wave.Ticks {
+			listed[tick.TickID] = true
+			for _, try := range tick.Tries {
+				if at, err := time.Parse(time.RFC3339, try.DispatchedAt); err == nil {
+					stamps[fmt.Sprintf("%s#%d", tick.TickID, try.Attempt)] = at
+				}
+			}
+		}
+	}
+	for _, worker := range derefWorkers(model.Workers) {
+		if !listed[worker.TickID] {
+			continue
+		}
+		where := fmt.Sprintf("golden %s, worker %s#%d", golden, worker.TickID, worker.Attempt)
+		marker, ok := stamps[fmt.Sprintf("%s#%d", worker.TickID, worker.Attempt)]
+		if !ok {
+			if worker.ElapsedSeconds != nil {
+				t.Errorf("%s's elapsed is %d, want null: the listed tries state no parseable dispatch stamp for the attempt the census names",
+					where, *worker.ElapsedSeconds)
+			}
+			continue
+		}
+		want := int64(now.Sub(marker).Round(time.Second).Seconds())
+		if worker.ElapsedSeconds == nil || *worker.ElapsedSeconds != want {
+			t.Errorf("%s's elapsed is %s, want %d: the attempt dispatched at %s, and buildWorkers measures it to generated_at (%s)",
+				where, nullableSeconds(worker.ElapsedSeconds), want, marker.Format(time.RFC3339), now.Format(time.RFC3339))
+		}
+	}
+}
+
+// goldenProgressAgreesWithTheWaves mirrors buildWaves: the progress counts
+// are the SAME loop that lays the waves out — the ticks it lists, the wave
+// states it derives — so a progress beside a null or empty waves list, or
+// beside a list it does not count, is a value the builder cannot emit. A
+// wave is done when every tick in it closed, the first wave that is not done
+// is the active frontier and the waves behind it are upcoming; a tracker the
+// model could not read, or one with no waves, answers null waves and null
+// counters — buildWaves returns nil, never an empty list.
+func goldenProgressAgreesWithTheWaves(t *testing.T, golden string, model *Model) {
+	t.Helper()
+	where := fmt.Sprintf("golden %s", golden)
+	if model.Waves == nil || len(*model.Waves) == 0 {
+		if model.Waves != nil {
+			t.Errorf("%s carries an empty waves list: buildWaves returns null, never an empty list — 'no waves' and 'unread' both answer null", where)
+		}
+		if model.Progress.Ticks != nil {
+			t.Errorf("%s's progress.ticks is {total %d, closed %d, open %d}, want null: buildWaves counts the ticks it lists in the same loop that lists them, and a null or empty waves list lists none",
+				where, model.Progress.Ticks.Total, model.Progress.Ticks.Closed, model.Progress.Ticks.Open)
+		}
+		if model.Progress.Waves != nil {
+			t.Errorf("%s's progress.waves is {total %d, done %d, active %d}, want null: buildWaves counts the waves it lists in the same loop that lists them, and a null or empty waves list lists none",
+				where, model.Progress.Waves.Total, model.Progress.Waves.Done, model.Progress.Waves.Active)
+		}
+		return
+	}
+	waves := *model.Waves
+	total, closed, done, active := 0, 0, 0, 0
+	for i := range waves {
+		wave := &waves[i]
+		allClosed := true
+		for j := range wave.Ticks {
+			total++
+			if wave.Ticks[j].State == tickClosed {
+				closed++
+			} else {
+				allClosed = false
+			}
+		}
+		wantState := WaveUpcoming
+		switch {
+		case allClosed:
+			wantState = WaveDone
+			done++
+		case active == 0:
+			wantState = WaveActive
+			active = wave.Wave
+		}
+		if wave.State != wantState {
+			t.Errorf("%s's wave %d reads %q, want %q: a wave is done when every tick in it closed, the first wave that is not done is the active frontier, and the waves behind it are upcoming",
+				where, wave.Wave, wave.State, wantState)
+		}
+	}
+	if got := model.Progress.Ticks; got == nil {
+		t.Errorf("%s states no progress.ticks beside %d listed tick(s): buildWaves counts the ticks it lists in the same loop that lists them", where, total)
+	} else if got.Total != total || got.Closed != closed || got.Open != total-closed {
+		t.Errorf("%s's progress.ticks is {total %d, closed %d, open %d}, want {total %d, closed %d, open %d}: buildWaves counts the ticks the waves list, in the same loop that lists them",
+			where, got.Total, got.Closed, got.Open, total, closed, total-closed)
+	}
+	if got := model.Progress.Waves; got == nil {
+		t.Errorf("%s states no progress.waves beside %d listed wave(s): buildWaves counts the waves it lists in the same loop that lays them out", where, len(waves))
+	} else if got.Total != len(waves) || got.Done != done || got.Active != active {
+		t.Errorf("%s's progress.waves is {total %d, done %d, active %d}, want {total %d, done %d, active %d}: buildWaves counts the waves it lists, and active is the frontier wave's own number",
+			where, got.Total, got.Done, got.Active, len(waves), done, active)
+	}
+}
+
+// goldenGatesAgreeWithTheRecords mirrors buildGates: one gate per evidence
+// record, sorted by key then started_at. And it holds the fixture-side
+// standard this tick sets — every value derivable from the document alone —
+// for the closed ticks' durations: a closed or integrated tick whose tries
+// carry a start must have its close STATED, a gate record naming it or its
+// closed line in the tail, because the array is every evidence record and
+// durationOf measures the close to the latest one naming the tick. A closed
+// tick whose duration traces to a stamp the document does not state is the
+// fixture-drift class this tick removes — the gates array must back the
+// closed ticks.
+func goldenGatesAgreeWithTheRecords(t *testing.T, golden string, model *Model) {
+	t.Helper()
+	for i := 1; i < len(model.Gates); i++ {
+		next, prev := &model.Gates[i], &model.Gates[i-1]
+		if (next.Key != prev.Key && next.Key < prev.Key) ||
+			(next.Key == prev.Key && next.StartedAt < prev.StartedAt) {
+			t.Errorf("golden %s's gates array is not sorted by key then started_at: %q follows %q — buildGates sorts the evidence records",
+				golden, next.Key, prev.Key)
+		}
+	}
+	for _, wave := range deref(model.Waves) {
+		for _, tick := range wave.Ticks {
+			if tick.State != tickClosed && tick.State != tickIntegrated {
+				continue
+			}
+			start, ok := goldenEarliestDispatch(tick)
+			if !ok {
+				continue
+			}
+			if goldenClosedEndIsStated(t, golden, model, tick, start) {
+				continue
+			}
+			span := "no stated duration"
+			if tick.DurationSeconds != nil {
+				span = fmt.Sprintf("duration %d", *tick.DurationSeconds)
+			}
+			t.Errorf("golden %s's closed tick %s carries a %s that no gate record and no closed line states the end of: the gates array is every evidence record and durationOf measures the close to the latest one naming the tick, so the gates array must back the closed ticks' durations",
+				golden, tick.TickID, span)
+		}
+	}
+}
+
+// goldenClosedEndIsStated answers whether the document states the named
+// closed tick's end at all: a gate record naming the tick with a parseable
+// finished_at, or its closed line in the document's tail view of the feed.
+// Where a duration is stated, the stamp must equal start + duration — the
+// value the duration claims to measure.
+func goldenClosedEndIsStated(t *testing.T, golden string, model *Model, tick Tick, start time.Time) bool {
+	t.Helper()
+	stated := false
+	for i := range model.Gates {
+		gate := &model.Gates[i]
+		if gate.TickID == nil || *gate.TickID != tick.TickID || gate.FinishedAt == "" {
+			continue
+		}
+		at, err := time.Parse(time.RFC3339, gate.FinishedAt)
+		if err != nil {
+			continue
+		}
+		stated = true
+		if tick.DurationSeconds != nil {
+			if want := start.Add(time.Duration(*tick.DurationSeconds) * time.Second); !at.Equal(want) {
+				t.Errorf("golden %s's closed tick %s carries duration %d, but the latest gate record naming it finished at %s, which measures %d from its first dispatch (%s): durationOf measures the close to the latest gate record naming the tick",
+					golden, tick.TickID, *tick.DurationSeconds, at.Format(time.RFC3339),
+					int64(at.Sub(start).Round(time.Second).Seconds()), start.Format(time.RFC3339))
+			}
+		}
+	}
+	if stated {
+		return true
+	}
+	if line := goldenNewestLineFor(model, tick.TickID, reconcile.StageClosed); line != nil {
+		if at, err := time.Parse(time.RFC3339, line.At); err == nil {
+			stated = true
+			if tick.DurationSeconds != nil {
+				if want := start.Add(time.Duration(*tick.DurationSeconds) * time.Second); !at.Equal(want) {
+					t.Errorf("golden %s's closed tick %s carries duration %d, but its closed line reads %s, which measures %d from its first dispatch (%s): with no gate record naming the tick, durationOf measures the close to the closed line",
+						golden, tick.TickID, *tick.DurationSeconds, at.Format(time.RFC3339),
+						int64(at.Sub(start).Round(time.Second).Seconds()), start.Format(time.RFC3339))
+				}
+			}
+		}
+	}
+	return stated
+}
+
+// goldenEarliestDispatch is the tick's earliest parseable try stamp — the
+// document's own copy of the dispatch markers durationOf reads.
+func goldenEarliestDispatch(tick Tick) (time.Time, bool) {
+	var earliest time.Time
+	for _, try := range tick.Tries {
+		at, err := time.Parse(time.RFC3339, try.DispatchedAt)
+		if err != nil {
+			continue
+		}
+		if earliest.IsZero() || at.Before(earliest) {
+			earliest = at
+		}
+	}
+	return earliest, !earliest.IsZero()
+}
+
+// goldenNewestLineFor is the newest line of one stage the document's tail
+// view of the feed holds for one tick — liveness.last_event is the feed's
+// own last line, so when it matches it is the newest; otherwise the last
+// match in the recent tail is, because the tail is the feed's end and
+// nothing lies beyond it.
+func goldenNewestLineFor(model *Model, tickID, stage string) *runfeed.Event {
+	if last := model.Liveness.LastEvent; last != nil && last.Stage == stage &&
+		last.TickID != nil && *last.TickID == tickID {
+		return last
+	}
+	var newest *runfeed.Event
+	for i := range model.Recent {
+		line := &model.Recent[i]
+		if line.Stage == stage && line.TickID != nil && *line.TickID == tickID {
+			newest = line
+		}
+	}
+	return newest
+}
+
+// nullableSeconds prints a nullable duration the way the document states it,
+// so a refusal quotes the value it refuses.
+func nullableSeconds(seconds *int64) string {
+	if seconds == nil {
+		return "null"
+	}
+	return strconv.FormatInt(*seconds, 10)
 }
