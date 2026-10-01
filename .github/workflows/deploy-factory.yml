@@ -114,11 +114,12 @@ jobs:
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
-    # The live-run guard waits up to 60 minutes; the deploy itself takes ~10
-    # (image build and push, then a rollout wait of up to 10 — up to 60 while
-    # the platform still reports the rollout in progress, as it does when fresh
-    # layers pull slowly: 23-48 minute rollouts on 2026-09-30).
-    timeout-minutes: 140
+    # The deploy takes ~10 minutes (image build and push, then a rollout wait
+    # of up to 10 — up to 60 while the platform still reports the rollout in
+    # progress and nothing shows it serving new instances yet, as when fresh
+    # layers pull slowly: 23-48 minute rollouts on 2026-09-30). A slow push
+    # adds its retries. There is no wait for live runs (see "Live runs" below).
+    timeout-minutes: 110
     concurrency:
       # One deploy at a time: two deploys racing one Cloudflare account is the
       # two-writers-one-name problem, and an upgrade must not cancel a deploy
@@ -172,10 +173,8 @@ jobs:
       # derived here (the workers.dev host of the Worker cloudflare/wrangler.toml
       # names, on the account's own subdomain) and masked before any later step
       # can print it. The deploy's output is filtered as well (see that step),
-      # for a host this derivation did not predict. The derived endpoint is
-      # also what the live-run guard asks.
+      # for a host this derivation did not predict.
       - name: Resolve and mask the factory endpoint
-        id: endpoint
         if: steps.deploy-credentials.outputs.configured == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -186,14 +185,11 @@ jobs:
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/subdomain" 2>/dev/null \
             | jq -r '.result.subdomain // empty' 2>/dev/null || true)"
           if [ -z "$worker" ] || [ -z "$subdomain" ]; then
-            echo "::warning::could not resolve the factory endpoint from the Cloudflare API; the live-run guard is skipped (the deploy's output is still filtered)"
-            echo "resolved=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::could not resolve the factory endpoint from the Cloudflare API; only the deploy's output filter keeps it out of this log"
             exit 0
           fi
           echo "::add-mask::$subdomain"
           echo "::add-mask::https://$worker.$subdomain.workers.dev"
-          echo "$worker.$subdomain.workers.dev" > "$RUNNER_TEMP/factory-host"
-          echo "resolved=true" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@v6
         if: steps.deploy-credentials.outputs.configured == 'true'
@@ -311,8 +307,7 @@ jobs:
       # operator's token here is what makes the deploy REUSE it instead of
       # minting a fresh one — a minted token would push a new hash to the
       # Worker (invalidating the laptop's token) and then die with the runner.
-      # The file is owner-only, as it is on the laptop. The endpoint rides
-      # along when it was resolved, so the live-run guard can ask the factory.
+      # The file is owner-only, as it is on the laptop.
       - name: Stage the factory credential file
         if: steps.decide.outputs.deploy == 'true'
         env:
@@ -320,67 +315,44 @@ jobs:
         run: |
           umask 077
           printf 'factory_token=%s\n' "$TICFAC_FACTORY_TOKEN" > ~/.ticfacrc
-          if [ -s "$RUNNER_TEMP/factory-host" ]; then
-            printf 'factory_url=https://%s\n' "$(cat "$RUNNER_TEMP/factory-host")" >> ~/.ticfacrc
-          fi
 
-      # The live-run guard. A Workers deploy is atomic and a running container
-      # keeps the image it booted, so deploying under a live run is safe — but
-      # that run's NEXT container (a worker, a resume) boots the new image. So:
-      # wait while any run is live (starting, running, stopping), up to 60
-      # minutes, then deploy anyway; one long run must not pin the factory to
-      # old code. An unreadable status is not a live run: it is logged and the
-      # deploy proceeds.
-      - name: Wait for live runs to finish (bounded)
-        if: steps.decide.outputs.deploy == 'true'
-        env:
-          RESOLVED: ${{ steps.endpoint.outputs.resolved }}
-        run: |
-          record() {
-            echo "live-run guard: $1"
-            echo "Live-run guard: $1" >> "$GITHUB_STEP_SUMMARY"
-          }
-          if [ "$RESOLVED" != "true" ]; then
-            record "skipped — the factory endpoint was not resolved"
-            exit 0
-          fi
-          start=$SECONDS
-          limit=3600
-          while :; do
-            if ! status="$(./ticfac cloud status --json 2>"$RUNNER_TEMP/status.err")"; then
-              echo "::warning::could not read the factory's runs; deploying without waiting"
-              sed -E 's#https?://[A-Za-z0-9.-]+#<factory>#g' "$RUNNER_TEMP/status.err"
-              record "the factory's status was unreadable — deployed without waiting"
-              exit 0
-            fi
-            live="$(jq -r '[.runs[]? | select(.state == "starting" or .state == "running" or .state == "stopping")
-              | "\(.run_id) (epic \(.epic), \(.state))"] | join(", ")' <<<"$status")"
-            waited=$(( (SECONDS - start) / 60 ))
-            if [ -z "$live" ]; then
-              record "no live run (waited ${waited}m) — deploying"
-              exit 0
-            fi
-            if [ $((SECONDS - start)) -ge "$limit" ]; then
-              echo "::warning::runs still live after ${waited}m: $live — deploying anyway (running containers keep their image)"
-              record "still live after ${waited}m ($live) — deployed anyway"
-              exit 0
-            fi
-            echo "live: $live — waited ${waited}m, asking again in 60s"
-            sleep 60
-          done
+      # Live runs. There is deliberately no wait for them. A container rollout
+      # cannot take a live run's container: cloudflare/wrangler.toml sets
+      # rollout_active_grace_period to a day, so the platform replaces an
+      # instance only once it has been connected to its Durable Object that
+      # long, and a run holds its instances on the image they booted while
+      # every new instance boots the new one. The deploy reports exactly that
+      # — which runs still hold instances on the previous image — instead of
+      # waiting for them. The live-run guard that stood here (wait up to 60
+      # minutes while `ticfac cloud status` showed a run live) could not do the
+      # job the grace period now does: it checked once, before a rollout that
+      # outlives it (run_911b, 2026-09-30: the guard passed at 11:57, the
+      # rollout it let through reached 100% at 13:31 and took a run started at
+      # 12:11), it deployed anyway after 60 minutes (the 2026-09-29 12:49 deploy
+      # did), it cannot see a run whose orchestrator runs on the operator's
+      # machine (`ticfac run --cloud-workers`), and on 2026-09-29/30 it held
+      # deploys for 36 and 60 minutes to protect nothing it could protect.
 
       # The deploy itself, with no flags: it builds and pushes the sandbox
       # image from this build's embedded context, applies migrations, deploys
       # the Worker, verifies the endpoint and waits for the container rollout.
       # Its output is kept for the summary and filtered on its way to the
       # public log: any workers.dev host becomes <factory>, whatever the mask
-      # above did or did not catch.
+      # above did or did not catch. ticfac streams wrangler's output as it is
+      # written and the filter is line-buffered (`sed -u`), so each line's
+      # timestamp in this log is when it happened: buffered, a failed deploy's
+      # ~700 lines all carried the second wrangler exited (run 36735949343).
       #
-      # The image build goes through .github/scripts/wrangler-docker.sh
-      # (WRANGLER_DOCKER_BIN): buildx on a docker-container builder with the
-      # GitHub Actions cache, so a layer that did not change keeps its digest
-      # and is neither pushed nor pulled again. Without it a fresh runner
-      # rebuilt ~0.8 GB of new blobs per deploy.
+      # Wrangler's docker is the bundle's shim (cloudflare/scripts/
+      # wrangler-docker.sh), which the deploy sets as WRANGLER_DOCKER_BIN on
+      # every deploy, laptop or CI: it logs in afresh before each push attempt
+      # (wrangler's own registry login lasts 15 minutes, and a slower push
+      # failed `unauthorized` in run 36735949343). Here it also builds through
+      # buildx on a docker-container builder with the GitHub Actions cache —
+      # TICFAC_BUILDX_BUILDER and the Actions runtime switch that on — so a
+      # layer that did not change keeps its digest and is neither pushed nor
+      # pulled again. Without it a fresh runner rebuilt ~0.8 GB of new blobs
+      # per deploy.
       - name: Set up a buildx builder for the image build cache
         if: steps.decide.outputs.deploy == 'true'
         id: buildx
@@ -393,12 +365,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          WRANGLER_DOCKER_BIN: ${{ github.workspace }}/.github/scripts/wrangler-docker.sh
           TICFAC_BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
         run: |
           set -o pipefail
           ./ticfac factory deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log" \
-            | sed -E 's#https?://[A-Za-z0-9.-]+\.workers\.dev#<factory>#g'
+            | sed -u -E 's#https?://[A-Za-z0-9.-]+\.workers\.dev#<factory>#g'
 
       # What was deployed, where the operator looks for it: the commit, the
       # Worker version wrangler created, and the image digest the container
@@ -412,7 +383,10 @@ jobs:
           worker="$(sed -nE 's/^[[:space:]]*(worker:|Current Version ID:)[[:space:]]*([0-9A-Za-z-]+)[[:space:]]*$/\2/p' "$log" | tail -n1)"
           image="$(sed -nE 's/^[[:space:]]*image:[[:space:]]*(sha256:[0-9a-f]+).*$/\1/p' "$log" | tail -n1)"
           version="$(git describe --tags --match 'v*' --always --long --abbrev=12)"
-          if grep -q '^Factory ready at' "$log"; then
+          held="$(sed -nE 's/^.*held by live run\(s\): (.*)$/\1/p' "$log" | tail -n1)"
+          if grep -q '^Factory ready at' "$log" && [ -n "$held" ]; then
+            outcome="deployed, new instances serve the new image; instances held by live runs ($held) keep the previous one until each run lets go"
+          elif grep -q '^Factory ready at' "$log"; then
             outcome="deployed, container rollout confirmed"
           elif grep -q '^Factory deployed at' "$log"; then
             outcome="deployed, container rollout NOT confirmed"

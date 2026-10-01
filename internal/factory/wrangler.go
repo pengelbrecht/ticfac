@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // PrerequisiteError reports that the deploy stopped before doing anything
@@ -74,6 +75,9 @@ type wrangler struct {
 	// out receives wrangler's own progress output, so a real deploy is not
 	// silent while it uploads.
 	out io.Writer
+	// env is added to every invocation's environment (the docker shim,
+	// dockershim.go).
+	env []string
 }
 
 // findWrangler resolves how to invoke the CLI, by *running* each candidate
@@ -206,6 +210,9 @@ func (w *wrangler) run(ctx context.Context, stdin string, args ...string) (strin
 	cmd := exec.CommandContext(ctx, w.bin, append(append([]string(nil), w.prefix...), args...)...)
 	cmd.Dir = w.dir
 	cmd.Stdin = strings.NewReader(stdin)
+	if len(w.env) > 0 {
+		cmd.Env = append(os.Environ(), w.env...)
+	}
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
@@ -215,6 +222,87 @@ func (w *wrangler) run(ctx context.Context, stdin string, args ...string) (strin
 		return out, &commandError{args: args, output: out, err: err}
 	}
 	return out, nil
+}
+
+// runStreaming is run for the one long invocation, `wrangler deploy`: its
+// output reaches w.out line by line as wrangler writes it, indented as echo
+// indents, instead of all at once when wrangler exits. A deploy is a 5-40
+// minute build, push and rollout, and buffered output gave every line of it
+// the timestamp of the moment wrangler exited (deploy-factory run
+// 36735949343: some 700 lines all at 15:57:17, so how long the failed push
+// ran could only be read off wrangler's log file name). The whole output is
+// still returned for parsing; a failure's error carries only its tail, since
+// the rest has been printed already.
+func (w *wrangler) runStreaming(ctx context.Context, args ...string) (string, error) {
+	cmd := exec.CommandContext(ctx, w.bin, append(append([]string(nil), w.prefix...), args...)...)
+	cmd.Dir = w.dir
+	cmd.Stdin = strings.NewReader("")
+	if len(w.env) > 0 {
+		cmd.Env = append(os.Environ(), w.env...)
+	}
+	var buf bytes.Buffer
+	sink := io.Writer(&buf)
+	var lines *lineWriter
+	if w.out != nil {
+		lines = &lineWriter{out: w.out, prefix: "  "}
+		sink = io.MultiWriter(&buf, lines)
+	}
+	cmd.Stdout = sink
+	cmd.Stderr = sink
+	err := cmd.Run()
+	if lines != nil {
+		lines.flush()
+	}
+	out := buf.String()
+	if err != nil {
+		detail := out
+		if w.out != nil {
+			detail = "…\n" + tailLines(out, 30)
+		}
+		return out, &commandError{args: args, output: detail, err: err}
+	}
+	return out, nil
+}
+
+// lineWriter writes complete lines to out, each with prefix, as they arrive.
+// Stdout and stderr share one, so writes are serialized.
+type lineWriter struct {
+	mu      sync.Mutex
+	out     io.Writer
+	prefix  string
+	pending []byte
+}
+
+func (l *lineWriter) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.pending = append(l.pending, p...)
+	for {
+		i := bytes.IndexByte(l.pending, '\n')
+		if i < 0 {
+			break
+		}
+		fmt.Fprintf(l.out, "%s%s\n", l.prefix, strings.TrimRight(string(l.pending[:i]), "\r"))
+		l.pending = l.pending[i+1:]
+	}
+	return len(p), nil
+}
+
+func (l *lineWriter) flush() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if len(bytes.TrimSpace(l.pending)) > 0 {
+		fmt.Fprintf(l.out, "%s%s\n", l.prefix, strings.TrimRight(string(l.pending), "\r"))
+	}
+	l.pending = nil
+}
+
+func tailLines(s string, n int) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 // probeVersion asks the candidate for its version. It is the "is this really a
@@ -407,12 +495,7 @@ func (w *wrangler) execute(ctx context.Context, name, sql string) error {
 
 // deploy uploads the bundle and returns wrangler's output.
 func (w *wrangler) deploy(ctx context.Context) (string, error) {
-	out, err := w.run(ctx, "", "deploy")
-	if err != nil {
-		return out, err
-	}
-	w.echo(out)
-	return out, nil
+	return w.runStreaming(ctx, "deploy")
 }
 
 // putSecret writes a Worker secret, passing the value on stdin so it never

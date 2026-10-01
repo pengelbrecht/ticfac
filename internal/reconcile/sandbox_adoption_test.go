@@ -995,3 +995,65 @@ func superviseProtected(r *Reconciler) (err error) {
 	_, err = r.Supervise(context.Background())
 	return err
 }
+
+// JobsLiveAtFactory is the real executor's statement, restated: the door's
+// jobs live in the factory, which answers for them.
+func (e *doorExecutor) JobsLiveAtFactory() bool { return true }
+
+// lose makes every container of the named tick read `lost` from now on —
+// the door's answer when it cannot see a work process under the identity —
+// while nothing about the work is decided.
+func (d *fakeSandboxDoor) lose(tick string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	for id, c := range d.containers {
+		if id.tick == tick {
+			c.state, c.terminal = subprocess.StateLost, false
+		}
+	}
+}
+
+// TestALostCloudAttemptIsReAskedNotHandedToAPerson: epic hn6, run_6d88e3de.
+// 7uv's worker container idled out while the orchestrator sat in another
+// tick's resolve-conflict wait, the door's next answer for it was `lost`, and
+// the run refused attempt_unaddressed on that ONE answer — "nobody can say
+// whether it is running" — and halted for a person while zl1's worker was
+// still running and other ticks were ready. For an executor whose jobs live
+// at the factory, `lost` is the factory's answer for that moment, and the
+// factory is the one party that can settle it: the run keeps asking, holds
+// only that tick, and the wall clock stays the backstop.
+func TestALostCloudAttemptIsReAskedNotHandedToAPerson(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{gate: cloudGate})
+	door := newFakeSandboxDoor("r-fixture")
+
+	stop := func(e Event) bool {
+		if e.Tick != "a1" {
+			return false
+		}
+		if e.Stage == StageDispatched {
+			door.lose("a1")
+			return false
+		}
+		return e.Stage == StageWaiting && strings.Contains(e.Detail, "reads lost at the factory")
+	}
+	r, result, err := runDoorIncarnation(t, f, f.Repo, door, f.StateRoot, stop)
+	var refusal *Refusal
+	if asRefusal(err, &refusal) {
+		t.Fatalf("one `lost` from the factory became a refusal (%s) — a stop for a person: %v", refusal.Reason, err)
+	}
+	if result != nil && result.Failure != nil {
+		t.Fatalf("one `lost` from the factory stopped the run (%s) — a stop for a person: %s",
+			result.Failure.Reason, result.Failure.Message)
+	}
+	killedAfter(t, err, "a1", StageWaiting)
+	for _, stage := range []string{StageRejected, StageRedispatched} {
+		if contains(r.Stages("a1"), stage) {
+			t.Errorf("a1 was %s on a `lost` answer: %v", stage, r.Stages("a1"))
+		}
+	}
+	if boots := door.bootCount(); boots != 1 {
+		t.Errorf("the factory booted %d containers, want 1: a `lost` is never a licence to dispatch a rival", boots)
+	}
+}

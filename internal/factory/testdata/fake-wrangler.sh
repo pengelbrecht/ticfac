@@ -34,6 +34,8 @@
 #   FAKE_WRANGLER_HEALTH_ERROR  JSON list items `containers info` reports as
 #                         health.errors; unset, `containers info` is unsupported
 #   FAKE_WRANGLER_ROLLOUT_ACTIVE when non-empty, `containers info` reports a rollout in progress
+#   FAKE_WRANGLER_INSTANCES     JSON `containers instances <app> --json` prints;
+#                         unset, that command is unsupported
 #   FAKE_WRANGLER_REGISTRY_HOST registry host `containers registries credentials`
 #                         names; unset, that command is unsupported (no prune)
 #                         `containers images delete` appends to
@@ -54,6 +56,13 @@ registry=registry.cloudflare.com/acct
 case "${1:-}" in
   --version)
     echo "4.123.0"
+    ;;
+  auth)
+    if [ "${2:-}" != "token" ]; then
+      echo "fake wrangler: unsupported auth command: $*" >&2
+      exit 64
+    fi
+    echo '{"type":"api_token","token":"fake-api-token"}'
     ;;
   whoami)
     if [ -n "${FAKE_WRANGLER_UNAUTH:-}" ]; then
@@ -149,6 +158,10 @@ case "${1:-}" in
       exit 1
     fi
     cp wrangler.toml "$FAKE_WRANGLER_STATE/deployed-wrangler.toml"
+    # The docker the deploy handed wrangler (internal/factory/dockershim.go).
+    printf 'WRANGLER_DOCKER_BIN=%s\nTICFAC_DOCKER_BIN=%s\nTICFAC_WRANGLER_BIN=%s\n' \
+      "${WRANGLER_DOCKER_BIN:-}" "${TICFAC_DOCKER_BIN:-}" "${TICFAC_WRANGLER_BIN:-}" \
+      >"$FAKE_WRANGLER_STATE/deploy-docker-env"
     # The Docker build log wrangler prints first is full of sha256 digests that
     # are NOT the application's; the parser has to ignore them.
     echo "#4 [internal] load metadata for docker.io/cloudflare/sandbox:0.12.7-python"
@@ -209,8 +222,15 @@ case "${1:-}" in
         fi
         rollout=null
         [ -n "${FAKE_WRANGLER_ROLLOUT_ACTIVE:-}" ] && rollout='"rollout-1"'
-        printf '{"id":"%s","name":"ticks-orchestrator","active_rollout_id":%s,"health":{"errors":[%s],"instances":{"starting":1}}}\n' \
+        printf '{"id":"%s","name":"ticks-orchestrator","account_id":"acct","active_rollout_id":%s,"health":{"errors":[%s],"instances":{"starting":1}}}\n' \
           "${3:-}" "$rollout" "${FAKE_WRANGLER_HEALTH_ERROR:-}"
+        ;;
+      instances)
+        if [ -z "${FAKE_WRANGLER_INSTANCES:-}" ]; then
+          echo "fake wrangler: unsupported containers command: $*" >&2
+          exit 64
+        fi
+        printf '%s\n' "$FAKE_WRANGLER_INSTANCES"
         ;;
       registries)
         # `containers registries credentials <domain> --pull --json`: only

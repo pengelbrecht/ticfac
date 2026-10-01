@@ -103,7 +103,7 @@ func TestConfirmContainerRolloutUsesApplicationDigestAfterSkippedPush(t *testing
 	outcome, err := confirmContainerRollout(
 		context.Background(), w, io.Discard,
 		"Image already exists remotely, skipping push\n",
-		time.Second, time.Millisecond, 0, false,
+		time.Second, time.Millisecond, 0, false, rolloutAPI{},
 	)
 	if err != nil {
 		t.Fatalf("confirmContainerRollout: %v", err)
