@@ -1115,7 +1115,7 @@
               "try": 2,
               "attempt": 3,
               "tries": [
-                { "try": 1, "attempt": 2, "outcome": "gate-failed", "dispatched_at": "2026-09-28T18:00:30Z", "tier": "frontier", "reason": null, "next_step": null },
+                { "try": 1, "attempt": 2, "outcome": "dispatched", "dispatched_at": "2026-09-28T18:00:30Z", "tier": "frontier", "reason": null, "next_step": null },
                 { "try": 2, "attempt": 3, "outcome": "closed", "dispatched_at": "2026-09-28T18:18:00Z", "tier": "frontier", "reason": null, "next_step": null }
               ],
               "tier": "frontier",
@@ -1148,7 +1148,7 @@
               "try": 2,
               "attempt": 6,
               "tries": [
-                { "try": 1, "attempt": 4, "outcome": "rejected", "dispatched_at": "2026-09-28T18:20:00Z", "tier": "strong", "reason": "gofmt drifted in two files", "next_step": null },
+                { "try": 1, "attempt": 4, "outcome": "gate-failed", "dispatched_at": "2026-09-28T18:20:00Z", "tier": "strong", "reason": "attempt 4 of 46x struck out: gofmt drifted in two files", "next_step": null },
                 { "try": 2, "attempt": 6, "outcome": "in-flight", "dispatched_at": "2026-09-28T18:58:02Z", "tier": "frontier", "reason": null, "next_step": null }
               ],
               "tier": "frontier",
@@ -1185,7 +1185,7 @@
               "try": 1,
               "attempt": 5,
               "tries": [
-                { "try": 1, "attempt": 5, "outcome": "reported", "dispatched_at": "2026-09-28T18:40:00Z", "tier": "closeout", "reason": null, "next_step": null }
+                { "try": 1, "attempt": 5, "outcome": "dispatched", "dispatched_at": "2026-09-28T18:40:00Z", "tier": "closeout", "reason": null, "next_step": null }
               ],
               "tier": "closeout",
               "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",

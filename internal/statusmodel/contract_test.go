@@ -15,6 +15,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/schema"
 )
 
@@ -327,6 +328,27 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 //     every evidence record and durationOf measures the close to the
 //     latest one naming the tick.
 //
+// Tick lh4 added the try rule the value rules never read either — the tries'
+// outcome and reason vocabulary, the same drift class one golden over:
+// 46x's superseded try read `rejected` beside the gates array's own fail
+// record naming its attempt, 823's and v7z's tries read gate-failed and
+// reported beside an evidence array that carries no record for either
+// attempt, and 46x's reason carried the refusal line's tail where
+// decorateTries copies the line's detail whole:
+//
+//   - a try's outcome is tryOutcome's own branch run over the document's
+//     inputs — the checkpoint's word about the tick on the current try, then
+//     the gates array's evidence for that dispatch, then the census — and
+//     the array is the complete evidence inventory and the panel is the
+//     census, so the outcome is demanded of EVERY try;
+//   - a refused try's reason is the newest refusal line's detail, cut at
+//     160 the way decorateTries cuts it — demanded where the document's
+//     tail view of the feed carries the line (the tail holds the newest
+//     lines, so a refusal line the tail shows IS the newest for its
+//     tick and attempt), silent where the tail shows none, because a
+//     refusal older than the tail could still exist and the rule does not
+//     invent what it cannot see.
+//
 // The rules read the RENDERED cell, and the fill can only ever downgrade a
 // stage to pending (pipelineCell): a rendered done, active or failed stage is
 // always the derivation's own answer, while a rendered pending one is the
@@ -535,6 +557,9 @@ func goldenTickAgreesWithTheDerivation(t *testing.T, golden string, model *Model
 	// worker spans the stamps the document itself carries measure.
 	goldenDurationAgreesWithTheStamps(t, golden, model, tick, now)
 	goldenElapsedAgreesWithTheStamps(t, golden, model, tick, now)
+	// The try agreement (tick lh4): the outcomes and reasons the evidence
+	// array and the census answer for.
+	goldenTryOutcomesAgreeWithTheEvidence(t, golden, model, tick)
 }
 
 // stageOf is one named stage's own entry in a cell, or nil when the role's
@@ -1013,6 +1038,114 @@ func goldenEarliestDispatch(tick Tick) (time.Time, bool) {
 		}
 	}
 	return earliest, !earliest.IsZero()
+}
+
+// --------------------------------------------- the try rule (tick lh4) ---
+
+// goldenTryOutcomesAgreeWithTheEvidence mirrors tryOutcome (build.go) and the
+// reason half of decorateTries (pipeline.go), run over the document's own
+// inputs: the checkpoint's word about the tick is the tick's state, the gate
+// evidence that dispatch produced is what the gates array carries for its
+// (tick, attempt), and the census is the workers panel. The array is the
+// document's complete evidence inventory (buildGates carries one record per
+// evidence record) and the panel is the census itself, so the OUTCOME is
+// demanded of every try; the REASON is demanded only where the document's
+// tail view of the feed carries a refusal line for the pair — the tail holds
+// the feed's newest lines, so a refusal line the tail shows IS the newest one
+// for its (tick, attempt), the one reasonLine answers — and stays silent
+// where the tail shows none, because a refusal older than the tail could
+// still exist and the rule does not invent what it cannot see. The cut is
+// decorateTries' own cutToWordBoundary, not a copy of it: a mirror that
+// re-spells the cut would drift from the thing it mirrors.
+func goldenTryOutcomesAgreeWithTheEvidence(t *testing.T, golden string, model *Model, tick Tick) {
+	t.Helper()
+	where := fmt.Sprintf("golden %s, tick %s", golden, tick.TickID)
+	current := 0
+	if tick.Attempt != nil {
+		current = *tick.Attempt
+	}
+	for i := range tick.Tries {
+		try := &tick.Tries[i]
+		evidence := []runstate.Evidence{}
+		for j := range model.Gates {
+			gate := &model.Gates[j]
+			if gate.TickID == nil || *gate.TickID != tick.TickID ||
+				gate.Attempt == nil || *gate.Attempt != try.Attempt {
+				continue
+			}
+			evidence = append(evidence, runstate.Evidence{Result: gate.Result})
+		}
+		stands := goldenStandsFor(model, tick.TickID, try.Attempt) && try.Attempt == current
+		want := tryOutcome(tick.State, current, try.Attempt, evidence, stands)
+		if try.Outcome != want {
+			t.Errorf("%s's try %d (attempt %d) reads outcome %q, want %q: tryOutcome reads the checkpoint's word on the current try, then the gates array's evidence for that dispatch (%s), then the census — the durable records alone",
+				where, try.Try, try.Attempt, try.Outcome, want,
+				goldenEvidenceSummary(model, tick.TickID, try.Attempt))
+		}
+		if try.Outcome != TryRejected && try.Outcome != TryGateFailed {
+			continue
+		}
+		if line := goldenNewestRefusalLine(model, tick.TickID, try.Attempt); line != nil {
+			want := cutToWordBoundary(line.Detail, reasonDetailLimit)
+			if try.Reason == nil || *try.Reason != want {
+				t.Errorf("%s's try %d (attempt %d, %s) carries reason %s, want the newest refusal line's own detail %q: decorateTries copies the line's detail whole, cut at %d",
+					where, try.Try, try.Attempt, try.Outcome, nullableQuote(try.Reason), want, reasonDetailLimit)
+			}
+		}
+	}
+}
+
+// goldenEvidenceSummary names what the gates array carries for one (tick,
+// attempt) — the evidence tryOutcome reads — so a refusal quotes the facts it
+// refuses: each record's key and result, or "none".
+func goldenEvidenceSummary(model *Model, tickID string, attempt int) string {
+	names := []string{}
+	for i := range model.Gates {
+		gate := &model.Gates[i]
+		if gate.TickID == nil || *gate.TickID != tickID || gate.Attempt == nil || *gate.Attempt != attempt {
+			continue
+		}
+		names = append(names, fmt.Sprintf("%s %s", gate.Key, gate.Result))
+	}
+	if len(names) == 0 {
+		return "none"
+	}
+	return strings.Join(names, ", ")
+}
+
+// goldenNewestRefusalLine is the newest rejected or gate_failed line the
+// document's tail view of the feed holds for one (tick, attempt) —
+// liveness.last_event is the feed's own last line, so when it matches it is
+// the newest; otherwise the newest match in the recent tail is, because the
+// tail is the feed's end and nothing lies beyond it.
+func goldenNewestRefusalLine(model *Model, tickID string, attempt int) *runfeed.Event {
+	if last := model.Liveness.LastEvent; last != nil && last.TickID != nil &&
+		*last.TickID == tickID && last.Attempt != nil && *last.Attempt == attempt {
+		switch last.Stage {
+		case reconcile.StageRejected, reconcile.StageGateFailed:
+			return last
+		}
+	}
+	for i := len(model.Recent) - 1; i >= 0; i-- {
+		line := &model.Recent[i]
+		if line.TickID == nil || *line.TickID != tickID || line.Attempt == nil || *line.Attempt != attempt {
+			continue
+		}
+		switch line.Stage {
+		case reconcile.StageRejected, reconcile.StageGateFailed:
+			return line
+		}
+	}
+	return nil
+}
+
+// nullableQuote prints a nullable string the way the document states it, so
+// a refusal quotes the value it refuses.
+func nullableQuote(s *string) string {
+	if s == nil {
+		return "null"
+	}
+	return strconv.Quote(*s)
 }
 
 // goldenNewestLineFor is the newest line of one stage the document's tail
