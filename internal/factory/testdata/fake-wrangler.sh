@@ -157,6 +157,20 @@ case "${1:-}" in
       echo "fake wrangler: refusing to deploy with the placeholder database_id" >&2
       exit 1
     fi
+    # FAKE_WRANGLER_PREPARATION_TIMEOUTS=N: the first N deploys fail the way
+    # wrangler 4.145 does when Cloudflare has not prepared a durable_object
+    # application's image within its fixed 15 minutes.
+    if [ -n "${FAKE_WRANGLER_PREPARATION_TIMEOUTS:-}" ]; then
+      prep_file="$FAKE_WRANGLER_STATE/preparation-timeouts"
+      prep=0
+      [ -s "$prep_file" ] && prep=$(cat "$prep_file")
+      if [ "$prep" -lt "$FAKE_WRANGLER_PREPARATION_TIMEOUTS" ]; then
+        printf '%s' "$((prep + 1))" >"$prep_file"
+        echo "Image does not exist remotely, pushing: $registry/ticks-factory-factorysandbox-factory:abc"
+        echo "✘ [ERROR] Timed out while preparing the container image on Cloudflare's network."
+        exit 1
+      fi
+    fi
     cp wrangler.toml "$FAKE_WRANGLER_STATE/deployed-wrangler.toml"
     # The docker the deploy handed wrangler (internal/factory/dockershim.go).
     printf 'WRANGLER_DOCKER_BIN=%s\nTICFAC_DOCKER_BIN=%s\nTICFAC_WRANGLER_BIN=%s\n' \

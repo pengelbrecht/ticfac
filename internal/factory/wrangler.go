@@ -493,9 +493,47 @@ func (w *wrangler) execute(ctx context.Context, name, sql string) error {
 	return err
 }
 
+// imagePreparationTimeout is wrangler's message when Cloudflare has not
+// finished preparing a durable_object application's image (the
+// ticks-factory-sandbox application, #189) within wrangler's fixed 15 minutes
+// (wrangler 4.145 `waitForImagePreparation`: IMAGE_PREPARATION_TIMEOUT_MS,
+// no flag).
+const imagePreparationTimeout = "Timed out while preparing the container image on Cloudflare's network."
+
+// imagePreparationAttempts bounds how many times a deploy runs `wrangler
+// deploy` while only the image preparation times out.
+const imagePreparationAttempts = 3
+
 // deploy uploads the bundle and returns wrangler's output.
+//
+// A deploy whose only failure is the image-preparation timeout is run again.
+// The preparation is not abandoned when wrangler gives up: Cloudflare keeps
+// building it ("snapshot artifact build already dispatched"), so the next
+// attempt pushes nothing new — the same image, already in the registry — and
+// finds the preparation further along or ready. Deploy 67c531eb (run
+// 36841664063, 2026-10-01) failed on the timeout alone: the image had pushed
+// at 09:25:03 and was still preparing at 09:40:06, and still pending at 09:43
+// with that reason. `wrangler deploy` is idempotent, so running it again is
+// safe.
 func (w *wrangler) deploy(ctx context.Context) (string, error) {
-	return w.runStreaming(ctx, "deploy")
+	var all strings.Builder
+	for attempt := 1; ; attempt++ {
+		out, err := w.runStreaming(ctx, "deploy")
+		all.WriteString(out)
+		if err == nil || !strings.Contains(out, imagePreparationTimeout) || attempt >= imagePreparationAttempts {
+			if err == nil {
+				// Parsing reads the last successful attempt's output.
+				return out, nil
+			}
+			return all.String(), err
+		}
+		if w.out != nil {
+			fmt.Fprintf(w.out, "Cloudflare is still preparing the container image (attempt %d of %d); "+
+				"running wrangler deploy again — the preparation carries on server-side\n",
+				attempt, imagePreparationAttempts)
+		}
+		all.WriteString("\n")
+	}
 }
 
 // putSecret writes a Worker secret, passing the value on stdin so it never
