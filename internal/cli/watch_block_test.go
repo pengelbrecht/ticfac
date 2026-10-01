@@ -105,26 +105,28 @@ func TestWatchOnATerminalRendersTheEpicInPlace(t *testing.T) {
 		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
 	}()
 
-	// The frame renders from the model: the bar names the wave the run is
-	// in, and the frontier's ticks hold fixed rows.
-	watchWaitsFor(t, "the lifecycle bar", func() bool {
-		return strings.Contains(stdout.String(), "● waves 2/3")
+	// The frame renders from the model: the phase bar names the wave the run
+	// is in, and the frontier's ticks hold fixed rows.
+	watchWaitsFor(t, "the phase bar", func() bool {
+		return strings.Contains(stdout.String(), "◐ waves 2/3")
 	}, &stdout, &stderr)
 	watchWaitsFor(t, "the frontier's rows", func() bool {
 		out := stdout.String()
-		return strings.Contains(out, "  t2 dispatched") && strings.Contains(out, "  t3 ready")
+		return strings.Contains(out, " t2    the second tick") && strings.Contains(out, " t3    the third tick")
 	}, &stdout, &stderr)
-	// Done and upcoming waves are one line each, and the whole epic is in
-	// every frame.
-	watchWaitsFor(t, "the compressed waves", func() bool {
+	// Every tick of the epic is a fixed row in the dashboard's table, and
+	// the whole epic is in every frame — the done wave's ticks as much as
+	// the upcoming ones.
+	watchWaitsFor(t, "the whole epic's rows", func() bool {
 		out := stdout.String()
-		return strings.Contains(out, "wave 1 · done") && strings.Contains(out, "wave 3 ·")
+		return strings.Contains(out, " t1    the first tick") && strings.Contains(out, " t4    the fourth tick") &&
+			strings.Contains(out, " t5    the fifth tick")
 	}, &stdout, &stderr)
 	// Redrawn in place, not appended: the cursor moves back over the frame.
 	watchWaitsFor(t, "an in-place redraw", func() bool {
 		return strings.Contains(stdout.String(), "\x1b[J")
 	}, &stdout, &stderr)
-	if strings.Count(stdout.String(), "● waves 2/3") < 2 {
+	if strings.Count(stdout.String(), "◐ waves 2/3") < 2 {
 		t.Errorf("the frame was never redrawn in place:\n%s", stdout.String())
 	}
 
@@ -272,7 +274,7 @@ func TestWatchOnATerminalFollowsACloudRun(t *testing.T) {
 
 	watchWaitsFor(t, "the cloud frame", func() bool {
 		out := stdout.String()
-		return strings.Contains(out, "epic cld") && strings.Contains(out, "  t1 ready")
+		return strings.Contains(out, "cloud · alive") && strings.Contains(out, " t1    the one tick")
 	}, &stdout, &stderr)
 
 	// The Workflow's record is the liveness answer: it says completed, the

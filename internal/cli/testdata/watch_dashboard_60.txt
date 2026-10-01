@@ -1,0 +1,21 @@
+6in ticfac Phase 7: cut over and simplify ti…  local · alive
+2/4 ticks · 2h9m · ● healthy (recovered: net ×14)
+✓ plan ◐ waves 2/3 ✓ review ◐ close-out ◐ ci ○ merge
+                                          needs you: nothing
+
+ TICK  WHAT                             PIPELINE     TIME
+ 060   cloud worker early-exit nudge    ✓ ✓ ✓ ✓      49m
+  └ +823  re-run holds the stopped claim   ✓ ✓ ✓ ✓      34m
+ 46x   port sandbox verbs to ticfac     ✓ ✓ ● ○      1h
+ v7z   close out phase 7                ✓ ✓ ✗ ○      40m
+
+WORKERS                                       ACTIVITY (10m)
+46x  herdr pane tick-46x-a6                   ▁▃▅█▇▅▃▁▂▅
+    ran go test ./internal/reconcile (1m ago)  nudged ×1
+
+CI #98 go ◐ 6m · ts ✓
+cost Workers AI $0.41 · claude not metered
+─ recent ─────────────────────────────────────────────────
+18:58:02 46x#2        dispatched: 46x try 2 dispatched (run 
+19:04:12 run          closeout_held: the close-out waits for
+                                    [e] events  [enter] tick
