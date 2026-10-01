@@ -16,6 +16,6 @@
   "acceptance_criteria": "[1] A phone run card shows the headline (progress, ETA, verdict), phase row, needs-you, a pipeline tick table and honest cost from the same model; a pre-hn6 doc renders as before. [2] `cd cloudflare \u0026\u0026 pnpm exec vitest run test/phone-page.test.ts test/status-snapshots.test.ts` passes against the imported contract.json 'dashboard' golden (CI's ts job; the per-tick gate does not run vitest). [3] The gate's ts command (`cd cloudflare \u0026\u0026 pnpm install --frozen-lockfile --prefer-offline \u0026\u0026 pnpm lint \u0026\u0026 pnpm contracts:check \u0026\u0026 pnpm exec tsc --noEmit`) passes.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-28T18:41:10.663913Z",
-  "updated_at": "2026-10-01T04:48:42.87845Z",
+  "updated_at": "2026-10-01T04:50:31.675377Z",
   "started_at": "2026-10-01T04:00:13.26375Z"
 }
