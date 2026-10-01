@@ -3,12 +3,13 @@
   "title": "Recovery.seconds prose says 'the last one'; the 7uv fill sums the spans",
   "description": "The bundle's $defs.recovery.seconds description (\"How long the last one took, where anything measured it\") and the Go field's doc comment describe a per-occurrence span, while the tick's rule — and this fill — state the SUM of the stated suspension durations across the counted host_suspended lines. A renderer reading the contract prose would print the wrong number for any run that slept twice; the bundle's wording should be re-cut to name the sum the fill states (or the fill changed, if the prose is what binds).\nevidence: contracts/status-model.json $defs.recovery.properties.seconds description; internal/statusmodel/verdict.go buildRecovered's sleep accumulation\n\nticfac run run_3f034e683faf4fdf9f6c0952fc158524 filed this backlog tick from the finding 20ce84257eada3f9860b453bf34918732c2cc1d66612ef2d4de1f49894f1bdf7 (reported by run-run_3f034e683faf4fdf9f6c0952fc158524/tick-7uv/attempt-2): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_3f034e683faf4fdf9f6c0952fc158524/absorptions/20ce84257eada3f9860b453bf34918732c2cc1d66612ef2d4de1f49894f1bdf7.json on the run branch.",
   "notes": "2026-09-30 19:02 - ticfac run run_3f034e683faf4fdf9f6c0952fc158524: created by absorbing finding 20ce84257eada3f9860b453bf34918732c2cc1d66612ef2d4de1f49894f1bdf7 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/run_3f034e683faf4fdf9f6c0952fc158524/absorptions/20ce84257eada3f9860b453bf34918732c2cc1d66612ef2d4de1f49894f1bdf7.json on epic/hn6, and it says: the classifier put 0.18 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb\n2026-10-01 06:47 - ticfac run run_37b36bfe525c411b902e85dc01a16a52: closed as a duplicate of 370. Both were promoted from finding 20ce84257eada3f9860b453bf34918732c2cc1d66612ef2d4de1f49894f1bdf7 — 370 by run run_911b556fce394004837695b3196e3925 at 2026-09-30T13:18:11Z, this one by run run_3f034e683faf4fdf9f6c0952fc158524 at 2026-09-30T17:02:24Z — and a finding is one tick, so the later promotion is closed; the work is 370's",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "discovered_from": "run-run_3f034e683faf4fdf9f6c0952fc158524/tick-7uv/attempt-2",
   "created_by": "ticfac run run_3f034e683faf4fdf9f6c0952fc158524",
   "created_at": "2026-09-30T17:02:27Z",
-  "updated_at": "2026-10-01T04:47:40.255755Z"
+  "updated_at": "2026-10-01T04:47:43.072391Z",
+  "closed_at": "2026-10-01T04:47:43.072391Z"
 }
