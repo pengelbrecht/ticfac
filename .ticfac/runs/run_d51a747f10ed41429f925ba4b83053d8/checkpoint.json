@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
   "epic_id": "hn6",
-  "sequence": 21,
-  "state": "running",
-  "reason": "yjq is running as attempt 5",
-  "updated_at": "2026-10-01T06:51:22Z",
+  "sequence": 22,
+  "state": "dispatching",
+  "reason": "dispatching zl1 as attempt 6",
+  "updated_at": "2026-10-01T06:51:38Z",
   "ticks": [
     {
       "tick_id": "0rx",
