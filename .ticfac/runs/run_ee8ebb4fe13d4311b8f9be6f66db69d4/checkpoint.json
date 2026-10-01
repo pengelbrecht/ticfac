@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
   "epic_id": "hn6",
-  "sequence": 26,
-  "state": "dispatching",
-  "reason": "dispatching 0rx as attempt 7",
-  "updated_at": "2026-10-01T04:00:09Z",
+  "sequence": 27,
+  "state": "running",
+  "reason": "0rx is running as attempt 7",
+  "updated_at": "2026-10-01T04:00:25Z",
   "ticks": [
     {
       "tick_id": "378",
@@ -34,7 +34,8 @@
     },
     {
       "tick_id": "0rx",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 7
     },
     {
       "tick_id": "u5n",
