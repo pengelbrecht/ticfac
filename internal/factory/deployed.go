@@ -32,6 +32,10 @@ const deployedPath = "/api/deployment"
 // errNoDeployedRoute is a factory that predates GET /api/deployment.
 var errNoDeployedRoute = errors.New("this factory predates GET /api/deployment — the next deploy adds it")
 
+// ErrNoFactory is ReadDeployed's answer when ~/.ticfacrc names no factory (no
+// URL or no token): a state no amount of waiting changes.
+var ErrNoFactory = errors.New("no factory is configured")
+
 // DeployedFacts is the factory's answer. Every field may be empty: a factory
 // no deploy has recorded, a rollout nobody confirmed, a runtime without the
 // version-metadata binding.
@@ -111,7 +115,7 @@ func ReadDeployed(ctx context.Context, configPath string, client *http.Client) (
 	token := cfg.Get(credentials.KeyToken)
 	localVersion = cfg.Get(credentials.KeyVersion)
 	if url == "" || token == "" {
-		return nil, localVersion, errors.New("no factory is configured")
+		return nil, localVersion, ErrNoFactory
 	}
 	if client == nil {
 		client = httpnet.Client(15 * time.Second)

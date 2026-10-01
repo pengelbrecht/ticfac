@@ -68,13 +68,20 @@ Before acting on a failure, confirm its `headSha` is your HEAD.
 
 `.github/workflows/deploy-factory.yml` deploys the factory after CI passes on
 every main commit that changes what it ships (cloudflare/, image/, the Go
-cross-compiled into the image). So to get a fix into the factory, merge it
-and watch that workflow's run for your commit (`gh run list --workflow
-deploy-factory.yml`, then confirm its summary names your sha); check the
-result read-only with `ticfac factory status`. It does not wait for live
-runs: `rollout_active_grace_period` keeps a rollout off their containers, and
-the run's summary names any run still holding the previous image. Retry a failed deploy with `gh workflow run
-deploy-factory.yml`. A local `ticfac factory deploy` is the fallback only
+cross-compiled into the image). So to get a fix into the factory, merge it.
+To wait for your fix to be live, run `ticfac factory wait-deployed <your
+merge sha>` — never a hand-rolled `gh run list` polling loop. It reads the
+factory's own answer to what it runs and exits 0 once that commit contains
+yours (or nothing it ships changed), 1 naming the deploy-factory or CI run
+that failed to carry it, 5 on `--timeout` (default 90m). A deploy for your
+sha that is skipped or cancelled is normal: deploy-factory deploys the newest
+green main head and a newer commit's deploy supersedes yours, carrying your
+fix with it. A loop keyed to your sha's own run never ends in that case
+(several did, for hours, on 2026-10-01). Check the factory read-only with
+`ticfac factory status`. A deploy does not wait for live runs:
+`rollout_active_grace_period` keeps a rollout off their containers, and the
+run's summary names any run still holding the previous image. Retry a failed
+deploy with `gh workflow run deploy-factory.yml`. A local `ticfac factory deploy` is the fallback only
 (first install, token rotation, CI unable to deploy): from this Mac it builds
 an emulated amd64 image and is fragile. The repository is public: never paste
 the factory URL, account ids or tokens into a log, commit or PR.
