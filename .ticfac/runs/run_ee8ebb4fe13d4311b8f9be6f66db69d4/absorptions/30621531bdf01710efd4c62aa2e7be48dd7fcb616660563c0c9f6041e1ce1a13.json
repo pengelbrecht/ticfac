@@ -1,0 +1,31 @@
+{
+  "schema_version": 3,
+  "key": "30621531bdf01710efd4c62aa2e7be48dd7fcb616660563c0c9f6041e1ce1a13",
+  "tick_id": "7as",
+  "gating": false,
+  "basis": "predicted",
+  "confidence": 0.51,
+  "model": "jev-1.13.0",
+  "reason": "the classifier put 0.25 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
+  "placement": "backlog",
+  "decided_at": "2026-10-01T03:19:16Z",
+  "provenance": {
+    "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
+    "tick_id": "7uv",
+    "attempt": 2,
+    "source_ref": "refs/heads/tick/hn6/attempt-2/7uv-run_6d88e3de89ca466c8dab3841185931c1",
+    "source_sha": "b7478e4ba71ebb7cf7b981583f9b561a471c8592",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:5ab57f1f6dc05bc69f1c1522eabf44e8537f2c2d18ae5f2d23dd56ddcc52cae1",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
