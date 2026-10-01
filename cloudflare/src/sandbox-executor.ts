@@ -1158,6 +1158,10 @@ async function collectAttempt(
     tick_id: payload.tick_id,
     branch: writeRefBranch(payload.write_ref),
     base_sha: payload.base_sha,
+    // Where the container itself pushed: a boot that stopped before its
+    // harness leaves its reason beside this branch, not the write_ref (#176).
+    landing_branch: payload.branch,
+    run_id: payload.run_id,
   });
   return reportFromWorker(report);
 }

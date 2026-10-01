@@ -29,6 +29,7 @@
 
 import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
+import { workerBootStoppedBranch, workerBootStoppedFile, workerExitClass } from "./worker-boot";
 
 // ------------------------------------------------------------- the verdict ---
 
@@ -100,6 +101,19 @@ export type WorkerTask = {
   branch: string;
   /** The epic base the branch is compared against — never a moving `main`. */
   base_sha: string;
+  /**
+   * The branch the container itself pushed (its landing branch), when the
+   * branch read above is a ref the work was mirrored onto (the attempt's
+   * write_ref). A container that stopped in its boot leaves its reason
+   * beside THIS one (workerBootStoppedBranch). Defaults to `branch`.
+   */
+  landing_branch?: string;
+  /**
+   * The run the attempt belongs to: the container's fallback landing name is
+   * `<landing branch>-<run>` when origin already had the recorded name from
+   * another base (git-refs.ts), and its boot marker sits beside that one.
+   */
+  run_id?: string;
 };
 
 /** One worker's collect outcome. Every field is evidence, mirroring `collect.Report`. */
@@ -135,6 +149,14 @@ export type WorkerReport = {
    * clean. Undefined when the report could not be read.
    */
   boundary_attempted?: boolean;
+  /**
+   * What a container that stopped in its boot, before its harness, left
+   * beside its landing branch (#176): its exit code and the boot's own stop
+   * message. Read only when the branch carries nothing — no report, no
+   * commit — and evidence like the fields above: it changes the detail,
+   * never the verdict.
+   */
+  boot_stopped?: { exit_code: number; reason: string };
   detail: string;
 };
 
@@ -380,7 +402,7 @@ export async function collectFromGithub(
     if (compare.missing) {
       report.verdict = WORKER_VERDICTS.noCommits;
       report.detail = `${task.branch} does not exist on origin (or ${task.base_sha} is unresolvable)`;
-      return report;
+      return withBootStopped(env, project, task, report);
     }
     report.detail = compare.detail;
     return report; // unknown: the remote could not be read
@@ -410,7 +432,75 @@ export async function collectFromGithub(
 
   report.verdict = verdictFor(report);
   report.detail = detailFor(report);
+  if (
+    report.verdict === WORKER_VERDICTS.noCommits &&
+    !report.report_only &&
+    !report.result_exists
+  ) {
+    return withBootStopped(env, project, task, report);
+  }
   return report;
+}
+
+/**
+ * The reason a container that never reached its harness left beside its
+ * landing branch (#176), read the way the Go collect reads it
+ * (internal/exec/cloudflaresandbox/boot_stopped.go `bootStopped`): the
+ * landing branch's marker, then the per-run fallback's. The sentence is the Go
+ * collect's own, so a run reads the same line from either side. The verdict
+ * stays what the branch made it; a marker that cannot be read or parsed
+ * leaves the report as it was.
+ */
+async function withBootStopped(
+  env: Env,
+  project: string,
+  task: WorkerTask,
+  report: WorkerReport,
+): Promise<WorkerReport> {
+  const landing = task.landing_branch ?? task.branch;
+  const branches = [landing];
+  if (task.run_id !== undefined && task.run_id !== "") branches.push(`${landing}-${task.run_id}`);
+  for (const branch of branches) {
+    const marker = await readFileAt(
+      env,
+      project,
+      workerBootStoppedBranch(branch),
+      workerBootStoppedFile(task.tick_id),
+    );
+    if (!marker.ok) continue;
+    const stopped = parseBootStopped(marker.text);
+    if (stopped === null) continue;
+    report.boot_stopped = stopped;
+    const cls = workerExitClass(stopped.exit_code);
+    report.detail =
+      `the container's boot stopped before its harness started (exit ${stopped.exit_code}` +
+      `${cls === "" ? "" : `: ${cls}`}): ${stopped.reason}. ` +
+      `Nothing reached ${landing}; the reason is on ${workerBootStoppedBranch(landing)}`;
+    return report;
+  }
+  return report;
+}
+
+/**
+ * The boot-stopped marker's `exit:` and `reason:` lines, or null when either
+ * is missing or the code is not a number. Ported from the Go collect's
+ * `parseBootStopped`: the first of each line wins.
+ */
+export function parseBootStopped(body: string): { exit_code: number; reason: string } | null {
+  let code = -1;
+  let reason = "";
+  for (const line of body.split("\n")) {
+    if (line.startsWith("exit: ") && code < 0) {
+      const value = line.slice("exit: ".length).trim();
+      if (!/^-?\d+$/.test(value)) return null;
+      code = Number(value);
+    }
+    if (line.startsWith("reason: ") && reason === "") {
+      reason = line.slice("reason: ".length).trim();
+    }
+  }
+  if (code < 0 || reason === "") return null;
+  return { exit_code: code, reason };
 }
 
 /**
