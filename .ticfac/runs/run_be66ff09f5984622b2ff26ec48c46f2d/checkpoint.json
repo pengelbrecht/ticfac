@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_be66ff09f5984622b2ff26ec48c46f2d",
   "epic_id": "hn6",
-  "sequence": 4,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-10-01T11:16:16Z",
+  "sequence": 5,
+  "state": "failed",
+  "reason": "the width hn6 declares is already full of claims this run does not hold: the graph counts 4 in dispatch.in_flight_ids (l89, lkq, u4l, yjq), and tk stopped refusing over-width claims at 0.32.0 (exit 8 retired, ticks became tracker-only), so this run counts the width itself and holds rather than claiming past it. The run is HELD, not failed: running the epic again under this run id re-derives from the graph and proceeds the moment a slot frees. A claim lives until its tick CLOSES, so the width frees itself as the ticks in flight finish; if it does not, look at what else holds a claim under this epic (another run, or a person's claim)",
+  "updated_at": "2026-10-01T11:16:18Z",
   "ticks": [
     {
       "tick_id": "gmo",
