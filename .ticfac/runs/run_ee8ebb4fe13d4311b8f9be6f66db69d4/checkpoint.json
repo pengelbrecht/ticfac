@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
   "epic_id": "hn6",
-  "sequence": 14,
-  "state": "gating",
-  "reason": "running the integrated gate for 7uv on 54f654ae9290",
-  "updated_at": "2026-10-01T03:35:57Z",
+  "sequence": 15,
+  "state": "publishing",
+  "reason": "closing 7uv behind the integrated gate on 54f654ae9290",
+  "updated_at": "2026-10-01T03:37:47Z",
   "ticks": [
     {
       "tick_id": "378",
