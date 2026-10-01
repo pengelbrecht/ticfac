@@ -600,7 +600,19 @@ func (r *Reconciler) conflictedMergeOf(epicHead, head, message string, config []
 	}
 	defer remove()
 
-	args := append(append([]string{}, config...), "merge", "--no-ff", "--no-commit", "-m", message, head)
+	config = append([]string{}, config...)
+	if keepReports {
+		// An attempt's merge: changelogs merge as a union, as they do in the
+		// integration merge itself (union_merge.go), so the job is never
+		// handed a changelog's markers.
+		union, removeUnion, err := unionMergeConfig()
+		if err != nil {
+			return "", err
+		}
+		defer removeUnion()
+		config = append(config, union...)
+	}
+	args := append(config, "merge", "--no-ff", "--no-commit", "-m", message, head)
 	_, _, mergeErr := r.git.try(dir, args...)
 	if mergeErr != nil {
 		// The markers and the unmerged index ARE the state this function
