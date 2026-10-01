@@ -1398,7 +1398,7 @@ async function detectTrip(
 
 // ------------------------------------------------------------ the passes ---
 
-type PassOutcome =
+export type PassOutcome =
   /**
    * `detail` is optional and is the pass's own account of what it did. A
    * single orchestrator pass has nothing to add — it finished the epic, which
@@ -2655,6 +2655,79 @@ async function observeLocal(
 }
 
 /**
+ * What a local orchestrator's done signal says about the run's end.
+ *
+ * A container's pass asks the PROCESS how it ended; a local orchestrator has
+ * no process this factory can ask, so the signal's outcome is the account.
+ * Before it was read, every signal meant `completed` — hn6's run_6d88 and
+ * run_09eb failed, their supervisors halted, and the factory recorded both
+ * completed, which the next `ticfac run` then read as a finished run.
+ *
+ * The words match the container pass's: a halted run "stopped deliberately",
+ * and it is `failed`, as a halted container run is. A `completed` outcome is
+ * still only the orchestrator's claim — the progress assessment downstream
+ * decides whether the epic moved (tick ehy). A signal with no outcome (a
+ * ticfac that predates it) keeps the old reading, said as such.
+ */
+export function localDoneOutcome(signal: DoneSignal, epic: string): PassOutcome {
+  const outcome = signal.outcome;
+  if (outcome === undefined) {
+    return {
+      kind: "completed",
+      boots: 0,
+      detail:
+        "the local orchestrator reported that it finished (its ticfac did not say how — it " +
+        "predates the done signal's outcome)",
+    };
+  }
+  const exit = outcome.exit_code === undefined ? "exit unknown" : `exit ${outcome.exit_code}`;
+  const reason = outcome.reason === undefined ? "" : `: ${outcome.reason}`;
+  const resume =
+    `; \`ticfac run ${epic} --cloud-workers\` resumes the epic from its integration branch ` +
+    "as a new run";
+  switch (outcome.state) {
+    case "completed":
+      return {
+        kind: "completed",
+        boots: 0,
+        detail: `the local orchestrator reported that it finished${reason}`,
+      };
+    case "cancelled":
+      // A stop that already happened on the machine: the run is `stopped`.
+      return {
+        kind: "tripped",
+        boots: 0,
+        trip: {
+          kind: "stop",
+          hard: true,
+          detail: `the local orchestrator's run was cancelled on the operator's machine (${exit})${reason}`,
+        },
+      };
+    case "died":
+      return {
+        kind: "failed",
+        boots: 0,
+        detail: `the local orchestrator died (${exit})${reason}${resume}`,
+      };
+    case "failed":
+      if (outcome.halt !== undefined) {
+        return {
+          kind: "failed",
+          boots: 0,
+          detail:
+            `the local orchestrator stopped deliberately (failed, ${exit}): its supervisor halted ` +
+            `rather than continue — ${outcome.halt}${reason === "" ? "" : ` — the run${reason}`}${resume}`,
+        };
+      }
+      return {
+        kind: "failed",
+        boots: 0,
+        detail: `the local orchestrator's run failed (${exit})${reason}${resume}`,
+      };
+  }
+}
+
+/**
  * The pass for a LOCAL orchestrator (`ticfac run --cloud-workers`,
  * src/local-orchestrator.ts): no container is booted, so there is no process
  * to ask and nothing to reboot. What the Workflow still owns is everything
@@ -2714,12 +2787,12 @@ async function superviseLocalOrchestrator(
           });
           return { heard: signal };
         });
-        ended = "the local orchestrator reported that it finished";
-        return {
-          kind: "completed",
-          boots: 0,
-          detail: "the local orchestrator reported that it finished",
-        };
+        const reported = localDoneOutcome(signal, params.epic);
+        ended =
+          reported.kind === "tripped"
+            ? `the local orchestrator's run was stopped: ${reported.trip.detail}`
+            : (reported.detail ?? "the local orchestrator reported that it finished");
+        return reported;
       }
 
       const seen = await step.do(`${label}:watch:${look}`, OBSERVE_RETRIES, () =>

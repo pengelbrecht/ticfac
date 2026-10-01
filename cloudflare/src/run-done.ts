@@ -90,13 +90,76 @@ export const DONE_EVENT_PAYLOAD_CAP_BYTES = 1 << 20;
  */
 export const MAX_BRANCH_CHARS = 255;
 
-/** What a finished orchestrator reports: where it landed, not what it did. */
+/**
+ * How the run ended, in the orchestrator's own words (internal/runsignal's
+ * Outcome spells the same four). A run's terminal state is one of the first
+ * three; `died` is a run-epic that ended in an error with no result at all.
+ */
+export const DONE_OUTCOME_STATES = ["completed", "failed", "cancelled", "died"] as const;
+export type DoneOutcomeState = (typeof DONE_OUTCOME_STATES)[number];
+
+/** The bound on each free-text field of an outcome (the Go client cuts to it). */
+export const MAX_OUTCOME_TEXT_CHARS = 4000;
+
+/**
+ * The orchestrator's account of its end.
+ *
+ * For a CONTAINER orchestrator it changes nothing: the Workflow asks the
+ * process for its exit itself. For a LOCAL orchestrator (`ticfac run
+ * --cloud-workers`) it is the only account there is — no process to ask — and
+ * before it existed every local run that signalled was recorded completed,
+ * a failed and halted one included (hn6's run_6d88 and run_09eb).
+ */
+export type DoneOutcome = {
+  state: DoneOutcomeState;
+  exit_code?: number;
+  /** The run's terminal reason. */
+  reason?: string;
+  /** Why the run's supervisor stopped continuing, when it did. */
+  halt?: string;
+};
+
+/** What a finished orchestrator reports: where it landed, and how it ended. */
 export type DoneSignal = {
   /** The run's integration branch, as the orchestrator pushed it. */
   branch: string;
   /** The branch head the durable layer should be holding, when it is known. */
   head?: string;
+  /** The orchestrator's own account of its end; absent from older clients. */
+  outcome?: DoneOutcome;
 };
+
+/**
+ * Reads an outcome, or explains why it cannot: a string is the refusal's
+ * detail, null is "no outcome was sent".
+ */
+function parseOutcome(raw: unknown): { outcome: DoneOutcome | null } | { refused: string } {
+  if (raw === undefined || raw === null) return { outcome: null };
+  if (typeof raw !== "object" || Array.isArray(raw)) {
+    return { refused: "outcome must be an object" };
+  }
+  const o = raw as Record<string, unknown>;
+  if (!DONE_OUTCOME_STATES.includes(o.state as DoneOutcomeState)) {
+    return { refused: `outcome.state must be one of ${DONE_OUTCOME_STATES.join(", ")}` };
+  }
+  const outcome: DoneOutcome = { state: o.state as DoneOutcomeState };
+  if (o.exit_code !== undefined) {
+    if (typeof o.exit_code !== "number" || !Number.isInteger(o.exit_code)) {
+      return { refused: "outcome.exit_code must be an integer" };
+    }
+    outcome.exit_code = o.exit_code;
+  }
+  for (const field of ["reason", "halt"] as const) {
+    const value = o[field];
+    if (value === undefined || value === "") continue;
+    if (typeof value !== "string") return { refused: `outcome.${field} must be a string` };
+    outcome[field] =
+      value.length > MAX_OUTCOME_TEXT_CHARS
+        ? `${value.slice(0, MAX_OUTCOME_TEXT_CHARS - 1)}…`
+        : value;
+  }
+  return { outcome };
+}
 
 /**
  * The workflow-side read of an event payload: the same shape the door
@@ -112,6 +175,9 @@ export function readDoneSignal(payload: unknown): DoneSignal | null {
   if (typeof raw.branch !== "string") return null;
   const signal: DoneSignal = { branch: raw.branch };
   if (typeof raw.head === "string" && raw.head !== "") signal.head = raw.head;
+  // An outcome the reader cannot read is no outcome: the wake-up stands.
+  const parsed = parseOutcome(raw.outcome);
+  if ("outcome" in parsed && parsed.outcome !== null) signal.outcome = parsed.outcome;
   return signal;
 }
 
@@ -232,8 +298,14 @@ export async function signalRunDone(env: Env, request: Request): Promise<DoneRes
     );
   }
 
-  const payload: DoneSignal =
-    head === undefined ? { branch: raw.branch } : { branch: raw.branch, head };
+  const parsed = parseOutcome(raw.outcome);
+  if ("refused" in parsed) return refuse(400, "invalid_request", parsed.refused);
+
+  const payload: DoneSignal = {
+    branch: raw.branch,
+    ...(head === undefined ? {} : { head }),
+    ...(parsed.outcome === null ? {} : { outcome: parsed.outcome }),
+  };
   try {
     const instance = await binding.get(run.run_id);
     if (typeof instance.sendEvent !== "function") {

@@ -3160,6 +3160,57 @@ describe("a local orchestrator's run (ticfac run --cloud-workers)", () => {
     expect(feed).toContain("the orchestrator runs on the operator's machine");
   });
 
+  /** A local run that is running, its machine's credential, and a done POST. */
+  async function signalledLocal(outcome: Record<string, unknown>) {
+    set("RUN_POLL_INTERVAL_MS", "2000");
+    const ignited = await ignite({ local: true });
+    const token = await credential(ignited.runID);
+    await waitFor("the run to be running", async () => {
+      const run = await getRun(env.DB, ignited.runID);
+      return run?.state === "running" ? run : null;
+    });
+    orchestratorPushedWork(ignited.epic);
+    const answered = await SELF.fetch(`${FACTORY}/api/done`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ branch: `epic/${ignited.epic}`, head: PUSHED_SHA, outcome }),
+    });
+    expect(answered.status).toBe(202);
+    return ignited;
+  }
+
+  // hn6's run_6d88 and run_09eb: the machine's run failed and its supervisor
+  // halted, the done signal said only "done", and the factory recorded the run
+  // completed — so the next `ticfac run` read a finished run, not a failed one.
+  it("records a failed, halted run as failed, with the halt", async () => {
+    const { runID, project } = await signalledLocal({
+      state: "failed",
+      exit_code: 1,
+      reason: "ltg did not pass: the gate refused",
+      halt: "the same refusal came back over an unchanged tree",
+    });
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    const record = JSON.stringify(await readRunRecord(env.ARTIFACTS, project, runID));
+    expect(record).toMatch(/stopped deliberately/);
+    expect(record).toMatch(/the same refusal came back over an unchanged tree/);
+    expect(record).toMatch(/ltg did not pass/);
+  });
+
+  it("records a run that died on the machine as failed", async () => {
+    const { runID } = await signalledLocal({
+      state: "died",
+      exit_code: 1,
+      reason: "reconcile: read the run state: boom",
+    });
+    expect((await settled(runID)).state).toBe("failed");
+  });
+
+  it("records a run cancelled on the machine as stopped", async () => {
+    const { runID } = await signalledLocal({ state: "cancelled", exit_code: 7 });
+    expect((await settled(runID)).state).toBe("stopped");
+  });
+
   it("ends a run whose machine stopped heartbeating, and says so", async () => {
     set("RUN_LOCAL_HEARTBEAT_STALE_MS", "300");
     const { runID } = await ignite({ local: true });
