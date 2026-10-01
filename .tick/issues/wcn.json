@@ -1,0 +1,17 @@
+{
+  "id": "wcn",
+  "title": "A worker's report carries attachments (screenshots, recordings, logs) to the reviewer and the operator; the review job can be given images",
+  "gloss": "report attachments + image review",
+  "description": "Operator, 2026-10-01: verification know-how (how to capture and judge a UI) belongs in the ticks skill, written per tick by its author — agents will design better loops than anything we hard-code (ticks 20674131: Pattern: Work Someone Will See, DoR line). ticfac only provides the generic transport the skill cannot, with no UI-specific concept:\n1. Attachments: a worker can attach files to its report (images, recordings, logs) by a declared convention (e.g. a manifest in the report or an attachments dir the report names); the executor collects them for every executor (local, herdr, cloud), stores them (local run dir / factory R2), size-bounded, kept OUT of the integration tree (like RESULT-*.md since #169), and shows/links them from ticfac watch/status/events and the epic PR.\n2. Images to the review job: the final review (and any role job the profile marks) is given the attempt's image attachments when its model accepts images; otherwise it is told they exist and where.\n3. A vision-capable model is reachable through the role/tier config like any other; in the cloud a Workers AI vision model via the gateway (never claude in the cloud).\nThe report linter accepts and validates the attachment manifest (paths exist, types, size cap).",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "after": [
+    "z7w"
+  ],
+  "acceptance_criteria": "[1] A local and a cloud worker each attach a PNG to a report; the run records it, the PR body links it, and it never lands on the integration branch. [2] A review job on an image-capable model receives the attachment; on a text-only model it is told the path. [3] make gate + cloudflare tests pass.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-01T11:02:43.46145Z",
+  "updated_at": "2026-10-01T11:06:32.10694Z"
+}
