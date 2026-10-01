@@ -62,6 +62,11 @@ const (
 	EnvModelID       = "TICKS_MODEL_ID"
 	// EnvModelProbeTimeout bounds the pre-flight model probe, in seconds.
 	EnvModelProbeTimeout = "TICKS_MODEL_PROBE_TIMEOUT"
+	// EnvModelProbeTries and EnvModelProbeBackoff are how often a probe that
+	// got no answer (or a transient 429/502/504) is asked again, and the
+	// seconds × the try number waited in between.
+	EnvModelProbeTries   = "TICKS_MODEL_PROBE_TRIES"
+	EnvModelProbeBackoff = "TICKS_MODEL_PROBE_BACKOFF"
 	// EnvHarnessProbeTimeout bounds the pre-flight HARNESS probe, in seconds.
 	// It is a bigger number than the model probe's on purpose: this one starts
 	// a whole agent CLI, not one curl.
