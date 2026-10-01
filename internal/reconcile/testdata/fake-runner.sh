@@ -335,6 +335,38 @@ conflict)
 		report
 	fi
 	;;
+conflict_resolve_while_live)
+	# Epic hn6, run_6d88e3de: the same conflict, and a THIRD tick ($LIVE_TICK)
+	# whose worker is still running when the resolve-conflict job starts. It
+	# finishes only once the resolve has started; the resolve answers only
+	# once it has, and a moment after — so whether the run addressed the third
+	# tick DURING the resolve is read straight off the event order.
+	if [ "$TICFAC_ROLE" = "resolve-conflict" ]; then
+		: > "$CONFLICT_SYNC/resolve.started"
+		waited=0
+		while [ ! -e "$CONFLICT_SYNC/live.done" ] && [ "$waited" -lt 600 ]; do
+			sleep 0.1
+			waited=$((waited + 1))
+		done
+		sleep 1
+		resolve_union
+		report
+	elif in_conflict_ticks; then
+		conflict_side
+	elif [ "$TICFAC_TICK" = "${LIVE_TICK:-}" ]; then
+		waited=0
+		while [ ! -e "$CONFLICT_SYNC/resolve.started" ] && [ "$waited" -lt 600 ]; do
+			sleep 0.1
+			waited=$((waited + 1))
+		done
+		commit
+		report
+		: > "$CONFLICT_SYNC/live.done"
+	else
+		commit
+		report
+	fi
+	;;
 conflict_resolve_hold)
 	# epic-2jn (4mv attempt 33): the same conflict, and a resolve-conflict
 	# worker that writes its resolution into its worktree WITHOUT committing
