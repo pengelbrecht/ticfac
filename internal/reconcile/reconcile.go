@@ -892,6 +892,10 @@ type Reconciler struct {
 	// rather than stopping at a refusal: the run's reason then says it
 	// worked every other tick to the end, not that it stopped.
 	heldEnd *heldEnd
+	// releaseFault, when set, is consulted before a run release is recorded
+	// (recordRunRelease) and fails it with what it returns: the seam the
+	// tests use to make origin refuse that one write.
+	releaseFault func(attemptHandle) error
 
 	// priorResumes is how many automatic continuations came before THIS
 	// incarnation (tick go6), set by the supervisor on each successor it
@@ -2560,9 +2564,15 @@ type Refusal struct {
 	// dispatches the tick again in-run, bounded, rather than holding it for
 	// a person.
 	factoryUnanswered bool
-	// unanswered is the attempt a factoryUnanswered refusal is about: the
-	// one the run releases before it dispatches the tick again.
-	unanswered *attemptHandle
+	// heldWork marks a collect_failed whose attempt committed work nothing
+	// merged and whose disposal the collect could not record (a release
+	// origin did not take). The window decides it in-run as the next
+	// incarnation would (carryHeldWork), rather than holding it until then.
+	heldWork bool
+
+	// attempt is the attempt a factoryUnanswered or heldWork refusal is
+	// about: the one the run releases before it dispatches the tick again.
+	attempt *attemptHandle
 }
 
 func (r *Refusal) Error() string { return r.Message }

@@ -3354,7 +3354,17 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 		// bound of its own (its wall clock, its budget, its quota, a refused
 		// credential) would meet the same bound again: both are held, as
 		// they were.
-		refusal.neverAnswered = neverAnswered(collected) && r.rejectedWorkHead(marker) == ""
+		head := r.rejectedWorkHead(marker)
+		refusal.neverAnswered = neverAnswered(collected) && head == ""
+		// An attempt that committed work and reached here was not disposed
+		// by the collect (disposeRejectedWork answered nil: the release was
+		// not recorded, say). The window decides it in-run as a resume would
+		// (carryHeldWork), from the rejection just recorded.
+		if head != "" && !r.integrated(head) {
+			refusal.heldWork = true
+			held := marker
+			refusal.attempt = &held
+		}
 		return nil, refusal
 	}
 

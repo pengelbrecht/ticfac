@@ -184,6 +184,22 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			!holdsOnlyItsTick(refusal) {
 			return false
 		}
+		// A held tick that LEFT WORK the collect could not dispose of is
+		// decided now, as the next incarnation would decide it
+		// (carryHeldWork): an operational rejection's work is released by the
+		// run carrying it, and the tick is dispatched again from it.
+		if refusal.heldWork && retried[entry.TickID] < maxOperationalRetries && r.carryHeldWork(ctx, entry, refusal) {
+			retried[entry.TickID]++
+			r.recordRefusal(entry.TickID, refusal)
+			r.record(entry.TickID, StageRedispatched,
+				"%s left work nothing merged (%s) and its disposal could not be recorded when it was rejected; the "+
+					"run decided it now, as the next incarnation would, and dispatches the tick again in this run "+
+					"from that work (%d of at most %d)", entry.TickID, refusal.Message, retried[entry.TickID],
+				maxOperationalRetries)
+			entry.Claimed, entry.OwnClaim, entry.StaleClaim, entry.InFlight = true, true, false, false
+			queue = append([]planEntry{entry}, queue...)
+			return true
+		}
 		if redispatchesInRun(refusal) && retried[entry.TickID] < maxOperationalRetries {
 			if refusal.factoryUnanswered {
 				// The factory was asked and could not answer for the attempt

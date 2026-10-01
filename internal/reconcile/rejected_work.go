@@ -220,6 +220,11 @@ func (r *Reconciler) rejectedRedispatch(tick, name string, carry bool, reason, b
 // `ticfac settle` writes, with the run as the releaser and the rejection as
 // the reason, as FIELDS. Create-if-absent per attempt.
 func (r *Reconciler) recordRunRelease(marker attemptHandle, reason, step string, carry bool, carryRef, carrySHA string) error {
+	if r.releaseFault != nil {
+		if err := r.releaseFault(marker); err != nil {
+			return err
+		}
+	}
 	decisions, err := r.store.Decisions()
 	if err != nil {
 		return err
@@ -340,6 +345,37 @@ func (r *Reconciler) disposeUndecidedRejection(ctx context.Context, entry planEn
 		return false, false, "", ""
 	}
 	return true, carries, reason, ""
+}
+
+// carryHeldWork is disposeUndecidedRejection taken in-run, for a held
+// collect_failed whose attempt committed work the collect could not dispose
+// of (Refusal.heldWork): the next incarnation would decide it from the
+// recorded rejection and carry the work, so the window does that now rather
+// than idling the tick until the restart. Only a rejection whose recorded
+// class CARRIES (operational: missing-result, a job that stopped to ask) is
+// decided here; one on the merits, or one the classifier cannot place, keeps
+// its hold. True when the run released the attempt carrying its work.
+func (r *Reconciler) carryHeldWork(ctx context.Context, entry planEntry, refusal *Refusal) bool {
+	if refusal == nil || !refusal.heldWork || refusal.attempt == nil || isRoleJob(entry.Role) {
+		return false
+	}
+	marker := *refusal.attempt
+	if _, err := r.store.Fetch(); err != nil {
+		return false
+	}
+	recorded, found := r.recordedRejection(marker.TickID, marker.Attempt)
+	if !found {
+		return false
+	}
+	if _, carries, ok := classifyRecordedRejection(recorded); !ok || !carries {
+		return false
+	}
+	released, err := r.settlements()
+	if err != nil {
+		return false
+	}
+	disposed, carries, _, _ := r.disposeUndecidedRejection(ctx, entry, marker, released)
+	return disposed && carries
 }
 
 // recordedRejection is the reason the run recorded when it rejected this
