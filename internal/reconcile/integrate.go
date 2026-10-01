@@ -177,6 +177,11 @@ func (r *Reconciler) integratedAlready(marker attemptHandle, branch string) (mer
 	if head == "" {
 		head = r.offOriginAttemptHead(marker)
 	}
+	if head == "" && marker.CollectedFrom != nil {
+		// Another run's work this attempt ruled on, or finished from the
+		// integration branch (takeover.go): its commit is the head.
+		head = marker.CollectedFrom.SHA
+	}
 	epicHead, err := r.git.remoteHead(r.branch)
 	if err != nil {
 		return merge{}, err

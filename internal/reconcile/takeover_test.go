@@ -598,3 +598,241 @@ func TestATakeoverAdoptsTheDeadRunsUntriagedFindingsForTheCloseOut(t *testing.T)
 		t.Errorf("a finding a person already discarded was adopted (%v, %v): its decision stands where it was made", ok, err)
 	}
 }
+
+// integratedHolderFixture drives a1 under the fixture's default run id until
+// its work is MERGED into the integration branch, and kills that run there —
+// before the integrated gate and the close, its claim left standing. It
+// returns the merged head of a1's work and the run id holding the claim.
+func integratedHolderFixture(t *testing.T) (*fixture, string, string) {
+	t.Helper()
+	f := newFixture(t, fixtureOptions{mode: "report"})
+	_, _, err := f.run(f.Repo, fixtureOptions{mode: "report", stopAfter: stopAt("a1", StageIntegrated)})
+	killedAfter(t, err, "a1", StageIntegrated)
+	f.stopEverything()
+	holder := "r-fixture"
+	head := branchHead(f.Repo.Dir, "refs/heads/ticfac/run-"+holder+"/tick-a1/attempt-1")
+	if head == "" || !containsCommit(t, f, head, "origin/epic/qeu") {
+		t.Fatalf("a1's work (%q) is not on the integration branch: this fixture proves nothing", head)
+	}
+	if f.Tracker.count("close:a1") != 0 {
+		t.Fatal("a1 closed before the kill: this fixture proves nothing")
+	}
+	return f, head, holder
+}
+
+// assertFinishedFromIntegration is the shape a taken-over tick whose work is
+// already merged must take: no worker, no collect, the tick closed behind the
+// gate, and the marker naming the merged delivery it was finished from.
+func assertFinishedFromIntegration(t *testing.T, f *fixture, r *Reconciler, result *Result, holder, delivered string) {
+	t.Helper()
+	if result.State != runstate.StateCompleted || !contains(result.Closed, "a1") {
+		t.Fatalf("the new run ended %s (failure %+v) with a1 not closed; a1's stages %v",
+			result.State, result.Failure, r.Stages("a1"))
+	}
+	for n := 1; n <= 4; n++ {
+		if starts := f.startCount(attemptJobID("r-next", "a1", n)); starts != 0 {
+			t.Fatalf("the new run started %d worker(s) for a1 (run dispatch #%d) over work already merged into "+
+				"the integration branch; a1's stages %v", starts, n, r.Stages("a1"))
+		}
+	}
+	for _, event := range r.Journal() {
+		if event.Tick != "a1" {
+			continue
+		}
+		switch event.Stage {
+		case StageSettledWorkCollected, StageRejected, StageDispatched:
+			t.Errorf("a1 was %s although its work is already merged: %s", event.Stage, event.Detail)
+		case StageCollected:
+			if !strings.Contains(event.Detail, "not collected a second time") {
+				t.Errorf("a1 was collected again although its work is already merged: %s", event.Detail)
+			}
+		}
+	}
+	line, ok := journalLine(r, "a1", StageClaimTakenOver)
+	if !ok || !strings.Contains(line, "ALREADY on") || !strings.Contains(line, short(delivered)) {
+		t.Errorf("the takeover does not say the work is already merged at %s: %q", short(delivered), line)
+	}
+	if got := f.Tracker.count("close:a1"); got != 1 {
+		t.Errorf("a1 closed %d times, want once", got)
+	}
+	store := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-next")
+	attempts, err := store.Attempts()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, attempt := range attempts {
+		if attempt.TickID != "a1" {
+			continue
+		}
+		marker := handleFromMap(attempt.JobHandle)
+		if marker.CollectedFrom == nil || marker.CollectedFrom.RunID != holder || marker.CollectedFrom.SHA != delivered {
+			t.Errorf("the marker's collected_from is %+v, want run %s's merged delivery %s", marker.CollectedFrom,
+				holder, delivered)
+		}
+		if marker.TakenOver == nil || marker.TakenOver.RunID != holder {
+			t.Errorf("the marker's taken_over is %+v, want run %s", marker.TakenOver, holder)
+		}
+		return
+	}
+	t.Error("the new run left no marker for a1: the finish is not reconstructible")
+}
+
+// hn6 run_ee8e's 378, the plain shape: the dead run had MERGED its attempt's
+// work into the integration branch and died before the integrated gate and the
+// close. The run that takes the claim over must not start a fresh worker on a
+// tick whose work is merged, nor collect it again: it goes straight to the
+// integrated gate and closes the tick.
+func TestATakeoverFinishesADeadRunsMergedAttemptFromTheIntegrationBranch(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f, head, holder := integratedHolderFixture(t)
+
+	host := &hostSays{run: holder, verdict: HolderDead}
+	r, result, err := f.run(f.Repo, fixtureOptions{runID: "r-next", mode: "report", claimHolder: host.ask})
+	if err != nil {
+		t.Fatalf("the new run did not finish: %v", err)
+	}
+	assertFinishedFromIntegration(t, f, r, result, holder, head)
+}
+
+// hn6 run_ee8e's 378, exactly: the dead run's attempt was a CARRIED cloud
+// attempt whose worker added nothing but its own report, so the dead run's
+// collect delivered the carried head (tick isp) and merged THAT — while the
+// container's landing branch still carries one more commit, the report. The
+// takeover read that branch as unmerged work, re-collected it measured from
+// the carried head, ruled it no-commits ("the only commit … is the
+// container's own report") and redispatched the tick a tier up. Work whose
+// only commits beyond the integration branch are the attempt's own report is
+// merged work: the tick is finished from the integration branch.
+func TestATakeoverFinishesACarriedCloudAttemptWhoseOnlyUnmergedCommitIsItsReport(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f, head, holder := integratedHolderFixture(t)
+	dir := f.Repo.Dir
+
+	// The dead run's attempt becomes the hn6 shape: a cloudflare-sandbox
+	// attempt CARRIED from an earlier one, cut at the carried head — which is
+	// the work, already merged — with its write ref at that base and its
+	// container's landing branch one report commit above it.
+	writeRef := "refs/heads/ticfac/run-" + holder + "/tick-a1/attempt-1"
+	landing := "tick/qeu/attempt-1/a1"
+	scratch := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "landing"))
+	mustRun(t, scratch.Dir, "git", "fetch", "--quiet", "origin", writeRef)
+	mustRun(t, scratch.Dir, "git", "checkout", "--quiet", "--detach", head)
+	write(t, filepath.Join(scratch.Dir, "RESULT-a1.md"), "# a1\n\nThe container's own report.\n\nSTATUS: DONE\n")
+	mustRun(t, scratch.Dir, "git", "add", "RESULT-a1.md")
+	mustRun(t, scratch.Dir, "git", "commit", "--quiet", "-m", "tick a1: worker report")
+	reportHead := strings.TrimSpace(mustRun(t, scratch.Dir, "git", "rev-parse", "HEAD"))
+	mustRun(t, scratch.Dir, "git", "push", "--quiet", "origin", reportHead+":refs/heads/"+landing)
+	mustRun(t, dir, "git", "push", "--quiet", "--force", "origin", head+":"+writeRef)
+
+	clone := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "marker-edit"))
+	mustRun(t, clone.Dir, "git", "checkout", "--quiet", "epic/qeu")
+	path := filepath.Join(clone.Dir, ".ticfac", "runs", holder, "attempts", "1.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record map[string]any
+	if err := json.Unmarshal(raw, &record); err != nil {
+		t.Fatal(err)
+	}
+	handle := record["job_handle"].(map[string]any)
+	handle["executor"] = cloudflareSandboxExecutor
+	handle["base_sha"] = head
+	handle["resumed_from"] = map[string]any{"tick_id": "a1", "attempt": 1, "write_ref": writeRef, "sha": head,
+		"released_by": "ticfac (took over the claim of run r-earlier)", "run_id": "r-earlier"}
+	edited, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(t, path, string(edited)+"\n")
+	mustRun(t, clone.Dir, "git", "commit", "--quiet", "-am", "the dead run's attempt was a carried sandbox one")
+	mustRun(t, clone.Dir, "git", "push", "--quiet", "origin", "epic/qeu")
+	if containsCommit(t, f, reportHead, "origin/epic/qeu") {
+		t.Fatal("the report commit is on the integration branch: this fixture proves nothing")
+	}
+
+	host := &hostSays{run: holder, verdict: HolderDead}
+	factory := func(context.Context, string, string, int) SettledState {
+		return SettledState{Known: true, Succeeded: true,
+			Evidence: "the factory recorded its worker container completed with exit 0"}
+	}
+	r, result, err := f.run(f.Repo, fixtureOptions{runID: "r-next", mode: "report", claimHolder: host.ask,
+		settledAttempt: factory})
+	if err != nil {
+		t.Fatalf("the new run did not finish: %v", err)
+	}
+	assertFinishedFromIntegration(t, f, r, result, holder, head)
+}
+
+// hn6's oro/log and yjq/qrl: findings are content-hashed, and the key is the
+// finding's identity across the runs of one epic, not only within one. A run
+// that absorbed a finding into a tick and then DIED left that decision on the
+// integration branch; the run that takes its claim over collects the same
+// report again and meets the same finding. It must LINK to the standing
+// decision — the tick the dead run created, open or closed — and never draft,
+// decide or absorb it a second time as a duplicate tick.
+func TestATakeoverLinksAFindingTheDeadRunAlreadyAbsorbedRatherThanAbsorbingItAgain(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f := newFixture(t, fixtureOptions{mode: "finding_local"})
+	// An item nothing can run yet: the predicted fallback absorbs the finding.
+	setEpicAcceptance(t, f, "[A2] A cloud run dispatches on the model the gateway names.")
+	_, _, err := f.run(f.Repo, fixtureOptions{mode: "finding_local", stopAfter: stopAt("a1", StageAbsorbed)})
+	killedAfter(t, err, "a1", StageAbsorbed)
+	f.stopEverything()
+	holder := "r-fixture"
+
+	dead := openRunStore(t, f.Repo.Dir, "epic/qeu", holder)
+	decided, err := dead.Absorptions()
+	if err != nil || len(decided) != 1 {
+		t.Fatalf("the dead run left %d absorption decision(s) (%v), want the one this fixture proves on", len(decided), err)
+	}
+	first := decided[0]
+	original, ok, err := dead.Finding(first.Key)
+	if err != nil || !ok || original.Status != runstate.FindingPromoted || original.PromotedAs != first.TickID {
+		t.Fatalf("the dead run's draft is %+v (%v): want it promoted as %s", original, err, first.TickID)
+	}
+
+	host := &hostSays{run: holder, verdict: HolderDead}
+	r, result, err := f.run(f.Repo, fixtureOptions{runID: "r-next", mode: "finding_local", claimHolder: host.ask})
+	if err != nil {
+		t.Fatalf("the new run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted || !contains(result.Closed, "a1") {
+		t.Fatalf("the new run ended %s (failure %+v) with a1 not closed; a1's stages %v",
+			result.State, result.Failure, r.Stages("a1"))
+	}
+
+	next := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-next")
+	again, err := next.Absorptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("the new run absorbed the dead run's finding again as %+v: a finding whose key already produced "+
+			"tick %s is linked, never re-absorbed", again, first.TickID)
+	}
+	if _, ok, err := next.Finding(first.Key); err != nil || ok {
+		t.Errorf("the new run drafted the finding a second time (%v, %v): the dead run's decision stands", ok, err)
+	}
+	for _, event := range r.Journal() {
+		if event.Stage == StageAbsorbed || event.Stage == StageFindingFiled {
+			t.Errorf("the new run %s the finding the dead run already absorbed: %s", event.Stage, event.Detail)
+		}
+	}
+	line, ok := journalLine(r, "a1", StageFindingDuplicate)
+	if !ok {
+		t.Fatalf("no %s line on a1: the link to the standing decision nobody can see\n%s",
+			StageFindingDuplicate, journalText(r))
+	}
+	for _, want := range []string{first.Key, holder, first.TickID} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the %s line does not name %q: %s", StageFindingDuplicate, want, line)
+		}
+	}
+	if n := f.Tracker.count("create:" + first.TickID); n != 1 {
+		t.Errorf("the absorbed tick was created %d times, want once", n)
+	}
+}

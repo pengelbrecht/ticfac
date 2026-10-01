@@ -100,11 +100,61 @@ func FromEnv(log io.Writer) *Signaller {
 }
 
 // The signal payload: the branch and where it stands — never the work product.
-// The platform caps an event payload at 1 MiB, and the Workflow reads nothing
-// here as a verdict anyway; the head is the one durable fact worth carrying.
+// The platform caps an event payload at 1 MiB; the head is the one durable
+// fact about the work worth carrying, and the outcome is the run's own word
+// about how it ended.
 type signal struct {
-	Branch string `json:"branch"`
-	Head   string `json:"head,omitempty"`
+	Branch  string   `json:"branch"`
+	Head    string   `json:"head,omitempty"`
+	Outcome *Outcome `json:"outcome,omitempty"`
+}
+
+// The outcome words the door accepts (cloudflare/src/run-done.ts spells the
+// same four). A run's terminal state is one of the first three; died is a
+// run-epic that ended in an error with no result at all.
+const (
+	OutcomeCompleted = "completed"
+	OutcomeFailed    = "failed"
+	OutcomeCancelled = "cancelled"
+	OutcomeDied      = "died"
+)
+
+// MaxOutcomeTextChars bounds each free-text field of an Outcome. A run's
+// terminal reason can be a paragraph; it is a record line, never a payload
+// that could approach the platform's event cap, so it is cut, never refused.
+const MaxOutcomeTextChars = 4000
+
+// Outcome is how the run ended, in the run's own words. For a container
+// orchestrator it is a courtesy: the Workflow reads the process's exit
+// itself. For a LOCAL orchestrator (`ticfac run --cloud-workers`) it is the
+// only account the factory gets — there is no process for it to ask — so
+// without it every run that signalled was recorded as finished, a failed
+// one included (hn6's run_6d88 and run_09eb).
+type Outcome struct {
+	// State is one of the Outcome* words.
+	State string `json:"state"`
+	// ExitCode is the code run-epic exits with.
+	ExitCode int `json:"exit_code"`
+	// Reason is the run's terminal reason (its Result.Reason, or the error).
+	Reason string `json:"reason,omitempty"`
+	// Halt is why the supervisor stopped continuing, when it did.
+	Halt string `json:"halt,omitempty"`
+}
+
+// bounded is the outcome as it is posted: every free-text field cut to the
+// bound, so no reason can turn the signal into a refusal.
+func (o Outcome) bounded() Outcome {
+	o.Reason = cutText(o.Reason, MaxOutcomeTextChars)
+	o.Halt = cutText(o.Halt, MaxOutcomeTextChars)
+	return o
+}
+
+func cutText(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max-1]) + "…"
 }
 
 // Done reports that the run has finished: it resolves the branch head from the
@@ -120,7 +170,10 @@ type signal struct {
 // cannot be resolved (the run failed before pushing anything) is omitted
 // rather than invented: the wake-up is the point, and the door accepts a
 // branch on its own.
-func (s *Signaller) Done(ctx context.Context, repo, remote, branch string) {
+//
+// The outcome is the run's own account of its end; nil sends none (the door
+// and the Workflow read a signal without one as a bare wake-up).
+func (s *Signaller) Done(ctx context.Context, repo, remote, branch string, outcome *Outcome) {
 	if s == nil {
 		return
 	}
@@ -135,7 +188,12 @@ func (s *Signaller) Done(ctx context.Context, repo, remote, branch string) {
 			branch, remote, headErr)
 	}
 
-	body, err := json.Marshal(signal{Branch: branch, Head: head})
+	posted := signal{Branch: branch, Head: head}
+	if outcome != nil {
+		bounded := outcome.bounded()
+		posted.Outcome = &bounded
+	}
+	body, err := json.Marshal(posted)
 	if err != nil {
 		fmt.Fprintf(s.log, "completion signal: could not encode the payload: %v\n", err)
 		return
@@ -161,24 +219,24 @@ func (s *Signaller) Done(ctx context.Context, repo, remote, branch string) {
 		fmt.Fprintf(s.log, "completion signal: the door's answer was unreadable: %v\n", readErr)
 		return
 	}
-	var outcome struct {
+	var answered struct {
 		Delivered bool   `json:"delivered"`
 		Detail    string `json:"detail"`
 		Error     string `json:"error"`
 	}
-	_ = json.Unmarshal(answer, &outcome)
+	_ = json.Unmarshal(answer, &answered)
 	// A refusal from the door is an answer, not an error to propagate: the
 	// four refusal verdicts (unknown, revoked, orphaned, finished) are facts
 	// about the run, and the run's own state already accounts for all of them.
 	switch {
-	case resp.StatusCode == http.StatusAccepted && outcome.Delivered:
-		fmt.Fprintf(s.log, "completion signal: delivered (%s)\n", outcome.Detail)
+	case resp.StatusCode == http.StatusAccepted && answered.Delivered:
+		fmt.Fprintf(s.log, "completion signal: delivered (%s)\n", answered.Detail)
 	case resp.StatusCode == http.StatusAccepted:
-		fmt.Fprintf(s.log, "completion signal: the door took the POST but the event did not land (%s)\n", outcome.Detail)
+		fmt.Fprintf(s.log, "completion signal: the door took the POST but the event did not land (%s)\n", answered.Detail)
 	default:
-		detail := outcome.Detail
+		detail := answered.Detail
 		if detail == "" {
-			detail = outcome.Error
+			detail = answered.Error
 		}
 		if detail == "" {
 			detail = string(answer)

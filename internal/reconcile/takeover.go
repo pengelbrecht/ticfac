@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -66,10 +67,17 @@ const cloudflareSandboxExecutor = "cloudflare-sandbox"
 // takeover record, and the holder's committed work to carry (nil when it left
 // none nothing has merged). Nil, nil when the entry is not a stale foreign
 // claim.
-func (r *Reconciler) takeOverClaim(entry planEntry) (*carriedWork, *takenOver, error) {
+//
+// When the holder's newest attempt with work is ALREADY ON the integration
+// branch (hn6 run_ee8e's 378: run_6d88 merged it as d2f01b18 and died before
+// the integrated gate and the close), the work is not carried and the tick is
+// not started fresh: the answer is that attempt's delivery as a collectedFrom
+// — integrated — and the dispatch finishes the tick from the integration
+// branch, gated on the epic head and closed, with no worker and no collect.
+func (r *Reconciler) takeOverClaim(entry planEntry) (*carriedWork, *takenOver, *collectedFrom, error) {
 	holder := entry.ClaimHolder
 	if !entry.StaleClaim || holder == "" || holder == r.runID {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	taken := &takenOver{RunID: holder, Evidence: entry.ClaimEvidence}
 	tick := entry.TickID
@@ -77,7 +85,7 @@ func (r *Reconciler) takeOverClaim(entry planEntry) (*carriedWork, *takenOver, e
 	// The dead run's untriaged findings come with its claim: it will never
 	// reach the close-out that decides them, and this run will.
 	if err := r.adoptFindings(tick, holder, entry.ClaimEvidence); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	attempts, err := r.store.ForeignAttempts()
@@ -85,7 +93,7 @@ func (r *Reconciler) takeOverClaim(entry planEntry) (*carriedWork, *takenOver, e
 		r.record(tick, StageClaimTakenOver,
 			"%s's claim is taken over from run %s, which ended (%s); its attempts could not be read (%v), so the "+
 				"next try starts fresh", tick, holder, entry.ClaimEvidence, err)
-		return nil, taken, nil
+		return nil, taken, nil, nil
 	}
 	var theirs []runstate.Attempt
 	for _, attempt := range attempts {
@@ -103,7 +111,20 @@ func (r *Reconciler) takeOverClaim(entry planEntry) (*carriedWork, *takenOver, e
 			continue
 		}
 		ref, head := r.foreignAttemptWork(marker, holder)
-		if head == "" || r.integrated(head) {
+		if head == "" {
+			continue
+		}
+		if delivered := r.foreignWorkIntegrated(marker, head); delivered != "" && !isRoleJob(entry.Role) {
+			r.record(tick, StageClaimTakenOver,
+				"%s's claim is taken over from run %s, which ended (%s): the run does not hold on a claim nobody is "+
+					"behind. Its attempt %d's work (%s on %s) is ALREADY on %s at %s, so it is neither carried nor "+
+					"redone: the tick is finished from the integration branch — gated on the epic head and closed",
+				tick, holder, entry.ClaimEvidence, marker.Attempt, short(head), branchOf(ref), r.branch,
+				short(delivered))
+			return nil, taken, &collectedFrom{RunID: holder, JobID: marker.JobID, Attempt: marker.Attempt,
+				WriteRef: ref, SHA: delivered,
+				Evidence: fmt.Sprintf("its work is already on %s at %s", r.branch, short(delivered))}, nil
+		} else if delivered != "" {
 			continue
 		}
 		carried := marker
@@ -114,13 +135,81 @@ func (r *Reconciler) takeOverClaim(entry planEntry) (*carriedWork, *takenOver, e
 				"behind. Its attempt %d left work nothing merged (%s on %s), so the next try starts from it rather "+
 				"than redoing it; the gate still decides what merges",
 			tick, holder, entry.ClaimEvidence, marker.Attempt, short(head), branchOf(ref))
-		return &carriedWork{marker: carried, by: by, at: r.now().UTC().Format(time.RFC3339), runID: holder}, taken, nil
+		return &carriedWork{marker: carried, by: by, at: r.now().UTC().Format(time.RFC3339), runID: holder}, taken, nil, nil
 	}
 	r.record(tick, StageClaimTakenOver,
 		"%s's claim is taken over from run %s, which ended (%s): the run does not hold on a claim nobody is "+
 			"behind. None of its %d attempt(s) of %s left work nothing merged, so the next try starts fresh",
 		tick, holder, entry.ClaimEvidence, len(theirs), tick)
-	return nil, taken, nil
+	return nil, taken, nil, nil
+}
+
+// foreignWorkIntegrated is the commit on the integration branch that delivers
+// another run's attempt whose work is head, or "" when the integration branch
+// does not carry that work.
+//
+// Two shapes count. The plain one: the integration branch carries head
+// itself. And the hn6 one (run_ee8e's 378): the holder's attempt was CARRIED,
+// its cloud worker added nothing but its own report on top of the carried
+// work, and the holder's collect delivered the carried head (tick isp) and
+// merged THAT — so the landing branch's head, report commit and all, is not on
+// the integration branch, although every line of work it carries is. That
+// attempt is integrated when the holder's own delivery is (integratedHead,
+// the question a resume of the holder would ask) and the only commits head
+// carries beyond the integration branch are report-only: no merge, and
+// nothing touched but the attempt's own RESULT file. Anything else — a single
+// line of work the integration branch lacks — is work to carry, as before.
+func (r *Reconciler) foreignWorkIntegrated(marker attemptHandle, head string) string {
+	integrated, err := r.integratedOn(head)
+	if err != nil {
+		return ""
+	}
+	if integrated {
+		return head
+	}
+	delivered, err := r.integratedHead(marker)
+	if err != nil || delivered == "" || delivered == head {
+		return ""
+	}
+	if !r.onlyReportBeyondIntegration(head, marker.TickID) {
+		return ""
+	}
+	return delivered
+}
+
+// onlyReportBeyondIntegration says every commit head carries beyond the
+// integration branch on origin is a report-only commit: not a merge, and
+// touching nothing but the tick's RESULT file. False when there is no such
+// commit, or the range cannot be read.
+func (r *Reconciler) onlyReportBeyondIntegration(head, tick string) bool {
+	epicHead, err := r.git.remoteHead(r.branch)
+	if err != nil || epicHead == "" {
+		return false
+	}
+	if err := r.git.fetch(r.branch); err != nil {
+		return false
+	}
+	out, err := r.git.run("", "rev-list", "--parents", epicHead+".."+head)
+	if err != nil || strings.TrimSpace(out) == "" {
+		return false
+	}
+	report := sandboximage.WorkerResultFile(tick)
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			return false // a merge (or a root): not a report commit
+		}
+		files, err := r.git.run("", "diff-tree", "--no-commit-id", "--name-only", "-r", "--no-renames", fields[0])
+		if err != nil {
+			return false
+		}
+		for _, file := range strings.Fields(files) {
+			if file != report {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // StageFindingAdopted is the line an adopted finding leaves: a finding a run

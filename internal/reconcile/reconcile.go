@@ -918,6 +918,11 @@ type Reconciler struct {
 	// window is the dispatch window runPlan is working, while it works one:
 	// what a start waiting for room looks at (capacity.go lookAtLiveJobs).
 	window *held
+	// windowTurn is the window's own turn, set by runPlan while ONE finish
+	// step runs, for a wait inside that step to take between its polls
+	// (takeWindowTurn, window.go); inWindowTurn keeps a turn from nesting.
+	windowTurn   func(ctx context.Context)
+	inWindowTurn bool
 
 	// inFlightIDs is the width's raw material since tk 0.32.0 (tick dz1): the
 	// epic's claimed-and-not-closed children as the graph's
@@ -1944,6 +1949,13 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	// including the store's own: its view was fetched before the fold.
 	if _, err := store.Fetch(); err != nil {
 		return nil, fmt.Errorf("reconcile: read the run state: %w", err)
+	}
+
+	// A finding promoted to two ticks — by two runs, before cross-run dedup
+	// held (dupes.go) — is closed down to its earliest tick before anything
+	// is planned, so the duplicate is neither worked nor gates the review.
+	if err := r.closeDuplicatePromotions(ctx); err != nil {
+		return nil, fmt.Errorf("reconcile: close duplicate finding ticks: %w", err)
 	}
 
 	graph, err := r.tracker.Graph(ctx, r.opts.EpicID)

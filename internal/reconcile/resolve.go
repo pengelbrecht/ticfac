@@ -541,7 +541,10 @@ func (r *Reconciler) awaitResolve(ctx context.Context, handle *subprocess.JobHan
 		if status == nil {
 			return nil, fmt.Errorf("the executor reports nothing about the %s job %s", marker.Role, marker.JobID)
 		}
-		if status.State == subprocess.StateLost {
+		// A factory's `lost` is its answer for one look, and the factory
+		// settles a job it can no longer run (FactoryJobs): re-asked, as the
+		// window's wait re-asks it.
+		if status.State == subprocess.StateLost && !jobsLiveAtFactory(executor) {
 			return nil, fmt.Errorf(
 				"the %s job %s can no longer be addressed and has not settled", marker.Role, marker.JobID)
 		}
@@ -552,6 +555,10 @@ func (r *Reconciler) awaitResolve(ctx context.Context, handle *subprocess.JobHan
 		if status.Cursor != nil {
 			cursor = *status.Cursor
 		}
+		// The window's turn, between this job's polls: the run's other
+		// attempts are addressed and admitted while this one is waited out
+		// (takeWindowTurn; epic hn6, run_6d88e3de).
+		r.takeWindowTurn(ctx)
 		if r.sleep != nil {
 			r.sleep(interval)
 		} else {

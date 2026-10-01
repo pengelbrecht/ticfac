@@ -591,6 +591,16 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 			if sig == syscall.SIGTERM {
 				status = 143
 			}
+			// A person's Ctrl-C of a LOCAL orchestrator (`ticfac run
+			// --cloud-workers`) is a cancelled run, and its factory hears so
+			// now rather than after the heartbeat bound, as a failure. SIGTERM
+			// is not signalled: in a container it is the platform evicting it
+			// (the Workflow asks the process), and on a machine it is the
+			// factory's own stop, which the factory already knows.
+			if sig == syscall.SIGINT {
+				runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *fl.remote, reconciler.IntegrationBranch(),
+					&runsignal.Outcome{State: runsignal.OutcomeCancelled, ExitCode: status, Reason: detail})
+			}
 			os.Exit(status)
 		}
 	}()
@@ -610,7 +620,8 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 		// woken just as much as a finished one, so the reboot does not wait out
 		// a whole cadence to learn what the container already knew. The branch
 		// may never have landed — the door takes a signal with no head.
-		runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *fl.remote, reconciler.IntegrationBranch())
+		runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *fl.remote, reconciler.IntegrationBranch(),
+			runEpicDiedOutcome(err))
 		if *fl.asJSON {
 			emitRunEpicFailureJSON(epicID, err, answer)
 		}
@@ -656,7 +667,8 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// Workflow drains to R2) and swallowed, never an exit code. The feed relay
 	// is drained first, for the reason the error path gives.
 	stopRelay()
-	runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *fl.remote, reconciler.IntegrationBranch())
+	runsignal.FromEnv(stderr).Done(context.Background(), repoDir, *fl.remote, reconciler.IntegrationBranch(),
+		runEpicOutcome(result))
 	if *fl.asJSON {
 		// The one document (tick 8v3): the run's whole answer as fields, so
 		// an agent branching on the exit code can read the same verdict's
