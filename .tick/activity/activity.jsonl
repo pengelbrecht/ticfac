@@ -2110,3 +2110,4 @@
 {"ts":"2026-10-01T08:20:37.317026Z","tick":"u5n","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"2026-10-01 10:20 - ticfac run run_d51a747f10ed41429f925ba4b83053d8: u5n try 2 (run dispatch #9) merged into epic/hn6 as c12a9e1c1f41; the integrated gate (go, ts) passed.","title":"Watch renders the dashboard frame"}}
 {"ts":"2026-10-01T08:20:46.645025Z","tick":"u5n","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"Watch renders the dashboard frame"}}
 {"ts":"2026-10-01T08:21:23.630587Z","tick":"3rc","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Bare ticfac overview shows the dashboard headline"}}
+{"ts":"2026-10-01T08:22:04.373677Z","tick":"c2u","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Watch gains drill-in keys, the tick view and the full feed"}}
