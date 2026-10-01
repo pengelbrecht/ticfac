@@ -1,3 +1,16 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/hn6/attempt-3/fq0`, base `56a93b39395cc61af930e29d059ac31daf449ed3`, harness `pi` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+
+> **BOUNDARY VIOLATION ATTEMPTED.** This agent tried to write tracker state, which the
+> orchestrator owns. The container refused it, so nothing under `.tick/`
+> should have reached this branch — but the attempt is reported rather than
+> silently cleaned, because a model that ignored an explicit instruction is
+> something a human has to see. What it did:
+>
+> - the agent ran `tk --json issue show fq0`
+
 # The goldens' durations, elapsed, progress and gates corrected, and the guard extended to read them (tick fq0, hn6 attempt 3)
 
 Tick fq0 is oro's absorbed finding: the same fixture-drift class oro removed
