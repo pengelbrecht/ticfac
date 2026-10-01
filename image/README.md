@@ -460,8 +460,10 @@ starts a command in a sandbox.
 | `TICKS_HARNESS` | no | `pi` (default), `omp` or `claude`. The factory always sets it, so the default is a last resort only; it is `pi` because the cloud runs pi on GLM. |
 | `TICKS_MODEL` | no | The model the harness runs on. When unset, the entrypoint asks the checkout (`ticfac sandbox model`); when nothing routes one, the boot is refused with exit 7 rather than started. |
 | `TICKS_MODEL_PROBE_TIMEOUT` | no | Seconds the one-token gateway probe may take (default 30). |
-| `TICKS_MODEL_PROBE_TRIES` | no | How many times the gateway probe is asked in all when it gets no answer or a transient 429/502/504 (default 3). |
+| `TICKS_MODEL_PROBE_TRIES` | no | How many times the gateway probe is asked in all when it gets no usable answer — none at all, or a transient 408/429/502/504/52x (default 4, about three minutes with the backoff). Still silent after the last try is exit 14. A refusal the gateway answered is never retried. |
 | `TICKS_MODEL_PROBE_BACKOFF` | no | Seconds × the try number waited between those tries (default 10). |
+| `TICKS_FETCH_WINDOW` | no | Seconds the boot keeps re-trying a fetch origin did not answer before it exits 15 (default 120). A fetch the remote refused (401/403/404, a rejected credential) is never retried. |
+| `TICKS_BOOT_RETRY_BACKOFF` | no | The first wait between those fetch retries, in seconds; it doubles up to 30 (default 5). |
 | `TICKS_HARNESS_PROBE_TIMEOUT` | no | Seconds the harness's own pre-flight round-trip may take (default 120). Larger than the gateway probe's because it starts a whole agent CLI. |
 | `TICKS_SUBSTRATE` | no | The dispatch substrate this run uses: `harness` (default), `herdr`, `auto` or `cloud`. It **overrides** `[orchestration].substrate` in the checkout, which a repository pins for its LOCAL runs; the checkout is read, never rewritten. A value that is not a substrate is exit 2. The default is load-bearing: a checkout may now declare `cloud`, and a container that inherited that declaration would dispatch worker containers from inside a container. See *The substrate, and why a container is told* below. |
 | `TICKS_MAX_TIME` | no | Passed through to the harness. |
@@ -895,7 +897,7 @@ provider's model is exit 7 rather than a run that cannot make one call.
 **The route is proved, not assumed.** One bounded, one-token completion goes
 through the gateway with the run's own credential before the harness starts —
 the same content gate `tk herd spawn` applies to workers, for the same reason.
-A refusal is quoted verbatim with its status: the factory's own gateway errors
+A gateway that does not answer at all — a timeout, a refused connection, a 502/504 from it or its upstream, a rate limit — is asked again with backoff, up to `TICKS_MODEL_PROBE_TRIES` times, before the boot gives up with exit 14: a factory Worker being redeployed or a Workers AI model loading cold outlasts one 30s try (epic hn6, run_37b36bfe). A refusal is quoted verbatim with its status, at once: the factory's own gateway errors
 name the setup command that fixes them, and collapsing them into one message would
 throw the fix away. This runs before toolchain provisioning, setup and the
 pre-flight, because a run that cannot make a model call is over whether or not
@@ -929,11 +931,14 @@ distinct, because these are read from a log after the sandbox is gone:
 |---|---|
 | 2 | A required input is missing or malformed (including no gateway). |
 | 3 | Clone or checkout of the submitted SHA failed. |
-| 4 | `tk` is absent, or is not the version the image pins. |
+| 4 | `tk` is absent, or is not the version the image pins. On a worker, the orchestrator reads it as the container's fault, not the tick's: no rung is spent, and the run stops naming the image (every worker boots the same one). |
 | 5 | An Environment pre-flight check failed (the failing check is named). |
 | 6 | The repository's own `[sandbox]` declaration was not satisfied: a setup command failed (the failing command is named), or this container is not the `[sandbox].image` the checkout declares (both references are named). |
 | 7 | A gateway with no usable model behind it: nothing routed, a model whose provider cannot be named, a model the chosen harness does not speak, or a gateway that refused the probe. |
 | 8 | The gateway answers and the harness cannot use it: no provider wired for the route, a credential the harness looks for under another name, or a harness round-trip that failed, timed out, or exited clean without answering. |
+| 13 | The start commit is not on origin: the fetch worked and the dispatched SHA is not among what it brought. |
+| 14 | The gateway gave no usable answer to the one-token probe through every try (`TICKS_MODEL_PROBE_TRIES`). Infrastructure, not the tick: the orchestrator dispatches the job again at the same tier, spending no rung of the ladder, at most three times per tick; the next one stops the run with a refusal naming the gateway. |
+| 15 | Origin did not answer the fetch through the whole retry window (`TICKS_FETCH_WINDOW`). Infrastructure, handled like 14. |
 | other | The harness's own exit status — the entrypoint `exec`s it. |
 
 Output streams to stdout as it is produced. The entrypoint prints directly and

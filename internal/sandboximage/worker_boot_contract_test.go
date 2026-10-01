@@ -168,6 +168,7 @@ func TestWorkerExitCodesAreDistinctFromTheSharedOnes(t *testing.T) {
 		ExitConfig: "config", ExitClone: "clone", ExitTkVersion: "tk-version",
 		ExitPreflight: "preflight", ExitSetup: "setup", ExitModel: "model", ExitHarness: "harness",
 		ExitReview: "review", ExitStartUnpublished: "start-unpublished",
+		ExitGatewayUnavailable: "gateway-unavailable", ExitOriginUnavailable: "origin-unavailable",
 	}
 	for code, name := range map[int]string{
 		ExitWorkerPush: "worker-push", ExitWorkerNoWork: "worker-no-work", ExitWorkerAgent: "worker-agent",

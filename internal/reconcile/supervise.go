@@ -127,6 +127,13 @@ const StoppedRemoteTokenRefused = "remote_token_refused"
 //     (rejected_work.go). The window requeues it in-run; should it escape,
 //     the next incarnation reads the recorded release and dispatches the
 //     same way.
+//   - RefusedInfrastructureRedispatch: a job died in its boot because a
+//     service outside it (the model gateway, origin) did not answer, and the
+//     run dispatches the tick again at the same tier (infrastructure.go). The
+//     window requeues it in-run; should it escape, the next incarnation reads
+//     the recorded infrastructure failure and redispatches the same way. It
+//     waits on the world, not the branch, so the anti-spin rule abstains; its
+//     own bound is per incarnation, and the continuation cap bounds the rest.
 //   - RefusedClaimWidth: the tracker refused a claim because the epic's
 //     declared width is full (tick 3mp). It is a fact about the WORLD — another
 //     run's claims, a tick a person holds — not a verdict on this run's work,
@@ -181,7 +188,7 @@ func resumesWithoutAPerson(reason string) bool {
 	switch reason {
 	case RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
 		RefusedBlockedRedispatch, RefusedRejectedRedispatch, RefusedClaimHolderUnknown, RefusedNoCapacity,
-		StoppedRemoteTokenRefused, RefusedFoldReplan:
+		StoppedRemoteTokenRefused, RefusedFoldReplan, RefusedInfrastructureRedispatch:
 		return true
 	}
 	return waitsOnCI(reason)
@@ -215,7 +222,7 @@ func waitsOnCI(reason string) bool {
 // from that host, never from the branch. The continuation cap bounds them all.
 func waitsOnTheWorld(reason string) bool {
 	return waitsOnCI(reason) || reason == StoppedRemoteTransient || reason == RefusedClaimHolderUnknown ||
-		reason == RefusedNoCapacity
+		reason == RefusedNoCapacity || reason == RefusedInfrastructureRedispatch
 }
 
 // spendsTheCap says whether a continuation across this stop counts against

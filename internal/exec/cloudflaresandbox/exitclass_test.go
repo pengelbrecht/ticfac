@@ -1,6 +1,7 @@
 package cloudflaresandbox
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -105,5 +106,82 @@ func TestAWorkerThatCannotCheckOutItsStartCommitCollectsAsStartNotOnOrigin(t *te
 	}
 	if strings.Contains(collected.Message, "the push never landed") {
 		t.Errorf("the message still reads as a job whose push failed: %s", collected.Message)
+	}
+}
+
+// TestAWorkerWhoseGatewayNeverAnsweredCollectsAsInfrastructure is epic hn6's
+// run_37b36bfe: 0rx's container probed the gateway while the factory's Worker
+// was being redeployed and died in its boot, before its harness. The collect
+// read the empty landing branch as a job that answered nothing — "missing-result
+// … carries no report" — and the run spent a rung of 0rx's ladder on it. The
+// container's exit says what happened (sandboximage.ExitGatewayUnavailable), and
+// the collect carries it as a typed infrastructure fact naming the service.
+//
+// short: an httptest door and local throwaway git repositories; no container.
+func TestAWorkerWhoseGatewayNeverAnsweredCollectsAsInfrastructure(t *testing.T) {
+	for _, tc := range []struct {
+		code       int
+		service    string
+		persistent bool
+	}{
+		{sandboximage.ExitGatewayUnavailable, "the model gateway", false},
+		{sandboximage.ExitOriginUnavailable, "origin", false},
+		{sandboximage.ExitTkVersion, "the worker image's tk", true},
+	} {
+		h, _, handle, _ := newCollectHarness(t)
+		h.door.setStatus("keh", 1, doorStatus{
+			state:    subprocess.StateFailed,
+			terminal: true,
+			observations: []subprocess.Observation{{At: "2026-10-01T04:49:30Z", Kind: subprocess.ObsExited,
+				Detail: fmt.Sprintf("the container's work process exited %d", tc.code)}},
+		})
+		status, err := h.ex.Inspect(handle, "")
+		if err != nil {
+			t.Fatalf("Inspect: %v", err)
+		}
+		if got := status.Observations[len(status.Observations)-1].Detail; !tc.persistent && !strings.Contains(got, "infrastructure") {
+			t.Errorf("exit %d's observation reads %q, want the class that says it is infrastructure", tc.code, got)
+		}
+		collected, err := h.ex.CollectDetail(handle)
+		if err != nil {
+			t.Fatalf("CollectDetail: %v", err)
+		}
+		if collected.Verdict != subprocess.VerdictMissingResult {
+			t.Errorf("verdict %q, want missing-result: the job never answered", collected.Verdict)
+		}
+		if collected.Infrastructure == nil || collected.Infrastructure.Service != tc.service ||
+			collected.Infrastructure.ExitCode != tc.code || collected.Infrastructure.Persistent != tc.persistent {
+			t.Fatalf("exit %d collects with Infrastructure %+v, want %s", tc.code, collected.Infrastructure, tc.service)
+		}
+		if collected.Result.FailureClass != subprocess.FailureInfrastructure {
+			t.Errorf("failure class %q, want %q", collected.Result.FailureClass, subprocess.FailureInfrastructure)
+		}
+		if !strings.Contains(collected.Message, tc.service) {
+			t.Errorf("the message does not name %s: %s", tc.service, collected.Message)
+		}
+	}
+}
+
+// A model verdict (exit 7: the gateway ANSWERED no) is not infrastructure: it
+// is the failure it always was.
+//
+// short: an httptest door and local throwaway git repositories; no container.
+func TestAModelVerdictIsNotCollectedAsInfrastructure(t *testing.T) {
+	h, _, handle, _ := newCollectHarness(t)
+	h.door.setStatus("keh", 1, doorStatus{
+		state:    subprocess.StateFailed,
+		terminal: true,
+		observations: []subprocess.Observation{{At: "2026-10-01T04:49:30Z", Kind: subprocess.ObsExited,
+			Detail: fmt.Sprintf("the container's work process exited %d", sandboximage.ExitModel)}},
+	})
+	if _, err := h.ex.Inspect(handle, ""); err != nil {
+		t.Fatalf("Inspect: %v", err)
+	}
+	collected, err := h.ex.CollectDetail(handle)
+	if err != nil {
+		t.Fatalf("CollectDetail: %v", err)
+	}
+	if collected.Infrastructure != nil {
+		t.Errorf("exit %d collected as infrastructure %+v", sandboximage.ExitModel, collected.Infrastructure)
 	}
 }

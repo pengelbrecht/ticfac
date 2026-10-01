@@ -938,6 +938,12 @@ type Reconciler struct {
 	// axis role routing resolved against (tick 84z). It is never auto by
 	// the time a Reconciler exists: New resolves it or refused the run.
 	substrate runconfig.Substrate
+
+	// infrastructure counts, per tick, the jobs this reconciler dispatched
+	// again because their container died in its boot on a service outside
+	// it (infrastructure.go): the bound that keeps a dead gateway from
+	// looping.
+	infrastructure infrastructureBound
 }
 
 // Event is one thing the run did, in order. It is what makes "the gate ran

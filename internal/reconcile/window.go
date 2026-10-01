@@ -193,7 +193,8 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			return false
 		}
 		switch {
-		case refusal.Reason == RefusedBlockedRedispatch, refusal.Reason == RefusedRejectedRedispatch:
+		case refusal.Reason == RefusedBlockedRedispatch, refusal.Reason == RefusedRejectedRedispatch,
+			refusal.Reason == RefusedInfrastructureRedispatch:
 			// The claim the requeued tick carries is the one THIS run took
 			// when it dispatched the attempt that asked: redispatching into it
 			// takes no new claim (dz1), and it is no foreign party's to hold
