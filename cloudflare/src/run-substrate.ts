@@ -18,7 +18,8 @@
  * the reclaim, the sweep — routes correctly without being told the run.
  */
 
-import type { InstanceSize } from "./factory-sandbox";
+import type { FactorySandboxNamespace, InstanceSize } from "./factory-sandbox";
+import type { Env } from "./index";
 import type { OrchestratorSandbox, SandboxBinding } from "./sandbox";
 
 /** The substrates a run can be on. `sdk0` is the default and has no row. */
@@ -61,6 +62,36 @@ export async function readRunSubstrate(db: D1Database, runID: string): Promise<R
     .first<{ substrate: string; image: string | null }>();
   if (row === null || !isRunSubstrate(row.substrate)) return SDK0;
   return { substrate: row.substrate, image: row.image ?? null };
+}
+
+// ------------------------------------------------------------- the pin ---
+
+/** The FactorySandbox object a submit asks for the deployment's image ref. */
+export const IMAGE_REF_OBJECT = "image-ref";
+
+/**
+ * The digest-pinned image this deployment starts FactorySandbox containers on
+ * (`ctx.container.images.factory`), read through a Durable Object because
+ * only one has `ctx.container` (tick v1d). Pinned in the run's record at
+ * submit, so every container of the run starts on it — the orchestrator and
+ * a worker booted after three more deploys alike — and the Mac's ticfac and
+ * the container's never skew mid-run. Asking it starts no container.
+ *
+ * Null when it cannot be read (no SANDBOXES_V1, a seam-shaped test binding,
+ * a failed call): the run then starts each container on the deployment's
+ * image at that moment, which is the 1hq behaviour, and the log says so.
+ */
+export async function deploymentImageRef(env: Env): Promise<string | null> {
+  const binding = env.SANDBOXES_V1;
+  if (binding === undefined || binding === null) return null;
+  if (typeof (binding as { idFromName?: unknown }).idFromName !== "function") return null;
+  const namespace = binding as FactorySandboxNamespace;
+  try {
+    return await namespace.get(namespace.idFromName(IMAGE_REF_OBJECT)).imageRef();
+  } catch (error) {
+    console.error(`factory runs: could not read the FactorySandbox image to pin: ${String(error)}`);
+    return null;
+  }
 }
 
 // ------------------------------------------------------------- the names ---
@@ -117,14 +148,6 @@ type GetOptions = Parameters<SandboxBinding["get"]>[1] & {
 };
 
 /**
- * Which containers of a `do_v1` run go to SANDBOXES_V1. Workers since 1hq;
- * the orchestrator stays on SANDBOXES until v1d moves it.
- */
-export type RouteScope = { orchestrator: boolean };
-
-export const ROUTE_WORKERS_ONLY: RouteScope = { orchestrator: false };
-
-/**
  * One binding over both substrates: each `get` reads the run's record
  * (once per run per binding) and addresses the container in the namespace
  * the run was submitted on, with the instance its job kind starts on and the
@@ -134,7 +157,6 @@ export function routedSandboxBinding(
   legacy: SandboxBinding,
   v1: SandboxBinding,
   lookup: (runID: string) => Promise<RunSubstrateRecord>,
-  scope: RouteScope = ROUTE_WORKERS_ONLY,
 ): SandboxBinding {
   const records = new Map<string, Promise<RunSubstrateRecord>>();
   const recordOf = (runID: string): Promise<RunSubstrateRecord> => {
@@ -151,7 +173,9 @@ export function routedSandboxBinding(
     async get(name: string, options?: GetOptions): Promise<OrchestratorSandbox> {
       const record = await recordOf(runIDOfSandboxName(name));
       const kind = jobKindOfSandboxName(name);
-      if (record.substrate !== DO_V1 || (kind === "orchestrator" && !scope.orchestrator)) {
+      // Every container of a do_v1 run — its orchestrator (v1d) and its
+      // workers (1hq) — and none of any other run's.
+      if (record.substrate !== DO_V1) {
         return legacy.get(name, options);
       }
       return v1.get(name, {

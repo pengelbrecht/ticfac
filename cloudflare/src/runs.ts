@@ -67,7 +67,13 @@ import type {
   StopMode,
   StopRequest,
 } from "./run-room";
-import { DO_V1, isRunSubstrate, type RunSubstrate, recordRunSubstrate } from "./run-substrate";
+import {
+  DO_V1,
+  deploymentImageRef,
+  isRunSubstrate,
+  type RunSubstrate,
+  recordRunSubstrate,
+} from "./run-substrate";
 import { carriedTraceID, parseTraceID } from "./trace";
 
 /**
@@ -763,7 +769,7 @@ function runMarks(
   if (!local && !v1) return undefined;
   return async () => {
     if (local) await recordLocalOrchestrator(env.DB, runID);
-    if (v1) await recordRunSubstrate(env.DB, runID, DO_V1);
+    if (v1) await recordRunSubstrate(env.DB, runID, DO_V1, await deploymentImageRef(env));
   };
 }
 
