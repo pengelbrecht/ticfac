@@ -1,6 +1,11 @@
 <!-- ticks-worker: container facts, prepended after the harness exited. The
 agent's report, including its STATUS line, is unchanged below. -->
 
+_ticks-worker: branch `tick/hn6/attempt-2-resolve-2-0d576fa2/7uv`, base `f393155b0c96359a1fd4953fc6924c35a53f5b89`, harness `pi` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
 _ticks-worker: branch `tick/hn6/attempt-2/7uv-run_ee8ebb4fe13d4311b8f9be6f66db69d4`, base `b7478e4ba71ebb7cf7b981583f9b561a471c8592`, harness `pi` exited 0, 1 work commit(s), 1 uncommitted path(s)._
 
 _ticks-worker: a carried attempt — its base `b7478e4ba71ebb7cf7b981583f9b561a471c8592` is the head of the work it continued, which was cut from `341ce14a6da712c0d29b39a8829f79c537646d47`; its work commits are counted from the carried head._
