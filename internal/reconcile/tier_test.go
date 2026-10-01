@@ -273,6 +273,7 @@ func TestAnUnrecognisedTierLabelIsRefusedLoudlyBeforeAnythingIsClaimed(t *testin
 func TestAFailedAttemptEarnsTheNextRung(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{gate: tierGate, mode: "empty-first"})
+	chainedFixture(t, f) // each run ends on ONE tick's refusal: what follows waits behind it
 	_, result, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -609,6 +610,7 @@ func TestAMassRoutedDispatchSelectsItsModelFromTheRecord(t *testing.T) {
 func TestAFailedAttemptEarnsARungAboveTheClassifiedStart(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{gate: massGate, mode: "empty-first"})
+	chainedFixture(t, f) // each run ends on ONE tick's refusal: what follows waits behind it
 	// a1 clears the threshold; a2 and b1 do not — the ladder under test is
 	// a1's, and the fallback under test is theirs. Every incarnation answers
 	// per tick exactly the same way, so any answer a cold one was allowed to

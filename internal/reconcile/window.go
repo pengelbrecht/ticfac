@@ -762,7 +762,13 @@ func holdsOnlyItsTick(refusal *Refusal) bool {
 		return false
 	}
 	switch refusal.Reason {
-	case RefusedMerge, RefusedCollect, RefusedBoundary, RefusedUndeclaredTouch,
+	case RefusedMerge:
+		// Only the attempt's work not merging onto the branch (a conflict no
+		// resolve delivered, the ladder spent). A merge refused because
+		// origin would not take the attempt's head, or because the branch
+		// kept moving, is about the remote and the run, not the tick.
+		return refusal.conflict
+	case RefusedCollect, RefusedBoundary, RefusedUndeclaredTouch,
 		RefusedWiped, RefusedUnaddressed, RefusedRejectedWork, RefusedFindingInvalid:
 		return true
 	}

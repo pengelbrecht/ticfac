@@ -129,7 +129,7 @@ func TestATicksTerminalRefusalHoldsOnlyThatTick(t *testing.T) {
 func TestOnlyARefusalBeforeTheMergeHoldsJustItsTick(t *testing.T) {
 	t.Parallel()
 	for reason, want := range map[string]bool{
-		RefusedMerge: true, RefusedCollect: true, RefusedBoundary: true, RefusedUndeclaredTouch: true,
+		RefusedCollect: true, RefusedBoundary: true, RefusedUndeclaredTouch: true,
 		RefusedWiped: true, RefusedUnaddressed: true, RefusedRejectedWork: true, RefusedFindingInvalid: true,
 		RefusedGate: false, RefusedStale: false, RefusedBaseRefresh: false, RefusedEpicAbsent: false,
 		RefusedIntegratedHeadMissing: false, RefusedClaimWidth: false, RefusedRoleResult: false,
@@ -138,7 +138,37 @@ func TestOnlyARefusalBeforeTheMergeHoldsJustItsTick(t *testing.T) {
 			t.Errorf("holdsOnlyItsTick(%s) = %v, want %v", reason, got, want)
 		}
 	}
+	// merge_failed holds only its tick when it is the attempt's work not
+	// merging (a conflict); origin refusing the attempt's head is not.
+	if !holdsOnlyItsTick(&Refusal{Reason: RefusedMerge, conflict: true}) {
+		t.Error("a conflict no resolve delivered does not hold only its tick")
+	}
+	if holdsOnlyItsTick(&Refusal{Reason: RefusedMerge}) {
+		t.Error("a merge refused for a reason that is not a conflict holds only its tick")
+	}
 	if holdsOnlyItsTick(nil) {
 		t.Error("no refusal holds a tick")
 	}
+}
+
+// chainedFixture makes the fixture's ticks a chain — a2 behind a1, b1 behind
+// a2, the role jobs behind all three — for a test whose story is one tick's
+// refusal ending a run and the NEXT run picking that tick up. A refusal
+// before the merge holds only its own tick, so in the fixture's flat graph
+// the run would go on to a2 and b1 and the story would be another one; in a
+// chain every later tick waits behind the held one, and the run ends on it
+// exactly as the story needs.
+func chainedFixture(t *testing.T, f *fixture) {
+	t.Helper()
+	state, err := f.Tracker.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.BlockedBy = map[string][]string{
+		"a2": {"a1"},
+		"b1": {"a2"},
+		"rv": {"a1", "a2", "b1"},
+		"co": {"a1", "a2", "b1", "rv"},
+	}
+	f.Tracker.write(t, state)
 }
