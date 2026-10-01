@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
   "epic_id": "hn6",
-  "sequence": 33,
-  "state": "dispatching",
-  "reason": "dispatching yjq as attempt 8",
-  "updated_at": "2026-10-01T07:24:17Z",
+  "sequence": 34,
+  "state": "running",
+  "reason": "yjq is running as attempt 8",
+  "updated_at": "2026-10-01T07:24:31Z",
   "ticks": [
     {
       "tick_id": "0rx",
@@ -29,8 +29,8 @@
     },
     {
       "tick_id": "yjq",
-      "state": "ready",
-      "attempt": 5
+      "state": "dispatched",
+      "attempt": 8
     },
     {
       "tick_id": "zl1",
