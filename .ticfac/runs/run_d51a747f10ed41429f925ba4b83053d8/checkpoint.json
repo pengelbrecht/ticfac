@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
   "epic_id": "hn6",
-  "sequence": 13,
-  "state": "collecting",
-  "reason": "collecting 0rx attempt 1",
-  "updated_at": "2026-10-01T06:29:21Z",
+  "sequence": 14,
+  "state": "integrating",
+  "reason": "integrating 0rx attempt 1 into epic/hn6",
+  "updated_at": "2026-10-01T06:34:42Z",
   "ticks": [
     {
       "tick_id": "0rx",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
