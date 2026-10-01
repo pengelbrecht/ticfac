@@ -777,6 +777,108 @@ nudge_due() {
 }
 
 # ---------------------------------------------------------------------------
+# The report check (hn6 run_d51a747f, tick u5n)
+#
+# PR #105 (tick 4m6) gave every executor one report checker — the reader
+# collect itself uses — and pushed a failing report back to the agent's own
+# session on the local supervisor and in herdr's pane. This container only
+# had the prompt line asking the agent to run the checker itself, and u5n's
+# economy-tier worker did not: it ended with its work described in a report
+# that carried no STATUS line, the container pushed it as it was, and collect
+# answered missing-result — a rejected attempt and a spent rung over a report
+# one more turn would have fixed.
+#
+# So after a clean exit WITH a report this container runs the same checker
+# (the image ships it beside ticfac) and, when the report fails it, hands the
+# checker's own pushback prompt to the harness — in its own session where one
+# can be named, as a fresh run on the same checkout where it cannot — at most
+# REPORT_PUSHBACK_MAX times, the local supervisor's bound (MaxLintPushbacks).
+# A report still failing after that is pushed as it is: the work is never
+# held hostage to its report, and collect decides what the report is worth.
+# A checker that cannot answer (absent, or broken) pushes nothing back.
+# ---------------------------------------------------------------------------
+readonly REPORT_PUSHBACK_MAX=2
+readonly REPORT_CHECKER="ticfac-exec-subprocess"
+
+# The role the report is checked as. The role prompt names it in the very
+# check it tells the agent to run (`lint-report … --role <role>`), so the
+# container asks the checker exactly what the agent was told to ask; a worker
+# on the checkout's own prompt is implementing a tick. A role prompt that
+# names no role is checked role-neutrally (the STATUS line and the findings
+# block, which every role's report carries).
+report_role() {
+	if [[ -n ${role_prompt//[[:space:]]/} ]]; then
+		printf '%s\n' "$role_prompt" | sed -n 's/.*lint-report.*--role[ =]\([a-z][a-z-]*\).*/\1/p' | sed -n 1p
+		return 0
+	fi
+	printf 'implement-tick\n'
+}
+
+# check_report runs the checker over the report. It answers 0 when the report
+# passes, 1 when it fails — with the pushback prompt in report_pushback — and
+# 2 when the checker could not answer, which is said and never pushed back.
+report_pushback=""
+
+# What is appended to the WHOLE prompt for a harness with no session to
+# resume, when its report is pushed back: the fresh process starts blind, so
+# it is told its work is already committed and only the report needs fixing
+# (the local supervisor's lintPushbackArgv says the same).
+fresh_pushback_section() {
+	printf '\n## This job already ran once on this checkout\n\nA run before you wrote its report and ended; its work is committed on %s already. Do not redo it.\n\n%s\n' \
+		"$worker_branch" "$report_pushback"
+}
+
+check_report() {
+	local role out status
+	local -a args=(lint-report "$workdir/$result_path" --pushback --tick "$tick_id" --repo "$workdir")
+	role="$(report_role)"
+	if [[ -n $role ]]; then args+=(--role "$role"); fi
+	if ! command -v "$REPORT_CHECKER" >/dev/null 2>&1; then
+		warn "the report check could not run: ${REPORT_CHECKER} is not on PATH; the report goes as the agent wrote it and collect reads it"
+		return 2
+	fi
+	out="$("$REPORT_CHECKER" "${args[@]}" 2>&1)"
+	status=$?
+	case $status in
+	0) return 0 ;;
+	1)
+		report_pushback="$out"
+		return 1
+		;;
+	esac
+	warn "the report check could not run (${REPORT_CHECKER} exited ${status}: $(printf '%s\n' "$out" | sed -n 1p)); the report goes as the agent wrote it and collect reads it"
+	return 2
+}
+
+# The decision after a harness run that left a report: push it back, or let
+# it go. Every condition is a reason a pushback cannot help, or a bound spent.
+report_pushback_due() {
+	local status="$1" count="$2" started="$3"
+	((status == 0)) || return 1
+	[[ -f $workdir/$result_path ]] || return 1
+	if cancel_requested; then
+		return 1
+	fi
+	if ((harness_timeout > 0)) && ((SECONDS - started >= harness_timeout)); then
+		return 1
+	fi
+	check_report
+	case $? in
+	0)
+		((count == 0)) || say "the report passes the report check after ${count} pushback(s)"
+		return 1
+		;;
+	2) return 1 ;;
+	esac
+	if ((count >= REPORT_PUSHBACK_MAX)); then
+		warn "the report at ${result_path} still fails the report check after ${count} pushback(s); it is pushed as the agent wrote it, and collect decides"
+		printf '%s\n' "$report_pushback" | sed "s/^/${ME}:   /"
+		return 1
+	fi
+	return 0
+}
+
+# ---------------------------------------------------------------------------
 # The harness
 #
 # Not exec'd, and bounded when the caller bounded it: everything this script
@@ -1324,18 +1426,38 @@ main() {
 	# early, not the worker finishing — re-prompt it, bounded, before the
 	# verdict below is decided. The loop re-reads everything the decision
 	# depends on, so a nudge that lands the report simply ends it.
-	local nudged=0
-	while nudge_due "$harness_status" "$nudged" "$harness_started"; do
-		nudged=$((nudged + 1))
+	#
+	# Then the report check (u5n): a clean exit WITH a report whose report
+	# fails the checker collect reads it with is pushed back to the same
+	# session, bounded, before anything is pushed. A pushback turn that loses
+	# the report is nudged like any other, so the two share one loop.
+	local nudged=0 pushed_back=0
+	while :; do
 		local nudge_text how
-		if [[ -n $session_id ]]; then
-			nudge_text="$(nudge_prompt_text)"
-			how="re-prompting it in its own session"
+		if nudge_due "$harness_status" "$nudged" "$harness_started"; then
+			nudged=$((nudged + 1))
+			if [[ -n $session_id ]]; then
+				nudge_text="$(nudge_prompt_text)"
+				how="re-prompting it in its own session"
+			else
+				nudge_text="${prompt_text}$(fresh_nudge_section)"
+				how="re-running it fresh on the same checkout"
+			fi
+			say "nudge ${nudged} of ${NUDGE_MAX}: the $harness harness exited 0 without writing its report at ${result_path}, and a headless worker that ends its turn early ends the job; $how"
+		elif report_pushback_due "$harness_status" "$pushed_back" "$harness_started"; then
+			pushed_back=$((pushed_back + 1))
+			if [[ -n $session_id ]]; then
+				nudge_text="$report_pushback"
+				how="re-prompting it in its own session with the checker's errors"
+			else
+				nudge_text="${prompt_text}$(fresh_pushback_section)"
+				how="re-running it fresh on the same checkout with the checker's errors"
+			fi
+			say "pushback ${pushed_back} of ${REPORT_PUSHBACK_MAX}: the $harness harness exited 0 and its report at ${result_path} fails the report check collect reads it with; $how"
+			printf '%s\n' "$report_pushback" | grep '^error: ' | sed "s/^/${ME}:   /" || true
 		else
-			nudge_text="${prompt_text}$(fresh_nudge_section)"
-			how="re-running it fresh on the same checkout"
+			break
 		fi
-		say "nudge ${nudged} of ${NUDGE_MAX}: the $harness harness exited 0 without writing its report at ${result_path}, and a headless worker that ends its turn early ends the job; $how"
 		run_harness "$nudge_text" "$session_id" 1
 		harness_status=$?
 	done

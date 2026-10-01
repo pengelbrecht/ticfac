@@ -518,13 +518,21 @@ func lintQuote(s string) string {
 // ---------------------------------------------------------------------- CLI ---
 
 // LintMain is `ticfac-exec-subprocess lint-report <path> [--role r] [--tick
-// id] [--repo dir]`. The flags default to the job's own environment
-// (TICFAC_ROLE, TICFAC_TICK, TICFAC_WORKTREE, else the working directory), so
-// a worker inside a job can run it with the path alone. Exit 0 when the report
-// has no errors, 1 when it has (the list is on stdout), 2 on a usage error.
+// id] [--repo dir] [--pushback]`. The flags default to the job's own
+// environment (TICFAC_ROLE, TICFAC_TICK, TICFAC_WORKTREE, else the working
+// directory), so a worker inside a job can run it with the path alone. Exit 0
+// when the report has no errors, 1 when it has (the list is on stdout), 2 on a
+// usage error.
+//
+// --pushback prints, for a failing report, the whole prompt the run pushes the
+// report back with (LintPushbackPrompt) instead of the bare list: the cloud
+// worker's entrypoint (image/worker.sh) has no Go supervisor to render it and
+// hands this text to the harness's own session as it is, so the local and the
+// cloud pushback say the same words (hn6 run_d51a, u5n).
 func LintMain(args []string, stdout, stderr io.Writer) int {
 	role, tick, repo := os.Getenv("TICFAC_ROLE"), os.Getenv("TICFAC_TICK"), os.Getenv("TICFAC_WORKTREE")
 	var path string
+	pushback := false
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		name, value, hasValue := strings.Cut(strings.TrimLeft(arg, "-"), "=")
@@ -537,8 +545,12 @@ func LintMain(args []string, stdout, stderr io.Writer) int {
 			continue
 		}
 		if name == "h" || name == "help" {
-			fmt.Fprint(stdout, "usage: ticfac-exec-subprocess lint-report <path> [--role <role>] [--tick <id>] [--repo <dir>]\n")
+			fmt.Fprint(stdout, lintUsage)
 			return ExitOK
+		}
+		if name == "pushback" && !hasValue {
+			pushback = true
+			continue
 		}
 		if !hasValue {
 			if i+1 >= len(args) {
@@ -564,7 +576,7 @@ func LintMain(args []string, stdout, stderr io.Writer) int {
 		path = os.Getenv("TICFAC_RESULT_PATH")
 	}
 	if path == "" {
-		fmt.Fprint(stderr, "usage: ticfac-exec-subprocess lint-report <path> [--role <role>] [--tick <id>] [--repo <dir>]\n")
+		fmt.Fprint(stderr, lintUsage)
 		return ExitUsage
 	}
 	raw, err := os.ReadFile(path)
@@ -576,6 +588,10 @@ func LintMain(args []string, stdout, stderr io.Writer) int {
 		repo, _ = os.Getwd()
 	}
 	result := LintReport(string(raw), LoadLintContext(repo, role, tick))
+	if pushback && !result.Clean() {
+		fmt.Fprint(stdout, LintPushbackPrompt(path, LintCommand(LintCommandName, path, role, tick, repo), result.Text()))
+		return ExitError
+	}
 	fmt.Fprint(stdout, result.Text())
 	if !result.Clean() {
 		fmt.Fprintf(stdout, "%d error(s): fix them and run the check again\n", len(result.Errors))
@@ -584,6 +600,8 @@ func LintMain(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintln(stdout, "ok: the report passes the check")
 	return ExitOK
 }
+
+const lintUsage = "usage: ticfac-exec-subprocess lint-report <path> [--role <role>] [--tick <id>] [--repo <dir>] [--pushback]\n"
 
 // ReasonReportInvalid is the message key every collect settles a report with
 // FATAL check problems under: not a verdict — it collects as missing-result,
