@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
   "epic_id": "hn6",
-  "sequence": 16,
-  "state": "publishing",
-  "reason": "closing 0rx behind the integrated gate on a24582967a33",
-  "updated_at": "2026-10-01T06:50:11Z",
+  "sequence": 17,
+  "state": "running",
+  "reason": "0rx is closed",
+  "updated_at": "2026-10-01T06:50:20Z",
   "ticks": [
     {
       "tick_id": "0rx",
-      "state": "reported",
+      "state": "closed",
       "attempt": 1
     },
     {
