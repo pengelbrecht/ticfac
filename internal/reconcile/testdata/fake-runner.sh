@@ -556,6 +556,13 @@ linger-until)
 			waited=$((waited + 1))
 		done
 	fi
+	# $BOUNDARY_TICK, when set, names a tick whose every try also writes the
+	# boundary mode's forged tracker record beside its work: a refusal on the
+	# merits that lands while the lingering worker is still thinking.
+	if [ "$TICFAC_TICK" = "${BOUNDARY_TICK:-}" ]; then
+		mkdir -p "$TICFAC_WORKTREE/.tick/issues"
+		printf '{"id":"forged-%s","status":"closed"}\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/.tick/issues/forged-$TICFAC_TICK.json"
+	fi
 	commit
 	report
 	;;

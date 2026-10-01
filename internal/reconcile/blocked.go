@@ -56,6 +56,10 @@ const (
 	// sequenced behind a held question (or is a role job over the whole
 	// epic); every other tick keeps going.
 	StageWaitsBehindHeld = "waits_behind_held"
+	// StageTickHeld: a tick whose refusal holds only itself (holdsOnlyItsTick,
+	// epic hn6 run_ee8e) — the run goes on with every tick that does not wait
+	// behind it, and ends naming it once nothing else can progress.
+	StageTickHeld = "tick_held"
 
 	// RefusedBlockedRedispatch is a collect that answered a stopped worker by
 	// dispatching the tick again (escalate or decide). The window requeues the

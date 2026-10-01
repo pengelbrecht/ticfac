@@ -119,6 +119,8 @@ var watchKeepStages = map[string]bool{
 	reconcile.StageBlockedEscalated: true,
 	reconcile.StageBlockedDecide:    true,
 	reconcile.StageBlockedHeld:      true,
+	// A tick held on its own refusal while the run goes on (hn6 run_ee8e).
+	reconcile.StageTickHeld: true,
 	// A rejected attempt with work, disposed by the run (epic-6in 823):
 	// where the work went is worth coming back to.
 	reconcile.StageRejectedWorkCarried:  true,

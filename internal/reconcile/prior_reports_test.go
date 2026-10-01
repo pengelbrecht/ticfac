@@ -157,6 +157,7 @@ func TestASecondAttemptIsShownWhatItsPredecessorFound(t *testing.T) {
 
 	blocked := fixtureOptions{mode: "empty-first"}
 	f := newFixture(t, blocked)
+	chainedFixture(t, f) // each run ends on ONE tick's refusal: what follows waits behind it
 
 	// Incarnation one: attempt 1 of a1 answers DONE_WITH_CONCERNS with nothing
 	// committed, and the run stops on the refusal — the rejection is what is
