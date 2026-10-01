@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_37b36bfe525c411b902e85dc01a16a52",
   "epic_id": "hn6",
-  "sequence": 3,
-  "state": "running",
-  "reason": "0rx is running as attempt 1",
-  "updated_at": "2026-10-01T04:48:53Z",
+  "sequence": 4,
+  "state": "dispatching",
+  "reason": "dispatching 378 as attempt 2",
+  "updated_at": "2026-10-01T04:49:10Z",
   "ticks": [
     {
       "tick_id": "0rx",
