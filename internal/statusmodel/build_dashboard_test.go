@@ -8,56 +8,28 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 )
 
-<<<<<<< HEAD
-// The DASHBOARD vocabulary (epic hn6, wave 1 — tick r5i): wave 1 declared
-// every field the dashboard renders, and THIS test is the fence that says
-// what the stubs must not quietly leave out — the wave-2 ticks fill the
-// fields in parallel, each replacing the empty assertions for ITS half with
-// the real derivations while the empty ones stay as the fence for the ticks
-// still to come. The pipeline half is tick 3gk's (wave 2): the cells, the
-// parents, the durations, the findings and the try words below are the
-// derivations, while the worker activity, the handles, the verdict and the
-// cost lines stay at their honest empty values until their own wave-2 ticks
-// fill them.
+// The DASHBOARD vocabulary (epic hn6, wave 1 — tick r5i): this tick declared
+// every field the dashboard renders so the wave-2 ticks could fill them in
+// parallel against a fixed shape — it computed NOTHING new beyond `recent`
+// and the two graph copies (`epic_title`, `gloss`), every other new field
+// came out at its honest empty value, and THIS test was the fence that said
+// what the stubs must not quietly leave out. Two wave-2 halves are filled
+// in below: the per-tick half is 3gk's (the cells, the parents, the
+// durations, the findings and the try words are the derivations) and the
+// run-level half is 7uv's (the health verdict and the cost lines at their
+// real values). The worker half is ltg's, and this fixture still answers it
+// null — nothing measures a worker here and nobody named its handle — the
+// honest not-measured, not a stub the wave quietly left behind.
 
 // TestBuildEmitsTheDashboardFieldsEmpty: a Build over the running-epic
 // fixture emits every dashboard field — the role's own pipeline stage list
 // per tick with the states the records derive, the findings the ticks
 // reported, the durations the markers measure, the try words the feed
-// states — and beside them the fields no wave-2 tick has filled yet: no
-// report read, no worker activity, the healthy verdict, no cost lines.
-// The wave-1 half stays: `recent` holds the last five feed lines oldest
-// first, `epic_title` is copied off the graph, and every tick's `gloss` is
-// copied off its graph task.
-=======
-// The DASHBOARD vocabulary (epic hn6, wave 1 — tick r5i): this tick declared
-// every field the dashboard renders so the wave-2 ticks fill them in
-// parallel against a fixed shape. It computes NOTHING new beyond `recent`
-// and the two graph copies (`epic_title`, `gloss`); every other new field
-// came out at its honest empty value, and THIS test was the fence that said
-// what the stubs must not quietly leave out. The wave-2 verdict and cost
-// tick (7uv) has since filled the two run-level headline fields, and the
-// two sections below pin them at their real values; the per-tick fields are
-// still the wave-1 empties the pipeline and activity ticks (3gk, ltg) fill.
-
-// pendingPipeline is the wave-1 pipeline cell: the role's own stage list,
-// every stage pending — what a renderer lays the cell out from before
-// anything has happened.
-func pendingPipeline(stages []string) []PipelineStage {
-	cell := make([]PipelineStage, 0, len(stages))
-	for _, stage := range stages {
-		cell = append(cell, PipelineStage{Stage: stage, State: StageStatePending})
-	}
-	return cell
-}
-
-// TestBuildEmitsTheDashboardFieldsEmpty: a Build over the running-epic
-// fixture emits every dashboard field — pipeline per role all pending,
-// findings empty, the report and the parent unread, no worker activity, the
-// derived verdict and cost lines — and the three fields wave 1 fills for
-// real: `recent` holding the last five feed lines oldest first, `epic_title`
-// copied off the graph, and every tick's `gloss` copied off its graph task.
->>>>>>> f7f17aed81281a6175119e2ea875d93088d0a489
+// states, the derived health verdict and the cost lines — and beside them
+// the fields this fixture honestly answers null: the report and the parent
+// unread, no worker activity, no handle. The wave-1 half stays: `recent`
+// holds the last five feed lines oldest first, `epic_title` is copied off
+// the graph, and every tick's `gloss` is copied off its graph task.
 func TestBuildEmitsTheDashboardFieldsEmpty(t *testing.T) {
 	t.Parallel()
 	src := runningEpicSources()
