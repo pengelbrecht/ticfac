@@ -96,6 +96,18 @@ func TestATicksTerminalRefusalHoldsOnlyThatTick(t *testing.T) {
 	if !strings.Contains(result.Reason, "a1") {
 		t.Errorf("the run's reason does not name the held tick: %s", result.Reason)
 	}
+	// The reason says what happened: the run worked on past the hold and
+	// ended on it. "The run stopped rather than integrating over an unproven
+	// change" is the stop's sentence, and it was false here — a2 was
+	// integrated and closed after a1 was held.
+	if strings.Contains(result.Reason, "the run stopped rather than integrating") {
+		t.Errorf("a run that worked past a hold reads as one that stopped at it: %s", result.Reason)
+	}
+	for _, want := range []string{"a1 is held on " + RefusedBoundary, "worked to the end", "b1"} {
+		if !strings.Contains(result.Reason, want) {
+			t.Errorf("the run's reason does not say %q: %s", want, result.Reason)
+		}
+	}
 
 	// a2 did not depend on a1: it is worked to the end, not abandoned.
 	a2, err := f.Tracker.Show(context.Background(), "a2")
