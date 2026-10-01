@@ -1,0 +1,14 @@
+{
+  "id": "yjq",
+  "title": "hn6's acceptance list parses as one item: A2–A6 are unaddressable",
+  "description": "The epic's acceptance_criteria puts all six [A\u003cn\u003e] marks on one line, and the acceptance parser takes a mark only where a line begins with one (internal/acceptance/acceptance.go, Parse: one mark per line) — so hn6's done parses as the single item A1 with A2..A6 inside its prose, and per-item gate binding can only ever reach A1. Verified today: 6 marks in the text, one line-leading. Previously reported by run_3f034e683's attempt of this tick. The record is the tracker's to re-flow one [A\u003cn\u003e] item per line; no code change is needed.\nevidence: Parse on .tick/issues/hn6.json acceptance_criteria: 6 [A\u003cn\u003e] marks in the text, 1 line-leading mark — one item\n\nticfac run run_6d88e3de89ca466c8dab3841185931c1 created this tick by absorbing the finding 1a69054b5b01bd2ecd5f36d700827ab73d7ac6f1ddc287920d80fff4e2a9cfb5 (reported by run-run_6d88e3de89ca466c8dab3841185931c1/tick-378/attempt-1): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_6d88e3de89ca466c8dab3841185931c1/absorptions/1a69054b5b01bd2ecd5f36d700827ab73d7ac6f1ddc287920d80fff4e2a9cfb5.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-run_6d88e3de89ca466c8dab3841185931c1/tick-378/attempt-1",
+  "created_by": "ticfac run run_6d88e3de89ca466c8dab3841185931c1",
+  "created_at": "2026-10-01T00:36:38Z",
+  "updated_at": "2026-10-01T00:36:38Z"
+}
