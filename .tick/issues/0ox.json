@@ -1,0 +1,13 @@
+{
+  "id": "0ox",
+  "title": "statusmodel readers cannot see a run dispatched with --state-root",
+  "description": "`ticfac run --state-root \u003cdir\u003e` points the reconciler's ExecStateRoot at \u003cdir\u003e directly (no \"runs\" suffix; the suffix is only appended to the default), and neither `ticfac status`/`watch` nor the readers they call have a way to name that root: reportStateRoots honours only $TICFAC_EXEC_STATE_DIR and the ~/.ticfac/exec/*/runs glob. Such a run's attempt records exist on the machine but the archived-report reader (A3's report summary) and zl1's handle reader both silently answer null for it while every suite stays green. Worth a small tick: thread the state root through the status/watch option surface into reportStateRoots and WorkerHandles, the way the herd commands already take --state-root.\nevidence: internal/cli/cli.go:110 (--state-root on run), internal/reconcile/reconcile.go:1413-1414 (the /runs suffix only on the default), internal/statusmodel/report.go:186 (reportStateRoots), internal/statusmodel/handle.go:46 (the same roots)\n\nticfac run run_d51a747f10ed41429f925ba4b83053d8 filed this backlog tick from the finding 7ec483b86c6fd8ca32c8582b27652f99027c6d7092bc8fa6e6befcb46060f8a2 (reported by run-run_d51a747f10ed41429f925ba4b83053d8/tick-zl1/attempt-6): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_d51a747f10ed41429f925ba4b83053d8/absorptions/7ec483b86c6fd8ca32c8582b27652f99027c6d7092bc8fa6e6befcb46060f8a2.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-run_d51a747f10ed41429f925ba4b83053d8/tick-zl1/attempt-6",
+  "created_by": "ticfac run run_d51a747f10ed41429f925ba4b83053d8",
+  "created_at": "2026-10-01T07:25:23Z",
+  "updated_at": "2026-10-01T07:25:23Z"
+}
