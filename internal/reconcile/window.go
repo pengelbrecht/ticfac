@@ -202,6 +202,7 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 	endHeld := func() ([]string, error) {
 		refusal := parked[parkOrder[0]]
 		r.failure = refusal
+		r.heldEnd = newHeldEnd(parkOrder, parked, waiting)
 		if _, err := r.checkpoint(runstate.StateFailed, refusal.Error()); err != nil {
 			return nil, err
 		}

@@ -888,6 +888,10 @@ type Reconciler struct {
 	ticks    []runstate.TickState
 	journal  []Event
 	failure  *Refusal
+	// heldEnd is set when the run ended on its holds (window.go endHeld)
+	// rather than stopping at a refusal: the run's reason then says it
+	// worked every other tick to the end, not that it stopped.
+	heldEnd *heldEnd
 
 	// priorResumes is how many automatic continuations came before THIS
 	// incarnation (tick go6), set by the supervisor on each successor it
@@ -2113,7 +2117,12 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	r.sweepClosed(ctx, len(failed) == 0)
 
 	state, reason := runstate.StateCompleted, fmt.Sprintf("every tick of %s is closed behind the integrated gate", r.opts.EpicID)
-	if len(failed) > 0 {
+	if len(failed) > 0 && r.heldEnd != nil {
+		state = runstate.StateFailed
+		reason = r.heldEnd.reason(r.branch) + ". Running the epic again under this run id resumes it — a held " +
+			"attempt that left nothing is redispatched, an attempt held holding commits nothing merged is " +
+			"reported rather than dispatched over, and nothing that already passed is redone"
+	} else if len(failed) > 0 {
 		state = runstate.StateFailed
 		reason = fmt.Sprintf("%s did not pass: the run stopped rather than integrating over an unproven change. "+
 			"Running the epic again under this run id resumes it — a rejected attempt that left nothing is "+
