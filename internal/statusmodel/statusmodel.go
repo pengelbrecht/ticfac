@@ -562,7 +562,9 @@ type HealthVerdict struct {
 }
 
 // Recovery is one thing the run got past by itself: what it was, how many
-// times, and how long the last one took — null when nobody measured that.
+// times, and — where the run's own lines state durations — the sum of the
+// stated spans across the counted lines (the sleep suspensions), null when
+// no line stated one.
 type Recovery struct {
 	What    string `json:"what"`
 	Count   int    `json:"count"`
@@ -616,11 +618,13 @@ type CheckState struct {
 	StartedAt  string `json:"started_at"`
 }
 
-// Cost is what the run spent so far, as far as the records state it. The only
-// cost any record carries today is the model exchanges' usage (the decisions'
-// own `usage.cost_usd`); worker jobs record no cost, and the basis says so —
-// a number that quietly claimed more than the records do would be a lie with
-// a decimal point.
+// Cost is what the run spent so far, as far as anything measured it. The
+// costs anything states today are the model exchanges' usage (the decisions'
+// own `usage.cost_usd`) and, for a cloud run, the host's own ground-truth
+// number for its workers (Sources.WorkerCost, the factory's gateway-backed
+// `cost_usd`); worker jobs record no cost of their own, and the basis says
+// so — a number that quietly claimed more than what was measured would be a
+// lie with a decimal point (hn6 rule 7).
 type Cost struct {
 	RecordedUSD float64 `json:"recorded_usd"`
 	// Attempts is how many dispatches the run paid for — the count a person

@@ -366,15 +366,25 @@ func TestTheModelDerivesTheWorkers(t *testing.T) {
 }
 
 // TestTheModelCountsHealthFromTheFeed: retries, interventions, stall
-// warnings and firings are counts of the run's own typed lines. The verdict
-// rides beside them at its wave-1 value (healthy, nothing to say, nothing
-// recovered) — the real derivation is the wave-2 verdict tick's.
+// warnings and firings are counts of the run's own typed lines, and the
+// verdict beside them (wave 2, tick 7uv) is derived from the same lines and
+// the model built around them: healthy here — the fixture's one stall
+// warning is ninety minutes old, outside the window that still reads — with
+// what the run got past listed as calm.
 func TestTheModelCountsHealthFromTheFeed(t *testing.T) {
 	t.Parallel()
 	model := Build(runningEpicSources())
 	want := Health{
 		RemoteRetries: 1, Interventions: 1, StallWarnings: 1, WallClocksFired: 1,
-		Verdict: HealthVerdict{State: VerdictHealthy, Summary: "", Recovered: []Recovery{}},
+		Verdict: HealthVerdict{
+			State:   VerdictHealthy,
+			Summary: VerdictHealthy,
+			Recovered: []Recovery{
+				{What: "net", Count: 1},
+				{What: "interventions", Count: 1},
+				{What: "wall clocks", Count: 1},
+			},
+		},
 	}
 	if !reflect.DeepEqual(model.Health, want) {
 		t.Errorf("the health counts are %+v, want %+v", model.Health, want)
