@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 5,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The epic's acceptance_criteria puts all six [A<n>] marks on one line, and the acceptance parser takes a mark only where a line begins with one (internal/acceptance/acceptance.go, Parse: one mark per line) — so hn6's done parses as the single item A1 with A2..A6 inside its prose, and per-item gate binding can only ever reach A1. Verified today: 6 marks in the text, one line-leading. Previously reported by run_3f034e683's attempt of this tick. The record is the tracker's to re-flow one [A<n>] item per line; no code change is needed.\nevidence: Parse on .tick/issues/hn6.json acceptance_criteria: 6 [A<n>] marks in the text, 1 line-leading mark — one item\n\nticfac run run_6d88e3de89ca466c8dab3841185931c1 created this tick by absorbing the finding 1a69054b5b01bd2ecd5f36d700827ab73d7ac6f1ddc287920d80fff4e2a9cfb5 (reported by run-run_6d88e3de89ca466c8dab3841185931c1/tick-378/attempt-1): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_6d88e3de89ca466c8dab3841185931c1/absorptions/1a69054b5b01bd2ecd5f36d700827ab73d7ac6f1ddc287920d80fff4e2a9cfb5.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "yjq",
+    "title": "hn6's acceptance list parses as one item: A2–A6 are unaddressable"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.87,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.01,
+      "design": 0,
+      "diagnosis": 0.09,
+      "mechanical": 0.89,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1452,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-01T06:51:00Z",
+  "answered_at": "2026-10-01T06:51:00Z",
+  "provenance": {
+    "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
+    "tick_id": "yjq",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "216edb77e590a8dfb68dc8eede592478d5eb6eae",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
