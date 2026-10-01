@@ -81,7 +81,7 @@ func (r *Reconciler) askFactoryAgain(ctx context.Context, fl *inflightAttempt, r
 	refusal.Message += fmt.Sprintf(" — asked the factory again: it %s", said)
 	refusal.factoryUnanswered = true
 	unanswered := marker
-	refusal.unanswered = &unanswered
+	refusal.attempt = &unanswered
 	// What the attempt committed goes where the release reads it: the local
 	// branch's head pushed to the write ref, or — for a container that
 	// pushed to a landing branch of its own — what the executor collects.
@@ -100,10 +100,10 @@ func (r *Reconciler) askFactoryAgain(ctx context.Context, fl *inflightAttempt, r
 // next dispatch of the tick (claimDispatch) neither adopts it nor holds it.
 // False when the release could not be recorded.
 func (r *Reconciler) releaseUnanswered(refusal *Refusal) bool {
-	if refusal == nil || refusal.unanswered == nil {
+	if refusal == nil || refusal.attempt == nil {
 		return false
 	}
-	marker := *refusal.unanswered
+	marker := *refusal.attempt
 	if _, err := r.store.Fetch(); err != nil {
 		r.record(marker.TickID, StageRejected, "the run's release of %s could not be recorded (%v): it is held",
 			r.attemptName(marker.TickID, marker.Attempt), err)
