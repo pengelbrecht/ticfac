@@ -103,7 +103,7 @@ func TestDonePostsTheBranchAndItsPushedHead(t *testing.T) {
 	})
 	log := &strings.Builder{}
 
-	New(d.url(), "tkr_run_token", log).Done(context.Background(), repo, "origin", "epic/ko8")
+	New(d.url(), "tkr_run_token", log).Done(context.Background(), repo, "origin", "epic/ko8", nil)
 
 	if len(d.calls) != 1 {
 		t.Fatalf("the door was called %d times, want 1", len(d.calls))
@@ -128,6 +128,38 @@ func TestDonePostsTheBranchAndItsPushedHead(t *testing.T) {
 	}
 }
 
+// A local orchestrator's signal is the factory's only account of how the run
+// ended (hn6's run_6d88: a failed, halted run recorded as completed because
+// the signal said nothing but "done"). The outcome rides the payload, its
+// free text bounded so a long reason can never turn the signal into a refusal.
+func TestDoneCarriesTheRunsOutcome(t *testing.T) {
+	t.Parallel()
+
+	repo, _ := repoWithRemoteBranch(t, "epic/hn6")
+	d := newDoor(t, func(w http.ResponseWriter) {
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"delivered":true,"detail":"signalled"}`))
+	})
+
+	long := strings.Repeat("r", MaxOutcomeTextChars+50)
+	New(d.url(), "tkr_run_token", &strings.Builder{}).Done(context.Background(), repo, "origin", "epic/hn6",
+		&Outcome{State: OutcomeFailed, ExitCode: 1, Reason: long, Halt: "the stop needs a person"})
+
+	if len(d.calls) != 1 {
+		t.Fatalf("the door was called %d times, want 1", len(d.calls))
+	}
+	got := d.calls[0].body.Outcome
+	if got == nil {
+		t.Fatal("the signal carried no outcome")
+	}
+	if got.State != OutcomeFailed || got.ExitCode != 1 || got.Halt != "the stop needs a person" {
+		t.Errorf("outcome %+v, want failed, exit 1, with the halt", got)
+	}
+	if n := len([]rune(got.Reason)); n != MaxOutcomeTextChars {
+		t.Errorf("reason is %d characters, want it cut to %d", n, MaxOutcomeTextChars)
+	}
+}
+
 func TestDoneStillSignalsWhenTheBranchNeverLanded(t *testing.T) {
 	t.Parallel()
 
@@ -140,7 +172,7 @@ func TestDoneStillSignalsWhenTheBranchNeverLanded(t *testing.T) {
 
 	// A run that failed before pushing anything: the remote has no such branch,
 	// so there is no head to resolve — and the wake-up is still worth sending.
-	New(d.url(), "tkr_run_token", log).Done(context.Background(), repo, "origin", "epic/never-pushed")
+	New(d.url(), "tkr_run_token", log).Done(context.Background(), repo, "origin", "epic/never-pushed", nil)
 
 	if len(d.calls) != 1 {
 		t.Fatalf("the door was called %d times, want 1 — a headless signal still wakes the supervisor", len(d.calls))
@@ -168,7 +200,7 @@ func TestDoneSwallowsEveryDeliveryFailure(t *testing.T) {
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{"error":"run_token_revoked","detail":"the run was stopped"}`))
 	})
-	New(refusing.url(), "tkr_run_token", log).Done(context.Background(), repo, "origin", "epic/ko8")
+	New(refusing.url(), "tkr_run_token", log).Done(context.Background(), repo, "origin", "epic/ko8", nil)
 	if !strings.Contains(log.String(), "the pushed branch remains the source of truth") {
 		t.Errorf("a refused signal names the branch as the truth, got: %s", log.String())
 	}
@@ -177,14 +209,14 @@ func TestDoneSwallowsEveryDeliveryFailure(t *testing.T) {
 	// before its callback lands is the exact case the design says the branch
 	// must cover, so this is the one failure the whole rule is about.
 	log.Reset()
-	New("http://127.0.0.1:1", "tkr_run_token", log).Done(context.Background(), repo, "origin", "epic/ko8")
+	New("http://127.0.0.1:1", "tkr_run_token", log).Done(context.Background(), repo, "origin", "epic/ko8", nil)
 	if !strings.Contains(log.String(), "not delivered") {
 		t.Errorf("an undeliverable signal is said and swallowed, got: %s", log.String())
 	}
 
 	// And no path through Done may panic on a nil Signaller: FromEnv returns
 	// nil for a local run, and the call site does not branch on that.
-	FromEnv(&strings.Builder{}).Done(context.Background(), repo, "origin", "epic/ko8")
+	FromEnv(&strings.Builder{}).Done(context.Background(), repo, "origin", "epic/ko8", nil)
 }
 
 func TestFromEnvReadsTheContainerConfiguration(t *testing.T) {

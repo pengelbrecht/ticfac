@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runregistry"
@@ -403,7 +404,7 @@ func TestProbeReportsTheStandingAttemptsGaps(t *testing.T) {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = repo
-		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+		cmd.Env = testGitEnv()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 		}
@@ -442,6 +443,16 @@ func TestProbeLeavesTheGapsNullWhenTheCensusCannotBeRead(t *testing.T) {
 	}
 }
 
+// testGitEnv is the environment these tests' own git runs in. Automatic
+// maintenance is off: a `git commit` starts `git maintenance run --auto
+// --detach`, which goes on touching .git after the commit returns, and the
+// test's TempDir cleanup then races it — "unlinkat .../.git: directory not
+// empty" (TestProbeReportsTheStandingAttemptsGaps, CI go race, PR #163). The
+// run's own git has been held to the same rule since tick mel (gitbin).
+func testGitEnv() []string {
+	return gitbin.WithNoAutoMaintenance(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"))
+}
+
 // wallRepo is a repository with ONE standing attempt — the in-flight shape —
 // whose run feed already carries lines beside the liveness facts: the fixture
 // for the wall clock's firing reaching `ticfac status` (tick q1e).
@@ -452,7 +463,7 @@ func wallRepo(t *testing.T, runID string, now time.Time) string {
 		t.Helper()
 		cmd := exec.Command("git", args...)
 		cmd.Dir = repo
-		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+		cmd.Env = testGitEnv()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 		}
@@ -470,6 +481,7 @@ func wallRepo(t *testing.T, runID string, now time.Time) string {
 	worktree := filepath.Join(t.TempDir(), "wt-a1")
 	cmd := exec.Command("git", "worktree", "add", "--quiet", worktree, branch)
 	cmd.Dir = repo
+	cmd.Env = testGitEnv()
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
 	}

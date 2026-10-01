@@ -47,6 +47,18 @@ package cli
 // local process under the SAME factory run (its workers keep running and are
 // adopted); anything else — no run, a finished one — is a new submission,
 // which resumes the epic from its integration branch.
+//
+// A FINISHED run is not resumed under its own run id, as a local run's is,
+// because the factory model has no reopening: a run is one Workflow instance
+// whose id is the run id, and its finalize is terminal — credentials
+// revoked, worker containers reclaimed, lease released, the terminal feed
+// line and board event published. The run's end is recorded truthfully (the
+// done signal carries run-epic's outcome, so a failed, halted run is failed),
+// and the next run picks the epic up from the integration branch, the
+// tracker and the commit-keyed gate evidence. What a new id does not carry is
+// the previous run's attempt numbering. The window in which the SAME id is
+// kept is while the factory still holds the run alive: a local process that
+// died without finishing is re-credentialled above.
 
 import (
 	"context"
@@ -195,7 +207,16 @@ func runCloudWorkersCommand(ctx context.Context, epicID, repo string, fl *runFla
 				"restarting it on this machine; its workers keep running and are adopted\n",
 				existing.RunID, liveness.Reason)
 		} else {
-			fmt.Fprintf(prose, "run %s is not running — %s — resuming the epic as a new run\n",
+			// Not the same run id, unlike a local run's resume, and on purpose:
+			// the factory FINALIZED this run (see the header) — its Workflow
+			// instance, whose id is the run id, is complete; its credentials
+			// are revoked, its workers reclaimed and its lease released. A
+			// finished factory run is never reopened. What carries over is
+			// what a resume needs: the integration branch, the tracker's
+			// closed ticks, and gate evidence keyed by commit.
+			fmt.Fprintf(prose, "run %s is not running — %s — a finished factory run is not reopened "+
+				"(its credentials, workers and lease ended with it), so the epic resumes from its "+
+				"integration branch as a new run\n",
 				existing.RunID, liveness.Reason)
 		}
 	} else {

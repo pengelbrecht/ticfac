@@ -196,6 +196,57 @@ func TestRunCloudWorkersRestartsTheOrchestratorOfALiveRunWhoseProcessDied(t *tes
 	_ = requests
 }
 
+// A run the factory finalized as failed (hn6's run_6d88: its supervisor
+// halted) is not reopened — its Workflow instance, credentials, workers and
+// lease ended with it — so the command submits a new run and says why the
+// run id changes, naming the old run's real end.
+//
+// short: a fake factory and the spawn/attach seams.
+func TestRunCloudWorkersResumesAFailedRunAsANewRunAndSaysWhy(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	failed := cloudRunIDOf("ee55")
+	resumed := cloudRunIDOf("ff66")
+
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": failed, "epic": "epic1", "project": "acme/project", "state": "failed",
+				"started_at": "2026-09-30T10:00:00Z",
+			}}}
+		case request.Method == http.MethodPost && request.Path == "/api/runs/"+failed+"/orchestrator":
+			t.Error("a finished run was re-credentialled; the factory refuses that, and it is not asked")
+			return 409, map[string]any{"error": "run_not_active"}
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			return http.StatusCreated, map[string]any{"run": map[string]any{"run_id": resumed, "state": "starting"}}
+		case request.Method == http.MethodPost && request.Path == "/api/runs/"+resumed+"/orchestrator":
+			return http.StatusCreated, map[string]any{
+				"run_id": resumed, "project": "acme/project", "epic": "epic1", "state": "starting",
+				"token": "tkr_new", "factory_max_instances": 3,
+			}
+		}
+		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+	spawn := saveCloudWorkersSeams(t)
+
+	code, stdout, stderr := runCloudWorkers(t, repo)
+	if code != exitSuccess {
+		t.Fatalf("exit %d: %s\n%s", code, stderr.String(), stdout.String())
+	}
+	if got, _ := envValue(spawn.env, "TICKS_RUN_ID"); got != resumed {
+		t.Fatalf("the orchestrator runs as %q, want the new run %s", got, resumed)
+	}
+	out := stdout.String()
+	for _, want := range []string{"run " + failed + " is not running", "failed", "is not reopened", "as a new run"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout does not say %q:\n%s", want, out)
+		}
+	}
+}
+
 // short: a fake factory; nothing is started.
 func TestRunCloudWorkersRefusesALiveContainerOrchestratedRun(t *testing.T) {
 	stubCloudTk(t)

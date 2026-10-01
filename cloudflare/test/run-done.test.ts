@@ -133,6 +133,35 @@ describe("the completion event, against the platform's documented shape", () => 
     expect(readDoneSignal({ head: "a".repeat(40) })).toBeNull();
     expect(readDoneSignal({ branch: 7 })).toBeNull();
   });
+
+  it("reads the run's own outcome, and drops one it cannot read rather than the signal", () => {
+    expect(
+      readDoneSignal({
+        branch: "epic/hn6",
+        outcome: {
+          state: "failed",
+          exit_code: 1,
+          reason: "ltg did not pass",
+          halt: "needs a person",
+        },
+      }),
+    ).toEqual({
+      branch: "epic/hn6",
+      outcome: {
+        state: "failed",
+        exit_code: 1,
+        reason: "ltg did not pass",
+        halt: "needs a person",
+      },
+    });
+    // An outcome word outside the vocabulary is no outcome: the wake-up stands.
+    expect(readDoneSignal({ branch: "epic/hn6", outcome: { state: "exploded" } })).toEqual({
+      branch: "epic/hn6",
+    });
+    expect(readDoneSignal({ branch: "epic/hn6", outcome: "failed" })).toEqual({
+      branch: "epic/hn6",
+    });
+  });
 });
 
 // ------------------------------------------------------------- the door ---
@@ -193,6 +222,26 @@ describe("what may be carried", () => {
     const { token } = await liveRun();
     const response = await SELF.fetch(doneRequest(token, '{"branch":"epic/ko8","head":"short"}'));
     expect(response.status).toBe(400);
+  });
+
+  it("refuses an outcome outside the vocabulary, and accepts the run's own", async () => {
+    const { token } = await liveRun();
+    for (const outcome of [{ state: "exploded" }, "failed", { state: "failed", reason: 7 }]) {
+      const response = await SELF.fetch(
+        doneRequest(token, JSON.stringify({ branch: "epic/ko8", outcome })),
+      );
+      expect(response.status, `outcome ${JSON.stringify(outcome)}`).toBe(400);
+    }
+    const accepted = await SELF.fetch(
+      doneRequest(
+        token,
+        JSON.stringify({
+          branch: "epic/ko8",
+          outcome: { state: "failed", exit_code: 1, reason: "ltg did not pass", halt: "x" },
+        }),
+      ),
+    );
+    expect(accepted.status).toBe(202);
   });
 
   it("accepts a branch with no head — a run that pushed nothing still wakes", async () => {
