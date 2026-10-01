@@ -819,6 +819,21 @@ report_role() {
 # 2 when the checker could not answer, which is said and never pushed back.
 report_pushback=""
 
+# Whether the report delivers a tracker edit (hn6 yjq, PR #186): a tick whose
+# deliverable is a change to a tracker record commits nothing — `.tick/` is
+# never a worker's to write — and proposes the change in a tracker-edits
+# block, which the run validates and applies. Behind a DONE answer that is a
+# delivery, not the no-work exit; behind a question it is not, because the
+# run applies a proposal only behind a DONE. Whether the proposal holds is
+# collect's to decide, as for any delivery.
+report_proposes_tracker_edits() {
+	local report="$workdir/$result_path" status
+	[[ -f $report ]] || return 1
+	grep -qE '^```tracker-edits([[:space:]]+v1)?[[:space:]]*$' "$report" || return 1
+	status="$(sed -E 's/^[[:space:]>*#`-]+//' "$report" | grep -E '^STATUS:' | tail -n 1)"
+	[[ $status =~ ^STATUS:[[:space:]]*(DONE_WITH_CONCERNS|DONE)([^A-Z_]|$) ]]
+}
+
 # What is appended to the WHOLE prompt for a harness with no session to
 # resume, when its report is pushed back: the fresh process starts blind, so
 # it is told its work is already committed and only the report needs fixing
@@ -1535,6 +1550,10 @@ main() {
 		carried="$(carried_work_paths)"
 		if ((carried > 0)); then
 			say "the harness exited 0 and added nothing to the carried work, so the attempt delivers the carried work: ${carried} path(s) between the work base ${work_base_sha} and ${base_sha}"
+			exit 0
+		fi
+		if report_proposes_tracker_edits; then
+			say "the harness exited 0, committed nothing and answered done with a tracker-edits block: the proposal is the delivery, which the run validates and applies through its own tracker writer"
 			exit 0
 		fi
 		warn "the harness exited 0 and committed nothing to ${worker_branch}; the report is on origin and the tick is not implemented"
