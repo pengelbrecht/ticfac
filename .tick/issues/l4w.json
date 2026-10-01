@@ -2,6 +2,7 @@
   "id": "l4w",
   "title": "Tick 0rx's description names the golden at a path it left at tick 4i8",
   "description": "The tick's description says the dashboard golden lives in internal/statusmodel/contract.json; that file moved into the pinned contract bundle (contracts/status-model.json) at tick 4i8, before this tick ran. A worker following the description's path literally hits a missing file; the intended reading — 'the same way other tests import ../../contracts/*.json' — is what the test does. Worth correcting in the tick record so a re-run does not stumble on the stale path.\nevidence: contracts/status-model.json holds golden 'dashboard'; git log dbd6b8cf 'contracts: ticfac authors its own bundle' removed internal/statusmodel/contract.json\n\nticfac run run_d51a747f10ed41429f925ba4b83053d8 filed this backlog tick from the finding 03627820d2970a6f1fe96d1f4c0f1f99d1fc654e1b0d217063eab734cae9e566 (reported by run-run_d51a747f10ed41429f925ba4b83053d8/tick-0rx/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_d51a747f10ed41429f925ba4b83053d8/absorptions/03627820d2970a6f1fe96d1f4c0f1f99d1fc654e1b0d217063eab734cae9e566.json on the run branch.",
+  "notes": "2026-10-01 08:29 - ticfac run run_d51a747f10ed41429f925ba4b83053d8: created by absorbing finding 03627820d2970a6f1fe96d1f4c0f1f99d1fc654e1b0d217063eab734cae9e566 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/run_d51a747f10ed41429f925ba4b83053d8/absorptions/03627820d2970a6f1fe96d1f4c0f1f99d1fc654e1b0d217063eab734cae9e566.json on epic/hn6, and it says: the classifier put 0.03 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_d51a747f10ed41429f925ba4b83053d8/tick-0rx/attempt-1",
   "created_by": "ticfac run run_d51a747f10ed41429f925ba4b83053d8",
   "created_at": "2026-10-01T06:29:31Z",
-  "updated_at": "2026-10-01T06:29:31Z"
+  "updated_at": "2026-10-01T06:29:36.519173Z"
 }
