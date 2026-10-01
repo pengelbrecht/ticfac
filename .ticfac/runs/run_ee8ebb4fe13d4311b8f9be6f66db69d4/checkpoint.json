@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
   "epic_id": "hn6",
-  "sequence": 5,
-  "state": "running",
-  "reason": "7uv is running as attempt 2",
-  "updated_at": "2026-10-01T02:51:59Z",
+  "sequence": 6,
+  "state": "dispatching",
+  "reason": "dispatching oro as attempt 3",
+  "updated_at": "2026-10-01T02:52:09Z",
   "ticks": [
     {
       "tick_id": "378",
