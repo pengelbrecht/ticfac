@@ -62,6 +62,7 @@ func newFactoryCommand(stdout, stderr io.Writer) *cobra.Command {
 		newFactoryWebhookCommand(stdout, stderr),
 		newFactoryDeployCommand(stdout, stderr),
 		newFactorySetupCommand(stdout, stderr),
+		newFactoryWaitDeployedCommand(stdout, stderr),
 	)
 	return cmd
 }
@@ -136,6 +137,8 @@ account, on your compute, with your model keys. See ticks' docs/design/cloud-fac
   deploy  put it in your account   |  status     what is configured, and works
   setup   walk the credentials     |  dashboard  watch it run, read-only
   webhook point Telegram at it     |  (register by default; --status reads, --delete withdraws)
+  wait-deployed <sha>  block until the factory runs a commit containing <sha>
+                       (0 live, 1 its deploy or CI failed, 4 no such commit, 5 timed out)
 
 'ticfac factory dashboard' is observation, like 'ticfac cloud status/logs/trace':
 it watches a deployed factory from a local terminal and cannot steer one, so
