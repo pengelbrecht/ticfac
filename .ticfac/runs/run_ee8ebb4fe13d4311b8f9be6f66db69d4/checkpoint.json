@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
   "epic_id": "hn6",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching 378 as attempt 1",
-  "updated_at": "2026-10-01T02:51:20Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "378 is collected as attempt 1 from run run_6d88e3de89ca466c8dab3841185931c1's settled attempt 1",
+  "updated_at": "2026-10-01T02:51:27Z",
   "ticks": [
     {
       "tick_id": "378",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "7uv",
