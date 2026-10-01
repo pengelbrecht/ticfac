@@ -50,6 +50,22 @@ func TestAMergeFailedAttemptAPersonMergedIsIntegratedNotHeld(t *testing.T) {
 	_, _, err := f.run(f.Repo, fixtureOptions{stopAfter: stopAt("a1", StageCollected)})
 	killedAfter(t, err, "a1", StageCollected)
 	conflictOnIntegrationBranch(t, f.Repo, "work-a1.txt", "a change nobody merged around\n")
+	// A live run hands a conflict nobody resolved to the standing ladder
+	// (conflictToLadder) and stops only once the ladder is spent. This test is
+	// about the stop, so the ladder is seeded spent: a1's one further try at
+	// the ceiling already went to a release the run made before.
+	st, err := runstate.Open(runstate.Options{Repo: f.Repo.Dir, Remote: "origin", Branch: "epic/qeu", RunID: "r-fixture"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	putDecision(t, st, runstate.Decision{
+		Decision: 90, Role: settleRole,
+		Request: map[string]any{"op": settleOp, "run_id": "r-fixture", "epic_id": "qeu", "tick_id": "a1",
+			"attempt": 99, "job_id": "run-r-fixture/tick-a1/attempt-99", "state": "rejected"},
+		Response: map[string]any{"settled": true, "released_by": runReleaser, "by_run": true,
+			"reason": "seeded", "step": rejectedStepCeiling, "disposition": dispositionUnaddressable,
+			"state": "rejected"},
+	})
 	_, refused, err := f.run(f.Repo, fixtureOptions{})
 	if err != nil {
 		t.Fatalf("the refusing run did not finish: %v", err)

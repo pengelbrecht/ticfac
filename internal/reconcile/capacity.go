@@ -108,7 +108,14 @@ func (r *Reconciler) roomForAJob(window *held) bool {
 // recorded so the wait is visible. A start still refused for want of room
 // after CapacityWaitBound is the typed RefusedNoCapacity stop, never an
 // operational error the supervisor would read as a transient remote.
+//
+// It is also the ONE place every job is started, so it is where a job bound
+// for an executor that checks out from origin has its start commit published
+// first (start_publish.go) — whatever the job's kind.
 func (r *Reconciler) startWithRoom(executor Executor, tick string, spec *subprocess.JobSpec) (*subprocess.JobHandle, error) {
+	if err := r.publishStart(executor, tick, spec); err != nil {
+		return nil, err
+	}
 	var waited time.Duration
 	for {
 		handle, err := executor.Start(spec)

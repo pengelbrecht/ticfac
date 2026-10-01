@@ -488,7 +488,7 @@ func (r *Reconciler) collectResolveJob(ctx context.Context, handle *subprocess.J
 	if _, err := r.awaitResolve(ctx, handle, executor, marker); err != nil {
 		return nil, failed("it did not settle: %v", err)
 	}
-	collected, err := executor.CollectDetail(handle)
+	collected, err := r.collectDetail(executor, handle, tick)
 	if err != nil {
 		return nil, failed("it could not be collected: %v", err)
 	}

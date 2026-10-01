@@ -72,21 +72,7 @@ func claimHolderLiveness(repo string) func(context.Context, string) reconcile.Ho
 // run is known on this machine: registered here, or with a run directory in
 // this checkout.
 func localHolder(repo, runID string) (reconcile.HolderState, bool) {
-	checkout := ""
-	if reg, ok, err := runregistry.Lookup(runID); err == nil && ok && reg.Repo != "" {
-		host, _ := os.Hostname()
-		if reg.Host == "" || reg.Host == host {
-			checkout = reg.Repo
-		}
-	}
-	if checkout == "" && repo != "" {
-		// run.log, not the directory: the directory is also the feed's, and a
-		// cloud run watched from this checkout can have one. Only a local
-		// process that claimed the run writes its log.
-		if _, err := os.Stat(filepath.Join(runlife.Dir(repo, runID), runlife.LogName)); err == nil {
-			checkout = repo
-		}
-	}
+	checkout := localRunCheckout(repo, runID)
 	if checkout == "" {
 		return reconcile.HolderState{}, false
 	}
@@ -103,6 +89,30 @@ func localHolder(repo, runID string) (reconcile.HolderState, bool) {
 			Evidence: "no process holds the local run in " + checkout + ": its last process released it"}, true
 	}
 	return reconcile.HolderState{Evidence: "the local run's process could not be asked: " + status.Reason}, false
+}
+
+// localRunCheckout is the checkout on THIS machine whose process ran runID,
+// or "" when no process here ever did: the one the machine's registry names
+// for it, else repo when the run's log stands in it. It is also how a cloud
+// run whose orchestrator is this machine (`ticfac run --cloud-workers`, #151)
+// is told from one the factory's container drives: its id is the factory's,
+// but its process, pidfile and feed are here.
+func localRunCheckout(repo, runID string) string {
+	if reg, ok, err := runregistry.Lookup(runID); err == nil && ok && reg.Repo != "" {
+		host, _ := os.Hostname()
+		if reg.Host == "" || reg.Host == host {
+			return reg.Repo
+		}
+	}
+	if repo != "" {
+		// run.log, not the directory: the directory is also the feed's, and a
+		// cloud run watched from this checkout can have one. Only a local
+		// process that claimed the run writes its log.
+		if _, err := os.Stat(filepath.Join(runlife.Dir(repo, runID), runlife.LogName)); err == nil {
+			return repo
+		}
+	}
+	return ""
 }
 
 // claimHolderRunStatus is the part of GET /api/runs/<id> a holder verdict reads.
@@ -195,4 +205,56 @@ func cloudHolderVerdict(state, workflow string) reconcile.HolderState {
 	}
 	return reconcile.HolderState{Verdict: reconcile.HolderUnknown, Evidence: fmt.Sprintf(
 		"the factory's record says %s and it could read no Workflow instance for the run", stateOrUnknown(state))}
+}
+
+// claimHolderSettled is the part of GET /api/runs/<id> a settled-attempt
+// answer reads: the attempts whose own worker container the factory recorded
+// settled (migration 0019).
+type claimHolderSettled struct {
+	SettledAttempts []struct {
+		TickID   string `json:"tick_id"`
+		Attempt  int    `json:"attempt"`
+		State    string `json:"state"`
+		ExitCode *int   `json:"exit_code"`
+		At       string `json:"at"`
+	} `json:"settled_attempts"`
+}
+
+// settledAttemptOnFactory is the production reconcile.Options.SettledAttempt:
+// how another run's cloud attempt settled, as the factory recorded its worker
+// container (hn6's ltg). A container that completed with exit 0 settled
+// succeeded; one the factory has no settlement for — still running, never
+// observed, a factory that predates the record — is not Known, and the
+// takeover carries its work into a fresh worker as before.
+func settledAttemptOnFactory(ctx context.Context, runID, tickID string, attempt int) reconcile.SettledState {
+	client := cloudHolderClient()
+	if client == nil {
+		return reconcile.SettledState{}
+	}
+	askCtx, cancel := context.WithTimeout(ctx, claimHolderHTTPTimeout)
+	defer cancel()
+	data, err := client.request(askCtx, http.MethodGet, "/api/runs/"+url.PathEscape(runID), nil)
+	if err != nil {
+		return reconcile.SettledState{}
+	}
+	var status claimHolderSettled
+	if err := decodeCloudJSON(data, &status); err != nil {
+		return reconcile.SettledState{}
+	}
+	for _, settled := range status.SettledAttempts {
+		if settled.TickID != tickID || settled.Attempt != attempt {
+			continue
+		}
+		exit := "no exit code"
+		if settled.ExitCode != nil {
+			exit = fmt.Sprintf("exit %d", *settled.ExitCode)
+		}
+		return reconcile.SettledState{
+			Known:     true,
+			Succeeded: settled.State == "completed" && settled.ExitCode != nil && *settled.ExitCode == 0,
+			Evidence: fmt.Sprintf("the factory recorded its worker container %s with %s at %s",
+				settled.State, exit, settled.At),
+		}
+	}
+	return reconcile.SettledState{}
 }

@@ -80,6 +80,7 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 	conflict *mergeConflict, drivers map[string]string) (string, func() error, error) {
 
 	sides := r.baseFoldSides(base, baseHead, epicHead)
+	forgiven := -1
 	for {
 		// THE BOUND: one resolve per fold, durably. A fold of this base head
 		// that a resolve already ANSWERED for — merged, or failed on its
@@ -89,6 +90,16 @@ func (r *Reconciler) resolveBaseFold(ctx context.Context, base, baseHead, epicHe
 		ledger, err := r.baseFoldLedgerOf(baseHead)
 		if err != nil {
 			return "", nil, err
+		}
+		if r.foldRetrying {
+			// The retry of a fold the run start deferred (refresh_defer.go)
+			// gets a fresh operational allowance: the jobs that never answered
+			// before it are recorded and were paid for, and what failed them
+			// then need not fail now. What was spent on its merits stays spent.
+			if forgiven < 0 {
+				forgiven = len(ledger.operational)
+			}
+			ledger.operational = ledger.operational[forgiven:]
 		}
 		if len(ledger.spent) > 0 {
 			prior := ledger.spent[len(ledger.spent)-1]

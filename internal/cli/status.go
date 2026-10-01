@@ -355,10 +355,28 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 
 	status := runlife.Probe(*repo, runID, time.Now())
 
+	// A cloud run whose ORCHESTRATOR is this machine (`ticfac run
+	// --cloud-workers`, #151) carries the factory's `run_` id, but its
+	// process, pidfile and feed are here: its liveness is that process, and
+	// the Workflow instance is only the supervisor of its heartbeat. Asking
+	// the Workflow alone answered "the supervisor is queued and has not
+	// started executing yet" about a run that was dispatching on this
+	// machine.
+	orchestratedHere := false
+	if looksLikeCloudRunID(runID) {
+		if status.State == runlife.Alive {
+			orchestratedHere = true
+		} else if checkout := localRunCheckout(*repo, runID); checkout != "" {
+			orchestratedHere = true
+			*repo = checkout
+			status = runlife.Probe(checkout, runID, time.Now())
+		}
+	}
+
 	// A run the Workflow hosts is answered by the Workflow, and its id says
 	// which host that is: `run_` plus hex names a cloud run, and no local
 	// pidfile was ever its claim to life.
-	if status.State != runlife.Alive && looksLikeCloudRunID(runID) {
+	if !orchestratedHere && looksLikeCloudRunID(runID) {
 		return cloudRunStatus(ctx, *repo, runID, *asJSON, stdout, stderr)
 	}
 
@@ -369,11 +387,21 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 	// this checkout wins first — that is the run's own evidence — and a
 	// factory with nothing this project can claim leaves the local answer
 	// standing, exactly as before.
-	if status.State != runlife.Alive {
+	if status.State != runlife.Alive && !orchestratedHere {
 		if _, feedErr := os.Stat(runfeed.Path(*repo, runID)); feedErr != nil {
 			if resolved, note, err := cloudRunForEpic(ctx, *repo, runID); err == nil && resolved != "" {
-				fmt.Fprintln(stderr, note)
-				return cloudRunStatus(ctx, *repo, resolved, *asJSON, stdout, stderr)
+				checkout := localRunCheckout(*repo, resolved)
+				if checkout == "" {
+					fmt.Fprintln(stderr, note)
+					return cloudRunStatus(ctx, *repo, resolved, *asJSON, stdout, stderr)
+				}
+				// The factory's run for this epic is orchestrated HERE: it is
+				// answered as the local run it is, under the id it runs as.
+				fmt.Fprintf(stderr, "# %s is cloud run %s, orchestrated on this machine (--cloud-workers): its "+
+					"liveness is its process here, and its workers are the factory's\n", runID, resolved)
+				runID, *repo, orchestratedHere = resolved, checkout, true
+				resolution.Known = true
+				status = runlife.Probe(checkout, runID, time.Now())
 			} else if err != nil {
 				// A factory that cannot be read is named, never silent: the
 				// run may be there, and the local probe's answer alone would
@@ -447,6 +475,9 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 				}
 			}
 			fmt.Fprintf(stdout, "%s\n", line)
+		}
+		if orchestratedHere {
+			fmt.Fprintln(stdout, factoryWorkersLine(ctx, runID))
 		}
 	}
 	if status.State == runlife.Alive {
@@ -572,6 +603,29 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 		return 0
 	}
 	return 1
+}
+
+// factoryWorkersLine is the factory's half of a locally orchestrated cloud
+// run's status (`ticfac run --cloud-workers`, #151): the factory hosts its
+// workers and supervises this machine's heartbeat, so its record and its
+// Workflow instance are said as THAT — never as the run's own liveness, which
+// is the process here. A factory that cannot be asked is said so; the local
+// answer stands either way.
+func factoryWorkersLine(ctx context.Context, runID string) string {
+	const lead = "factory (hosts its workers, supervises this machine's heartbeat): "
+	state, err := readCloudRunState(ctx, runID)
+	if err != nil {
+		return lead + "could not be asked: " + err.Error()
+	}
+	answer := cloudRunLiveness(ctx, runID, state)
+	word := "running"
+	switch {
+	case answer.State == cloudLivenessOrphaned:
+		word = "orphaned"
+	case !answer.Alive:
+		word = "ended"
+	}
+	return lead + word + " — " + answer.Reason
 }
 
 // readCloudRunRecord reads the run record the factory holds — the Workflow's

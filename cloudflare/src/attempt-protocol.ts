@@ -72,6 +72,14 @@ export type AttemptSpec = {
    * harness and pushes before the wall fires. Absent is unbounded.
    */
   wall_seconds?: number;
+  /**
+   * For a CARRIED attempt, the full commit the carried work was cut from
+   * (epic hn6, run_3f034e68): `base_sha` is then the released attempt's
+   * head, and the worker's container needs this to see that a worker which
+   * added nothing to complete carried work delivered it. Absent for every
+   * attempt that carries nothing.
+   */
+  work_base_sha?: string;
 };
 
 /** The JobHandle the executor's start returned (SPEC 4.3); opaque here. */

@@ -36,6 +36,19 @@ model = "opus"
 [roles.implement.tiers.frontier]
 model = "opus-frontier"
 
+# The review cell's ceiling overlay: the on-demand resolve-conflict and
+# plan-repair jobs route at the ceiling through it, and a run refuses at
+# start when they cannot.
+[roles.review]
+kind = "claude"
+model = "opus"
+
+[roles.review.tiers.strong]
+model = "opus"
+
+[roles.review.tiers.frontier]
+model = "opus"
+
 [tier_policy]
 default = "strong"
 ceiling = "frontier"

@@ -172,7 +172,7 @@ model = "opus"
 	if err := os.MkdirAll(profiles, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, role := range profile.Roles {
+	for _, role := range profile.EveryRole() {
 		writeProfile(t, profiles, role,
 			`"executor": "cloudflare-sandbox", "runner": "pi", "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3"`)
 	}

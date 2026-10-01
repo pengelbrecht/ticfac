@@ -57,6 +57,7 @@ type workerContract struct {
 		Setup        string `json:"worker_setup"`
 		StateDir     string `json:"worker_state_dir"`
 		TraceID      string `json:"trace_id"`
+		WorkBase     string `json:"work_base"`
 	} `json:"env"`
 	Trace struct {
 		BannerMarker  string `json:"banner_marker"`
@@ -124,6 +125,9 @@ func TestWorkerBootContractMatchesThisPackage(t *testing.T) {
 		// worker.sh prints the line, this package asserts the variable name,
 		// and worker-boot.ts is what sets it on the container.
 		{"trace id env", EnvTraceID, c.Env.TraceID},
+		// The carried work's base (epic hn6, run_3f034e68): worker.sh reads
+		// it, this package names it, worker-boot.ts sets it.
+		{"work base env", EnvWorkBaseSHA, c.Env.WorkBase},
 		{"setup always", WorkerSetupAlways, c.SetupModes.Always},
 		{"setup skip", WorkerSetupSkip, c.SetupModes.Skip},
 		// The boundary guard's two strings (tick dxk). Three readers again:
@@ -163,6 +167,7 @@ func TestWorkerExitCodesAreDistinctFromTheSharedOnes(t *testing.T) {
 	seen := map[int]string{
 		ExitConfig: "config", ExitClone: "clone", ExitTkVersion: "tk-version",
 		ExitPreflight: "preflight", ExitSetup: "setup", ExitModel: "model", ExitHarness: "harness",
+		ExitReview: "review", ExitStartUnpublished: "start-unpublished",
 	}
 	for code, name := range map[int]string{
 		ExitWorkerPush: "worker-push", ExitWorkerNoWork: "worker-no-work", ExitWorkerAgent: "worker-agent",

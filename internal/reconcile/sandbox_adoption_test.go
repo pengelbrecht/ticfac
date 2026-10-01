@@ -613,7 +613,7 @@ func (f *fixture) doorOptions(t *testing.T, repo *testRepo, door *fakeSandboxDoo
 	if err := os.MkdirAll(profiles, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, role := range profile.Roles {
+	for _, role := range profile.EveryRole() {
 		writeProfile(t, profiles, role,
 			`"executor": "`+doorExecutorName+`", "runner": "pi", "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3"`)
 	}

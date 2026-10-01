@@ -1,6 +1,6 @@
 {
   "$comment": "The versioned cross-language contract bundle, authored by TICFAC since tick 4i8. Read contracts/README.md for what the fixtures are and contracts/CHANGELOG.md for the rule that governs this file. `version` is pinned by exact value by every consumer — cloudflare/contracts.pin.json here, and any repository that vendors this bundle. Regenerate `files` and `digests` when a fixture changes; never re-cut them without bumping `version`. `version_digests` is the append-only ledger that makes that rule executable: each version records a sha256 over its own `version` + `digests`, written the first time it is cut and never rewritten, so a re-cut at an unchanged version contradicts it and both verifiers refuse. The ledger begins at 1.0.0, ticfac's first cut: 2.1.1-6.3.0 were ticks' bundle and their history lives in the ticks repository; 1.0.0 carries the 6.3.0 bytes across unchanged except where its own changelog entry says. Two files in this bundle are not ticfac's to edit: tk-json-manifest.json and tracker-layout.json are vendored from a pinned ticks release (contracts.pin.json) and change only by moving that pin.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "files": [
     "collect-vocabulary.json",
     "credential-ownership.json",
@@ -35,11 +35,12 @@
     "ticfac-run-state.json": "a1cf745f00b4982c4b59a3aa7a6dac3766365e4b479ece03ef5d8f0280f15ca7",
     "tk-json-manifest.json": "01ea3a1956cec3bab40b4f79880665eb906653e59427fb8c2c07930aa2311678",
     "tracker-layout.json": "ce015d8d7fd5b788e09f491b4b69e6af6f78f823be092a5c73a99fead2bb3a4c",
-    "worker-boot-contract.json": "7326ba972f6d8b16bd5f127d644586082da0cf2a8ff78281ff411c366df7ca27"
+    "worker-boot-contract.json": "45e06d5281ac4e4468675e209c72c8df75ee29bcc158ae61d030f4f852793105"
   },
   "version_digests": {
     "1.0.0": "4f25c9ef0f3da37693c249194cbcfefd5b86c2890543bad6f50c422661d9aa86",
     "1.0.1": "810ce72251a93f4db9668f4397973195763bb619099f3ee2e787a164f763dd78",
-    "1.1.0": "db0bbc96b5753a17c58e18dd1d5b26b3c8de9b90c30e46c9bc836b023778a616"
+    "1.1.0": "db0bbc96b5753a17c58e18dd1d5b26b3c8de9b90c30e46c9bc836b023778a616",
+    "1.2.0": "dbe3ab82e4d3f8980adb55b1dcad1389066664a6807881a7a2f1090419b2a964"
   }
 }

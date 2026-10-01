@@ -313,7 +313,8 @@ func TestTheCapIsWhatStopsAResumableStopThatKeepsChangingTheTree(t *testing.T) {
 func TestOnlyTheStopsThatNeedNobodyAreResumable(t *testing.T) {
 	t.Parallel()
 	for _, reason := range []string{RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient,
-		RefusedCloseoutOverRedCI, RefusedCloseoutCIPending, RefusedCloseoutCIAbsent, RefusedLandCIPending, RefusedClaimHolderUnknown} {
+		RefusedCloseoutOverRedCI, RefusedCloseoutCIPending, RefusedCloseoutCIAbsent, RefusedLandCIPending, RefusedClaimHolderUnknown,
+		StoppedRemoteTokenRefused, RefusedFoldReplan} {
 		if !resumesWithoutAPerson(reason) {
 			t.Errorf("%s is resumable by construction and the supervisor refuses to continue across it", reason)
 		}
@@ -395,12 +396,21 @@ func TestARefusedHTTPSTokenPushIsANamedStopNotAnUnclassifiedOne(t *testing.T) {
 	err = fmt.Errorf("record the gate's evidence for t1: %w", err)
 
 	reason := errorStopReason(err)
-	if reason != StoppedRemoteAuthRefused {
-		t.Fatalf("a refused https token push is stop %q, want %q", reason, StoppedRemoteAuthRefused)
+	if reason != StoppedRemoteTokenRefused {
+		t.Fatalf("a refused https token push is stop %q, want %q", reason, StoppedRemoteTokenRefused)
 	}
-	stop := supervisedStop{Reason: reason, Message: err.Error(), Tree: treeUnreadable}
+	stop := supervisedStop{Reason: reason, Message: err.Error(), Tree: "tree-1"}
+	// Resumable (epic hn6's cloud run, 2026-09-30: every refused App token
+	// went through on a later attempt) — and bounded: the same refusal over
+	// an unchanged tree is a spin, and it halts with the remedy in the line.
+	if halt := haltReason(stop, supervisedStop{}, 0, 3); halt != "" {
+		t.Errorf("a refused App token halted the run on its first stop: %s", halt)
+	}
+	if halt := haltReason(stop, stop, 1, 3); halt == "" {
+		t.Error("the same refused token over an unchanged tree was continued again: that is a spin")
+	}
 	line := reasonOf(stop) + detailOf(stop)
-	for _, want := range []string{StoppedRemoteAuthRefused, "workflows: write", "contents: write",
+	for _, want := range []string{StoppedRemoteTokenRefused, runstate.RemoteAuthRefusedClass, "workflows: write", "contents: write",
 		"credential helper", "denied to example-app[bot]"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("the halt line does not say %q: %s", want, line)

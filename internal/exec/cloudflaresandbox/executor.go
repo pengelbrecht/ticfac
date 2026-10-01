@@ -13,6 +13,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
+	"github.com/pengelbrecht/ticfac/internal/sandboximage"
 )
 
 // The executor: start and inspect over the door, collect from git (the
@@ -97,6 +98,12 @@ type Options struct {
 	// the prompt whose digest the reconciler's marker records is the prompt
 	// that reached the worker. Required: the door refuses a start without one.
 	Prompt string
+
+	// WorkBaseSHA is, for a CARRIED dispatch, the base the carried work was
+	// cut from (reconcile.Dispatch.WorkBaseSHA), carried through the door as
+	// `work_base_sha` so the worker's container can see carried work it added
+	// nothing to. Empty for a dispatch that carries nothing.
+	WorkBaseSHA string
 
 	// Repo is the ORCHESTRATOR'S OWN CHECKOUT of the project the worker
 	// pushed to — the clone the reconciler runs in. It is not among the
@@ -312,6 +319,7 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		Harness:     e.opts.Harness,
 		Prompt:      e.opts.Prompt,
 		WallSeconds: spec.Limits.WallSeconds,
+		WorkBaseSHA: e.opts.WorkBaseSHA,
 	}
 	if err := validateDoorFields(req); err != nil {
 		return nil, err
@@ -549,6 +557,73 @@ func (e *Executor) ReattachSettled(spec *subprocess.JobSpec) (*subprocess.JobHan
 	return handleFor(record), nil
 }
 
+// AdoptSettledElsewhere describes ANOTHER run's settled attempt as this run's
+// attempt `spec`, so the reconciler's collect can rule on the work it left.
+// It never boots anything and never asks the door, which answers only for the
+// credential's own run: the settlement comes in as evidence the caller read
+// from the factory's record, and Inspect answers from it.
+//
+// It is the cross-run half of ReattachSettled (hn6's ltg): run_911b's worker
+// settled succeeded with its work on `tick/hn6/attempt-4/ltg`, the run died
+// before collecting it, and the run that took its claim over dispatched a
+// fresh worker over finished work. The record names that attempt's landing
+// branch and base — the spec is cut at it — and the other run's id, so the
+// collect's per-run fallback (`…-<run id>`) is that run's too.
+func (e *Executor) AdoptSettledElsewhere(spec *subprocess.JobSpec, runID, jobID string, attempt int, branch, evidence string) (*subprocess.JobHandle, error) {
+	if err := spec.Validate(); err != nil {
+		return nil, err
+	}
+	if runID == "" || jobID == "" || attempt < 1 || branch == "" {
+		return nil, fmt.Errorf("a settled attempt of another run is addressed by its run, job, attempt and landing "+
+			"branch; got run %q, job %q, attempt %d, branch %q", runID, jobID, attempt, branch)
+	}
+	dir := e.stateDirFor(spec.JobID, e.opts.Attempt)
+	st := e.storeAt(dir)
+	if st.exists(fileAttempt) {
+		record, err := st.readAttempt()
+		if err != nil {
+			return nil, refuse(subprocess.RefusedUnknown,
+				"the attempt record at %s cannot be read (%v): this attempt is held for a person", dir, err)
+		}
+		if record.SettledElsewhere == nil || record.SettledElsewhere.JobID != jobID {
+			return nil, refuse(subprocess.RefusedLive,
+				"the attempt record at %s is %s's, not a ruling on %s: nothing is re-described over it",
+				dir, record.JobID, jobID)
+		}
+		return handleFor(record), nil
+	}
+	record := &attemptRecord{
+		SchemaVersion: stateSchemaVersion,
+		JobID:         spec.JobID,
+		Attempt:       e.opts.Attempt,
+		TickID:        tickOf(spec),
+		State:         dir,
+		BaseSHA:       spec.Source.BaseSHA,
+		Branch:        branch,
+		WriteRef:      spec.Source.WriteRef,
+		Detail: fmt.Sprintf("rules on run %s's attempt %d (%s), which settled succeeded before that run ended: %s",
+			runID, attempt, jobID, evidence),
+		// The run whose container pushed the branch: the collect's per-run
+		// landing fallback is spelled with it.
+		RunID:   runID,
+		EpicID:  e.opts.EpicID,
+		Role:    spec.Role,
+		BaseRef: e.opts.BaseRef,
+		Title:   e.opts.Title,
+		Model:   e.opts.Model,
+		Harness: e.opts.Harness,
+		Adopted: true,
+		Spec:    spec,
+		SettledElsewhere: &settledElsewhere{RunID: runID, JobID: jobID, Attempt: attempt,
+			State: subprocess.StateSucceeded, Evidence: evidence},
+		IssuedAt: e.stamp(),
+	}
+	if err := st.writeAttempt(record); err != nil {
+		return nil, err
+	}
+	return handleFor(record), nil
+}
+
 // attemptOwnJobID is the job id of an attempt's own job — the door's
 // attemptJobID (cloudflare/src/sandbox-executor.ts) and the reconciler's,
 // one spelling: `run-<run>/tick-<tick>/attempt-<n>`.
@@ -593,6 +668,17 @@ func (e *Executor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.
 		return nil, fmt.Errorf("handle carries attempt %d: the door addresses an attempt by a positive integer", h.Attempt)
 	}
 	full, record, resolveErr := payload.resolved()
+	// Another run's settled attempt this run's attempt rules on: the door
+	// answers only for its own run, and the settlement is already recorded.
+	if record != nil && record.SettledElsewhere != nil {
+		return &subprocess.JobStatus{
+			SchemaVersion: subprocess.SchemaVersion,
+			JobID:         h.JobID,
+			State:         record.SettledElsewhere.State,
+			Terminal:      true,
+			ObservedAt:    e.stamp(),
+		}, nil
+	}
 	tickID := full.TickID
 	if tickID == "" {
 		if resolveErr != nil {
@@ -618,9 +704,27 @@ func (e *Executor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.
 		return nil, fmt.Errorf("the door answered for %s, not %s: the credential names a run this handle does not",
 			status.JobID, want)
 	}
+	// A container that could not check out its start commit (the commit is
+	// not on origin) is marked in the attempt's state before the exit is
+	// named, so the collect that follows says so rather than reading the
+	// empty landing branch as a job that answered nothing (epic hn6,
+	// run_09ebaf29). Best effort: the observation carries the same fact.
+	if payload.State != "" && exitedWith(status, sandboximage.ExitStartUnpublished) {
+		_ = e.storeAt(payload.State).writeJSON(fileStartUnpublished, map[string]any{
+			"observed_at": status.ObservedAt, "exit_code": sandboximage.ExitStartUnpublished,
+		})
+	}
 	nameExitClasses(status)
 	return status, nil
 }
+
+// ChecksOutFromOrigin says this executor's jobs run off a checkout of the
+// REMOTE, never of the orchestrator's own repository: the container clones
+// origin at the dispatched start commit, so a commit only the orchestrator's
+// clone holds is one it cannot start from (epic hn6, run_09ebaf29). The
+// reconciler asks, and publishes every start commit before it dispatches here
+// (reconcile.RemoteCheckout).
+func (e *Executor) ChecksOutFromOrigin() bool { return true }
 
 // ------------------------------------- the operations decided elsewhere ---
 

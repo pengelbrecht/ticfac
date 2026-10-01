@@ -49,8 +49,10 @@ import {
   insertRun,
   insertRunImage,
   listRuns,
+  listSettledSandboxAttempts,
   type Run,
   type RunProgressRecord,
+  type SettledSandboxAttempt,
   updateRunState,
 } from "./db";
 import { modelRoutingComplaint, revokeRunTokens } from "./gateway";
@@ -1163,6 +1165,15 @@ export type RunStatus = {
    * shape being called `completed` that this exists to make visible (tick ehy).
    */
   progress: RunProgressRecord | null;
+  /**
+   * The run's attempts whose own worker container the factory recorded
+   * SETTLED (migration 0019), with the exit code. A run that takes over this
+   * run's claim once it has ended reads it to tell finished work from work
+   * cut off mid-flight: an attempt that settled with exit 0 is collected and
+   * ruled on as it stands, never redone by a fresh worker (hn6's ltg, whose
+   * run died after its worker had finished).
+   */
+  settled_attempts: SettledSandboxAttempt[];
 };
 
 /** Everything `tk cloud status <run>` shows: index row, Workflow step state, lease, gates, queue. */
@@ -1171,13 +1182,14 @@ export async function runStatus(env: Env, runID: string): Promise<RunStatus | nu
   if (run === null) return null;
 
   const room = roomFor(env, run.project);
-  const [lease, queued, gates, stop, image, progress] = await Promise.all([
+  const [lease, queued, gates, stop, image, progress, settled] = await Promise.all([
     room.leaseStatus(),
     room.listQueuedSubmissions(),
     room.listQuestions(),
     room.stopRequest(runID),
     getRunImage(env.DB, runID),
     getRunProgress(env.DB, runID),
+    listSettledSandboxAttempts(env.DB, runID),
   ]);
 
   return {
@@ -1189,6 +1201,7 @@ export async function runStatus(env: Env, runID: string): Promise<RunStatus | nu
     stop,
     image,
     progress,
+    settled_attempts: settled,
   };
 }
 

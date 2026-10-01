@@ -2,6 +2,7 @@ package runstate
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -63,7 +64,13 @@ const (
 // retries, inside the transient bound's backoff. A real credential problem
 // costs the run a few seconds more than it used to; a blip in front of a
 // working key no longer costs it a person.
-const AuthRefusalAttempts = 3
+//
+// Four, not three (epic hn6's cloud run, 2026-09-30): the per-run GitHub App
+// token was refused twice running at 12:11 and again at 13:23, and both times
+// the third attempt went through — one attempt from the bound, with the whole
+// boot riding on it. The fourth costs eight seconds more on a key that is
+// really wrong.
+const AuthRefusalAttempts = 4
 
 // RemoteAuthRefusedClass is the class's name as a run's stop reason and in
 // the refusal's own text, so a reader and a switch statement see one word.
@@ -273,11 +280,22 @@ func ClassifyRemote(err error) RemoteClass {
 		return RemoteAuthRefused
 	case containsAny(text, deniedMarkers):
 		return RemoteTerminal
-	case containsAny(text, transientMarkers):
+	case containsAny(text, transientMarkers), remoteRefFailed.MatchString(text):
 		return RemoteTransient
 	}
 	return RemoteUnclassified
 }
+
+// remoteRefFailed is a remote that took a push and then failed to move the
+// ref, saying no more than that: "! [remote rejected] <sha> -> <ref> (failed)"
+// (or "(failure)"), with no hook, no protection rule and no lease named.
+// Epic hn6's cloud run (2026-09-30) lost its first orchestrator boot to
+// exactly this on a claim push — "a stop this run has no classification for"
+// — and the next boot's identical push went through. The ref did not move,
+// the push is lease-protected, and a hook that declined or a lease that was
+// stale says so in the parentheses, which is why only these two bare words
+// match.
+var remoteRefFailed = regexp.MustCompile(`\[remote rejected\][^\n]*\((failed|failure)\)`)
 
 func containsAny(text string, markers []string) bool {
 	for _, marker := range markers {

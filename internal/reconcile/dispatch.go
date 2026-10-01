@@ -18,6 +18,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runprogress"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/sandboximage"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -129,6 +130,12 @@ type attemptHandle struct {
 	// (takeover.go): the run, and the evidence it was read as ended on. Null
 	// when the dispatch took nothing over.
 	TakenOver *takenOver `json:"taken_over"`
+
+	// CollectedFrom says this attempt started NO worker: it is the ruling on
+	// another run's attempt that settled succeeded before that run ended
+	// (takeover.go, hn6's ltg). Null for every attempt that ran a worker of
+	// its own.
+	CollectedFrom *collectedFrom `json:"collected_from"`
 }
 
 // resumedFrom is one dispatch's answer to "this work came from a released
@@ -168,6 +175,9 @@ func (a attemptHandle) asMap() map[string]any {
 		// The claim this dispatch took over from a run that ended, null when
 		// it took none (takeover.go).
 		"taken_over": a.TakenOver,
+		// The settled attempt of a run that ended this attempt rules on
+		// instead of running a worker, null when it ran one (takeover.go).
+		"collected_from": a.CollectedFrom,
 		// The backstop the attempt was issued (tick wv2): what an adopting
 		// run measures it against.
 		"wall_seconds": a.WallSeconds,
@@ -246,6 +256,21 @@ func handleFromMap(raw map[string]any) attemptHandle {
 		taken.RunID, _ = fields["run_id"].(string)
 		taken.Evidence, _ = fields["evidence"].(string)
 	}
+	var collected *collectedFrom
+	if fields, ok := raw["collected_from"].(map[string]any); ok {
+		collected = &collectedFrom{}
+		collected.RunID, _ = fields["run_id"].(string)
+		collected.JobID, _ = fields["job_id"].(string)
+		switch value := fields["attempt"].(type) {
+		case float64:
+			collected.Attempt = int(value)
+		case int:
+			collected.Attempt = value
+		}
+		collected.WriteRef, _ = fields["write_ref"].(string)
+		collected.SHA, _ = fields["sha"].(string)
+		collected.Evidence, _ = fields["evidence"].(string)
+	}
 	wall := 0
 	switch value := raw["wall_seconds"].(type) {
 	case float64:
@@ -265,6 +290,7 @@ func handleFromMap(raw map[string]any) attemptHandle {
 		Touch:                  touch,
 		ResumedFrom:            resumed,
 		TakenOver:              taken,
+		CollectedFrom:          collected,
 	}
 }
 
@@ -827,6 +853,10 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	}
 
 	number := nextAttemptNumber(attempts)
+	// settled is the taken-over work this dispatch rules on instead of
+	// running a worker, asked once of the first executor built for it.
+	var settled *collectedFrom
+	probedSettled := false
 	for conflicts := 0; conflicts < maxDispatchConflicts; conflicts++ {
 		// The tick's own try for this dispatch (tick vw0): the same number the
 		// feed lines say, computed once here so the dispatch, the marker and
@@ -852,6 +882,21 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		}
 		dispatch.Substrate = substrate
 		marker.SubstrateProtocol, marker.SubstrateServerVersion = substrate.Protocol, substrate.ServerVersion
+
+		// The work a takeover carries may be FINISHED (takeover.go, hn6's
+		// ltg): the dead run's worker settled succeeded, as its host
+		// recorded, and the run died before it collected it. Then this
+		// attempt starts no worker — it is cut at that attempt's own base
+		// and rules on its work, and only a rejection dispatches a worker.
+		if taken != nil && carry != nil && carry.runID != "" && !probedSettled {
+			probedSettled = true
+			settled = r.settledElsewhere(ctx, executor, dispatch, carry)
+		}
+		if settled != nil {
+			dispatch.BaseSHA, marker.BaseSHA = carry.marker.BaseSHA, carry.marker.BaseSHA
+			dispatch.ResumedFrom, marker.ResumedFrom = nil, nil
+			marker.CollectedFrom = settled
+		}
 
 		r.setTick(tick, "ready")
 		if _, err := r.checkpoint(runstate.StateDispatching, fmt.Sprintf("dispatching %s as attempt %d", tick, number)); err != nil {
@@ -957,6 +1002,30 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 					"continues that work rather than redoing it, and the gate still decides what merges",
 				attemptLabel(tick, try, number), from,
 				branchOf(marker.ResumedFrom.WriteRef), marker.ResumedFrom.ReleasedBy)
+		}
+
+		if marker.CollectedFrom != nil {
+			// No worker: the handle addresses the settled work, and the
+			// window's collect rules on it like any attempt's.
+			handle, err := r.settledHandle(executor, dispatch, marker)
+			if err != nil {
+				return nil, nil, marker, r.startFailure(tick, err)
+			}
+			from := marker.CollectedFrom
+			r.noteAlive(dispatch.JobID)
+			r.setTick(tick, "dispatched")
+			r.record(tick, StageSettledWorkCollected,
+				"%s starts no worker: run %s's attempt %d of %s had already FINISHED (%s) with its work on %s at %s "+
+					"when that run ended, so it is collected and ruled on as it stands — report, boundary and gate — "+
+					"and a worker is dispatched only if that verdict rejects it",
+				attemptLabel(tick, try, number), from.RunID, from.Attempt, tick, from.Evidence,
+				branchOf(from.WriteRef), short(from.SHA))
+			if _, err := r.checkpoint(runstate.StateRunning,
+				fmt.Sprintf("%s is collected as attempt %d from run %s's settled attempt %d", tick, number,
+					from.RunID, from.Attempt)); err != nil {
+				return nil, nil, marker, err
+			}
+			return handle, executor, marker, nil
 		}
 
 		handle, err := r.startWithRoom(executor, tick, r.jobSpec(dispatch))
@@ -1669,7 +1738,26 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 	// malformed labels were already refused at admission, so what is left
 	// here is only the parsed list the merge holds the worker to.
 	marker.Touch, _ = parseTouchLabels(entry.TickID, entry.Labels)
+	dispatch.WorkBaseSHA = r.dispatchWorkBase(marker)
 	return dispatch, marker, nil
+}
+
+// dispatchWorkBase is the base a CARRIED dispatch's work is measured from —
+// the base the original released attempt was cut from — for an executor
+// whose worker counts its own work (Dispatch.WorkBaseSHA). Empty for a
+// dispatch that carries nothing, and when the base cannot be read: the worker
+// then counts as it always did, and the collect (deliverCarriedWork), which
+// reads the same base itself, still decides. A base equal to the dispatched
+// one carries nothing to measure and is not passed.
+func (r *Reconciler) dispatchWorkBase(marker attemptHandle) string {
+	if marker.ResumedFrom == nil {
+		return ""
+	}
+	base, err := r.carriedBase(marker)
+	if err != nil || base == marker.BaseSHA {
+		return ""
+	}
+	return base
 }
 
 // attemptWriteRef is the ref ONE attempt of one tick may write, in SPEC
@@ -1796,6 +1884,19 @@ func (r *Reconciler) adopt(ctx context.Context, marker attemptHandle) (*subproce
 	executor, _, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
 		return nil, nil, fmt.Errorf("build the executor for %s: %w", marker.TickID, err)
+	}
+	// An attempt that rules on another run's SETTLED work (takeover.go) never
+	// had a worker to start: it is re-addressed where that work is, on every
+	// resume, whatever this host's state holds for it.
+	if marker.CollectedFrom != nil {
+		_ = r.replayClaim(ctx, marker.TickID)
+		handle, err := r.settledHandle(executor, dispatch, marker)
+		if err != nil {
+			return nil, nil, r.startFailure(marker.TickID, err)
+		}
+		r.noteAlive(marker.JobID)
+		r.setTick(marker.TickID, "dispatched")
+		return handle, executor, nil
 	}
 	// The marker and the claim are two effects, in that order, and adopting is
 	// what happens when a reconciler died between them — or when the tracker
@@ -1992,6 +2093,10 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 	// a later record of the same dispatch — a finding draft, a settle — says
 	// what the DISPATCH resumed from, never what this incarnation would.
 	dispatch.ResumedFrom = marker.ResumedFrom
+	// And the carried work's base, re-derived from the same marker chain: a
+	// dispatch rebuilt from its marker can still START the attempt, and the
+	// worker it boots needs it exactly as the first dispatch's would have.
+	dispatch.WorkBaseSHA = r.dispatchWorkBase(marker)
 	// The reports of the tick's earlier attempts (tick nvn) are re-derived
 	// rather than carried, because a dispatch rebuilt from the marker can
 	// still START the attempt — the marker landed, and nothing did — and the
@@ -2492,6 +2597,10 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 				status.State, overran.Round(time.Second), r.wallOf(marker), lastObservation(status))
 			return status, nil
 		}
+		if line := r.carriedNoWorkSettle(marker, status); line != "" {
+			r.record(marker.TickID, StageWaiting, "%s", line)
+			return status, nil
+		}
 		if status.State != subprocess.StateSucceeded && len(status.Observations) > 0 {
 			// A failure's settle line carries the executor's last word — for a
 			// sandbox worker, its exit code and what the code means (epic hn6:
@@ -2614,6 +2723,46 @@ func (r *Reconciler) announceNudges(tick string, status *subprocess.JobStatus) {
 // only party that can see the substrate, and its observations are how it says
 // what it saw — "the interrupt was delivered but the agent has not exited" is
 // a different first move from "the supervisor is gone".
+// noWorkExit is the sandbox worker image's no-work exit as the executor's
+// settle observation spells it ("… exited 10 (…)").
+var noWorkExit = regexp.MustCompile(`\bexited ` + strconv.Itoa(sandboximage.ExitWorkerNoWork) + `\b`)
+
+// carriedNoWorkSettle is the settle line for a CARRIED attempt whose worker
+// container settled on its no-work exit, or "" for any other settle.
+//
+// The container counts its work commits from the base it was booted at, and a
+// carried attempt is booted AT the carried head (planDispatch): a worker that
+// finds the carried work complete and correctly adds nothing exits "no work
+// commits", and the door settles it failed. That is true of the worker and
+// false of the attempt — the collect delivers the carried work
+// (deliverCarriedWork) and the gate decides. Epic hn6, run_3f034e68: 7uv and
+// 378 each read "settled as failed" and were then delivered and merged, and
+// the settle line was the one a person took for two finished ticks lost.
+func (r *Reconciler) carriedNoWorkSettle(marker attemptHandle, status *subprocess.JobStatus) string {
+	if marker.ResumedFrom == nil || status == nil || status.State != subprocess.StateFailed {
+		return ""
+	}
+	last := lastObservation(status)
+	if !noWorkExit.MatchString(last) {
+		return ""
+	}
+	return fmt.Sprintf("settled with no commit of its own on the work it was carried from (%s): that is the "+
+		"worker's no-work exit, not a failed attempt — the work %s left on %s is this attempt's delivery, "+
+		"which the collect measures from the base that work was cut from, and the gate still decides what merges",
+		last, r.carriedFromName(marker), branchOf(marker.ResumedFrom.WriteRef))
+}
+
+// carriedFromName names the attempt a carried attempt continues: this run's
+// own name for it, or — for a claim taken over from another run — that run's
+// attempt, whose number in this run names a different attempt.
+func (r *Reconciler) carriedFromName(marker attemptHandle) string {
+	from := marker.ResumedFrom
+	if from.RunID != "" && from.RunID != r.runID {
+		return fmt.Sprintf("run %s's attempt %d of %s", from.RunID, from.Attempt, from.TickID)
+	}
+	return r.attemptName(from.TickID, from.Attempt)
+}
+
 func lastObservation(status *subprocess.JobStatus) string {
 	if status == nil || len(status.Observations) == 0 {
 		return "the executor recorded no observation about it"
@@ -2896,7 +3045,7 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	if _, err := r.checkpoint(runstate.StateCollecting, fmt.Sprintf("collecting %s attempt %d", marker.TickID, marker.Attempt)); err != nil {
 		return nil, err
 	}
-	collected, err := executor.CollectDetail(handle)
+	collected, err := r.collectDetail(executor, handle, marker.TickID)
 	if err != nil {
 		return nil, fmt.Errorf("collect %s: %w", marker.TickID, err)
 	}
@@ -3160,7 +3309,7 @@ func (r *Reconciler) deliverCarriedWork(marker attemptHandle, collected *subproc
 		"%s added no commit to the work it was carried from, so it delivers that work: %d commit(s) from %s to "+
 			"the carried head %s, measured from the base %s was cut from",
 		r.attemptName(marker.TickID, marker.Attempt), commits, short(base), short(carried),
-		r.attemptName(marker.ResumedFrom.TickID, marker.ResumedFrom.Attempt))
+		r.carriedFromName(marker))
 	return &delivered
 }
 

@@ -132,6 +132,68 @@ printf 'exit=%s\n' "$?" >>"$TICKS_TEST_TK_ATTEMPT"`)
 	}
 }
 
+// READING the tracker is not a violation (epic hn6, run_3f034e68). 7uv's
+// report listed some seventy "the agent ran `tk version --json`" lines under
+// BOUNDARY VIOLATION ATTEMPTED — every one of them the startup probe of
+// ticfac's own tk client (internal/tk NewContext), run by the repository's
+// tests while the worker ran `make gate`. The shim refused them, so those
+// tests also ran against a tk that does not answer. A read (version, show,
+// list, …) passes through to the real tk and is not reported; so does any tk
+// call made against a tracker that is not this checkout's — a test fixture's
+// temporary repository — because the guard exists for the orchestrator's
+// tracker state, not for every repository on the machine.
+func TestWorkerPassesTrackerReadsThroughAndDoesNotReportThem(t *testing.T) {
+	f := newWorkerFixture(t)
+	attempt := filepath.Join(f.root, "tk-read")
+	f.env["TICKS_TEST_TK_ATTEMPT"] = attempt
+	fixture := filepath.Join(f.root, "fixture-repo")
+	f.env["TICKS_TEST_FIXTURE_REPO"] = fixture
+	workerAgent(f, `bash -c 'tk version --json; tk show "$TICKS_TICK" --json; tk list --all --json' >"$TICKS_TEST_TK_ATTEMPT" 2>&1
+printf 'exit=%s\n' "$?" >>"$TICKS_TEST_TK_ATTEMPT"
+mkdir -p "$TICKS_TEST_FIXTURE_REPO" && git -C "$TICKS_TEST_FIXTURE_REPO" init -q
+( cd "$TICKS_TEST_FIXTURE_REPO" && tk close fixture-tick ) >>"$TICKS_TEST_TK_ATTEMPT" 2>&1
+printf 'fixture-exit=%s\n' "$?" >>"$TICKS_TEST_TK_ATTEMPT"`)
+
+	out, code := f.run()
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	got, err := os.ReadFile(attempt)
+	if err != nil {
+		t.Fatalf("the agent never ran tk: %v\n%s", err, out)
+	}
+	mustContain(t, string(got), "tk 0.31.0", "the real tk answering the version read")
+	mustContain(t, string(got), "exit=0", "the reads succeeding")
+	mustContain(t, string(got), "fixture-exit=0", "a write to a tracker that is not the checkout's succeeding")
+	if strings.Contains(string(got), WorkerTkDeniedMessage) {
+		t.Errorf("a read or a fixture's write was refused:\n%s", got)
+	}
+	report := f.reportOnOrigin(WorkerBranch(f.epic, f.tick))
+	if strings.Contains(report, WorkerBoundaryReportMarker) {
+		t.Errorf("reads and a fixture's write were reported as a boundary violation:\n%s", report)
+	}
+}
+
+// A violation repeated is one fact with a count, not a wall of identical
+// lines burying the one that differs.
+func TestWorkerReportsARepeatedViolationOnce(t *testing.T) {
+	f := newWorkerFixture(t)
+	workerAgent(f, `for i in 1 2 3; do tk close "$TICKS_TICK" >/dev/null 2>&1; done
+tk note "$TICKS_TICK" hello >/dev/null 2>&1`)
+
+	out, code := f.run()
+	if code != 0 {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	report := f.reportOnOrigin(WorkerBranch(f.epic, f.tick))
+	mustContain(t, report, WorkerBoundaryReportMarker, "the attempt reaching a human")
+	if n := strings.Count(report, "tk close "+f.tick); n != 1 {
+		t.Errorf("the repeated `tk close` is listed %d times, want once with a count:\n%s", n, report)
+	}
+	mustContain(t, report, "(3 times)", "the count of the repeated call")
+	mustContain(t, report, "tk note "+f.tick+" hello", "the call that differs")
+}
+
 // --------------------------------------------------------------- the hook ---
 
 // The shim closes the route the observed agent took. It does not close a

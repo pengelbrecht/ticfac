@@ -60,8 +60,11 @@ func TestABaseFoldResolveThatExitsWithoutAReportIsRetriedFromItsResolution(t *te
 	}
 }
 
-// Fold resolves that never answer are bounded: 1+maxOperationalRetries starts,
-// then the stop naming every job.
+// Fold resolves that never answer are bounded: 1+maxOperationalRetries starts
+// at run start — and then NOT the stop (epic hn6, run_09ebaf29): the fold is
+// deferred, the run works every tick on the unfolded branch, and retries the
+// fold once they are closed with a fresh allowance of the same bound. Only a
+// fold that still does not land then is the stop, naming every job.
 //
 // serial: t.Setenv, as above.
 func TestBaseFoldResolvesThatNeverAnswerAreBoundedAndTheStopNamesEveryOne(t *testing.T) {
@@ -70,19 +73,32 @@ func TestBaseFoldResolvesThatNeverAnswerAreBoundedAndTheStopNamesEveryOne(t *tes
 	f := newFixture(t, opts)
 	baseFoldConflict(t, f)
 
-	_, result, err := f.run(f.Repo, opts)
+	r, result, err := f.run(f.Repo, opts)
 	if err != nil {
 		t.Fatalf("the run did not finish: %v", err)
 	}
 	if result.State != runstate.StateFailed || result.Failure == nil || result.Failure.Reason != RefusedBaseRefresh {
 		t.Fatalf("the run ended %s (%+v), want the %s stop", result.State, result.Failure, RefusedBaseRefresh)
 	}
-	starts := resolveStartsIn(t, filepath.Join(os.Getenv("CONFLICT_SYNC"), "resolve.starts"))
-	if len(starts) != 1+maxOperationalRetries {
-		t.Fatalf("the run started %d fold resolves (%v), want %d", len(starts), starts, 1+maxOperationalRetries)
+	if len(result.Closed) == 0 {
+		t.Error("the run closed no tick: a fold that did not land at run start halted the run instead of being deferred")
 	}
-	for _, want := range []string{"deps.txt", "failed without delivering a resolution",
-		"base-fold-1-", "base-fold-2-", "base-fold-3-"} {
+	deferred := false
+	for _, event := range r.Journal() {
+		if event.Stage == StageRefreshDeferred {
+			deferred = true
+		}
+	}
+	if !deferred {
+		t.Errorf("the feed never says the fold was deferred (%s)", StageRefreshDeferred)
+	}
+	starts := resolveStartsIn(t, filepath.Join(os.Getenv("CONFLICT_SYNC"), "resolve.starts"))
+	if len(starts) != 2*(1+maxOperationalRetries) {
+		t.Fatalf("the run started %d fold resolves (%v), want %d at run start and %d more on the retry",
+			len(starts), starts, 1+maxOperationalRetries, 1+maxOperationalRetries)
+	}
+	for _, want := range []string{"deps.txt", "failed without delivering a resolution", "still does not land",
+		"base-fold-4-", "base-fold-5-", "base-fold-6-"} {
 		if !strings.Contains(result.Failure.Message, want) {
 			t.Errorf("the stop does not name %q: %s", want, result.Failure.Message)
 		}

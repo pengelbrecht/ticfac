@@ -273,6 +273,68 @@ export async function relayedEnd(
   return segmentEnd(last, 0);
 }
 
+/** The reconciler's stage for its supervisor declining to continue the run. */
+export const STAGE_SUPERVISION_HALTED = "supervision_halted" as const;
+
+/** How much of a halt's reason the Workflow quotes. */
+const HALT_DETAIL_MAX = 600;
+
+/**
+ * Whether boot `boot`'s orchestrator HALTED — its supervisor recorded a
+ * supervision_halted line in the feed it relayed — and the halt's reason
+ * (bounded) if it did; null when it did not, or when nothing can be read.
+ *
+ * An orchestrator that exits after that line exited because it decided to,
+ * and a reboot would only re-derive the stop it already made (epic hn6's
+ * cloud run: two boots spent that way). The relay drains before the process
+ * exits, so a halt is in R2 by the time the exit is observed.
+ */
+export async function supervisionHaltOf(
+  bucket: R2Bucket | undefined | null,
+  project: string,
+  runID: string,
+  boot: number,
+): Promise<string | null> {
+  if (bucket === undefined || bucket === null) return null;
+  try {
+    const prefix = relayFeedPrefix(project, runID, boot, "feed");
+    const keys: string[] = [];
+    let cursor: string | undefined;
+    for (;;) {
+      const page: R2Objects = await bucket.list({
+        prefix,
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      keys.push(...page.objects.map((object) => object.key));
+      if (!page.truncated) break;
+      cursor = page.cursor;
+    }
+    keys.sort();
+    let halt: string | null = null;
+    for (const key of keys) {
+      const object = await bucket.get(key);
+      if (object === null) continue;
+      for (const line of (await object.text()).split("\n")) {
+        if (!line.includes(STAGE_SUPERVISION_HALTED)) continue;
+        try {
+          const event = JSON.parse(line) as { stage?: unknown; detail?: unknown };
+          if (event.stage === STAGE_SUPERVISION_HALTED && typeof event.detail === "string") {
+            halt = event.detail.split("\n")[0]!.slice(0, HALT_DETAIL_MAX);
+          }
+        } catch {
+          // A line that is not JSON says nothing about a halt.
+        }
+      }
+    }
+    return halt;
+  } catch (error) {
+    console.error(
+      `factory feed-relay: ${runID} could not read boot ${boot}'s relayed feed for a halt: ${String(error)}`,
+    );
+    return null;
+  }
+}
+
 function segmentEnd(object: R2Object, fallback: number): number {
   const end = Number(object.customMetadata?.end ?? Number.NaN);
   return Number.isSafeInteger(end) && end >= 0 ? end : fallback;
