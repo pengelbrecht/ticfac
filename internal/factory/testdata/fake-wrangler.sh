@@ -158,6 +158,10 @@ case "${1:-}" in
       exit 1
     fi
     cp wrangler.toml "$FAKE_WRANGLER_STATE/deployed-wrangler.toml"
+    # The docker the deploy handed wrangler (internal/factory/dockershim.go).
+    printf 'WRANGLER_DOCKER_BIN=%s\nTICFAC_DOCKER_BIN=%s\nTICFAC_WRANGLER_BIN=%s\n' \
+      "${WRANGLER_DOCKER_BIN:-}" "${TICFAC_DOCKER_BIN:-}" "${TICFAC_WRANGLER_BIN:-}" \
+      >"$FAKE_WRANGLER_STATE/deploy-docker-env"
     # The Docker build log wrangler prints first is full of sha256 digests that
     # are NOT the application's; the parser has to ignore them.
     echo "#4 [internal] load metadata for docker.io/cloudflare/sandbox:0.12.7-python"

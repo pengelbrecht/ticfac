@@ -283,6 +283,14 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 	}
 	fmt.Fprintf(out, "bundle %s (tk %s) staged in %s\n", shortSHA(BundleSHA()), opts.Version, bundleDir)
 
+	// Wrangler's docker is the bundle's shim from here on (dockershim.go):
+	// a fresh long-lived registry login before every push attempt.
+	shimEnv, err := dockerShimEnv(bundleDir, w)
+	if err != nil {
+		return nil, err
+	}
+	w.env = append(w.env, shimEnv...)
+
 	// The image's build context is staged at the repository-relative position
 	// the `[[containers]]` image path in the committed wrangler.toml names
 	// (`../image/Dockerfile`, true of the moved bundle at cloudflare and of
