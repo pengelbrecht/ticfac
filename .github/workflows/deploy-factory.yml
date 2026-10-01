@@ -118,8 +118,11 @@ jobs:
     # of up to 10 — up to 60 while the platform still reports the rollout in
     # progress and nothing shows it serving new instances yet, as when fresh
     # layers pull slowly: 23-48 minute rollouts on 2026-09-30). A slow push
-    # adds its retries. There is no wait for live runs (see "Live runs" below).
-    timeout-minutes: 110
+    # adds its retries, and so does a durable_object image Cloudflare has not
+    # prepared inside wrangler's 15 minutes (up to three `wrangler deploy`
+    # attempts; internal/factory/wrangler.go). There is no wait for live runs
+    # (see "Live runs" below).
+    timeout-minutes: 150
     concurrency:
       # One deploy at a time: two deploys racing one Cloudflare account is the
       # two-writers-one-name problem, and an upgrade must not cancel a deploy
