@@ -53,6 +53,25 @@ loud.
 
 ---
 
+## 1.2.2
+
+PATCH: two values in `status-model.json`'s `status_model_running_wave` golden,
+corrected to what the wave-2 pipeline derivation (tick 3gk) actually produces —
+the same fixture-drift class 1.1.1 removed from the `dashboard` golden, still
+live in the wave-1 golden (tick oro): nwj read state `closed` with a closed try
+beside an all-pending pipeline cell, and 6dh read state `dispatched` beside the
+same, where a dispatch marker alone makes claim done and work active. nwj's
+cell is now all four stages `done` and 6dh's is claim `done`, work `active`,
+gate and merged `pending`. The schema, the rules and every other byte are
+unchanged, and both corrected values remain schema-admitted. The agreement
+guard that 1.1.1's tick bound to the `dashboard` golden alone now reads every
+golden the contract carries, with the state agreements the two contradictions
+name (`TestEveryGoldenAgreesWithThePipelineDerivation`) — a golden is a
+rendering fixture, and no golden the contract carries is outside the rule that
+it states only values the derivation produces. No consumer has anything to do.
+
+---
+
 ## 1.2.1
 
 PATCH: the fold of tick 378's attempt into epic/hn6 — two parallel cuts

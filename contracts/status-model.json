@@ -671,10 +671,10 @@
               "title": "The command surface on cobra + fang",
               "state": "closed",
               "pipeline": [
-                { "stage": "claim", "state": "pending" },
-                { "stage": "work", "state": "pending" },
-                { "stage": "gate", "state": "pending" },
-                { "stage": "merged", "state": "pending" }
+                { "stage": "claim", "state": "done" },
+                { "stage": "work", "state": "done" },
+                { "stage": "gate", "state": "done" },
+                { "stage": "merged", "state": "done" }
               ],
               "parent_tick_id": null,
               "duration_seconds": null,
@@ -696,8 +696,8 @@
               "title": "ticfac status --json: one model of every run",
               "state": "dispatched",
               "pipeline": [
-                { "stage": "claim", "state": "pending" },
-                { "stage": "work", "state": "pending" },
+                { "stage": "claim", "state": "done" },
+                { "stage": "work", "state": "active" },
                 { "stage": "gate", "state": "pending" },
                 { "stage": "merged", "state": "pending" }
               ],

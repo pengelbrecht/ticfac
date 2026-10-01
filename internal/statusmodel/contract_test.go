@@ -2,14 +2,17 @@ package statusmodel
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
+	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/schema"
 )
 
@@ -228,7 +231,7 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 	// superseded by a live try, so the derivation states no next step anywhere
 	// in it — demanding one here would force the fixture back into the
 	// contradiction this tick removed. WHERE a next step may exist is pinned
-	// by TestTheDashboardGoldenAgreesWithThePipelineDerivation below.
+	// by TestEveryGoldenAgreesWithThePipelineDerivation below.
 	if !activityDrawn || !handleNamed {
 		t.Errorf("no worker carries activity buckets and a handle (activity=%v handle=%v): the workers panel's fixture is empty",
 			activityDrawn, handleNamed)
@@ -259,16 +262,21 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 		CostSourceDecisions, CostSourceWorkersAI, CostSourceClaude, CostSourcePiLocal, CostSourceOther)
 }
 
-// TestTheDashboardGoldenAgreesWithThePipelineDerivation: the golden is a
-// rendering fixture, not a Build output, so no suite derives it — the only
-// thing that keeps it saying what the wave-2 derivation (tick 3gk) actually
-// produces is the rule read back over it. Tick 378 found the gap: v7z's ci
-// cell read active beside the golden's own red CI, and 46x's superseded try
-// carried a next step, both values decorateTicks can never state — and the
-// wave-3 renderers and the phone page take this golden as THE shape fixture,
-// so the illustration and the model it illustrates disagreed, the exact
-// failure A5's one-model rule exists to prevent. Three agreements, each a
-// rule 3gk spelled:
+// TestEveryGoldenAgreesWithThePipelineDerivation: the goldens are rendering
+// fixtures, not Build outputs, so no suite derives them — the only thing that
+// keeps them saying what the wave-2 derivation (tick 3gk) actually produces
+// is the rule read back over them. Tick 378 found the gap in the dashboard
+// golden alone: v7z's ci cell read active beside the golden's own red CI, and
+// 46x's superseded try carried a next step. Tick oro found the same class
+// still live one golden over, in status_model_running_wave, which this guard
+// did not read: nwj read state "closed" with a closed try beside an
+// all-pending cell — the derivation makes a closed tick claim/work/gate/merged
+// all done — and 6dh read state "dispatched" beside the same, where a dispatch
+// marker alone makes claim done and work active. The guard is therefore EVERY
+// golden's, and the state agreements below are the ones those two
+// contradictions name. Each rule is faithful to the production code and reads
+// only what the golden document itself states — the cell, the tick's own
+// state, the try history, the feed tail the model carries:
 //
 //   - a cell is its role's own stage list, filled left to right — done
 //     stages first, at most one live stage, every stage behind the first
@@ -276,74 +284,213 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 //   - a closeout's ci stage says what the model's own CI answer makes the
 //     derivation say — a red CI is that stage's FAILURE, not its activity;
 //   - a try's next step exists only on the last try of a refusal, and a
-//     reason only on a refusal.
-func TestTheDashboardGoldenAgreesWithThePipelineDerivation(t *testing.T) {
+//     reason only on a refusal;
+//   - a claim is never a stage a run is in or fails at, and any try — one is
+//     cut per dispatch marker — makes it done;
+//   - a tick's own state pins its work, gate and end stages once a dispatch
+//     exists: a state that answers the work (reported, integrated, closed)
+//     makes work done and a closed or integrated one makes gate and end
+//     done, a dispatched state leaves work done-or-active, a reported
+//     current try makes its gate done where the cell's fill reaches it, and
+//     nothing dispatched leaves the gate pending;
+//   - a failed work stage names a refused current try nothing stands
+//     behind, and a done merged or closed stage names a tick the records
+//     closed (a role tick's close stays pending behind a mere integration).
+//
+// The rules read the RENDERED cell, and the fill can only ever downgrade a
+// stage to pending (pipelineCell): a rendered done, active or failed stage is
+// always the derivation's own answer, while a rendered pending one is the
+// answer OR the fill parking it — so the rules that DEMAND a value demand it
+// only where the fill provably reaches the stage (a try means the claim is
+// done; a work-answered state means the work stage is), and the rules that
+// FORBID a value forbid it wherever the cell shows it.
+func TestEveryGoldenAgreesWithThePipelineDerivation(t *testing.T) {
 	t.Parallel()
 	_, _, goldens := bundleFixture(t)
-	raw, ok := goldens[dashboardGoldenName]
-	if !ok {
-		t.Fatalf("the contract carries no golden named %q", dashboardGoldenName)
+	if len(goldens) == 0 {
+		t.Fatal("the contract carries no golden document")
 	}
-	var model Model
-	if err := json.Unmarshal(raw, &model); err != nil {
-		t.Fatalf("the dashboard golden does not decode into the Go Model: %v", err)
+	names := make([]string, 0, len(goldens))
+	for name := range goldens {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			var model Model
+			if err := json.Unmarshal(goldens[name], &model); err != nil {
+				t.Fatalf("the golden %s does not decode into the Go Model: %v", name, err)
+			}
+			for _, wave := range deref(model.Waves) {
+				for i := range wave.Ticks {
+					goldenTickAgreesWithTheDerivation(t, name, &model, wave.Ticks[i])
+				}
+			}
+		})
+	}
+}
+
+// goldenTickAgreesWithTheDerivation reads one golden tick back over the
+// pipeline derivation's rules. Every rule names the branch it mirrors
+// (pipeline.go), and every fact it reads is one the golden document itself
+// carries, so a rule fires only on a value the derivation can never produce.
+func goldenTickAgreesWithTheDerivation(t *testing.T, golden string, model *Model, tick Tick) {
+	t.Helper()
+	where := fmt.Sprintf("golden %s, tick %s", golden, tick.TickID)
+
+	if !stagesOf(tick.Pipeline, roleStages(tick.Role)) {
+		t.Errorf("%s's cell is %s, want the %v stages of its role",
+			where, cellOf(tick.Pipeline), roleStages(tick.Role))
+		return
+	}
+	filled, live := true, 0
+	for _, stage := range tick.Pipeline {
+		switch stage.State {
+		case StageStateDone:
+			if !filled {
+				t.Errorf("%s's cell is %s: %s is done behind a live stage",
+					where, cellOf(tick.Pipeline), stage.Stage)
+			}
+		case StageStateActive, StageStateFailed:
+			if !filled {
+				t.Errorf("%s's cell is %s: %s is live behind another live stage",
+					where, cellOf(tick.Pipeline), stage.Stage)
+			}
+			filled = false
+			live++
+		case StageStatePending:
+			filled = false
+		default:
+			t.Errorf("%s's %s stage carries the unknown state %q", where, stage.Stage, stage.State)
+		}
+	}
+	if live > 1 {
+		t.Errorf("%s's cell is %s: a tick is IN one stage, never %d",
+			where, cellOf(tick.Pipeline), live)
+	}
+	if ci := stageOf(tick.Pipeline, StageCI); ci != nil {
+		if want := goldenCIStateOf(*model, tick); ci.State != want {
+			ciAnswer := "absent"
+			if model.CI != nil {
+				ciAnswer = model.CI.State
+			}
+			t.Errorf("%s's ci stage is %s, want %s: the model's own CI answer is %q, and the cell and the PR cannot say two things about one another",
+				where, ci.State, want, ciAnswer)
+		}
+	}
+	for i := range tick.Tries {
+		try := &tick.Tries[i]
+		last := i == len(tick.Tries)-1
+		refused := try.Outcome == TryRejected || try.Outcome == TryGateFailed
+		if try.Reason != nil && !refused {
+			t.Errorf("%s's try %d closed as %s and still carries the reason %q: a reason is a refusal's own word",
+				where, try.Try, try.Outcome, *try.Reason)
+		}
+		if try.NextStep != nil && (!last || !refused) {
+			t.Errorf("%s's try %d (attempt %d, %s) carries the next step %q: the derivation states one on the last try of a refusal only",
+				where, try.Try, try.Attempt, try.Outcome, *try.NextStep)
+		}
 	}
 
-	for _, wave := range deref(model.Waves) {
-		for _, tick := range wave.Ticks {
-			if !stagesOf(tick.Pipeline, roleStages(tick.Role)) {
-				t.Errorf("%s's cell is %s, want the %v stages of its role",
-					tick.TickID, cellOf(tick.Pipeline), roleStages(tick.Role))
-				continue
+	// The state agreements (tick oro). current and currentTry are the
+	// derivation's own reading of the document — stageStateOf's: the
+	// checkpoint's attempt where the document names one, the try cut for it,
+	// and the standing worktree the workers panel carries.
+	hasTries := len(tick.Tries) > 0 // one try is cut per dispatch marker
+	current := 0
+	if tick.Attempt != nil {
+		current = *tick.Attempt
+	}
+	currentTry := tryOfAttempt(tick.Tries, current)
+	stands := goldenStandsFor(model, tick.TickID, current)
+
+	// claimState: done once any record states a dispatch — a marker (a try)
+	// or the claimed line; pending before that; never active or failed.
+	if claim := stageOf(tick.Pipeline, StageClaim); claim != nil {
+		if claim.State != StageStatePending && claim.State != StageStateDone {
+			t.Errorf("%s's claim stage is %s: claimState answers pending or done and nothing else — a claim is not a stage a run is in or fails at",
+				where, claim.State)
+		}
+		if hasTries && claim.State != StageStateDone {
+			t.Errorf("%s carries %d try(ies) and its claim stage is %s: a try is cut one per dispatch marker, and a dispatch marker alone makes the claim done",
+				where, len(tick.Tries), claim.State)
+		}
+	}
+	// workState — and a role tick's review, which is that role's work.
+	for _, stage := range tick.Pipeline {
+		if stage.Stage != StageWork && stage.Stage != StageReview {
+			continue
+		}
+		switch tick.State {
+		case tickReported, tickIntegrated, tickClosed:
+			if hasTries && stage.State != StageStateDone {
+				t.Errorf("%s's %s stage is %s, want done: the tick's own state is %q — a state that answers the work — and the dispatch the tries carry lets the cell's fill reach the stage",
+					where, stage.Stage, stage.State, tick.State)
 			}
-			filled, live := true, 0
-			for _, stage := range tick.Pipeline {
-				switch stage.State {
-				case StageStateDone:
-					if !filled {
-						t.Errorf("%s's cell is %s: %s is done behind a live stage",
-							tick.TickID, cellOf(tick.Pipeline), stage.Stage)
-					}
-				case StageStateActive, StageStateFailed:
-					if !filled {
-						t.Errorf("%s's cell is %s: %s is live behind another live stage",
-							tick.TickID, cellOf(tick.Pipeline), stage.Stage)
-					}
-					filled = false
-					live++
-				case StageStatePending:
-					filled = false
-				default:
-					t.Errorf("%s's %s stage carries the unknown state %q", tick.TickID, stage.Stage, stage.State)
-				}
+		case tickDispatched:
+			if hasTries && stage.State != StageStateDone && stage.State != StageStateActive {
+				t.Errorf("%s's %s stage is %s: the tick's own state is %q — the dispatch stands — and the derivation leaves that stage done (a collect answered) or active (the dispatch), never %s",
+					where, stage.Stage, stage.State, tick.State, stage.State)
 			}
-			if live > 1 {
-				t.Errorf("%s's cell is %s: a tick is IN one stage, never %d",
-					tick.TickID, cellOf(tick.Pipeline), live)
+		}
+		if stage.State == StageStateActive && tick.State != tickDispatched && !stands {
+			t.Errorf("%s's %s stage is active, but the document states neither a dispatched tick nor a standing worker for attempt %d: workState states active while a dispatch stands and nothing else",
+				where, stage.Stage, current)
+		}
+		if stage.State == StageStateFailed {
+			outcome := "none"
+			if currentTry != nil {
+				outcome = currentTry.Outcome
 			}
-			if ci := stageOf(tick.Pipeline, StageCI); ci != nil {
-				if want := goldenCIStateOf(model, tick); ci.State != want {
-					ciAnswer := "absent"
-					if model.CI != nil {
-						ciAnswer = model.CI.State
-					}
-					t.Errorf("%s's ci stage is %s, want %s: the model's own CI answer is %q, and the cell and the PR cannot say two things about one another",
-						tick.TickID, ci.State, want, ciAnswer)
-				}
+			refused := currentTry != nil && currentTry.Outcome == TryRejected &&
+				!laterTryStands(tick, current) && !goldenSeesLaterDispatch(model, tick.TickID, current)
+			if !refused {
+				t.Errorf("%s's %s stage is failed, but the document names no refused current try nothing stands behind (state %q, current try %s): workState states failed on a rejected current try without a later dispatch and nothing else",
+					where, stage.Stage, tick.State, outcome)
 			}
-			for i := range tick.Tries {
-				try := &tick.Tries[i]
-				last := i == len(tick.Tries)-1
-				refused := try.Outcome == TryRejected || try.Outcome == TryGateFailed
-				if try.Reason != nil && !refused {
-					t.Errorf("%s's try %d closed as %s and still carries the reason %q: a reason is a refusal's own word",
-						tick.TickID, try.Try, try.Outcome, *try.Reason)
-				}
-				if try.NextStep != nil && (!last || !refused) {
-					t.Errorf("%s's try %d (attempt %d, %s) carries the next step %q: the derivation states one on the last try of a refusal only",
-						tick.TickID, try.Try, try.Attempt, try.Outcome, *try.NextStep)
-				}
+		}
+	}
+	// gateState, scoped to the current attempt the document names.
+	if gate := stageOf(tick.Pipeline, StageGate); gate != nil {
+		switch tick.State {
+		case tickClosed, tickIntegrated:
+			if hasTries && gate.State != StageStateDone {
+				t.Errorf("%s's gate stage is %s, want done: the tick's own state is %q — gateState makes a closed or integrated tick's gate done — and the dispatch the tries carry lets the cell's fill reach the stage",
+					where, gate.State, tick.State)
 			}
+		default:
+			if current == 0 && gate.State != StageStatePending {
+				t.Errorf("%s's gate stage is %s, want pending: the document names no current attempt, and gateState answers pending before any attempt",
+					where, gate.State)
+			}
+		}
+		if currentTry != nil && currentTry.Outcome == TryReported && gate.State != StageStateDone &&
+			fillReaches(tick.Pipeline, StageGate) {
+			t.Errorf("%s's gate stage is %s, want done: the current try (attempt %d) closed as %q — the records' all-pass evidence — and gateState makes that try's gate done where the cell's fill reaches it",
+				where, gate.State, currentTry.Attempt, currentTry.Outcome)
+		}
+	}
+	// endState: the merged stage of an implement tick, the closed stage of a
+	// role tick — done on the close, and on an integration for merged only.
+	if end := stageOf(tick.Pipeline, StageMerged); end != nil {
+		if end.State == StageStateDone && tick.State != tickClosed && tick.State != tickIntegrated {
+			t.Errorf("%s's merged stage is done, but the tick's own state is %q: endState makes the merge done on a closed or integrated tick and nothing else",
+				where, tick.State)
+		}
+		if hasTries && (tick.State == tickClosed || tick.State == tickIntegrated) && end.State != StageStateDone {
+			t.Errorf("%s's merged stage is %s, want done: the tick's own state is %q and the dispatch the tries carry lets the cell's fill reach the stage — endState makes that tick's merge done",
+				where, end.State, tick.State)
+		}
+	}
+	if end := stageOf(tick.Pipeline, StageClosed); end != nil {
+		if end.State == StageStateDone && tick.State != tickClosed {
+			t.Errorf("%s's closed stage is done, but the tick's own state is %q: a role tick's end stage is done on a closed tick and nothing else — an integrated role tick's close is still pending",
+				where, tick.State)
+		}
+		if hasTries && tick.State == tickClosed && end.State != StageStateDone {
+			t.Errorf("%s's closed stage is %s, want done: the tick's own state is %q and the dispatch the tries carry lets the cell's fill reach the stage — endState makes that tick's close done",
+				where, end.State, tick.State)
 		}
 	}
 }
@@ -357,6 +504,76 @@ func stageOf(cell []PipelineStage, name string) *PipelineStage {
 		}
 	}
 	return nil
+}
+
+// fillReaches says whether the cell's fill provably reaches the named stage:
+// every stage before it is rendered done, so the stage's own value is the
+// derivation's answer and not the fill parking it — pipelineCell downgrades
+// every stage past the first non-done one to pending, whatever the records
+// would have said.
+func fillReaches(cell []PipelineStage, stage string) bool {
+	for i := range cell {
+		if cell[i].Stage == stage {
+			return true
+		}
+		if cell[i].State != StageStateDone {
+			return false
+		}
+	}
+	return false
+}
+
+// laterTryStands is the marker half of hasLaterDispatch over a golden: one
+// try is cut per dispatch marker, so a try the document carries at a higher
+// attempt is a dispatch the records state happened later.
+func laterTryStands(tick Tick, attempt int) bool {
+	for _, try := range tick.Tries {
+		if try.Attempt > attempt {
+			return true
+		}
+	}
+	return false
+}
+
+// goldenSeesLaterDispatch is the feed half of hasLaterDispatch, over the
+// feed the document itself shows — the recent tail and liveness.last_event.
+// A dispatch line beyond the tail is a line the document cannot state, and
+// the rule stays silent about what it cannot see, the same trade
+// goldenCIStateOf's held-line branch makes.
+func goldenSeesLaterDispatch(model *Model, tickID string, attempt int) bool {
+	for i := range model.Recent {
+		if goldenLineDispatchesLater(&model.Recent[i], tickID, attempt) {
+			return true
+		}
+	}
+	return model.Liveness.LastEvent != nil &&
+		goldenLineDispatchesLater(model.Liveness.LastEvent, tickID, attempt)
+}
+
+// goldenLineDispatchesLater is one feed line's answer to "does this line
+// state a dispatch of this tick past this attempt" — the stages
+// hasLaterDispatch reads, on the tick and attempt it names.
+func goldenLineDispatchesLater(line *runfeed.Event, tickID string, attempt int) bool {
+	if line.TickID == nil || *line.TickID != tickID || line.Attempt == nil || *line.Attempt <= attempt {
+		return false
+	}
+	switch line.Stage {
+	case reconcile.StageDispatched, reconcile.StageRedispatched, reconcile.StageRepairDispatched:
+		return true
+	}
+	return false
+}
+
+// goldenStandsFor is the census half of workState's and isLive's standing
+// question, over the workers panel the document carries: one entry per
+// standing attempt, named by tick and attempt.
+func goldenStandsFor(model *Model, tickID string, attempt int) bool {
+	for _, worker := range derefWorkers(model.Workers) {
+		if worker.TickID == tickID && worker.Attempt == attempt {
+			return true
+		}
+	}
+	return false
 }
 
 // goldenCIStateOf states what the pipeline derivation (pipeline.go's
