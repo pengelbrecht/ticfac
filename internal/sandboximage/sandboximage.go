@@ -279,6 +279,20 @@ const (
 	// lost to it as missing-result) — and it is distinct from ExitClone
 	// because it is the one checkout failure a retry as-is cannot survive.
 	ExitStartUnpublished = 13
+	// ExitGatewayUnavailable reports a gateway that gave no usable answer to
+	// the one-token probe through the boot's whole retry window: no HTTP
+	// answer, or a timeout, rate limit or bad gateway from it or its upstream.
+	// ExitOriginUnavailable is the same for origin's fetch. They are
+	// INFRASTRUCTURE, never a verdict on the tick: the boot never reached the
+	// harness, and the orchestrator dispatches the job again at the same tier
+	// rather than spending a rung of the ladder (epic hn6, run_37b36bfe: 0rx's
+	// worker probed the gateway while the factory Worker was being
+	// redeployed, gave up after one 30s try with exit 7, and the run escalated
+	// 0rx to the ceiling over it). Distinct from ExitModel and ExitClone,
+	// which stay the verdicts a retry as-is reaches again: a refusal the
+	// gateway answered, a fetch the remote refused.
+	ExitGatewayUnavailable = 14
+	ExitOriginUnavailable  = 15
 )
 
 // Script names the files the image installs.

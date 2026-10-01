@@ -41,6 +41,10 @@ func exitClass(code int) string {
 		return "the harness could not use the model route (the harness probe failed)"
 	case sandboximage.ExitStartUnpublished:
 		return "the start commit is not on origin: the job was dispatched on a commit only its dispatcher's clone holds"
+	case sandboximage.ExitGatewayUnavailable:
+		return "the model gateway did not answer through the boot's retry window (infrastructure, not the tick)"
+	case sandboximage.ExitOriginUnavailable:
+		return "origin did not answer the fetch through the boot's retry window (infrastructure, not the tick)"
 	case sandboximage.ExitWorkerPush:
 		return "commits exist and origin would not take them"
 	case sandboximage.ExitWorkerNoWork:
@@ -77,6 +81,41 @@ func exitedWith(status *subprocess.JobStatus, code int) bool {
 // otherwise has only an empty landing branch to go on — and an empty branch
 // reads as a job that answered nothing.
 const fileStartUnpublished = "start-unpublished.json"
+
+// fileInfrastructure marks an attempt whose container died in its boot on a
+// service outside it (ExitGatewayUnavailable, ExitOriginUnavailable): written
+// by the Inspect that observed the settle, read by the collect, which has only
+// an empty landing branch to go on otherwise (epic hn6, run_37b36bfe).
+const fileInfrastructure = "infrastructure.json"
+
+// infrastructureService names what a boot exit code says failed outside the
+// tick, and whether a retry reaches the same answer, or "" for a code that is
+// not an infrastructure failure. A tk the image does not pin (ExitTkVersion)
+// is the container itself: no tier boots a different image, so it spends no
+// rung either, and it is not retried.
+func infrastructureService(code int) (string, bool) {
+	switch code {
+	case sandboximage.ExitGatewayUnavailable:
+		return "the model gateway", false
+	case sandboximage.ExitOriginUnavailable:
+		return "origin", false
+	case sandboximage.ExitTkVersion:
+		return "the worker image's tk", true
+	}
+	return "", false
+}
+
+// infrastructureExit is the infrastructure exit code a terminal status says
+// the container's work process exited with, or 0.
+func infrastructureExit(status *subprocess.JobStatus) int {
+	for _, code := range []int{sandboximage.ExitGatewayUnavailable, sandboximage.ExitOriginUnavailable,
+		sandboximage.ExitTkVersion} {
+		if exitedWith(status, code) {
+			return code
+		}
+	}
+	return 0
+}
 
 // nameExitClasses appends the class to every "exited N" observation the door
 // answered with, so the settled line a person reads says which step died.

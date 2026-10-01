@@ -46,6 +46,16 @@ readonly EXIT_HARNESS=8
 # conflicted merge, three resolve jobs lost to it as "missing-result") — and
 # because it is the one checkout failure a retry as-is can never survive.
 readonly EXIT_START_UNPUBLISHED=13
+# A service outside the container that did not answer through a bounded retry
+# window: the boot never reached the harness, and nothing about the TICK was
+# tried. Their own classes, distinct from 7 and 3, because the orchestrator
+# reads them as INFRASTRUCTURE — the job is dispatched again at the same tier,
+# never one rung up — where 7 and 3 are verdicts a retry as-is reaches again
+# (epic hn6, run_37b36bfe: a worker probed the gateway while the factory's
+# Worker was being redeployed, waited one 30s try, exited 7, and the run spent
+# two rungs of 0rx's ladder on it).
+readonly EXIT_GATEWAY_UNAVAILABLE=14
+readonly EXIT_ORIGIN_UNAVAILABLE=15
 
 say() { printf '%s: %s\n' "$ME" "$*"; }
 # The trace id as a banner fragment, or nothing. A container with no trace id
@@ -131,13 +141,21 @@ factory_project="${TICKS_FACTORY_PROJECT:-}"
 # by construction: an unbounded probe for a hang is itself a hang.
 probe_timeout="${TICKS_MODEL_PROBE_TIMEOUT:-30}"
 # A probe that got NO answer (a timeout, a refused connection) or a gateway's
-# transient 429/502/504 is asked again, this many times in all, waiting
-# backoff × the try number seconds between: a Workers AI model that is cold
-# can take longer than one bounded call to answer its first token, and one
-# such silence used to end the boot (hn6 run_ee8e: 378's resolve job exited
-# at its probe, pushed nothing, and was counted a job that never answered).
-probe_tries="${TICKS_MODEL_PROBE_TRIES:-3}"
+# transient 408/429/502/504/52x is asked again, this many times in all, waiting
+# backoff × the try number seconds between — about three minutes at the
+# defaults: a Workers AI model that is cold, or a factory Worker being
+# redeployed, can take longer than one bounded call to answer, and one such
+# silence used to end the boot (hn6 run_ee8e: 378's resolve job exited at its
+# probe; hn6 run_37b36bfe: 0rx's worker probed mid-deploy and the run spent a
+# rung of its ladder on it). A gateway still silent after the last try is
+# EXIT_GATEWAY_UNAVAILABLE — infrastructure, not the tick.
+probe_tries="${TICKS_MODEL_PROBE_TRIES:-4}"
 probe_backoff="${TICKS_MODEL_PROBE_BACKOFF:-10}"
+# How long the boot keeps retrying a fetch origin did not answer before it
+# gives up with EXIT_ORIGIN_UNAVAILABLE, and the first wait between tries
+# (doubling to 30).
+fetch_window="${TICKS_FETCH_WINDOW:-120}"
+retry_backoff="${TICKS_BOOT_RETRY_BACKOFF:-5}"
 # The same bound for the harness's own round-trip. Larger, because this one
 # starts a whole agent CLI rather than one curl.
 harness_probe_timeout="${TICKS_HARNESS_PROBE_TIMEOUT:-120}"
@@ -425,67 +443,98 @@ probe_model() {
 		die $EXIT_MODEL "no curl in the container, so the model route cannot be proved before the harness starts — the image is broken"
 	fi
 
-	local url payload body status curl_error try=1
-	# Body and curl's own diagnostics go to separate files: -o truncates its
-	# target, so appending stderr to the same path would eat the response.
-	local out="${TMPDIR:-/tmp}/ticks-model-probe.$$"
-	local err="$out.err"
-	payload="$(printf '{"model":"%s","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}' "$model_id")"
+	local try=1
+	probe_url="" probe_status="" probe_body="" probe_curl_error=""
 	while :; do
-		if [[ $model_provider == "anthropic" ]]; then
-			url="$model_base_url/v1/messages"
-			status="$(curl -sS -o "$out" -w '%{http_code}' --max-time "$probe_timeout" \
-				-X POST "$url" \
-				-H 'content-type: application/json' \
-				-H 'anthropic-version: 2023-06-01' \
-				-H "x-api-key: $gateway_token" \
-				--data "$payload" 2>"$err")"
-		else
-			url="$model_base_url/chat/completions"
-			status="$(curl -sS -o "$out" -w '%{http_code}' --max-time "$probe_timeout" \
-				-X POST "$url" \
-				-H 'content-type: application/json' \
-				-H "authorization: Bearer $gateway_token" \
-				--data "$payload" 2>"$err")"
-		fi
-		body="$(head -c 400 "$out" 2>/dev/null)"
-		curl_error="$(head -c 200 "$err" 2>/dev/null)"
-		rm -f "$out" "$err"
-		case "$status" in
-		"" | 000 | 429 | 502 | 504) ;;
-		*) break ;;
+		probe_model_once
+		case "$probe_status" in
+		2*)
+			say "model probe green: $model_id answered a one-token request through the gateway (HTTP $probe_status)"
+			return 0
+			;;
 		esac
+		if ! probe_status_transient "$probe_status"; then
+			break
+		fi
 		((try < probe_tries)) || break
-		warn "model probe try $try of $probe_tries got ${status:-no answer} (${curl_error:-no diagnostic}); asking again in $((probe_backoff * try))s"
+		warn "model probe try $try of $probe_tries got $(probe_outcome) (${probe_curl_error:-no diagnostic}); asking again in $((probe_backoff * try))s"
 		sleep "$((probe_backoff * try))"
 		try=$((try + 1))
 	done
 
-	case "$status" in
-	2*)
-		say "model probe green: $model_id answered a one-token request through the gateway (HTTP $status)"
-		return 0
-		;;
-	"" | 000)
-		# No HTTP answer at all: a timeout, DNS, or a refused connection.
-		# Distinct from a status, and it needs the opposite investigation.
-		die $EXIT_MODEL "the gateway did not answer a one-token request within ${probe_timeout}s (asked $try time(s)).
-  POST $url
+	if probe_status_transient "$probe_status"; then
+		# No usable answer through every try: the gateway is down or
+		# unreachable, which says nothing about the tick. Its own code, so the
+		# orchestrator dispatches the job again at the same tier instead of
+		# reading a failed attempt (EXIT_GATEWAY_UNAVAILABLE).
+		die $EXIT_GATEWAY_UNAVAILABLE "the gateway did not answer a one-token request within ${probe_timeout}s (asked $try time(s)); the last try got $(probe_outcome).
+  POST $probe_url
   model: $model_id (provider $model_provider, routed from '$model')
-  curl: ${curl_error:-no diagnostic}
-The harness would have started and hung on this same call, so the boot stops here. Check that AI_GATEWAY_BASE_URL is reachable from the sandbox and that the factory is deployed."
-		;;
-	esac
+  curl: ${probe_curl_error:-no diagnostic}
+  body: ${probe_body:-<empty>}
+The harness would have started and hung on this same call, so the boot stops here (gateway unavailable, exit $EXIT_GATEWAY_UNAVAILABLE: infrastructure, not the tick). Check that AI_GATEWAY_BASE_URL is reachable from the sandbox and that the factory is deployed."
+	fi
 	# The gateway's own refusals name the command that fixes them, so the body
 	# is quoted rather than summarised: collapsing "this factory has no key for
 	# workers-ai" and "that model does not exist" into one message would leave
 	# an operator diagnosing from source.
 	die $EXIT_MODEL "the routed model could not answer a one-token request through the gateway.
-  POST $url
+  POST $probe_url
   model: $model_id (provider $model_provider, routed from '$model')
-  status: $status
-  body: ${body:-<empty>}
+  status: $probe_status
+  body: ${probe_body:-<empty>}
 This is a stop, not a warning: the harness would have started, reached the skill loop and hung on its first call. Configure the provider behind the gateway with 'ticfac factory setup', or route [orchestrator].model in .tick/runners.toml at a model that provider serves."
+}
+
+# probe_status_transient says whether one probe's status is the gateway (or
+# what is behind it) not answering, rather than answering no: no HTTP answer at
+# all (a timeout, DNS, a refused connection), a request timeout, a rate limit,
+# or a bad-gateway/timeout from the edge or the upstream. A 503 is NOT one: the
+# factory's gateway answers its own configuration refusals with 503, and those
+# name the fix — retrying them would only delay the message.
+probe_status_transient() {
+	case "$1" in
+	"" | 000 | 408 | 429 | 502 | 504 | 520 | 521 | 522 | 523 | 524 | 529) return 0 ;;
+	esac
+	return 1
+}
+
+# probe_outcome is one probe's result in a few words, for the retry lines.
+probe_outcome() {
+	case "$probe_status" in
+	"" | 000) printf 'no answer within %ss' "$probe_timeout" ;;
+	*) printf 'HTTP %s' "$probe_status" ;;
+	esac
+}
+
+# probe_model_once makes one bounded one-token request and leaves its outcome
+# in probe_url, probe_status, probe_body and probe_curl_error.
+probe_model_once() {
+	local payload
+	# Body and curl's own diagnostics go to separate files: -o truncates its
+	# target, so appending stderr to the same path would eat the response.
+	local out="${TMPDIR:-/tmp}/ticks-model-probe.$$"
+	local err="$out.err"
+	payload="$(printf '{"model":"%s","max_tokens":1,"messages":[{"role":"user","content":"ping"}]}' "$model_id")"
+	if [[ $model_provider == "anthropic" ]]; then
+		probe_url="$model_base_url/v1/messages"
+		probe_status="$(curl -sS -o "$out" -w '%{http_code}' --max-time "$probe_timeout" \
+			-X POST "$probe_url" \
+			-H 'content-type: application/json' \
+			-H 'anthropic-version: 2023-06-01' \
+			-H "x-api-key: $gateway_token" \
+			--data "$payload" 2>"$err")"
+	else
+		probe_url="$model_base_url/chat/completions"
+		probe_status="$(curl -sS -o "$out" -w '%{http_code}' --max-time "$probe_timeout" \
+			-X POST "$probe_url" \
+			-H 'content-type: application/json' \
+			-H "authorization: Bearer $gateway_token" \
+			--data "$payload" 2>"$err")"
+	fi
+	probe_body="$(head -c 400 "$out" 2>/dev/null)"
+	probe_curl_error="$(head -c 200 "$err" 2>/dev/null)"
+	rm -f "$out" "$err"
 }
 
 # ---------------------------------------------------------------------------
@@ -1011,9 +1060,19 @@ install_git_credential_helper() {
 # and the run is pinned to the base it was submitted with. The checkout is
 # always fresh, even in a sandbox that has run before.
 #
+# A fetch that fails is retried over a bounded window (fetch_window) unless the
+# remote REFUSED it (fetch_refused); a remote that never answered through the
+# window is EXIT_ORIGIN_UNAVAILABLE, which the orchestrator reads as
+# infrastructure rather than as a failed attempt at the tick.
+#
 # It stops at the detached checkout. What branch the container works on is the
 # ROLE's decision — `tick-run/<epic>` for an orchestrator, `tick/<epic>/<tick>`
 # for a worker — so each entrypoint takes its own branch step after this.
+fetch_refused() {
+	cat "$@" 2>/dev/null | grep -qiE \
+		'authentication failed|could not read (username|password)|returned error: 40[134]|repository (.* )?not found|permission denied|does not appear to be a git repository|terminal prompts disabled|invalid credentials'
+}
+
 clone_at_sha() {
 	install_git_credential_helper
 	# The container commits — tracker state as an orchestrator, the tick's own
@@ -1034,18 +1093,44 @@ clone_at_sha() {
 	# first message is the only record of why the FIRST attempt failed, and
 	# throwing it away is what let "the remote refused a shallow fetch" stand
 	# as a diagnosis of what was actually an authentication failure (tick jwd).
-	local shallow_err
+	local shallow_err full_err
 	shallow_err="$(mktemp 2>/dev/null || echo /tmp/ticks-shallow-fetch.$$)"
-	if ! git -C "$workdir" fetch -q --depth 1 origin "$base_sha" 2>"$shallow_err"; then
+	full_err="$(mktemp 2>/dev/null || echo /tmp/ticks-full-fetch.$$)"
+	local started=$SECONDS delay=$retry_backoff tries=0
+	while :; do
+		tries=$((tries + 1))
+		if git -C "$workdir" fetch -q --depth 1 origin "$base_sha" 2>"$shallow_err"; then
+			break
+		fi
 		say "the remote would not serve a shallow fetch of the SHA; fetching history"
-		if ! git -C "$workdir" fetch -q origin; then
-			say "the shallow attempt said: $(tr '\n' ' ' <"$shallow_err" | sed 's/  */ /g')"
+		if git -C "$workdir" fetch -q origin 2>"$full_err"; then
+			break
+		fi
+		cat "$full_err" >&2
+		say "the shallow attempt said: $(tr '\n' ' ' <"$shallow_err" | sed 's/  */ /g')"
+		# A remote that REFUSED — the credential, the door, a repository it
+		# does not have — answers the same on every try, and is the clone
+		# failure it always was. Anything else (no route, a timeout, a 5xx, a
+		# connection the remote dropped) is origin not answering, and is asked
+		# again until the window is spent.
+		if fetch_refused "$shallow_err" "$full_err"; then
 			explain_git_refusal "$repo_url"
-			rm -f "$shallow_err"
+			rm -f "$shallow_err" "$full_err"
 			die $EXIT_CLONE "cannot fetch $repo_url"
 		fi
-	fi
-	rm -f "$shallow_err"
+		if ((SECONDS - started >= fetch_window)); then
+			explain_git_refusal "$repo_url"
+			rm -f "$shallow_err" "$full_err"
+			die $EXIT_ORIGIN_UNAVAILABLE "cannot fetch $repo_url: ${tries} tries over $((SECONDS - started))s and origin never answered (origin unavailable, exit $EXIT_ORIGIN_UNAVAILABLE: infrastructure, not the tick)"
+		fi
+		say "origin did not answer the fetch (try ${tries}); fetching again in ${delay}s — the boot keeps trying for up to ${fetch_window}s"
+		sleep "$delay"
+		delay=$((delay * 2))
+		if ((delay > 30)); then
+			delay=30
+		fi
+	done
+	rm -f "$shallow_err" "$full_err"
 	if ! git -C "$workdir" cat-file -e "${base_sha}^{commit}" 2>/dev/null; then
 		die $EXIT_START_UNPUBLISHED "the start commit $base_sha is not on $repo_url: origin serves it neither by SHA nor from any branch, so the job was dispatched on a commit only its dispatcher's clone holds (start commit not on origin; a retry as-is fails the same way — the dispatcher must publish it first)"
 	fi
