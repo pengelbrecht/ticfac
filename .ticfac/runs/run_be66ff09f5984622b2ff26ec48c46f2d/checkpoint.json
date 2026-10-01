@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_be66ff09f5984622b2ff26ec48c46f2d",
   "epic_id": "hn6",
-  "sequence": 2,
+  "sequence": 3,
   "state": "failed",
-  "reason": "the width hn6 declares is already full of claims this run does not hold: the graph counts 4 in dispatch.in_flight_ids (l89, lkq, u4l, yjq), and tk stopped refusing over-width claims at 0.32.0 (exit 8 retired, ticks became tracker-only), so this run counts the width itself and holds rather than claiming past it. The run is HELD, not failed: running the epic again under this run id re-derives from the graph and proceeds the moment a slot frees. A claim lives until its tick CLOSES, so the width frees itself as the ticks in flight finish; if it does not, look at what else holds a claim under this epic (another run, or a person's claim)",
-  "updated_at": "2026-10-01T11:15:36Z",
+  "reason": "gmo did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: the width hn6 declares is already full of claims this run does not hold: the graph counts 4 in dispatch.in_flight_ids (l89, lkq, u4l, yjq), and tk stopped refusing over-width claims at 0.32.0 (exit 8 retired, ticks became tracker-only), so this run counts the width itself and holds rather than claiming past it. The run is HELD, not failed: running the epic again under this run id re-derives from the graph and proceeds the moment a slot frees. A claim lives until its tick CLOSES, so the width frees itself as the ticks in flight finish; if it does not, look at what else holds a claim under this epic (another run, or a person's claim)",
+  "updated_at": "2026-10-01T11:15:42Z",
   "ticks": [
     {
       "tick_id": "gmo",
