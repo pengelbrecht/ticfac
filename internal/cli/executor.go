@@ -111,12 +111,17 @@ func executorFactory(runner, gate string) func(reconcile.Dispatch) (reconcile.Ex
 }
 
 // sweeperFactory builds the substrate half of the run's leftover sweep for the
-// executor a profile routes to (reconcile/sweep.go). Only herdr makes
-// resources outside git — workspaces and panes — so only a herdr profile gets
-// one; every other executor's leftovers are git's, which the run sweeps
-// itself.
+// executor a profile routes to (reconcile/sweep.go). herdr makes resources
+// outside git — workspaces and panes. The cloudflare-sandbox executor's
+// workers leave boot markers (`<worker branch>-boot-stopped`, #176) on the
+// remote under a name outside the run's namespace, which only it can spell;
+// its sweeper needs no factory credential. Every other executor's leftovers
+// are git's, which the run sweeps itself.
 func sweeperFactory(gate string) func(reconcile.Dispatch) (reconcile.LeftoverSweeper, error) {
 	return func(d reconcile.Dispatch) (reconcile.LeftoverSweeper, error) {
+		if d.Profile != nil && d.Profile.Executor == cloudflaresandbox.ExecutorName {
+			return cloudflaresandbox.NewLeftoverSweeper(d.Repo, d.Remote, d.EpicID, d.RunID), nil
+		}
 		if d.Profile == nil || d.Profile.Executor != herdr.ExecutorName {
 			return nil, nil
 		}
