@@ -1,0 +1,14 @@
+{
+  "id": "oro",
+  "title": "The running_wave golden carries cells the wave-2 derivation can never produce",
+  "description": "Same fixture-drift class this tick removed from the `dashboard` golden, still live and verified today in the wave-1 `status_model_running_wave` golden: nwj reads state \"closed\" with a closed try beside an all-pending pipeline cell (the derivation makes a closed tick claim/work/gate/merged all done), and 6dh reads state \"dispatched\" beside an all-pending cell, where a dispatch marker alone makes claim done and work active. Previously reported by run_3f034e683's attempt of this tick; re-verified on today's tree. No suite fails on it because the guard binds only the dashboard golden. Fix shape as this tick: correct the values through the bundle's cut procedure and extend the agreement test over every golden.\nevidence: contracts/status-model.json golden 'status_model_running_wave': nwj {state: closed, try 1 closed} with pipeline [claim pending, work pending, gate pending, merged pending]; 6dh {state: dispatched} with the same all-pending cell\n\nticfac run run_6d88e3de89ca466c8dab3841185931c1 created this tick by absorbing the finding f519ea4e7515cff0f2d598961c19b58f2bd6ce4381c1c1651b355d748dd5c9e0 (reported by run-run_6d88e3de89ca466c8dab3841185931c1/tick-378/attempt-1): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_6d88e3de89ca466c8dab3841185931c1/absorptions/f519ea4e7515cff0f2d598961c19b58f2bd6ce4381c1c1651b355d748dd5c9e0.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-run_6d88e3de89ca466c8dab3841185931c1/tick-378/attempt-1",
+  "created_by": "ticfac run run_6d88e3de89ca466c8dab3841185931c1",
+  "created_at": "2026-10-01T00:36:15Z",
+  "updated_at": "2026-10-01T00:36:15Z"
+}
