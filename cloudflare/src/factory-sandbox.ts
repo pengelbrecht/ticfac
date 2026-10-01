@@ -24,7 +24,7 @@
  * kill, destroy, isRunning), on `this.ctx.container` instead of the SDK:
  *
  *  - Processes are directories in the container, managed by the image's
- *    process runner (`ticfac-proc`, tick x9d): `exec()` returns a process
+ *    process runner (`ticks-proc`, tick x9d): `exec()` returns a process
  *    object that belongs to the request that made it, so a later request can
  *    only find a process through files — its pid, its merged output, its
  *    exit code. That is Cloudflare's own background-process recipe
@@ -69,11 +69,12 @@ export const FACTORY_IMAGE_NAME = "factory";
  */
 export const DEFAULT_INSTANCE: InstanceSize = "standard-3";
 
-/** The image's process runner (tick x9d). */
-export const PROCESS_RUNNER = "/usr/local/bin/ticfac-proc";
-
-/** Where the runner keeps one directory per process. */
-export const PROCESS_ROOT = "/var/lib/ticfac/processes";
+/**
+ * The image's process runner (tick x9d, image/proc.sh). It keeps one
+ * directory per process under its own root (/var/run/ticks-proc) and answers
+ * one short verb per question; every call returns at once.
+ */
+export const PROCESS_RUNNER = "/usr/local/bin/ticks-proc";
 
 /**
  * Where the boot entrypoint records the image's own environment.
@@ -97,7 +98,7 @@ export const PROCESS_CWD = "/workspace";
 export const BOOT_ENTRYPOINT = [
   "/bin/sh",
   "-c",
-  `mkdir -p ${PROCESS_ROOT} ${PROCESS_CWD} && export -p > ${IMAGE_ENV_FILE} && exec sleep infinity`,
+  `mkdir -p /var/lib/ticfac ${PROCESS_CWD} && export -p > ${IMAGE_ENV_FILE} && exec sleep infinity`,
 ];
 
 /**
@@ -225,34 +226,57 @@ export type RunnerState =
  * the only TypeScript that knows its verbs).
  */
 export const runner = {
-  /** Starts `argv` in the process directory `id`; exit 17 when `id` exists. */
-  start: (id: string, argv: string[]) => [PROCESS_RUNNER, "start", PROCESS_ROOT, id, "--", ...argv],
-  inspect: (id: string) => [PROCESS_RUNNER, "inspect", PROCESS_ROOT, id],
-  read: (id: string, offset: number, max: number) => [
+  /** Starts `argv` as process `id` in the working directory; exit 4 when `id` is taken. */
+  start: (id: string, argv: string[]) => [
     PROCESS_RUNNER,
-    "read",
-    PROCESS_ROOT,
+    "start",
+    id,
+    "--cwd",
+    PROCESS_CWD,
+    "--",
+    ...argv,
+  ],
+  /** `state=…`, `pid=…` and, once exited, `exit_code=…`; exit 3 for an unknown id. */
+  status: (id: string) => [PROCESS_RUNNER, "status", id],
+  /**
+   * At most `max` bytes of stdout from byte `offset`. The runner prints the
+   * whole remainder; `head -c` is what keeps one answer bounded in the
+   * Durable Object's memory.
+   */
+  read: (id: string, offset: number, max: number) => [
+    "sh",
+    "-c",
+    `${PROCESS_RUNNER} read "$1" stdout "$2" | head -c "$3"`,
+    "sh",
     id,
     String(offset),
     String(max),
   ],
-  kill: (id: string) => [PROCESS_RUNNER, "kill", PROCESS_ROOT, id],
-  list: () => [PROCESS_RUNNER, "list", PROCESS_ROOT],
+  /** TERM to the process group, KILL after the runner's grace. */
+  kill: (id: string) => [PROCESS_RUNNER, "kill", id],
+  list: () => [PROCESS_RUNNER, "list"],
 };
 
-/** The runner's `inspect` line, parsed. Anything unreadable is `missing`. */
-export function parseRunnerState(line: string): RunnerState {
-  const [state, value] = line.trim().split(/\s+/);
-  switch (state) {
+/** The runner's `status` answer, parsed. Anything unreadable (an unknown id) is `missing`. */
+export function parseRunnerState(text: string): RunnerState {
+  const fields = new Map<string, string>();
+  for (const line of text.split("\n")) {
+    const eq = line.indexOf("=");
+    if (eq > 0) fields.set(line.slice(0, eq).trim(), line.slice(eq + 1).trim());
+  }
+  switch (fields.get("state")) {
     case "starting":
       return { state: "starting" };
     case "running": {
-      const pid = Number(value);
-      return Number.isInteger(pid) ? { state: "running", pid } : { state: "starting" };
+      const pid = Number(fields.get("pid"));
+      return Number.isInteger(pid) && pid > 0 ? { state: "running", pid } : { state: "starting" };
     }
     case "exited": {
-      const exitCode = Number(value);
-      return Number.isInteger(exitCode) ? { state: "exited", exitCode } : { state: "lost" };
+      const raw = fields.get("exit_code") ?? "";
+      const exitCode = Number(raw);
+      return raw !== "" && Number.isInteger(exitCode)
+        ? { state: "exited", exitCode }
+        : { state: "lost" };
     }
     case "lost":
       return { state: "lost" };
@@ -317,7 +341,10 @@ export function utf8Boundary(bytes: Uint8Array): number {
 export function processArgv(command: string): string[] {
   // One merged stream, so one byte cursor stays correct (src/sandbox.ts's
   // MERGE_STDERR, for the same reason).
-  return ["bash", "-c", `${command} 2>&1`];
+  // `exec 2>&1` FIRST, so it holds for every command of a compound line: a
+  // trailing `2>&1` binds to the last command only (staging: `echo a >&2;
+  // exit 5` lost the `a`).
+  return ["bash", "-c", `exec 2>&1; ${command}`];
 }
 
 /**
@@ -641,7 +668,7 @@ export class FactorySandboxCore {
   }
 
   private async inspect(container: DoContainer, id: string): Promise<RunnerState> {
-    const out = await run(container, runner.inspect(id));
+    const out = await run(container, runner.status(id));
     return parseRunnerState(out.stdout);
   }
 }

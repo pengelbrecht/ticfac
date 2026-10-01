@@ -55,6 +55,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -238,6 +239,15 @@ func cloudRunsForEpic(ctx context.Context, client *cloudClient, project, epicID 
 	return newest, nil
 }
 
+// CloudSubstrateEnv opts a cloud run's containers into the factory's
+// durable_object-policy class (epic umq): TICFAC_CLOUD_SUBSTRATE=do_v1. Unset
+// is the factory's default substrate. Read at submit only — the factory
+// records it with the run and never moves a run between substrates — so a
+// run already going is unaffected by setting or clearing it.
+const CloudSubstrateEnv = "TICFAC_CLOUD_SUBSTRATE"
+
+func cloudSubstrate() string { return strings.TrimSpace(os.Getenv(CloudSubstrateEnv)) }
+
 // submitCloudRun makes the submission `ticfac cloud run` makes — the same
 // pushed boundary, the same POST — and reports it in `run`'s own voice.
 // The returned queued answer is a submission the factory parked behind the
@@ -259,6 +269,7 @@ func submitCloudRun(ctx context.Context, client *cloudClient, repo, epicID, orch
 		RequestedBy  string `json:"requested_by"`
 		Queue        bool   `json:"queue"`
 		Orchestrator string `json:"orchestrator,omitempty"`
+		Substrate    string `json:"substrate,omitempty"`
 	}{
 		Project: project, Epic: epicID, BaseSHA: baseSHA, RequestedBy: requestedBy,
 		// The everyday surface has no queue flag: a lease another run holds is
@@ -266,6 +277,7 @@ func submitCloudRun(ctx context.Context, client *cloudClient, repo, epicID, orch
 		// operator. The expert `cloud run --queue` stays the way in.
 		Queue:        false,
 		Orchestrator: orchestrator,
+		Substrate:    cloudSubstrate(),
 	}
 	data, err := client.request(ctx, http.MethodPost, "/api/runs", submission)
 	if err != nil {

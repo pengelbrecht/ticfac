@@ -67,6 +67,7 @@ import type {
   StopMode,
   StopRequest,
 } from "./run-room";
+import { DO_V1, isRunSubstrate, type RunSubstrate, recordRunSubstrate } from "./run-substrate";
 import { carriedTraceID, parseTraceID } from "./trace";
 
 /**
@@ -285,6 +286,13 @@ export type RunSubmission = {
    * Absent means the factory's own container.
    */
   orchestrator?: OrchestratorKind;
+  /**
+   * The container substrate the run's containers run on (epic umq,
+   * migration 0023). Absent is the Sandbox SDK 0.x class, which is every run
+   * before the field existed; `do_v1` is FactorySandbox on the
+   * durable_object policy. Recorded once, at submit, and never changed.
+   */
+  substrate?: RunSubstrate;
 };
 
 export type SubmissionParse =
@@ -476,6 +484,29 @@ export function parseSubmission(body: unknown): SubmissionParse {
     }
   }
 
+  // The container substrate (epic umq). Refused rather than defaulted: a run
+  // that asked for the new substrate and silently got the old one would prove
+  // nothing about it. Not queueable, because the parked record (D22) is
+  // shape-frozen and would ignite the run on the default substrate.
+  let substrate: RunSubstrate | undefined;
+  if (raw.substrate !== undefined && raw.substrate !== null) {
+    if (!isRunSubstrate(raw.substrate)) {
+      return {
+        ok: false,
+        detail: `substrate must be "sdk0" or "do_v1", got ${JSON.stringify(raw.substrate)}`,
+      };
+    }
+    substrate = raw.substrate;
+    if (substrate === DO_V1 && raw.queue === true) {
+      return {
+        ok: false,
+        detail:
+          "a run on the do_v1 substrate cannot be queued: the parked submission does not carry " +
+          "its substrate, and it would ignite on the default one",
+      };
+    }
+  }
+
   // The RunRoom's queued-submission record (D22) is shape-frozen; it never
   // carried a wave, and a wave is no longer a thing a submission can ask for
   // at all — see the tick_ids refusal above.
@@ -496,6 +527,7 @@ export function parseSubmission(body: unknown): SubmissionParse {
       ...(origin === undefined ? {} : { origin }),
       ...(grade === undefined ? {} : { credential_grade: grade }),
       ...(orchestrator === undefined || orchestrator === "container" ? {} : { orchestrator }),
+      ...(substrate === undefined || substrate === "sdk0" ? {} : { substrate }),
     },
   };
 }
@@ -571,6 +603,8 @@ export type StartRunInput = {
   credential_grade?: RunCredentialGrade;
   /** See {@link RunSubmission.orchestrator}. Absent means the factory's container. */
   orchestrator?: OrchestratorKind;
+  /** See {@link RunSubmission.substrate}. Absent means the 0.x Sandbox class. */
+  substrate?: RunSubstrate;
 };
 
 export type StartedRun = { run: Run; workflow: { id: string; status: string } };
@@ -709,8 +743,28 @@ export async function startRun(env: Env, input: StartRunInput): Promise<StartedR
       });
       return instance;
     },
-    input.orchestrator === "local" ? () => recordLocalOrchestrator(env.DB, run.run_id) : undefined,
+    runMarks(env, run.run_id, input),
   );
+}
+
+/**
+ * What is written beside the run row before its Workflow exists: where its
+ * orchestrator runs (0022) and which substrate its containers run on (0023).
+ * Both are read by the Workflow's first step and by every container boot,
+ * so neither may land after the instance does.
+ */
+function runMarks(
+  env: Env,
+  runID: string,
+  input: { orchestrator?: OrchestratorKind; substrate?: RunSubstrate },
+): (() => Promise<void>) | undefined {
+  const local = input.orchestrator === "local";
+  const v1 = input.substrate === DO_V1;
+  if (!local && !v1) return undefined;
+  return async () => {
+    if (local) await recordLocalOrchestrator(env.DB, runID);
+    if (v1) await recordRunSubstrate(env.DB, runID, DO_V1);
+  };
 }
 
 /**
@@ -889,6 +943,7 @@ export async function submitRun(env: Env, submission: RunSubmission): Promise<Su
           ...(submission.orchestrator === undefined
             ? {}
             : { orchestrator: submission.orchestrator }),
+          ...(submission.substrate === undefined ? {} : { substrate: submission.substrate }),
         }),
       };
     } catch (error) {

@@ -31,6 +31,10 @@ const IMAGE = "registry.cloudflare.com/acct/ticks-factory-sandbox-factory@sha256
 
 type FakeProcess = { state: string; output: Uint8Array; killed: number };
 
+/** ticks-proc's `status` answers. */
+const statusRunning = (pid: number) => `state=running\npid=${pid}\n`;
+const statusExited = (code: number) => `state=exited\npid=42\nexit_code=${code}\n`;
+
 /**
  * A stand-in for `ctx.container` that runs the process runner's verbs the way
  * the image's `ticfac-proc` answers them: `inspect` prints one state line,
@@ -88,29 +92,32 @@ function fakeContainer(
         }
         return answer("");
       }
+      // A bounded read is the runner's read piped through head -c.
+      if (argv[0] === "sh" && argv[2]?.startsWith(`${PROCESS_RUNNER} read `)) {
+        const [id, offset, max] = argv.slice(4) as [string, string, string];
+        const p = processes.get(id);
+        if (p === undefined) return answer("", 3);
+        return answer(p.output.subarray(Number(offset), Number(offset) + Number(max)));
+      }
       // A start goes through the environment wrapper; the runner line follows it.
       const line = argv[0] === "sh" && argv[2] === START_WRAPPER ? argv.slice(4) : argv;
       if (line[0] !== PROCESS_RUNNER) return answer("", 127);
-      const [, verb, , id, ...rest] = line;
+      const [, verb, id] = line;
       switch (verb) {
         case "start": {
-          if (processes.has(id!)) return answer("exists", 17);
-          processes.set(id!, { state: "running 42", output: new Uint8Array(), killed: 0 });
+          if (processes.has(id!)) return answer("", 4);
+          processes.set(id!, { state: statusRunning(42), output: new Uint8Array(), killed: 0 });
           return answer("");
         }
-        case "inspect":
-          return answer(processes.get(id!)?.state ?? "missing");
-        case "read": {
+        case "status": {
           const p = processes.get(id!);
-          if (p === undefined) return answer("", 1);
-          const [offset, max] = rest.map(Number) as [number, number];
-          return answer(p.output.subarray(offset, offset + max));
+          return p === undefined ? answer("", 3) : answer(p.state);
         }
         case "kill": {
           const p = processes.get(id!);
           if (p !== undefined) {
             p.killed += 1;
-            p.state = "exited 143";
+            p.state = statusExited(143);
           }
           return answer("");
         }
@@ -162,7 +169,7 @@ function fakeContainer(
       p.output = next;
     },
     exit(id: string, code: number) {
-      processes.get(id)!.state = `exited ${code}`;
+      processes.get(id)!.state = statusExited(code);
     },
   };
 }
@@ -238,7 +245,7 @@ describe("FactorySandbox: starting a process", () => {
     const start = c.execs.find((e) => e.argv.includes("start"))!;
     expect(start.env).toEqual({ TICKS_RUN_ID: "run_1" });
     expect(start.argv.slice(0, 4)).toEqual(["sh", "-c", START_WRAPPER, IMAGE_ENV_FILE]);
-    expect(start.argv.slice(-3)).toEqual(["bash", "-c", "ticks-worker 2>&1"]);
+    expect(start.argv.slice(-3)).toEqual(["bash", "-c", "exec 2>&1; ticks-worker"]);
     expect(start.cwd).toBe("/workspace");
   });
 
@@ -319,7 +326,7 @@ describe("FactorySandbox: starting a process", () => {
     const c = fakeContainer();
     const { object } = sandbox(c);
     const view = await object.startProcess("x", {});
-    // Same id twice: the runner's mkdir refuses (exit 17).
+    // Same id twice: the runner refuses a taken id (exit 4).
     const origRandom = crypto.randomUUID;
     crypto.randomUUID = () => view.id as `${string}-${string}-${string}-${string}-${string}`;
     try {
@@ -424,26 +431,28 @@ describe("FactorySandbox: lifetime", () => {
 
 describe("FactorySandbox: reading a process", () => {
   it("maps the runner's states onto the seam's", () => {
-    expect(runnerView("p", parseRunnerState("running 7"), "c")).toEqual({
+    expect(runnerView("p", parseRunnerState(statusRunning(7)), "c")).toEqual({
       id: "p",
       command: "c",
       state: "running",
       exit_code: null,
     });
-    expect(runnerView("p", parseRunnerState("starting"), undefined)?.state).toBe("running");
-    expect(runnerView("p", parseRunnerState("exited 0"), undefined)).toMatchObject({
+    expect(runnerView("p", parseRunnerState("state=starting\npid=\n"), undefined)?.state).toBe(
+      "running",
+    );
+    expect(runnerView("p", parseRunnerState(statusExited(0)), undefined)).toMatchObject({
       state: "completed",
       exit_code: 0,
     });
-    expect(runnerView("p", parseRunnerState("exited 3"), undefined)).toMatchObject({
+    expect(runnerView("p", parseRunnerState(statusExited(3)), undefined)).toMatchObject({
       state: "failed",
       exit_code: 3,
     });
-    expect(runnerView("p", parseRunnerState("lost"), undefined)).toMatchObject({
+    expect(runnerView("p", parseRunnerState("state=lost\npid=9\n"), undefined)).toMatchObject({
       state: "failed",
       exit_code: null,
     });
-    expect(runnerView("p", parseRunnerState("missing"), undefined)).toBeNull();
+    expect(runnerView("p", parseRunnerState(""), undefined)).toBeNull();
     expect(runnerView("p", parseRunnerState("garbage"), undefined)).toBeNull();
   });
 
