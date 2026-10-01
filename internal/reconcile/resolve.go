@@ -576,7 +576,7 @@ func (r *Reconciler) awaitResolve(ctx context.Context, handle *subprocess.JobHan
 func (r *Reconciler) conflictedTree(epicHead, head string, marker attemptHandle) (string, error) {
 	message := fmt.Sprintf("ticfac run %s: the conflicted merge of %s into %s for the resolve-conflict job",
 		r.runID, branchOf(marker.WriteRef), r.branch)
-	return r.conflictedMerge(epicHead, head, message, nil)
+	return r.conflictedMergeOf(epicHead, head, message, nil, true)
 }
 
 // conflictedMerge is conflictedTree's mechanics for any two heads: `head`
@@ -585,6 +585,15 @@ func (r *Reconciler) conflictedTree(epicHead, head string, marker attemptHandle)
 // for the base fold, so the records resolve exactly as the fold resolves them
 // and only the files the fold could not merge carry markers.
 func (r *Reconciler) conflictedMerge(epicHead, head, message string, config []string) (string, error) {
+	return r.conflictedMergeOf(epicHead, head, message, config, false)
+}
+
+// conflictedMergeOf is conflictedMerge with the choice of keeping worker
+// reports out (report_merge.go): an attempt's merge into the integration
+// branch keeps them out, so the resolve job is never handed a report's
+// markers to resolve; the base fold brings in what the base has, as it
+// always did.
+func (r *Reconciler) conflictedMergeOf(epicHead, head, message string, config []string, keepReports bool) (string, error) {
 	dir, remove, err := r.git.tempWorktree("ticfac-resolve-", epicHead)
 	if err != nil {
 		return "", fmt.Errorf("prepare the conflicted tree at %s: %w", short(epicHead), err)
@@ -603,6 +612,11 @@ func (r *Reconciler) conflictedMerge(epicHead, head, message string, config []st
 		if strings.TrimSpace(unmerged) == "" {
 			return "", fmt.Errorf("rebuild the conflicted merge of %s into %s: %w",
 				short(head), r.branch, mergeErr)
+		}
+	}
+	if keepReports {
+		if err := r.keepReportsOut(dir, epicHead); err != nil {
+			return "", err
 		}
 	}
 	// Staging the markers as content resolves the index's unmerged entries;
@@ -786,7 +800,10 @@ func (r *Reconciler) mintResolveMerge(resolveHead, head, epicHead string, marker
 				"its tree was resolved against, and a merge minted over a guessed one can revert work",
 			r.attemptName(marker.TickID, marker.Attempt), short(resolveHead), err, r.branch)
 	}
-	tree, err := r.git.run("", "rev-parse", resolveHead+"^{tree}")
+	// The job's container commits its own report on its branch: the tree is
+	// minted with every report as the head it resolved over has it
+	// (report_merge.go).
+	tree, err := r.treeWithoutReports(resolveHead, resolvedOver)
 	if err != nil {
 		return "", fmt.Errorf("read the tree the resolve-conflict job resolved to: %w", err)
 	}
@@ -822,9 +839,7 @@ func (r *Reconciler) mergeResolutionOnto(resolution, resolvedOver, epicHead stri
 		"attempt %d was resolved against %s; %s has moved to %s since, and the resolution is merged onto it",
 		marker.TickID, r.branch, r.runID, marker.TickID, marker.Attempt, short(resolvedOver), r.branch,
 		short(epicHead))
-	if stdout, stderr, err := r.git.try(dir, "merge", "--no-ff", "--no-edit", "-m", message, resolution); err != nil {
-		unmerged, _ := r.git.run(dir, "diff", "--name-only", "--diff-filter=U")
-		_, _, _ = r.git.try(dir, "merge", "--abort")
+	if stdout, stderr, unmerged, err := r.mergeKeepingReportsOut(dir, epicHead, message, resolution); err != nil {
 		return "", r.refuse(RefusedMerge, marker.TickID,
 			"the resolve-conflict job resolved the conflict of %s (%s) against %s at %s, and %s has moved to %s "+
 				"since with work that does not merge with the resolution: %s. A second conflict on the same tick "+
