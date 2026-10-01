@@ -562,7 +562,9 @@ type HealthVerdict struct {
 }
 
 // Recovery is one thing the run got past by itself: what it was, how many
-// times, and how long the last one took — null when nobody measured that.
+// times, and — where the run's own lines state durations — the sum of the
+// stated spans across the counted lines (the sleep suspensions), null when
+// no line stated one.
 type Recovery struct {
 	What    string `json:"what"`
 	Count   int    `json:"count"`

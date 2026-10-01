@@ -190,6 +190,57 @@ func TestCostSplitsRiversTheProvenanceNames(t *testing.T) {
 	assertValidatesAgainstTheContract(t, model)
 }
 
+// TestCostAProviderQualifiedClaudeIdIsPiLocalNotTheSubscription: the claude
+// river is the subscription — a bare Claude-family model, the same family the
+// runner config itself recognises (runconfig's claudeFamily: an alias, or a
+// claude-… name, never provider-qualified). A provider-qualified claude id is
+// a different river: the local pi serving a claude model through another
+// provider is pay-per-token spend this repository does not meter, and reading
+// it as the subscription merges two rivers into one line. The fourth alias
+// fable is the family's own too.
+func TestCostAProviderQualifiedClaudeIdIsPiLocalNotTheSubscription(t *testing.T) {
+	t.Parallel()
+
+	// Two provider-qualified claude spellings, no bare alias anywhere: one
+	// pi-local line carrying both, and NO claude line at all — the
+	// subscription river only ever carries a bare family name.
+	src := runningEpicSources()
+	src.Records.Decisions = nil
+	src.Records.Attempts = []runstate.Attempt{
+		attemptMarker(1, "nwj", "2026-09-27T03:19:05Z", "strong", "openrouter/anthropic/claude-opus-5", "local-subprocess"),
+		attemptMarker(2, "89m", "2026-09-27T04:00:00Z", "strong", "bedrock/anthropic.claude-sonnet-4-5", "local-subprocess"),
+	}
+	model := Build(src)
+	if line := recoveredLine(model, CostSourceClaude); line != nil {
+		t.Errorf("the model carries a claude line %+v, want none: a provider-qualified claude id is not the subscription", line)
+	}
+	line := costLineOf(t, model, CostSourcePiLocal)
+	if line.Attempts != 2 || line.Metered || line.USD != nil {
+		t.Errorf("the pi-local line is %+v, want both provider-qualified claude dispatches, unmetered with no number", line)
+	}
+	if model.Cost.RecordedUSD != 0 {
+		t.Errorf("recorded_usd is %v, want 0: nothing measured the pi-local spend", model.Cost.RecordedUSD)
+	}
+	assertValidatesAgainstTheContract(t, model)
+
+	// fable, the family's fourth alias — the same bare spelling the claude
+	// runner's --model takes — is the subscription river, not pi-local.
+	alias := runningEpicSources()
+	alias.Records.Decisions = nil
+	alias.Records.Attempts = []runstate.Attempt{
+		attemptMarker(1, "nwj", "2026-09-27T03:19:05Z", "strong", "fable", "local-subprocess"),
+	}
+	model = Build(alias)
+	if line := recoveredLine(model, CostSourcePiLocal); line != nil {
+		t.Errorf("the model carries a pi-local line %+v, want none: fable is a bare claude family alias", line)
+	}
+	line = costLineOf(t, model, CostSourceClaude)
+	if line.Attempts != 1 || line.Metered || line.USD != nil {
+		t.Errorf("the claude line is %+v, want the fable dispatch alone, unmetered with no number", line)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
 // float64Ptr is the test-side pointer a metered line's number needs.
 func float64Ptr(v float64) *float64 { return &v }
 
