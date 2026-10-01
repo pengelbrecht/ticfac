@@ -12,3 +12,4 @@
 // that installs nothing, discovered only on the machine of the person who
 // tried.
 package release
+// (throwaway: probes affected-only PR CI; never merged)
