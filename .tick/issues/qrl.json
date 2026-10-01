@@ -3,7 +3,7 @@
   "title": "hn6's acceptance list parses as one item: A2–A6 are unaddressable",
   "description": "The epic's acceptance_criteria puts all six [A\u003cn\u003e] marks on one line, and the acceptance parser takes a mark only where a line begins with one (internal/acceptance/acceptance.go, Parse: one mark per line) — so hn6's done parses as the single item A1 with A2..A6 inside its prose, and per-item gate binding can only ever reach A1. Verified today: 6 marks in the text, one line-leading. Previously reported by run_3f034e683's attempt of this tick. The record is the tracker's to re-flow one [A\u003cn\u003e] item per line; no code change is needed.\nevidence: Parse on .tick/issues/hn6.json acceptance_criteria: 6 [A\u003cn\u003e] marks in the text, 1 line-leading mark — one item\n\nticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4 created this tick by absorbing the finding 1a69054b5b01bd2ecd5f36d700827ab73d7ac6f1ddc287920d80fff4e2a9cfb5 (reported by run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-378/attempt-1): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_ee8ebb4fe13d4311b8f9be6f66db69d4/absorptions/1a69054b5b01bd2ecd5f36d700827ab73d7ac6f1ddc287920d80fff4e2a9cfb5.json on the run branch.",
   "notes": "2026-10-01 04:53 - ticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4: created by absorbing finding 1a69054b5b01bd2ecd5f36d700827ab73d7ac6f1ddc287920d80fff4e2a9cfb5 — placed before the final review, which is blocked-by qrl. The decision record is .ticfac/runs/run_ee8ebb4fe13d4311b8f9be6f66db69d4/absorptions/1a69054b5b01bd2ecd5f36d700827ab73d7ac6f1ddc287920d80fff4e2a9cfb5.json on epic/hn6, and it says: the classifier put 0.62 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A1: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side\n2026-10-01 06:47 - ticfac run run_37b36bfe525c411b902e85dc01a16a52: closed as a duplicate of yjq. Both were promoted from finding 1a69054b5b01bd2ecd5f36d700827ab73d7ac6f1ddc287920d80fff4e2a9cfb5 — yjq by run run_6d88e3de89ca466c8dab3841185931c1 at 2026-10-01T00:36:36Z, this one by run run_ee8ebb4fe13d4311b8f9be6f66db69d4 at 2026-10-01T02:53:01Z — and a finding is one tick, so the later promotion is closed; the work is yjq's",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,5 +11,6 @@
   "discovered_from": "run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-378/attempt-1",
   "created_by": "ticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4",
   "created_at": "2026-10-01T02:53:03Z",
-  "updated_at": "2026-10-01T04:47:33.603027Z"
+  "updated_at": "2026-10-01T04:47:36.434914Z",
+  "closed_at": "2026-10-01T04:47:36.434914Z"
 }
