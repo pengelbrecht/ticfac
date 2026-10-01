@@ -1,6 +1,11 @@
 <!-- ticks-worker: container facts, prepended after the harness exited. The
 agent's report, including its STATUS line, is unchanged below. -->
 
+_ticks-worker: branch `tick/hn6/attempt-14/c2u`, base `06f0bf226293dce9f1b2461474d27d68263c55ac`, harness `pi` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
 _ticks-worker: branch `tick/hn6/attempt-14/c2u`, base `06f0bf2bfeea2688bae65bf7a48fdaa5239d1fbb`, harness `pi` exited 0, 1 work commit(s), 0 uncommitted path(s)._
 
 # Watch gains drill-in keys, the tick view and the full feed (tick c2u, hn6 attempt 14)
