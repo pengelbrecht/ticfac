@@ -1,32 +1,35 @@
 package statusmodel
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 )
 
-// The DASHBOARD vocabulary (epic hn6, wave 1 — tick r5i): wave 1 declared
-// every field the dashboard renders, and THIS test is the fence that says
-// what the stubs must not quietly leave out — the wave-2 ticks fill the
-// fields in parallel, each replacing the empty assertions for ITS half with
-// the real derivations while the empty ones stay as the fence for the ticks
-// still to come. The pipeline half is tick 3gk's (wave 2): the cells, the
-// parents, the durations, the findings and the try words below are the
-// derivations, while the worker activity, the handles, the verdict and the
-// cost lines stay at their honest empty values until their own wave-2 ticks
-// fill them.
+// The DASHBOARD vocabulary (epic hn6, wave 1 — tick r5i): this tick declared
+// every field the dashboard renders so the wave-2 ticks could fill them in
+// parallel against a fixed shape — it computed NOTHING new beyond `recent`
+// and the two graph copies (`epic_title`, `gloss`), every other new field
+// came out at its honest empty value, and THIS test was the fence that said
+// what the stubs must not quietly leave out. Two wave-2 halves are filled
+// in below: the per-tick half is 3gk's (the cells, the parents, the
+// durations, the findings and the try words are the derivations) and the
+// run-level half is 7uv's (the health verdict and the cost lines at their
+// real values). The worker half is ltg's, and this fixture still answers it
+// null — nothing measures a worker here and nobody named its handle — the
+// honest not-measured, not a stub the wave quietly left behind.
 
 // TestBuildEmitsTheDashboardFieldsEmpty: a Build over the running-epic
 // fixture emits every dashboard field — the role's own pipeline stage list
 // per tick with the states the records derive, the findings the ticks
 // reported, the durations the markers measure, the try words the feed
-// states — and beside them the fields no wave-2 tick has filled yet: no
-// report read, no worker activity, the healthy verdict, no cost lines.
-// The wave-1 half stays: `recent` holds the last five feed lines oldest
-// first, `epic_title` is copied off the graph, and every tick's `gloss` is
-// copied off its graph task.
+// states, the derived health verdict and the cost lines — and beside them
+// the fields this fixture honestly answers null: the report and the parent
+// unread, no worker activity, no handle. The wave-1 half stays: `recent`
+// holds the last five feed lines oldest first, `epic_title` is copied off
+// the graph, and every tick's `gloss` is copied off its graph task.
 func TestBuildEmitsTheDashboardFieldsEmpty(t *testing.T) {
 	t.Parallel()
 	src := runningEpicSources()
@@ -156,25 +159,37 @@ func TestBuildEmitsTheDashboardFieldsEmpty(t *testing.T) {
 		t.Errorf("the worker's handle is %q, want null: no executor named it yet", *worker.Handle)
 	}
 
-	// The verdict: healthy with nothing recovered and nothing to say — the
-	// stub's answer, which the wave-2 verdict tick grows into the real one.
+	// The verdict (wave 2, tick 7uv): healthy — the fixture's live run has
+	// nothing wrong with it, its one stall warning ninety minutes old and
+	// outside the window that reads — with what it got past on its own
+	// listed as calm, never as alarms.
 	if model.Health.Verdict.State != VerdictHealthy {
 		t.Errorf("the verdict state is %q, want healthy", model.Health.Verdict.State)
 	}
-	if model.Health.Verdict.Summary != "" {
-		t.Errorf("the verdict summary is %q, want empty", model.Health.Verdict.Summary)
+	if model.Health.Verdict.Summary != VerdictHealthy {
+		t.Errorf("the verdict summary is %q, want %q", model.Health.Verdict.Summary, VerdictHealthy)
 	}
-	if model.Health.Verdict.Recovered == nil || len(model.Health.Verdict.Recovered) != 0 {
-		t.Errorf("the verdict's recovered list is %+v, want the empty list", model.Health.Verdict.Recovered)
+	wantRecovered := []Recovery{
+		{What: "net", Count: 1},
+		{What: "interventions", Count: 1},
+		{What: "wall clocks", Count: 1},
+	}
+	if !reflect.DeepEqual(model.Health.Verdict.Recovered, wantRecovered) {
+		t.Errorf("the verdict's recovered list is %+v, want %+v", model.Health.Verdict.Recovered, wantRecovered)
 	}
 
-	// The cost lines: none yet — the recorded_usd half still answers, and
-	// the lines are the wave-2 cost tick's to fill.
-	if model.Cost.Lines == nil {
-		t.Error("the cost lines are nil, want the empty list: the field is required")
+	// The cost lines (wave 2, tick 7uv): the spend split per river — the
+	// decisions' own recorded usage metered, the fixture's one claude attempt
+	// and two local pi/GLM attempts unmetered with NO number, never a
+	// fabricated $0.00.
+	decisionsUSD := 0.04
+	wantLines := []CostLine{
+		{Source: CostSourceDecisions, Metered: true, USD: &decisionsUSD, Attempts: 1, Basis: "usage recorded on decision records"},
+		{Source: CostSourceClaude, Metered: false, USD: nil, Attempts: 1, Basis: "not metered (subscription)"},
+		{Source: CostSourcePiLocal, Metered: false, USD: nil, Attempts: 2, Basis: "not metered"},
 	}
-	if len(model.Cost.Lines) != 0 {
-		t.Errorf("the cost lines are %+v, want empty", model.Cost.Lines)
+	if !reflect.DeepEqual(model.Cost.Lines, wantLines) {
+		t.Errorf("the cost lines are %+v, want %+v", model.Cost.Lines, wantLines)
 	}
 
 	// recent: the one field this tick fills for real. The fixture's feed has
