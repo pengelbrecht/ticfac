@@ -1148,7 +1148,7 @@
               "try": 2,
               "attempt": 6,
               "tries": [
-                { "try": 1, "attempt": 4, "outcome": "rejected", "dispatched_at": "2026-09-28T18:20:00Z", "tier": "strong", "reason": "gofmt drifted in two files", "next_step": "reformat and re-push on the next try" },
+                { "try": 1, "attempt": 4, "outcome": "rejected", "dispatched_at": "2026-09-28T18:20:00Z", "tier": "strong", "reason": "gofmt drifted in two files", "next_step": null },
                 { "try": 2, "attempt": 6, "outcome": "in-flight", "dispatched_at": "2026-09-28T18:58:02Z", "tier": "frontier", "reason": null, "next_step": null }
               ],
               "tier": "frontier",
@@ -1171,7 +1171,7 @@
               "pipeline": [
                 { "stage": "claim", "state": "done" },
                 { "stage": "work", "state": "done" },
-                { "stage": "ci", "state": "active" },
+                { "stage": "ci", "state": "failed" },
                 { "stage": "closed", "state": "pending" }
               ],
               "parent_tick_id": null,

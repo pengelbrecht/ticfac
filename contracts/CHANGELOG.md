@@ -53,6 +53,7 @@ loud.
 
 ---
 
+<<<<<<< HEAD
 ## 1.2.0
 
 MINOR: the fold of main into epic/hn6 — two parallel cuts of 1.1.0 become one.
@@ -73,6 +74,19 @@ own cut of the same version,
 b3c50e1c412e3d8b903fb671f701b6dd5717d4225e6c8254e7c8c939988b3eab, is
 recorded here instead. A consumer pinned to either 1.1.0 adopts both halves
 by moving to this version.
+=======
+## 1.1.1
+
+PATCH: two values in `status-model.json`'s `dashboard` golden, corrected to
+what the wave-2 pipeline derivation (tick 3gk) actually produces — the
+fixture is a rendering fixture, not a Build output, and it had drifted into
+illustration values no Build can emit (tick 378): the closeout tick's ci
+stage read `active` beside the golden's own red `ci.state` (a red CI is that
+stage's `failed`), and a superseded try carried a `next_step` while a later
+try stood (a next step is stated on the last try of a refusal only). The
+schema, the rules and every other byte are unchanged, and both corrected
+values remain schema-admitted. No consumer has anything to do.
+>>>>>>> e43a19cb3d78a994eadd10153cfd8d31ca3ef181
 
 ---
 
