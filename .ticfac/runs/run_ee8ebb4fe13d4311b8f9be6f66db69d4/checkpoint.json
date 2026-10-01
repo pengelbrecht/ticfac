@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
   "epic_id": "hn6",
-  "sequence": 11,
-  "state": "running",
-  "reason": "378 is running as attempt 4",
-  "updated_at": "2026-10-01T02:53:44Z",
+  "sequence": 12,
+  "state": "collecting",
+  "reason": "collecting 7uv attempt 2",
+  "updated_at": "2026-10-01T03:19:03Z",
   "ticks": [
     {
       "tick_id": "378",
