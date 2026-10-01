@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Same fixture-drift class this tick removed from the `dashboard` golden, still live and verified today in the wave-1 `status_model_running_wave` golden: nwj reads state \"closed\" with a closed try beside an all-pending pipeline cell (the derivation makes a closed tick claim/work/gate/merged all done), and 6dh reads state \"dispatched\" beside an all-pending cell, where a dispatch marker alone makes claim done and work active. Previously reported by run_3f034e683's attempt of this tick; re-verified on today's tree. No suite fails on it because the guard binds only the dashboard golden. Fix shape as this tick: correct the values through the bundle's cut procedure and extend the agreement test over every golden.\nevidence: contracts/status-model.json golden 'status_model_running_wave': nwj {state: closed, try 1 closed} with pipeline [claim pending, work pending, gate pending, merged pending]; 6dh {state: dispatched} with the same all-pending cell\n\nticfac run run_6d88e3de89ca466c8dab3841185931c1 created this tick by absorbing the finding f519ea4e7515cff0f2d598961c19b58f2bd6ce4381c1c1651b355d748dd5c9e0 (reported by run-run_6d88e3de89ca466c8dab3841185931c1/tick-378/attempt-1): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_6d88e3de89ca466c8dab3841185931c1/absorptions/f519ea4e7515cff0f2d598961c19b58f2bd6ce4381c1c1651b355d748dd5c9e0.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "oro",
+    "title": "The running_wave golden carries cells the wave-2 derivation can never produce"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.63,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.18,
+      "design": 0.01,
+      "diagnosis": 0.01,
+      "mechanical": 0.7,
+      "translation": 0.1
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1497,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-01T02:52:06Z",
+  "answered_at": "2026-10-01T02:52:06Z",
+  "provenance": {
+    "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
+    "tick_id": "oro",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "18e3c83af843e5e61ac9eb7b4847b262624d8a00",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
