@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_37b36bfe525c411b902e85dc01a16a52",
   "epic_id": "hn6",
-  "sequence": 8,
+  "sequence": 9,
   "state": "failed",
-  "reason": "0rx try 1 (run dispatch #1) is missing-result: the container's branch tick/hn6/attempt-1/0rx carries no report and no commit beyond the base it was cut from: the push never landed, and this is neither running nor done",
-  "updated_at": "2026-10-01T04:49:35Z",
+  "reason": "0rx did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: 0rx try 1 (run dispatch #1) is missing-result: the container's branch tick/hn6/attempt-1/0rx carries no report and no commit beyond the base it was cut from: the push never landed, and this is neither running nor done",
+  "updated_at": "2026-10-01T04:49:41Z",
   "ticks": [
     {
       "tick_id": "0rx",
