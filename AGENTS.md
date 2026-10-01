@@ -43,8 +43,9 @@ every main commit that changes what it ships (cloudflare/, image/, the Go
 cross-compiled into the image). So to get a fix into the factory, merge it
 and watch that workflow's run for your commit (`gh run list --workflow
 deploy-factory.yml`, then confirm its summary names your sha); check the
-result read-only with `ticfac factory status`. It waits for live runs (up to
-60 minutes) before deploying. Retry a failed deploy with `gh workflow run
+result read-only with `ticfac factory status`. It does not wait for live
+runs: `rollout_active_grace_period` keeps a rollout off their containers, and
+the run's summary names any run still holding the previous image. Retry a failed deploy with `gh workflow run
 deploy-factory.yml`. A local `ticfac factory deploy` is the fallback only
 (first install, token rotation, CI unable to deploy): from this Mac it builds
 an emulated amd64 image and is fragile. The repository is public: never paste

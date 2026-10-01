@@ -94,6 +94,11 @@ type Options struct {
 	// rolloutExtension overrides the extension (rollout.go) a wait gets
 	// while the platform still reports the rollout in progress (tests).
 	rolloutExtension time.Duration
+	// cloudflareAPIBase replaces https://api.cloudflare.com/client/v4 for the
+	// rollouts API the held-rollout check reads (tests).
+	cloudflareAPIBase string
+	// heldCheckEvery spaces the held-rollout check (tests).
+	heldCheckEvery time.Duration
 
 	// onSecretPut runs after `wrangler secret put` returns, so the test
 	// harness can propagate the secret into its fake worker the way
@@ -149,6 +154,11 @@ type Result struct {
 	// observed serving ImageDigest. False means the deploy is not claiming a
 	// run started now boots this image.
 	RolloutConfirmed bool
+	// RolloutHeldBy are the live runs still holding instances on an older
+	// image when the rollout was confirmed: under rollout_active_grace_period
+	// the platform replaces those once each run lets go. Empty when the
+	// rollout had completed.
+	RolloutHeldBy []string
 	// WorkerVersionID is the Worker version `wrangler deploy` created
 	// ("Current Version ID"), the identity Cloudflare's own dashboard and
 	// `wrangler versions` name. Empty when wrangler did not print one.
@@ -475,10 +485,12 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 	// without waiting for it, so this is where the deploy stops being allowed
 	// to claim readiness on the strength of an exit code (see rollout.go).
 	rollout, rolloutErr := confirmContainerRollout(
-		ctx, w, out, deployOut, opts.rolloutTimeout, opts.rolloutPoll, opts.rolloutExtension, opts.SkipRolloutWait)
+		ctx, w, out, deployOut, opts.rolloutTimeout, opts.rolloutPoll, opts.rolloutExtension, opts.SkipRolloutWait,
+		rolloutAPI{base: opts.cloudflareAPIBase, client: opts.HTTPClient, every: opts.heldCheckEvery})
 	result.ImageRef = rollout.Ref
 	result.ImageDigest = rollout.Digest
 	result.RolloutConfirmed = rollout.Confirmed
+	result.RolloutHeldBy = rollout.HeldBy
 	if rolloutErr != nil {
 		return result, rolloutErr
 	}

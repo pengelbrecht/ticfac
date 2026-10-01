@@ -242,8 +242,14 @@ type rolloutOutcome struct {
 	Ref string
 	// Digest is the image digest the application was confirmed to serve.
 	Digest string
-	// Confirmed reports whether the application actually answered with it.
+	// Confirmed reports whether the application actually answered with it:
+	// the application record reports it, or the rollout serves it to new
+	// instances with only live runs' instances left on an older image
+	// (rollout_held.go).
 	Confirmed bool
+	// HeldBy are the live runs still holding instances on an older image
+	// when the rollout was confirmed; empty when it had completed.
+	HeldBy []string
 }
 
 // confirmContainerRollout waits for the container application to report the
@@ -255,6 +261,7 @@ func confirmContainerRollout(
 	deployOut string,
 	timeout, poll, extension time.Duration,
 	skip bool,
+	api rolloutAPI,
 ) (rolloutOutcome, error) {
 	ref, digest := parsePushedImage(deployOut)
 	noPush := deploySkippedImagePush(deployOut)
@@ -305,6 +312,12 @@ func confirmContainerRollout(
 	var lastAppID string
 	extended := false
 	var lastErr error
+	heldEvery := api.every
+	if heldEvery <= 0 {
+		heldEvery = defaultHeldCheckEvery
+	}
+	var lastHeldCheck time.Time
+	var lastHeldWhy string
 	for attempt := 1; ; attempt++ {
 		apps, err := w.listContainerApps(ctx)
 		switch {
@@ -323,9 +336,15 @@ func confirmContainerRollout(
 				if digest == "" && lastServing != "" {
 					// Wrangler intentionally omitted the image block because it did
 					// not push. The application record is the authoritative image
-					// identity for this idempotent deploy.
+					// identity for this idempotent deploy — unless an earlier
+					// deploy's rollout is still held open by a live run, in which
+					// case the record still names the image before it, and the
+					// image that deploy pushed is the rollout's target.
 					ref = app.Image
-					digest = lastServing
+					if target := w.activeRolloutTarget(ctx, api, app.ID); target != "" {
+						ref = target
+					}
+					digest = digestPattern.FindString(ref)
 					outcome.Ref = ref
 					outcome.Digest = digest
 					fmt.Fprintf(out, "  existing container image is %s; confirming it\n", shortDigest(digest))
@@ -335,6 +354,31 @@ func confirmContainerRollout(
 						ContainerAppName, shortDigest(digest), app.State)
 					outcome.Confirmed = true
 					return outcome, nil
+				}
+				// Under rollout_active_grace_period a live run holds its
+				// instances on the previous image, and the application record
+				// does not move until the rollout completes — possibly hours
+				// later. New instances serving this image is the claim a deploy
+				// owes (rollout_held.go).
+				if time.Since(lastHeldCheck) >= heldEvery {
+					lastHeldCheck = time.Now()
+					held, why := w.checkHeldRollout(ctx, api, app.ID, digest)
+					if why == "" {
+						fmt.Fprintf(out, "container application %s serves %s to new instances (rollout %s, %d of %d instances updated)\n",
+							ContainerAppName, shortDigest(digest), held.RolloutID, held.Updated, held.Total)
+						if held.Finishing {
+							fmt.Fprintf(out, "  every instance runs the new version; the platform has not marked the rollout complete yet\n")
+						} else {
+							fmt.Fprintf(out, "  %d instance(s) still on the previous image, held by live run(s): %s\n",
+								held.Held, strings.Join(held.Runs, ", "))
+							fmt.Fprintf(out, "  rollout_active_grace_period keeps a rollout from replacing a container a run holds; "+
+								"the platform replaces each once its run lets it go\n")
+						}
+						outcome.Confirmed = true
+						outcome.HeldBy = held.Runs
+						return outcome, nil
+					}
+					lastHeldWhy = why
 				}
 			}
 		}
@@ -421,7 +465,28 @@ func confirmContainerRollout(
 			failure.Reason += "; the rollout is still in progress and may yet land"
 		}
 	}
+	if lastHeldWhy != "" {
+		failure.Reason += "; new instances were not shown to serve it: " + lastHeldWhy
+	}
 	return outcome, failure
+}
+
+// activeRolloutTarget is the image the rollout in progress targets, "" when
+// none is in progress or it cannot be read.
+func (w *wrangler) activeRolloutTarget(ctx context.Context, api rolloutAPI, appID string) string {
+	health := w.containerHealth(ctx, appID)
+	if !health.RolloutActive || health.AccountID == "" {
+		return ""
+	}
+	token, err := w.apiToken(ctx)
+	if err != nil {
+		return ""
+	}
+	r, err := fetchRollout(ctx, api, token, health.AccountID, appID, health.RolloutID)
+	if err != nil || digestPattern.FindString(r.Target.Image) == "" {
+		return ""
+	}
+	return r.Target.Image
 }
 
 // rolloutExtension is how much longer the wait runs, once, when the base bound
@@ -438,6 +503,12 @@ type containerHealth struct {
 	Errors []string
 	// RolloutActive reports that a rollout is still in progress.
 	RolloutActive bool
+	// RolloutID is the rollout in progress, "" when none is.
+	RolloutID string
+	// AccountID is the account the application belongs to — what the
+	// rollouts API is addressed by. Never printed: the deploy's output lands
+	// in a public CI log.
+	AccountID string
 }
 
 // containerHealth reads the application's health, or the zero value when it
@@ -452,6 +523,7 @@ func (w *wrangler) containerHealth(ctx context.Context, id string) containerHeal
 		return containerHealth{}
 	}
 	var info struct {
+		AccountID       string  `json:"account_id"`
 		ActiveRolloutID *string `json:"active_rollout_id"`
 		Health          struct {
 			Errors []json.RawMessage `json:"errors"`
@@ -460,10 +532,15 @@ func (w *wrangler) containerHealth(ctx context.Context, id string) containerHeal
 	if json.Unmarshal([]byte(raw), &info) != nil {
 		return containerHealth{}
 	}
-	return containerHealth{
-		Errors:        renderHealthErrors(info.Health.Errors),
-		RolloutActive: info.ActiveRolloutID != nil && *info.ActiveRolloutID != "",
+	health := containerHealth{
+		Errors:    renderHealthErrors(info.Health.Errors),
+		AccountID: info.AccountID,
 	}
+	if info.ActiveRolloutID != nil && *info.ActiveRolloutID != "" {
+		health.RolloutActive = true
+		health.RolloutID = *info.ActiveRolloutID
+	}
+	return health
 }
 
 // registryAccountPattern is the account id inside a managed-registry image
