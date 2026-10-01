@@ -1,0 +1,14 @@
+{
+  "id": "lkq",
+  "title": "No golden document anywhere in the bundle carries a non-null next_step, so the field the first-use bug is about has zero fixture coverage for the renderers still to come",
+  "description": "All three goldens (dashboard, status_model_running_wave, status_model_completed_awaiting_merge) carry next_step null on every try — tick 378's anchor deliberately stops at reason, because the dashboard golden's one refusal was superseded by a live try and no next step is derivable from it. The consequence is not that anchor's but the bundle's: every renderer downstream of the model — the phone page (A5, i1r), z7w's properties, any future golden test — has no fixture that shows the field rendering, and c2u had to shape a next step in test code to pin the tick view's '— next:' line. Fix shape: a fourth golden (status_model_refused_last_try: a tick whose LAST try is refused, with the run's own reason and next step derivable from its own facts — a later attention entry or a redispatch line) admitted by the schema, so TestEveryGoldenAgreesWithThePipelineDerivation covers the field the way it now covers the cells. This does not touch the dashboard golden's anchor.\nevidence: contracts/status-model.json golden.{dashboard,status_model_running_wave,status_model_completed_awaiting_merge} — all next_step null; the anchor's rationale internal/statusmodel/contract_test.go (TestTheContractBindsTheDashboardGolden, the try-anchor comment); c2u's shaped fixture internal/cli/watch_drill_test.go\n\nticfac run run_d51a747f10ed41429f925ba4b83053d8 created this tick by absorbing the finding b8b948426a47dcc310b4fe4a1af62d22e2b347fc7f1763e0075ef360e6e97717 (reported by run-run_d51a747f10ed41429f925ba4b83053d8/tick-c2u/attempt-14): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_d51a747f10ed41429f925ba4b83053d8/absorptions/b8b948426a47dcc310b4fe4a1af62d22e2b347fc7f1763e0075ef360e6e97717.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-run_d51a747f10ed41429f925ba4b83053d8/tick-c2u/attempt-14",
+  "created_by": "ticfac run run_d51a747f10ed41429f925ba4b83053d8",
+  "created_at": "2026-10-01T09:17:57Z",
+  "updated_at": "2026-10-01T09:17:57Z"
+}
