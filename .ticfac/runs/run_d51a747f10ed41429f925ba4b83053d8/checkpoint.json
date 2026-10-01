@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
   "epic_id": "hn6",
-  "sequence": 62,
-  "state": "integrating",
-  "reason": "integrating u5n attempt 9 into epic/hn6",
-  "updated_at": "2026-10-01T08:19:03Z",
+  "sequence": 63,
+  "state": "gating",
+  "reason": "running the integrated gate for u5n on c12a9e1c1f41",
+  "updated_at": "2026-10-01T08:19:12Z",
   "ticks": [
     {
       "tick_id": "0rx",
