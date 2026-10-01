@@ -60,6 +60,16 @@ declare namespace Cloudflare {
      */
     SANDBOXES?: import("./sandbox").SandboxBinding | import("./sandbox").SandboxNamespace;
     /**
+     * The factory's own container class on the `durable_object` scheduling
+     * policy (epic umq, src/factory-sandbox.ts): a running container keeps
+     * the image it started on through every deploy. Off by default — only a
+     * run submitted on this substrate is routed here. A seam, like
+     * `SANDBOXES`, so a test can substitute a fake.
+     */
+    SANDBOXES_V1?:
+      | import("./sandbox").SandboxBinding
+      | import("./factory-sandbox").FactorySandboxNamespace;
+    /**
      * The orchestrator image this deployment's container application serves,
      * for a deployment that pushed it into its own registry. Unset means the
      * bundled default (`DEFAULT_SANDBOX_IMAGE`).

@@ -1,0 +1,27 @@
+# The STAGING Worker (epic umq, tick nmd): FactorySandbox alone, under its own
+# Worker name AND its own container application name, so a deploy can be
+# rehearsed under a live container without touching the production factory.
+# `wrangler deploy --name` does not rename container applications, which is
+# why this is a file of its own rather than a flag. Routes: src/staging.ts.
+name = "ticks-factory-staging"
+main = "../src/staging.ts"
+compatibility_date = "2026-08-11"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+[[durable_objects.bindings]]
+name = "SANDBOXES_V1"
+class_name = "FactorySandbox"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["FactorySandbox"]
+
+[[containers]]
+class_name = "FactorySandbox"
+name = "ticks-factory-sandbox-staging"
+scheduling_policy = "durable_object"
+
+[containers.images.factory]
+dockerfile = "./Dockerfile"
+build_context = "."
