@@ -45,7 +45,7 @@ local (not part of the four-operation protocol):
   dispose  < job_handle.json    remove the attempt worktree and branch
   stop                          record the durable refusal to issue credentials
   supervise --state <dir>       run one attempt to settlement (started by start)
-  lint-report <path> [--role <role>] [--tick <id>] [--repo <dir>]
+  lint-report <path> [--role <role>] [--tick <id>] [--repo <dir>] [--pushback]
                                 check a worker's report the way collect reads it;
                                 exit 0 clean, 1 with errors (listed on stdout)
 
