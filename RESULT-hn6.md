@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/hn6/attempt-1-base-fold-1-966a7332/hn6`, base `a7c5bf39fe5fb6155531c0bb721b0295910ea4dc`, harness `pi` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+
 # resolve-conflict: the fold of main into epic/hn6
 
 The branch is `tick/hn6/attempt-1-base-fold-1-966a7332/hn6`: epic/hn6 at
