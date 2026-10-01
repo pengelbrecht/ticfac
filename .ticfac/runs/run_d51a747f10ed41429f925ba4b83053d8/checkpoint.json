@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
   "epic_id": "hn6",
-  "sequence": 46,
-  "state": "collecting",
-  "reason": "collecting yjq attempt 8",
-  "updated_at": "2026-10-01T07:52:04Z",
+  "sequence": 47,
+  "state": "running",
+  "reason": "yjq try 2 (run dispatch #8) is rejected (no-commits): the only commit tick/hn6/attempt-8/yjq carries beyond its base (f10404aba55a) is the container's own report at RESULT-yjq.md: the worker committed no work, and a report is not a deliverable",
+  "updated_at": "2026-10-01T07:52:35Z",
   "ticks": [
     {
       "tick_id": "0rx",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "yjq",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 8
     },
     {
