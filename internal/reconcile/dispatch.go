@@ -3309,8 +3309,18 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 				return nil, r.answerBlocked(ctx, entry, marker, answer, RefusedNeedsHuman)
 			}
 		}
-		return nil, r.refuse(RefusedCollect, marker.TickID, "%s is %s: %s",
+		refusal := r.refuse(RefusedCollect, marker.TickID, "%s is %s: %s",
 			r.attemptName(marker.TickID, marker.Attempt), collected.Verdict, collected.Message)
+		// A worker that never answered — no report at all, the missing-result
+		// a lost container, a dead runner or a push that never landed leaves
+		// — and left nothing to carry: the window dispatches the tick again
+		// in-run (redispatchesInRun). A worker that answered with an empty
+		// branch (no-commits) answered on the merits, and one stopped by a
+		// bound of its own (its wall clock, its budget, its quota, a refused
+		// credential) would meet the same bound again: both are held, as
+		// they were.
+		refusal.neverAnswered = neverAnswered(collected) && r.rejectedWorkHead(marker) == ""
+		return nil, refusal
 	}
 
 	// The branch would merge. What the worker SAID is the other half of the

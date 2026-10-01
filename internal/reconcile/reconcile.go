@@ -2545,6 +2545,13 @@ type Refusal struct {
 	// of the merge machinery. The finish hands it to the standing ladder
 	// (finishIntegrate) rather than halting the run for a person.
 	conflict bool
+
+	// neverAnswered marks a collect_failed whose worker never answered (the
+	// missing-result verdict: no report at all) and left nothing to carry:
+	// no commits, nothing a person has to look at. The window dispatches
+	// such a tick again in-run (redispatchesInRun) rather than holding it for
+	// the next incarnation.
+	neverAnswered bool
 }
 
 func (r *Refusal) Error() string { return r.Message }
