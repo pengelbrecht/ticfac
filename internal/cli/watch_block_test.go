@@ -31,13 +31,33 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
-// fakeTerminal makes every writer a 100x30 terminal for one test.
+// fakeTerminal makes every writer a 100x30 terminal for one test — and the
+// keyboard keyless, because a test has none whatever the host's stdin is
+// attached to.
 func fakeTerminal(t *testing.T) {
 	t.Helper()
 	realTTY, realSize := watchIsTerminal, watchTerminalSize
 	t.Cleanup(func() { watchIsTerminal, watchTerminalSize = realTTY, realSize })
 	watchIsTerminal = func(io.Writer) bool { return true }
 	watchTerminalSize = func(io.Writer) (int, int, bool) { return 100, 30, true }
+	realKeys := watchAttachKeys
+	t.Cleanup(func() { watchAttachKeys = realKeys })
+	watchAttachKeys = func(context.Context) (<-chan string, func(), bool) { return nil, nil, false }
+}
+
+// fakeKeys replaces the keyboard seam with a channel the test feeds and a
+// restore the test can watch, so the key wiring is driven headless the way
+// the reducer is.
+func fakeKeys(t *testing.T) (chan string, *bool) {
+	t.Helper()
+	real := watchAttachKeys
+	t.Cleanup(func() { watchAttachKeys = real })
+	keys := make(chan string, 8)
+	restored := new(bool)
+	watchAttachKeys = func(context.Context) (<-chan string, func(), bool) {
+		return keys, func() { *restored = true }, true
+	}
+	return keys, restored
 }
 
 // watchWaitsFor polls a condition on a short interval until it holds or the
@@ -130,13 +150,13 @@ func TestWatchOnATerminalRendersTheEpicInPlace(t *testing.T) {
 		t.Errorf("the frame was never redrawn in place:\n%s", stdout.String())
 	}
 
-	// An event worth remembering — a gate failure — is kept ABOVE the
-	// block, as a plain line in the scrollback, and the block below it
-	// keeps working.
+	// The feed is no longer replayed as lines above the block: an event
+	// worth remembering — a gate failure — lands in the frame's own
+	// two-line tail (epic hn6 rule 6), and the block below it keeps working.
 	two := 2
 	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "t2", &two,
 		reconcile.StageGateFailed, "the integrated gate refused: go test failed"))
-	watchWaitsFor(t, "the keep line", func() bool {
+	watchWaitsFor(t, "the event in the tail", func() bool {
 		return strings.Contains(stdout.String(), "gate_failed: the integrated gate refused")
 	}, &stdout, &stderr)
 
@@ -487,5 +507,90 @@ func setCheckpointState(t *testing.T, repo, runID, state string) {
 	}
 	if err := os.WriteFile(path, out, 0o644); err != nil {
 		t.Fatalf("write the checkpoint: %v", err)
+	}
+}
+
+// TestWatchOnATerminalTakesKeys: on a terminal the dashboard answers the
+// keyboard (epic hn6 wave 4). j selects the plan's first row, enter opens
+// that tick's drill view, esc comes back down, e opens the whole feed —
+// lines the dashboard's two-line tail never showed — and q on the dashboard
+// ends the watch exactly as SIGINT does today: the same words, the same
+// exit code. Raw mode is restored on the way out, whatever ended the watch.
+func TestWatchOnATerminalTakesKeys(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+	runID := "epic-rmod"
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+	fakeTerminal(t)
+	keys, restored := fakeKeys(t)
+
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	var stdout, stderr syncBuffer
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
+	}()
+
+	watchWaitsFor(t, "the dashboard", func() bool {
+		return strings.Contains(stdout.String(), "◐ waves 2/3")
+	}, &stdout, &stderr)
+
+	// j moves the cursor onto the plan's first row.
+	keys <- "j"
+	watchWaitsFor(t, "the cursor on t1", func() bool {
+		return strings.Contains(stdout.String(), "▸t1")
+	}, &stdout, &stderr)
+
+	// enter opens the tick's drill view.
+	keys <- "enter"
+	watchWaitsFor(t, "the tick view", func() bool {
+		return strings.Contains(stdout.String(), "[esc] back")
+	}, &stdout, &stderr)
+
+	// esc comes back, and the frame under the cursor is the dashboard's
+	// again — drawn after the drill view's last frame.
+	keys <- "esc"
+	watchWaitsFor(t, "back on the dashboard", func() bool {
+		out := stdout.String()
+		return strings.LastIndex(out, "◐ waves 2/3") > strings.LastIndex(out, "[esc] back")
+	}, &stdout, &stderr)
+
+	// e opens the whole feed: the standing feed's own lines, not the tail's
+	// two — the retry line is the feed's oldest and the tail never shows it.
+	keys <- "e"
+	watchWaitsFor(t, "the feed view", func() bool {
+		return strings.Contains(stdout.String(), "origin refused the fetch; retry 1")
+	}, &stdout, &stderr)
+
+	// esc comes back once more, and q on the dashboard ends the watch the
+	// way SIGINT does: the run is still going here, so the interrupted
+	// answer — exit 1, the words that say so — is the contract.
+	keys <- "esc"
+	watchWaitsFor(t, "back on the dashboard again", func() bool {
+		out := stdout.String()
+		return strings.LastIndex(out, "◐ waves 2/3") > strings.LastIndex(out, "origin refused the fetch")
+	}, &stdout, &stderr)
+	keys <- "q"
+	var got int
+	select {
+	case got = <-code:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("q on the dashboard never ended the watch;\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	}
+	if got != 1 {
+		t.Errorf("exit code %d, want 1 for a watch ended by q on a live run; stderr:\n%s", got, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "the watch was interrupted") {
+		t.Errorf("q did not end the watch the way SIGINT words it:\n%s", stderr.String())
+	}
+	if !*restored {
+		t.Error("the terminal's raw mode was never restored on the way out")
 	}
 }
