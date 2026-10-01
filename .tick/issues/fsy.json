@@ -3,7 +3,7 @@
   "title": "Bump wrangler to \u003e=4.142 and opt in to pending-I/O keep-alive",
   "gloss": "wrangler bump + io keepalive",
   "description": "wrangler ^4.142 (durable_object policy needs \u003e=4.131; local dev \u003e=4.136). Add compat flag durable_object_io_tasks_prevent_eviction. Allow-list Cloudflare's own packages past the 3-day release-age gate in the cloudflare pnpm workspace (minimumReleaseAgeExclude) so SDK 1.0 / new wrangler install.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
@@ -11,5 +11,7 @@
   "acceptance_criteria": "cloudflare deps install; tests + make gate green",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-01T08:24:24.55246Z",
-  "updated_at": "2026-10-01T08:24:24.55246Z"
+  "updated_at": "2026-10-01T08:48:01.244085Z",
+  "closed_at": "2026-10-01T08:48:01.244085Z",
+  "closed_reason": "PR #187 (826be55b)"
 }

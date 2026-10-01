@@ -2017,3 +2017,5 @@
 {"ts":"2026-10-01T08:24:24.711352Z","tick":"dax","action":"create","actor":"peter@engelbrecht.dk","epic":"umq","data":{"priority":2,"title":"Default new runs to the new path; delete grace period, rollout_held, rollout wait, old app","type":"task"}}
 {"ts":"2026-10-01T08:24:24.739645Z","tick":"l76","action":"create","actor":"peter@engelbrecht.dk","epic":"umq","data":{"priority":2,"title":"Final review of the SDK 1.0 migration diff","type":"task"}}
 {"ts":"2026-10-01T08:24:24.770556Z","tick":"rlx","action":"create","actor":"peter@engelbrecht.dk","epic":"umq","data":{"priority":2,"title":"Close out the SDK 1.0 migration: retro, then the next feasible epic","type":"task"}}
+{"ts":"2026-10-01T08:48:01.244473Z","tick":"fsy","action":"close","actor":"peter@engelbrecht.dk","epic":"umq","data":{"reason":"PR #187 (826be55b)","title":"Bump wrangler to \u003e=4.142 and opt in to pending-I/O keep-alive"}}
+{"ts":"2026-10-01T08:48:01.332648Z","tick":"x9d","action":"close","actor":"peter@engelbrecht.dk","epic":"umq","data":{"reason":"PR #188 (c179d761)","title":"Process runner script in the image (works under 0.x and DO-managed containers)"}}
