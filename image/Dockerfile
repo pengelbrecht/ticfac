@@ -263,7 +263,11 @@ COPY entrypoint.sh /usr/local/bin/ticks-orchestrator
 COPY worker.sh /usr/local/bin/ticks-worker
 COPY preflight.sh /usr/local/bin/ticks-preflight
 COPY common.sh /usr/local/share/ticks/common.sh
-RUN chmod 0755 /usr/local/bin/ticks-orchestrator /usr/local/bin/ticks-worker /usr/local/bin/ticks-preflight \
+# ticks-proc: background processes for a container started through a Durable
+# Object's own ctx.container (epic umq), which has no 0.x control server to
+# own them. Unused by the 0.x path; the two coexist.
+COPY proc.sh /usr/local/bin/ticks-proc
+RUN chmod 0755 /usr/local/bin/ticks-orchestrator /usr/local/bin/ticks-worker /usr/local/bin/ticks-preflight /usr/local/bin/ticks-proc \
     && chmod 0644 /usr/local/share/ticks/common.sh
 
 # Green-start discipline: prove every battery answers before the image ships.

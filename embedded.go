@@ -149,7 +149,7 @@ func FactoryFS() embed.FS {
 // TestTheImageTreeIsWhatTheBinaryShips fails until it is.
 //
 //go:embed image/Dockerfile image/entrypoint.sh image/preflight.sh
-//go:embed image/worker.sh image/common.sh
+//go:embed image/worker.sh image/common.sh image/proc.sh
 //go:embed image/build.sh image/README.md
 //go:embed image/required-tk-commands
 var sandboxFS embed.FS
