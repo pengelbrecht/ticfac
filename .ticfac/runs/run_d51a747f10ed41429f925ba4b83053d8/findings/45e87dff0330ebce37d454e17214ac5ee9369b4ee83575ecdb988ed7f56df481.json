@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "zl1",
   "attempt": 6,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-01T07:25:34Z",
+  "triaged_at": "2026-10-01T07:25:44Z",
+  "triaged_by": "ticfac run run_d51a747f10ed41429f925ba4b83053d8 absorbing wwy",
+  "promoted_as": "wwy",
   "provenance": {
     "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
     "tick_id": "zl1",
