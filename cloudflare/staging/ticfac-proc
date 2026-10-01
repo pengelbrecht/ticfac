@@ -1,0 +1,72 @@
+#!/bin/sh
+# STAGING STAND-IN for the image's process runner (tick x9d owns the real one
+# in image/). The same verbs FactorySandbox calls:
+#   start <root> <id> -- argv...     exit 17 when <id> exists; returns once recorded
+#   inspect <root> <id>              running <pid> | exited <code> | starting | lost | missing
+#   read <root> <id> <offset> <max>  raw output bytes from a byte offset
+#   kill <root> <id>                 SIGTERM to the process group
+#   list <root>                      one id per line
+set -u
+verb=${1:-}
+root=${2:-}
+case "$verb" in
+start)
+  id=$3
+  shift 3
+  [ "${1:-}" = "--" ] && shift
+  dir="$root/$id"
+  mkdir -p "$root"
+  mkdir "$dir" 2>/dev/null || { echo "exists"; exit 17; }
+  # setsid: its own process group, so kill reaches what it starts.
+  setsid sh -c '
+    d=$1; shift
+    sh -c '\''echo "$$ $(cat /proc/sys/kernel/random/boot_id)" > "$0/pid"; exec "$@"'\'' "$d" "$@" > "$d/output" 2>&1
+    echo $? > "$d/exit.tmp" && mv "$d/exit.tmp" "$d/exit"
+  ' sh "$dir" "$@" </dev/null >/dev/null 2>&1 &
+  i=0
+  while [ ! -e "$dir/pid" ] && [ ! -e "$dir/exit" ] && [ $i -lt 100 ]; do
+    sleep 0.05
+    i=$((i + 1))
+  done
+  exit 0
+  ;;
+inspect)
+  dir="$root/$3"
+  if [ ! -d "$dir" ]; then
+    echo missing
+  elif [ -e "$dir/exit" ]; then
+    echo "exited $(cat "$dir/exit")"
+  elif [ ! -e "$dir/pid" ]; then
+    echo starting
+  else
+    read -r pid boot <"$dir/pid"
+    if [ "$boot" = "$(cat /proc/sys/kernel/random/boot_id)" ] && kill -0 "$pid" 2>/dev/null; then
+      echo "running $pid"
+    elif [ -e "$dir/exit" ]; then
+      echo "exited $(cat "$dir/exit")"
+    else
+      echo lost
+    fi
+  fi
+  ;;
+read)
+  f="$root/$3/output"
+  [ -f "$f" ] || exit 1
+  tail -c +"$(($4 + 1))" "$f" | head -c "$5"
+  ;;
+kill)
+  dir="$root/$3"
+  { [ -e "$dir/pid" ] && [ ! -e "$dir/exit" ]; } || exit 0
+  read -r pid boot <"$dir/pid"
+  kill -s TERM -- "-$pid" 2>/dev/null || kill -s TERM "$pid" 2>/dev/null
+  exit 0
+  ;;
+list)
+  [ -d "$root" ] && ls -1 "$root"
+  exit 0
+  ;;
+*)
+  echo "usage: ticfac-proc start|inspect|read|kill|list" >&2
+  exit 2
+  ;;
+esac

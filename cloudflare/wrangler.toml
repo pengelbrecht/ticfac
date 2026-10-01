@@ -83,6 +83,12 @@ new_sqlite_classes = ["SignalInbox"]
 tag = "v4"
 new_sqlite_classes = ["RepoRoom"]
 
+# FactorySandbox (epic umq, tick nmd): the durable_object-policy container
+# class. At the bottom, for the reason above.
+[[migrations]]
+tag = "v5"
+new_sqlite_classes = ["FactorySandbox"]
+
 # The container application the Sandbox class runs. `image` is a path to the
 # Dockerfile of the image context (ticfac/image — SPEC §12 Phase 4 item 4
 # moved it there from cloud/sandbox), relative to this bundle's directory
@@ -131,6 +137,36 @@ instance_type = "standard-3"
 # longest any run may live — so an instance is replaced only once no run can
 # still be using it; idle instances roll at once. The suite pins the two.
 rollout_active_grace_period = 86400
+
+# The factory's own container class on the `durable_object` scheduling policy
+# (epic umq, tick nmd): src/factory-sandbox.ts. A SECOND application beside
+# `ticks-orchestrator` above, never a change to it — the policy of an existing
+# application cannot change, and the 0.x `Sandbox` class keeps every run that
+# was submitted on it (a run never straddles the two; tick 1hq routes a run by
+# the substrate its record names). Off by default: nothing addresses
+# SANDBOXES_V1 until a run is submitted on it.
+#
+# What the policy changes: a running container keeps the image it STARTED on
+# through every later deploy (no application-wide rollout exists to take it),
+# the class picks the image and the instance size per start, and there is no
+# `max_instances` — the policy refuses one, so container-capacity.ts's count
+# is the only cap. The application `name` must be new and must not contain
+# `ticks-orchestrator` (internal/factory/rollout.go reads the 0.x image's
+# digest out of the deploy output by that name).
+[[durable_objects.bindings]]
+name = "SANDBOXES_V1"
+class_name = "FactorySandbox"
+
+[[containers]]
+class_name = "FactorySandbox"
+name = "ticks-factory-sandbox"
+scheduling_policy = "durable_object"
+
+# The image a FactorySandbox starts on unless the run pinned another
+# (`ctx.container.images.factory`). The same image context as the 0.x
+# application's: `ticfac factory deploy` stages it beside this bundle.
+[containers.images.factory]
+dockerfile = "../image/Dockerfile"
 
 # The Worker version this code is running as (its id, tag and upload time),
 # so GET /api/deployment can say which version the factory actually serves —
