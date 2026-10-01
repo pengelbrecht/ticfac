@@ -45,7 +45,12 @@ export async function stagingFetch(request: Request, env: StagingEnv): Promise<R
       if (command === "" || request.method !== "POST")
         return new Response("POST ?cmd=", { status: 400 });
       const keepAlive = url.searchParams.get("keepalive") === "1";
-      return Response.json(await stub.startProcess(command, {}, { keepAlive }));
+      // ?pin=<digest-pinned ref>: start on an image an earlier deploy built
+      // (v1d: is a ref no longer in ctx.container.images still accepted?).
+      const pin = url.searchParams.get("pin");
+      return Response.json(
+        await stub.startProcess(command, {}, { keepAlive, ...(pin ? { pinnedImage: pin } : {}) }),
+      );
     }
     case "proc":
       return id === undefined

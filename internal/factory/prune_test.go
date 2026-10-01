@@ -266,3 +266,35 @@ func TestPruneFlagsStorageNearTheLimit(t *testing.T) {
 		t.Error("an image was deleted from a repository within the keep count")
 	}
 }
+
+// A FactorySandbox image a live run pins is never pruned (umq v1d, [A4]): the
+// pins come from D1, and an answer that cannot be read stops the prune.
+func TestPinnedDigestsReadTheLiveRunsPins(t *testing.T) {
+	pinned := "registry.cloudflare.com/acct/" + FactorySandboxImageRepo + "@" + digestOf('d')
+	out := "banner line\n[{\"results\":[{\"image\":\"" + pinned + "\"},{\"image\":\"no digest\"}],\"success\":true,\"meta\":{}}]\n"
+	got, ok := pinnedDigests(out)
+	if !ok || len(got) != 1 || got[0] != digestOf('d') {
+		t.Fatalf("pinnedDigests = %v, %v; want [%s], true", got, ok, digestOf('d'))
+	}
+	if got, ok := pinnedDigests("[{\"results\":[],\"success\":true}]"); !ok || len(got) != 0 {
+		t.Errorf("no live pins: got %v, %v; want [], true", got, ok)
+	}
+	for _, bad := range []string{"", "not json", "[]", "[{\"results\":[],\"success\":false}]"} {
+		if _, ok := pinnedDigests(bad); ok {
+			t.Errorf("pinnedDigests(%q) was read as an answer", bad)
+		}
+	}
+
+	// The selection keeps the newest three and the pinned one, however old.
+	var images []registryImage
+	for i := 0; i < 6; i++ {
+		images = append(images, registryImage{
+			Tag: fmt.Sprintf("t%d", i), Digest: digestOf(byte('a' + i)),
+			Created: time.Date(2026, 9, 1+i, 0, 0, 0, 0, time.UTC),
+		})
+	}
+	pruned := tags(selectImagesToPrune(images, factorySandboxKeepNewest, []string{digestOf('a')}))
+	if strings.Join(pruned, ",") != "t1,t2" {
+		t.Errorf("pruned %v, want [t1 t2] (t0 is pinned, t3-t5 are the newest three)", pruned)
+	}
+}

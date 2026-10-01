@@ -100,15 +100,42 @@ describe("routedSandboxBinding", () => {
     ]);
   });
 
-  it("keeps a do_v1 run's orchestrator on 0.x until v1d moves it", async () => {
+  it("routes a do_v1 run's orchestrator to SANDBOXES_V1 too (v1d)", async () => {
     const legacy = recorder("legacy");
     const v1 = recorder("v1");
     const routed = routedSandboxBinding(legacy.binding, v1.binding, lookup);
 
-    await routed.get(sandboxName(RUN, 1), { keepAlive: true });
+    await routed.get(sandboxName(RUN, 1), { keepAlive: true, image: "docker.io/x:1" });
 
-    expect(v1.gets).toEqual([]);
-    expect(legacy.gets).toHaveLength(1);
+    expect(legacy.gets).toEqual([]);
+    expect(v1.gets).toEqual([
+      {
+        name: sandboxName(RUN, 1),
+        options: {
+          keepAlive: true,
+          image: "docker.io/x:1",
+          instance: INSTANCE_BY_JOB_KIND.orchestrator,
+        },
+      },
+    ]);
+  });
+
+  it("starts every container of a run on the image the run pinned", async () => {
+    const pinned = "registry.cloudflare.com/acct/ticks-factory-factorysandbox-factory@sha256:00aa";
+    const legacy = recorder("legacy");
+    const v1 = recorder("v1");
+    const routed = routedSandboxBinding(legacy.binding, v1.binding, async () => ({
+      substrate: DO_V1,
+      image: pinned,
+    }));
+
+    await routed.get(sandboxName(RUN, 1), { keepAlive: true });
+    await routed.get(attemptSandboxName(RUN, "nmd", 1));
+
+    expect(v1.gets.map((g) => (g.options as { pinnedImage?: string }).pinnedImage)).toEqual([
+      pinned,
+      pinned,
+    ]);
   });
 
   it("reads a run's record once per binding", async () => {
@@ -244,6 +271,30 @@ describe("a run submitted on do_v1", () => {
 
     expect(await readRunSubstrate(env.DB, v1)).toEqual({ substrate: DO_V1, image: null });
     expect(await readRunSubstrate(env.DB, plain)).toEqual({ substrate: "sdk0", image: null });
+  });
+
+  it("pins the deployment's FactorySandbox image in its record at submit (v1d)", async () => {
+    const pinned = "registry.cloudflare.com/acct/ticks-factory-factorysandbox-factory@sha256:00bb";
+    const real = (env as unknown as Record<string, unknown>).SANDBOXES_V1;
+    const asked: string[] = [];
+    (env as unknown as Record<string, unknown>).SANDBOXES_V1 = {
+      idFromName: (name: string) => {
+        asked.push(name);
+        return name;
+      },
+      get: () => ({ imageRef: async () => pinned }),
+    };
+    try {
+      const runID = await submit({ substrate: "do_v1" });
+      expect(await readRunSubstrate(env.DB, runID)).toEqual({ substrate: DO_V1, image: pinned });
+      expect(asked).toEqual(["image-ref"]);
+      // A plain run asks nothing and records nothing.
+      const plain = await submit({});
+      expect(asked).toHaveLength(1);
+      expect((await readRunSubstrate(env.DB, plain)).image).toBeNull();
+    } finally {
+      (env as unknown as Record<string, unknown>).SANDBOXES_V1 = real;
+    }
   });
 
   it("can be locally orchestrated too (the cloud-workers mode), recording both", async () => {

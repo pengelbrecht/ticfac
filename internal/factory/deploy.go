@@ -416,6 +416,10 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("deploying the factory worker: %w", err)
 	}
+	// FactorySandbox's images (epic umq): no rollout to wait for — a running
+	// container keeps its startup image — so they are bounded right away,
+	// never touching a digest a live run pins.
+	pruneFactorySandboxImages(ctx, w, out, opts, DatabaseName)
 
 	url := strings.TrimSuffix(opts.URL, "/")
 	if url == "" {
