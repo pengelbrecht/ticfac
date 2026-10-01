@@ -1,6 +1,7 @@
 package reconcile
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -271,10 +272,24 @@ func roleJobAnsweredNothing(head, base, carried string, ledger roleJobLedger, he
 // Every other refusal stays the stop it was: live or unaddressable work under
 // the identity is never dispatched over, and a cancelled or unenforceable
 // dispatch is a person's to read.
+//
+// A start the substrate itself calls PERMANENT (permanentStart — the cloud
+// door's invalid_sandbox_name) is a stop on its merits, once: the same
+// identity is refused the same way on every ask, and counting it a job that
+// never answered spent hn6 run_ee8e's resolve allowance in six seconds.
 func startIsOperational(err error) bool {
+	var permanent permanentStartAnswer
+	if errors.As(err, &permanent) && permanent.PermanentStart() {
+		return false
+	}
 	refusal, ok := subprocess.AsRefusal(err)
 	if !ok {
 		return err != nil
 	}
 	return refusal.Reason == subprocess.RefusedSettled
 }
+
+// permanentStartAnswer is a substrate's typed "this start can never succeed
+// under this identity" (the cloud door's invalid_sandbox_name), recognised
+// by its method so this package imports no executor.
+type permanentStartAnswer interface{ PermanentStart() bool }

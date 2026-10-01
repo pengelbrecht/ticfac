@@ -99,6 +99,12 @@
  *     outlasted the caller's client in hn6's cloud run. Retry later; an
  *     adoption is never refused for capacity.
  *
+ *   - `422 invalid_sandbox_name` — the Sandbox SDK refuses the container
+ *     name the job's identity derives (longer than 63 characters, a hyphen
+ *     at either end, a reserved name). Permanent: the same identity derives
+ *     the same name, so asking again is refused the same way. Answered on
+ *     the state route too.
+ *
  * `handle` is the pinned job-protocol `job_handle` record (`contracts/`
  * `$defs.job_handle`): the closed top level of identity and executor name
  * (`cloudflare-sandbox`), the issue time, and the one open `handle` object
@@ -208,9 +214,11 @@ import {
   attemptJobSlot,
   d1JobLogs,
   d1JobRecords,
+  InvalidSandboxNameError,
   namedAttemptStatus,
   type SandboxJobHandle,
   sandboxExecutorDepsFromEnv,
+  sandboxNameRejection,
   specJobID,
   startNamedAttempt,
 } from "./sandbox-executor";
@@ -627,6 +635,9 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     if (error instanceof AdoptionModelUnknownError) {
       return refuse(409, "adoption_model_unknown", error.message);
     }
+    if (error instanceof InvalidSandboxNameError) {
+      return refuse(422, INVALID_SANDBOX_NAME, error.message);
+    }
     throw error;
   }
   const body: Record<string, unknown> = { handle: started.handle, adopted: started.adopted };
@@ -728,6 +739,14 @@ export async function sandboxAttemptRoute(
 /** The class a throw inside the door answers with. */
 export const DOOR_FAULT = "door_fault";
 
+/**
+ * The class for a container name the Sandbox SDK refuses: 422, permanent —
+ * the name is derived from the job's identity, so every ask under it is
+ * refused the same way, and a caller that retried it would spend its
+ * allowance on an answer it already has.
+ */
+export const INVALID_SANDBOX_NAME = "invalid_sandbox_name";
+
 /** How much of a thrown error's message the door hands back. */
 const DOOR_FAULT_DETAIL_MAX = 400;
 
@@ -738,6 +757,15 @@ const DOOR_FAULT_DETAIL_MAX = 400;
  * to read; the full error goes to the Worker's log.
  */
 export function doorFault(request: Request, error: unknown): SandboxDispatchResult {
+  const rejected = sandboxNameRejection(error);
+  if (rejected !== null) {
+    return refuse(
+      422,
+      INVALID_SANDBOX_NAME,
+      `the Sandbox SDK refuses the container name this job's identity derives (${rejected}); ` +
+        "asking again under the same identity is refused the same way",
+    );
+  }
   const text =
     error instanceof Error ? `${error.name}: ${error.message}` : String(error ?? "unknown error");
   const line = (text.split("\n")[0] ?? "").slice(0, DOOR_FAULT_DETAIL_MAX);

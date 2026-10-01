@@ -888,6 +888,10 @@ type Reconciler struct {
 	ticks    []runstate.TickState
 	journal  []Event
 	failure  *Refusal
+	// heldEnd is set when the run ended on its holds (window.go endHeld)
+	// rather than stopping at a refusal: the run's reason then says it
+	// worked every other tick to the end, not that it stopped.
+	heldEnd *heldEnd
 
 	// priorResumes is how many automatic continuations came before THIS
 	// incarnation (tick go6), set by the supervisor on each successor it
@@ -938,6 +942,12 @@ type Reconciler struct {
 	// axis role routing resolved against (tick 84z). It is never auto by
 	// the time a Reconciler exists: New resolves it or refused the run.
 	substrate runconfig.Substrate
+
+	// infrastructure counts, per tick, the jobs this reconciler dispatched
+	// again because their container died in its boot on a service outside
+	// it (infrastructure.go): the bound that keeps a dead gateway from
+	// looping.
+	infrastructure infrastructureBound
 }
 
 // Event is one thing the run did, in order. It is what makes "the gate ran
@@ -2107,7 +2117,12 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	r.sweepClosed(ctx, len(failed) == 0)
 
 	state, reason := runstate.StateCompleted, fmt.Sprintf("every tick of %s is closed behind the integrated gate", r.opts.EpicID)
-	if len(failed) > 0 {
+	if len(failed) > 0 && r.heldEnd != nil {
+		state = runstate.StateFailed
+		reason = r.heldEnd.reason(r.branch) + ". Running the epic again under this run id resumes it — a held " +
+			"attempt that left nothing is redispatched, an attempt held holding commits nothing merged is " +
+			"reported rather than dispatched over, and nothing that already passed is redone"
+	} else if len(failed) > 0 {
 		state = runstate.StateFailed
 		reason = fmt.Sprintf("%s did not pass: the run stopped rather than integrating over an unproven change. "+
 			"Running the epic again under this run id resumes it — a rejected attempt that left nothing is "+
@@ -2530,6 +2545,13 @@ type Refusal struct {
 	// of the merge machinery. The finish hands it to the standing ladder
 	// (finishIntegrate) rather than halting the run for a person.
 	conflict bool
+
+	// neverAnswered marks a collect_failed whose worker never answered (the
+	// missing-result verdict: no report at all) and left nothing to carry:
+	// no commits, nothing a person has to look at. The window dispatches
+	// such a tick again in-run (redispatchesInRun) rather than holding it for
+	// the next incarnation.
+	neverAnswered bool
 }
 
 func (r *Refusal) Error() string { return r.Message }

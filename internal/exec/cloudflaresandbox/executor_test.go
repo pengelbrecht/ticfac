@@ -518,6 +518,23 @@ func TestDoorRefusalsArriveTyped(t *testing.T) {
 	if !door.TransientRemote() {
 		t.Error("a door fault is not read as the remote's transient failure")
 	}
+
+	// A container name the Sandbox SDK refuses is the same name on every ask
+	// (hn6 run_ee8e): permanent, typed, and never the remote's transient
+	// failure — a retry under the same identity can only be refused again.
+	h.door.refuseWith(http.StatusUnprocessableEntity, InvalidSandboxNameClass,
+		"the Sandbox SDK refuses the container name (Sandbox ID must be 1-63 characters long.)")
+	_, err = h.start("another")
+	door, ok = AsDoorError(err)
+	if !ok || door.Class != InvalidSandboxNameClass {
+		t.Fatalf("a refused container name did not arrive typed: %v", err)
+	}
+	if door.TransientRemote() {
+		t.Error("a refused container name is read as the remote's transient failure")
+	}
+	if !door.PermanentStart() {
+		t.Error("a refused container name is not read as a start that can never succeed")
+	}
 }
 
 // The three operations the door does not carry: refused, typed, and naming

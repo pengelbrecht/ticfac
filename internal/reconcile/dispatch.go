@@ -510,6 +510,10 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 	// the same tier), and not an attempt a PERSON released — the human was
 	// the actor, and no rung is earned from somebody else's decision.
 	failed := 0
+	// infrastructure are the attempts of this tick that never reached their
+	// harness because a service outside them did not answer
+	// (infrastructure.go): rejected and redispatched, and no rung earned.
+	infrastructure := r.infrastructureFailures(tick)
 	// carry is the released attempt whose WORK the next dispatch of this tick
 	// starts from: a person released it with --carry-work, so the next worker
 	// begins at its commits rather than redoing them (settle.go, tick 0z0).
@@ -638,6 +642,17 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		disposition, where := r.disposition(*existing, marker)
 		switch disposition {
 		case redispatchAttempt:
+			if service, ok := infrastructure[existing.Attempt]; ok {
+				// It never reached its harness: a service outside it did
+				// not answer (infrastructure.go). A new try is dispatched,
+				// and the ladder earns no rung — nothing about the tick was
+				// tried.
+				r.record(tick, StageRedispatched,
+					"%s never reached its harness (its boot stopped on %s) and was rejected as infrastructure, "+
+						"not a failed try; a new try is dispatched at the same tier",
+					attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), service)
+				continue
+			}
 			// SETTLED, and it produced nothing. Adopting it would re-collect
 			// the same refusal for as long as the run is restarted, so this is
 			// a new ATTEMPT — a new number, a new marker, and a base that is
@@ -3261,6 +3276,14 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 		// which is the bug the guard exists for.
 		verdict = subprocess.VerdictReadyToMerge
 	}
+	if verdict != subprocess.VerdictReadyToMerge && collected.Infrastructure != nil {
+		// A job that died in its boot on a service outside it never reached
+		// its harness: it is dispatched again at the same tier, never read as
+		// a failed attempt that earns a rung (infrastructure.go).
+		if err := r.answerInfrastructure(marker, handle, executor, collected); err != nil {
+			return nil, err
+		}
+	}
 	if verdict != subprocess.VerdictReadyToMerge {
 		// An attempt that committed work is disposed by the rejection's class
 		// BEFORE the rejection is durable (rejected_work.go): missing-result
@@ -3286,8 +3309,18 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 				return nil, r.answerBlocked(ctx, entry, marker, answer, RefusedNeedsHuman)
 			}
 		}
-		return nil, r.refuse(RefusedCollect, marker.TickID, "%s is %s: %s",
+		refusal := r.refuse(RefusedCollect, marker.TickID, "%s is %s: %s",
 			r.attemptName(marker.TickID, marker.Attempt), collected.Verdict, collected.Message)
+		// A worker that never answered — no report at all, the missing-result
+		// a lost container, a dead runner or a push that never landed leaves
+		// — and left nothing to carry: the window dispatches the tick again
+		// in-run (redispatchesInRun). A worker that answered with an empty
+		// branch (no-commits) answered on the merits, and one stopped by a
+		// bound of its own (its wall clock, its budget, its quota, a refused
+		// credential) would meet the same bound again: both are held, as
+		// they were.
+		refusal.neverAnswered = neverAnswered(collected) && r.rejectedWorkHead(marker) == ""
+		return nil, refusal
 	}
 
 	// The branch would merge. What the worker SAID is the other half of the

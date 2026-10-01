@@ -1446,19 +1446,21 @@ func TestEntrypointDistinguishesABrokenConfigFromAMissingModel(t *testing.T) {
 }
 
 // No HTTP answer at all is a different investigation from a status code, and
-// it is the failure mode closest to the hang this tick closes.
+// it is the failure mode closest to the hang this tick closes. Silence through
+// every try is infrastructure (ExitGatewayUnavailable), not the model verdict:
+// the orchestrator redispatches it at the same tier (hn6 run_37b36bfe).
 func TestEntrypointStopsWhenTheGatewayNeverAnswersTheProbe(t *testing.T) {
 	f := newFixture(t, "- `true`\n")
 	f.env["TICKS_TEST_CURL_STATUS"] = "000"
 	f.env[EnvModelProbeTimeout] = "3"
 	f.env[EnvModelProbeBackoff] = "0"
 	out, code := f.run()
-	if code != ExitModel {
-		t.Fatalf("exit %d, want %d\n%s", code, ExitModel, out)
+	if code != ExitGatewayUnavailable {
+		t.Fatalf("exit %d, want %d\n%s", code, ExitGatewayUnavailable, out)
 	}
 	mustContain(t, out, "did not answer", "the stop names the silence")
 	mustContain(t, out, "3s", "the stop names the bound it waited")
-	mustContain(t, out, "asked 3 time(s)", "the stop says it asked as often as it may")
+	mustContain(t, out, "asked 4 time(s)", "the stop says it asked as often as it may")
 	mustContain(t, f.probeCalls(), "--max-time", "the probe honoured the configured bound")
 	if f.harnessStarted() {
 		t.Error("the harness started against a gateway that never answered")
@@ -1478,7 +1480,7 @@ func TestEntrypointAsksAgainWhenTheGatewayIsSilentOnce(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit %d, want 0 (the second probe answered)\n%s", code, out)
 	}
-	mustContain(t, out, "model probe try 1 of 3", "the retry is said, not silent")
+	mustContain(t, out, "model probe try 1 of 4", "the retry is said, not silent")
 	mustContain(t, out, "model probe green", "the second answer is the green boot")
 	if got := strings.Count(f.probeCalls(), "URL="); got != 2 {
 		t.Errorf("the probe was asked %d times, want 2:\n%s", got, f.probeCalls())

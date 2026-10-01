@@ -171,11 +171,31 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 	}
 	// holdOnly parks a refusal that holds only its own tick and says so;
 	// anything else is left for the stop.
+	//
+	// A tick whose attempt left nothing for an operational reason
+	// (redispatchesInRun) is not held but dispatched again at the head of the
+	// queue, as the next incarnation would have dispatched it — at most
+	// maxOperationalRetries times in this run; once those are spent it is
+	// held like any other.
+	retried := map[string]int{}
 	holdOnly := func(entry planEntry, err error) bool {
 		var refusal *Refusal
 		if isRoleJob(entry.Role) || !asRefusal(err, &refusal) || refusal.TickID != entry.TickID ||
 			!holdsOnlyItsTick(refusal) {
 			return false
+		}
+		if redispatchesInRun(refusal) && retried[entry.TickID] < maxOperationalRetries {
+			retried[entry.TickID]++
+			r.recordRefusal(entry.TickID, refusal)
+			r.record(entry.TickID, StageRedispatched,
+				"%s never answered and left nothing to carry (%s), so it is dispatched again in this run rather than held for "+
+					"the next one (%d of at most %d)", entry.TickID, refusal.Message, retried[entry.TickID],
+				maxOperationalRetries)
+			// The claim is this run's own (dz1, tick 823), as for every
+			// in-run redispatch.
+			entry.Claimed, entry.OwnClaim, entry.StaleClaim, entry.InFlight = true, true, false, false
+			queue = append([]planEntry{entry}, queue...)
+			return true
 		}
 		park(entry.TickID, refusal)
 		return true
@@ -202,6 +222,7 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 	endHeld := func() ([]string, error) {
 		refusal := parked[parkOrder[0]]
 		r.failure = refusal
+		r.heldEnd = newHeldEnd(parkOrder, parked, waiting)
 		if _, err := r.checkpoint(runstate.StateFailed, refusal.Error()); err != nil {
 			return nil, err
 		}
@@ -216,7 +237,8 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 			return false
 		}
 		switch {
-		case refusal.Reason == RefusedBlockedRedispatch, refusal.Reason == RefusedRejectedRedispatch:
+		case refusal.Reason == RefusedBlockedRedispatch, refusal.Reason == RefusedRejectedRedispatch,
+			refusal.Reason == RefusedInfrastructureRedispatch:
 			// The claim the requeued tick carries is the one THIS run took
 			// when it dispatched the attempt that asked: redispatching into it
 			// takes no new claim (dz1), and it is no foreign party's to hold
@@ -1648,4 +1670,38 @@ func (r *Reconciler) restWindow(live []*inflightAttempt) error {
 	}
 	r.sleep(d)
 	return nil
+}
+
+// redispatchesInRun says a held refusal is answered by dispatching its tick
+// again in THIS run rather than holding it until the next incarnation: a
+// collect whose worker never answered (missing-result: a lost container, a
+// runner that died, a push that never landed) and left nothing to carry. The
+// next incarnation would do exactly that — RefusedCollect resumes without a
+// person, and the resume redispatches a rejected attempt that left nothing —
+// so waiting for it only keeps the tick's dependents idle for the rest of the
+// run. A worker that answered with an empty branch answered on the merits;
+// it, and everything else holdsOnlyItsTick names (on the merits, or needing
+// somebody to say what happened: unaddressed, wiped), stays held. A job that
+// died in its boot on the gateway or origin never gets here: it is
+// infrastructure, requeued by infrastructure.go at the same tier.
+func redispatchesInRun(refusal *Refusal) bool {
+	return refusal != nil && refusal.Reason == RefusedCollect && refusal.neverAnswered
+}
+
+// neverAnswered says a collect is a worker that never answered for a reason
+// a fresh dispatch does not meet again: missing-result, failed, as a runner
+// error (the process died, the container was lost, the push never landed)
+// or an infrastructure one. A worker stopped by its own bound — wall clock,
+// cost budget, quota — or whose credential was refused is not: the next
+// dispatch would meet the same bound.
+func neverAnswered(collected *subprocess.Collection) bool {
+	if collected == nil || collected.Verdict != subprocess.VerdictMissingResult || collected.Result == nil ||
+		collected.Result.Outcome != subprocess.OutcomeFailed {
+		return false
+	}
+	switch collected.Result.FailureClass {
+	case subprocess.FailureRunnerError, subprocess.FailureInfrastructure:
+		return true
+	}
+	return false
 }

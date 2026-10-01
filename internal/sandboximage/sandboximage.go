@@ -279,6 +279,20 @@ const (
 	// lost to it as missing-result) — and it is distinct from ExitClone
 	// because it is the one checkout failure a retry as-is cannot survive.
 	ExitStartUnpublished = 13
+	// ExitGatewayUnavailable reports a gateway that gave no usable answer to
+	// the one-token probe through the boot's whole retry window: no HTTP
+	// answer, or a timeout, rate limit or bad gateway from it or its upstream.
+	// ExitOriginUnavailable is the same for origin's fetch. They are
+	// INFRASTRUCTURE, never a verdict on the tick: the boot never reached the
+	// harness, and the orchestrator dispatches the job again at the same tier
+	// rather than spending a rung of the ladder (epic hn6, run_37b36bfe: 0rx's
+	// worker probed the gateway while the factory Worker was being
+	// redeployed, gave up after one 30s try with exit 7, and the run escalated
+	// 0rx to the ceiling over it). Distinct from ExitModel and ExitClone,
+	// which stay the verdicts a retry as-is reaches again: a refusal the
+	// gateway answered, a fetch the remote refused.
+	ExitGatewayUnavailable = 14
+	ExitOriginUnavailable  = 15
 )
 
 // Script names the files the image installs.
@@ -593,6 +607,19 @@ func WorkerBranch(epic, tick string) string {
 // every worker of a wave branches from the same commit, and a shared name is
 // an add/add conflict on the second merge.
 func WorkerResultFile(tick string) string { return "RESULT-" + tick + ".md" }
+
+// WorkerBootStoppedBranch is where a worker container that stopped in its
+// boot — before its harness started — leaves the reason: BESIDE its worker
+// branch, never on it, because an empty worker branch is what the collect's
+// verdicts and the infrastructure class read, and a marker on it would read
+// as a report-only answer (hn6 run_ee8e: 378's resolve job exited 7 at its
+// model probe and the collect could only say "the push never landed").
+func WorkerBootStoppedBranch(workerBranch string) string { return workerBranch + "-boot-stopped" }
+
+// WorkerBootStoppedFile is the one file the boot marker adds to the base:
+// `exit: <code>` and `reason: <the boot's own stop message>`. Not a RESULT
+// file and no STATUS line, so no report reader takes it for an answer.
+func WorkerBootStoppedFile(tick string) string { return "BOOT-STOPPED-" + tick + ".md" }
 
 // Exit codes the worker entrypoint adds to the shared 2-8. Each is a different
 // thing to do about it, which is why they are not one code.

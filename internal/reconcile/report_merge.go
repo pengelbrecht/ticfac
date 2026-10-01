@@ -84,7 +84,13 @@ func (r *Reconciler) keepReportsOut(dir, keep string) error {
 // conflict lines removed, for describeMergeFailure and classifyMergeFailure
 // to read as they always have; `unmerged` then names what is left.
 func (r *Reconciler) mergeKeepingReportsOut(dir, epicHead, message, head string) (stdout, stderr, unmerged string, err error) {
-	stdout, stderr, err = r.git.try(dir, "merge", "--no-ff", "--no-commit", "-m", message, head)
+	// Changelogs merge as a union (union_merge.go).
+	union, removeUnion, uerr := unionMergeConfig()
+	if uerr != nil {
+		return "", "", "", uerr
+	}
+	defer removeUnion()
+	stdout, stderr, err = r.git.try(dir, append(union, "merge", "--no-ff", "--no-commit", "-m", message, head)...)
 	if err != nil {
 		unmerged, _ = r.git.run(dir, "diff", "--name-only", "--diff-filter=U")
 		if strings.TrimSpace(unmerged) == "" {

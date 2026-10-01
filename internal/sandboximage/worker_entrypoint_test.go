@@ -264,6 +264,16 @@ for a in "$@"; do
 done
 printf '%s\n' "$*" >> "$TICKS_TEST_CURL_RECORD"
 [ -z "$out" ] || printf '{"ok":true}' > "$out"
+# TICKS_TEST_CURL_STATUS_SEQ answers successive calls in turn — "000 000 200"
+# is a gateway that answers on the third try — and its last entry answers
+# every call after it.
+if [ -n "${TICKS_TEST_CURL_STATUS_SEQ:-}" ]; then
+  n=$(grep -c . "$TICKS_TEST_CURL_RECORD")
+  set -- $TICKS_TEST_CURL_STATUS_SEQ
+  while [ "$n" -gt 1 ] && [ "$#" -gt 1 ]; do shift; n=$((n - 1)); done
+  printf '%s' "$1"
+  exit 0
+fi
 printf '%s' "${TICKS_TEST_CURL_STATUS:-200}"
 `)
 }

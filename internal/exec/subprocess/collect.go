@@ -59,7 +59,34 @@ type Collection struct {
 	// publishes the commit rather than redispatching the same doomed job.
 	StartNotOnOrigin string
 
+	// Infrastructure is set when the job never reached its harness because a
+	// service outside it did not answer through the boot's retry window — the
+	// model gateway, origin's fetch (epic hn6, run_37b36bfe). The verdict
+	// stays missing-result, because the job never answered; this is the typed
+	// fact beside it that says nothing about the TICK was tried, so the
+	// orchestrator dispatches it again at the same tier rather than reading a
+	// failed attempt.
+	Infrastructure *InfrastructureFailure
+
 	Message string
+}
+
+// InfrastructureFailure is a job that died in its boot on a service outside
+// it, before any work on the tick.
+type InfrastructureFailure struct {
+	// Service names what stopped the boot, in words a person reads in a
+	// stop: "the model gateway", "origin", "the repository's [sandbox] setup".
+	Service string
+	// ExitCode is the container's exit, the evidence the class was read from.
+	ExitCode int
+	// Persistent says a retry reaches the same answer: a deterministic
+	// environment fault (the inputs, the image's tk, the repository's
+	// pre-flight or setup, a refused model route, the harness's wiring), so
+	// the job is not dispatched again at all — and still no rung is spent,
+	// because a higher tier boots the same image on the same repository.
+	Persistent bool
+	// Fix is what a person does about it, for the stop that names it.
+	Fix string
 }
 
 // Collect returns the protocol record.

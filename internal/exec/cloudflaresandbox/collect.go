@@ -206,6 +206,55 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 			"a retry as-is fails the same way", shortSHA(record.BaseSHA), sandboximage.ExitStartUnpublished)
 	}
 
+	// A container that stopped in its boot, before its harness: the exit code
+	// the Inspect that saw the settle marked, or — for an orchestrator that
+	// never saw it — the one the worker's own boot-stopped marker on origin
+	// states (#176). Both are the same process's exit; the observation wins
+	// if they ever differ. The typed fact travels beside the missing-result
+	// verdict, so the orchestrator never reads a job that never reached its
+	// harness as a failed attempt at the tick (epic hn6, run_37b36bfe), and the
+	// marker's reason says what stopped it (hn6 run_ee8e).
+	if head == "" && collected.Verdict == subprocess.VerdictMissingResult {
+		code := 0
+		if st.exists(fileInfrastructure) {
+			var marked struct {
+				ExitCode int `json:"exit_code"`
+			}
+			if err := st.readJSON(fileInfrastructure, &marked); err == nil {
+				code = marked.ExitCode
+			}
+		}
+		stoppedCode, reason, stopped := e.bootStopped(record)
+		if code == 0 && stopped {
+			code = stoppedCode
+		}
+		if fault := bootFault(code); fault != nil {
+			result.FailureClass = subprocess.FailureInfrastructure
+			collected.Infrastructure = fault
+			if fault.Persistent {
+				collected.Message = fmt.Sprintf("the container never reached its harness: its boot stopped on %s "+
+					"(exit %d) — the environment, not the tick, and a retry boots the same one", fault.Service, code)
+			} else {
+				collected.Message = fmt.Sprintf("the container never reached its harness: %s did not answer "+
+					"through the boot's retry window (exit %d) — infrastructure, so nothing about the tick was tried",
+					fault.Service, code)
+			}
+		}
+		if stopped {
+			line := fmt.Sprintf("the container's boot stopped before its harness started (exit %d", stoppedCode)
+			if class := exitClass(stoppedCode); class != "" {
+				line += ": " + class
+			}
+			line += "): " + reason
+			if collected.Infrastructure != nil {
+				collected.Message += ". " + line
+			} else {
+				collected.Message = line + ". Nothing reached " + record.Branch +
+					"; the reason is on " + sandboximage.WorkerBootStoppedBranch(record.Branch)
+			}
+		}
+	}
+
 	// A PREVENTED boundary attempt is invisible in the diff — the container's
 	// guard refused the write and swept it, so the branch reads clean — and
 	// the marker its guard prepends to the report is the only durable trace.

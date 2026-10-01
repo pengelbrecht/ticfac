@@ -93,6 +93,20 @@ func (e *doorError) TransientRemote() bool {
 // runtime's own 500 page.
 const DoorFaultClass = "door_fault"
 
+// InvalidSandboxNameClass is the door's answer for a container name the
+// Sandbox SDK refuses (sandbox-dispatch.ts INVALID_SANDBOX_NAME): 422,
+// permanent. The name is derived from the job's identity, so every start
+// under it is refused the same way (hn6 run_ee8e: two resolve retries were
+// each refused in seconds as a door_fault, read as "ask again", until the
+// tick's resolve allowance was spent).
+const InvalidSandboxNameClass = "invalid_sandbox_name"
+
+// PermanentStart marks the refusal as a start that can never succeed under
+// this identity: never transient, never a job that "did not answer". The
+// reconciler recognises it by this method (startIsOperational), not by this
+// package.
+func (e *doorError) PermanentStart() bool { return e.Class == InvalidSandboxNameClass }
+
 // doorUnreachable is the door not answering at all: a transport failure or
 // the client's own timeout (epic hn6's second cloud run: "context deadline
 // exceeded (Client.Timeout exceeded while awaiting headers)"). It is never a

@@ -263,6 +263,9 @@ type doorFixture struct {
 	work  string
 	home  string
 	seed  string
+	// extraEnv is appended to the clone's environment, for a case that
+	// tunes the boot's retry window.
+	extraEnv []string
 }
 
 func newDoorFixture(t *testing.T, challenge bool) *doorFixture {
@@ -334,6 +337,7 @@ clone_at_sha
 		"TICKS_BASE_SHA="+f.sha,
 		"TICKS_WORKDIR="+f.work,
 	)
+	cmd.Env = append(cmd.Env, f.extraEnv...)
 	out, err := cmd.CombinedOutput()
 	code := 0
 	if err != nil {
@@ -440,8 +444,9 @@ func TestARejectedCredentialIsReportedAsARejectedCredential(t *testing.T) {
 	f := newDoorFixture(t, true)
 	f.token = "tkr_a_token_this_door_does_not_know"
 	out, code := f.clone(t)
-	if code == 0 {
-		t.Fatalf("a stranger's token cloned successfully\n%s", out)
+	if code != ExitClone {
+		t.Fatalf("a stranger's token exited %d, want %d (ExitClone): a refusal is the clone verdict, never "+
+			"origin being unavailable\n%s", code, ExitClone, out)
 	}
 	if !f.door.credentialled("tkr_a_token_this_door_does_not_know") {
 		t.Errorf("git never sent the credential to a door that challenged for it:\n%v", f.door.presented())
