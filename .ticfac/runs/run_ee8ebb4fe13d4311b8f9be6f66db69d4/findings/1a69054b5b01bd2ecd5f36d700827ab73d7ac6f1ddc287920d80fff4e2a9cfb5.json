@@ -12,8 +12,11 @@
   "attempt": 1,
   "done_item": "A1",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-01T02:52:55Z",
+  "triaged_at": "2026-10-01T02:53:10Z",
+  "triaged_by": "ticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4 absorbing qrl",
+  "promoted_as": "qrl",
   "provenance": {
     "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
     "tick_id": "378",
