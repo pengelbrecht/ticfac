@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
   "epic_id": "hn6",
-  "sequence": 8,
-  "state": "collecting",
-  "reason": "collecting 378 attempt 1",
-  "updated_at": "2026-10-01T02:52:27Z",
+  "sequence": 9,
+  "state": "running",
+  "reason": "378 try 1 (run dispatch #1) is rejected (no-commits): the only commit tick/hn6/attempt-1/378 carries beyond its base (e43a19cb3d78) is the container's own report at RESULT-378.md: the worker committed no work, and a report is not a deliverable",
+  "updated_at": "2026-10-01T02:53:23Z",
   "ticks": [
     {
       "tick_id": "378",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 1
     },
     {
