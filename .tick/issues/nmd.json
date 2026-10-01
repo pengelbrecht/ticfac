@@ -1,0 +1,21 @@
+{
+  "id": "nmd",
+  "title": "FactorySandbox DO class on ctx.container + new durable_object container app (off by default) + staging Worker",
+  "gloss": "FactorySandbox DO class",
+  "description": "Implement the 7 seam methods of src/sandbox.ts on this.ctx.container; alarm heartbeat + monitor(); setInactivityTimeout re-armed in the constructor; enableInternet explicit; byte log cursors; chunked log reads. Second [[containers]] entry, scheduling_policy=durable_object, new app name, migration, binding SANDBOXES_V1. Staging Worker to rehearse a deploy under a live container.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "fsy",
+    "x9d"
+  ],
+  "parent": "umq",
+  "acceptance_criteria": "unit tests; staging proves a deploy leaves a running container on its startup image",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-01T08:24:24.612106Z",
+  "updated_at": "2026-10-01T09:01:30.889408Z",
+  "closed_at": "2026-10-01T09:01:30.889408Z",
+  "closed_reason": "#189 (6d65990b): FactorySandbox + durable_object app + staging proof of [A2]"
+}

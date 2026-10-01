@@ -1,0 +1,15 @@
+{
+  "id": "umq",
+  "title": "Containers on the durable_object scheduling policy (Sandbox SDK 1.0)",
+  "gloss": "SDK 1.0 / DO scheduling",
+  "description": "Move every factory container (workers, then the orchestrator) from Sandbox SDK 0.12.x's Sandbox class + the app-wide image rollout to our own Durable Object class on this.ctx.container under scheduling_policy = \"durable_object\". Forced: SDK 1.0 (2026-09-30) requires the policy and 0.x gets fixes only through 2026-12-31. Gains: a deploy never replaces a running container (each keeps its startup image) — deletes rollout_active_grace_period, rollout_held.go, the deploy's rollout wait; per-run image pin (no Mac/container contract skew); per-job instance size; pending-I/O keep-alive replaces #160's keepalive. Risks: one-way per app (new app name), beta, DO restart on deploy must re-arm setInactivityTimeout in the constructor, no platform max_instances (our container-capacity count is the only cap), prune must protect pinned digests, image retention undocumented. Operator, 2026-10-01: early CF beta is fine for this project. Spike evidence (2026-10-01): seam is src/sandbox.ts (7 methods); docs: containers/configuration/scheduling-policy, guides/migrate-to-durable-object-scheduling-policy, api/durable-object-container, sandbox/sdk/migrate.",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "owner": "peter@engelbrecht.dk",
+  "target_date": "2026-10-01",
+  "acceptance_criteria": "[A1] A new run's worker AND orchestrator containers start through the new DO class on a durable_object-policy app, on the image pinned in the run record, at a per-job instance size. [A2] A wrangler deploy during a live run leaves its containers running on their startup image (proven on staging). [A3] rollout_active_grace_period, rollout_held.go and the deploy rollout wait are deleted once no 0.x run remains; the old container app is deleted. [A4] Image prune never deletes a digest a live run pins. [A5] make gate and the cloudflare test suite pass; a real hn6-style cloud run completes a tick on the new path.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-01T08:24:24.523872Z",
+  "updated_at": "2026-10-01T08:41:20.699159Z"
+}

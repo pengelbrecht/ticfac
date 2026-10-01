@@ -109,6 +109,10 @@ type heldRollout struct {
 	// Finishing reports that no instance is held back: every instance runs
 	// the new version, and only the platform's completion mark is missing.
 	Finishing bool
+	// NoneStartedYet reports that no instance has started on the new
+	// version since the rollout began: every instance is held, and the next
+	// container a run starts is the first on the target.
+	NoneStartedYet bool
 }
 
 // judgeHeldRollout decides whether the rollout serves new instances with only
@@ -145,7 +149,22 @@ func judgeHeldRollout(r rolloutRecord, digest string, instances []containerInsta
 		runs[run] = true
 	}
 	if current == 0 && held.Updated == 0 {
-		return heldRollout{}, "no instance has come up on the new version yet"
+		if held.Held == 0 {
+			return heldRollout{}, "no instance has come up on the new version yet"
+		}
+		// Every instance is held by a live run and none has started since
+		// the rollout began. On this application (scheduling_policy
+		// default, Durable Object-bound instances) a rollout's steps count
+		// the instances that start on its target, so with every instance
+		// held it sits at 0 updated until a run starts a container — and
+		// that container boots the target. Observed 2026-10-01 under
+		// --cloud-workers run_d51a747f: worker l89-10 started at 07:25:46
+		// on v72, the target of the rollout begun at 07:17; worker u4l-15
+		// started at 07:59:21 on v73, the target of the rollout begun at
+		// 07:53. Deploy 87fcc329's rollout (v74, begun 08:19) then sat at
+		// 0 of 7 for an hour with only those two held, and the deploy's
+		// wait held every later deploy behind it.
+		held.NoneStartedYet = true
 	}
 	if held.Held == 0 {
 		// Every instance is on the new version and the platform has not

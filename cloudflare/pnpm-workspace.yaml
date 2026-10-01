@@ -1,3 +1,20 @@
 allowBuilds:
   esbuild: true
   workerd: true
+# The operator's global release-age gate (3 days) holds back new packages.
+# Cloudflare's own packages are exempt for this project: the factory tracks
+# the containers / Sandbox SDK betas closely (epic umq), and early Cloudflare
+# releases are accepted here.
+minimumReleaseAgeExclude:
+  - wrangler
+  - workerd
+  - miniflare
+  - "@cloudflare/*"
+# @cloudflare/vitest-pool-workers pins its own (older) miniflare, whose workerd
+# rejects compatibility flags newer than it (durable_object_io_tasks_prevent_eviction
+# among them), so the test runtime would refuse wrangler.toml. One miniflare
+# for the whole tree, and one wrangler (the pool reads wrangler.toml through
+# its own copy): the ones the deploy uses.
+overrides:
+  miniflare: 5.20260930.0-alpha
+  wrangler: 4.145.0

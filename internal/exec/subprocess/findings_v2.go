@@ -81,6 +81,7 @@ const MaxFindingTitle = 80
 // knownV2Field is the closed key set of a v2 item.
 var knownV2Field = map[string]bool{
 	"kind": true, "title": true, "body": true, "severity": true, "target": true, "breaks": true, "evidence": true,
+	"tracker_edit": true,
 }
 
 // V2FindingFieldNames is the v2 key set, sorted, for messages.
@@ -110,6 +111,9 @@ func looksLikeV2(items []map[string]json.RawMessage) bool {
 		if _, ok := fields["evidence"]; ok {
 			return true
 		}
+		if _, ok := fields["tracker_edit"]; ok {
+			return true
+		}
 		var kind string
 		if json.Unmarshal(fields["kind"], &kind) == nil &&
 			(kind == FindingV2KindProposal || kind == FindingV2KindContractChange) {
@@ -127,6 +131,9 @@ type findingV2 struct {
 	Target   string          `json:"target"`
 	Breaks   json.RawMessage `json:"breaks"`
 	Evidence string          `json:"evidence"`
+	// TrackerEdit is the exact tracker change that fixes the finding, when
+	// its fix is purely tracker-side (tracker_edits.go).
+	TrackerEdit json.RawMessage `json:"tracker_edit"`
 }
 
 // readFindingV2 reads one v2 item and maps it onto the internal record. It
@@ -221,6 +228,17 @@ func readFindingV2(i int, fields map[string]json.RawMessage) (Finding, []Finding
 	}
 	if evidence := strings.TrimSpace(item.Evidence); evidence != "" {
 		finding.Body = appendBodyLine(finding.Body, "evidence: "+evidence)
+	}
+	// The tracker edit that IS the fix (hn6 yjq). Never folded or repaired:
+	// an edit is a write, so one the run cannot apply as written refuses the
+	// block, and the worker fixes it in-session.
+	if len(item.TrackerEdit) > 0 && string(item.TrackerEdit) != "null" {
+		edit, err := readTrackerEdit(item.TrackerEdit)
+		if err != nil {
+			return Finding{}, nil, fmt.Sprintf("findings[%d].tracker_edit %v", i, err)
+		}
+		finding.TrackerEdit = &edit
+		finding.Body = appendBodyLine(finding.Body, "tracker edit: "+edit.String()+" (applied by the run)")
 	}
 	return finding, notes, ""
 }

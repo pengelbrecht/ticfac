@@ -1,0 +1,17 @@
+{
+  "id": "x9d",
+  "title": "Process runner script in the image (works under 0.x and DO-managed containers)",
+  "gloss": "image process runner",
+  "description": "Per-process dir (pid, exit code, stdout/stderr files) + runner script: the SDK's background-processes recipe, replacing 0.x startProcess/getProcess/listProcesses/readOutput/killProcess.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "umq",
+  "acceptance_criteria": "image tests cover start/inspect/read/kill; existing 0.x path unchanged",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-01T08:24:24.584714Z",
+  "updated_at": "2026-10-01T08:48:01.332245Z",
+  "closed_at": "2026-10-01T08:48:01.332245Z",
+  "closed_reason": "PR #188 (c179d761)"
+}

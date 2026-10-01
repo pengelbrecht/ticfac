@@ -391,6 +391,10 @@ func (r *Reconciler) dispatchResolve(ctx context.Context, marker attemptHandle, 
 			}
 		}
 		recorded := r.disposeResolve(handle, executor, resolveMarker, head, resolveHead, conflict, rerr, failureOperational)
+		if fault := r.roleJobBootFault(tick, "the resolve-conflict job for "+r.attemptName(tick, marker.Attempt),
+			collected); fault != nil {
+			return "", nil, false, fault
+		}
 		return "", nil, recorded && ctx.Err() == nil, rerr
 	}
 	if rerr == nil && roleJobAnsweredNothing(resolveHead, wip, carried, ledger, "resolve_head") {

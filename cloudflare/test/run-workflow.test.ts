@@ -689,31 +689,36 @@ async function ignite(
   if (!lease.ok) throw new Error(`the lease was refused: ${JSON.stringify(lease)}`);
   if (overrides.lapsed === true) await expireLease(project);
   overrides.beforeStart?.(runID);
-  const started = await startRun(env, {
-    run_id: runID,
-    project,
-    epic,
-    base_sha: BASE_SHA,
-    requested_by: "operator",
-    lease_token: lease.lease.token,
-    ...(overrides.local === true ? { orchestrator: "local" as const } : {}),
-  });
+  // A params blob from before tick l6t, replayed after it: the field rides
+  // into the Workflow's ONE create call, as an old serialised instance would
+  // hand it back, and must be inert. Injected into startRun's own create
+  // rather than by a second create of the same id, which the Workflows
+  // runtime (miniflare 5.20260930+, as production always did) refuses.
+  const workflow = runWorkflowBinding(env)!;
   if (overrides.staleTickIDs !== undefined) {
-    // A params blob from before tick l6t, replayed after it: the field is
-    // passed straight into the Workflow's create call, as an old serialised
-    // instance would hand it back, and must be inert.
-    await runWorkflowBinding(env)!.create({
-      id: runID,
-      params: {
-        run_id: runID,
-        project,
-        epic,
-        base_sha: BASE_SHA,
-        requested_by: "operator",
-        lease_token: lease.lease.token,
-        tick_ids: overrides.staleTickIDs,
-      } as never,
+    const stale = overrides.staleTickIDs;
+    (env as unknown as Record<string, unknown>).RUN_WORKFLOW = {
+      get: (id: string) => workflow.get(id),
+      create: (options: { id: string; params: Record<string, unknown> }) =>
+        workflow.create({
+          ...options,
+          params: { ...options.params, tick_ids: stale } as never,
+        }),
+    };
+  }
+  let started: Awaited<ReturnType<typeof startRun>>;
+  try {
+    started = await startRun(env, {
+      run_id: runID,
+      project,
+      epic,
+      base_sha: BASE_SHA,
+      requested_by: "operator",
+      lease_token: lease.lease.token,
+      ...(overrides.local === true ? { orchestrator: "local" as const } : {}),
     });
+  } finally {
+    (env as unknown as Record<string, unknown>).RUN_WORKFLOW = workflow;
   }
   return {
     runID,

@@ -19,7 +19,9 @@
  */
 
 import { getSandbox, type Sandbox } from "@cloudflare/sandbox";
+import { factorySandboxBindingFromEnv } from "./factory-sandbox";
 import type { Env } from "./index";
+import { type RunSubstrateRecord, readRunSubstrate, routedSandboxBinding } from "./run-substrate";
 import { WORKER_TRACE_ID_ENV } from "./worker-boot";
 
 // -------------------------------------------------------------- the image ---
@@ -309,7 +311,36 @@ export interface SandboxBinding {
 export function sandboxBinding(env: Env): SandboxBinding | null {
   const binding = env.SANDBOXES;
   if (binding === undefined || binding === null) return null;
-  return isSandboxNamespace(binding) ? sdkSandboxBinding(binding) : binding;
+  const legacy = isSandboxNamespace(binding) ? sdkSandboxBinding(binding) : binding;
+  // Epic umq (tick 1hq): a run submitted on the durable_object substrate has
+  // its containers in SANDBOXES_V1. Every other run — every run before umq,
+  // and every run that did not ask — is answered by the 0.x binding exactly
+  // as before, because a run with no substrate record is a 0.x run.
+  const v1 = factorySandboxBindingFromEnv(env);
+  if (v1 === null || env.DB === undefined || env.DB === null) return legacy;
+  const db = env.DB;
+  return routedSandboxBinding(legacy, v1, (runID) => substrateOrSdk0(db, runID));
+}
+
+/**
+ * A run's substrate, read twice before it is given up on. A record that
+ * cannot be read at all falls back to 0.x and says so: every live run that
+ * predates umq is a 0.x run, and the one thing this routing must never do
+ * is move one of those.
+ */
+async function substrateOrSdk0(db: D1Database, runID: string): Promise<RunSubstrateRecord> {
+  try {
+    return await readRunSubstrate(db, runID);
+  } catch {
+    try {
+      return await readRunSubstrate(db, runID);
+    } catch (error) {
+      console.error(
+        `factory sandbox: could not read ${runID}'s substrate; addressing SANDBOXES: ${String(error)}`,
+      );
+      return { substrate: "sdk0", image: null };
+    }
+  }
 }
 
 // ------------------------------------------------------- the SDK adapter ---

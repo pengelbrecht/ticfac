@@ -373,6 +373,9 @@ func confirmContainerRollout(
 								held.Held, strings.Join(held.Runs, ", "))
 							fmt.Fprintf(out, "  rollout_active_grace_period keeps a rollout from replacing a container a run holds; "+
 								"the platform replaces each once its run lets it go\n")
+							if held.NoneStartedYet {
+								fmt.Fprintf(out, "  no container has started since the rollout began; the next one a run starts boots the new image\n")
+							}
 						}
 						outcome.Confirmed = true
 						outcome.HeldBy = held.Runs

@@ -296,27 +296,109 @@ func pruneOrchestratorImages(ctx context.Context, w *wrangler, out io.Writer, op
 			ContainerAppName)
 		return
 	}
-	client, err := newRegistryClient(ctx, w, opts.registryBaseURL, opts.HTTPClient)
-	if err != nil {
-		fmt.Fprintf(out, "WARNING: not pruning %s images: %v\n", ContainerAppName, err)
-		return
-	}
-	images, err := client.listImages(ctx, ContainerAppName)
-	if err != nil {
-		fmt.Fprintf(out, "WARNING: not pruning %s images: %v\n", ContainerAppName, err)
-		return
-	}
-	before := uniqueLayerBytes(images)
 	keep := opts.ImageKeep
 	if keep == 0 {
 		keep = imageKeepNewest
 	}
+	pruneRepositoryImages(ctx, w, out, opts, ContainerAppName, keep, live, "the served image")
+}
+
+// FactorySandboxImageRepo is the registry repository of FactorySandbox's
+// named image `factory` (epic umq): wrangler names it
+// <worker>-<class, lowercased>-<image name>. A durable_object-policy
+// container keeps running the image it STARTED on, and a run's containers
+// all start on the image the run pinned at submit (tick v1d) — so a digest is
+// in use for as long as any live run pins it, whatever has been deployed
+// since. Deleting it would leave that run's next container unable to start.
+const FactorySandboxImageRepo = "ticks-factory-factorysandbox-factory"
+
+// factorySandboxKeepNewest is how many of the newest FactorySandbox images a
+// prune keeps besides every pinned one: the deployment's current image and
+// one or two to roll back to. Lean on purpose — the account's 50 GB image
+// storage is shared with the 0.x repository until it is deleted (dax).
+const factorySandboxKeepNewest = 3
+
+// livePinsSQL selects the image every live run pinned (migration 0023, the
+// run states ACTIVE_RUN_STATES names in cloudflare/src/runs.ts).
+const livePinsSQL = `SELECT s.image AS image FROM run_substrate s JOIN runs r ON r.run_id = s.run_id ` +
+	`WHERE s.image IS NOT NULL AND r.state IN ('starting','running','stopping')`
+
+// pinnedDigests reads `wrangler d1 execute --json` output for livePinsSQL
+// and returns the digests the pinned references name. ok is false when the
+// output is not the shape expected — which must stop the prune, never let it
+// run as if nothing were pinned.
+func pinnedDigests(out string) (digests []string, ok bool) {
+	start := strings.Index(out, "[")
+	end := strings.LastIndex(out, "]")
+	if start < 0 || end < start {
+		return nil, false
+	}
+	var results []struct {
+		Results []struct {
+			Image string `json:"image"`
+		} `json:"results"`
+		Success *bool `json:"success"`
+	}
+	if err := json.Unmarshal([]byte(out[start:end+1]), &results); err != nil || len(results) == 0 {
+		return nil, false
+	}
+	for _, r := range results {
+		if r.Success != nil && !*r.Success {
+			return nil, false
+		}
+		for _, row := range r.Results {
+			if d := digestPattern.FindString(row.Image); d != "" {
+				digests = append(digests, d)
+			}
+		}
+	}
+	return digests, true
+}
+
+// pruneFactorySandboxImages keeps FactorySandbox's repository bounded: the
+// newest factorySandboxKeepNewest images and every digest a live run pins.
+// It prunes nothing when the pins cannot be read.
+func pruneFactorySandboxImages(ctx context.Context, w *wrangler, out io.Writer, opts Options, database string) {
+	if opts.SkipImagePrune {
+		return
+	}
+	raw, err := w.run(ctx, "", "d1", "execute", database, "--remote", "--json", "--command", livePinsSQL)
+	if err != nil {
+		fmt.Fprintf(out, "WARNING: not pruning %s images: could not read the images live runs pin\n",
+			FactorySandboxImageRepo)
+		return
+	}
+	pins, ok := pinnedDigests(raw)
+	if !ok {
+		fmt.Fprintf(out, "WARNING: not pruning %s images: the live runs' pins were unreadable\n",
+			FactorySandboxImageRepo)
+		return
+	}
+	pruneRepositoryImages(ctx, w, out, opts, FactorySandboxImageRepo, factorySandboxKeepNewest, pins,
+		fmt.Sprintf("%d image(s) live runs pin", len(pins)))
+}
+
+// pruneRepositoryImages deletes what selectImagesToPrune picks from one
+// repository and reports its storage. Never an error (see the file comment).
+func pruneRepositoryImages(ctx context.Context, w *wrangler, out io.Writer, opts Options,
+	repo string, keep int, live []string, protectedLabel string) {
+	client, err := newRegistryClient(ctx, w, opts.registryBaseURL, opts.HTTPClient)
+	if err != nil {
+		fmt.Fprintf(out, "WARNING: not pruning %s images: %v\n", repo, err)
+		return
+	}
+	images, err := client.listImages(ctx, repo)
+	if err != nil {
+		fmt.Fprintf(out, "WARNING: not pruning %s images: %v\n", repo, err)
+		return
+	}
+	before := uniqueLayerBytes(images)
 	prune := selectImagesToPrune(images, keep, live)
 
 	deleted := map[string]bool{}
 	var failed []string
 	for _, img := range prune {
-		if _, err := w.run(ctx, "", "containers", "images", "delete", ContainerAppName+":"+img.Tag, "--skip-confirmation"); err != nil {
+		if _, err := w.run(ctx, "", "containers", "images", "delete", repo+":"+img.Tag, "--skip-confirmation"); err != nil {
 			failed = append(failed, img.Tag)
 			continue
 		}
@@ -330,16 +412,16 @@ func pruneOrchestratorImages(ctx context.Context, w *wrangler, out io.Writer, op
 	}
 	after := uniqueLayerBytes(remaining)
 
-	fmt.Fprintf(out, "%s images: %d tags, %s of layers; pruned %d (keeping the newest %d and the served image), %s remain\n",
-		ContainerAppName, len(images), gigabytes(before), len(deleted), keep, gigabytes(after))
+	fmt.Fprintf(out, "%s images: %d tags, %s of layers; pruned %d (keeping the newest %d and %s), %s remain\n",
+		repo, len(images), gigabytes(before), len(deleted), keep, protectedLabel, gigabytes(after))
 	if len(failed) > 0 {
 		fmt.Fprintf(out, "WARNING: could not delete %d %s image(s): %s\n",
-			len(failed), ContainerAppName, strings.Join(failed, ", "))
+			len(failed), repo, strings.Join(failed, ", "))
 	}
 	if after >= imageStorageWarnBytes {
 		fmt.Fprintf(out, "WARNING: %s images still hold %s of the account's %s image storage limit; "+
 			"a push past the limit fails the rollout with ImagePullError\n",
-			ContainerAppName, gigabytes(after), gigabytes(imageStorageLimitBytes))
+			repo, gigabytes(after), gigabytes(imageStorageLimitBytes))
 	}
 }
 

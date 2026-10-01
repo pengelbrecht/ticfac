@@ -238,3 +238,41 @@ func TestBothGLMModelsAreNameableAsAWorkerModel(t *testing.T) {
 		t.Errorf("the flash resolution does not name where its model came from: %q", economy.Routed)
 	}
 }
+
+// The cloud worker checks a report as the role its prompt names in the check
+// the prompt tells the agent to run (image/worker.sh's report_role; hn6
+// run_d51a, u5n): `lint-report … --role <role>`. So a cloud role prompt that
+// carries the check names its OWN role there — a prompt that named another
+// would have the container push a report back over another role's contract.
+//
+// short: reads of this repository's own profile files; no I/O.
+func TestCloudRolePromptsNameTheirOwnRoleInTheReportCheck(t *testing.T) {
+	dir := cloudProfileDir(t)
+	roles := append(append([]string{}, Roles...), RoleResolveConflict, RoleRepairGate)
+	checked := 0
+	for _, role := range roles {
+		p, err := Resolve(role, Options{Dir: dir})
+		if err != nil {
+			t.Fatalf("%s did not resolve from the cloud set: %v", role, err)
+		}
+		for _, line := range strings.Split(p.Prompt, "\n") {
+			if !strings.Contains(line, "lint-report") {
+				continue
+			}
+			checked++
+			fields := strings.Fields(line)
+			named := ""
+			for i, field := range fields {
+				if field == "--role" && i+1 < len(fields) {
+					named = fields[i+1]
+				}
+			}
+			if named != role {
+				t.Errorf("%s's report check names role %q, want its own: %q", role, named, line)
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no cloud role prompt carries the report check: the cloud worker checks its report as the role its prompt names")
+	}
+}

@@ -584,6 +584,56 @@ silent)
 nocommit)
 	report
 	;;
+tracker_edit | tracker_edit_drop)
+	# The yjq shape (hn6 run_d51a): b1's deliverable IS a tracker edit — the
+	# epic's acceptance re-flowed one [A<n>] item per line — which no worker
+	# may write. b1 commits nothing and PROPOSES the edit in a typed block;
+	# every other tick does its work (b1 is the second wave's, so the gate's
+	# tree already carries the first wave's work when it runs over b1's
+	# delivery). tracker_edit_drop has b1 propose an edit that drops an item
+	# the record marks, which the run must refuse.
+	if [ "$TICFAC_TICK" != "b1" ]; then
+		commit
+		report
+	else
+		value='[A1] Every tick closes behind a green gate;\n[A2] The fixture epic carries a second item.'
+		if [ "$mode" = "tracker_edit_drop" ]; then
+			value='[A1] Every tick closes behind a green gate.'
+		fi
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf 'The fix is the epic record itself; proposed for the run to apply.\n\n'
+			printf '%s\n' '```tracker-edits'
+			printf '[{"tick": "qeu", "field": "acceptance_criteria", "value": "%s"},\n' "$value"
+			printf '%s\n' ' {"tick": "b1", "field": "notes", "value": "re-flowed the epic acceptance one item per line"}]'
+			printf '%s\n' '```'
+			printf '\n%s\n%s\n%s\n\n' '```findings v2' '[]' '```'
+			printf 'STATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+	fi
+	;;
+tracker_edit_finding)
+	# The triage half: a1 does its own work and reports a finding whose
+	# whole fix is a tracker edit, with the exact change — the run applies
+	# it rather than absorbing a tick no worker could do. Every other tick
+	# does its work.
+	commit
+	if [ "$TICFAC_TICK" != "a1" ]; then
+		report
+	else
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf '%s\n' '```findings v2'
+			printf '%s\n' '[{"kind": "defect", "title": "The epic acceptance parses as one item", "severity": "high",'
+			printf '%s\n' '  "breaks": {"item": "A1"},'
+			printf '%s\n' '  "tracker_edit": {"tick": "qeu", "field": "acceptance_criteria", "value": "[A1] Every tick closes behind a green gate;\n[A2] The fixture epic carries a second item."}}]'
+			printf '%s\n' '```'
+			printf '\nSTATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+	fi
+	;;
 a1-adds-nothing)
 	# The isp shape: a1's attempt was cut from a RELEASED attempt's carried
 	# work, finds the work already done, and correctly adds nothing — a

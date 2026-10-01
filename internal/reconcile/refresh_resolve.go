@@ -291,6 +291,9 @@ func (r *Reconciler) dispatchBaseFold(ctx context.Context, base, baseHead, epicH
 		}
 		r.tearDown(handle, executor, marker, fmt.Sprintf(
 			"the resolve-conflict job for the fold of %s into %s failed", base, r.branch), true)
+		if fault := r.roleJobBootFault("", "the resolve-conflict job for the fold of "+base, collected); fault != nil {
+			return "", nil, false, fault
+		}
 		return "", nil, recorded && ctx.Err() == nil, rerr
 	}
 	if rerr == nil && (resolveHead == "" || (resolveHead == wip && carried == "")) {

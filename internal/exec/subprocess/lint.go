@@ -33,7 +33,7 @@ import (
 //     attempt that never said what it did, never a hold for a person.
 //
 // Errors come in two strengths. A FATAL error is one collect cannot read past
-// — no STATUS line, a findings block the reader refuses, a review with no
+// — no STATUS line, a findings or tracker-edits block the reader refuses, a review with no
 // REVIEW-VERDICT — and it fails the attempt once the pushbacks are spent. Every
 // other error is something the reader REPAIRED (a folded key, a normalised
 // value) or a rule the record does not enforce (a long title, a claim that
@@ -149,6 +149,11 @@ func fatalProblems(role string, report Report, lines []string) []LintProblem {
 		out = append(out, LintProblem{Where: "findings block", Message: report.FindingsProblem +
 			". The block is a JSON array of objects; see the v2 shape in your prompt", Fatal: true})
 	}
+	if report.TrackerEditsProblem != "" {
+		out = append(out, LintProblem{Where: "tracker-edits block", Message: report.TrackerEditsProblem +
+			". The block is a JSON array of {\"tick\", \"field\", \"value\"} objects; see its shape in your prompt",
+			Fatal: true})
+	}
 	if roleContracts[role].reviewVerdict && report.ReviewVerdict == "" {
 		msg := "a review-epic report states its judgement as its own line before the STATUS line: " +
 			"`REVIEW-VERDICT: READY` or `REVIEW-VERDICT: NOT READY — <what would make it ready>`"
@@ -253,6 +258,9 @@ func LintReport(body string, ctx LintContext) LintResult {
 		}
 		for i, f := range block.Findings {
 			out.lintClaim(i, f, block.Version, ctx)
+			if f.TrackerEdit != nil {
+				out.lintTrackerEdits(fmt.Sprintf("findings[%d].tracker_edit", i), []TrackerEdit{*f.TrackerEdit}, ctx.Repo)
+			}
 		}
 		switch {
 		case !block.Present:
@@ -264,6 +272,8 @@ func LintReport(body string, ctx LintContext) LintResult {
 				Message: "is the v1 format; it is still read, but write ```findings v2 as your prompt shows"})
 		}
 	}
+
+	out.lintTrackerEdits("", report.TrackerEdits, ctx.Repo)
 
 	if report.Status != "" {
 		if report.Status != StatusDone && report.Detail == "" {
@@ -461,7 +471,7 @@ func LintSection(command string) string {
 		"    " + command + "\n\n" +
 		"It is the same reader the run collects your report with. Fix every error it prints and run it again " +
 		"until it exits 0; a report that fails it is sent back to you, and one that still fails is treated as " +
-		"no report at all. It checks the STATUS line, the findings block field by field, and anything else " +
+		"no report at all. It checks the STATUS line, the findings block field by field, a tracker-edits block against the tracker, and anything else " +
 		"your role must state.\n\n" +
 		FindingsV2Section
 }
@@ -488,7 +498,9 @@ const FindingsV2Section = "A discovery outside your job that deserves its own ti
 	"required. `target` is the repository it belongs on as owner/name; omit it for this repository. `breaks` " +
 	"is optional: the epic's acceptance item this finding breaks, and the check that shows it — a " +
 	"[testing.commands] id or a runnable command; omit `breaks` when it breaks no item (never write \"none\"). " +
-	"`evidence` is optional: where to look. No findings: an empty array, `[]`.\n\n"
+	"`evidence` is optional: where to look. `tracker_edit` is optional: when the finding's whole fix is a change to " +
+	"a tracker record, the exact change as {\"tick\", \"field\", \"value\"} — the run applies it itself rather " +
+	"than filing a tick for it. No findings: an empty array, `[]`.\n\n"
 
 // LintPushbackPrompt is what a worker whose report failed the check is told,
 // in its own session.
@@ -518,13 +530,21 @@ func lintQuote(s string) string {
 // ---------------------------------------------------------------------- CLI ---
 
 // LintMain is `ticfac-exec-subprocess lint-report <path> [--role r] [--tick
-// id] [--repo dir]`. The flags default to the job's own environment
-// (TICFAC_ROLE, TICFAC_TICK, TICFAC_WORKTREE, else the working directory), so
-// a worker inside a job can run it with the path alone. Exit 0 when the report
-// has no errors, 1 when it has (the list is on stdout), 2 on a usage error.
+// id] [--repo dir] [--pushback]`. The flags default to the job's own
+// environment (TICFAC_ROLE, TICFAC_TICK, TICFAC_WORKTREE, else the working
+// directory), so a worker inside a job can run it with the path alone. Exit 0
+// when the report has no errors, 1 when it has (the list is on stdout), 2 on a
+// usage error.
+//
+// --pushback prints, for a failing report, the whole prompt the run pushes the
+// report back with (LintPushbackPrompt) instead of the bare list: the cloud
+// worker's entrypoint (image/worker.sh) has no Go supervisor to render it and
+// hands this text to the harness's own session as it is, so the local and the
+// cloud pushback say the same words (hn6 run_d51a, u5n).
 func LintMain(args []string, stdout, stderr io.Writer) int {
 	role, tick, repo := os.Getenv("TICFAC_ROLE"), os.Getenv("TICFAC_TICK"), os.Getenv("TICFAC_WORKTREE")
 	var path string
+	pushback := false
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		name, value, hasValue := strings.Cut(strings.TrimLeft(arg, "-"), "=")
@@ -537,8 +557,12 @@ func LintMain(args []string, stdout, stderr io.Writer) int {
 			continue
 		}
 		if name == "h" || name == "help" {
-			fmt.Fprint(stdout, "usage: ticfac-exec-subprocess lint-report <path> [--role <role>] [--tick <id>] [--repo <dir>]\n")
+			fmt.Fprint(stdout, lintUsage)
 			return ExitOK
+		}
+		if name == "pushback" && !hasValue {
+			pushback = true
+			continue
 		}
 		if !hasValue {
 			if i+1 >= len(args) {
@@ -564,7 +588,7 @@ func LintMain(args []string, stdout, stderr io.Writer) int {
 		path = os.Getenv("TICFAC_RESULT_PATH")
 	}
 	if path == "" {
-		fmt.Fprint(stderr, "usage: ticfac-exec-subprocess lint-report <path> [--role <role>] [--tick <id>] [--repo <dir>]\n")
+		fmt.Fprint(stderr, lintUsage)
 		return ExitUsage
 	}
 	raw, err := os.ReadFile(path)
@@ -576,6 +600,10 @@ func LintMain(args []string, stdout, stderr io.Writer) int {
 		repo, _ = os.Getwd()
 	}
 	result := LintReport(string(raw), LoadLintContext(repo, role, tick))
+	if pushback && !result.Clean() {
+		fmt.Fprint(stdout, LintPushbackPrompt(path, LintCommand(LintCommandName, path, role, tick, repo), result.Text()))
+		return ExitError
+	}
 	fmt.Fprint(stdout, result.Text())
 	if !result.Clean() {
 		fmt.Fprintf(stdout, "%d error(s): fix them and run the check again\n", len(result.Errors))
@@ -584,6 +612,8 @@ func LintMain(args []string, stdout, stderr io.Writer) int {
 	fmt.Fprintln(stdout, "ok: the report passes the check")
 	return ExitOK
 }
+
+const lintUsage = "usage: ticfac-exec-subprocess lint-report <path> [--role <role>] [--tick <id>] [--repo <dir>] [--pushback]\n"
 
 // ReasonReportInvalid is the message key every collect settles a report with
 // FATAL check problems under: not a verdict — it collects as missing-result,

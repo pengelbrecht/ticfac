@@ -308,8 +308,16 @@ const (
 	WorkerScript     = "worker.sh"
 	CommonScript     = "common.sh"
 	PreflightScript  = "preflight.sh"
-	DockerfileName   = "Dockerfile"
+	// ProcScript is the background-process runner (image/proc.sh), installed
+	// as ProcCommand: the per-process directory recipe a container under the
+	// durable_object scheduling policy needs in place of the 0.x control
+	// server's process API (epic umq, tick x9d).
+	ProcScript     = "proc.sh"
+	DockerfileName = "Dockerfile"
 )
+
+// ProcCommand is where the Dockerfile installs ProcScript.
+const ProcCommand = "/usr/local/bin/ticks-proc"
 
 // Dir returns the absolute path of image/, the image's build context, found by
 // walking up from the working directory to the module root.

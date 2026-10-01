@@ -223,6 +223,20 @@ fi
 exit "${TICKS_TEST_WORKER_EXIT:-0}"
 `)
 	writeStub(t, filepath.Join(f.binDir, "mise"), "exit 0\n")
+	// The report checker the image ships beside ticfac (hn6 run_d51a, u5n).
+	// A stand-in, like every other binary here, so no test picks up a real
+	// one from the developer's PATH: it records how it was asked, refuses a
+	// report with no STATUS line the way the real checker does — printing a
+	// pushback prompt naming the problem — and passes every other report.
+	// The real checker's own answers are proved in internal/exec/subprocess
+	// and, end to end, by the real-binary case in worker_report_check_test.go.
+	writeStub(t, filepath.Join(f.binDir, reportCheckerBinary), `[ -z "${TICKS_TEST_LINT_RECORD:-}" ] || printf '%s\n' "$*" >> "$TICKS_TEST_LINT_RECORD"
+[ "$1" = "lint-report" ] || exit 2
+if [ -n "${TICKS_TEST_LINT_EXIT:-}" ]; then echo "the checker broke"; exit "$TICKS_TEST_LINT_EXIT"; fi
+if grep -q '^STATUS: ' "$2"; then echo "ok: the report passes the check"; exit 0; fi
+printf 'Your report at %s does not pass the report check.\n\nerror: STATUS: the report has no STATUS line\n' "$2"
+exit 1
+`)
 	// `tk` still answers the TRACKER commands the worker entrypoint runs —
 	// verify_tk's version check — and nothing else: the sandbox verbs left tk
 	// with tick 46x and the scripts ask `ticfac` for them.

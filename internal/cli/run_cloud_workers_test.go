@@ -294,3 +294,47 @@ func TestRunCloudWorkersRefusesFlagsThatDoNotApply(t *testing.T) {
 		}
 	}
 }
+
+// The substrate opt-in (epic umq): TICFAC_CLOUD_SUBSTRATE rides the one
+// submission, and an unset variable sends no field at all — so the factory's
+// default, and every run already going, is untouched.
+func TestRunCloudWorkersCarriesTheSubstrateOptIn(t *testing.T) {
+	for _, tc := range []struct {
+		env  string
+		want any
+	}{{"", nil}, {"do_v1", "do_v1"}} {
+		t.Run("substrate="+tc.env, func(t *testing.T) {
+			t.Setenv(CloudSubstrateEnv, tc.env)
+			stubCloudTk(t)
+			repo, _, _ := setupCloudRepo(t, true)
+			started := cloudRunIDOf("cc34")
+			endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+				switch {
+				case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+					return 200, map[string]any{"runs": []any{}}
+				case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+					return http.StatusCreated, map[string]any{"run": map[string]any{"run_id": started, "state": "starting"}}
+				case request.Method == http.MethodPost && request.Path == "/api/runs/"+started+"/orchestrator":
+					return http.StatusCreated, map[string]any{
+						"run_id": started, "project": "acme/project", "epic": "epic1", "state": "starting",
+						"token": "tkr_x", "factory_max_instances": 3,
+					}
+				}
+				return 404, map[string]any{"error": "not_found"}
+			})
+			configureCloudFactory(t, endpoint)
+			saveCloudWorkersSeams(t)
+
+			if code, stdout, stderr := runCloudWorkers(t, repo); code != exitSuccess {
+				t.Fatalf("exit %d: %s\n%s", code, stderr.String(), stdout.String())
+			}
+			for _, request := range *requests {
+				if request.Method == http.MethodPost && request.Path == cloudIndexPath {
+					if got := request.Body["substrate"]; got != tc.want {
+						t.Errorf("the submission's substrate is %#v, want %#v", got, tc.want)
+					}
+				}
+			}
+		})
+	}
+}

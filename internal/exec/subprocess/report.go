@@ -126,6 +126,14 @@ type Report struct {
 	ReviewVerdict       string
 	ReviewVerdictDetail string
 	ReviewVerdictLine   string
+
+	// TrackerEdits are the tracker changes the report PROPOSES for the run
+	// to apply (tracker_edits.go, hn6 yjq), and TrackerEditsProblem is why
+	// its tracker-edits block cannot be applied as written. A proposal is
+	// applied whole or not at all, so TrackerEdits is nil whenever the
+	// problem is set.
+	TrackerEdits        []TrackerEdit
+	TrackerEditsProblem string
 }
 
 // NeedsHuman is the escalation set: two statuses that reach a person
@@ -145,6 +153,8 @@ func ParseReport(body string) Report {
 	if block := ReadFindingsBlock(body); block.Present || block.Problem != "" {
 		out.FindingsPresent, out.FindingsVersion = true, block.Version
 	}
+	edits := ReadTrackerEditsBlock(body)
+	out.TrackerEdits, out.TrackerEditsProblem = edits.Edits, edits.Problem
 	for _, raw := range strings.Split(body, "\n") {
 		trimmed := strings.Trim(strings.TrimRight(raw, "\r"), decorationCutset)
 		if m := statusLine.FindStringSubmatch(trimmed); m != nil {

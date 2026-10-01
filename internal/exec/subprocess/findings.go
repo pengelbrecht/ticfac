@@ -123,6 +123,12 @@ type Finding struct {
 	// testing commands where one fits, else the test's name. Empty means no
 	// claim was made.
 	DemonstratingCheck string `json:"demonstrating_check,omitempty"`
+	// TrackerEdit is the exact tracker change that IS the finding's fix,
+	// when its fix is purely tracker-side (a v2 finding's `tracker_edit`,
+	// hn6 yjq): the run applies it itself rather than filing a tick no worker
+	// could do. It rides beside the record, never in it — the pinned
+	// $defs.finding and the draft are unchanged — so it is not serialised.
+	TrackerEdit *TrackerEdit `json:"-"`
 }
 
 // findingFields is every REQUIRED field of the record, for the closed-key

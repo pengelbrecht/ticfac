@@ -35,18 +35,75 @@ on:
 permissions:
   contents: read
 
+# Main's runs are never cancelled by a later push: main's full run is the
+# deploy gate, and when merges landed faster than the 13-minute suite every
+# main run was cancelled by the next and nothing deployed (1d628236 ran 14
+# minutes and was cancelled, 2026-10-01). GitHub keeps one run in progress and
+# one pending per group, a newer pending replacing an older, so main still
+# converges on its newest head. Every other ref cancels as before.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+# Two shapes of run (operator, 2026-10-01: "only a few CIs at critical
+# junctures"):
+#
+#   - push (main, epic/**) and workflow_dispatch: the FULL suite, sharded —
+#     internal/reconcile (11 of the old job's 13 minutes) split across three
+#     `go test` jobs, every other package in a fourth. Main's full run is the
+#     deploy gate: deploy-factory.yml runs on this workflow's success. An epic
+#     branch's full run is what its close-out waits for.
+#   - pull_request: ADVISORY and affected-only. The plan job runs the Go
+#     packages the diff can change the verdict of (changed packages and every
+#     package whose tests depend on one), skips the Go jobs when there are
+#     none and typescript when nothing it reads changed. Agents merge on local
+#     targeted tests and `make gate`; nothing here is a required check.
+#
+# The plan is .github/scripts/ci-plan.sh; a shard is go-test-shard.sh.
 jobs:
-  go:
-    name: go
+  plan:
+    name: plan
     # An epic branch already gets a push-triggered run on the same head
     # commit (see `on:` above), so its PR's pull_request run was the same
-    # checks twice. Feature-branch PRs still run here: their branches are not
-    # in the push filter.
+    # checks twice; skipping the plan skips every job that needs it.
+    # Feature-branch PRs still run here: their branches are not in the push
+    # filter.
     if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'epic/')
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      go: ${{ steps.plan.outputs.go }}
+      ts: ${{ steps.plan.outputs.ts }}
+      race_pkgs: ${{ steps.plan.outputs.race_pkgs }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # A pull request's diff is taken against its base, which a shallow
+          # checkout of the merge commit does not carry.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Plan
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            git diff --name-only "$BASE"...HEAD | .github/scripts/ci-plan.sh
+          else
+            .github/scripts/ci-plan.sh </dev/null
+          fi
+
+  go-lint:
+    name: go lint
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -74,48 +131,6 @@ jobs:
       - name: go build
         run: go build ./...
 
-      # The full suite's one test that needs the OTHER toolchain:
-      # internal/exec/cloudflaresandbox's end-to-end adoption test (tick 6gr)
-      # drives the real factory Worker (cloudflare/src) in real workerd through
-      # miniflare, so it skips itself wherever cloudflare/node_modules is not
-      # installed. `make test` below is the one place that test runs, and a
-      # suite whose newest end-to-end proof skips on every CI run is a suite
-      # that never proved it, so the install lives here — the same two setup
-      # actions and the same frozen install the typescript job runs, arriving
-      # at the same cached store, before the step that needs it.
-      #
-      # It costs the install (~1 min cold, seconds cached) on a job that runs
-      # ~7 minutes of Go tests; it is deliberately NOT on the `go test -short`
-      # step's path, whose point is that the short suite needs nothing but Go.
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 12.3.4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-          cache-dependency-path: cloudflare/pnpm-lock.yaml
-
-      - name: Install the worker workspace
-        working-directory: cloudflare
-        run: pnpm install --frozen-lockfile --prefer-offline
-
-      # The full suite. It used to run after `make test-short`, which ran the
-      # short subset a second time inside the same job: the full suite is a
-      # superset (every short test runs in it too), so the extra step bought
-      # minutes of CI and no coverage. -timeout is pinned via the Makefile (not
-      # a bare `go test ./...`): internal/reconcile's suite runs past go test's
-      # default 10-minute per-package timeout.
-      #
-      # This is also where the sandbox image's scripts are tested (tick r6w):
-      # internal/sandboximage runs image/'s entrypoints for real against stub
-      # harnesses and real git. ticfac authors image/, so there is no longer a
-      # pinned upstream copy to fetch and compare — the tree CI tests is the
-      # tree the binary embeds, and that package checks the two are one.
-      - name: go test
-        run: make test
-
       - name: ticfac run-epic fails closed
         run: |
           go build -o /tmp/ticfac ./cmd/ticfac
@@ -132,15 +147,72 @@ jobs:
             *) echo "the refusal does not say 'no executor configured'"; exit 1 ;;
           esac
 
+  # The suite, one job per entry of the plan's matrix: internal/reconcile's
+  # three shards (its top-level tests dealt round-robin by name, so the shards
+  # partition the package by construction) and one job for every other
+  # package. -timeout and -parallel stay the Makefile's: each shard is a
+  # `make test` narrowed by PKGS and GOTEST_RUN.
+  #
+  # This is also where the sandbox image's scripts are tested (tick r6w):
+  # internal/sandboximage runs image/'s entrypoints for real against stub
+  # harnesses and real git, from the tree the binary embeds.
+  go-test:
+    name: go test (${{ matrix.name }})
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          # Cached on go.sum: the module cache and, more importantly, the
+          # build and test cache, so an unchanged package's tests answer from
+          # cache exactly as they do on a laptop and in the per-tick gate.
+          cache: true
+
+      # The one test that needs the OTHER toolchain:
+      # internal/exec/cloudflaresandbox's end-to-end adoption test (tick 6gr)
+      # drives the real factory Worker (cloudflare/src) in real workerd through
+      # miniflare, so it skips itself wherever cloudflare/node_modules is not
+      # installed. A suite whose newest end-to-end proof skips on every CI run
+      # never proved it, so the job that runs that package installs the worker
+      # workspace first (the plan sets `node` on it).
+      - uses: pnpm/action-setup@v4
+        if: matrix.node
+        with:
+          version: 12.3.4
+
+      - uses: actions/setup-node@v4
+        if: matrix.node
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: cloudflare/pnpm-lock.yaml
+
+      - name: Install the worker workspace
+        if: matrix.node
+        working-directory: cloudflare
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: go test
+        run: .github/scripts/go-test-shard.sh "${{ matrix.pkgs }}" "${{ matrix.shard }}" "${{ matrix.of }}"
+
   # The race detector over the short suite, as its own job so it runs beside
-  # `go` and adds no wall time to CI (measured locally, 10-core darwin: the
-  # short suite 64s plain, 81s under -race). The short suite is where every
-  # concurrent seam is exercised — the follow, the watch, the detached
-  # attach, the overview's gathering — while `make test` stays as it is. A
-  # race is a bug, production or test side: this job stops one landing.
+  # the tests and adds no wall time to CI (measured locally, 10-core darwin:
+  # the short suite 64s plain, 81s under -race). The short suite is where
+  # every concurrent seam is exercised — the follow, the watch, the detached
+  # attach, the overview's gathering. A race is a bug, production or test
+  # side: this job stops one landing. A pull request races its affected
+  # packages only.
   go-race:
     name: go race
-    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'epic/')
+    needs: plan
+    if: needs.plan.outputs.go == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -151,7 +223,29 @@ jobs:
           cache: true
 
       - name: go test -race -short
-        run: make test-race
+        run: make test-race PKGS="${{ needs.plan.outputs.race_pkgs }}"
+
+  # One check named `go` over every Go job, whatever the matrix was: a reader
+  # (a person, the close-out's per-check view) keeps one name to look at.
+  # Skipped Go jobs (a pull request with no Go change) read as a pass; a
+  # failed or cancelled one fails it. deploy-factory.yml reads the WORKFLOW's
+  # conclusion, which every job's failure already decides.
+  go:
+    name: go
+    needs: [plan, go-lint, go-test, go-race]
+    if: always() && (github.event_name != 'pull_request' || !startsWith(github.head_ref, 'epic/'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every Go job passed or was not needed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          bad="$(echo "$RESULTS" | jq -r '[to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key] | join(" ")')"
+          if [ -n "$bad" ]; then
+            echo "not passed: $bad"
+            exit 1
+          fi
 
   contracts:
     name: contracts
@@ -210,11 +304,11 @@ jobs:
 
   typescript:
     name: typescript
-    # An epic branch already gets a push-triggered run on the same head
-    # commit (see `on:` above), so its PR's pull_request run was the same
-    # checks twice. Feature-branch PRs still run here: their branches are not
-    # in the push filter.
-    if: github.event_name != 'pull_request' || !startsWith(github.head_ref, 'epic/')
+    # Always on a push or dispatch; on a pull request only when the diff
+    # touches what it reads (cloudflare/, contracts/, CI itself) — the plan
+    # job decides, and an epic PR skips it with the plan.
+    needs: plan
+    if: needs.plan.outputs.ts == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

@@ -188,6 +188,17 @@ func (r *Reconciler) finishCollect(ctx context.Context, f *finishing) error {
 
 // finishIntegrate merges the attempt into the integration branch.
 func (r *Reconciler) finishIntegrate(ctx context.Context, f *finishing) error {
+	// The tracker edits the attempt proposed go on first, through the run's
+	// own writer (tracker_edits.go): a delivery that was ONLY edits has
+	// nothing more to merge, and its gate runs over the edited branch.
+	if delivered, merged, err := r.integrateTrackerEdits(ctx, f.fl.marker, f.collected); err != nil {
+		r.disposeFinished(f, err)
+		return err
+	} else if delivered {
+		f.merged = merged
+		f.stage = finishGating
+		return nil
+	}
 	merged, err := r.integrate(ctx, f.fl.marker, f.collected)
 	if err != nil {
 		err = r.conflictToLadder(ctx, f, err)

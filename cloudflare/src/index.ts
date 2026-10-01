@@ -1870,6 +1870,9 @@ export default {
 // class IS the container's control plane, and everything this factory wants
 // from it lives behind the seam in src/sandbox.ts.
 export { Sandbox } from "@cloudflare/sandbox";
+// The factory's own container class on the durable_object scheduling policy
+// (epic umq), bound as SANDBOXES_V1 beside the SDK's class above.
+export { FactorySandbox } from "./factory-sandbox";
 // workerd accepts a Durable Object class and a Workflow entrypoint as named
 // exports of the entry module; anything else named here fails at boot, not at
 // deploy (see SERVICE above).
