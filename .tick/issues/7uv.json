@@ -15,6 +15,6 @@
   "acceptance_criteria": "[1] health.verdict is healthy/degraded/stopped with recovered counts per the rules; `go test -short -timeout 20m -run 'TestVerdict|TestCost|TestTheContract' ./internal/statusmodel/` passes. [2] No cost line is ever metered:false with a number; unmetered claude/pi-local/workers-ai spend is a line with usd null, and a cloud run's gateway cost is metered. [3] `make gate` passes.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-28T18:40:57.553253Z",
-  "updated_at": "2026-09-30T17:02:58.022576Z",
+  "updated_at": "2026-10-01T00:25:11.019348Z",
   "started_at": "2026-09-29T13:47:18.828815926Z"
 }
