@@ -1,12 +1,14 @@
 import { env, SELF } from "cloudflare:test";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import contract from "../../contracts/status-model.json";
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
 import { insertRun } from "../src/db";
+import { MAX_SNAPSHOT_BYTES } from "../src/status";
 
 /**
  * The phone page's auth and listing (tick i1r): `/status` is the page an
- * operator follows from a phone with the laptop closed, and these are the two
+ * operator follows from a phone with the laptop closed, and these are the
  * properties the acceptance names —
  *
  *  - the page NEEDS the operator's factory credential, and the credential
@@ -16,6 +18,15 @@ import { insertRun } from "../src/db";
  *    local rows marked PAUSED/STALE by the snapshot's age — saying plainly
  *    that a local run pauses when its laptop sleeps, rather than looking
  *    stuck.
+ *
+ * The dashboard rendering (hn6, tick 0rx — A5's second half): a run card
+ * renders the SAME status model the terminal dashboard renders, and the
+ * contract's own "dashboard" golden — the one fixture with every hn6 field
+ * populated — is the cross-language guarantee. The golden is imported
+ * straight from the contract bundle (the same way every other test imports
+ * ../../contracts/*.json; the bundle is where the fixture has lived since it
+ * gained a second reader, tick 4i8), so the page cannot drift from the model
+ * the Go side builds while both suites stay green.
  */
 
 const BASE = "https://factory.example.com";
@@ -98,6 +109,7 @@ function localDoc(runID: string, epicID: string, extra: Record<string, unknown> 
 async function cloudRunRow(
   runID: string,
   state: "running" | "failed" | "completed",
+  costUsd = 0,
 ): Promise<void> {
   await insertRun(env.DB, {
     run_id: runID,
@@ -108,7 +120,7 @@ async function cloudRunRow(
     state,
     started_at: new Date().toISOString(),
     ended_at: state === "running" ? null : new Date().toISOString(),
-    cost_usd: 0,
+    cost_usd: costUsd,
     trace_id: null,
     credential_grade: "write",
   });
@@ -321,5 +333,177 @@ describe("the page is installable to a phone home screen", () => {
   it("refuses an unknown sub-path", async () => {
     const res = await SELF.fetch(`${BASE}/status/not-a-thing`);
     expect(res.status).toBe(404);
+  });
+});
+
+describe("the phone page renders the dashboard model (hn6, tick 0rx)", () => {
+  // The contract's own "dashboard" golden: the one fixture with every hn6
+  // field populated. Imported, not transcribed — a drift between the golden
+  // and the page is a drift this suite catches, not one it copies.
+  const golden = (contract as { golden: { dashboard: Record<string, unknown> } }).golden.dashboard;
+
+  /** The whole page for one pushed model, signed in. */
+  async function renderedPage(doc: Record<string, unknown>): Promise<string> {
+    await pushSnapshot("epic-6in", doc);
+    return await (await page(await login())).text();
+  }
+
+  it("renders the golden: every tick in plan order, the ✗ on the rejected try's tick, the healthy verdict with its recovery, needs-you and honest cost", async () => {
+    const body = await renderedPage(golden);
+
+    // Every tick id, in the golden's own plan order (060, its child 823,
+    // 46x, v7z) — rows never reorder.
+    const at = ["060", "823", "46x", "v7z"].map((id) => body.indexOf(id));
+    for (const pos of at)
+      expect(pos, "a tick id of the golden is missing").toBeGreaterThanOrEqual(0);
+    expect(
+      [...at].sort((a, b) => a - b),
+      "the tick rows are not in the golden's order",
+    ).toEqual(at);
+    // A closed parent row and its child, indented under the parent the model
+    // names: the pipeline cell filled left to right, the child under 060.
+    expect(body).toContain(
+      '<tr class="trow"><td class="c-tick">060</td>' +
+        '<td class="c-what" data-label="what">cloud worker early-exit nudge</td>' +
+        '<td class="c-pipeline" data-label="pipeline">✓ ✓ ✓ ✓</td>' +
+        '<td class="c-time" data-label="time">49m</td>' +
+        '<td class="c-attempts" data-label="attempts">✓</td></tr>',
+    );
+    expect(body).toContain(
+      '<tr class="trow child"><td class="c-tick">└ 823</td>' +
+        '<td class="c-what" data-label="what">re-run holds the stopped claim</td>' +
+        '<td class="c-pipeline" data-label="pipeline">✓ ✓ ✓ ✓</td>' +
+        '<td class="c-time" data-label="time">34m</td>' +
+        '<td class="c-attempts" data-label="attempts">✗✓</td></tr>',
+    );
+
+    // The rejected try's tick: 46x's row carries the ✗ on its first try (and
+    // the ● of the try now in flight), with its pipeline at the gate.
+    const row46x = body.slice(at[2], at[3]);
+    expect(row46x).toContain('<td class="c-pipeline" data-label="pipeline">✓ ✓ ● …</td>');
+    expect(row46x).toContain('<td class="c-attempts" data-label="attempts">✗●</td>');
+    expect(row46x).toContain('<td class="c-time" data-label="time">1h</td>');
+
+    // A failed stage is a ✗, the pending tail behind it one … — the same
+    // glyphs the terminal's pipeline cell draws (v7z's ci stage failed).
+    expect(body).toContain('<td class="c-pipeline" data-label="pipeline">✓ ✓ ✗ …</td>');
+
+    // The verdict as the headline a person reads, with its recovery — not
+    // the four raw counters.
+    expect(body).toContain("healthy (recovered: net ×14)");
+
+    // Honest cost: the metered number, "not metered" where nothing measured
+    // the spend — and never a fabricated $0.00 anywhere on the page.
+    expect(body).toContain("Workers AI $0.41");
+    expect(body).toContain("claude not metered");
+    expect(body).not.toContain("$0.00");
+
+    // Needs-you, quiet when the model needs nobody.
+    expect(body).toContain("needs you: nothing");
+
+    // The last two recent events only — the tail, not the whole feed.
+    expect(body).toContain("18:58 46x dispatched: 46x try 2 dispatched");
+    expect(body).toContain("19:04 run closeout_held: the close-out waits for CI green on the PR");
+    expect(body).not.toContain("the close-out published the run records");
+  });
+
+  it("renders the headline's progress and the phase row, and the ETA only where the model states one", async () => {
+    const body = await renderedPage(golden);
+    // The progress bar is a width percentage of closed ticks, with the count
+    // the golden's own progress states.
+    expect(body).toContain('style="width:50%"');
+    expect(body).toContain("2/4 ticks");
+    // The phase row, one chip per lifecycle phase with its own state glyph.
+    expect(body).toContain(
+      '<span class="ph ph-done">plan ✓</span> <span class="ph ph-active">waves ●</span> ' +
+        '<span class="ph ph-done">review ✓</span> <span class="ph ph-active">close-out ●</span> ' +
+        '<span class="ph ph-active">ci ●</span> <span class="ph ph-pending">merge ○</span>',
+    );
+    // The golden's remaining is null: no ETA is invented.
+    expect(body).not.toContain("ETA ~");
+
+    await env.DB.prepare("DELETE FROM status_snapshots").run();
+    const withEta = await renderedPage({
+      ...golden,
+      remaining: {
+        approximate_seconds: 2400,
+        basis: "the median closed tick × the two still open",
+      },
+    });
+    expect(withEta).toContain("ETA ~40m");
+  });
+
+  it("names each needs-person attention with its command", async () => {
+    const body = await renderedPage({
+      ...golden,
+      attention: [
+        {
+          kind: "held-for-person",
+          what: "attempt 6 of 46x is held for a person: blocked on a question",
+          since: "2026-09-28T19:04:12Z",
+          needs_person: true,
+          unblock_command: "ticfac settle 6in 46x 6 --release who",
+        },
+      ],
+    });
+    expect(body).toContain(
+      "needs you: attempt 6 of 46x is held for a person: blocked on a question " +
+        "— ticfac settle 6in 46x 6 --release who",
+    );
+    expect(body).not.toContain("needs you: nothing");
+  });
+
+  it("renders a cloud run's Workers AI cost from its own run row", async () => {
+    await cloudRunRow("run_cost", "running", 0.41);
+    const body = await (await page(await login())).text();
+    expect(body).toContain("Workers AI $0.41");
+    // The composed cloud doc carries no health or waves — no other dashboard
+    // section is invented for it.
+    expect(body).not.toContain("needs you");
+    expect(body).not.toContain("ETA ~");
+  });
+
+  it("renders a pre-hn6 doc exactly as it did before hn6, without throwing", async () => {
+    await pushSnapshot("epic-2jn", localDoc("epic-2jn", "2jn"), {
+      i1r: "Follow ticfac from a phone",
+      w9b: "The tick whose label this page names",
+    });
+    const body = await (await page(await login())).text();
+    // The card is byte-for-byte the pre-hn6 card: the head, the reason, the
+    // old tick list inside the fold-out.
+    expect(body).toContain(
+      '<section class="run running">\n<div class="run-head"><span class="run-id">epic-2jn</span>\n' +
+        '<span class="state running">running</span></div>\n' +
+        '<p class="note">local run · epic 2jn</p>\n' +
+        '<p class="reason">2 in-flight attempt(s)</p>',
+    );
+    expect(body).toContain(
+      '<details><summary>ticks (2)</summary>\n<ul class="ticklist">' +
+        "<li>i1r (Follow ticfac from a phone) — in-flight</li>" +
+        "<li>w9b (The tick whose label this page names) — closed</li>" +
+        "</ul></details>\n</section>",
+    );
+    // None of the dashboard sections render for a doc without the hn6 fields.
+    expect(body).not.toContain("needs you");
+    expect(body).not.toContain("ETA ~");
+    expect(body).not.toContain("not metered");
+    expect(body).not.toContain('<table class="ticks-table"');
+    expect(body).not.toContain('style="width:');
+    expect(body).not.toContain("recovered");
+  });
+
+  it("serialises the dashboard golden well inside the snapshot bound", () => {
+    const envelope = JSON.stringify({
+      schema_version: 1,
+      run_id: "epic-6in",
+      host: "local",
+      pushed_at: new Date().toISOString(),
+      model: golden,
+    });
+    // ~8.5 KB against the 256 KiB door: the golden every field populates is
+    // a few percent of what the door accepts, so a real run's model has all
+    // the room it needs. "Well under", asserted rather than assumed.
+    const bytes = new TextEncoder().encode(envelope).length;
+    expect(bytes).toBeLessThan(MAX_SNAPSHOT_BYTES / 4);
   });
 });
