@@ -123,3 +123,41 @@ func TestWorkerHandleIsAlsoFoundUnderTheDefaultStateRoots(t *testing.T) {
 		t.Errorf("the handle reads %v, want the agent name under the executor's default state root", handle)
 	}
 }
+
+// TestWorkerHandleKeepsWalkingWhenAnExecutorNamesNoWorker: one root's
+// answer is not the end of the search. The walk is per EXECUTOR state root,
+// and the case that matters in production joins two of them: herdr's record
+// for an attempt that predates the agent's launch — no agent name, no pane
+// yet — beside the local supervisor's own record for the same attempt, in
+// the supervisor's FLAT layout (attempt.json directly in the dispatch's
+// state directory, no executor nesting under it). The reader must keep
+// walking and answer the pid the supervisor names, never stop at the first
+// root that named nothing — and never the reverse, taking the first root's
+// no-answer as the worker's.
+func TestWorkerHandleKeepsWalkingWhenAnExecutorNamesNoWorker(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv(EnvExecStateDir, "")
+
+	// herdr's root, first in the walk's order: a nested record that names
+	// the tick but no worker — the state an attempt is in between the
+	// dispatch and the agent's launch.
+	writeAttemptRecord(t, filepath.Join(home, ".ticfac", "exec", "herdr"), "epic-2jn", "6dh", 3,
+		`{"tick_id": "6dh", "workspace_id": "ws-1"}`)
+	// The local supervisor's root: the same attempt in the supervisor's own
+	// flat layout, naming the pid it watches.
+	dispatch := filepath.Join(home, ".ticfac", "exec", "local-subprocess", "runs",
+		"epic-2jn", "6dh", "3")
+	if err := os.MkdirAll(dispatch, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dispatch, "attempt.json"),
+		[]byte(`{"tick_id": "6dh", "supervisor_pid": 4821}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	handle := WorkerHandles("epic-2jn")("6dh", 3)
+	if handle == nil || *handle != "pid:4821" {
+		t.Errorf("the handle reads %v, want the supervisor's pid from the next root's flat record", handle)
+	}
+}
