@@ -11,19 +11,22 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 )
 
-// The deploy workflow's `docker` (.github/scripts/wrangler-docker.sh) owns the
-// registry login for a push. Wrangler logs docker in once, after the build,
+// The deploy's `docker` (cloudflare/scripts/wrangler-docker.sh, which every
+// deploy points wrangler at: dockershim.go) owns the registry login for a
+// push. Wrangler logs docker in once, after the build,
 // with a 15-minute credential and then pushes; deploy-factory run 36735949343
 // pushed every layer but one, retried the 209 MB one until that credential
 // lapsed, and failed `unauthorized`. These run the script for real against a
 // stub docker and a stub wrangler.
 
-// wranglerDockerFixture puts a stub docker and wrangler on PATH. The stub
+// wranglerDockerFixture stubs the docker the shim wraps (named by
+// TICFAC_DOCKER_BIN, not on PATH) and the wrangler it mints with (named by
+// TICFAC_WRANGLER_BIN with a TICFAC_WRANGLER_PREFIX, as an npx wrangler is). The stub
 // docker records every call (and a login's stdin) in the returned log; its
 // push fails `unauthorized` for the first failPushes calls.
 func wranglerDockerFixture(t *testing.T, failPushes int) (script string, env []string, log string) {
 	t.Helper()
-	for _, tool := range []string{"bash", "jq"} {
+	for _, tool := range []string{"bash"} {
 		if _, err := exec.LookPath(tool); err != nil {
 			t.Skipf("%s is not installed", tool)
 		}
@@ -32,7 +35,7 @@ func wranglerDockerFixture(t *testing.T, failPushes int) (script string, env []s
 	if err != nil {
 		t.Fatal(err)
 	}
-	script = filepath.Join(root, ".github", "scripts", "wrangler-docker.sh")
+	script = filepath.Join(root, "cloudflare", "scripts", "wrangler-docker.sh")
 
 	bin := t.TempDir()
 	state := t.TempDir()
@@ -43,7 +46,7 @@ func wranglerDockerFixture(t *testing.T, failPushes int) (script string, env []s
 			t.Fatal(err)
 		}
 	}
-	writeStub("docker", `
+	writeStub("real-docker", `
 log="$STUB_STATE/calls.log"
 case "$1" in
   login) printf 'docker %s stdin=%s\n' "$*" "$(cat)" >>"$log" ;;
@@ -58,10 +61,13 @@ esac
 	writeStub("wrangler", `
 n=$(cat "$STUB_STATE/mints" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" >"$STUB_STATE/mints"
 printf 'wrangler %s\n' "$*" >>"$STUB_STATE/calls.log"
-printf '{"account_id":"acct","registry_host":"registry.cloudflare.com","username":"v1","password":"secret-%s"}\n' "$n"
+# Pretty-printed, as wrangler's own JSON output is.
+printf '{\n  "account_id": "acct",\n  "registry_host": "registry.cloudflare.com",\n  "username": "v1",\n  "password": "secret-%s"\n}\n' "$n"
 `)
 	env = append(os.Environ(),
-		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"TICFAC_DOCKER_BIN="+filepath.Join(bin, "real-docker"),
+		"TICFAC_WRANGLER_BIN="+filepath.Join(bin, "wrangler"),
+		"TICFAC_WRANGLER_PREFIX=--no wrangler",
 		"STUB_STATE="+state,
 		"STUB_FAIL_PUSHES="+strconv.Itoa(failPushes),
 		"TICFAC_PUSH_RETRY_DELAY=0",
@@ -96,10 +102,10 @@ func TestWranglerDockerPushLogsInWithALongLivedCredentialAndRetriesAnExpiredOne(
 	}
 
 	want := []string{
-		"wrangler containers registries credentials registry.cloudflare.com --push --pull --expiration-minutes 120 --json",
+		"wrangler --no wrangler containers registries credentials registry.cloudflare.com --push --pull --expiration-minutes 120 --json",
 		"docker login --username v1 --password-stdin registry.cloudflare.com stdin=secret-1",
 		"docker push " + ref,
-		"wrangler containers registries credentials registry.cloudflare.com --push --pull --expiration-minutes 120 --json",
+		"wrangler --no wrangler containers registries credentials registry.cloudflare.com --push --pull --expiration-minutes 120 --json",
 		"docker login --username v1 --password-stdin registry.cloudflare.com stdin=secret-2",
 		"docker push " + ref,
 	}

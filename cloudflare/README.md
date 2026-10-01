@@ -423,8 +423,11 @@ the binaries' checksums), which change on every deploy, are declared at the end
 of the staged Dockerfile, right before the COPYs that use them. BuildKit keys
 every RUN on every ARG in scope, so declaring them in the version block at the
 top rebuilt every layer below it. CI also builds through buildx with the GitHub
-Actions cache (`.github/scripts/wrangler-docker.sh` as `WRANGLER_DOCKER_BIN`),
-because a fresh runner has no layer cache of its own. Before both fixes, each
+Actions cache (`scripts/wrangler-docker.sh`, which every deploy sets as
+`WRANGLER_DOCKER_BIN`; it switches the cache on only in Actions), because a
+fresh runner has no layer cache of its own. The same shim logs docker in to the
+registry with a fresh 120-minute credential before each push attempt, on a
+laptop too: wrangler's own login lasts 15 minutes, and a slow push outlived it. Before both fixes, each
 deploy pushed ~0.8 GB of new layers (22 of 46).
 
 The rollout wait is 10 minutes, extended once by up to 50 while the platform

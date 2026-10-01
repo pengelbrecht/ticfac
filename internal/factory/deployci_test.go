@@ -166,8 +166,12 @@ func TestCIDeploysMainOnlyAfterCIPassed(t *testing.T) {
 		t.Error("cloudflare/wrangler.toml no longer sets rollout_active_grace_period = 86400 — the deploy workflow " +
 			"deploys under live runs on the strength of it; restore it or restore a live-run wait")
 	}
-	workflowMustContain(t, workflow, "WRANGLER_DOCKER_BIN: ${{ github.workspace }}/.github/scripts/wrangler-docker.sh",
-		"the image push must go through the wrapper that logs in with a credential outliving the push (run 36735949343)")
+	workflowMustNotContain(t, workflow, "WRANGLER_DOCKER_BIN:",
+		"the deploy sets wrangler's docker to the bundle's shim itself (dockershim.go); a workflow override would bypass it")
+	workflowMustContain(t, workflow, "TICFAC_BUILDX_BUILDER:",
+		"CI's image build goes through buildx with the Actions cache, which the shim switches on from this")
+	workflowMustContain(t, workflow, "sed -u -E",
+		"the public-log filter must be line-buffered, or every line of a deploy carries the timestamp of its end")
 
 	workflowMustContain(t, workflow, "GITHUB_STEP_SUMMARY",
 		"the job summary records what was deployed")

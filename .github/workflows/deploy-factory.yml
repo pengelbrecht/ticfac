@@ -338,15 +338,21 @@ jobs:
       # the Worker, verifies the endpoint and waits for the container rollout.
       # Its output is kept for the summary and filtered on its way to the
       # public log: any workers.dev host becomes <factory>, whatever the mask
-      # above did or did not catch.
+      # above did or did not catch. ticfac streams wrangler's output as it is
+      # written and the filter is line-buffered (`sed -u`), so each line's
+      # timestamp in this log is when it happened: buffered, a failed deploy's
+      # ~700 lines all carried the second wrangler exited (run 36735949343).
       #
-      # The image build goes through .github/scripts/wrangler-docker.sh
-      # (WRANGLER_DOCKER_BIN): buildx on a docker-container builder with the
-      # GitHub Actions cache, so a layer that did not change keeps its digest
-      # and is neither pushed nor pulled again. Without it a fresh runner
-      # rebuilt ~0.8 GB of new blobs per deploy. It also logs in afresh before
-      # each push attempt: wrangler's own registry login lasts 15 minutes, and
-      # a slower push failed `unauthorized` (run 36735949343; see the script).
+      # Wrangler's docker is the bundle's shim (cloudflare/scripts/
+      # wrangler-docker.sh), which the deploy sets as WRANGLER_DOCKER_BIN on
+      # every deploy, laptop or CI: it logs in afresh before each push attempt
+      # (wrangler's own registry login lasts 15 minutes, and a slower push
+      # failed `unauthorized` in run 36735949343). Here it also builds through
+      # buildx on a docker-container builder with the GitHub Actions cache —
+      # TICFAC_BUILDX_BUILDER and the Actions runtime switch that on — so a
+      # layer that did not change keeps its digest and is neither pushed nor
+      # pulled again. Without it a fresh runner rebuilt ~0.8 GB of new blobs
+      # per deploy.
       - name: Set up a buildx builder for the image build cache
         if: steps.decide.outputs.deploy == 'true'
         id: buildx
@@ -359,12 +365,11 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          WRANGLER_DOCKER_BIN: ${{ github.workspace }}/.github/scripts/wrangler-docker.sh
           TICFAC_BUILDX_BUILDER: ${{ steps.buildx.outputs.name }}
         run: |
           set -o pipefail
           ./ticfac factory deploy 2>&1 | tee "$RUNNER_TEMP/deploy.log" \
-            | sed -E 's#https?://[A-Za-z0-9.-]+\.workers\.dev#<factory>#g'
+            | sed -u -E 's#https?://[A-Za-z0-9.-]+\.workers\.dev#<factory>#g'
 
       # What was deployed, where the operator looks for it: the commit, the
       # Worker version wrangler created, and the image digest the container
