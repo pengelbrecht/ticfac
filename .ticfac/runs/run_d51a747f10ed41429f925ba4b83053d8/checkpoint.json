@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
   "epic_id": "hn6",
-  "sequence": 58,
-  "state": "running",
-  "reason": "yjq try 3 (run dispatch #11) is rejected (ready-to-merge): BLOCKED: the fix is still the one-field re-flow of hn6's acceptance_criteria (the exact six-line text is in this report and re-proven to parse as A1–A6), .tick/ remains a protected prefix no worker may write (report.go:171-183), the tick itself says no code change is needed, and the field still reads 0 newlines in this tree — the run's tracker authority (via l89, still open) or a person must apply it, after which acceptance.Parse yields six items, findings can cite A2–A6, and the final review unblocks.",
-  "updated_at": "2026-10-01T08:17:57Z",
+  "sequence": 59,
+  "state": "dispatching",
+  "reason": "dispatching yjq as attempt 12",
+  "updated_at": "2026-10-01T08:18:17Z",
   "ticks": [
     {
       "tick_id": "0rx",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "yjq",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 11
     },
     {
