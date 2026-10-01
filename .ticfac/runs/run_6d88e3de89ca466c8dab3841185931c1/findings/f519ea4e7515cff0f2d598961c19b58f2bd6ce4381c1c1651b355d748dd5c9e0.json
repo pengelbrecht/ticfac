@@ -12,8 +12,11 @@
   "attempt": 1,
   "done_item": "A1",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-01T00:36:06Z",
+  "triaged_at": "2026-10-01T00:36:22Z",
+  "triaged_by": "ticfac run run_6d88e3de89ca466c8dab3841185931c1 absorbing oro",
+  "promoted_as": "oro",
   "provenance": {
     "run_id": "run_6d88e3de89ca466c8dab3841185931c1",
     "tick_id": "378",
