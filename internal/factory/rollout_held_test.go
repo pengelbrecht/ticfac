@@ -83,10 +83,10 @@ func TestJudgeHeldRollout(t *testing.T) {
 			func(r *rolloutRecord, _ *[]containerInstance) { r.Health.Instances.Failed = 1 },
 			"failing",
 		},
-		"no new instance yet": {
+		"no instance at all, none updated": {
 			func(r *rolloutRecord, in *[]containerInstance) {
 				r.Progress.UpdatedInstances = 0
-				*in = (*in)[:2]
+				*in = nil
 			}, "no instance has come up",
 		},
 		"a rollout another replaced": {
@@ -124,6 +124,56 @@ func TestJudgeARolloutWithNothingHeldBack(t *testing.T) {
 	r.Progress.UpdatedInstances = 5
 	if _, why := judgeHeldRollout(r, digest, allNew); !strings.Contains(why, "5 of 7") {
 		t.Errorf("a rollout at 5 of 7 with no old instance listed: why = %q, want it to say 5 of 7", why)
+	}
+}
+
+// Deploy 87fcc329 (run 36835041041, 2026-10-01): a --cloud-workers run held
+// two WORKER instances, on v72 and v73 — the targets of the two rollouts it
+// had outlived — and the new rollout (v74) sat at 0 of 7 updated for an hour,
+// because no container had started since it began. The deploy's wait held
+// every later deploy behind it. Every instance held by a live run and none
+// started yet is a confirmed deploy that names the run.
+func TestJudgeARolloutEveryInstanceOfWhichAWorkerRunHolds(t *testing.T) {
+	t.Parallel()
+	digest := "sha256:" + strings.Repeat("2", 64)
+	const run = "run_d51a747f10ed41429f925ba4b83053d8"
+	r := progressingRollout(digest)
+	r.TargetVersion = 74
+	r.Progress.UpdatedInstances, r.Progress.TotalInstances = 0, 7
+	held, why := judgeHeldRollout(r, digest, []containerInstance{
+		{ID: "a", Name: run + "-u4l-15", State: "running", Version: intp(73)},
+		{ID: "b", Name: run + "-l89-10", State: "running", Version: intp(72)},
+		{ID: "c", Name: run + "-3gk-1", State: "inactive"},
+	})
+	if why != "" {
+		t.Fatalf("a rollout held only by a cloud-workers run's workers was not accepted: %s", why)
+	}
+	if !held.NoneStartedYet || held.Held != 2 || len(held.Runs) != 1 || held.Runs[0] != run {
+		t.Errorf("held = %+v, want 2 instances held by %s and none started yet", held, run)
+	}
+}
+
+// The bundle declares a second container application, ticks-factory-sandbox
+// (scheduling_policy durable_object, #189), which has no application-wide
+// rollout. The wait judges ticks-orchestrator alone: the image it waits for is
+// the orchestrator's even when the sandbox's block is printed after it.
+func TestParsePushedImageIgnoresTheFactorySandboxApplication(t *testing.T) {
+	t.Parallel()
+	orchestrator := "sha256:" + strings.Repeat("2", 64)
+	sandbox := "sha256:" + strings.Repeat("5", 64)
+	out := strings.Join([]string{
+		"├ EDIT ticks-orchestrator",
+		`+   image = "registry.cloudflare.com/acct/ticks-orchestrator@` + orchestrator + `"`,
+		"├ EDIT ticks-factory-sandbox",
+		`+   image = "registry.cloudflare.com/acct/ticks-factory-sandbox@` + sandbox + `"`,
+		"╰ Applied changes",
+	}, "\n")
+	if _, digest := parsePushedImage(out); digest != orchestrator {
+		t.Errorf("digest = %q, want the orchestrator's %q", digest, orchestrator)
+	}
+	apps := []containerApp{{Name: "ticks-factory-sandbox", ID: "s"}, {Name: ContainerAppName, ID: "o"}}
+	if app, _ := findContainerApp(apps, ContainerAppName); app.ID != "o" {
+		t.Errorf("the wait found %q, want the orchestrator application", app.Name)
 	}
 }
 
