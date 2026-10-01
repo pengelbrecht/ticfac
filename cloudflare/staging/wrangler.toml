@@ -24,4 +24,4 @@ scheduling_policy = "durable_object"
 
 [containers.images.factory]
 dockerfile = "./Dockerfile"
-build_context = "."
+build_context = "../../image"
