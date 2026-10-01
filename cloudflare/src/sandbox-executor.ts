@@ -785,7 +785,12 @@ export function statusFromProcess(
       {
         at: observedAt,
         kind: "exited",
-        detail: `the container's work process exited ${view.exit_code ?? "unknown"}`,
+        detail:
+          view.exit_code === null
+            ? "the container's work process ended with no exit status — killed, or its container " +
+              "stopped under it (idled out, evicted or reclaimed): it is not running, and whatever " +
+              "it pushed is on its landing branch"
+            : `the container's work process exited ${view.exit_code}`,
       },
     ],
   };
@@ -878,6 +883,23 @@ export async function namedAttemptStatus(
     identity.job_id,
   );
   const sandbox = await namedSandbox(binding, name);
+  // A booted, unsettled job whose container is NOT RUNNING has no work
+  // process anywhere: a process lives only inside its container, and the
+  // container stopped under it — idled out, evicted, or reclaimed. That is
+  // the factory's own knowledge, and it is a verdict, not an evidence gap
+  // (epic hn6, run_6d88e3de: 7uv's container idled out while the
+  // orchestrator sat in another job's wait, the next read cold-booted it
+  // empty, and `lost` — "nobody can say whether it is running" — halted the
+  // run for a person over a worker the factory could have said was gone).
+  // Asked BEFORE the list, because the list would boot the container just to
+  // find it empty. Settled `failed` in the records, so every later read
+  // answers the same and the slot is no longer counted held; whatever the
+  // worker pushed is on its landing branch, where collect reads it.
+  if (records !== undefined && sandbox.isRunning !== undefined && !(await sandbox.isRunning())) {
+    const stopped = { state: "failed" as const, exit_code: null };
+    await records.settle(identity, stopped);
+    return statusFromProcess(stopped, jobID, now);
+  }
   // The list, never a remembered id — the evidence-gap rule the seam documents
   // and `inspectAttempt` already leans on: a caller with no handle has no id
   // to ask about, and "I have no id for it" must never read as "nothing is

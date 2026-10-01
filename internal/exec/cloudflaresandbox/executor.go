@@ -726,6 +726,14 @@ func (e *Executor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.
 // (reconcile.RemoteCheckout).
 func (e *Executor) ChecksOutFromOrigin() bool { return true }
 
+// JobsLiveAtFactory says this executor's jobs live in the factory, which
+// keeps their records (boot, settlement, reclaim) and answers for them by
+// identity: a `lost` from the door is its answer for one look, and the door
+// settles a job whose container stopped under it. The reconciler re-asks a
+// `lost` from such an executor rather than stopping the run for a person
+// (reconcile.FactoryJobs; epic hn6, run_6d88e3de).
+func (e *Executor) JobsLiveAtFactory() bool { return true }
+
 // ------------------------------------- the operations decided elsewhere ---
 
 // Cancel is refused, by decision (tick xev): the credential a sandbox attempt

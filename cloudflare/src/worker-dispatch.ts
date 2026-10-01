@@ -635,12 +635,25 @@ export async function spawnWorker(
     };
   }
 
-  const work = await sandbox.startProcess(spec.command, { env: spec.env ?? {} });
+  // From here the container's life is the WORKER's, not its observer's (epic
+  // hn6, run_6d88e3de): under the SDK's idle `sleepAfter` a container lives
+  // only while someone keeps addressing it, and a worker's only caller is an
+  // orchestrator that polls between other work. That orchestrator sat 25
+  // minutes inside one resolve-conflict job's wait, the two other workers it
+  // had running idled out past SANDBOX_SLEEP_AFTER with pi mid-tick, and the
+  // next look found a container with no work process in it. A worker
+  // container is kept alive the way the orchestrator's own is (tick cr4) —
+  // and, like it, destroyed explicitly: at its first terminal observation,
+  // at the run's finalize, and by the hourly sweep of runs that are not live.
+  // Set only once the probe passed, so a container that never launched work
+  // keeps the idle ceiling.
+  const working = await binding.get(sandboxName, { keepAlive: true });
+  const work = await working.startProcess(spec.command, { env: spec.env ?? {} });
   // Recorded before anything waits on it: `confirmDispatch` can take a minute,
   // and a supervisor that died inside it would otherwise leave a manifest that
   // names a container but not the process running in it.
   await opts.record?.started(task, sandboxName, work.id);
-  const confirm = await confirmDispatch(sandbox, work.id, {
+  const confirm = await confirmDispatch(working, work.id, {
     timeoutMs: opts.confirm_timeout_ms ?? DEFAULT_CONFIRM_TIMEOUT_MS,
     pollMs: opts.confirm_poll_ms ?? DEFAULT_CONFIRM_POLL_MS,
     sleep,
