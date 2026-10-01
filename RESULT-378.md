@@ -1,6 +1,11 @@
 <!-- ticks-worker: container facts, prepended after the harness exited. The
 agent's report, including its STATUS line, is unchanged below. -->
 
+_ticks-worker: branch `tick/hn6/attempt-1-resolve-1-868ca692/378`, base `8a63938d49de7c8d10f47726a4580b0f9e40aede`, harness `pi` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
 _ticks-worker: branch `tick/hn6/attempt-1/378`, base `16491a01784953772dd7f4f8c30a5abdb9599464`, harness `pi` exited 0, 0 work commit(s), 1 uncommitted path(s)._
 
 > **BOUNDARY VIOLATION ATTEMPTED.** This agent tried to write tracker state, which the
