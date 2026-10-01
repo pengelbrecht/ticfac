@@ -563,6 +563,17 @@ linger-until)
 		mkdir -p "$TICFAC_WORKTREE/.tick/issues"
 		printf '{"id":"forged-%s","status":"closed"}\n' "$TICFAC_TICK" > "$TICFAC_WORKTREE/.tick/issues/forged-$TICFAC_TICK.json"
 	fi
+	# $VANISH_TICK, when set, names a tick whose first $VANISH_TRIES tries die
+	# without a commit or a report (a worker that never answered: the
+	# missing-result a lost container leaves), counted in the file
+	# $VANISH_COUNT; its later tries do the work.
+	if [ "$TICFAC_TICK" = "${VANISH_TICK:-}" ]; then
+		tries=$(cat "${VANISH_COUNT:?}" 2>/dev/null || echo 0)
+		if [ "$tries" -lt "${VANISH_TRIES:-1}" ]; then
+			echo $((tries + 1)) > "$VANISH_COUNT"
+			exit 0
+		fi
+	fi
 	commit
 	report
 	;;
