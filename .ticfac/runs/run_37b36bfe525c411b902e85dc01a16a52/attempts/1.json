@@ -1,0 +1,56 @@
+{
+  "schema_version": 3,
+  "attempt": 1,
+  "tick_id": "0rx",
+  "dispatched_at": "2026-10-01T04:48:40Z",
+  "job_handle": {
+    "attempt": 1,
+    "base_sha": "f0fd0789c447fb9cfd75af16079dfcc0dae81f68",
+    "collected_from": null,
+    "executor": "cloudflare-sandbox",
+    "job_id": "run-run_37b36bfe525c411b902e85dc01a16a52/tick-0rx/attempt-1",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "prompt_digest": "sha256:c25d77e407a584a3674741ad2476828c148e64504bdd1d523b44641b216e8784",
+    "remote": "origin",
+    "resumed_from": {
+      "tick_id": "0rx",
+      "attempt": 7,
+      "write_ref": "refs/heads/tick/hn6/attempt-7/0rx",
+      "sha": "f0fd0789c447fb9cfd75af16079dfcc0dae81f68",
+      "released_by": "ticfac (took over the claim of run run_ee8ebb4fe13d4311b8f9be6f66db69d4, which ended: its checkpoint on the integration branch reads failed)",
+      "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4"
+    },
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "taken_over": {
+      "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
+      "evidence": "its checkpoint on the integration branch reads failed"
+    },
+    "tick_id": "0rx",
+    "tier": "economy",
+    "touch": null,
+    "try": 1,
+    "wall_seconds": 28800,
+    "write_ref": "refs/heads/ticfac/run-run_37b36bfe525c411b902e85dc01a16a52/tick-0rx/attempt-1"
+  },
+  "provenance": {
+    "run_id": "run_37b36bfe525c411b902e85dc01a16a52",
+    "tick_id": "0rx",
+    "attempt": 1,
+    "source_ref": "refs/heads/tick/hn6/attempt-7/0rx",
+    "source_sha": "f0fd0789c447fb9cfd75af16079dfcc0dae81f68",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:5ab57f1f6dc05bc69f1c1522eabf44e8537f2c2d18ae5f2d23dd56ddcc52cae1",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
