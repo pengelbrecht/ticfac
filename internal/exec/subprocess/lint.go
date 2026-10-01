@@ -33,7 +33,7 @@ import (
 //     attempt that never said what it did, never a hold for a person.
 //
 // Errors come in two strengths. A FATAL error is one collect cannot read past
-// — no STATUS line, a findings block the reader refuses, a review with no
+// — no STATUS line, a findings or tracker-edits block the reader refuses, a review with no
 // REVIEW-VERDICT — and it fails the attempt once the pushbacks are spent. Every
 // other error is something the reader REPAIRED (a folded key, a normalised
 // value) or a rule the record does not enforce (a long title, a claim that
@@ -149,6 +149,11 @@ func fatalProblems(role string, report Report, lines []string) []LintProblem {
 		out = append(out, LintProblem{Where: "findings block", Message: report.FindingsProblem +
 			". The block is a JSON array of objects; see the v2 shape in your prompt", Fatal: true})
 	}
+	if report.TrackerEditsProblem != "" {
+		out = append(out, LintProblem{Where: "tracker-edits block", Message: report.TrackerEditsProblem +
+			". The block is a JSON array of {\"tick\", \"field\", \"value\"} objects; see its shape in your prompt",
+			Fatal: true})
+	}
 	if roleContracts[role].reviewVerdict && report.ReviewVerdict == "" {
 		msg := "a review-epic report states its judgement as its own line before the STATUS line: " +
 			"`REVIEW-VERDICT: READY` or `REVIEW-VERDICT: NOT READY — <what would make it ready>`"
@@ -253,6 +258,9 @@ func LintReport(body string, ctx LintContext) LintResult {
 		}
 		for i, f := range block.Findings {
 			out.lintClaim(i, f, block.Version, ctx)
+			if f.TrackerEdit != nil {
+				out.lintTrackerEdits(fmt.Sprintf("findings[%d].tracker_edit", i), []TrackerEdit{*f.TrackerEdit}, ctx.Repo)
+			}
 		}
 		switch {
 		case !block.Present:
@@ -264,6 +272,8 @@ func LintReport(body string, ctx LintContext) LintResult {
 				Message: "is the v1 format; it is still read, but write ```findings v2 as your prompt shows"})
 		}
 	}
+
+	out.lintTrackerEdits("", report.TrackerEdits, ctx.Repo)
 
 	if report.Status != "" {
 		if report.Status != StatusDone && report.Detail == "" {
@@ -461,7 +471,7 @@ func LintSection(command string) string {
 		"    " + command + "\n\n" +
 		"It is the same reader the run collects your report with. Fix every error it prints and run it again " +
 		"until it exits 0; a report that fails it is sent back to you, and one that still fails is treated as " +
-		"no report at all. It checks the STATUS line, the findings block field by field, and anything else " +
+		"no report at all. It checks the STATUS line, the findings block field by field, a tracker-edits block against the tracker, and anything else " +
 		"your role must state.\n\n" +
 		FindingsV2Section
 }
@@ -488,7 +498,9 @@ const FindingsV2Section = "A discovery outside your job that deserves its own ti
 	"required. `target` is the repository it belongs on as owner/name; omit it for this repository. `breaks` " +
 	"is optional: the epic's acceptance item this finding breaks, and the check that shows it — a " +
 	"[testing.commands] id or a runnable command; omit `breaks` when it breaks no item (never write \"none\"). " +
-	"`evidence` is optional: where to look. No findings: an empty array, `[]`.\n\n"
+	"`evidence` is optional: where to look. `tracker_edit` is optional: when the finding's whole fix is a change to " +
+	"a tracker record, the exact change as {\"tick\", \"field\", \"value\"} — the run applies it itself rather " +
+	"than filing a tick for it. No findings: an empty array, `[]`.\n\n"
 
 // LintPushbackPrompt is what a worker whose report failed the check is told,
 // in its own session.

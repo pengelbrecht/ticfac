@@ -605,6 +605,28 @@ func (f *fakeTracker) Adopt(_ context.Context, tickID, parent string) error {
 	return f.record(tick)
 }
 
+// EditTick is the fake's half of the tracker-edit seam (tracker_edits.go):
+// one prose field of one record replaced, mirrored to the checkout like
+// every other write, so the durable layer has the file to commit.
+func (f *fakeTracker) EditTick(_ context.Context, tickID, field, value string) (tk.Tick, error) {
+	f.tally("edit:" + tickID)
+	var unknown bool
+	tick, err := f.mutate(tickID, func(tick *tk.Tick) {
+		switch field {
+		case "acceptance_criteria":
+			tick.AcceptanceCriteria = value
+		case "description":
+			tick.Description = value
+		default:
+			unknown = true
+		}
+	})
+	if err == nil && unknown {
+		err = fmt.Errorf("the fake tracker edits no field %q", field)
+	}
+	return tick, err
+}
+
 func (f *fakeTracker) Close(_ context.Context, tickID string) (tk.Tick, error) {
 	f.tally("close:" + tickID)
 	// The claim ends HERE and nowhere earlier, which is the whole of tick 3mp:

@@ -197,7 +197,7 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 			// drafting and deciding is decided by this one, once. A draft a
 			// person or an earlier incarnation already decided is left alone
 			// by the decision's own standing-draft check.
-			if _, err := r.decideFinding(ctx, marker, key, dispatch); err != nil {
+			if _, err := r.decideOrApplyFinding(ctx, marker, key, dispatch, finding); err != nil {
 				return err
 			}
 			continue
@@ -213,7 +213,7 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 		// person's. The decision is made where the finding is discovered, so
 		// the absorbed tick is fixed before the items it gates are asserted
 		// rather than appended after the review that asserts them.
-		decided, err := r.decideFinding(ctx, marker, key, dispatch)
+		decided, err := r.decideOrApplyFinding(ctx, marker, key, dispatch, finding)
 		if err != nil {
 			return err
 		}
