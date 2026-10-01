@@ -16,6 +16,6 @@
   "acceptance_criteria": "[1] renderWatchFrame draws the hn6 layout (header with progress/ETA/verdict/phase bar/needs-you, a tick table whose rows never reorder with a pipeline cell, workers with activity, CI and cost lines, a two-line recent tail) and matches testdata/watch_dashboard_120.txt and _60.txt. [2] `go test -short -timeout 20m -run 'TestDashboard|TestWatchPlural|TestTheFrame|TestWatch' ./internal/cli/` passes, including the narrow-width, height-fit, never-$0.00 and 'retries' cases. [3] `make gate` passes.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-28T18:41:10.615997Z",
-  "updated_at": "2026-10-01T06:50:38.21989Z",
+  "updated_at": "2026-10-01T07:24:55.26869Z",
   "started_at": "2026-10-01T06:50:38.21989Z"
 }
