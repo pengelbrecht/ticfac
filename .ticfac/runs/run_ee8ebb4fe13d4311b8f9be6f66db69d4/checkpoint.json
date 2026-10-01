@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
   "epic_id": "hn6",
-  "sequence": 23,
-  "state": "gating",
-  "reason": "running the integrated gate for oro on eb0b721041b8",
-  "updated_at": "2026-10-01T03:44:32Z",
+  "sequence": 24,
+  "state": "publishing",
+  "reason": "closing oro behind the integrated gate on eb0b721041b8",
+  "updated_at": "2026-10-01T03:59:47Z",
   "ticks": [
     {
       "tick_id": "378",
