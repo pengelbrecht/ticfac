@@ -2,6 +2,7 @@
   "id": "wwy",
   "title": "run-state contract misdescribes attempt.job_handle as the executor's own handle",
   "description": "contracts/ticfac-run-state.json's attempt.job_handle comment says \"The JobHandle returned by the executor's start (SPEC 4.3)\", but the reconciler stores its own dispatch marker there (attemptHandle.asMap(): executor, job_id, write_ref, base_sha, model, tier, ... — no schema_version, no issued_at, no nested handle), and that is now the permanent, documented shape: the marker is cut before the start and the executor's real handle is half host paths a public repository must never commit (the reason logged in internal/statusmodel/handle.go). The contract's own words should describe the marker it actually pins — the field every dashboard reader, the adoption path and zl1's fallback read — rather than an intent the local run can never honour.\nevidence: contracts/ticfac-run-state.json $defs.attempt.properties.job_handle.$comment; internal/reconcile/dispatch.go:910 (JobHandle: marker.asMap()); internal/runstate/records.go:282-284\n\nticfac run run_d51a747f10ed41429f925ba4b83053d8 filed this backlog tick from the finding 45e87dff0330ebce37d454e17214ac5ee9369b4ee83575ecdb988ed7f56df481 (reported by run-run_d51a747f10ed41429f925ba4b83053d8/tick-zl1/attempt-6): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_d51a747f10ed41429f925ba4b83053d8/absorptions/45e87dff0330ebce37d454e17214ac5ee9369b4ee83575ecdb988ed7f56df481.json on the run branch.",
+  "notes": "2026-10-01 09:25 - ticfac run run_d51a747f10ed41429f925ba4b83053d8: created by absorbing finding 45e87dff0330ebce37d454e17214ac5ee9369b4ee83575ecdb988ed7f56df481 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/run_d51a747f10ed41429f925ba4b83053d8/absorptions/45e87dff0330ebce37d454e17214ac5ee9369b4ee83575ecdb988ed7f56df481.json on epic/hn6, and it says: the classifier put 0.26 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_d51a747f10ed41429f925ba4b83053d8/tick-zl1/attempt-6",
   "created_by": "ticfac run run_d51a747f10ed41429f925ba4b83053d8",
   "created_at": "2026-10-01T07:25:41Z",
-  "updated_at": "2026-10-01T07:25:41Z"
+  "updated_at": "2026-10-01T07:25:46.985902Z"
 }
