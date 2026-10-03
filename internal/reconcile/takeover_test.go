@@ -836,3 +836,44 @@ func TestATakeoverLinksAFindingTheDeadRunAlreadyAbsorbedRatherThanAbsorbingItAga
 		t.Errorf("the absorbed tick was created %d times, want once", n)
 	}
 }
+
+// hn6's run_be66ff09: the dead run's orphaned claim stands on a tick that is
+// NOT at the head of the new run's plan, and the width is full of it. The new
+// run must take the orphan over first — taking it over claims nothing the
+// width has not already counted — rather than hold on claim_width for a slot
+// only the takeover itself would ever free. That run held, the supervisor
+// resumed it over an unchanged tree and halted: a stopped run's claim cost the
+// epic its whole run.
+func TestADeadRunsClaimOffTheHeadOfThePlanIsTakenOverBeforeTheWidthIsCounted(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	// Width one (no declared width): a1's orphaned claim fills it.
+	f, _, holder := deadHolderFixture(t, "")
+
+	// The tracker now layers a2 ahead of a1, so the plan's head is a tick
+	// nobody claims and the orphan sits behind it.
+	state, err := f.Tracker.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.Waves = [][]string{{"a2"}, {"a1"}, {"b1"}, {"rv", "co"}}
+	state.Order = []string{"a2", "a1", "b1", "rv", "co"}
+	if err := f.Tracker.save(state); err != nil {
+		t.Fatal(err)
+	}
+
+	host := &hostSays{run: holder, verdict: HolderDead}
+	f.Runner = fakeRunnerArgv(t, "report")
+	r, result, err := f.run(f.Repo, fixtureOptions{runID: "r-next", claimHolder: host.ask})
+	if err != nil {
+		t.Fatalf("the new run did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted || !contains(result.Closed, "a1") || !contains(result.Closed, "a2") {
+		t.Fatalf("the new run ended %s (failure %+v) closing %v: the dead run's claim on a1 filled the width "+
+			"and the run held on it instead of taking it over\n%s", result.State, result.Failure, result.Closed,
+			journalText(r))
+	}
+	if _, ok := journalLine(r, "a1", StageClaimTakenOver); !ok {
+		t.Errorf("no %s line for a1: the orphan was not taken over\n%s", StageClaimTakenOver, journalText(r))
+	}
+}

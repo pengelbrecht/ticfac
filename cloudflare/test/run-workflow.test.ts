@@ -1500,6 +1500,37 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
     expect(record.detail).toContain("will NOT be continued automatically");
   });
 
+  it("names a supervision halt that exited 3 as the halt, never as a configuration failure", async () => {
+    // Epic hn6's run_be66ff09: the reconciler held on claim_width, its
+    // supervisor halted over an unchanged tree and the orchestrator exited 3
+    // — which the run reported as "a configuration failure (the clone or
+    // checkout of the submitted SHA failed…)". Exit 3 is also the held code;
+    // the halt line on the feed is what says which it was.
+    const { runID, project } = await ignite();
+    const first = await firstProcess();
+    await env.ARTIFACTS.put(
+      relayFeedKey(project, runID, 1, "feed", 0),
+      `${JSON.stringify({
+        schema_version: 1,
+        at: "2026-10-01T11:16:20Z",
+        run_id: runID,
+        tick_id: null,
+        attempt: null,
+        stage: STAGE_SUPERVISION_HALTED,
+        detail: "the same refusal (claim_width) came back over an UNCHANGED TREE",
+      })}\n`,
+    );
+    first.exit(3);
+
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    expect(sandboxes.booted).toHaveLength(1);
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.detail).toContain("stopped deliberately (boot 1, exit 3)");
+    expect(record.detail).toContain("claim_width");
+    expect(record.detail).not.toContain("configuration failure");
+  });
+
   it("does not reboot on a configuration verdict from the entrypoint", async () => {
     const { runID } = await ignite();
     // Exit 5: an Environment pre-flight check failed. A fresh container reaches

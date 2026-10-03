@@ -601,6 +601,18 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 				if len(queue) > 0 && r.mayAdmit(queue[0], &window, plan) {
 					continue
 				}
+				// A claim this run may take over — its own, or one a run that
+				// has ENDED left (StaleClaim) — is never a reason to hold: the
+				// width already counts it, so taking it over claims nothing new,
+				// and it is the only thing that will ever free the slot it
+				// fills (hn6's run_be66ff09, whose re-derived queue put a tick
+				// nobody claimed ahead of a stopped run's orphans). It goes to
+				// the head of the queue and the run takes it over.
+				if i := takeoverIndex(queue); i > 0 && !behindParked(queue[i]) && r.mayAdmit(queue[i], &window, plan) {
+					takeover := queue[i]
+					queue = append([]planEntry{takeover}, append(queue[:i:i], queue[i+1:]...)...)
+					continue
+				}
 				entry := queue[0]
 				// A question this run parked (tick tyd) keeps its tick's claim
 				// standing, and that claim is THIS run's own. When the width is
@@ -745,7 +757,19 @@ func (r *Reconciler) adoptionFirst(plan []planEntry) ([]planEntry, error) {
 		dispatched[attempt.TickID] = true
 	}
 	rank := func(entry planEntry) int {
-		if !dispatched[entry.TickID] || isRoleJob(entry.Role) {
+		if isRoleJob(entry.Role) {
+			return 2
+		}
+		if !dispatched[entry.TickID] {
+			// A claim a run that has ENDED left (StaleClaim, tick 823) is
+			// taken over before anything new is claimed (hn6's
+			// run_be66ff09): the width already counts it, so a plan head
+			// nobody claims would otherwise find the width full of orphans
+			// only the takeover itself would ever free, and hold on
+			// claim_width over an unchanged tree.
+			if entry.StaleClaim {
+				return 1
+			}
 			return 2
 		}
 		switch r.tickState(entry.TickID) {
@@ -797,6 +821,18 @@ func (r *Reconciler) adoptionFirst(plan []planEntry) ([]planEntry, error) {
 	}
 	sort.SliceStable(out, func(i, j int) bool { return rank(out[i]) < rank(out[j]) })
 	return out, nil
+}
+
+// takeoverIndex is the first queue entry whose claim the run may take over
+// without claiming anything new — its own (OwnClaim) or one a run that has
+// ended left (StaleClaim) — or -1 when there is none.
+func takeoverIndex(queue []planEntry) int {
+	for i, entry := range queue {
+		if !isRoleJob(entry.Role) && entry.Claimed && (entry.OwnClaim || entry.StaleClaim) {
+			return i
+		}
+	}
+	return -1
 }
 
 // holdsOnlyItsTick says a refusal raised about an attempt before its work
