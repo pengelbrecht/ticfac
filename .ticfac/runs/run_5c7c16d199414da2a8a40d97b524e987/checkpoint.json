@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
   "epic_id": "hn6",
-  "sequence": 72,
-  "state": "running",
-  "reason": "eli is running as attempt 12",
-  "updated_at": "2026-10-04T03:58:58Z",
+  "sequence": 73,
+  "state": "dispatching",
+  "reason": "dispatching ulw as attempt 13",
+  "updated_at": "2026-10-04T03:59:06Z",
   "ticks": [
     {
       "tick_id": "gmo",
