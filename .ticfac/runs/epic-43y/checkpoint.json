@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 28,
-  "state": "integrating",
-  "reason": "integrating oq4 attempt 5 into epic/43y",
-  "updated_at": "2026-10-04T14:12:43Z",
+  "sequence": 29,
+  "state": "gating",
+  "reason": "running the integrated gate for oq4 on 8b8469824ee3",
+  "updated_at": "2026-10-04T14:12:55Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "oq4",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 5
     },
     {
