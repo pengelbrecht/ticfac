@@ -1,0 +1,13 @@
+{
+  "id": "m5m",
+  "title": "holdsForAPerson's doc bullet list omits land_review_not_ready",
+  "description": "The comment on holdsForAPerson promises that each member of the set says why it is there, and the switch does include RefusedLandReviewNotReady, but the bullet list stops at RefusedAbsorptionDepth — the final-review hold joined the set without its stated reason. A reader deciding whether a new reason is a hold reads an incomplete contract.\nevidence: internal/reconcile/reconcile.go:2947-2965 (the bullet list) against the case at internal/reconcile/reconcile.go:2967-2969\n\nticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c filed this backlog tick from the finding 35676284d747437b62e652cb8b654bd57360fcb5f2ac2f1e86ad0a56fd7edfab (reported by run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-quz/attempt-7): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/35676284d747437b62e652cb8b654bd57360fcb5f2ac2f1e86ad0a56fd7edfab.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-quz/attempt-7",
+  "created_by": "ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c",
+  "created_at": "2026-10-04T13:37:23Z",
+  "updated_at": "2026-10-04T13:37:23Z"
+}
