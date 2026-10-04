@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 45,
-  "state": "running",
-  "reason": "dwn is closed",
-  "updated_at": "2026-10-04T15:37:50Z",
+  "sequence": 46,
+  "state": "dispatching",
+  "reason": "dispatching 4fs as attempt 8",
+  "updated_at": "2026-10-04T15:38:01Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -60,6 +60,10 @@
       "tick_id": "lid",
       "state": "closed",
       "attempt": 3
+    },
+    {
+      "tick_id": "4fs",
+      "state": "ready"
     }
   ],
   "provenance": {
