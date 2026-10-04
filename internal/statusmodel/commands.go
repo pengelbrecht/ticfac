@@ -2,8 +2,10 @@ package statusmodel
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
+	"github.com/pengelbrecht/ticfac/internal/runfeed"
 )
 
 // The one command that clears a stop, spelled once here so every renderer —
@@ -67,20 +69,6 @@ func TriageCommandForCurrentRun(epicID, runID string) string {
 	return TriageCommandForRun(epicID, runID)
 }
 
-// SettleCommand is the one command that releases a held attempt: the epic,
-// tick and run-wide attempt number it is addressed by — and, when the
-// holding run is NOT the run the model answers for, the --run-id that names
-// it, because attempt numbers are per run and the default a settle without
-// the flag uses (epic-<epic-id>) cannot name another run's dispatch. The
-// empty runID is the holding run's own word, spelled as every renderer has
-// spelled it so far.
-func SettleCommand(epicID, tickID string, attempt int, runID string) string {
-	if runID == "" {
-		return fmt.Sprintf("ticfac settle %s %s %d --release \"<who>\"", epicID, tickID, attempt)
-	}
-	return fmt.Sprintf("ticfac settle %s %s %d --run-id %s --release \"<who>\"", epicID, tickID, attempt, runID)
-}
-
 // SettleCommandForCurrentRun is the settle command for a hold the run the
 // model answers for left. It names the run whenever that run's id is NOT
 // the epic spelling (epic-<epic-id>): settle without --run-id defaults to
@@ -96,4 +84,76 @@ func SettleCommand(epicID, tickID string, attempt int, runID string) string {
 // spell one command, not two.
 func SettleCommandForCurrentRun(epicID, tickID string, attempt int, runID string) string {
 	return reconcile.SettleReleaseCommand(epicID, tickID, attempt, runID)
+}
+
+// HoldReason is the refusal reason a run_held line's detail leads with.
+// Every StageRunHeld site writes the line one shape — `<reason>: <message>`,
+// the refusal's own closed vocabulary — so the reason is a field of the
+// line, not prose to parse: the prefix before the first colon. The
+// surfaces that decide what a hold is CLEARED BY (HoldClearingCommand) and
+// the wordings that explain it read the same prefix, so one hold kind is one
+// decision everywhere it is named. An empty answer is a detail that names
+// no reason — a line no closed set knows.
+func HoldReason(detail string) string {
+	if i := strings.IndexByte(detail, ':'); i > 0 {
+		return detail[:i]
+	}
+	return ""
+}
+
+// HoldClearingCommand is the one command that moves one run_held line's
+// hold on, decided by WHAT the run holds — the refusal reason the line's
+// detail leads with (HoldReason) — and never by the line's shape alone
+// (tick gf0). The holds a run raises for a person are not cleared by one
+// verb:
+//
+//   - finding_untriaged, the close-out's findings gate, is cleared by the
+//     triage addressed to the holding run's own store: settle releases an
+//     attempt, and this hold holds a person's decision about findings.
+//
+//   - absorption_depth_exceeded is cleared by the same triage: the finding
+//     the bound refused to absorb is still a person's to decide — absorb,
+//     file, fixed or discard — and the refusal's own message names the
+//     other road, raising the bound with --absorption-depth and running the
+//     epic again. The reason decides, never the attempt: even a line that
+//     names one is not released by it — the reporting tick's work is not
+//     what the bound stopped.
+//
+//   - claim_width and foreign_claim are cleared by the RUN AGAIN, addressed
+//     by the host the run lives on: they are facts about the world that end
+//     when the other holder's tick closes or a slot frees — never by a
+//     release — and a resumed run re-derives from the graph and proceeds
+//     the moment they do. They are raised before the tick's first dispatch,
+//     so no attempt stands behind them and a settle addressed by one
+//     refuses ("-" is not an attempt number).
+//
+//   - every other hold names an attempt the run dispatched, and the release
+//     a person types is the settle command that attempt addresses.
+//
+// A hold the closed set does not know — no reason it recognises and no
+// attempt behind it — answers nil: no command is better than a wrong one a
+// person copies, and the dash settle this decision replaced was exactly
+// that.
+//
+// storeRunID is the id the HOLDING run's own store lives at — the triage's
+// address, where the run's drafts were written; runID is the id the surface
+// answers for — the settle's address, the run whose dispatch the attempt
+// number counts. They differ only for a run read under one id whose records
+// were written under another (tick q8m). Both are per hold: a prior run's
+// hold is cleared by commands addressed to THAT run, never the one the
+// model answers for.
+func HoldClearingCommand(epicID, host, storeRunID, runID string, held runfeed.Event) *string {
+	switch HoldReason(held.Detail) {
+	case reconcile.RefusedFindingUntriaged, reconcile.RefusedAbsorptionDepth:
+		command := TriageCommandForCurrentRun(epicID, storeRunID)
+		return &command
+	case reconcile.RefusedClaimWidth, reconcile.RefusedForeignClaim:
+		command := ResumeCommand(host, epicID)
+		return &command
+	}
+	if held.TickID != nil && held.Attempt != nil {
+		command := SettleCommandForCurrentRun(epicID, *held.TickID, *held.Attempt, runID)
+		return &command
+	}
+	return nil
 }

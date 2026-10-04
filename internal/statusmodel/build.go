@@ -815,21 +815,19 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 		}
 		since := held.At
 		w.Since = &since
-		// The command is named by WHAT the run is holding, not by the line's
-		// own shape (tick gtk): the close-out's untriaged-findings hold is
-		// cleared by triage — settle releases an attempt, and this hold
-		// holds a person's decision about findings, not an attempt. The
-		// triage is addressed to the run's own store (tick q8m), the same
-		// address rule the settle keeps for a run whose id the default does
-		// not spell (tick ulw). Every other hold is the settle command the
-		// run-wide dispatch number addresses — the same sentence `ticfac
-		// watch` prints.
-		if strings.HasPrefix(held.Detail, reconcile.RefusedFindingUntriaged+":") {
-			unblock := TriageCommandForCurrentRun(m.EpicID, ownRunID)
-			w.UnblockCommand = &unblock
-		} else if held.TickID != nil && held.Attempt != nil {
-			unblock := SettleCommandForCurrentRun(m.EpicID, *held.TickID, *held.Attempt, m.RunID)
-			w.UnblockCommand = &unblock
+		// The command is named by WHAT the run is holding, one decision per
+		// hold kind (tick gf0, the same decision the watch's hold alert and
+		// the rows' next steps read): the close-out's untriaged-findings hold
+		// and the absorption bound's are cleared by the triage addressed to
+		// the run's own store (tick q8m) — settle releases an attempt, and
+		// these holds hold a person's decision, not one; the holds about the
+		// world — the width, a foreign claim — by the run again, addressed by
+		// the host (tick gtk), because they fire before the tick's first
+		// dispatch, end when the world does, and no release clears them;
+		// every other hold is the settle command the run-wide dispatch number
+		// addresses — the same sentence `ticfac watch` prints.
+		if command := HoldClearingCommand(m.EpicID, m.Host, ownRunID, m.RunID, held); command != nil {
+			w.UnblockCommand = command
 		}
 		claim(w)
 	}
@@ -850,7 +848,7 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 		}
 		since := held.Event.At
 		w.Since = &since
-		if command := priorHoldCommand(m.EpicID, held); command != nil {
+		if command := priorHoldCommand(m.EpicID, m.Host, held); command != nil {
 			w.UnblockCommand = command
 		}
 		claim(w)
@@ -1104,21 +1102,13 @@ func standingPriorHolds(src Sources, stateOf func(string) string) []PriorHold {
 
 // priorHoldCommand is the unblock command a standing prior hold carries, in
 // the header's needs-you entry and in the try's next step alike: named by
-// WHAT the run held — the same rule the newest run's own hold answers with —
-// and by WHICH run holds it, because the drafts and the attempt numbers are
-// per run, so the clearing command addresses the holding run, never the run
-// the model answers for. Nil when nothing a settle or a triage addresses is
-// named.
-func priorHoldCommand(epicID string, hold PriorHold) *string {
-	if strings.HasPrefix(hold.Event.Detail, reconcile.RefusedFindingUntriaged+":") {
-		command := TriageCommandForRun(epicID, hold.RunID)
-		return &command
-	}
-	if hold.Event.TickID != nil && hold.Event.Attempt != nil {
-		command := SettleCommand(epicID, *hold.Event.TickID, *hold.Event.Attempt, hold.RunID)
-		return &command
-	}
-	return nil
+// WHAT the run held — the same per-kind decision the newest run's own hold
+// answers with (HoldClearingCommand) — and by WHICH run holds it, because
+// the drafts and the attempt numbers are per run, so the clearing command
+// addresses the holding run, never the run the model answers for. Nil when
+// nothing a command addresses is named.
+func priorHoldCommand(epicID, host string, hold PriorHold) *string {
+	return HoldClearingCommand(epicID, host, hold.RunID, hold.RunID, hold.Event)
 }
 
 // holdSettledByAResume answers whether a resume made the newest run_held

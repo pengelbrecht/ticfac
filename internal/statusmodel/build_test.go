@@ -550,6 +550,116 @@ func TestAHoldAResumeSettledIsHistory(t *testing.T) {
 	}
 }
 
+// TestAHoldAboutTheWorldNamesTheRunAgainCommand (tick gf0): the holds that
+// fire before the tick's first dispatch — the width, a foreign claim —
+// carry a NULL attempt, so the settle command cannot address them ("-" is
+// not an attempt number) and a release would not clear them anyway: they
+// are facts about the world that end when the holder's tick closes or a
+// slot frees. The needs-you command is the RESUME, named by the host the run
+// lives on — the same command a dead run's wait carries — never a settle.
+func TestAHoldAboutTheWorldNamesTheRunAgainCommand(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the width", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "w9b", nil,
+			reconcile.StageRunHeld, "claim_width: the width 2jn declares is already full of claims this run does not hold"))
+		model := Build(src)
+		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+			t.Fatalf("a width hold waits on %+v, want held-for-person", model.WaitsOn)
+		}
+		if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run-epic 2jn" {
+			t.Errorf("the width hold's command is %+v, want the run-again command a resume addresses",
+				model.WaitsOn.UnblockCommand)
+		}
+	})
+
+	t.Run("a foreign claim", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "w9b", nil,
+			reconcile.StageRunHeld, "foreign_claim: w9b is claimed by run run-epic-xte, whose records do not read finished"))
+		model := Build(src)
+		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+			t.Fatalf("a foreign-claim hold waits on %+v, want held-for-person", model.WaitsOn)
+		}
+		if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run-epic 2jn" {
+			t.Errorf("the foreign-claim hold's command is %+v, want the run-again command a resume addresses",
+				model.WaitsOn.UnblockCommand)
+		}
+	})
+
+	t.Run("a foreign claim a cloud run holds", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Host = HostCloud
+		src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "w9b", nil,
+			reconcile.StageRunHeld, "foreign_claim: w9b is claimed by run run-epic-xte, whose records do not read finished"))
+		model := Build(src)
+		if model.WaitsOn == nil || model.WaitsOn.UnblockCommand == nil {
+			t.Fatalf("the cloud foreign-claim hold carries no command: %+v", model.WaitsOn)
+		}
+		if *model.WaitsOn.UnblockCommand != "ticfac run 2jn --cloud" {
+			t.Errorf("the cloud world hold's command is %q, want the factory resubmission a resume on the cloud host is",
+				*model.WaitsOn.UnblockCommand)
+		}
+	})
+}
+
+// TestAnAbsorptionBoundHoldNamesTheFindingsDecision (tick gf0): the bound's
+// hold asks a person to judge the chain the refusal carries, and the finding
+// it refused to absorb is still theirs to decide — so the needs-you command
+// is the triage, the one command that decides a finding; the refusal's own
+// message names the raise with --absorption-depth as the other road. It
+// carries no attempt any more than the world holds do — and even the line
+// that does is not released: deciding the finding is the move, never a
+// release of the attempt that reported it.
+func TestAnAbsorptionBoundHoldNamesTheFindingsDecision(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	five := 5
+	src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "nwj", &five,
+		reconcile.StageRunHeld, "absorption_depth_exceeded: absorbing the finding \"c0ffee\" would be the 4th "+
+			"absorption of ONE chain that already carries 3 and the bound is 3 (tick qjj)"))
+	model := Build(src)
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+		t.Fatalf("the bound's hold waits on %+v, want held-for-person", model.WaitsOn)
+	}
+	if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac triage 2jn" {
+		t.Errorf("the bound's hold command is %+v, want the triage that decides the finding",
+			model.WaitsOn.UnblockCommand)
+	}
+}
+
+// TestAPriorRunsWorldHoldNamesTheRunAgainCommand: a hold an earlier run left
+// about the world clears by the same per-kind decision the newest run's own
+// hold answers with — the run again, never a settle the dash attempt would
+// refuse — in the header's needs-you entry and the try's next step alike.
+func TestAPriorRunsWorldHoldNamesTheRunAgainCommand(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.PriorRecords = []Records{{Checkpoint: priorCheckpoint("run_prior", "failed")}}
+	src.PriorFeeds = map[string][]runfeed.Event{"run_prior": {
+		runfeed.NewEvent(testNow.Add(-2*time.Hour), "run_prior", "w9b", nil, reconcile.StageRunHeld,
+			"claim_width: the width 2jn declares is already full of claims this run does not hold"),
+	}}
+	model := Build(src)
+	var attention *Attention
+	for i := range model.Attention {
+		if model.Attention[i].Kind == WaitHeldForPerson && strings.Contains(model.Attention[i].What, "run_prior") {
+			attention = &model.Attention[i]
+		}
+	}
+	if attention == nil {
+		t.Fatalf("the prior run's width hold is not attention: %+v", model.Attention)
+	}
+	if attention.UnblockCommand == nil || *attention.UnblockCommand != "ticfac run-epic 2jn" {
+		t.Errorf("the prior run's width hold command is %+v, want the run-again command a resume addresses",
+			attention.UnblockCommand)
+	}
+}
+
 // TestADeadRunIsAttentionWithTheResumeCommand: a run whose process is gone
 // without its own terminal word is the first thing a person must learn, with
 // the one command that resumes it.

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -332,57 +331,78 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 			// The line the whole command exists for, said to a human: which
 			// tick, which attempt, why — all read off the line's own fields,
 			// never out of its prose — and the command that moves the hold on,
-			// named by WHAT the run holds (tick gtk): the close-out's
-			// untriaged-findings hold is cleared by triage, and settle there
-			// would point at a command that refuses it; every other hold is
-			// the settle command the run-wide dispatch number addresses.
+			// decided by WHAT the run holds, one decision per hold kind (tick
+			// gf0): the shared spelling in statusmodel, the same one the
+			// model's needs-you and the rows' next steps read, so no two
+			// surfaces can name two verbs for one hold. The holds that fire
+			// before the tick's first dispatch — the width, a foreign claim,
+			// the absorption bound — carry a NULL attempt: no settle command
+			// can address them ("-" is not an attempt number), and a release
+			// would not clear them anyway, so each names the command that
+			// actually moves it on; a hold the closed set does not know names
+			// no command at all, never a wrong one a person copies.
 			held = true
-			tick, attempt, what := "-", "-", "-"
+			tick, what := "-", "-"
 			if event.TickID != nil {
 				tick = *event.TickID
 				what = "tick " + tick
 			}
 			if event.Attempt != nil {
-				// The settle command is addressed by the run-wide dispatch
-				// number — the attempt's identity — so that is the number the
-				// command carries; the sentence leads with the tick's try.
-				attempt = strconv.Itoa(*event.Attempt)
+				// The sentence leads with the tick's try; the command the
+				// run-wide dispatch number addresses comes from the shared
+				// decision, which carries the number the attempt's identity is.
 				try, _ := tries.Of(tick, *event.Attempt)
 				what = reconcile.AttemptLabel(tick, try, *event.Attempt)
 			}
-			if strings.HasPrefix(event.Detail, reconcile.RefusedFindingUntriaged+":") {
-				// The triage is addressed to the run whose store carries the
-				// drafts — the run that wrote this line, named by the line's
-				// own run id (tick q8m): a cloud run's store lives under the
-				// factory's run_<hex>, one the bare command's default (the
-				// local spelling epic-<epic-id>) holds nothing for.
-				address := runID
-				if event.RunID != "" {
-					address = event.RunID
-				}
-				triage := statusmodel.TriageCommandForCurrentRun(epicOf(), address)
-				fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
+			host := statusmodel.HostLocal
+			if kind == "cloud" {
+				host = statusmodel.HostCloud
+			}
+			// The triage and the settle are addressed to the runs their records
+			// live under: the drafts under the run that wrote this line, named
+			// by the line's own run id (tick q8m) — a cloud run's store lives
+			// under the factory's run_<hex>, one the bare command's default
+			// (the local spelling epic-<epic-id>) holds nothing for — and the
+			// attempt under the run the watch answers for (tick ulw fixed the
+			// model surface; tick qxj this alert).
+			address := runID
+			if event.RunID != "" {
+				address = event.RunID
+			}
+			clearing := statusmodel.HoldClearingCommand(epicOf(), host, address, runID, event)
+			head := fmt.Sprintf("\nticfac watch: run %s is HOLDING %s for a person:\n%s\n", runID, what, event.Detail)
+			switch statusmodel.HoldReason(event.Detail) {
+			case reconcile.RefusedFindingUntriaged:
+				fmt.Fprintf(stderr, "%s"+
 					"Nothing proceeds until somebody decides. Triage the finding(s) with `%s` — "+
 					"every untriaged finding of the run settles there, by short key prefix — "+
 					"or answer what the tick is waiting for. The "+
-					"evidence is on the integration branch, not in this line.\n\n",
-					runID, what, event.Detail, triage)
-			} else {
-				// The release command is addressed by the run the hold belongs
-				// to, whenever that run's id is NOT the spelling a settle
-				// without --run-id opens (tick ulw fixed the model surface;
-				// tick qxj this alert): a cloud run's attempt is recorded under
-				// the factory's run_<hex>, which the bare command's default
-				// (epic-<epic-id>) does not carry, and the release refuses.
-				settle := fmt.Sprintf("ticfac settle %s %s %s --release \"<who>\"", epicOf(), tick, attempt)
-				if n, err := strconv.Atoi(attempt); err == nil {
-					settle = statusmodel.SettleCommandForCurrentRun(epicOf(), tick, n, runID)
+					"evidence is on the integration branch, not in this line.\n\n", head, *clearing)
+			case reconcile.RefusedClaimWidth, reconcile.RefusedForeignClaim:
+				fmt.Fprintf(stderr, "%s"+
+					"Nothing proceeds until the world changes — and a release is not what changes it: "+
+					"no attempt was ever dispatched, so settle refuses the hold's dash attempt. "+
+					"The hold ends when the claim it names does, and `%s` runs the epic again, "+
+					"re-deriving from the graph and proceeding the moment it has. The evidence is on "+
+					"the integration branch, not in this line.\n\n", head, *clearing)
+			case reconcile.RefusedAbsorptionDepth:
+				fmt.Fprintf(stderr, "%s"+
+					"Nothing proceeds until somebody judges the chain the line carries: decide the "+
+					"finding with `%s` — or take the escape the line itself names, raising the bound "+
+					"with --absorption-depth and running the epic again. The evidence is on the "+
+					"integration branch, not in this line.\n\n", head, *clearing)
+			default:
+				if clearing != nil {
+					fmt.Fprintf(stderr, "%s"+
+						"Nothing proceeds until somebody decides. Release it with `%s` — add --carry-work to base the "+
+						"next try on the commits the released one left — or answer what the tick is waiting for. The "+
+						"evidence is on the integration branch, not in this line.\n\n", head, *clearing)
+				} else {
+					fmt.Fprintf(stderr, "%s"+
+						"Nothing proceeds until somebody decides. No one command clears this hold — "+
+						"answer what the tick is waiting for. The evidence is on the integration branch, not in this line.\n\n",
+						head)
 				}
-				fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
-					"Nothing proceeds until somebody decides. Release it with `%s` — add --carry-work to base the "+
-					"next try on the commits the released one left — or answer what the tick is waiting for. The "+
-					"evidence is on the integration branch, not in this line.\n\n",
-					runID, what, event.Detail, settle)
 			}
 		}
 		if event.Stage == reconcile.StageRunFinished || event.Stage == reconcile.StageRunDied {

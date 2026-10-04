@@ -589,7 +589,7 @@ func (p *pipelineIndex) nextStepOf(tick *Tick, last Try) *string {
 	// on the unreleased attempt — and it is the very command the header's
 	// needs-you entry carries, from the same shared answer (tick eli).
 	if hold, ok := p.priorHold[tick.TickID]; ok {
-		if command := priorHoldCommand(p.epicID, hold); command != nil {
+		if command := priorHoldCommand(p.epicID, p.host, hold); command != nil {
 			return command
 		}
 		step := "held — see needs-you"
@@ -656,18 +656,12 @@ func (p *pipelineIndex) attentionCommand(tickID string) *string {
 	if holdSettledByAResume(p.feed) {
 		return nil
 	}
-	if strings.HasPrefix(held.Detail, reconcile.RefusedFindingUntriaged+":") {
-		// The triage addressed to the run's own store (tick q8m) — the same
-		// command the header's attention entry carries, from the same
-		// derivation, so a row and the header cannot name two stores.
-		command := TriageCommandForCurrentRun(p.epicID, p.ownRunID)
-		return &command
-	}
-	if held.Attempt != nil {
-		command := SettleCommandForCurrentRun(p.epicID, tickID, *held.Attempt, p.runID)
-		return &command
-	}
-	return nil
+	// The same per-kind decision the header's needs-you reads (tick gf0), so
+	// a row's next step and the header's command cannot name two verbs for
+	// one hold — including the holds about the world and the absorption
+	// bound, which no attempt stands behind and whose clearing command is
+	// the run again and the triage respectively, never a settle.
+	return HoldClearingCommand(p.epicID, p.host, p.ownRunID, p.runID, *held)
 }
 
 // heldForPerson answers whether the feed leaves this tick holding a wait
