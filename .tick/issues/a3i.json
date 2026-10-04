@@ -1,0 +1,14 @@
+{
+  "id": "a3i",
+  "title": "ticfac run --cloud fails when the local checkout is behind origin: it pushes HEAD to main",
+  "gloss": "cloud submit pushes stale HEAD",
+  "description": "2026-10-04: `ticfac run hn6 --cloud` from the main checkout (behind origin/main by a few commits, as it usually is while agents merge and a local run owns the checkout) failed: 'could not push the current branch for epic hn6: git push origin HEAD:refs/heads/main … rejected (non-fast-forward)'. Submitting a cloud run should not need the operator's checkout to be current or touch main at all: submit the epic against origin's main head (or the epic branch), fetch first, and only push when the operator explicitly asks to submit local commits — then say clearly that the checkout is behind.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A cloud submission from a checkout behind origin/main succeeds without pushing; a checkout AHEAD with unpushed commits is told so (and pushes only with an explicit flag); tests.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-04T14:55:30.414063Z",
+  "updated_at": "2026-10-04T14:55:30.414063Z"
+}
