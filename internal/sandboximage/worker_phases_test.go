@@ -326,3 +326,109 @@ func TestWorkerAllInOneDefaultStillRunsTheWholeContract(t *testing.T) {
 	}
 	_ = exec.Command("true") // keep os/exec imported for the fixture helpers above
 }
+
+// ----------------------------------------------------------- the setup entry ---
+
+// `ticks-worker --setup` (epic 43y, tick i3h): the entry the pi-durable
+// host's RESTORE runs. A container lost mid-turn is rebuilt from the last wip
+// snapshot by the host's own git plumbing (harness/src/workspace/
+// checkpoints.ts `restoreWorkspace`), which can clone and check out but
+// cannot re-run the one boot step the restored tree still needs: the
+// repository's own [sandbox] setup, whose dependency installs died with the
+// container. This entry is that step alone — and nothing else around it: no
+// clone, no harness, no push, and none of the boot's inputs (a restored box
+// has no TICKS_TICK of its own).
+func TestWorkerSetupEntryRunsTheRepositorySetupAndNothingElse(t *testing.T) {
+	shorttest.EndToEnd(t)
+	f := newWorkerFixture(t)
+	f.phasesState(t)
+	if out, code := f.run(WorkerBootArg); code != 0 {
+		t.Fatalf("the boot that made the checkout exited %d:\n%s", code, out)
+	}
+	// The container the host restored: the checkout is there, everything the
+	// boot resolved is not — the entry must take none of it.
+	delete(f.env, EnvTick)
+	os.Remove(f.ticfacRecord)
+
+	out, code := f.run(WorkerSetupArg)
+	if code != 0 {
+		t.Fatalf("the setup entry exited %d:\n%s", code, out)
+	}
+	mustContain(t, f.ticfacCalls(), "sandbox setup", "the repository's own setup, re-run")
+	mustContain(t, out, "repository setup took", "the per-boot cost of the step fan-out pays N times")
+	if f.harnessRecord() != "" {
+		t.Error("the setup entry ran the harness; the conversation the host runs owns those calls")
+	}
+	// Pushed nothing: the attempt branch is the conversation's and collect's
+	// to write, and a setup entry that pushed would read as work.
+	if exists, _ := f.remoteBranch(WorkerBranch(f.epic, f.tick)); exists {
+		t.Error("the setup entry pushed the worker branch; the restore hands the branch back to the conversation, not to origin")
+	}
+}
+
+// A box with no checkout is not a restored workspace: the setup entry runs
+// only after the boot or the host's restore made one, and it refuses as the
+// clone class rather than provisioning a checkout of its own.
+func TestWorkerSetupEntryRefusesABoxWithNoCheckout(t *testing.T) {
+	shorttest.EndToEnd(t)
+	f := newWorkerFixture(t)
+	out, code := f.run(WorkerSetupArg)
+	if code != ExitClone {
+		t.Fatalf("a setup entry with no checkout exited %d, want %d (the clone class):\n%s", code, ExitClone, out)
+	}
+}
+
+// The setup's own fault class is the boot's: a repository whose setup fails
+// in a restored container is the same wave-killing fault it was at boot.
+func TestWorkerSetupEntryDiesWithTheSetupFaultCode(t *testing.T) {
+	shorttest.EndToEnd(t)
+	f := newWorkerFixture(t)
+	f.phasesState(t)
+	if out, code := f.run(WorkerBootArg); code != 0 {
+		t.Fatalf("the boot that made the checkout exited %d:\n%s", code, out)
+	}
+	f.env["TICKS_TEST_SANDBOX_SETUP_EXIT"] = "1"
+	out, code := f.run(WorkerSetupArg)
+	if code != ExitSetup {
+		t.Fatalf("the setup entry exited %d, want %d:\n%s", code, ExitSetup, out)
+	}
+}
+
+// The wave's setup lever still holds through the restore: a wave dispatched
+// with TICKS_WORKER_SETUP=skip skipped the install at boot, and the box a
+// lost container restored into keeps skipping it.
+func TestWorkerSetupEntryHonoursTheWaveSetupLever(t *testing.T) {
+	shorttest.EndToEnd(t)
+	f := newWorkerFixture(t)
+	f.env[EnvWorkerSetup] = WorkerSetupSkip
+	f.phasesState(t)
+	if out, code := f.run(WorkerBootArg); code != 0 {
+		t.Fatalf("the boot that made the checkout exited %d:\n%s", code, out)
+	}
+	os.Remove(f.ticfacRecord)
+	out, code := f.run(WorkerSetupArg)
+	if code != 0 {
+		t.Fatalf("the skipped setup entry exited %d:\n%s", code, out)
+	}
+	if strings.Contains(f.ticfacCalls(), "sandbox setup") {
+		t.Error("TICKS_WORKER_SETUP=skip still ran the repository's setup in the restored box")
+	}
+	mustContain(t, out, "does NOT run the repository's [sandbox] setup", "what skipping costs")
+}
+
+// An unknown setup mode is a config fault through this door too, never a
+// silent `always`: the value arrives from the host's record of the boot env,
+// and one that never validated would re-provision every restore.
+func TestWorkerSetupEntryRefusesAnUnknownSetupMode(t *testing.T) {
+	shorttest.EndToEnd(t)
+	f := newWorkerFixture(t)
+	f.phasesState(t)
+	if out, code := f.run(WorkerBootArg); code != 0 {
+		t.Fatalf("the boot that made the checkout exited %d:\n%s", code, out)
+	}
+	f.env[EnvWorkerSetup] = "maybe"
+	out, code := f.run(WorkerSetupArg)
+	if code != ExitConfig {
+		t.Fatalf("the setup entry exited %d, want %d:\n%s", code, ExitConfig, out)
+	}
+}

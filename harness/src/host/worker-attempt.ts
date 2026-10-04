@@ -79,7 +79,7 @@ import {
 
 /**
  * The container's half of the contract, as contracts/worker-boot-contract.json
- * pins it (`boot_command`, `finish_command`, `boot_marker`,
+ * pins it (`boot_command`, `finish_command`, `setup_command`, `boot_marker`,
  * `boot_prompt_begin`, `boot_prompt_end`). Defaults only: the cloud host hands
  * in the factory's own constants (cloudflare/src/worker-boot.ts, pinned to the
  * same file by its own suite), and this package's suite pins these to it.
@@ -87,6 +87,7 @@ import {
 export const WORKER_BOOT_PROTOCOL = {
   bootCommand: "/usr/local/bin/ticks-worker --boot",
   finishCommand: "/usr/local/bin/ticks-worker --finish",
+  setupCommand: "/usr/local/bin/ticks-worker --setup",
   bootMarker: "ticks-worker-boot-ok",
   promptBegin: "ticks-worker-boot-prompt-begin",
   promptEnd: "ticks-worker-boot-prompt-end",
@@ -753,7 +754,15 @@ export class WorkerAttemptHost {
 
   // ------------------------------------------------------------- helpers ---
 
-  /** The attempt's workspace git: its branch (the boot's), its remote, its credentials. */
+  /**
+   * The attempt's workspace git: its branch (the boot's), its remote, its
+   * credentials — and its SETUP (tick i3h): the restore re-runs the
+   * repository's `[sandbox]` setup through the contract's `--setup` entry, so
+   * a container lost mid-turn comes back with its dependency installs, not
+   * just its tree. The setup rides the same env the restore's fetch needed,
+   * because the entry honours the wave's TICKS_WORKER_SETUP lever and checks
+   * the declared image against the one the container boots on.
+   */
   private workspaceGit(record: WorkerAttemptRecord): WorkspaceGit {
     const spec = record.spec;
     return {
@@ -761,7 +770,8 @@ export class WorkerAttemptHost {
       branch: record.boot?.branch ?? "",
       identity: WORKER_GIT_IDENTITY,
       base: spec.baseSha,
-      env: credentialEnv(spec.env),
+      setup: this.protocol.setupCommand,
+      env: restoreEnv(spec.env),
     };
   }
 
@@ -863,10 +873,25 @@ export function pinnedDoor(door: SandboxDoor, boot: SandboxBootOptions | undefin
   };
 }
 
-/** The git credentials a restore's fetch needs, and nothing else of the boot env. */
-function credentialEnv(env: Readonly<Record<string, string>>): Record<string, string> {
+/**
+ * The env a RESTORE needs from the boot's: the git credentials its fetches
+ * run under, and the slots the restored box's setup re-run reads — the
+ * wave's setup lever (TICKS_WORKER_SETUP), the image the declared-image check
+ * compares against (TICKS_SANDBOX_IMAGE) and the workspace the entry runs
+ * in (TICKS_WORKDIR, whose default the host's own cwd already matches).
+ * Nothing else of the boot env: the model's credentials in particular never
+ * reach a restore.
+ */
+function restoreEnv(env: Readonly<Record<string, string>>): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const name of ["GITHUB_TOKEN", "TICKS_GITHUB_TOKEN_URL", "TICKS_FACTORY_TOKEN"]) {
+  for (const name of [
+    "GITHUB_TOKEN",
+    "TICKS_GITHUB_TOKEN_URL",
+    "TICKS_FACTORY_TOKEN",
+    "TICKS_WORKER_SETUP",
+    "TICKS_SANDBOX_IMAGE",
+    "TICKS_WORKDIR",
+  ]) {
     const value = env[name];
     if (value !== undefined && value !== "") out[name] = value;
   }

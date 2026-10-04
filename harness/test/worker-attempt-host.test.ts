@@ -130,6 +130,7 @@ describe("the boot handoff", () => {
     expect(WORKER_BOOT_PROTOCOL).toEqual({
       bootCommand: contract.boot_command,
       finishCommand: contract.finish_command,
+      setupCommand: contract.setup_command,
       bootMarker: contract.boot_marker,
       promptBegin: contract.boot_prompt_begin,
       promptEnd: contract.boot_prompt_end,
@@ -395,6 +396,70 @@ describe("a worker attempt driven by the host", () => {
     const settled = await done;
     expect(settled.settled?.exitCode).toBe(0);
     expect(seen[0]).toEqual([PROMPT, "also add a docstring"]);
+  });
+
+  it("restores a lost workspace with the repository's setup: the contract's setup entry rides the restore", async () => {
+    // The ready check fails ONCE: the box a between-rounds loss booted is
+    // empty, and the pre-round check (tick 4fs) is what sees it.
+    let lostOnce = false;
+    const door = fakeSandboxDoor({
+      runExit: (command) => {
+        if (!lostOnce && command.includes('test -e "$CWD/.git"')) {
+          lostOnce = true;
+          return 1;
+        }
+        return undefined;
+      },
+      // The restore's checkout answers the tip it restored to.
+      runOutput: (command) =>
+        command.includes("git checkout -q -B") ? "cafef00d\nwip: tool round\n" : "",
+      processScript: (command) => {
+        if (command === WORKER_BOOT_PROTOCOL.bootCommand) {
+          return { output: bootOutput(), exit: 0, ms: 20 };
+        }
+        if (command.startsWith(WORKER_BOOT_PROTOCOL.finishCommand)) {
+          return { output: "ticks-worker: pushed\n", exit: 0, ms: 20 };
+        }
+        return { output: "bash ran\n", exit: 0, ms: 20 };
+      },
+    });
+    const log: string[] = [];
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("done; the report is written"),
+    ]);
+    const host = new WorkerAttemptHost({
+      door: door.sandbox,
+      storage: async () => new MemoryStorage(),
+      models,
+      records: memoryRecords(),
+      log: (text) => {
+        log.push(text);
+      },
+      pollMs: 5,
+      bashPollMs: 5,
+      guardDir: null,
+    });
+    await host.start(spec({ env: { ...spec().env, TICKS_WORKER_SETUP: "always" } }));
+    const settled = await host.drive();
+    expect(settled.settled).toMatchObject({ exitCode: 0, phase: "finishing" });
+
+    // The restore ran the contract's setup entry (tick i3h): a container lost
+    // mid-turn comes back with its dependency installs, not just its tree.
+    const setup = door.runs.find((r) => r.command.includes(WORKER_BOOT_PROTOCOL.setupCommand));
+    expect(setup).toBeDefined();
+    expect(setup?.command).toContain('cd "$TICFAC_WORKSPACE"');
+    expect(setup?.env.TICFAC_WORKSPACE).toBe("/work/repo");
+    // The wave's setup lever rides the restore, and none of the model's
+    // credentials do.
+    expect(setup?.env.TICKS_WORKER_SETUP).toBe("always");
+    expect(setup?.env.AI_GATEWAY_TOKEN).toBeUndefined();
+    expect(log.join("")).toContain(
+      "the container was lost between rounds; workspace restored to cafef00d",
+    );
   });
 
   it("aborts the conversation at the wall and finishes with the timeout status", async () => {
