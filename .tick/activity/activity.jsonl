@@ -2077,3 +2077,4 @@
 {"ts":"2026-10-04T14:47:35.437305Z","tick":"kgk","action":"note","actor":"ticfac","epic":"43y","data":{"note":"2026-10-04 16:47 - ticfac run epic-43y: kgk try 1 (run dispatch #2) merged into epic/43y as b5f89b292397; the integrated gate (go, ts) passed.","title":"Execution environments: FactorySandboxEnv (replay-safe bash) and a guarded local env"}}
 {"ts":"2026-10-04T14:47:38.273674Z","tick":"kgk","action":"close","actor":"ticfac","epic":"43y","data":{"title":"Execution environments: FactorySandboxEnv (replay-safe bash) and a guarded local env"}}
 {"ts":"2026-10-04T14:47:55.928527Z","tick":"dwn","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Workspace checkpoints: wip commit after every tool round; restore on a lost container"}}
+{"ts":"2026-10-04T14:48:16.045737Z","tick":"pom","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Worker contract as hooks and phases on pi-durable"}}

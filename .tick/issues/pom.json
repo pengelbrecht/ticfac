@@ -3,10 +3,10 @@
   "title": "Worker contract as hooks and phases on pi-durable",
   "gloss": "contract hooks + phases",
   "description": "Step 5: worker.sh split into --boot and --finish phases (exit codes unchanged, pinned); report linter pushback (#183) as an onYield follow-up message; early-exit nudge; wall deadline via abort(); tracker-edits block, findings, STATUS, boot-fault codes (#171/#178) preserved.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "kgk"
   ],
@@ -14,5 +14,6 @@
   "acceptance_criteria": "contract tests pass for each mapped behaviour",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.413578Z",
-  "updated_at": "2026-10-04T11:59:00.413578Z"
+  "updated_at": "2026-10-04T14:48:16.045251Z",
+  "started_at": "2026-10-04T14:48:16.045251Z"
 }
