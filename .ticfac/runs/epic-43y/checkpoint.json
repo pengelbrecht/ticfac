@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 113,
-  "state": "running",
-  "reason": "4uj is closed",
-  "updated_at": "2026-10-04T21:17:00Z",
+  "sequence": 114,
+  "state": "dispatching",
+  "reason": "dispatching jhp as attempt 20",
+  "updated_at": "2026-10-04T21:17:15Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -101,6 +101,10 @@
     },
     {
       "tick_id": "nou",
+      "state": "ready"
+    },
+    {
+      "tick_id": "qf4",
       "state": "ready"
     }
   ],
