@@ -451,7 +451,10 @@ func lastEventIn(path string) (TranscriptEvent, bool) {
 // transcript: the stamp of every dated line — the moments the worker was
 // seen doing something, which the status model buckets into its activity
 // window — and the LAST tool call as a person reads it: the tool's own name
-// plus its first argument, one bounded line, with its own stamp.
+// plus its first argument, one bounded line, with its own stamp. The line is
+// CREDENTIAL-REDACTED (see redactCredentials, tick ghh): it is what the
+// dashboard renders and the phone snapshot ships off-host, and a command's
+// first argument can carry a token.
 type TranscriptEvents struct {
 	Events       []time.Time
 	LastToolCall string
@@ -531,11 +534,140 @@ func lastToolCall(line transcriptLine) (string, bool) {
 			args = block.Input
 		}
 		if arg := firstArgument(args); arg != "" {
-			return boundLine(name + ": " + arg), true
+			// The argument is REDACTED before the line is built — the line is
+			// what the dashboard renders and the phone snapshot ships off-host
+			// (tick ghh), and a command's first argument can carry a credential.
+			// Redaction precedes the bound below on purpose: a cut line must
+			// not carry half a secret.
+			return boundLine(name + ": " + redactCredentials(arg)), true
 		}
 		return boundLine(name), true
 	}
 	return "", false
+}
+
+// ---- credential redaction (tick ghh) --------------------------------------
+
+// The LAST column's line crosses a boundary the tool call never did: the
+// dashboard renders it and `status --json` carries it, and the phone
+// snapshot pushes the model off the host (cloudflare/src/status.ts keeps
+// the last one per run — "a snapshot carries no secrets", a claim this
+// redaction is what makes true). A worker's command line can carry a
+// credential — a token exported in front of a curl, an Authorization
+// header, a URL with a secret in its query or userinfo — so the reader
+// redacts every credential-shaped part of the argument to <redacted>
+// before the line is built, at the one producer every renderer reads.
+//
+// The rule is deliberately cheap and over-redacting: a false positive costs
+// a dashboard line that says <redacted> where an ordinary value stood, a
+// false negative ships a secret off-host. It borrows the source grade's own
+// vocabulary (grade.go: a NAME carrying TOKEN, PASSWORD, PASSWD, SECRET or
+// CREDENTIAL is a credential by convention) and adds the shapes that
+// vocabulary misses: header values, URL userinfo and query parameters, and
+// the known token literals the forges and vendors print.
+const redactedCredential = "<redacted>"
+
+// secretByName is a NAME that carries a credential by convention — the same
+// substring vocabulary the source grade scrubs from a read-only runner's
+// environment, plus the api-key spelling. Matched case-insensitively as a
+// substring of the whole name: MY_TOKEN, ANTHROPIC_AUTH_TOKEN, api_key and
+// access_token are all credentials by their own names.
+var secretByName = regexp.MustCompile(`(?i)token|password|passwd|secret|credential|api_?key`)
+
+// credentialAssignments matches every `NAME=value` the line carries,
+// whatever quotes the value wears and wherever it stands — an exported
+// variable, an inline assignment in front of a command, a URL query or
+// fragment parameter. The value stops at whitespace and at the shell's own
+// ; & | separators so `A=1 B=2` redacts each name's own value; redactCredentials
+// keeps the name and swaps only the value, so the line still says WHICH
+// credential was carried.
+var credentialAssignments = regexp.MustCompile(`(?i)([A-Za-z_][A-Za-z0-9_]*=)("[^"]*"|'[^']*'|[^\s;&|"']*)`)
+
+// credentialURLParams matches a URL parameter named for a credential, in the
+// query or the fragment: ?token=…, #api_key=…, &sig=…. Hyphens are allowed
+// here and not in credentialAssignments because a URL parameter may carry
+// them (x-api-key=); the shell's NAME= space is [A-Za-z0-9_] only. `key` and
+// `sig` are whole keywords here and not in the NAME vocabulary because a
+// shell variable so named is unusual while a URL parameter so named is
+// usually the credential itself.
+var credentialURLParams = regexp.MustCompile(`(?i)([?&#;][A-Za-z0-9_-]*(?:token|password|passwd|secret|credential|key|sig|signature)[A-Za-z0-9_-]*=)([^\s&#"']*)`)
+
+// credentialHeaders matches a header whose value is a credential, with the
+// scheme word (Bearer, Basic, token) optional and preserved-then-dropped:
+// what stays in the line is the header's own name.
+var credentialHeaders = regexp.MustCompile(`(?i)(\b(?:authorization|x-api-key|api-key|private-token|access-token|cookie)\s*:\s*)(?:bearer\s+|basic\s+|token\s+)?([^\s"']+)`)
+
+// credentialFlags matches a command-line flag named for a credential, = form
+// or space form, its value in quotes or bare: --with-token …, --password=…,
+// --api-key …. The flag's own name and its separator stay in the line. Bare
+// `key` is not a keyword here (a --key flag names a sort key, an ssh key, a
+// registry key as often as a credential) while api-key, auth-key and
+// access-key spell the credential.
+var credentialFlags = regexp.MustCompile(`(?i)((?:^|\s)--?[A-Za-z0-9-]*(?:token|password|passwd|secret|credential|api-?key|auth-?key|access-?key)[A-Za-z0-9-]*)(=|\s+)("[^"]*"|'[^']*'|\S+)`)
+
+// curlUserPassword matches curl's -u / --user user:password — the one
+// flag-shaped credential whose own NAME says nothing. Restricted to values
+// with a colon so the many innocent -u flags (docker -u 1000, psql --user
+// postgres) stand: the user:password spelling is curl's own.
+var curlUserPassword = regexp.MustCompile(`(?i)((?:^|\s)(?:-u|--user)(?:=|\s+))([^\s:]+:[^\s"']+)`)
+
+// urlUserinfoWithPassword matches a URL's user:password@ — the credential a
+// URL carries in its authority. A bare user with no colon (git@github.com)
+// is a public convention, not a secret, and stays.
+var urlUserinfoWithPassword = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)([^\s/@:]+):([^\s/@]+)@`)
+
+// urlBareCredential matches a URL whose userinfo is a bare, long opaque
+// string — the api-key-as-username shape vendors use (a 20+ rune opaque
+// credential is not a username). Short bare users stay: git@, admin@.
+var urlBareCredential = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)([^\s/:@]{20,})@`)
+
+// knownTokenLiterals are the token shapes the forges and vendors print, with
+// their own recognisable prefixes: a GitHub token, a GitLab one, the
+// Anthropic and OpenAI key spellings, a Slack token, an AWS key id, a Google
+// API key. These are credentials whole, so the whole literal goes.
+var knownTokenLiterals = []*regexp.Regexp{
+	regexp.MustCompile(`\bghp_[A-Za-z0-9]{16,}`),
+	regexp.MustCompile(`\bgho_[A-Za-z0-9]{16,}`),
+	regexp.MustCompile(`\bghu_[A-Za-z0-9]{16,}`),
+	regexp.MustCompile(`\bghs_[A-Za-z0-9]{16,}`),
+	regexp.MustCompile(`\bghr_[A-Za-z0-9]{16,}`),
+	regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{20,}`),
+	regexp.MustCompile(`\bglpat-[A-Za-z0-9_-]{16,}`),
+	regexp.MustCompile(`\bsk-ant-[A-Za-z0-9_-]{16,}`),
+	regexp.MustCompile(`\bsk-[A-Za-z0-9_-]{20,}`),
+	regexp.MustCompile(`\bxox[a-z]-[A-Za-z0-9-]{10,}`),
+	regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`),
+	regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{30,40}`),
+}
+
+// redactCredentials replaces every credential-shaped part of a tool call's
+// first argument with <redacted>: the known token literals first, then the
+// named shapes — header values, URL userinfo and parameters, flags and
+// assignments whose own NAME says credential. The output is the line a
+// person reads; what it must never contain is the credential itself.
+func redactCredentials(text string) string {
+	for _, re := range knownTokenLiterals {
+		text = re.ReplaceAllString(text, redactedCredential)
+	}
+	text = credentialHeaders.ReplaceAllString(text, `$1`+redactedCredential)
+	text = urlUserinfoWithPassword.ReplaceAllString(text, `$1`+redactedCredential+`@`)
+	text = urlBareCredential.ReplaceAllString(text, `$1`+redactedCredential+`@`)
+	text = credentialURLParams.ReplaceAllString(text, `$1`+redactedCredential)
+	text = credentialAssignments.ReplaceAllStringFunc(text, func(match string) string {
+		idx := credentialAssignments.FindStringSubmatchIndex(match)
+		name := match[idx[2]:idx[3]] // group 1: the NAME with its =
+		if secretByName.MatchString(strings.TrimSuffix(name, "=")) {
+			return name + redactedCredential
+		}
+		// The name is not one, but the VALUE may itself carry a named
+		// credential (--from-literal=password=…): the value is rescanned,
+		// never the name. Each rescan strips at least the name it matched,
+		// so the recursion bottoms out.
+		return name + redactCredentials(match[idx[3]:])
+	})
+	text = credentialFlags.ReplaceAllString(text, `$1$2`+redactedCredential)
+	text = curlUserPassword.ReplaceAllString(text, `$1`+redactedCredential)
+	return text
 }
 
 // firstArgument reads the first argument of a tool call in the order the

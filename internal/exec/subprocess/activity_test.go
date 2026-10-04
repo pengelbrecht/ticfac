@@ -315,3 +315,112 @@ func TestReadTranscriptEventsAnswersTheWindowAndTheLastToolCall(t *testing.T) {
 		t.Error("a worktree with no transcript answered events")
 	}
 }
+
+// The LAST tool call line is what the dashboard renders and the phone
+// snapshot ships off-host (tick ghh): a command's first argument can carry
+// a credential — an exported token, an Authorization header, a URL with a
+// secret in it — and the line a person reads must not state it. Every shape
+// a worker plausibly types is redacted to <redacted> at the reader, the one
+// producer every renderer reads, and the redaction happens BEFORE the
+// 80-rune bound so a cut line can never carry half a secret.
+func TestReadTranscriptEventsRedactsCredentialsFromTheLastToolCall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(EnvTranscriptHome, home)
+	cwd := t.TempDir()
+
+	cases := []struct {
+		command string
+		want    string
+	}{
+		{
+			// An inline assignment in front of the command, unquoted.
+			command: "GH_TOKEN=ghp_0123456789abcdefghijklmnopqrstuv go test ./internal/reconcile",
+			want:    "bash: GH_TOKEN=<redacted> go test ./internal/reconcile",
+		},
+		{
+			// An exported variable, quoted value.
+			command: `export ANTHROPIC_AUTH_TOKEN="sk-ant-api03-0123456789abcdefghijklmnopqrstuvwxyz"`,
+			want:    "bash: export ANTHROPIC_AUTH_TOKEN=<redacted>",
+		},
+		{
+			// An Authorization header, bearer scheme spelled or not.
+			command: `curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9abcdef" https://example.com/v1`,
+			want:    `bash: curl -H "Authorization: <redacted>" https://example.com/v1`,
+		},
+		{
+			// A URL query parameter named for a credential.
+			command: "curl 'https://api.example.com/v1/messages?api_key=0123456789abcdef&other=1'",
+			want:    "bash: curl 'https://api.example.com/v1/messages?api_key=<redacted>&other=1'",
+		},
+		{
+			// Userinfo with a password in it.
+			command: "git clone https://operator:hunter2@example.com/ticfac/ticfac.git",
+			want:    "bash: git clone https://<redacted>@example.com/ticfac/ticfac.git",
+		},
+		{
+			// A flag whose value is a token, space form; and a known token
+			// literal anywhere in the line.
+			command: "gh auth login --with-token ghp_0123456789abcdefghijklmnopqrstuv",
+			want:    "bash: gh auth login --with-token <redacted>",
+		},
+		{
+			// Redaction happens before the bound: the token's 200 runes must
+			// not push the tail out of the line, and no cut may carry them.
+			command: "MY_API_KEY=" + strings.Repeat("k", 200) + " echo done",
+			want:    "bash: MY_API_KEY=<redacted> echo done",
+		},
+		{
+			// A named credential nested inside another assignment's value —
+			// the value is rescanned, never left as someone else's value.
+			command: "kubectl create secret generic s --from-literal=password=hunter2",
+			want:    "bash: kubectl create secret generic s --from-literal=password=<redacted>",
+		},
+		{
+			// curl's -u user:password — a credential whose flag says nothing.
+			command: "curl -u admin:hunter2 https://example.com",
+			want:    "bash: curl -u <redacted> https://example.com",
+		},
+		{
+			// The redaction is about credentials, not about every value: an
+			// ordinary command line states itself whole — a bare --key names a
+			// sort key as often as a credential, and a variable whose name
+			// merely mentions one stays readable.
+			command: "npx vitest run status-model --key nonexistent",
+			want:    "bash: npx vitest run status-model --key nonexistent",
+		},
+		{
+			command: "go test ./internal/reconcile -count=1",
+			want:    "bash: go test ./internal/reconcile -count=1",
+		},
+	}
+	for i, c := range cases {
+		writeTranscript(t, "pi", cwd,
+			map[string]any{"type": "message", "timestamp": "2026-10-04T09:00:00.000Z",
+				"message": map[string]any{"role": "assistant", "content": []any{
+					map[string]any{"type": "toolCall", "name": "bash",
+						"arguments": map[string]any{"command": c.command}},
+				}}})
+		events, ok := ReadTranscriptEvents(home, "pi", cwd)
+		if !ok {
+			t.Fatalf("case %d: the transcript stands and the tail reader answered nothing", i)
+		}
+		if events.LastToolCall != c.want {
+			t.Errorf("case %d: the last tool call is %q, want %q — a credential reached the dashboard line",
+				i, events.LastToolCall, c.want)
+		}
+	}
+
+	// Claude Code's own spelling answers through the same redaction: the seam
+	// is the line the reader builds, not one harness's blocks.
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "assistant", "timestamp": "2026-10-04T09:01:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "tool_use", "name": "Bash",
+					"input": map[string]any{"command": "GITHUB_TOKEN=gho_0123456789abcdefghijklmnopqrstu gh pr view 1"}},
+			}}})
+	events, ok := ReadTranscriptEvents(home, "claude", cwd)
+	if !ok || events.LastToolCall != "Bash: GITHUB_TOKEN=<redacted> gh pr view 1" {
+		t.Errorf("the claude tail read %q (ok %t), want the tool_use line with the credential redacted",
+			events.LastToolCall, ok)
+	}
+}

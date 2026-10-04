@@ -528,7 +528,11 @@ type WallClock struct {
 // WorkerActivity is one worker's measured activity window: buckets of
 // events at a fixed width (oldest first), the window's own span, the last
 // action and its stamp, and the nudges the run sent. Every dashboard's
-// per-agent card (hn6 rule 5): current action, progress.
+// per-agent card (hn6 rule 5): current action, progress. The last action is
+// the transcript reader's own CREDENTIAL-REDACTED line (tick ghh): it is
+// rendered on the dashboard and shipped off-host with the phone snapshot,
+// so the reader redacts every credential-shaped part of it before it
+// enters the model.
 type WorkerActivity struct {
 	WindowSeconds int     `json:"window_seconds"`
 	Buckets       []int   `json:"buckets"`

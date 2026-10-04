@@ -53,6 +53,21 @@ loud.
 
 ---
 
+## 1.5.1
+
+PATCH: `status-model.json`'s `last_action` description states the credential
+redaction the field now carries (tick ghh, epic hn6). The dashboard's LAST
+column and `status --json` — and through them the phone snapshot, which
+pushes the model off-host — rendered a tool call's first argument whole, and a
+command line can carry a credential: an exported token, an Authorization
+header, a URL with a secret in its query or userinfo. The transcript reader
+(internal/exec/subprocess, the one producer every renderer reads) now redacts
+every credential-shaped part of the line to `<redacted>` before it enters the
+model, so the description — which said "as its transcript states it" — now
+says what the field actually is. Description only: no shape changed, no
+golden moved, an unchanged consumer is still correct. The Go redaction itself
+and its tests live with the reader; consumers: none have anything to do.
+
 ## 1.5.0
 
 MINOR: `status-model.json` gains `progress.run_elapsed_seconds` (tick e6g,
