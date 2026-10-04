@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 12,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The epic-across-runs merge reads prior runs' RECORDS but not their FEEDS, so a hold an earlier run left — an attempt struck out for a person, untriaged findings nobody moved — shows in the tick row's state (rejected, the work stage crossed) but never as the model's held-for-person wait or attention entry: the newest run failed at boot, its own feed holds no run_held line, and 'needs you' answers nothing while a person's decision is actually standing. Reading each prior run's feed (local .ticfac/logs, or the factory's events route per run id for cloud runs) would let buildWaits see those holds the same way it sees the newest run's.\nevidence: internal/statusmodel/build.go buildWaits reads src.Feed only (the newest run's); internal/statusmodel/build_epic_test.go's t3/at3 is rejected with a person's release still owed and model.Attention answers empty\n\nticfac run run_5c7c16d199414da2a8a40d97b524e987 created this tick by absorbing the finding be7cad71c90d6ad33388d8a5080f5902fd55e37929ffc4441bb21630e9f30633 (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-gmo/attempt-6): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/be7cad71c90d6ad33388d8a5080f5902fd55e37929ffc4441bb21630e9f30633.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "z3p",
+    "title": "An earlier run's hold never reaches needs-you across runs"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.51,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.2,
+      "design": 0.01,
+      "diagnosis": 0.17,
+      "mechanical": 0.6,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1481,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T03:10:44Z",
+  "answered_at": "2026-10-04T03:10:44Z",
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "z3p",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "22015bb227de8aaa6aab218a1bb2250dceaf4264",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
