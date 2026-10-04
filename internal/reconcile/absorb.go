@@ -252,36 +252,13 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 		if err != nil {
 			return findingDecision{}, err
 		}
-<<<<<<< HEAD
-		// The bound THIS decision applies, resolved against the run branch and
-		// recorded there (tick wz0, finding 95f5ee1a): a cold restart applies
-		// the same bound the warm run did, and only a person's explicit raise
-		// changes it.
-		bound, err := r.absorptionDepthBound(dispatch)
-		if err != nil {
-			return findingDecision{}, err
-		}
-		if absorptionDepthExceeded(links, bound) {
-			r.record(marker.TickID, StageAbsorptionBoundExceeded,
-				"the absorption of finding %s would be the %s absorption of one chain and the bound is %d: %s",
-				standing.Key, ordinal(len(links)+1), bound, chainNarrative(links))
-			return findingDecision{}, r.refuse(RefusedAbsorptionDepth, marker.TickID,
-				"absorbing the finding %s (%q), reported by %s, would be the %s absorption of ONE chain that "+
-					"already carries %d and the bound is %d (tick qjj): the run stops for a person rather than recurse "+
-					"past the bound, because unbounded the recursion is an epic that never closes and nothing "+
-					"announces it. The chain that produced the stop: %s. The finding stays a person's. %s. Raise "+
-					"the bound with --absorption-depth and run the epic again instead. If this bound trips often, "+
-					"the criterion is wrong and the bound is hiding it — the chain above is what a person judges "+
-					"it by",
-				standing.Key, standing.Title, r.attemptName(marker.TickID, marker.Attempt),
-				ordinal(len(links)+1), len(links), bound, chainNarrative(links),
-				triagePointer(r.opts.EpicID, r.runID))
-=======
 		if exceeded {
+			// The verdict the bound overrode, in the deferral's own words: the
+			// past-bound record carries WHAT the finding claimed to gate, and
+			// the bound still wins (deferPastBound, absorb_bound.go).
 			overridden := runstate.Absorption{Gating: true, ItemID: verdict.ItemID, Basis: string(verdict.Basis)}
 			return r.deferPastBound(ctx, marker, *standing, dispatch, links, bound,
 				fmt.Sprintf("%s (basis %s)", verdictLine(overridden), verdict.Basis))
->>>>>>> 90b4cd7d49ae9e892fbd3d3e3237596b79e9a51b
 		}
 	}
 

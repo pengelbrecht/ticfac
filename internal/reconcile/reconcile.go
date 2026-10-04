@@ -2728,6 +2728,21 @@ const (
 	RefusedFindingInvalid   = "finding_report_invalid"
 	RefusedFindingUntriaged = "finding_untriaged"
 
+	// RefusedAbsorptionDepth is the hold the absorption bound used to raise
+	// (tick qjj): a gating finding would have been one absorption too many
+	// for ONE chain, and the run stopped for a person to judge it. Past the
+	// bound the run now DEFERS the finding to the backlog and carries on —
+	// it never halts over the bound (absorb_bound.go, run_5c7c16d1) — so no
+	// hold the reconciler raises carries this reason any more. It stays in
+	// the closed vocabulary because a hold recorded before that change is
+	// still standing state on a run branch (hn6's chain gmo → z3p → ulw →
+	// qxj held on it, 2026-10-04), and the surfaces that answer for
+	// recorded holds — the status model's HoldClearingCommand, the watch
+	// alert — still name its clearing command: the triage addressed to the
+	// HOLDING run's own store (tick q8m), where that run's drafts live,
+	// never the bare command's default.
+	RefusedAbsorptionDepth = "absorption_depth_exceeded"
+
 	// RefusedClaimWidth is the tracker refusing a claim because the epic's
 	// declared dispatch width is already full (tk exit 8, tk.ErrDispatchWidth).
 	//

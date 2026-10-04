@@ -83,26 +83,9 @@ func (r *Reconciler) decideProseFinding(ctx context.Context, marker attemptHandl
 		if err != nil {
 			return findingDecision{}, err
 		}
-<<<<<<< HEAD
-		bound, err := r.absorptionDepthBound(dispatch)
-		if err != nil {
-			return findingDecision{}, err
-		}
-		if absorptionDepthExceeded(links, bound) {
-			r.record(marker.TickID, StageAbsorptionBoundExceeded,
-				"the absorption of finding %s would be the %s absorption of one chain and the bound is %d: %s",
-				standing.Key, ordinal(len(links)+1), bound, chainNarrative(links))
-			return findingDecision{}, r.refuse(RefusedAbsorptionDepth, marker.TickID,
-				"absorbing the finding %s (%q), which claims to break the build or CI, would be the %s absorption "+
-					"of ONE chain that already carries %d and the bound is %d (tick qjj). The chain: %s. %s. Raise "+
-					"the bound with --absorption-depth and run the epic again instead",
-				standing.Key, standing.Title, ordinal(len(links)+1), len(links), bound, chainNarrative(links),
-				triagePointer(r.opts.EpicID, r.runID))
-=======
 		if exceeded {
 			return r.deferPastBound(ctx, marker, standing, dispatch, links, bound,
 				"breaks the build or CI, which gates any epic's done (its reporter's claim)")
->>>>>>> 90b4cd7d49ae9e892fbd3d3e3237596b79e9a51b
 		}
 	}
 	tickID, err := r.mintTickID()
