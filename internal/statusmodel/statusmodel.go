@@ -295,12 +295,22 @@ type WaveRef struct {
 }
 
 // Progress is how far along the whole epic is: every tick and every wave,
-// counted from the same records the waves are built from. Both counters are
-// null when the tracker could not be read — "no ticks" and "unread ticks"
-// are different claims.
+// counted from the same records the waves are built from, and the epic's
+// own clock. The counters are null when the tracker could not be read —
+// "no ticks" and "unread ticks" are different claims.
 type Progress struct {
 	Ticks *TickProgress `json:"ticks"`
 	Waves *WaveProgress `json:"waves"`
+
+	// RunElapsedSeconds is the epic's own clock: the earliest dispatch
+	// any tick's try history states, to the model's `now` — clamped at the
+	// run's end when the run's own records state one, so a finished run's
+	// header stops counting instead of running on while a person reads it.
+	// It is the span every surface renders (watch's header, the phone page's
+	// headline), carried by the model so they cannot disagree. Null when no
+	// dispatch marker states a start — an elapsed nobody measured is an
+	// elapsed nobody prints.
+	RunElapsedSeconds *int64 `json:"run_elapsed_seconds"`
 }
 
 // TickProgress counts the epic's children: total, closed, and open.
