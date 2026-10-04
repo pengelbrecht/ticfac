@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "z3p",
   "attempt": 10,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T03:42:14Z",
+  "triaged_at": "2026-10-04T03:42:25Z",
+  "triaged_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987 absorbing d23",
+  "promoted_as": "d23",
   "provenance": {
     "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
     "tick_id": "z3p",
