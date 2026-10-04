@@ -304,6 +304,76 @@ func TestRejectedEventLineNamesReasonAndNextStep(t *testing.T) {
 	}
 }
 
+// TestRefusalLineNextStepIsTheEventsOwnTrys (tick 15b): the "— next:" a
+// refusal line carries is the next step of the event's OWN try, keyed on the
+// event's attempt — try 1's rejection shows try 1's next step, never try 2's.
+// An event that names no attempt, or one the tick's tries do not carry,
+// invents no next step at all.
+func TestRefusalLineNextStepIsTheEventsOwnTrys(t *testing.T) {
+	t.Parallel()
+	m := dashboardFixture()
+	tick := watchTickOf(m, "t2")
+	if tick == nil || len(tick.Tries) < 2 {
+		t.Fatal("the dashboard fixture carries no t2 tries to refuse")
+	}
+	// Both tries carry a next step of their own, so a line that borrows the
+	// wrong try's is caught by the words it shows, not by a silence.
+	tick.Tries[0].NextStep = ptr("try 1's own next step")
+	tick.Tries[1].NextStep = ptr("try 2's own next step")
+
+	at := time.Date(2026, 9, 28, 19, 4, 0, 0, time.UTC)
+	first, second, unseen := 1, 2, 7
+	events := []runfeed.Event{
+		runfeed.NewEvent(at, "epic-rmod", "t2", &first,
+			reconcile.StageRejected, "gofmt drifted in two files"),
+		runfeed.NewEvent(at.Add(time.Minute), "epic-rmod", "t2", &second,
+			reconcile.StageRejected, "no-commits: attempt 2 of t2 left no branch"),
+		runfeed.NewEvent(at.Add(2*time.Minute), "epic-rmod", "t2", nil,
+			reconcile.StageRejected, "a refusal that names no attempt"),
+		runfeed.NewEvent(at.Add(3*time.Minute), "epic-rmod", "t2", &unseen,
+			reconcile.StageGateFailed, "the integrated gate did not pass: go"),
+	}
+	var tries runfeed.Tries
+	for _, event := range events {
+		tries.Observe(event)
+	}
+
+	// The line form: each refusal carries its own try's next step, and an
+	// attempt nobody's try states — nil, or one the tick never saw — carries
+	// none rather than the last try's.
+	for i, tc := range []struct {
+		event runfeed.Event
+		want  string
+		none  bool
+	}{
+		{events[0], "— next: try 1's own next step", false},
+		{events[1], "— next: try 2's own next step", false},
+		{events[2], "", true},
+		{events[3], "", true},
+	} {
+		line := watchEventLineWith(tc.event, &tries, &m)
+		switch {
+		case tc.none && strings.Contains(line, "— next:"):
+			t.Errorf("line %d invents a next step for an attempt no try states: %q", i, line)
+		case !tc.none && !strings.Contains(line, tc.want):
+			t.Errorf("line %d does not carry its own try's next step %q: %q", i, tc.want, line)
+		}
+		if strings.Contains(line, "try 2's own next step") && tc.event != events[1] {
+			t.Errorf("line %d borrows try 2's next step: %q", i, line)
+		}
+	}
+
+	// The feed view, the surface the finding named: an older refusal line in
+	// the rendered feed carries its own try's next step, not the newest one's.
+	view := strings.Join(renderFeedView(events, &tries, &m, 0, 200, 0), "\n")
+	if !strings.Contains(view, "— next: try 1's own next step") {
+		t.Errorf("the feed view's try-1 refusal lost its own next step:\n%s", view)
+	}
+	if strings.Count(view, "try 2's own next step") != 1 {
+		t.Errorf("the feed view's try-2 next step appears anywhere but its own line:\n%s", view)
+	}
+}
+
 // TestWatchEventReasonIsTheFirstClause: the clause the refusal line names is
 // the detail up to the first ":" — or its first 120 characters, cut at a
 // word boundary, when the detail carries no colon to cut at.
