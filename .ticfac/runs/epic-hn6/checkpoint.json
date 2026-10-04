@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 89,
-  "state": "running",
-  "reason": "qwb is closed",
-  "updated_at": "2026-10-04T19:29:55Z",
+  "sequence": 90,
+  "state": "dispatching",
+  "reason": "dispatching fzt as attempt 16",
+  "updated_at": "2026-10-04T19:30:09Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -96,6 +96,10 @@
     },
     {
       "tick_id": "c65",
+      "state": "ready"
+    },
+    {
+      "tick_id": "onv",
       "state": "ready"
     }
   ],
