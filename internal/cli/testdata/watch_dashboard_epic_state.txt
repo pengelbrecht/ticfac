@@ -2,13 +2,13 @@ hpd the epic the runs worked                                                    
 ██████████████░░░░░░░░░░ 3/5 ticks · 2d19h · ● stopped: the Workflow's own record says failed, so the run has ended
 ✓ plan ◐ waves 1/2 ○ review ○ close-out ○ ci ○ merge                                                  needs you: nothing
 
- TICK  WHAT                             TIER       PIPELINE                         TIME    ATTEMPTS
- t1    first                            strong     claim ▸ work ▸ gate ▸ merged ✓   1h55m   1
- t2    second                           frontier   claim ▸ work ▸ gate ▸ merged ✓   2h55m   2 ⤴
- t3    third                            strong     claim ▸ ✗work ▸ …                1h      1
- dup   duplicate of t2                             claim ▸ work ▸ gate ▸ merged ✓           0
- t4    fourth                           strong     claim ▸ ●work ▸ …                1h      1
- t5    fifth                            strong     claim ▸ work ▸ gate ▸ merged ✓   35m     1
+ TICK  WHAT            TIER     PIPELINE                       TIME  ATTEMPTS
+ t1    first           strong   claim ▸ work ▸ gate ▸ merged ✓ 1h55m 1
+ t2    second          frontier claim ▸ work ▸ gate ▸ merged ✓ 2h55m 2 ⤴
+ t3    third           strong   claim ▸ ✗work ▸ …              1h    1
+ dup   duplicate of t2          claim ▸ work ▸ gate ▸ merged ✓       0
+ t4    fourth          strong   claim ▸ ●work ▸ …              1h    1
+ t5    fifth           strong   claim ▸ work ▸ gate ▸ merged ✓ 35m   1
 
 WORKERS                                       ACTIVITY        LAST
 t4  glm-5.3 · cloudflare-sandbox
