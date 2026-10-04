@@ -1486,6 +1486,8 @@ boot_phase() {
 restore_finish_state() {
 	worker_branch="$(read_recorded_worker_branch)" ||
 		die $EXIT_CONFIG "no boot record for this container's branch in ${state_dir} — the finish phase runs after a boot in the same container, and this one booted elsewhere or not at all"
+	[[ -n $worker_branch ]] ||
+		die $EXIT_CONFIG "the boot record for this container's branch in ${state_dir/branch} is empty — the boot never finished writing it"
 	guard_dir="${workdir}.guard"
 	boundary_ledger="$guard_dir/attempts"
 }
