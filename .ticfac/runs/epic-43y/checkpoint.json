@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 86,
-  "state": "gating",
-  "reason": "running the integrated gate for bgx on 63e9809f4d12",
-  "updated_at": "2026-10-04T18:59:24Z",
+  "sequence": 87,
+  "state": "publishing",
+  "reason": "closing bgx behind the integrated gate on 63e9809f4d12",
+  "updated_at": "2026-10-04T19:01:51Z",
   "ticks": [
     {
       "tick_id": "92k",
