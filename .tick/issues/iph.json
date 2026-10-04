@@ -3,7 +3,7 @@
   "title": "Ctrl-C/q on a terminal under `ticfac run` exits 1, not 5 'detached'",
   "description": "Regression from watch's raw-mode keys. term.MakeRaw (watch_keys.go:283) disables ISIG, so Ctrl-C arrives as a key; watch.go:991-997 returns interrupted() → 1 (or ExitHeld) without cancelling the context. attachRun (run.go:618) and runCloudAttach (run_cloud.go:80) map 1→5 'detached' only when ctx.Err()!=nil, so a person who presses Ctrl-C or q on `ticfac run` gets exit 1 and 'the watch was interrupted' while the run keeps going: the misread tick 8v3 fixed. Tests mask it (run_test swaps attach for a context cancel; TestWatchOnATerminalTakesKeys asserts 1 for q on a live run). Fix: make a key interrupt indistinguishable from a cancel to attach callers (cancel or return the running class), and test the real attach with a key.\nevidence: internal/cli/watch_keys.go:283; internal/cli/watch.go:991-997, :861-871; internal/cli/run.go:611-628; internal/cli/run_cloud.go:80\n\nticfac run epic-hn6 filed this backlog tick from the finding f4eb2fa44e734550e6ab79a430404933e475459be5940f9d3e3ebb5640180145 (reported by run-epic-hn6/tick-v16/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/f4eb2fa44e734550e6ab79a430404933e475459be5940f9d3e3ebb5640180145.json on the run branch.",
   "notes": "2026-10-04 18:16 - ticfac run epic-hn6: created by absorbing finding f4eb2fa44e734550e6ab79a430404933e475459be5940f9d3e3ebb5640180145 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-hn6/absorptions/f4eb2fa44e734550e6ab79a430404933e475459be5940f9d3e3ebb5640180145.json on epic/hn6, and it says: the classifier put 0.02 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb\n2026-10-04 18:20 - ticfac run epic-hn6: absorbed into the epic hn6 — the final review (decision 1, v16) judged the epic NOT READY and named this finding as blocking (severity high). A review's NOT READY is its own definition-of-done judgement, so its blocking findings are the epic's work whatever the shape of the epic's acceptance; the epic is reviewed again once this tick closes.\n2026-10-04 21:12 - ticfac run epic-hn6: iph try 1 (run dispatch #11) merged into epic/hn6 as b5c24ff65610; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-04T16:16:20Z",
-  "updated_at": "2026-10-04T19:12:30.955364Z",
-  "started_at": "2026-10-04T18:35:01.037488Z"
+  "updated_at": "2026-10-04T19:12:33.81997Z",
+  "closed_at": "2026-10-04T19:12:33.81997Z"
 }
