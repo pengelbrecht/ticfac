@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 49,
-  "state": "publishing",
-  "reason": "closing quz behind the integrated gate on 242d6e795b9f",
-  "updated_at": "2026-10-04T13:52:52Z",
+  "sequence": 50,
+  "state": "running",
+  "reason": "quz is closed",
+  "updated_at": "2026-10-04T13:53:01Z",
   "ticks": [
     {
       "tick_id": "q8m",
@@ -47,7 +47,7 @@
     },
     {
       "tick_id": "quz",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 7
     }
   ],
