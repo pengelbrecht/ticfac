@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
@@ -1007,10 +1008,12 @@ func TestTheBareOverviewShowsTheDashboardHeadline(t *testing.T) {
 
 // TestTheBareOverviewHeadlineMatchesWatch: the one-model-two-renderers
 // guarantee. For the same status model, the overview's headline lines are
-// dashboardHeadline's own at the fallback width, indented two spaces — the
-// progress and verdict line, the phase bar with the needs-you answer, and
-// every hold's own line after it. The overview and the watch render with the
-// same functions, so they cannot drift apart.
+// dashboardHeadline's own at the width the two-space indent leaves them,
+// indented two spaces — the progress and verdict line, the phase bar with
+// the needs-you answer, and every hold's own line after it. The overview
+// and the watch render with the same functions, so they cannot drift
+// apart; and because the headline is made at the width the indent leaves,
+// no indented line can run past the width it was laid out at (tick kce).
 func TestTheBareOverviewHeadlineMatchesWatch(t *testing.T) {
 	now := time.Now()
 	t.Setenv("HOME", t.TempDir())
@@ -1048,10 +1051,10 @@ func TestTheBareOverviewHeadlineMatchesWatch(t *testing.T) {
 		}
 		_, block := overviewBlock(out, runID)
 		// The watch's own lines for the same model, at the width the
-		// non-TTY stdout lays out at — the headline, then the attention
-		// lines the watch shows under it, wrapped to the width the two-space
-		// indent leaves them.
-		want := dashboardHeadline(model, plainStyles(), overviewHeadlineFallbackWidth)
+		// non-TTY stdout lays out at less the two-space indent the row
+		// carries — the headline, then the attention lines the watch
+		// shows under it, wrapped to the same width the indent leaves them.
+		want := dashboardHeadline(model, plainStyles(), overviewHeadlineFallbackWidth-2)
 		want = append(want, dashboardAttentionLines(model, plainStyles(), overviewHeadlineFallbackWidth-2)...)
 		if len(block) != len(want)-1 {
 			t.Fatalf("%s's row carries %d headline lines, want the watch's %d:\n got %q\nwant %q",
@@ -1064,6 +1067,58 @@ func TestTheBareOverviewHeadlineMatchesWatch(t *testing.T) {
 			}
 		}
 	}
+}
+
+// TestTheBareOverviewHeadlineFitsTheTerminal: the overview indents the
+// watch's own headline lines by two spaces, so it must lay them out at the
+// width that indent leaves (tick kce). The phase line pads to exactly the
+// width it is given — laid out at the terminal's full width and then
+// indented, it overflows by the two indent cells and "needs you" wraps
+// onto the next row. Every indented headline line of the running run — the
+// one whose headline ends in "needs you: nothing" — fits the width it was
+// laid out at, at the fallback width and at a terminal's own.
+func TestTheBareOverviewHeadlineFitsTheTerminal(t *testing.T) {
+	now := time.Now()
+	t.Setenv("HOME", t.TempDir())
+	ownRegistry(t)
+	repo, release := overviewHeadlineFixture(t, now)
+	defer release()
+	headlineGraph(t)
+
+	// A pipe, then a terminal 100 columns wide — the fallback width and
+	// the same width spoken by a terminal, each a width every indented
+	// headline line must fit inside.
+	check := func(t *testing.T, out string, width int) {
+		t.Helper()
+		_, block := overviewBlock(out, "epic-hd5")
+		if len(block) == 0 {
+			t.Fatalf("epic-hd5's headline is not under its row:\n%s", out)
+		}
+		for _, line := range block {
+			if w := ansi.StringWidth(line); w > width {
+				t.Errorf("epic-hd5's headline line is %d cells wide, over the %d it must fit:\n%q",
+					w, width, line)
+			}
+		}
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := Run([]string{"--repo", repo}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("the bare overview exits %d, want %d:\n%s\n%s",
+			code, exitSuccess, stdout.String(), stderr.String())
+	}
+	check(t, stdout.String(), overviewHeadlineFallbackWidth)
+
+	realTTY, realSize := watchIsTerminal, watchTerminalSize
+	t.Cleanup(func() { watchIsTerminal, watchTerminalSize = realTTY, realSize })
+	watchIsTerminal = func(io.Writer) bool { return true }
+	watchTerminalSize = func(io.Writer) (int, int, bool) { return overviewHeadlineFallbackWidth, 24, true }
+	stdout.Reset()
+	if code := Run([]string{"--repo", repo}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("the bare overview exits %d, want %d:\n%s\n%s",
+			code, exitSuccess, stdout.String(), stderr.String())
+	}
+	check(t, stdout.String(), overviewHeadlineFallbackWidth)
 }
 
 // TestTheBareOverviewHeadlineStylesAndWidth: the headline renders with the
