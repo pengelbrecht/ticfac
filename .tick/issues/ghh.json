@@ -1,0 +1,14 @@
+{
+  "id": "ghh",
+  "title": "Dashboard LAST column shows raw tool arguments; redact secrets",
+  "description": "firstArgument puts a tool call's first argument (e.g. a full bash command line) on the dashboard and into status --json, which the phone snapshot pushes off-host; a command carrying a token would be displayed and shipped.\nevidence: internal/exec/subprocess/activity.go firstArgument\n\nticfac run epic-hn6 created this tick by absorbing the finding d892e23266e9f20c107c746be1fe07478d354927d2743bc7860ab54c884ddb6f (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/d892e23266e9f20c107c746be1fe07478d354927d2743bc7860ab54c884ddb6f.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T16:20:12Z",
+  "updated_at": "2026-10-04T16:20:12Z"
+}
