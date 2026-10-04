@@ -874,6 +874,26 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 
 	// Untriaged findings beside a run that cannot triage them itself: a
 	// person's decision, attention even when something else blocks harder.
+	// EVERY run's drafts, not only the newest run's (tick d23): a run that
+	// died before its close-out raised no run_held line — the hold the
+	// close-out's findings gate would have raised never happened — so its
+	// untriaged drafts are invisible to a block that read only the newest
+	// run's records, although a person's decision about them is standing.
+	// Each prior run's attention names the run, and the triage command is
+	// addressed to IT (TriageCommandForRun): the drafts live in that run's
+	// own records, so they settle in its store, never the one the bare
+	// command's default spells — and they are a question regardless of the
+	// newest run's liveness, because a prior run cannot triage its own
+	// drafts whatever the newest run is doing.
+	//
+	// A finding is one record across runs, keyed by content, so the copies
+	// dedupe NEWEST-FIRST: a key a newer run's records carry — adopted into
+	// the live run's own store, or decided, its decision standing — answers
+	// for every older run's copy of it, and the older copy is history. The
+	// newest run's own drafts stay the newest run's question, asked only
+	// when it can no longer triage them itself: while it runs, they are its
+	// own close-out's to decide or hold.
+	seen := map[string]bool{}
 	if !src.Liveness.Alive {
 		untriaged, earliest := 0, ""
 		for _, f := range recs.Findings {
@@ -902,6 +922,49 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 			unblock := TriageCommand(m.EpicID)
 			w.UnblockCommand = &unblock
 			attention = append(attention, Attention(w))
+		}
+	}
+	for _, f := range recs.Findings {
+		seen[f.Key] = true
+	}
+	for i := len(src.PriorRecords) - 1; i >= 0; i-- {
+		prior := src.PriorRecords[i]
+		// A run whose records name no run id cannot be triaged and answers
+		// for no other run's copy: there is no command to spell for it, and
+		// an unnamed word settles nothing.
+		if prior.Checkpoint == nil || prior.Checkpoint.RunID == "" {
+			continue
+		}
+		untriaged, earliest := 0, ""
+		for _, f := range prior.Findings {
+			if f.Status == runstate.FindingProposed && !seen[f.Key] {
+				untriaged++
+				if earliest == "" || (f.ProposedAt != "" && f.ProposedAt < earliest) {
+					earliest = f.ProposedAt
+				}
+			}
+		}
+		if untriaged > 0 {
+			w := Wait{
+				Kind: WaitFinding,
+				What: fmt.Sprintf("run %s has %d untriaged finding(s) awaiting triage",
+					prior.Checkpoint.RunID, untriaged),
+				NeedsPerson: true,
+			}
+			if earliest != "" {
+				since := earliest
+				w.Since = &since
+			}
+			// The triage addressed to the holding run's own store: the
+			// drafts are that run's records, and the bare command's default
+			// spells this run's — the same address rule the prior holds
+			// keep (z3p).
+			unblock := TriageCommandForRun(m.EpicID, prior.Checkpoint.RunID)
+			w.UnblockCommand = &unblock
+			attention = append(attention, Attention(w))
+		}
+		for _, f := range prior.Findings {
+			seen[f.Key] = true
 		}
 	}
 	return m.WaitsOn, attention

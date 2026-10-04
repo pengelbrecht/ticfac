@@ -1965,6 +1965,17 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		return nil, fmt.Errorf("reconcile: read the run state: %w", err)
 	}
 
+	// The untriaged drafts every ENDED earlier run of this epic left are
+	// adopted into this run's own store before anything is planned (tick d23,
+	// inherit.go): a run that died before its close-out raised no hold over
+	// its drafts, and the close-out's findings gate reads only this run's
+	// own store — so un-adopted, the inherited drafts would gate nothing,
+	// forever. Adopted, this run's own rules decide them and its close-out
+	// holds for a person what the rules cannot.
+	if err := r.adoptInheritedFindings(); err != nil {
+		return nil, fmt.Errorf("reconcile: adopt the untriaged findings earlier runs left: %w", err)
+	}
+
 	// A finding promoted to two ticks — by two runs, before cross-run dedup
 	// held (dupes.go) — is closed down to its earliest tick before anything
 	// is planned, so the duplicate is neither worked nor gates the review.
