@@ -11,8 +11,8 @@
   "after": [
     "umq"
   ],
-  "acceptance_criteria": "[A1] Every worker (implement and role jobs), local and cloud, runs on pi-durable; the pi-CLI worker path is deleted. [A2] A harness process killed mid-tool resumes in a new process without re-running the tool; a container destroyed mid-turn is restored from the last wip commit and the turn completes — proven on staging and in a real run. [A3] ticfac watch shows a worker's thinking and tool calls live and the operator can steer; the stuck nudge is a steer. [A4] A real hn6-style cloud epic run and a local epic run complete on pi-durable. [A5] make gate, cloudflare tests and the harness package's conformance + replay tests pass in CI.",
+  "acceptance_criteria": "[A1] Every worker (implement and role jobs), local and cloud, runs on pi-durable; the pi-CLI worker path is deleted.\n[A2] A harness process killed mid-tool resumes in a new process without re-running the tool; a container destroyed mid-turn is restored from the last wip commit and the turn completes — proven on staging and in a real run.\n[A3] ticfac watch shows a worker's thinking and tool calls live and the operator can steer; the stuck nudge is a steer.\n[A4] A real hn6-style cloud epic run and a local epic run complete on pi-durable.\n[A5] make gate, cloudflare tests and the harness package's conformance + replay tests pass in CI.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.080552Z",
-  "updated_at": "2026-10-04T12:04:17.011319Z"
+  "updated_at": "2026-10-04T20:47:51Z"
 }
