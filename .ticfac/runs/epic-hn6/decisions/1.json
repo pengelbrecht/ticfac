@@ -1,0 +1,177 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "hn6",
+    "job_id": "run-epic-hn6/tick-v16/attempt-1",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:d251a161caa636cf29259dc058d36015243e7c7363028f39590d33e915e23b2d",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "3c4fc3812dd6a72bbd96d8538bffcf5a0a563d89",
+    "tick_id": "v16"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "Rule 7/A4. statusmodel/cost.go:79-93 emits the decisions line metered with USD 0 whenever any decision record exists, even with no usage block, and nothing ever sets jev.Usage.CostUSD, so every local run with a decision shows 'decisions $0.00'. Cloud: runs.cost_usd is NOT NULL DEFAULT 0 and cloudStatusDoc (status.ts:481-492) / status_model.go:647 turn any number into a metered 'AI Gateway logs' line, so a run before its first cost sync or with telemetry 'unavailable: …' (cost_source, unread on the status path) shows 'Workers AI $0.00'. Fix: emit the decisions line metered only when a record carries a measured cost, and make the cloud line unmetered unless cost_source is 'gateway'; teach P3's generator a metered-zero/no-usage decision and an unsynced cloud record.\nevidence: internal/statusmodel/cost.go:79-93; internal/jev/jev.go:185; cloudflare/migrations/0002_runs.sql:16; cloudflare/src/status.ts:481-492; internal/cli/status_model.go:647",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Cost still prints a fabricated $0.00: decisions line and cloud default 0"
+      },
+      {
+        "body": "Rule 3/A2. runCompleted (build.go:735-744) treats any run_finished not prefixed 'failed:' as completed, so an operator-stopped run with open ticks reads phase done, merge done, verdict healthy, attention [] and still shows an ETA (live: `ticfac status epic-hn6 --json` for run_08f5…, stopped 15:59 with 2/35 ticks open). A completed local run waiting on its PR (phase merge, not alive) reads red 'stopped' (verdict.go:90 exempts only done/cancelled). A failed run gets no dead-run wait (build.go:785 runTerminal), so the frame says 'needs you: nothing' beside '● stopped' though a person must resume it. nextStepOf (pipeline.go:620) promises 'the run will retry' on a dead/failed run. Fix the lifecycle/verdict/needs-you for stopped, failed and completed-awaiting-merge runs, hide ETA on ended runs, and add tests for each.\nevidence: internal/statusmodel/build.go:735-744, :785; internal/statusmodel/verdict.go:90; internal/statusmodel/pipeline.go:620; `ticfac status epic-hn6 --json` → phase done, verdict healthy, attention [] for a hard-stopped run",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Ended runs get a false verdict, phase and needs-you (stopped reads done/healthy)"
+      },
+      {
+        "body": "A3. attemptDiff (report.go:286) reads only while the attempt branch exists, and sweepTick deletes it on close (dispatch.go:3667), so every merged tick's drill-in says 'diff not read'. Under `watch epic-<id>` a tick's row comes from the prior run that closed it, but the report reader is bound to the CURRENT run id (status_model.go:529) and is handed the prior run's per-run attempt number, which yields 'report not read' or another dispatch's report when the numbers collide. Gate evidence is the newest run's only (build.go:217). Record diff stats durably at collect (or diff the merged commit), key reports by (run, tick, attempt), merge gate evidence per tick across runs, and test a drill-in on a closed prior-run tick.\nevidence: internal/statusmodel/report.go:286, :48-64; internal/reconcile/dispatch.go:3667; internal/cli/status_model.go:529; internal/statusmodel/build.go:217; internal/statusmodel/epic.go header",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Drill-in shows no diff, report or gate evidence for settled and prior-run ticks"
+      },
+      {
+        "body": "Regression from watch's raw-mode keys. term.MakeRaw (watch_keys.go:283) disables ISIG, so Ctrl-C arrives as a key; watch.go:991-997 returns interrupted() → 1 (or ExitHeld) without cancelling the context. attachRun (run.go:618) and runCloudAttach (run_cloud.go:80) map 1→5 'detached' only when ctx.Err()!=nil, so a person who presses Ctrl-C or q on `ticfac run` gets exit 1 and 'the watch was interrupted' while the run keeps going: the misread tick 8v3 fixed. Tests mask it (run_test swaps attach for a context cancel; TestWatchOnATerminalTakesKeys asserts 1 for q on a live run). Fix: make a key interrupt indistinguishable from a cancel to attach callers (cancel or return the running class), and test the real attach with a key.\nevidence: internal/cli/watch_keys.go:283; internal/cli/watch.go:991-997, :861-871; internal/cli/run.go:611-628; internal/cli/run_cloud.go:80",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Ctrl-C/q on a terminal under `ticfac run` exits 1, not 5 'detached'"
+      },
+      {
+        "body": "A5/rule 8 ('two renderers, they cannot disagree'). For cloud runs the Worker composes its own doc (status.ts:431-495: no health, progress, workers or ci, waves null, phase from run.state, one cost line) while `ticfac watch run_<hex>` builds the full Go model, so the same cloud run shows a verdict, table and per-source cost in the terminal and a bare state chip on the phone. On the same pushed document the phone prints 'degraded: degraded: …' (phone.ts:612 prefixes a summary verdict.go:117-131 already prefixes) and 'stopped: ' for an empty summary, and omits the workers panel, CI line and elapsed. Fix: render cloud runs on the phone from the same model (push or serve the Go-built doc), share the verdict wording, and add a cross-renderer test over the degraded and stopped goldens.\nevidence: cloudflare/src/status.ts:431-495; cloudflare/src/phone.ts:612; internal/statusmodel/verdict.go:117-131; internal/cli/watch_view.go:241",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Phone page shows a different model for cloud runs and garbles verdicts"
+      },
+      {
+        "body": "RESULT-{378,3gk,7uv,hn6,ltg,oro,r5i,v16}.md sit at the repository root on the integration branch; the epic's PR would land them on main, which #172 cleaned of exactly this ('a worker's report is a run's transport, not a file of the project'). report_merge.go says existing reports 'stay until somebody removes them'. And #169's guard does not cover the base-fold-through-resolve path: ab0cdab4 (2026-10-04, after #169 was on the branch) rewrote RESULT-hn6.md. Remove the eight files from epic/hn6 and route the base-fold resolve merge through keepReportsOut.\nevidence: git ls-tree HEAD --name-only | grep RESULT; git diff ab0cdab4^1 ab0cdab4 --stat -- RESULT-hn6.md; internal/reconcile/report_merge.go:1-30",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Epic branch carries 8 worker RESULT-*.md reports to main's root"
+      },
+      {
+        "body": "ulw/qxj add --run-id run_<hex> so the store opens, but settle then calls addressForSettlement, which requires the attempt's executor state on the machine running settle; a cloud attempt's state lives in the factory container, so the command the header prints refuses with 'this host holds no state … nothing to release'. Tests compare strings only. Needs a factory-side release or a different named command for cloud holds.\nevidence: internal/reconcile/settle.go:494-499; internal/reconcile/settle_command.go:18",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "A cloud attempt hold's printed settle command still cannot release it"
+      },
+      {
+        "body": "acceptTrackerEdits treats every BLOCKED/no-commits report with an acceptable tracker edit as the delivery and closes the tick, without checking the edit answers the blocking question; only the standing orders' always-ask class guards it. A 'BLOCKED — acceptance ambiguous' report proposing a clarifying edit to its own tick closes with no code. Tests cover only the yjq shape.\nevidence: internal/reconcile/tracker_edits.go:157-200",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "l89 closes any blocked tick that carries any acceptable tracker edit"
+      },
+      {
+        "body": "adoptInheritedFindings reads every run's checkpoint on the integration branch (other epics' included) before filtering by epic; decodeRecord disallows unknown fields and any error aborts Run. A factory-written checkpoint newer than the local binary, or one corrupt record, stops every run of the epic at boot. Each boot also asks ClaimHolder serially per non-terminal sibling.\nevidence: internal/reconcile/inherit.go:50-75; internal/reconcile/reconcile.go:1976",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "One unreadable sibling checkpoint fails every boot of the epic (d23)"
+      },
+      {
+        "body": "watchRunElapsed takes the earliest tries[].dispatched_at to generated_at; no contract field carries it (so the phone cannot show it) and it is never clamped at the run's end, so a finished run's header keeps counting.\nevidence: internal/cli/watch_view.go:1205-1235",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Run elapsed is TUI-derived, not in the model, and grows after the run ends"
+      },
+      {
+        "body": "dashboardTail observes runfeed.Tries over m.Recent only (5 events), contrary to runfeed's own doc; a tick on its 3rd try whose recent events are all one attempt prints #1 while the model and the [e] feed say 3.\nevidence: internal/cli/watch_view.go:1000-1010; internal/runfeed/tries.go:20-22",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Tail's tick#try prefix counted from 5 recent events disagrees with the model"
+      },
+      {
+        "body": "renderOverview lays dashboardHeadline out at full width then indents it by two spaces; the phase line pads to exactly width, so 'needs you' wraps. TestTheBareOverviewHeadlineMatchesWatch pins the 102-cell form at width 100.\nevidence: internal/cli/overview.go:850-853; internal/cli/watch_view.go:308",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Bare overview headline overflows the terminal by 2 cells"
+      },
+      {
+        "body": "localStatusModel constructs AttemptReports/WorkerHandles/TranscriptActivity on every call and watchLive calls it every interval, so each 2s frame spawns git per settled tick and walks the executor state dir. TestReportCachesPerAttempt holds one reader across calls, so it passes without testing the production wiring.\nevidence: internal/cli/status_model.go:528-530; internal/cli/watch.go:827",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Watch rebuilds report/handle/activity readers per frame; caches never hit"
+      },
+      {
+        "body": "epicStateFixture hand-builds Attention: [] next to a needs-person wait, so watch_dashboard_epic_state.txt pins the very output property P2 forbids; Build on the same story (build_epic_test.go:321-335) yields an attention entry. Render the epic-state golden from Build's output.\nevidence: internal/cli/watch_epic_state_test.go; internal/cli/testdata/watch_dashboard_epic_state.txt; internal/statusmodel/build_epic_test.go:321-335",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Epic-state golden pins 'needs you: nothing' beside a held tick"
+      },
+      {
+        "body": "watch.go:57-64 and Long help promise exit 5 for an interrupted watch (never returned); run_test.go:448 says Ctrl-C cancels the context (raw mode makes it a key); status_model.go:381-385 and 523-527 say the dashboard readers 'answer nil' / are 'nil-safe stubs'; build.go:196-198 'the one dashboards datum this tick computes for real'; statusmodel.go:29-34 'pinned by contract.json in this package … only Go reads it today'; watch_block_test.go:107 'events worth remembering kept above the block'.\nevidence: internal/cli/watch.go:57-64; internal/statusmodel/statusmodel.go:29-34; internal/statusmodel/build.go:196-198; internal/cli/status_model.go:381-385",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Doc comments the dashboard rewrite falsified"
+      },
+      {
+        "body": "renderFeedView appends '— next:' from the tick's last try to every rejected/gate-failed line without checking the event's attempt, so try 1's rejection shows try 3's next step.\nevidence: internal/cli/watch_drill.go:239-244",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Feed view attaches the last try's next step to older refusal lines"
+      },
+      {
+        "body": "firstArgument puts a tool call's first argument (e.g. a full bash command line) on the dashboard and into status --json, which the phone snapshot pushes off-host; a command carrying a token would be displayed and shipped.\nevidence: internal/exec/subprocess/activity.go firstArgument",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Dashboard LAST column shows raw tool arguments; redact secrets"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-hn6/tick-v16/attempt-1",
+      "commits": 0,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-hn6/v16/RESULT-v16.md",
+      "review_verdict": "NOT READY",
+      "review_verdict_detail": "stop the fabricated $0.00 (decisions line, cloud default), give stopped/failed/awaiting-merge runs a true verdict and needs-you, keep drill-in diff/report/gate data for settled and prior-run ticks, restore Ctrl-C detach (exit 5) under `ticfac run`, make the phone page render the same model for cloud runs, and remove the 8 RESULT-*.md reports from the epic branch"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (NOT READY — stop the fabricated $0.00 (decisions line, cloud default), give stopped/failed/awaiting-merge runs a true verdict and needs-you, keep drill-in diff/report/gate data for settled and prior-run ticks, restore Ctrl-C detach (exit 5) under `ticfac run`, make the phone page render the same model for cloud runs, and remove the 8 RESULT-*.md reports from the epic branch)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T16:20:23Z",
+  "answered_at": "2026-10-04T16:20:23Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "v16",
+    "attempt": 1,
+    "source_ref": "refs/heads/tick/hn6/attempt-1/v16",
+    "source_sha": "3c4fc3812dd6a72bbd96d8538bffcf5a0a563d89",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:d251a161caa636cf29259dc058d36015243e7c7363028f39590d33e915e23b2d",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}
