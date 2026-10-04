@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 51,
-  "state": "dispatching",
-  "reason": "dispatching v16 as attempt 8",
-  "updated_at": "2026-10-04T13:53:24Z",
+  "sequence": 52,
+  "state": "running",
+  "reason": "v16 is running as attempt 8",
+  "updated_at": "2026-10-04T13:53:40Z",
   "ticks": [
     {
       "tick_id": "q8m",
@@ -19,7 +19,8 @@
     },
     {
       "tick_id": "v16",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 8
     },
     {
       "tick_id": "qjl",
