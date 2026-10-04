@@ -12,8 +12,11 @@
   "attempt": 4,
   "done_item": "A2",
   "demonstrating_check": "go test ./internal/cli/ -run TestWatch",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T10:37:20Z",
+  "triaged_at": "2026-10-04T10:37:32Z",
+  "triaged_by": "ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c absorbing gf0",
+  "promoted_as": "gf0",
   "provenance": {
     "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
     "tick_id": "v2f",
