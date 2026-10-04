@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runprogress"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -111,6 +112,29 @@ func priorRecordsAcrossRuns() []Records {
 	return []Records{runA, runB}
 }
 
+// priorFeedsAcrossRuns is the two earlier runs' own feeds, keyed by run id:
+// the facts about a hold only the feed states. Run bbb held at3 for a person
+// and nobody has answered since — the records say the tick was rejected, but
+// only the line says the run held it FOR A PERSON. Run aaa's own hold was
+// answered by a resume (the person released the attempt, the run continued
+// and closed the tick), so its feed leaves nothing standing.
+func priorFeedsAcrossRuns() map[string][]runfeed.Event {
+	return map[string][]runfeed.Event{
+		"run_aaa": {
+			{SchemaVersion: 1, At: "2026-09-26T11:00:00Z", RunID: "run_aaa",
+				TickID: tickPtr("at2"), Attempt: intPtr(2), Stage: reconcile.StageRunHeld,
+				Detail: reconcile.RefusedRejectedWork + ": attempt 2 of at2 was rejected with commits nothing merged"},
+			{SchemaVersion: 1, At: "2026-09-26T11:20:00Z", RunID: "run_aaa", TickID: nil, Attempt: nil,
+				Stage: reconcile.StageResumed, Detail: "resumed after the person released the attempt"},
+		},
+		"run_bbb": {
+			{SchemaVersion: 1, At: "2026-09-27T08:10:00Z", RunID: "run_bbb",
+				TickID: tickPtr("at3"), Attempt: intPtr(12), Stage: reconcile.StageRunHeld,
+				Detail: reconcile.RefusedRejectedWork + ": attempt 12 of at3 was rejected with commits nothing merged"},
+		},
+	}
+}
+
 // failedNewestSources is the newest run: it failed at boot before touching
 // anything, so its checkpoint seeds every planned tick "ready" — including
 // the two earlier runs closed — and carries one "ready" row for the held
@@ -166,6 +190,7 @@ func failedNewestSources() Sources {
 		Graph:        epicGraphAcrossRuns(),
 		Records:      records,
 		PriorRecords: priorRecordsAcrossRuns(),
+		PriorFeeds:   priorFeedsAcrossRuns(),
 		Feed:         feed,
 		Standing:     standing,
 		StandingRead: true,
@@ -287,8 +312,35 @@ func TestBuildDerivesTheEpicAcrossRuns(t *testing.T) {
 	if len(model.Gates) != 0 {
 		t.Errorf("the gates read %+v, want none: the newest run recorded no gate evidence", model.Gates)
 	}
-	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitWorkers {
-		t.Errorf("the run waits on %+v, want its own standing worker", model.WaitsOn)
+
+	// But a hold an earlier run left for a person is not the run section's
+	// to swallow: run bbb held at3 and nobody answered, and the newest run
+	// failed at boot before writing a hold of its own — so the wait IS the
+	// hold, outranking the standing worker, with the command that releases
+	// THAT run's attempt (attempt numbers are per run).
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+		t.Fatalf("the run waits on %+v, want the hold run bbb left on at3", model.WaitsOn)
+	}
+	if !strings.Contains(model.WaitsOn.What, "run_bbb") || !strings.Contains(model.WaitsOn.What, "at3") {
+		t.Errorf("the hold reads %q, want the holding run and the tick named", model.WaitsOn.What)
+	}
+	if model.WaitsOn.Since == nil || *model.WaitsOn.Since != "2026-09-27T08:10:00Z" {
+		t.Errorf("the hold reads since %+v, want the run_held line's own stamp", model.WaitsOn.Since)
+	}
+	if model.WaitsOn.UnblockCommand == nil ||
+		*model.WaitsOn.UnblockCommand != `ticfac settle hpd at3 12 --run-id run_bbb --release "<who>"` {
+		t.Errorf("the hold's command is %+v, want the release addressed to the holding run", model.WaitsOn.UnblockCommand)
+	}
+	if len(model.Attention) != 1 || model.Attention[0].Kind != WaitHeldForPerson {
+		t.Errorf("the attention reads %+v, want the single held-for-person entry", model.Attention)
+	}
+
+	// Run aaa's hold was answered — the resume stands after it in its own
+	// feed — and no older run's word may resurface it beside the live one.
+	for _, a := range model.Attention {
+		if strings.Contains(a.What, "run_aaa") {
+			t.Errorf("the attention carries a hold run aaa's resume already answered: %+v", a)
+		}
 	}
 }
 
@@ -394,4 +446,207 @@ func TestNextStepOfAParkedTickNamesTheResume(t *testing.T) {
 		t.Errorf("the parked tick's next step reads %q, want the resume the run's own machinery cannot give",
 			*held.Tries[0].NextStep)
 	}
+}
+
+// priorHoldSources is the smallest epic a prior run's hold can stand in: one
+// tick, one earlier run that held it for a person, one newest run that
+// failed at boot — its own feed carries no run_held line, so without the
+// prior feed the model would answer "nothing needs you" while a person's
+// decision is standing. The mutate hook bends the fixture into each case.
+func priorHoldSources(mutate func(*Sources)) Sources {
+	now := testNow.Add(24 * time.Hour)
+	seven := 7
+	prior := Records{
+		Checkpoint: &runstate.Checkpoint{
+			SchemaVersion: runstate.SchemaVersion,
+			RunID:         "run_old",
+			EpicID:        "hpd",
+			Sequence:      3,
+			State:         "failed",
+			Reason:        "the container was evicted mid-run",
+			UpdatedAt:     testNow.Add(-48 * time.Hour).Format(time.RFC3339),
+		},
+	}
+	priorFeed := []runfeed.Event{
+		{SchemaVersion: 1, At: testNow.Add(-48 * time.Hour).UTC().Format(time.RFC3339), RunID: "run_old",
+			Stage: "run_started", Detail: "the run started"},
+		{SchemaVersion: 1, At: testNow.Add(-47 * time.Hour).UTC().Format(time.RFC3339), RunID: "run_old",
+			TickID: tickPtr("at1"), Attempt: &seven, Stage: reconcile.StageRunHeld,
+			Detail: reconcile.RefusedRejectedWork + ": attempt 7 of at1 was rejected with commits nothing merged"},
+	}
+	feed := []runfeed.Event{
+		{SchemaVersion: 1, At: now.Add(-30 * time.Minute).UTC().Format(time.RFC3339), RunID: "run_new",
+			Stage: "run_started", Detail: "the run started"},
+		{SchemaVersion: 1, At: now.Add(-5 * time.Minute).UTC().Format(time.RFC3339), RunID: "run_new",
+			Stage: "run_finished", Detail: "failed: the orchestrator could not claim the epic's width"},
+	}
+	src := Sources{
+		Now:    now,
+		RunID:  "run_new",
+		EpicID: "hpd",
+		Graph: &tk.Graph{Waves: []tk.GraphWave{{
+			Wave:  1,
+			Tasks: []tk.GraphTask{{ID: "at1", Title: "the one tick", Status: "open"}},
+		}}},
+		Records: &Records{Checkpoint: &runstate.Checkpoint{
+			SchemaVersion: runstate.SchemaVersion, RunID: "run_new", EpicID: "hpd",
+			Sequence: 1, State: "failed",
+			Reason:    "failed: the orchestrator could not claim the epic's width",
+			UpdatedAt: now.Add(-5 * time.Minute).Format(time.RFC3339),
+		}},
+		PriorRecords: []Records{prior},
+		PriorFeeds:   map[string][]runfeed.Event{"run_old": priorFeed},
+		Feed:         feed,
+		Liveness: LivenessInput{
+			Alive: false, State: "failed",
+			Reason: "the Workflow's own record says failed, so the run has ended",
+			Source: "workflow-record",
+		},
+	}
+	if mutate != nil {
+		mutate(&src)
+	}
+	return src
+}
+
+// TestAPriorHoldStandsUntilAnswered: the cases a prior run's hold is read
+// through. It stands until somebody answers it — the attempt is released (a
+// settlement decision), the run is resumed past it, or the epic moves past
+// the tick (closed, or taken up by a newer run) — and while it stands the
+// model's attention names it with the command that clears THAT run's hold.
+func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
+	t.Parallel()
+	t.Run("the hold stands and names the clearing command", func(t *testing.T) {
+		t.Parallel()
+		model := Build(priorHoldSources(nil))
+		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+			t.Fatalf("the run waits on %+v, want the hold run_old left", model.WaitsOn)
+		}
+		if !strings.Contains(model.WaitsOn.What, "run_old") || !strings.Contains(model.WaitsOn.What, "at1") {
+			t.Errorf("the hold reads %q, want the holding run and the tick named", model.WaitsOn.What)
+		}
+		if model.WaitsOn.UnblockCommand == nil ||
+			*model.WaitsOn.UnblockCommand != `ticfac settle hpd at1 7 --run-id run_old --release "<who>"` {
+			t.Errorf("the hold's command is %+v, want the release addressed to the holding run", model.WaitsOn.UnblockCommand)
+		}
+	})
+
+	t.Run("a resume within the prior run answers it", func(t *testing.T) {
+		t.Parallel()
+		model := Build(priorHoldSources(func(src *Sources) {
+			src.PriorFeeds["run_old"] = append(src.PriorFeeds["run_old"], runfeed.Event{
+				SchemaVersion: 1, At: testNow.Add(-40 * time.Hour).UTC().Format(time.RFC3339), RunID: "run_old",
+				Stage: reconcile.StageResumed, Detail: "resumed after the person released the attempt",
+			})
+		}))
+		if model.WaitsOn != nil || len(model.Attention) != 0 {
+			t.Errorf("an answered hold still reads as a wait: %+v / %+v", model.WaitsOn, model.Attention)
+		}
+	})
+
+	t.Run("a person's release answers it", func(t *testing.T) {
+		t.Parallel()
+		model := Build(priorHoldSources(func(src *Sources) {
+			prior := src.PriorRecords[0]
+			prior.Decisions = []runstate.Decision{{
+				SchemaVersion: runstate.SchemaVersion, Decision: 1,
+				Role: "triage-failure", Validated: true,
+				Request: map[string]any{
+					"op": reconcile.SettleOp, "run_id": "run_old", "epic_id": "hpd",
+					"tick_id": "at1", "attempt": 7,
+				},
+				Response: map[string]any{"settled": true, "released_by": "person-abc"},
+			}}
+			src.PriorRecords[0] = prior
+		}))
+		if model.WaitsOn != nil || len(model.Attention) != 0 {
+			t.Errorf("a released hold still reads as a wait: %+v / %+v", model.WaitsOn, model.Attention)
+		}
+	})
+
+	t.Run("the newest run's own hold on the tick is the live word", func(t *testing.T) {
+		t.Parallel()
+		model := Build(priorHoldSources(func(src *Sources) {
+			src.Feed = append(src.Feed, runfeed.Event{
+				SchemaVersion: 1, At: src.Now.Add(-10 * time.Minute).UTC().Format(time.RFC3339), RunID: "run_new",
+				TickID: tickPtr("at1"), Attempt: intPtr(1), Stage: reconcile.StageRunHeld,
+				Detail: "attempt 1 of at1 struck out: the refusal the run recorded",
+			})
+		}))
+		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson ||
+			!strings.Contains(model.WaitsOn.What, "struck out") {
+			t.Fatalf("the run waits on %+v, want the newest run's own hold", model.WaitsOn)
+		}
+		for _, a := range model.Attention {
+			if strings.Contains(a.What, "run_old") {
+				t.Errorf("the attention doubles the same decision with the older run's hold: %+v", a)
+			}
+		}
+	})
+
+	t.Run("a newer run taking the tick up supersedes it", func(t *testing.T) {
+		t.Parallel()
+		model := Build(priorHoldSources(func(src *Sources) {
+			src.Feed = append(src.Feed, runfeed.Event{
+				SchemaVersion: 1, At: src.Now.Add(-10 * time.Minute).UTC().Format(time.RFC3339), RunID: "run_new",
+				TickID: tickPtr("at1"), Attempt: intPtr(1), Stage: reconcile.StageDispatched,
+				Detail: "at1 try 1 dispatched",
+			})
+		}))
+		if model.WaitsOn != nil || len(model.Attention) != 0 {
+			t.Errorf("a superseded hold still reads as a wait: %+v / %+v", model.WaitsOn, model.Attention)
+		}
+	})
+
+	t.Run("a closed tick's hold is history", func(t *testing.T) {
+		t.Parallel()
+		model := Build(priorHoldSources(func(src *Sources) {
+			src.PriorRecords = append(src.PriorRecords, Records{
+				Checkpoint: &runstate.Checkpoint{
+					SchemaVersion: runstate.SchemaVersion, RunID: "run_mid", EpicID: "hpd",
+					Sequence: 2, State: "failed",
+					UpdatedAt: testNow.Add(-24 * time.Hour).Format(time.RFC3339),
+					Ticks:     []runstate.TickState{{TickID: "at1", State: "closed", Attempt: 1}},
+				},
+			})
+		}))
+		if model.WaitsOn != nil || len(model.Attention) != 0 {
+			t.Errorf("a hold on a closed tick still reads as a wait: %+v / %+v", model.WaitsOn, model.Attention)
+		}
+	})
+
+	t.Run("the untriaged-findings hold is cleared by triage, addressed to the holding run", func(t *testing.T) {
+		t.Parallel()
+		model := Build(priorHoldSources(func(src *Sources) {
+			src.PriorFeeds["run_old"] = []runfeed.Event{{
+				SchemaVersion: 1, At: testNow.Add(-47 * time.Hour).UTC().Format(time.RFC3339), RunID: "run_old",
+				TickID: tickPtr("at1"), Stage: reconcile.StageRunHeld,
+				Detail: reconcile.RefusedFindingUntriaged + ": 2 findings are untriaged",
+			}}
+		}))
+		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+			t.Fatalf("the run waits on %+v, want the findings hold", model.WaitsOn)
+		}
+		if model.WaitsOn.UnblockCommand == nil ||
+			*model.WaitsOn.UnblockCommand != "ticfac triage hpd --run-id run_old" {
+			t.Errorf("the hold's command is %+v, want the triage addressed to the holding run", model.WaitsOn.UnblockCommand)
+		}
+	})
+
+	t.Run("a hold that names no attempt carries no release command", func(t *testing.T) {
+		t.Parallel()
+		model := Build(priorHoldSources(func(src *Sources) {
+			src.PriorFeeds["run_old"] = []runfeed.Event{{
+				SchemaVersion: 1, At: testNow.Add(-47 * time.Hour).UTC().Format(time.RFC3339), RunID: "run_old",
+				Stage:  reconcile.StageRunHeld,
+				Detail: reconcile.RefusedAbsorptionDepth + ": the absorption recursion reached its bound",
+			}}
+		}))
+		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+			t.Fatalf("the run waits on %+v, want the run-level hold", model.WaitsOn)
+		}
+		if model.WaitsOn.UnblockCommand != nil {
+			t.Errorf("the hold's command is %+v, want none: nothing a settle or a triage addresses", model.WaitsOn.UnblockCommand)
+		}
+	})
 }

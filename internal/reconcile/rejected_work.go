@@ -231,7 +231,7 @@ func (r *Reconciler) recordRunRelease(marker attemptHandle, reason, step string,
 	}
 	number := len(decisions) + 1
 	for _, existing := range decisions {
-		if op, _ := existing.Request["op"].(string); op == settleOp &&
+		if op, _ := existing.Request["op"].(string); op == SettleOp &&
 			existing.Request["tick_id"] == marker.TickID && decisionAttemptOf(existing) == marker.Attempt {
 			return nil
 		}
@@ -262,7 +262,7 @@ func (r *Reconciler) recordRunRelease(marker attemptHandle, reason, step string,
 		Decision: number,
 		Role:     settleRole,
 		Request: map[string]any{
-			"op":      settleOp,
+			"op":      SettleOp,
 			"run_id":  r.runID,
 			"epic_id": r.opts.EpicID,
 			"tick_id": marker.TickID,

@@ -150,7 +150,7 @@ func TestAReleasedAttemptCanCarryItsWorkToTheNextAttempt(t *testing.T) {
 	}
 	found := false
 	for _, decision := range decisions {
-		if decision.Request["op"] != settleOp || decision.Request["tick_id"] != "a1" {
+		if decision.Request["op"] != SettleOp || decision.Request["tick_id"] != "a1" {
 			continue
 		}
 		found = true

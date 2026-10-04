@@ -57,8 +57,21 @@ type Sources struct {
 	// a run that failed at boot must not erase the ticks earlier runs
 	// closed. Each tick's row is read from the last run that touched it (its
 	// dispatch markers, gate evidence and provenance); the run SECTION —
-	// alive, workers, cost, feed, waits — is still the newest run's alone.
+	// alive, workers, cost, feed, waits — is still the newest run's alone,
+	// with the one exception the waits themselves make: a hold an earlier
+	// run left for a person (PriorFeeds).
 	PriorRecords []Records
+	// PriorFeeds is every EARLIER run's own event feed, keyed by the run id
+	// the records are keyed by (the checkpoint's run_id) — the feeds of the
+	// runs PriorRecords carries, walked in the same oldest-first order. A
+	// hold is a fact the feed is the only writer of: the records say the
+	// tick was rejected, but only the line says the run held it FOR A
+	// PERSON, and a hold an earlier run left stands until somebody answers
+	// it no matter what newer runs did elsewhere (tick z3p). A run whose
+	// feed could not be read is absent from the map — the model answers
+	// with what exists, and a missing feed is a missing hint, not a
+	// degraded source.
+	PriorFeeds map[string][]runfeed.Event
 	// Feed is the run's own event feed, whole. The feed is exhaust and
 	// hints: nothing in the model takes a VERDICT from a line, but the
 	// waits, the health counts and the wall clock firings are facts the
@@ -773,8 +786,8 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 	// already settled by resuming the run must not read as standing — the
 	// same rule the watch's subscription start made for lines (tick usx),
 	// stated here once for every surface that renders the model.
-	if held := latestStage(src.Feed, "", reconcile.StageRunHeld); held != nil &&
-		!holdSettledByAResume(src.Feed) {
+	if holds := unansweredHolds(src.Feed); len(holds) > 0 {
+		held := holds[len(holds)-1]
 		w := Wait{
 			Kind:        WaitHeldForPerson,
 			What:        held.Detail,
@@ -792,10 +805,124 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 			unblock := TriageCommand(m.EpicID)
 			w.UnblockCommand = &unblock
 		} else if held.TickID != nil && held.Attempt != nil {
-			unblock := fmt.Sprintf("ticfac settle %s %s %d --release \"<who>\"", m.EpicID, *held.TickID, *held.Attempt)
+			unblock := SettleCommand(m.EpicID, *held.TickID, *held.Attempt, "")
 			w.UnblockCommand = &unblock
 		}
 		claim(w)
+	}
+
+	// Prior runs' holds (tick z3p): a hold an earlier run left — an attempt
+	// struck out for a person, findings nobody triaged — stands until
+	// somebody answers it, and the newest run's own feed says nothing about
+	// whether anyone did. A newest run that failed at boot writes no
+	// run_held line of its own, so without this block a person's decision
+	// that is actually standing answers "nothing needs you". The records
+	// say the tick was rejected; only the FEED says the run held it FOR A
+	// PERSON — so the waits read each prior run's feed the same way they
+	// read the newest run's, newest run first: the newest unanswered word
+	// about a tick's held state is the live one, and a hold behind it (an
+	// earlier run's, or an older line of the same run's) is history.
+	held := map[string]bool{}
+	for i := range src.Feed {
+		line := &src.Feed[i]
+		if line.TickID == nil {
+			continue
+		}
+		switch line.Stage {
+		case reconcile.StageDispatched, reconcile.StageRedispatched, reconcile.StageRepairDispatched,
+			reconcile.StageRunHeld, reconcile.StageSettled:
+			held[*line.TickID] = true
+		}
+	}
+	for i := len(src.PriorRecords) - 1; i >= 0; i-- {
+		prior := src.PriorRecords[i]
+		if prior.Checkpoint == nil || prior.Checkpoint.RunID == "" {
+			continue
+		}
+		feed := src.PriorFeeds[prior.Checkpoint.RunID]
+		if len(feed) == 0 {
+			continue
+		}
+		// Per tick, the last hold the run left unanswered: a resume standing
+		// after a hold means the run continued past it — the hold it
+		// answered is history (the same position rule this run's own wait
+		// reads). An earlier unanswered line of the same tick is superseded
+		// by the later one.
+		byTick := map[string]runfeed.Event{}
+		var order []string
+		for _, hold := range unansweredHolds(feed) {
+			id := ""
+			if hold.TickID != nil {
+				id = *hold.TickID
+			}
+			if _, seen := byTick[id]; !seen {
+				order = append(order, id)
+			}
+			byTick[id] = hold
+		}
+		for _, id := range order {
+			hold := byTick[id]
+			if id != "" {
+				// The newest run's own word about the tick — it dispatched,
+				// held or saw the attempt settled — is the live one.
+				if held[id] {
+					continue
+				}
+				// The epic moved past the hold: the merged records close
+				// the tick, so whatever decision the hold waited on was
+				// made or overtaken.
+				if mergedStateOf(m, id) == tickClosed {
+					held[id] = true
+					continue
+				}
+				// The person already released the attempt: the settlement
+				// the release recorded, read from the holding run's own
+				// records — the only store a release can land in, since
+				// attempt numbers are per run.
+				if hold.Attempt != nil && settledByRelease(prior.Decisions, id, *hold.Attempt) {
+					held[id] = true
+					continue
+				}
+			}
+			w := Wait{
+				Kind:        WaitHeldForPerson,
+				NeedsPerson: true,
+			}
+			if id != "" {
+				w.What = fmt.Sprintf("run %s held %s for a person: %s", prior.Checkpoint.RunID, id, hold.Detail)
+			} else {
+				w.What = fmt.Sprintf("run %s held for a person: %s", prior.Checkpoint.RunID, hold.Detail)
+			}
+			since := hold.At
+			w.Since = &since
+			// The command is named by WHAT the run held — the same rule this
+			// run's own hold answers with — and by WHICH run holds it: the
+			// drafts and the attempt numbers are per run, so the clearing
+			// command addresses the holding run, never the run this model
+			// answers for.
+			if strings.HasPrefix(hold.Detail, reconcile.RefusedFindingUntriaged+":") {
+				unblock := TriageCommandForRun(m.EpicID, prior.Checkpoint.RunID)
+				w.UnblockCommand = &unblock
+			} else if hold.TickID != nil && hold.Attempt != nil {
+				unblock := SettleCommand(m.EpicID, *hold.TickID, *hold.Attempt, prior.Checkpoint.RunID)
+				w.UnblockCommand = &unblock
+			}
+			claim(w)
+		}
+		// This run's own words about a tick are newer than any older run's:
+		// a tick it dispatched, held or saw settled is answered or taken up
+		// from here back.
+		for j := range feed {
+			line := &feed[j]
+			if line.TickID == nil {
+				continue
+			}
+			switch line.Stage {
+			case reconcile.StageDispatched, reconcile.StageRedispatched, reconcile.StageRepairDispatched,
+				reconcile.StageRunHeld, reconcile.StageSettled:
+				held[*line.TickID] = true
+			}
+		}
 	}
 
 	// A completed run's open PR is the person's to merge.
@@ -883,6 +1010,75 @@ func holdSettledByAResume(feed []runfeed.Event) bool {
 		}
 	}
 	return lastHold >= 0 && lastResume > lastHold
+}
+
+// unansweredHolds is every run_held line no resume answers, oldest first:
+// position in the feed is the clock (the file is append-only), so the holds
+// standing after the last resume line are the ones nobody has settled by
+// resuming the run — and everything before it is history. This is the one
+// rule the waits read holds by, for the run's own feed and for a prior
+// run's alike (tick z3p); holdSettledByAResume is its boolean for the
+// newest line alone.
+func unansweredHolds(feed []runfeed.Event) []runfeed.Event {
+	lastResume := -1
+	for i := range feed {
+		switch feed[i].Stage {
+		case reconcile.StageResumed, reconcile.StageResumedAutomatically:
+			lastResume = i
+		}
+	}
+	holds := []runfeed.Event{}
+	for i := lastResume + 1; i < len(feed); i++ {
+		if feed[i].Stage == reconcile.StageRunHeld {
+			holds = append(holds, feed[i])
+		}
+	}
+	return holds
+}
+
+// settledByRelease says whether a person's release answers one (tick,
+// attempt) of the run whose decisions are given: the settlement decision
+// the release recorded, which only ever lands in the holding run's own
+// records — attempt numbers are per run, so a release addressed to another
+// run's number finds no dispatch under it and refuses. The decision's
+// fields are read as FIELDS, never matched in prose (settle.go's own rule),
+// and a JSON number decodes as a float64.
+func settledByRelease(decisions []runstate.Decision, tickID string, attempt int) bool {
+	for _, d := range decisions {
+		if op, _ := d.Request["op"].(string); op != reconcile.SettleOp {
+			continue
+		}
+		if tick, _ := d.Request["tick_id"].(string); tick != tickID {
+			continue
+		}
+		switch value := d.Request["attempt"].(type) {
+		case float64:
+			if int(value) == attempt {
+				return true
+			}
+		case int:
+			if value == attempt {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// mergedStateOf is one tick's state as the merged waves already state it:
+// the newest run's own row where it has one, the last run that touched the
+// tick where it does not, the tracker's closed status behind them both.
+// Empty when no wave named the tick — a tracker that did not read answers
+// nothing, and the hold is then judged without it.
+func mergedStateOf(m Model, tickID string) string {
+	for _, w := range deref(m.Waves) {
+		for _, t := range w.Ticks {
+			if t.TickID == tickID {
+				return t.State
+			}
+		}
+	}
+	return ""
 }
 
 // runTerminal says whether the run's own records say it ended by its own

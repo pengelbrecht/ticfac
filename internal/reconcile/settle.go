@@ -71,10 +71,13 @@ import (
 // reason a teardown always does: a container torn down before its credential is
 // revoked can spend on the way out.
 
-// settleOp is the request marker a settlement decision carries. It is read as
+// SettleOp is the request marker a settlement decision carries. It is read as
 // a FIELD rather than matched in prose: a run that recovers a decision by
-// matching on a sentence is the failure Appendix A #9 is about.
-const settleOp = "settle_attempt"
+// matching on a sentence is the failure Appendix A #9 is about. Exported so
+// the surfaces that read a run's records back — the status model's waits
+// among them — name the same marker the writer wrote, never a second copy
+// of the string beside it.
+const SettleOp = "settle_attempt"
 
 // The dispositions a release gives the released attempt's WORK — what the
 // next run does with the commits the released attempt left. Read as FIELDS
@@ -644,7 +647,7 @@ func (r *Reconciler) recordSettlement(marker attemptHandle, by, state string, ca
 		Decision: number,
 		Role:     settleRole,
 		Request: map[string]any{
-			"op":      settleOp,
+			"op":      SettleOp,
 			"run_id":  r.runID,
 			"epic_id": r.opts.EpicID,
 			"tick_id": marker.TickID,
@@ -679,7 +682,7 @@ func (r *Reconciler) settlements() (map[string]settlement, error) {
 	}
 	out := map[string]settlement{}
 	for _, decision := range decisions {
-		if op, _ := decision.Request["op"].(string); op != settleOp {
+		if op, _ := decision.Request["op"].(string); op != SettleOp {
 			continue
 		}
 		tick, _ := decision.Request["tick_id"].(string)

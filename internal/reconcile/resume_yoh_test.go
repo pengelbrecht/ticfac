@@ -60,7 +60,7 @@ func TestAMergeFailedAttemptAPersonMergedIsIntegratedNotHeld(t *testing.T) {
 	}
 	putDecision(t, st, runstate.Decision{
 		Decision: 90, Role: settleRole,
-		Request: map[string]any{"op": settleOp, "run_id": "r-fixture", "epic_id": "qeu", "tick_id": "a1",
+		Request: map[string]any{"op": SettleOp, "run_id": "r-fixture", "epic_id": "qeu", "tick_id": "a1",
 			"attempt": 99, "job_id": "run-r-fixture/tick-a1/attempt-99", "state": "rejected"},
 		Response: map[string]any{"settled": true, "released_by": runReleaser, "by_run": true,
 			"reason": "seeded", "step": rejectedStepCeiling, "disposition": dispositionUnaddressable,
