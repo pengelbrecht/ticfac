@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
   "epic_id": "hn6",
-  "sequence": 53,
+  "sequence": 54,
   "state": "gating",
-  "reason": "running the integrated gate for gmo on d55c7f76be3b",
-  "updated_at": "2026-10-04T02:44:21Z",
+  "reason": "running the integrated gate for gmo on 2b7276b3956f",
+  "updated_at": "2026-10-04T03:09:46Z",
   "ticks": [
     {
       "tick_id": "gmo",
