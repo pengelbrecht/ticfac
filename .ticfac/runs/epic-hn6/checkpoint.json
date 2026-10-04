@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 93,
-  "state": "integrating",
-  "reason": "integrating kce attempt 13 into epic/hn6",
-  "updated_at": "2026-10-04T19:30:52Z",
+  "sequence": 94,
+  "state": "gating",
+  "reason": "running the integrated gate for kce on 53e5fa9095a9",
+  "updated_at": "2026-10-04T19:31:06Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -73,7 +73,7 @@
     },
     {
       "tick_id": "kce",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 13
     },
     {
