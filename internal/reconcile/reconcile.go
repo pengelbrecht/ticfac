@@ -93,8 +93,9 @@ const (
 	DefaultAutoResumeCap = 12
 
 	// DefaultAbsorptionDepthBound bounds the absorption recursion (tick qjj):
-	// how many absorptions ONE chain may carry before the run stops for a
-	// person. The number is an argument, so here it is.
+	// how many absorptions ONE chain may carry before the run defers the next
+	// link to the backlog (it never halts for a person over it: epic hn6,
+	// run_5c7c16d1). The number is an argument, so here it is.
 	//
 	// The FIRST link needs no argument: a gating defect discovered in the
 	// ground the epic stands on is the absorption this epic (gvc) exists to
@@ -108,16 +109,17 @@ const (
 	// person. Past three, the more likely explanation is not an epic that
 	// needs a fourth chained fix but a criterion mis-judging — each fix
 	// manufacturing the next finding — which is exactly what a person should
-	// look at, with the chain the stop carries to judge it by.
+	// look at, with the chain the deferral carries to judge it by, on the
+	// epic PR.
 	//
-	// The stop is deliberately RARE: the bound governs the recursion — DEPTH,
+	// The deferral is deliberately RARE: the bound governs the recursion — DEPTH,
 	// not breadth — and only GATING findings extend a chain, so an epic that
 	// absorbs ten independent findings at depth one never sees it. Depth is
 	// the honest measure of the failure mode because it counts how far the
 	// run has travelled from the epic anyone asked for; wall clock bounds
 	// the RESOURCE and every attempt already carries one. If the bound trips
 	// often in practice, the criterion is wrong and the bound is hiding it —
-	// the chain the stop carries is the evidence.
+	// the chain the deferral carries is the evidence.
 	DefaultAbsorptionDepthBound = 3
 
 	// DefaultAutoResumeBackoff is the wait before the first automatic
@@ -687,12 +689,13 @@ type Options struct {
 	// many absorptions ONE chain may carry — a gating finding discovered by
 	// the epic's own plan work is the first link, one discovered while fixing
 	// an absorbed defect is the next, and so on. A gating finding whose chain
-	// already carries the bound's worth of links REFUSES to absorb and holds
-	// the run for a person, carrying the whole chain rather than only the
-	// count. Zero or below is the DEFAULT (DefaultAbsorptionDepthBound),
+	// already carries the bound's worth of links is NOT absorbed: it is
+	// deferred to a backlog tick with an owner, carrying the whole chain
+	// rather than only the count, named on the epic PR, and the run carries
+	// on. Zero or below is the DEFAULT (DefaultAbsorptionDepthBound),
 	// never "unbounded": a misconfiguration must not silently unbound the
-	// recursion, because an epic that recurses forever is worse than a stop
-	// — nothing announces it.
+	// recursion, because an epic that recurses forever never closes and
+	// nothing announces it.
 	//
 	// The bound is also a RECORD on the run branch (tick wz0, finding
 	// 95f5ee1a): the first decision that needs it records it, and a cold
@@ -702,9 +705,7 @@ type Options struct {
 	AbsorptionDepthBound int
 
 	// AbsorptionDepthExplicit says the bound was named EXPLICITLY on this
-	// invocation — the person's raise, the escape hatch the depth refusal
-	// itself names ("raise the bound with --absorption-depth and run the epic
-	// again"). An explicit bound WINS over the recorded one and rewrites it;
+	// invocation — the person's raise (--absorption-depth). An explicit bound WINS over the recorded one and rewrites it;
 	// an invocation that names no bound adopts whatever the run branch
 	// records, so a cold restart honours the bound the warm run ran with.
 	// What names it explicitly is the CALLER (the CLI passes the flag only
@@ -1098,13 +1099,13 @@ const (
 	// at, and the run refuses to absorb rather than guessing — the finding
 	// stays a person's, at the close-out hold.
 	StageAbsorptionRefused = "finding_absorption_refused"
-	// StageAbsorptionBoundExceeded is the recursion's bound, said at the
-	// tick whose attempt reported the finding that would extend a chain
-	// past the bound (tick qjj): the refusal reaches the feed as the run's
-	// hold, and this line is the moment itself — the chain it names is what
-	// a person judges the stop by, so it is recorded where the tick's own
-	// story is, not only in the run-level refusal.
-	StageAbsorptionBoundExceeded = "absorption_bound_exceeded"
+	// StageBackloggedPastBound is the recursion's bound, said at the tick
+	// whose attempt reported the finding that would extend a chain past the
+	// bound (tick qjj): the finding is DEFERRED — a backlog tick with an
+	// owner, outside the epic — and the run carries on. The line names the
+	// bound and the chain, because the chain is what a reviewer judges the
+	// deferral by (absorb_bound.go).
+	StageBackloggedPastBound = "finding_backlogged_past_bound"
 
 	// StagePredictionScored is the line the self-measurement leaves (tick
 	// jlv): a prediction made while an acceptance item was unrunnable became
@@ -2716,24 +2717,6 @@ const (
 	RefusedFindingInvalid   = "finding_report_invalid"
 	RefusedFindingUntriaged = "finding_untriaged"
 
-	// The one the ABSORPTION RECURSION adds (tick qjj): a gating finding
-	// would extend an absorption chain that already carries the bound's
-	// worth of links — a defect discovered while fixing an absorbed defect,
-	// discovered while fixing THAT one, and so on. It is a HOLD rather than
-	// a failure because the next actor is a PERSON, and deliberately so:
-	// unbounded, the recursion is an epic that never closes, which in an
-	// unattended factory is worse than a stop because nothing announces it
-	// — so exceeding the bound IS the stop, and the message carries the FULL
-	// CHAIN that produced it, never only the count, so an operator can see
-	// which finding led to which and judge whether the run was right to keep
-	// going. If the bound trips often in practice, the criterion is wrong
-	// and the bound is hiding it. It is distinct from
-	// RefusedFindingUntriaged because that hold asks a person to triage ONE
-	// finding at the close-out, while this one asks them to judge a RUN that
-	// recursed past what it was bounded to — a different question, sent to
-	// the person with the chain as its evidence.
-	RefusedAbsorptionDepth = "absorption_depth_exceeded"
-
 	// RefusedClaimWidth is the tracker refusing a claim because the epic's
 	// declared dispatch width is already full (tk exit 8, tk.ErrDispatchWidth).
 	//
@@ -2943,10 +2926,11 @@ const collapsedMessage = "the tick did not pass"
 //     claims this run does not hold (dz1), or a live foreign claim stands on
 //     the tick it would dispatch (tick 823, finding 08e5bcc0) — both facts
 //     about the world that resolve when the other holder's tick closes, and
-//     holds because the wait is the run's only honest answer;
-//   - RefusedAbsorptionDepth: the absorption recursion reached its bound
-//     (tick qjj) — whether the run was right to keep going is a judgement
-//     about the CHAIN, and the chain the stop carries is a person's to read.
+//     holds because the wait is the run's only honest answer.
+//
+// (The absorption recursion's bound was a hold here until epic hn6's
+// run_5c7c16d1: past the bound the run now defers the finding to the backlog
+// and carries on, so it is no stop at all — absorb_bound.go.)
 //
 // Every other refusal is a repair another RUN can make — a gate that runs
 // again on a fixed tree, an attempt that is redispatched once its blocker
@@ -2955,7 +2939,7 @@ func holdsForAPerson(reason string) bool {
 	switch reason {
 	case RefusedHeld, RefusedUnaddressed, RefusedRejectedWork,
 		RefusedNeedsHuman, RefusedRoleAnswer, RefusedFindingUntriaged,
-		RefusedClaimWidth, RefusedForeignClaim, RefusedAbsorptionDepth, RefusedLandReviewNotReady:
+		RefusedClaimWidth, RefusedForeignClaim, RefusedLandReviewNotReady:
 		return true
 	}
 	return false

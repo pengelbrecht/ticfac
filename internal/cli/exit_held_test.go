@@ -35,7 +35,6 @@ func TestARunThatStoppedHoldingForAPersonExitsHeld(t *testing.T) {
 		reconcile.RefusedFindingUntriaged,
 		reconcile.RefusedNeedsHuman,
 		reconcile.RefusedRoleAnswer,
-		reconcile.RefusedAbsorptionDepth,
 		reconcile.RefusedClaimWidth,
 		reconcile.RefusedForeignClaim,
 		reconcile.RefusedLandReviewNotReady,
