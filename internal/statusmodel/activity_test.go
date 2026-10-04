@@ -118,6 +118,41 @@ func TestActivityBucketsTranscriptEvents(t *testing.T) {
 	}
 }
 
+// TestActivityRedactsTheLastAction: the last_action the model carries is
+// rendered on the dashboard and shipped off-host with the phone snapshot,
+// so a credential in the tool call's argument must not survive the read
+// (tick ghh). The redaction is the transcript reader's own — this test
+// holds the whole pipeline to it: transcript → model.
+func TestActivityRedactsTheLastAction(t *testing.T) {
+	home := t.TempDir()
+	worktree := t.TempDir()
+	writeSessionTranscript(t, home, "pi", worktree,
+		map[string]any{"type": "message", "timestamp": transcriptStamp(testNow.Add(-30 * time.Second)),
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "toolCall", "name": "bash",
+					"arguments": map[string]any{"command": "GH_TOKEN=ghp_0123456789abcdefghijklmnopqrstuv go test ./internal/reconcile"}},
+			}}})
+
+	src := runningEpicSources()
+	src.Activity = TranscriptActivity(home)
+	src.Standing[0].Worktree = worktree
+	model := Build(src)
+
+	if model.Workers == nil || len(*model.Workers) != 1 || (*model.Workers)[0].Activity == nil {
+		t.Fatalf("the census read one standing attempt with a transcript, the model says %+v", model.Workers)
+	}
+	activity := (*model.Workers)[0].Activity
+	if activity.LastAction == nil {
+		t.Fatal("the worker's transcript carries a tool call and its last action reads null")
+	}
+	if strings.Contains(*activity.LastAction, "ghp_0123456789") {
+		t.Errorf("the last action %q carries the token whole — the model ships off-host", *activity.LastAction)
+	}
+	if want := "bash: GH_TOKEN=<redacted> go test ./internal/reconcile"; *activity.LastAction != want {
+		t.Errorf("the last action is %q, want %q", *activity.LastAction, want)
+	}
+}
+
 // TestActivityCountsNudgesWithoutATranscript: the nudge count is the feed's
 // own typed lines, counted for the worker whether or not a transcript could
 // be read — a worker the run nudged but whose harness keeps nothing this
