@@ -3,7 +3,7 @@
   "title": "Cloud host: a WorkerAgent DO per attempt (harness + DO SQLite + watch/steer sockets); the door answers from it",
   "gloss": "cloud WorkerAgent DO",
   "description": "Step 6, no flag: every cloud worker runs as a WorkerAgent DO with its tools in the attempt's FactorySandbox; the dispatch door's state/output/reclaim routes answer from it; hibernatable watch/steer WebSockets.",
-  "notes": "2026-10-04 18:03 - 2026-10-04 - run-epic-43y/tick-4fs/attempt-8: the between-rounds ready check landed in the checkpoint extension (tick 4fs) — this host MUST wire ensureReady: () =\u003e env.ensureWorkspaceReady() (and onRestore for its log) when it installs workspaceCheckpointExtension, or a container lost between rounds still boots empty and the round's file ops fail ENOENT. The residual boundary — a container lost DURING a round, under a file operation, where the run-door RPC has no loss signal — is this host's, which owns the container's lifetime and may call the public ensureWorkspaceReady()/restoreLostWorkspace() ahead of a round it knows the box under.",
+  "notes": "2026-10-04 18:03 - 2026-10-04 - run-epic-43y/tick-4fs/attempt-8: the between-rounds ready check landed in the checkpoint extension (tick 4fs) — this host MUST wire ensureReady: () =\u003e env.ensureWorkspaceReady() (and onRestore for its log) when it installs workspaceCheckpointExtension, or a container lost between rounds still boots empty and the round's file ops fail ENOENT. The residual boundary — a container lost DURING a round, under a file operation, where the run-door RPC has no loss signal — is this host's, which owns the container's lifetime and may call the public ensureWorkspaceReady()/restoreLostWorkspace() ahead of a round it knows the box under.\n2026-10-04 20:45 - ticfac run epic-43y: xd3 try 2 (run dispatch #11) reported a finding the run itself decided — defect \"Cloud workers on the default sdk0 substrate are not WorkerAgents\" (key 5fc1e1302f1a792143b807d074d6076d66f8208877ae0e7dfa3bbd889f38aec6, severity medium, for this repository) is absorbed into the running epic as tick hxd, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/5fc1e1302f1a792143b807d074d6076d66f8208877ae0e7dfa3bbd889f38aec6.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -17,6 +17,6 @@
   "acceptance_criteria": "a cloud attempt runs end to end on staging; door routes tested",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.482312Z",
-  "updated_at": "2026-10-04T16:57:04.08782Z",
+  "updated_at": "2026-10-04T18:45:42.145969Z",
   "started_at": "2026-10-04T16:01:58.469473Z"
 }
