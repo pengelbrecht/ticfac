@@ -2,11 +2,11 @@
 ████████████░░░░░░░░░░░░ 2/4 ticks · 2h9m · ● healthy (recovered: net ×14)
 ✓ plan ◐ waves 2/3 ✓ review ◐ close-out ◐ ci ○ merge                                                  needs you: nothing
 
- TICK  WHAT                             TIER       PIPELINE                         TIME    ATTEMPTS
- 060   cloud worker early-exit nudge    strong     claim ▸ work ▸ gate ▸ merged ✓   49m     1
-  └ +823  re-run holds the stopped claim   frontier   claim ▸ work ▸ gate ▸ merged ✓   34m     2
- 46x   port sandbox verbs to ticfac     frontier   claim ▸ work ▸ ●gate ▸ …         1h      2 ⤴
- v7z   close out phase 7                closeout   claim ▸ work ▸ ✗ci ▸ …           40m     1
+ TICK  WHAT                           TIER     PIPELINE                       TIME ATTEMPTS
+ 060   cloud worker early-exit nudge  strong   claim ▸ work ▸ gate ▸ merged ✓ 49m  1
+  └ +823  re-run holds the stopped claim frontier claim ▸ work ▸ gate ▸ merged ✓ 34m  2
+ 46x   port sandbox verbs to ticfac   frontier claim ▸ work ▸ ●gate ▸ …       1h   2 ⤴
+ v7z   close out phase 7              closeout claim ▸ work ▸ ✗ci ▸ …         40m  1
 
 WORKERS                                       ACTIVITY (10m)  LAST
 46x  glm-5.3 · herdr · herdr pane tick-46x-a6 ▁▃▅█▇▅▃▁▂▅      ran go test ./internal/reconcile (1m ago)  nudged ×1

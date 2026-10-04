@@ -44,10 +44,13 @@ const (
 )
 
 // The frame's fixed geometry: the progress bar's cells, the table's column
-// widths, the workers panel's columns, and the width the recent rule fills
-// when the pane's own width is unknown.
+// caps, the workers panel's columns, and the width the recent rule fills
+// when the pane's own width is unknown. The table's columns are sized to
+// their content up to these caps (tick r3x); the workers panel keeps its
+// fixed columns.
 const (
 	watchBarCells     = 24
+	dashTickCols      = 5 // the identity column's floor: the spec's own layout
 	dashWhatCols      = 32
 	dashTierCols      = 10
 	dashPipeWordsCols = 32
@@ -443,32 +446,85 @@ type dashRow struct {
 	closed bool
 }
 
+// dashCells is one tick row's cells before the table's columns are sized:
+// each cell already carries its styling and its own cap, the column widths
+// come from the widest content the table actually carries — the header
+// label included — and the render pads to the widths that sizing produced.
+type dashCells struct {
+	lead     string // the mark column: the cursor, a child's indent under it
+	id       string
+	what     string
+	tier     string
+	pipe     string
+	time     string
+	attempts string
+	tickID   string
+	closed   bool
+}
+
+// render lays the cells out under the sized columns: one space between
+// columns, every cell padded to its column's width. Trailing padding is
+// left for the frame's trim.
+func (c dashCells) render(showWhat, showTier bool, idW, whatW, tierW, pipeW, timeW, attemptsW int) string {
+	var row strings.Builder
+	row.WriteString(c.lead)
+	row.WriteString(dashPad(c.id, idW))
+	if showWhat {
+		row.WriteString(" " + dashPad(c.what, whatW))
+	}
+	if showTier {
+		row.WriteString(" " + dashPad(c.tier, tierW))
+	}
+	row.WriteString(" " + dashPad(c.pipe, pipeW))
+	row.WriteString(" " + dashPad(c.time, timeW))
+	if showTier {
+		row.WriteString(" " + dashPad(c.attempts, attemptsW))
+	}
+	return row.String()
+}
+
 // dashboardTable is the epic as the spec's fixed table: one row per tick, in
 // plan order (the waves in the tracker's own order, its order inside each
 // wave), children indented under the row named by parent_tick_id, a selected
 // row marked with "▸", absorbed ticks marked with a "+" before their id. An
 // unreadable tracker is said, never silently skipped: a frame that showed an
 // empty table would look like an empty epic.
+//
+// The columns are sized to their content: every column is as wide as the
+// widest cell it carries — the header label included — capped at the
+// layout's own maximum so one long cell cannot eat the pane (tick r3x: the
+// header laid its columns across the full pane with huge gaps no cell
+// filled). The identity column keeps the spec's five-cell floor.
 func dashboardTable(m statusmodel.Model, st watchStyles, width int, selected string) ([]string, []dashRow) {
 	showWhat := width == 0 || width >= watchWhatFrom
 	showTier := width == 0 || width >= watchTierFrom
 	words := width == 0 || width >= watchWordsFrom
-	pipeCols := dashPipeWordsCols
+	pipeCap := dashPipeWordsCols
 	if !words {
-		pipeCols = dashPipeGlyphCols
+		pipeCap = dashPipeGlyphCols
 	}
 
-	head := " " + fmt.Sprintf("%-5s", "TICK")
+	cells := make([]dashCells, 0, 16)
+	if m.Waves != nil {
+		for _, wave := range *m.Waves {
+			for _, tick := range wave.Ticks {
+				cells = append(cells, dashTickCells(tick, st, showWhat, showTier, words, pipeCap, selected))
+			}
+		}
+	}
+	idW, whatW, tierW, pipeW, timeW, attemptsW := dashColumnWidths(cells, showWhat, showTier, pipeCap)
+
+	head := " " + dashPad("TICK", idW)
 	if showWhat {
-		head += " " + fmt.Sprintf("%-*s", dashWhatCols, "WHAT")
+		head += " " + dashPad("WHAT", whatW)
 	}
 	if showTier {
-		head += " " + fmt.Sprintf("%-*s", dashTierCols, "TIER")
+		head += " " + dashPad("TIER", tierW)
 	}
-	head += " " + fmt.Sprintf("%-*s", pipeCols, "PIPELINE")
-	head += " " + fmt.Sprintf("%-*s", dashTimeCols, "TIME")
+	head += " " + dashPad("PIPELINE", pipeW)
+	head += " " + dashPad("TIME", timeW)
 	if showTier {
-		head += " ATTEMPTS"
+		head += " " + dashPad("ATTEMPTS", attemptsW)
 	}
 
 	if m.Waves == nil {
@@ -476,25 +532,58 @@ func dashboardTable(m statusmodel.Model, st watchStyles, width int, selected str
 			line: st.dim("the epic's shape could not be read (the tracker did not answer)"),
 		}}
 	}
-	rows := []dashRow{}
-	for _, wave := range *m.Waves {
-		for _, tick := range wave.Ticks {
-			rows = append(rows, dashRow{
-				line:   dashTickRow(tick, st, showWhat, showTier, words, pipeCols, selected),
-				tickID: tick.TickID,
-				closed: tick.State == "closed",
-			})
-		}
+	rows := make([]dashRow, 0, len(cells))
+	for _, c := range cells {
+		rows = append(rows, dashRow{
+			line:   c.render(showWhat, showTier, idW, whatW, tierW, pipeW, timeW, attemptsW),
+			tickID: c.tickID,
+			closed: c.closed,
+		})
 	}
 	return []string{"", head}, rows
 }
 
-// dashTickRow is one fixed row of the table: the tick's identity (a "▸" when
-// the drill-in cursor is on it, a "+" when the run absorbed it, a " └ " when
-// it is another tick's child), its work's name, its current tier, its
-// pipeline cell, its duration and its attempts. The row's POSITION never
+// dashColumnWidths sizes the table's columns to the widest cell each carries
+// — the header label included — capped at the layout's maxima (the WHAT,
+// TIER and PIPELINE cells already carry theirs from dashCell). Measured by
+// display width, so styled cells size their columns honestly.
+func dashColumnWidths(cells []dashCells, showWhat, showTier bool, pipeCap int) (idW, whatW, tierW, pipeW, timeW, attemptsW int) {
+	idW, whatW, tierW = dashTickCols, len("WHAT"), len("TIER")
+	pipeW, timeW, attemptsW = len("PIPELINE"), len("TIME"), len("ATTEMPTS")
+	for i := range cells {
+		c := &cells[i]
+		idW = max(idW, ansi.StringWidth(c.id))
+		pipeW = max(pipeW, ansi.StringWidth(c.pipe))
+		timeW = max(timeW, ansi.StringWidth(c.time))
+		if showWhat {
+			whatW = max(whatW, ansi.StringWidth(c.what))
+		}
+		if showTier {
+			tierW = max(tierW, ansi.StringWidth(c.tier))
+			attemptsW = max(attemptsW, ansi.StringWidth(c.attempts))
+		}
+	}
+	if whatW > dashWhatCols {
+		whatW = dashWhatCols
+	}
+	if tierW > dashTierCols {
+		tierW = dashTierCols
+	}
+	if pipeW > pipeCap {
+		pipeW = pipeCap
+	}
+	if timeW > dashTimeCols {
+		timeW = dashTimeCols
+	}
+	return idW, whatW, tierW, pipeW, timeW, attemptsW
+}
+
+// dashTickCells is one row of the table's raw cells: the tick's identity (a
+// "▸" when the drill-in cursor is on it, a "+" when the run absorbed it, a
+// " └ " when it is another tick's child), its work's name, its current tier,
+// its pipeline cell, its duration and its attempts. The row's POSITION never
 // depends on any of these — only its cells change.
-func dashTickRow(tick statusmodel.Tick, st watchStyles, showWhat, showTier, words bool, pipeCols int, selected string) string {
+func dashTickCells(tick statusmodel.Tick, st watchStyles, showWhat, showTier, words bool, pipeCap int, selected string) dashCells {
 	id := tick.TickID
 	if tick.Absorbed {
 		id = "+" + id
@@ -503,38 +592,38 @@ func dashTickRow(tick statusmodel.Tick, st watchStyles, showWhat, showTier, word
 	if selected != "" && selected == tick.TickID {
 		mark = "▸"
 	}
-	var row strings.Builder
+	lead := mark
 	if tick.ParentTickID != nil {
 		// A child row indents under its parent — the mark column still
 		// comes first, so the cursor never shifts a row's id.
-		row.WriteString("  └")
+		lead = "  └" + mark
 	}
-	row.WriteString(mark)
-	row.WriteString(fmt.Sprintf("%-5s", id))
+	what := ""
 	if showWhat {
-		what := tick.Gloss
+		what = tick.Gloss
 		if what == "" {
 			what = tick.Title
 		}
-		row.WriteString(" " + dashPad(dashCell(what, dashWhatCols), dashWhatCols))
+		what = dashCell(what, dashWhatCols)
 	}
-	if showTier {
-		tier := ""
-		if tick.Tier != nil {
-			tier = *tick.Tier
-		}
-		row.WriteString(" " + dashPad(dashCell(tier, dashTierCols), dashTierCols))
+	tier := ""
+	if showTier && tick.Tier != nil {
+		tier = dashCell(*tick.Tier, dashTierCols)
 	}
-	row.WriteString(" " + dashPad(dashPipeline(tick.Pipeline, st, words), pipeCols))
+	pipe := dashCell(dashPipeline(tick.Pipeline, st, words), pipeCap)
 	timeCell := ""
 	if tick.DurationSeconds != nil {
-		timeCell = humanDuration(*tick.DurationSeconds)
+		timeCell = dashCell(humanDuration(*tick.DurationSeconds), dashTimeCols)
 	}
-	row.WriteString(" " + dashPad(dashCell(timeCell, dashTimeCols), dashTimeCols))
+	attempts := ""
 	if showTier {
-		row.WriteString(" " + dashAttempts(tick))
+		attempts = dashAttempts(tick)
 	}
-	return row.String()
+	return dashCells{
+		lead: lead, id: id, what: what, tier: tier, pipe: pipe,
+		time: timeCell, attempts: attempts, tickID: tick.TickID,
+		closed: tick.State == "closed",
+	}
 }
 
 // dashPipeline is the row's pipeline cell (hn6 rule 1): the stops one tick
