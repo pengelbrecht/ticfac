@@ -1,3 +1,18 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/hn6/attempt-6/gmo`, base `ea3eb4338d8ce3356ceba8f52622a859c47b0dd3`, harness `pi` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+
+> **BOUNDARY VIOLATION ATTEMPTED.** This agent tried to write tracker state, which the
+> orchestrator owns. The container refused it, so nothing under `.tick/`
+> should have reached this branch — but the attempt is reported rather than
+> silently cleaned, because a model that ignored an explicit instruction is
+> something a human has to see. What it did:
+>
+> - the agent ran `tk --json show gmo`
+> - the agent ran `tk --json tick show gmo`
+> - the agent ran `tk tick show gmo`
+
 # gmo — the watch dashboard shows the epic's state, not only the latest run's
 
 Epic hn6, tick gmo. The operator screenshot (2026-10-01) caught the defect's
