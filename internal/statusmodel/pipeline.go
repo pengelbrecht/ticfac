@@ -625,8 +625,10 @@ func (p *pipelineIndex) hasLaterDispatch(tickID string, attempt int) bool {
 // left — a hold a later resume settled is history, and holdSettledByAResume
 // says so), and the same unblock command that entry carries. Mirrored rather
 // than read because decorateTicks runs before buildWaits assembles the list;
-// one spelling there, one mirror here, and a disagreement between a row's
-// next step and the header's command is a drift this comment points at.
+// the command itself is the shared spelling in commands.go, the same one the
+// header carries — one sentence there, one call here, and a disagreement
+// between a row's next step and the header's command is a drift this
+// comment points at.
 func (p *pipelineIndex) attentionCommand(tickID string) *string {
 	held := latestStage(p.feed, "", reconcile.StageRunHeld)
 	if held == nil || held.TickID == nil || *held.TickID != tickID {
@@ -640,7 +642,7 @@ func (p *pipelineIndex) attentionCommand(tickID string) *string {
 		return &command
 	}
 	if held.Attempt != nil {
-		command := fmt.Sprintf("ticfac settle %s %s %d --release \"<who>\"", p.epicID, tickID, *held.Attempt)
+		command := SettleCommand(p.epicID, tickID, *held.Attempt, "")
 		return &command
 	}
 	return nil
