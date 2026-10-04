@@ -12,8 +12,11 @@
   "attempt": 1,
   "done_item": "A4",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T16:15:17Z",
+  "triaged_at": "2026-10-04T16:15:28Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing 1tm",
+  "promoted_as": "1tm",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "v16",
