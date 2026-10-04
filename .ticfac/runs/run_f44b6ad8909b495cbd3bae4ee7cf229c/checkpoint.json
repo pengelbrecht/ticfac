@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 42,
-  "state": "publishing",
-  "reason": "closing gf0 behind the integrated gate on ffc9d2814769",
-  "updated_at": "2026-10-04T12:51:21Z",
+  "sequence": 43,
+  "state": "running",
+  "reason": "gf0 is closed",
+  "updated_at": "2026-10-04T12:51:29Z",
   "ticks": [
     {
       "tick_id": "q8m",
@@ -42,7 +42,7 @@
     },
     {
       "tick_id": "gf0",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 6
     }
   ],
