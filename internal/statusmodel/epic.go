@@ -19,10 +19,14 @@ package statusmodel
 //     is the LAST run that has records for it: the newest run with dispatch
 //     markers for the tick, else the run whose row the state came from.
 //     "Closed ticks show done with their last run's pipeline/time/attempts."
+//   - Gate evidence accumulates across runs: the gates array is the EPIC's
+//     evidence, per tick (tick ihw) — a closed tick's drill-in reads the
+//     gate rows of the run that closed it, and the newest run's own records
+//     may carry none of them.
 //   - Absorptions and findings accumulate: they are the epic's own history,
 //     keyed by content, and no run's copy is newer than another's.
 //   - Everything else — the run section — stays the newest run's alone; the
-//     merge is never read for workers, cost, waits, gates or the feed.
+//     merge is never read for workers, cost, waits or the feed.
 
 import (
 	"sort"
@@ -50,6 +54,13 @@ type mergedRuns struct {
 	// same key names different dispatches in different runs.
 	markers  map[string][]runstate.Attempt
 	evidence map[string][]runstate.Evidence
+	// allEvidence is EVERY run's evidence records, oldest run first — the
+	// per-tick gate rows the drill-in reads (tick ihw). Evidence is keyed by
+	// content in the record store (the evidence path names its run), so a
+	// union across runs cannot make one dispatch's record pose as another
+	// run's same-numbered one; the drill-in reads the rows of whichever run
+	// worked the tick.
+	allEvidence []runstate.Evidence
 	// absorbed is the union of every run's gated absorptions, by tick id.
 	absorbed map[string]bool
 	// absorptions and findings accumulate across runs, deduplicated by
@@ -101,6 +112,7 @@ func newMergedRuns(current Records, prior []Records) *mergedRuns {
 	}
 	// Owners and per-tick records, per run, newest run's answer surviving.
 	for i, r := range m.runs {
+		m.allEvidence = append(m.allEvidence, r.Evidence...)
 		perTick := map[string][]runstate.Attempt{}
 		for _, a := range r.Attempts {
 			perTick[a.TickID] = append(perTick[a.TickID], a)
@@ -174,6 +186,33 @@ func (m *mergedRuns) ownerIndex() map[string]int { return m.owner }
 
 // markersOf is the owner run's dispatch markers for one tick.
 func (m *mergedRuns) markersOf(tickID string) []runstate.Attempt { return m.markers[tickID] }
+
+// allEvidence is every run's evidence records, oldest run first — the
+// gates array is built from it, so a closed tick's drill-in carries the
+// gate rows of the run that closed it (tick ihw).
+func (m *mergedRuns) evidenceAll() []runstate.Evidence { return m.allEvidence }
+
+// ownerRunID is the run id of the run whose row one tick reads — the run
+// whose attempt numbers the tick's row carries, and the only run its
+// attempt branches and archived reports are ever filed under. The NEWEST
+// run answers `newest` (the id the surfaces were opened on): its records
+// are the caller's own. An earlier run answers its checkpoint's own id —
+// and "" when its records carried none, which the report readers answer as
+// not read: a run id nobody recorded is not the newest run's by default,
+// which was exactly the collision the (run, tick, attempt) key ends.
+func (m *mergedRuns) ownerRunID(tickID, newest string) string {
+	i, ok := m.owner[tickID]
+	if !ok || i < 0 || i >= len(m.runs) {
+		return ""
+	}
+	if i == len(m.runs)-1 {
+		return newest
+	}
+	if cp := m.runs[i].Checkpoint; cp != nil {
+		return cp.RunID
+	}
+	return ""
+}
 
 // duplicateOf reads a tick's own tracker record for a closure as a
 // duplicate: the dedup writer's note ("closed as a duplicate of <id>") or a

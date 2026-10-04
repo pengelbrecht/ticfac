@@ -822,9 +822,8 @@ func (r *Reconciler) mintResolveMerge(resolveHead, head, epicHead string, marker
 	if err != nil {
 		return "", fmt.Errorf("read the tree the resolve-conflict job resolved to: %w", err)
 	}
-	message := fmt.Sprintf("Merge the resolve-conflict job's resolution of %s into %s\n\nticfac run %s: tick %s "+
-		"attempt %d conflicted and was resolved by the resolve-conflict job",
-		marker.TickID, r.branch, r.runID, marker.TickID, marker.Attempt)
+	message := fmt.Sprintf("Merge the resolve-conflict job's resolution of %s into %s\n\n%s conflicted and was resolved by the resolve-conflict job",
+		marker.TickID, r.branch, AttemptMergeNeedle(r.runID, marker.TickID, marker.Attempt))
 	merged, err := r.git.run("", "commit-tree", tree, "-p", resolvedOver, "-p", head, "-m", message)
 	if err != nil {
 		return "", fmt.Errorf("mint the merge of the resolve-conflict job's resolution: %w", err)
@@ -850,9 +849,8 @@ func (r *Reconciler) mergeResolutionOnto(resolution, resolvedOver, epicHead stri
 	}
 	defer remove()
 
-	message := fmt.Sprintf("Merge the resolve-conflict job's resolution of %s into %s\n\nticfac run %s: tick %s "+
-		"attempt %d was resolved against %s; %s has moved to %s since, and the resolution is merged onto it",
-		marker.TickID, r.branch, r.runID, marker.TickID, marker.Attempt, short(resolvedOver), r.branch,
+	message := fmt.Sprintf("Merge the resolve-conflict job's resolution of %s into %s\n\n%s was resolved against %s; %s has moved to %s since, and the resolution is merged onto it",
+		marker.TickID, r.branch, AttemptMergeNeedle(r.runID, marker.TickID, marker.Attempt), short(resolvedOver), r.branch,
 		short(epicHead))
 	if stdout, stderr, unmerged, err := r.mergeKeepingReportsOut(dir, epicHead, message, resolution); err != nil {
 		return "", r.refuse(RefusedMerge, marker.TickID,

@@ -109,10 +109,13 @@ type Sources struct {
 	// spells, null when nothing names the worker.
 	Handle func(tickID string, attempt int) *string
 
-	// Report answers one (tick, attempt) report: its summary and its diff
-	// stats. Nil when there is no reader — the model leaves report null,
+	// Report answers one (run, tick, attempt) report: its summary and its
+	// diff stats. The RUN is the one whose row the tick reads — the run that
+	// dispatched the attempt, whose per-run attempt number the row carries —
+	// because the same (tick, attempt) in two runs names two dispatches (tick
+	// ihw). Nil when there is no reader — the model leaves report null,
 	// which is the honest "the report was not read".
-	Report func(tickID string, attempt int) *ReportInput
+	Report func(runID, tickID string, attempt int) *ReportInput
 
 	// WorkerCost is what the run's host states about what the workers spent —
 	// the factory's own ground-truth number and the river it came from. Nil
@@ -216,9 +219,13 @@ func Build(src Sources) Model {
 	decorateTicks(src, merged, priorHolds, &m)
 	m.Workers = buildWorkers(src, recs)
 	decorateWorkers(src, recs, &m)
-	decorateReports(src, &m)
+	decorateReports(src, merged, &m)
 	m.Health = buildHealth(src.Feed)
-	m.Gates = buildGates(recs.Evidence)
+	// The gates array is the EPIC's evidence, per tick across runs (tick
+	// ihw): a closed tick's gate rows belong to the run that closed it, and
+	// the drill-in reads them wherever the newest run's own records carry
+	// none.
+	m.Gates = buildGates(merged.evidenceAll())
 	m.CI = buildCI(src.CI)
 	m.Cost = buildCost(src, recs)
 	m.Lifecycle = buildLifecycle(src, recs, m)
@@ -584,9 +591,10 @@ func buildWorkers(src Sources, recs Records) *[]Worker {
 	return &workers
 }
 
-// buildGates carries the run's gate evidence per check per head, keyed by the
-// SOURCE the check ran on — the rule the gate's own evidence learned the
-// hard way (a run writes .ticfac/ to the branch it gates).
+// buildGates carries the epic's gate evidence per check per head, merged
+// per tick across runs — keyed by the SOURCE the check ran on, the rule the
+// gate's own evidence learned the hard way (a run writes .ticfac/ to the
+// branch it gates).
 func buildGates(evidence []runstate.Evidence) []Gate {
 	gates := []Gate{}
 	for _, e := range evidence {

@@ -234,8 +234,10 @@ type Model struct {
 
 	Health Health `json:"health"`
 
-	// Gates is the run's gate evidence, per check per head, exactly as the
-	// records state it. Empty when the run recorded none.
+	// Gates is the EPIC's gate evidence, per check per head, merged per tick
+	// across runs (tick ihw) — a closed tick's rows belong to the run that
+	// closed it. Exactly as the records state it; empty when no run recorded
+	// any.
 	Gates []Gate `json:"gates"`
 
 	// CI is what the forge says on the epic PR's head, per check. Null when
