@@ -169,7 +169,6 @@ The tests are split by what they can prove where:
   processes. The node suite exists because a shell behaviour test that
   never runs a shell certifies nothing, and workerd cannot run one.
 
-<<<<<<< HEAD
 ## The local worker host (epic 43y step 7, tick hpk)
 
 - **`runLocalWorker`** (`src/local/worker-host.ts`): the process the Go
@@ -210,16 +209,6 @@ The tests are split by what they can prove where:
   from the storage without re-running the tool, and a follow-up relaunch
   continuing the SAME conversation.
 
-## What comes next (the epic's steps)
-
-6. The `WorkerAgent` DO host — this package's `HarnessStorage` DO is its
-   seed, and it is what wires `FactorySandboxEnv` to the SANDBOXES_V1 stub
-   the `run` door was built for.
-8. Watch surfaces (`ticfac watch` from the commit stream), and the proof
-   runs (kill the host mid-tool, destroy the container mid-turn, deploy
-   mid-run) — the wip checkpoints, the restore and the local host's resume
-   here are the machinery those runs will exercise.
-=======
 ## The attempt host (epic 43y step 6, tick xd3)
 
 - **`WorkerAttemptHost`** (`src/host/worker-attempt.ts`): one worker attempt
@@ -254,10 +243,9 @@ The tests are split by what they can prove where:
 
 ## What comes next (the epic's steps)
 
-7. The local Node host, on `createGuardedNodeExecutionEnv`.
-8. Watch surfaces, and the proof runs (kill the host mid-tool, destroy the
-   container mid-turn, deploy mid-run) — the wip checkpoints and the
-   restore here are the machinery those runs will exercise; the WorkerAgent's
-   watch socket and steer route are what `ticfac watch` and the stuck nudge
-   reach in the cloud.
->>>>>>> a39dccf637466bf9d0a1edb4fc4249c8dbdb556e
+8. Watch surfaces (`ticfac watch` from the commit stream), and the proof
+   runs (kill the host mid-tool, destroy the container mid-turn, deploy
+   mid-run) — the wip checkpoints, the restore and the local host's resume
+   here are the machinery those runs will exercise; the WorkerAgent's watch
+   socket and steer route are what `ticfac watch` and the stuck nudge reach
+   in the cloud, as the local host's steer socket is what they reach locally.
