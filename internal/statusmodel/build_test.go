@@ -1366,14 +1366,26 @@ func TestTheFeedLastRunFinishedLineIsTheRunsOwnWord(t *testing.T) {
 	if w := mergeWait([]runfeed.Event{failed, completed}); w == nil || w.Kind != WaitMerge {
 		t.Errorf("a run whose last run_finished names its completion waits on %+v, want the merge", w)
 	}
-	// A failed ending is not a completion (the merge stays unstated), and
-	// since the run is not going it needs the one thing nothing makes for
-	// itself: the resume — the dead-run wait the ended run now states
-	// (tick jkb), with the run's own failure worded once.
-	if w := mergeWait([]runfeed.Event{failed}); w == nil || w.Kind != WaitDeadRun ||
-		!strings.Contains(w.What, "failed") || w.NeedsPerson != true ||
-		w.UnblockCommand == nil || *w.UnblockCommand != "ticfac run-epic 2jn" {
-		t.Errorf("a run whose only run_finished names a failure waits on %+v, want its own resume: a failed ending is not a completion, and only a person starts it again", w)
+	// A failed ending is not a completion — no merge wait — and with no
+	// record this checkout could read, no person's wait either: the
+	// command a resume names is one this checkout types, and a run whose
+	// records it cannot read is not its to command (tick jkb). The ending
+	// is still stated — the phase, the verdict — below, in the same test.
+	if w := mergeWait([]runfeed.Event{failed}); w != nil {
+		t.Errorf("a run whose only run_finished names a failure waits on %+v, want nothing: a failed ending is not a completion, and a run this checkout cannot read is not its to resume", w)
+	}
+	src := runningEpicSources()
+	src.Records = &Records{}
+	src.Feed = []runfeed.Event{failed}
+	src.Standing, src.StandingRead, src.Session = nil, false, nil
+	src.Liveness = LivenessInput{Alive: false, State: "failed",
+		Reason: "the factory's record says failed", Source: "workflow-record"}
+	model := Build(src)
+	if model.Lifecycle.Phase != PhaseFailed {
+		t.Errorf("a run whose own last word says failed reads phase %q, want failed: the ending is stated even where the wait is not", model.Lifecycle.Phase)
+	}
+	if model.Health.Verdict.State != VerdictStopped {
+		t.Errorf("a failed run's verdict is %q, want stopped", model.Health.Verdict.State)
 	}
 }
 

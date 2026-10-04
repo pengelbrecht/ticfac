@@ -1042,8 +1042,17 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 	// needs-you list carries both entries either way. A cancelled run is
 	// deliberately quiet (its own terminal answer stands), and a completed
 	// one waits on the merge below.
+	//
+	// The wait is stated only where this checkout could read the run's own
+	// durable records (a checkpoint it holds, terminal or not — the same
+	// boundary the dead-run wait's liveness exemption holds for a foreign
+	// cloud run): the command it names is one THIS checkout types, and a run
+	// whose records live on another project's origin is not this checkout's
+	// to resume — the ending is still stated (the phase, the verdict), but
+	// no wait of this repo's commands may claim a person for it.
 	if !src.Liveness.Alive {
-		if ending := runEnding(src, recs); ending == endFailed || ending == endStopped {
+		if ending := runEnding(src, recs); recs.Checkpoint != nil &&
+			(ending == endFailed || ending == endStopped) {
 			reason, since := endedRunReason(src, recs, ending)
 			w := Wait{Kind: WaitDeadRun, NeedsPerson: true}
 			switch {
