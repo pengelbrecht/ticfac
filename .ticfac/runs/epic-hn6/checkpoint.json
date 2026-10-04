@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 57,
-  "state": "collecting",
-  "reason": "collecting ghh attempt 8",
-  "updated_at": "2026-10-04T18:35:58Z",
+  "sequence": 58,
+  "state": "integrating",
+  "reason": "integrating ghh attempt 8 into epic/hn6",
+  "updated_at": "2026-10-04T18:36:45Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -48,7 +48,7 @@
     },
     {
       "tick_id": "ghh",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 8
     },
     {
