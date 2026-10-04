@@ -3,10 +3,10 @@
   "title": "Final review of hn6 (watch becomes a dashboard)",
   "gloss": "review hn6",
   "description": "Review hn6's full epic diff against its description, rules 1-8 and acceptance A1-A6. In particular: one status model, two renderers — the terminal dashboard, bare overview and phone page take every word from ticfac.status.v1 (A5); rule 7 honesty — no path prints $0.00 for unmetered spend; stale claims — grep watch_view.go, watch.go, overview.go, phone.ts and statusmodel doc comments for sentences the rewrite falsified (e.g. 'no keys', 'keep lines above the block', 'only Go reads it today'). A6: J (u4l) proves the layout properties in the gate; the Bombadil-in-CI half is z7w's (outside this epic) — record whether z7w has landed and say so in the verdict rather than holding on it. Fold findings by seam.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "c2u",
     "3rc",
@@ -45,5 +45,6 @@
   "acceptance_criteria": "REVIEW-VERDICT recorded; findings resolved or filed",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-28T18:41:20.493309Z",
-  "updated_at": "2026-10-01T11:01:25.135832Z"
+  "updated_at": "2026-10-04T13:53:29.23020171Z",
+  "started_at": "2026-10-04T13:53:29.23020061Z"
 }
