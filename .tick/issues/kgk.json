@@ -3,6 +3,7 @@
   "title": "Execution environments: FactorySandboxEnv (replay-safe bash) and a guarded local env",
   "gloss": "execution environments",
   "description": "Step 3: FactorySandboxEnv implementing the FileSystem subset over short commands plus a replay-safe tracked bash (nonce memo, reattach via listProcesses) with the boundary-guard PATH; a FactorySandbox.run door (start, wait, read in one RPC); local NodeExecutionEnv with the same guard.",
+  "notes": "2026-10-04 16:47 - ticfac run epic-43y: kgk try 1 (run dispatch #2) merged into epic/43y as b5f89b292397; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -14,6 +15,6 @@
   "acceptance_criteria": "tests: kill mid-bash then resume reattaches without re-running; the guard refuses tracker writes",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.257374Z",
-  "updated_at": "2026-10-04T13:13:48.7265Z",
+  "updated_at": "2026-10-04T14:47:35.434685Z",
   "started_at": "2026-10-04T13:13:48.7265Z"
 }
