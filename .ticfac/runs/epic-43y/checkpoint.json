@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 37,
-  "state": "dispatching",
-  "reason": "dispatching dwn as attempt 6",
-  "updated_at": "2026-10-04T14:47:51Z",
+  "sequence": 38,
+  "state": "running",
+  "reason": "dwn is running as attempt 6",
+  "updated_at": "2026-10-04T14:48:02Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -24,7 +24,8 @@
     },
     {
       "tick_id": "dwn",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 6
     },
     {
       "tick_id": "pom",
