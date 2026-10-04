@@ -16,5 +16,6 @@ minimumReleaseAgeExclude:
 # for the whole tree, and one wrangler (the pool reads wrangler.toml through
 # its own copy): the ones the deploy uses.
 overrides:
-  miniflare: 5.20260930.0-alpha
-  wrangler: 4.145.0
+  miniflare: 5.20261001.0-alpha
+  wrangler: 4.147.0
+  workerd: 1.20261004.1
