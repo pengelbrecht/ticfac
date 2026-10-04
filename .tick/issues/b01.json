@@ -2,6 +2,7 @@
   "id": "b01",
   "title": "Review and close-out read done when no role-carrying ticks exist",
   "description": "roleState (internal/statusmodel/build.go:748) answers PhaseStateDone for a role with no role-carrying ticks in the graph, so the epic-across-runs fixture — a run that failed at boot in waves and whose graph carries no review/closeout ticks — pins '✓ review ✓ close-out' in the golden's phase bar. The model suite pins the pending answer only for a graph that carries such ticks (build_test.go:327), leaving this direction unpinned. Worth a tick to either pin it deliberately or change the answer for a run that never reached the phase.\nevidence: internal/statusmodel/build.go:748-771; internal/cli/testdata/watch_dashboard_epic_state.txt line 3\n\nticfac run epic-hn6 filed this backlog tick from the finding 0b556650d3c65d39a27b58794d514e05cf00f28f7afeb781b432e73b7ee830b7 (reported by run-epic-hn6/tick-qwb/attempt-14): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/0b556650d3c65d39a27b58794d514e05cf00f28f7afeb781b432e73b7ee830b7.json on the run branch.",
+  "notes": "2026-10-04 21:26 - ticfac run epic-hn6: created by absorbing finding 0b556650d3c65d39a27b58794d514e05cf00f28f7afeb781b432e73b7ee830b7 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-hn6/absorptions/0b556650d3c65d39a27b58794d514e05cf00f28f7afeb781b432e73b7ee830b7.json on epic/hn6, and it says: the classifier put 0.15 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-hn6/tick-qwb/attempt-14",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-04T19:25:59Z",
-  "updated_at": "2026-10-04T19:25:59Z"
+  "updated_at": "2026-10-04T19:26:05.365685Z"
 }
