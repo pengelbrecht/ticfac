@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 7,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "watchRunElapsed takes the earliest tries[].dispatched_at to generated_at; no contract field carries it (so the phone cannot show it) and it is never clamped at the run's end, so a finished run's header keeps counting.\nevidence: internal/cli/watch_view.go:1205-1235\n\nticfac run epic-hn6 created this tick by absorbing the finding b0b3036b8743c6314f8549742e15d4a321f31aaf05b8c676af6c3f06394ac946 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/b0b3036b8743c6314f8549742e15d4a321f31aaf05b8c676af6c3f06394ac946.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "e6g",
+    "title": "Run elapsed is TUI-derived, not in the model, and grows after the run ends"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.38,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.12,
+      "design": 0.12,
+      "diagnosis": 0.5,
+      "mechanical": 0.24,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1280,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T16:34:15Z",
+  "answered_at": "2026-10-04T16:34:15Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "e6g",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "c706ed32f84057444c7dc5afdb172d438ef8e604",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
