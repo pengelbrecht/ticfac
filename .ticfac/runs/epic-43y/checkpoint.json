@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 75,
-  "state": "collecting",
-  "reason": "collecting xd3 attempt 11",
-  "updated_at": "2026-10-04T18:45:18Z",
+  "sequence": 76,
+  "state": "integrating",
+  "reason": "integrating xd3 attempt 11 into epic/43y",
+  "updated_at": "2026-10-04T18:47:07Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "xd3",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 11
     },
     {
