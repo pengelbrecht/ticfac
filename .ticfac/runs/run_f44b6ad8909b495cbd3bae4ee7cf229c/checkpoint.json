@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 17,
-  "state": "running",
-  "reason": "tt6 is running as attempt 3",
-  "updated_at": "2026-10-04T10:06:00Z",
+  "sequence": 18,
+  "state": "dispatching",
+  "reason": "dispatching v2f as attempt 4",
+  "updated_at": "2026-10-04T10:06:09Z",
   "ticks": [
     {
       "tick_id": "q8m",
