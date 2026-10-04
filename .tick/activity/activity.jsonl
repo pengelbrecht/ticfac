@@ -2378,3 +2378,4 @@
 {"ts":"2026-10-04T19:34:41.491553Z","tick":"c65","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"The listing's classifier reads a mid-run dead run as done"}}
 {"ts":"2026-10-04T19:39:36.608345Z","tick":"s71","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-04 21:39 - ticfac run epic-hn6: s71 try 1 (run dispatch #15) merged into epic/hn6 as 0163f6d7f8b0; the integrated gate (go, ts) passed.","title":"Tail's tick#try prefix counted from 5 recent events disagrees with the model"}}
 {"ts":"2026-10-04T19:39:40.423474Z","tick":"s71","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"Tail's tick#try prefix counted from 5 recent events disagrees with the model"}}
+{"ts":"2026-10-04T19:40:04.834753Z","tick":"onv","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"A stopped run's ETA displaces the progress bar at width 120"}}
