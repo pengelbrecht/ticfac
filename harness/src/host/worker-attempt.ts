@@ -210,6 +210,12 @@ export type WorkerAttemptDeps = {
   readonly guardDir?: string | null;
   /** Extension failures pi-durable does not fail an operation for. */
   readonly onReport?: (error: unknown) => void;
+  /**
+   * Called each time this life opens the attempt's conversation — where a
+   * host attaches its watchers (the WorkerAgent's sockets) to the live
+   * harness. Never awaited; a throw is reported, not the attempt's.
+   */
+  readonly onConversation?: (live: { harness: Harness; conversation: Conversation }) => void;
 };
 
 /** What a parsed boot handoff carries. */
@@ -637,6 +643,11 @@ export class WorkerAttemptHost {
     });
     this.harness = harness;
     this.conversation = conversation;
+    try {
+      this.deps.onConversation?.({ harness, conversation });
+    } catch (error) {
+      this.report(error);
+    }
     return { harness, conversation };
   }
 

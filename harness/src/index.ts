@@ -88,6 +88,13 @@ export {
 // cloud WorkerAgent Durable Object hosts.
 
 export {
+  type AgentEvent,
+  type AgentEventStream,
+  gatewayModelAccess,
+  openDurableObjectStorage,
+  watchAttemptEvents,
+} from "./host/cloud.js";
+export {
   type BootHandoff,
   HARNESS_STATUS_DONE,
   HARNESS_STATUS_UNANSWERED,
