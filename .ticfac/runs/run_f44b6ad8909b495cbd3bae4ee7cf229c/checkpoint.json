@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 45,
-  "state": "running",
-  "reason": "quz is running as attempt 7",
-  "updated_at": "2026-10-04T12:51:56Z",
+  "sequence": 46,
+  "state": "collecting",
+  "reason": "collecting quz attempt 7",
+  "updated_at": "2026-10-04T13:37:11Z",
   "ticks": [
     {
       "tick_id": "q8m",
