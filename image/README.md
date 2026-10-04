@@ -18,7 +18,7 @@ way, at model prices.
 |---|---|
 | `Dockerfile` | The image. Every version and checksum is pinned in one ARG block. |
 | `entrypoint.sh` | Installed as `/usr/local/bin/ticks-orchestrator` — the ORCHESTRATOR run entrypoint. |
-| `worker.sh` | Installed as `/usr/local/bin/ticks-worker` — the PER-TICK WORKER run entrypoint, plus `--probe` and `--cancel`. |
+| `worker.sh` | Installed as `/usr/local/bin/ticks-worker` — the PER-TICK WORKER run entrypoint, plus `--probe`, `--cancel`, and the `--boot`/`--finish` phases. |
 | `common.sh` | Installed as `/usr/local/share/ticks/common.sh` — the role-neutral half both entrypoints source. A library, not an entrypoint. |
 | `preflight.sh` | Installed as `/usr/local/bin/ticks-preflight` — the Environment pre-flight. |
 | `build.sh` | Builds and optionally pushes, tagged with the tk version the Dockerfile pins. |
@@ -137,6 +137,50 @@ is on disk, and the boot checks for it. It still pushes a report, because a
 cancelled container that pushes nothing is indistinguishable from one that was
 never dispatched.
 
+### The boot and finish phases (`--boot` / `--finish`)
+
+The all-in-one default is one process: boot, harness, finish. The pi-durable
+worker host (epic 43y) runs the same halves as **two commands around a
+conversation it owns**, because a durable conversation has no process whose
+exit status is the agent's:
+
+```
+ticks-worker --boot        # the env's first command: inputs, gateway, model
+                            # route, clone, branch, probes, toolchain, setup,
+                            # pre-flight, boundary guard, prompt
+
+ticks-worker --finish <status>   # run by the host once the conversation
+                                  # settles: boundary notes, sweep, salvage,
+                                  # report, container facts, commit, push
+```
+
+`--boot` faults with the all-in-one's OWN classes (exit 2-8, 13-15) and still
+pushes the boot-stopped marker branch beside the worker branch (#176). On
+success it prints the handoff the host submits to the conversation:
+
+```
+ticks-worker: ticks-worker-boot-ok branch=<branch> result=RESULT-<tick>.md
+ticks-worker-boot-prompt-begin
+<the rendered prompt, whole and verbatim>
+ticks-worker-boot-prompt-end
+```
+
+It also records the branch it resolved in the state dir — adoption can rename
+the branch, and the finish phase (a second process) cannot re-derive what it
+pushes.
+
+`--finish` takes the conversation's outcome as an exit status (0 for a settled
+run, non-zero for an aborted one — the wall deadline's `abort()` is the host's
+to call), and decides the same exit codes 9/10/11 from the same git facts as
+the all-in-one. Its follow-ups — the early-exit nudge (060) and the report
+linter pushback (#183) — are the host's `onYield` hook
+(`harness/src/worker-contract.ts`), in the SAME conversation rather than as
+process relaunches.
+
+The args and markers are pinned in `contracts/worker-boot-contract.json` like
+the probe and cancel markers, read by `internal/sandboximage` and
+`cloudflare/src/worker-boot.ts`.
+
 ### Worker inputs
 
 Everything in *Entrypoint contract* below applies, minus `TICKS_PHASE`,
@@ -150,7 +194,7 @@ plans no waves and dispatches nobody), plus:
 | `TICKS_WORKER_SETUP` | no | `always` (default) or `skip` — whether this worker runs the repository's `[sandbox]` setup. See below. |
 | `TICKS_WORK_BASE_SHA` | no | For a CARRIED attempt only: the full commit the carried work was cut from (`TICKS_BASE_SHA` is then the released attempt's head). A worker that adds nothing to carried work that differs from this base — the report aside — exits 0 rather than no-work (10), because the carried work is the attempt's delivery (epic hn6, run_3f034e68). Unreadable or equal to the base, it changes nothing. |
 | `TICKS_WORKER_TIMEOUT` | no | Seconds the harness may run before the container stops waiting and pushes what it has; `0` (default) leaves it unbounded. Derived per run from its wall-clock allowance — see below. |
-| `TICKS_WORKER_STATE_DIR` | no | Where the container keeps the harness pid and any lodged cancellation, so `--cancel` (a second process) can find them. Defaults to `/tmp/ticks-worker`; overridden only by the repository's tests. |
+| `TICKS_WORKER_STATE_DIR` | no | Where the container keeps the harness pid, any lodged cancellation, and the branch the boot resolved (for the finish phase, a second process), so `--cancel` and `--finish` can find them. Defaults to `/tmp/ticks-worker`; overridden only by the repository's tests. |
 | `TICKS_WORKER_CANCEL_KILL_S` | no | Seconds `--cancel` waits after `SIGTERM` before `SIGKILL` (default 10). |
 | `TICKS_WORKER_BRANCH` | derived | **Output, not input.** `tick/<epic>/<tick>`, exported for everything the harness spawns. |
 

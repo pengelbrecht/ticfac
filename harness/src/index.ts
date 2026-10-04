@@ -59,3 +59,24 @@ export {
   type WorkspaceGit,
   workspaceCheckpointExtension,
 } from "./workspace/checkpoints.js";
+
+// ------------------------------------------------- worker contract hooks ---
+// Epic 43y step 5 (tick pom): the report linter pushback (#183) and the
+// early-exit nudge (060) as onYield follow-ups, and the wall deadline as
+// abort().
+
+export {
+  armWallDeadline,
+  runWorkerReportCheck,
+  shellQuote,
+  type WallDeadline,
+  type WallDeadlineTarget,
+  WORKER_HEADLESS_LINE,
+  WORKER_MAX_NUDGES,
+  WORKER_MAX_PUSHBACKS,
+  WORKER_REPORT_CHECKER,
+  type WorkerContractOptions,
+  workerNudgeMessage,
+  workerOnYield,
+  workerReportCheckCommand,
+} from "./worker-contract.js";

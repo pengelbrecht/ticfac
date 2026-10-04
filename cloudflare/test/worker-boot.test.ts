@@ -4,6 +4,11 @@ import {
   attemptLandingBranch,
   ORCHESTRATOR_COMMAND,
   WORKER_ACTOR,
+  WORKER_BOOT_ARG,
+  WORKER_BOOT_COMMAND,
+  WORKER_BOOT_MARKER,
+  WORKER_BOOT_PROMPT_BEGIN,
+  WORKER_BOOT_PROMPT_END,
   WORKER_BRANCH_PREFIX,
   WORKER_CANCEL_ARG,
   WORKER_CANCEL_COMMAND,
@@ -13,6 +18,8 @@ import {
   WORKER_DEFAULT_HARNESS,
   WORKER_DEFAULT_MODEL,
   WORKER_EXIT,
+  WORKER_FINISH_ARG,
+  WORKER_FINISH_COMMAND,
   WORKER_PROBE_ARG,
   WORKER_PROBE_COMMAND,
   WORKER_PROBE_MARKER,
@@ -59,6 +66,17 @@ describe("the worker boot contract", () => {
     expect(WORKER_CANCEL_COMMAND).toBe(contract.cancel_command);
     expect(WORKER_CANCEL_MARKER).toBe(contract.cancel_marker);
     expect(WORKER_CANCEL_REPORT_MARKER).toBe(contract.cancel_report_marker);
+    // The boot/finish phases (epic 43y, tick pom): the pi-durable worker
+    // host runs the same halves the all-in-one runs, as two commands, and
+    // the spellings are the contract's — a host that invents its own second
+    // spelling drifts the way the probe marker once nearly did.
+    expect(WORKER_BOOT_ARG).toBe(contract.boot_arg);
+    expect(WORKER_BOOT_COMMAND).toBe(contract.boot_command);
+    expect(WORKER_BOOT_MARKER).toBe(contract.boot_marker);
+    expect(WORKER_BOOT_PROMPT_BEGIN).toBe(contract.boot_prompt_begin);
+    expect(WORKER_BOOT_PROMPT_END).toBe(contract.boot_prompt_end);
+    expect(WORKER_FINISH_ARG).toBe(contract.finish_arg);
+    expect(WORKER_FINISH_COMMAND).toBe(contract.finish_command);
     expect(WORKER_ACTOR).toBe(contract.worker_actor);
     expect(WORKER_BRANCH_PREFIX).toBe(contract.branch_prefix);
     // The boundary guard's two strings (tick dxk). The refusal is the

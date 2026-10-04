@@ -39,6 +39,30 @@ What is in it today:
   on staging against the real route: attribution in the AI Gateway's own logs,
   and a revoked token stopping the next request (`proof/README.md`).
 
+## The worker contract as hooks (epic 43y step 5, tick pom)
+
+- **`workerOnYield`** (`src/worker-contract.ts`): the early-exit nudge
+  (tick 060) and the report linter pushback (#183) as `onYield` follow-ups
+  in the SAME conversation — the port of `image/worker.sh`'s
+  nudge/pushback loop (which re-prompted a relaunched process) onto the
+  durable path, where `{ continue }` simply appends the next user message
+  and the run continues. The bounds are the shell's own (2 and 2, the Go
+  supervisor's `MaxNudges`/`MaxLintPushbacks`), counted per conversation
+  in the harness process — a `continue` hands the run to a successor
+  generation, so a task memo would reset every follow-up; the process
+  scope matches the shell's own per-boot loop, and the wall is the outer
+  bound.
+- **`armWallDeadline`**: the wall as `abort()` — the host arms it before
+  the conversation runs and cancels it when it settles; an armed timer
+  left behind would abort the NEXT submission. Note the semantic the host
+  (step 6) has to live with: `Conversation.abort()` marks and waits for
+  the conversation to go idle, so a tool already running finishes first —
+  abort stops the NEXT model call, not the tool in flight.
+- **The container's half** of the step is `image/worker.sh --boot` /
+  `--finish`, and the args and markers both halves share are pinned in
+  `contracts/worker-boot-contract.json` 1.2.0, asserted by
+  `internal/sandboximage` and `cloudflare/src/worker-boot.ts`.
+
 The suites run in CI (the `typescript` job of `.github/workflows/ci.yml`),
 not in the per-tick gate: same split as the factory suite — the gate covers
 contracts and types, CI covers behaviour.
@@ -127,7 +151,6 @@ The tests are split by what they can prove where:
 
 ## What comes next (the epic's steps)
 
-5. The worker contract as hooks and phases.
 6. The `WorkerAgent` DO host — this package's `HarnessStorage` DO is its
    seed, and it is what wires `FactorySandboxEnv` to the SANDBOXES_V1 stub
    the `run` door was built for.
