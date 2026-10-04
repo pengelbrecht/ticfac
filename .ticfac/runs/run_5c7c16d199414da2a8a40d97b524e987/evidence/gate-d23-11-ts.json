@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-d23-11-ts",
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "d23",
+    "attempt": 11,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "0c9bc0d86c6cc7a628e17d0fde3d20035728871f",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "integrated",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:1f6cbd8a30cabbefe3d0ee617c9eebec26666f32faf97c368bfa209ed96cbd13",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "ts",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit"
+    ]
+  },
+  "started_at": "2026-10-04T06:09:00Z",
+  "finished_at": "2026-10-04T06:14:00Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "Lockfile is up to date, resolution step is skipped\nProgress: resolved 1, reused 0, downloaded 0, added 0\nPackages: +88\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\nProgress: resolved 88, reused 88, downloaded 0, added 88, done\n\ndependencies:\n+ @cloudflare/sandbox 0.12.7\n\ndevDependencies:\n+ @biomejs/biome 2.5.13\n+ @cloudflare/vitest-pool-workers 0.21.3\n+ @cloudflare/workers-types 5.20261001.1\n+ esbuild 0.28.1\n+ miniflare 5.20260930.0-alpha\n+ typescript 5.9.3\n+ vite 8.2.1\n+ vitest 4.1.11\n+ wrangler 4.145.0\n\nDone in 5.1s using pnpm v11.0.6\n\u001b[0m\u001b[34mChecked 148 files in 1316\u001b[0m\u001b[0m\u001b[2m\u001b[34mms\u001b[0m\u001b[0m\u001b[34m.\u001b[0m\u001b[0m\u001b[34m No fixes applied.\u001b[0m\ncontracts: ok — 16 contract(s) at bundle 1.4.0 read in place from \u003credacted-host-path\u003e/contracts (mode: workspace)\n",
+    "stderr": "$ biome ci --error-on-warnings\n$ node scripts/contracts.mjs check\n",
+    "truncated": false,
+    "redacted": true,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:ae6c7f5eb23105c6b81110942c8c13f00c89d15954ed99abc65f468452ffec45",
+  "persistence_uri": "git:refs/heads/epic/hn6:.ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/evidence/gate-d23-11-ts.json"
+}
