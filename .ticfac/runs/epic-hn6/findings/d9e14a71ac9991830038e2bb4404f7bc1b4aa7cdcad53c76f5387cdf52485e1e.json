@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "d9d",
   "attempt": 6,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T18:28:33Z",
+  "triaged_at": "2026-10-04T18:28:46Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing tfq",
+  "promoted_as": "tfq",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "d9d",
