@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "For a cloud run (id run_…), every surface that spells the clearing command for the run's OWN untriaged findings — the close-out hold's triagePointer and the status model's WaitFinding attention — names `ticfac triage <epic>`, whose --run-id default resolves to the local id epic-<epic>: a store a cloud run never writes. A person following the named command finds \"run epic-<epic> has no findings drafted for triage\" and must discover --run-id on their own, while the hold the command was meant to clear stands. TriageCommandForRun already exists and is what this tick wired for prior runs' drafts; the current-run sites are the remaining half of the same seam.\nevidence: internal/statusmodel/commands.go:35 (TriageCommand) used at internal/statusmodel/build.go:805 and :1007; internal/reconcile/findings.go:370 (triagePointer in the close-out hold); the wrong default resolves at internal/cli/findings.go:121 runID = runIDOfEpic(epicID)\n\nticfac run run_5c7c16d199414da2a8a40d97b524e987 created this tick by absorbing the finding b30da19b9556f901861dc6a5918c566a0151b1dfcabc23b588e9d3bda330780b (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-d23/attempt-11): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/b30da19b9556f901861dc6a5918c566a0151b1dfcabc23b588e9d3bda330780b.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "q8m",
+    "title": "A cloud run's own triage command names the local run id, which holds no drafts"
+  },
+  "response": {
+    "choice": "translation",
+    "confidence": 0.52,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.05,
+      "design": 0,
+      "diagnosis": 0.03,
+      "mechanical": 0.3,
+      "translation": 0.62
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1537,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T08:52:10Z",
+  "answered_at": "2026-10-04T08:52:10Z",
+  "provenance": {
+    "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
+    "tick_id": "q8m",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "03373ac86a4b12136fa5df50c0659b718bf35420",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
