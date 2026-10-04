@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 61,
-  "state": "running",
-  "reason": "4fs is closed",
-  "updated_at": "2026-10-04T16:04:56Z",
+  "sequence": 62,
+  "state": "collecting",
+  "reason": "collecting xd3 attempt 10",
+  "updated_at": "2026-10-04T16:56:50Z",
   "ticks": [
     {
       "tick_id": "92k",
