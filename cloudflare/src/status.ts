@@ -104,6 +104,10 @@ export type StatusTick = {
   parent_tick_id?: string | null;
   duration_seconds?: number | null;
   tries?: StatusTry[];
+  /** The tick this one duplicates, when the tracker closed it as a later
+   *  promotion of the same finding — the work is the named tick's. Null on
+   *  every tick that is its own work (hn6, tick gmo). */
+  duplicate_of?: string | null;
 };
 
 /**

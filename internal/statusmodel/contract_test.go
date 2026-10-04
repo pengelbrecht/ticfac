@@ -738,6 +738,15 @@ func goldenLineDispatchesLater(line *runfeed.Event, tickID string, attempt int) 
 	return false
 }
 
+// isLive is the contract suite's elapsed rule over a golden document (one
+// run's model): the state says dispatched or reported, or a standing
+// worktree answers for it. The BUILDER's own live question is
+// isLiveAttempt, which also knows which run's records the state came from —
+// a state an earlier run wrote is history, not a present tense.
+func isLive(state string, stands bool) bool {
+	return stands || state == tickDispatched || state == tickReported
+}
+
 // goldenStandsFor is the census half of workState's and isLive's standing
 // question, over the workers panel the document carries: one entry per
 // standing attempt, named by tick and attempt.

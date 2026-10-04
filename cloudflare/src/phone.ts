@@ -308,6 +308,7 @@ function localRow(snapshot: StoredSnapshot, now: number): RunRow {
         parent_tick_id: tick.parent_tick_id,
         duration_seconds: tick.duration_seconds,
         tries: tick.tries,
+        duplicate_of: tick.duplicate_of ?? null,
       });
     }
   }
@@ -411,6 +412,9 @@ table.ticks-table { border-collapse: collapse; margin: .4rem 0 0; width: 100%;
 .ticks-table .c-pipeline, .ticks-table .c-attempts { white-space: nowrap;
   font-family: ui-monospace, monospace; }
 .ticks-table tr.child .c-tick { padding-left: .9rem; }
+/* A duplicate's row: dimmed whole, the work it belongs to named in the what
+   cell — rows never move, and nothing about the row is the frontier's. */
+.ticks-table tr.dup td { color: #7c8494; }
 @media (max-width: 480px) {
   /* The table collapses to stacked rows: one row per tick becomes one block
      per cell, labelled by its own data-label, so a phone width reads the
@@ -727,10 +731,16 @@ function tickListHTML(row: RunRow): string {
   const body = row.ticks
     .map((tick) => {
       const child = tick.parent_tick_id !== undefined && tick.parent_tick_id !== null;
+      const dup = tick.duplicate_of !== undefined && tick.duplicate_of !== null;
       const id = child ? `└ ${tick.tick_id}` : tick.tick_id;
-      const what = tick.gloss ?? tick.title ?? tick.label_text;
+      // A duplicate is not work the epic owes: its row keeps its place and
+      // its history, dimmed, with the tick the work belongs to in the what
+      // cell — the same words the terminal's dashboard renders (hn6 gmo).
+      const what = dup
+        ? `duplicate of ${tick.duplicate_of}`
+        : (tick.gloss ?? tick.title ?? tick.label_text);
       return (
-        `<tr class="trow${child ? " child" : ""}">` +
+        `<tr class="trow${child ? " child" : ""}${dup ? " dup" : ""}">` +
         `<td class="c-tick">${escapeHTML(id)}</td>` +
         `<td class="c-what" data-label="what">${escapeHTML(what)}</td>` +
         `<td class="c-pipeline" data-label="pipeline">${escapeHTML(pipelineGlyphs(tick.pipeline))}</td>` +
