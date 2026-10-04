@@ -1,19 +1,22 @@
 hpd the epic the runs worked                                                                              cloud · failed
-██████████████░░░░░░░░░░ 3/5 ticks · 2d19h · ● stopped: the Workflow's own record says failed, so the run has ended
-✓ plan ◐ waves 1/2 ○ review ○ close-out ○ ci ○ merge                                                  needs you: nothing
+3/5 ticks · 2d19h · ETA ~3h50m · ● stopped: the Workflow's own record says failed, so the run has ended
+✓ plan ◐ waves ✓ review ✓ close-out ○ ci ○ merge
+needs you: run run_bbb held at3 for a person: rejected_attempt_carries_work: attempt 12 of at3 was rejected with commits
+  nothing merged
+  ticfac settle hpd at3 12 --run-id run_bbb --release "<who>"
 
- TICK  WHAT            TIER     PIPELINE                       TIME  ATTEMPTS
- t1    first           strong   claim ▸ work ▸ gate ▸ merged ✓ 1h55m 1
- t2    second          frontier claim ▸ work ▸ gate ▸ merged ✓ 2h55m 2 ⤴
- t3    third           strong   claim ▸ ✗work ▸ …              1h    1
- dup   duplicate of t2          claim ▸ work ▸ gate ▸ merged ✓       0
- t4    fourth          strong   claim ▸ ●work ▸ …              1h    1
- t5    fifth           strong   claim ▸ work ▸ gate ▸ merged ✓ 35m   1
+ TICK  WHAT             TIER     PIPELINE                       TIME  ATTEMPTS
+ at1   first            strong   claim ▸ work ▸ gate ▸ merged ✓ 1h55m 1
+ at2   second           frontier claim ▸ work ▸ gate ▸ merged ✓ 2h55m 2 ⤴
+ at3   third            strong   claim ▸ ✗work ▸ …              1d21h 1
+ dup   duplicate of at2          …                                    0
+ at4   fourth           strong   claim ▸ ●work ▸ …              1h    1
+ at5   fifth            strong   claim ▸ work ▸ gate ▸ merged ✓ 35m   1
 
 WORKERS                                       ACTIVITY        LAST
-t4  glm-5.3 · cloudflare-sandbox
+at4  glm-5.3 · cloudflare-sandbox
 
-CI: no PR yet                                                                                      cost Workers AI $0.06
+CI: no PR yet                                                                                cost Workers AI not metered
 ─ recent ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-04:30:00 t4#1         dispatched: t4 try 1 dispatched
+04:30:00 at4#1        dispatched: at4 try 1 dispatched
 05:00:00 run          run_finished: failed: the orchestrator could not claim the epic's width   [e] events  [enter] tick
