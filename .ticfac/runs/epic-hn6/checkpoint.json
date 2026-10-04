@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 94,
-  "state": "gating",
-  "reason": "running the integrated gate for kce on 53e5fa9095a9",
-  "updated_at": "2026-10-04T19:31:06Z",
+  "sequence": 95,
+  "state": "publishing",
+  "reason": "closing kce behind the integrated gate on 53e5fa9095a9",
+  "updated_at": "2026-10-04T19:34:09Z",
   "ticks": [
     {
       "tick_id": "v16",
