@@ -145,12 +145,19 @@ func TestASettleReleasesAFactorysLostAttemptFromAHostThatNeverRanIt(t *testing.T
 	if settled.RunID != "r-fixture" || settled.TickID != "a1" || settled.Attempt != attempt {
 		t.Fatalf("the settlement names %+v, want run r-fixture's a1 attempt %d", settled, attempt)
 	}
-	if got := factory.asked(); got != 1 {
-		t.Fatalf("the factory was asked %d times, want 1: the release rules on the factory's answer, not on a "+
-			"poll of it", got)
+	// The factory is asked once per release attempt, never polled: the
+	// carrying settle that was refused asked, the release that ruled asked,
+	// and the second settle below — reading the record, not the answer —
+	// asks nothing.
+	if got := factory.asked(); got != 2 {
+		t.Fatalf("the factory was asked %d times, want 2 (the refused carry and the release): the release rules on "+
+			"the factory's answer, not on a poll of it", got)
 	}
 
 	// It is a DECISION on origin, readable as fields rather than as prose.
+	// The store is opened FRESH here: it is read after the release, so what it
+	// answers is what the next run will fetch.
+	store = openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
 	decisions, err := store.Decisions()
 	if err != nil {
 		t.Fatal(err)
@@ -176,10 +183,14 @@ func TestASettleReleasesAFactorysLostAttemptFromAHostThatNeverRanIt(t *testing.T
 	}
 
 	// Settling the same attempt twice writes nothing: a decision is created if
-	// absent and never rewritten — and the second settle asks the factory
-	// again, because the record it needs is the store's, not the answer's.
+	// absent and never rewritten — and the second settle reads the record on
+	// origin, never the factory's answer again.
 	if again, err := settler.Settle(ctx, "a1", attempt, "an operator"); err != nil || again.Recorded {
 		t.Fatalf("a second settlement wrote a second record: %+v (%v)", again, err)
+	}
+	if got := factory.asked(); got != 2 {
+		t.Errorf("the factory was asked %d times after the release, still want 2: a settled attempt is read from "+
+			"the record on origin, never re-asked", got)
 	}
 }
 
@@ -347,11 +358,17 @@ func TestAFactorysTerminalAnswerReleasesTheAttemptTheRunRejected(t *testing.T) {
 	if !settled.Recorded || settled.State != subprocess.StateFailed || settled.Disposed {
 		t.Fatalf("the settlement is %+v, want recorded, the factory's state, and nothing torn down here", settled)
 	}
-	if settled.WorkSHA != "" {
-		t.Errorf("the settlement reports work at %s, want none: a worker that never reported left nothing", settled.WorkSHA)
+	// Where the rejected work lives, read from the remote the release names:
+	// the release must say, never guess.
+	if settled.WorkRef == "" || settled.WorkSHA == "" {
+		t.Errorf("the settlement names no work (%+v): the rejected attempt's commits are what the person is "+
+			"releasing, and the release must say where they are", settled)
 	}
 
-	// The decision on origin, readable as fields.
+	// The decision on origin, readable as fields. The store is opened FRESH
+	// here: it is read after the release, so what it answers is what the
+	// next run will fetch.
+	store = openRunStore(t, f.Repo.Dir, "epic/qeu", "r-fixture")
 	decisions, err := store.Decisions()
 	if err != nil {
 		t.Fatal(err)

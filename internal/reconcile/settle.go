@@ -541,7 +541,10 @@ func (r *Reconciler) addressForSettlement(ctx context.Context, marker attemptHan
 // same settlement rule the executor's own Inspect is ruled on.
 func (r *Reconciler) addressAttemptThroughFactory(ctx context.Context, marker attemptHandle) (*subprocess.JobHandle, Executor, string, error) {
 	name := r.attemptName(marker.TickID, marker.Attempt)
-	if r.opts.FactoryAttempt == nil || ctx.Err() != nil {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, "", err
+	}
+	if r.opts.FactoryAttempt == nil {
 		return nil, nil, "", fmt.Errorf(
 			"reconcile: this host holds no state for %s: nothing was started here, so the next run "+
 				"starts it rather than holding it — there is nothing to release", name)
