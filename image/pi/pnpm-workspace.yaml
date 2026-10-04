@@ -1,0 +1,6 @@
+# pi is the cloud workers' harness, and the factory tracks its releases closely
+# (ticfac tick jd3), so pi's own packages are exempt from the release-age gate
+# here — the same project-scoped exception cloudflare/pnpm-workspace.yaml makes
+# for Cloudflare's. Everything else pi pulls in still waits out the gate.
+minimumReleaseAgeExclude:
+  - "@earendil-works/*"

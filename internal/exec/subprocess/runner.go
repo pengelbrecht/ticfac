@@ -119,9 +119,10 @@ var runners = map[string]runnerDef{
 	// or a bare id.
 	//
 	// `--session-id <id>` is "use exact project session ID, creating it if
-	// missing" (pi 0.85.1 --help), so ONE flag both starts the session and
+	// missing" (pi --help, 0.85.1 and 1.0.2 alike), so ONE flag starts the session and
 	// prompts it again. Verified: a second `pi -p --session-id <id>` in the
-	// same directory answered from the first one's turn.
+	// same directory answered from the first one's turn (re-verified on pi
+	// 1.0.2, tick jd3: the second turn recalled a word only the first carried).
 	"pi": {
 		Argv:          []string{"pi", "-p", promptPlaceholder},
 		ModelFlag:     "--model",

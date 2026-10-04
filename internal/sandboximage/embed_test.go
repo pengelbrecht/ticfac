@@ -19,27 +19,41 @@ import (
 // TestThePinnedTreeIsWhatTheBinaryShips when ticfac took ownership of image/
 // (tick r6w) and the pin it compared against went away.
 //
-// short: walks the embedded FS and one directory; no process runs
+// The walk is recursive: image/pi/ holds the lockfile the image installs pi
+// from (tick jd3), and a file under a subdirectory ships only if embedded.go
+// names it too. node_modules is skipped — a local `pnpm install` there is a
+// developer's scratch, not part of the build context.
+//
+// short: walks the embedded FS and one directory tree; no process runs
 func TestTheImageTreeIsWhatTheBinaryShips(t *testing.T) {
 	dir, err := Dir()
 	if err != nil {
 		t.Fatal(err)
 	}
 	onDisk := map[string][]byte{}
-	entries, err := os.ReadDir(dir)
+	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if d.Name() == "node_modules" {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		rel, err := filepath.Rel(dir, p)
+		if err != nil {
+			return err
+		}
+		body, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		onDisk[filepath.ToSlash(rel)] = body
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
-	}
-	for _, entry := range entries {
-		if entry.IsDir() {
-			t.Errorf("image/%s is a directory: embedded.go lists files, so nothing under it ships", entry.Name())
-			continue
-		}
-		body, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-		if err != nil {
-			t.Fatal(err)
-		}
-		onDisk[entry.Name()] = body
 	}
 
 	embedded := map[string][]byte{}

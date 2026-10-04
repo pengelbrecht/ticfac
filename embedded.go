@@ -152,6 +152,7 @@ func FactoryFS() embed.FS {
 //go:embed image/worker.sh image/common.sh image/proc.sh
 //go:embed image/build.sh image/README.md
 //go:embed image/required-tk-commands
+//go:embed image/pi/package.json image/pi/pnpm-lock.yaml image/pi/pnpm-workspace.yaml
 var sandboxFS embed.FS
 
 // SandboxFS returns the embedded orchestrator image context. Paths inside it

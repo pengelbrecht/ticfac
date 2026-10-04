@@ -765,6 +765,12 @@ pi_config_dir() {
 # 2026-09-12; the thinking format is what GLM's reasoning needs on the second
 # turn of a conversation, which a one-word probe never reaches.
 #
+# Still needed on pi 1.0.2 (tick jd3): its catalog lowered the limit to 1.0M,
+# which is still the whole budget and still far above what a turn should ask
+# for; with this override `pi --list-models` reports 65.5K. What changed is
+# the failure: 1.0.2 prints the upstream's 400 on stderr and exits 1, so the
+# probe below would now name the cause instead of finding an empty answer.
+#
 # A table, not a blanket cap: raising maxTokens for a model whose real limit is
 # smaller (Llama 3.3 fp8 fast is 24000) would CREATE this failure for it.
 pi_model_overrides() {

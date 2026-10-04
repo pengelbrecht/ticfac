@@ -387,7 +387,7 @@ func TestTheOracleIsResolvedExactlyOnceForAPiModel(t *testing.T) {
 }
 
 // ReadPiCatalog is the production resolver; the machine this was written on
-// has pi 0.85.1, and the real listing must parse. The test is skipped when pi
+// had pi 0.85.1 (pi 1.0.2 since tick jd3), and the real listing must parse. The test is skipped when pi
 // is absent, which is exactly the state the refusal above documents: this
 // host could not then host a pi worker.
 func TestReadPiCatalogParsesTheRealListing(t *testing.T) {

@@ -253,7 +253,12 @@ var kindSpecs = map[string]*kindSpec{
 		// story — `~/.pi/agent/trust.json` records the trusted roots, and
 		// `--approve` is what makes an untrusted path non-interactive. The
 		// template below was round-tripped: the echoed argv answered a live
-		// prompt and the session resumed after a restart.
+		// prompt and the session resumed after a restart. Re-verified on pi
+		// 1.0.2 (tick jd3, 2026-10-04, herdr 0.9.3, integration v9): the same
+		// argv answered through herdr in the now-default fullscreen TUI, its
+		// lifecycle went idle → done, and the pane read carried the answer;
+		// the flags, the `--list-models` columns and the keybindings are
+		// unchanged.
 		fullAuto:         []string{"--approve"},
 		fullAutoVerified: true,
 		modelFlag:        "--model",

@@ -1,0 +1,8 @@
+{
+  "name": "ticfac-image-pi",
+  "private": true,
+  "description": "The pi harness the worker image installs, pinned with its whole dependency tree (see image/Dockerfile).",
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.0.2"
+  }
+}

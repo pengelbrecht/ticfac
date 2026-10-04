@@ -286,6 +286,11 @@ herdr agent start <name> --kind pi --pane <pane-id> --timeout 120000 \
 - **Resume verified.** After two `C-c` sent to the *pane* (a single interrupt is not enough, and `herdr agent send-keys <agent> C-c` did not exit it — pi's own message says "press Ctrl+C twice"), a restart in the same pane under a fresh agent name with `--session 01a08ab5-…` answered a question about the earlier turn correctly, with the prior turn present in the restored transcript. Do not type `/exit` with `pane send-text` + Enter: it arrives as a prompt, the model answers it in prose, and you pay for the turn.
 - **Integration current (v8)** — `~/.pi/agent/extensions/herdr-agent-state.ts`; better maintained on this machine than claude's (v7) and codex's (v6). Check `herdr integration status` before a wave.
 
+**Re-verified on pi 1.0.2** *(2026-10-04, tick jd3, herdr 0.9.3, pi integration v9)*. The template above is unchanged: `pi --help` differs from 0.85.1 only in `--provider` now requiring `--model`, `--no-extensions` also covering the new built-in extensions (codemode, tool search, MCP), and `--tui-mode` defaulting to **fullscreen**. Fullscreen did not disturb herdr: `herdr agent start … -- --approve --model cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash:medium` came up ready, `agent prompt "Reply with the single word BANANA" --wait` went idle → done, and `pane read` (default and `recent-unwrapped`) carried the prompt and the answer. `agent_session` is still a `path` of the same layout. Two observations changed:
+
+- **A bad model id now fails.** The same `glm-9-imaginary` command still warns `Using custom model id`, but then prints the provider's refusal (`400 … No such model …`) and **exits 1**. Headless runs fail visibly; the catalog check still stops the typo before a pane, a claim and a model call exist.
+- **The effort suffix is clamped to what the model supports.** On this machine (`defaultThinkingLevel: "max"`), `--model …/glm-5.3-flash:medium` and `--thinking medium` both recorded `thinkingLevel: high` in the session, on 0.85.1 and on 1.0.2 alike, so this is not a 1.0 change. Read the status line, not the argv, for the effort actually in use.
+
 **Live evidence.**
 
 ```text

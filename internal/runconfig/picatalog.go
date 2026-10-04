@@ -29,6 +29,13 @@ import (
 // codes believes it worked. The catalog is the only oracle that closes this at
 // compile time; `pi auth check --model <nonsense>` reports ready because it
 // validates the PROVIDER only, and is not one.
+//
+// pi 1.0.2 (tick jd3, 2026-10-04) narrows the trap without closing it: the
+// same command still passes the id through as a custom model id, but now
+// prints the provider's refusal ("400 … No such model …") and exits 1. A
+// headless worker therefore fails visibly — after its pane, its claim and a
+// model call already exist. The catalog still stops the typo before any of
+// that, and the listing's format is unchanged (same columns, same row shape).
 type PiCatalog struct {
 	// thinking maps each catalog row's exact "<provider>/<model>" id to
 	// whether its thinking column reads yes. The second value of the pair

@@ -927,7 +927,7 @@ run_harness() {
 		;;
 	pi)
 		# --session-id is "use exact project session ID, creating it if
-		# missing" (pi 0.85.1 --help), so ONE flag both names the session up
+		# missing" (pi --help, 0.85.1 and 1.0.2 alike), so ONE flag names the session up
 		# front and re-prompts it — the same runner table the local executor
 		# runs. --approve is pi's whole full-auto story: it has no permission
 		# gate, only a trust prompt for project-local files, and this checkout

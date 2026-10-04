@@ -174,7 +174,12 @@ func TestDockerfileChecksumsEveryDownload(t *testing.T) {
 //
 // short: reads the image files and asserts on their text; no process runs
 func TestDockerfileBakesInNoRepositoryState(t *testing.T) {
-	df := readDockerfile(t)
+	// The one install the image is MEANT to carry is its own pi harness, from
+	// the lockfile committed beside the Dockerfile (tick jd3). That is the
+	// factory's tooling, not an enrolled repository's dependencies, and
+	// TestDockerfileInstallsPiFromItsLockfile pins its exact form; every other
+	// install is still refused.
+	df := strings.ReplaceAll(readDockerfile(t), piLockfileInstall, "")
 	banned := []string{"git clone", "pnpm install", "npm ci", "go mod download", "bun install"}
 	for _, b := range banned {
 		if strings.Contains(df, b) {

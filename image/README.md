@@ -23,6 +23,7 @@ way, at model prices.
 | `preflight.sh` | Installed as `/usr/local/bin/ticks-preflight` — the Environment pre-flight. |
 | `build.sh` | Builds and optionally pushes, tagged with the tk version the Dockerfile pins. |
 | `required-tk-commands` | Derived list of every `tk` subcommand the run scripts invoke. The image build asserts each one against the tk it produced. |
+| `pi/` | `package.json`, `pnpm-lock.yaml` and `pnpm-workspace.yaml` the image installs the pi harness from, its whole dependency tree pinned (see [How pi is installed](#how-pi-is-installed)). |
 
 ticfac authors this tree (tick r6w; until then it was vendored from ticks).
 Guarded by `internal/sandboximage` (`go test ./internal/sandboximage`), which
@@ -710,8 +711,8 @@ For a model whose catalog entry the upstream refuses, the file also carries a
 `modelOverrides` entry, which pi merges onto the built-in one field by field.
 Today that is GLM 5.3 and GLM 5.3 Flash: pi's catalog gives them `maxTokens`
 1310720, pi asks for nearly all of it, and Workers AI answers HTTP 400
-("supports at most 1048576 completion tokens") — on which `pi -p` prints
-nothing and exits 0. The first pi boot in a real container died on exactly that
+("supports at most 1048576 completion tokens") — on which `pi -p` 0.85.1
+printed nothing and exited 0. The first pi boot in a real container died on exactly that
 at the harness probe. They get `maxTokens: 65536` and `thinkingFormat:
 "deepseek"`, the values the operator's own pi config runs them with. It is a
 table in `pi_model_overrides`, not a blanket cap, because raising the limit for
@@ -721,6 +722,28 @@ Verified against a recording stand-in for the gateway: pi 0.85.1 with this
 file sent `POST <gateway>/workers-ai/v1/chat/completions`, `Authorization:
 Bearer <run token>`, `model: @cf/zai-org/glm-5.3`, streaming, and parsed the
 answer.
+
+Re-verified for pi 1.0.2 (tick jd3, 2026-10-04). The override is still
+needed: 1.0.2's catalog gives both GLM models a 1.0M output limit, and with
+this file `pi --list-models` reports GLM 5.3's as 65.5K. Pointed at a stand-in
+that answers HTTP 400, `pi -p` 1.0.2 prints the upstream's error on stderr and
+exits 1, so the harness probe now fails on its exit status and quotes the
+reason. The CLI flags this script and the worker pass (`-p`, `--mode text`,
+`--session-id`, `--approve`, `--model`, and the probe's `--no-*` switches) are
+unchanged from 0.85.1.
+
+### How pi is installed
+
+From `pi/`, not from `npm install -g`. pi 1.0.1 stopped publishing
+`npm-shrinkwrap.json`, so an npm install of an exact pi version no longer pins
+any dependency under it; `pi/pnpm-lock.yaml` pins the whole tree, and the
+image installs it with `pnpm install --frozen-lockfile`. `pi/pnpm-workspace.yaml`
+exempts pi's own packages (`@earendil-works/*`) from pnpm's release-age gate,
+as `cloudflare/pnpm-workspace.yaml` does for Cloudflare's. A pi bump changes
+`ARG PI_VERSION`, `pi/package.json` and the lockfile together: run
+`pnpm dlx pnpm@<PNPM_VERSION> i --lockfile-only --ignore-scripts` in `image/pi`.
+`internal/sandboximage`'s `TestDockerfileInstallsPiFromItsLockfile` fails until
+all three agree.
 
 ### Does the harness execute tools, or narrate them?
 

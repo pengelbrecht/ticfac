@@ -25,7 +25,7 @@ import (
 // Each entry names where it was verified, so the next person to add a kind
 // checks the same way rather than guessing:
 //
-//   - pi (@earendil-works/pi-coding-agent 0.85.1): docs/keybindings.md —
+//   - pi (@earendil-works/pi-coding-agent 0.85.1, unchanged in 1.0.2): docs/keybindings.md —
 //     `app.interrupt` = escape ("Cancel / abort"); `app.clear` = ctrl+c
 //     ("Clear editor (first) / exit (second)"). README: "Escape | Cancel/abort".
 //   - claude (Claude Code 2.1.283): the default keybinding table in the

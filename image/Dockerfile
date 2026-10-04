@@ -51,10 +51,15 @@ ARG OMP_SHA256_AMD64=efdb54f0054e80afe1c05c09f43d5ced09ce8ec8b75c3fb6b0ca5ce4805
 ARG OMP_SHA256_ARM64=5d97dba8068c9c3b19bc2949567798e0a839dec5f11c458b4c642bfe0f4d14a0
 
 ARG CLAUDE_CODE_VERSION=2.1.227
-# pi (github.com/earendil-works/pi), installed from npm at an exact version like
-# claude-code above. 0.85.1 is the version ticfac verified its pi runner kind
-# against (ticfac tick gjk). It needs Node >= 22.19; the base image carries 22.23.
-ARG PI_VERSION=0.85.1
+# pi (github.com/earendil-works/pi), installed from the lockfile in pi/ (see the
+# harness block below). 1.0.2 is the version ticfac verified its pi runner kind
+# against (ticfac tick jd3; 0.85.1 before it, tick gjk). It needs
+# Node >= 22.19; the base image carries 22.23. A bump changes THREE places, and
+# internal/sandboximage's TestDockerfileInstallsPiFromItsLockfile fails until
+# they agree: this ARG, pi/package.json, and pi/pnpm-lock.yaml (regenerated with
+# `pnpm i --lockfile-only --ignore-scripts` in image/pi, using this image's
+# PNPM_VERSION so the lockfile format is the one the build reads).
+ARG PI_VERSION=1.0.2
 
 ARG GO_VERSION=1.27.1
 ARG GO_SHA256_AMD64=63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445
@@ -173,11 +178,25 @@ RUN set -euo pipefail; \
 
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
 
+# pi from a LOCKFILE, not `npm install -g`. pi 1.0.1 stopped publishing
+# npm-shrinkwrap.json, so an npm install of an exact pi version no longer pins
+# anything under it ("Use the pi.dev installer for pinned installations"), and
+# that installer is an interactive script this image does not pipe into a
+# shell. pi/pnpm-lock.yaml pins the whole tree with integrity hashes and a
+# frozen install verifies them — pi's equivalent of the sha256sum lines above.
+# pi/pnpm-workspace.yaml exempts pi's own packages from pnpm's release-age gate
+# (early pi releases are accepted, as Cloudflare's are in cloudflare/).
 # --ignore-scripts as pi's own container recipe installs it
-# (docs/containerization.md): nothing in pi needs an install hook.
+# (docs/containerization.md): nothing in pi needs an install hook. The store
+# goes to a scratch directory and is removed with it; node_modules is copied
+# from it, not linked into it.
+COPY pi/package.json pi/pnpm-lock.yaml pi/pnpm-workspace.yaml /opt/pi/
 RUN set -euo pipefail; \
-    npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
-    pi --version
+    pnpm install --dir /opt/pi --frozen-lockfile --prod --ignore-scripts --package-import-method copy --store-dir /tmp/pnpm-store; \
+    rm -rf /tmp/pnpm-store; \
+    printf '#!/bin/sh\nexec /opt/pi/node_modules/.bin/pi "$@"\n' >/usr/local/bin/pi; \
+    chmod 0755 /usr/local/bin/pi; \
+    test "$(pi --version)" = "${PI_VERSION}"
 
 # ---------------------------------------------------------------------------
 # tk, BUILT FROM SOURCE at the ref the deploy pinned — not downloaded from a
@@ -275,7 +294,7 @@ RUN set -euo pipefail; \
     git --version; rg --version | sed -n 1p; jq --version; cc --version | sed -n 1p; \
     go version; uv --version; node --version; pnpm --version; bun --version; python3 --version; \
     mise --version; \
-    timeout 60 omp --version; timeout 60 claude --version; \
+    timeout 60 omp --version; timeout 60 claude --version; timeout 60 pi --version; \
     test -n "$(timeout 60 omp config path)"; \
     timeout 60 tk version | sed -n 1p; \
     bash -n /usr/local/bin/ticks-orchestrator; bash -n /usr/local/bin/ticks-worker; \
