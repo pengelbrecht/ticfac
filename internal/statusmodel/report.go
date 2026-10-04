@@ -39,8 +39,8 @@ import (
 // a cloud run's attempt branches belong to the factory's containers, and
 // its reports to their executor state, neither of which this machine reads.
 
-// ReportInput is one (tick, attempt) report as its reader answers it: the
-// STATUS-bearing summary the report opens with, the diff's three counts,
+// ReportInput is one (run, tick, attempt) report as its reader answers it:
+// the STATUS-bearing summary the report opens with, the diff's three counts,
 // and whether the diff was read at all — the fact that separates "no
 // changes" from "not looked", which the model owes the reader.
 type ReportInput struct {
