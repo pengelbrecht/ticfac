@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 19,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "WorkerAttemptHost builds its WorkspaceGit without a setup command, so a container lost mid-turn is restored to the last wip snapshot without the repository's [sandbox] setup (dependency installs). image/worker.sh has no entry that runs only repo_setup; add one (e.g. ticks-worker --setup) and wire it as WorkspaceGit.setup.\nevidence: harness/src/host/worker-attempt.ts workspaceGit() (no setup field)\n\nticfac run epic-43y created this tick by absorbing the finding b3f0b2e963560987fceb76e329d0aa7b93a8e47fa9a5b9dcdccb5ecacd899c46 (reported by run-epic-43y/tick-xd3/attempt-11): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/b3f0b2e963560987fceb76e329d0aa7b93a8e47fa9a5b9dcdccb5ecacd899c46.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "i3h",
+    "title": "A restored cloud workspace re-runs the repository's setup"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.37,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.47,
+      "design": 0,
+      "diagnosis": 0.01,
+      "mechanical": 0.5,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1295,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T20:52:31Z",
+  "answered_at": "2026-10-04T20:52:31Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "i3h",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "4982e906d46a360f4c2628a206990460df09bd4d",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
