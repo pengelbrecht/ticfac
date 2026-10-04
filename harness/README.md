@@ -161,12 +161,43 @@ The tests are split by what they can prove where:
   processes. The node suite exists because a shell behaviour test that
   never runs a shell certifies nothing, and workerd cannot run one.
 
+## The attempt host (epic 43y step 6, tick xd3)
+
+- **`WorkerAttemptHost`** (`src/host/worker-attempt.ts`): one worker attempt
+  driven end to end from a durable record — the container's
+  `ticks-worker --boot` (its process id recorded before it is polled, so a
+  host that dies mid-boot reattaches), the conversation on the prompt the boot
+  printed between its markers (submitted under a fixed `requestId`, resumed
+  by `harness.resume()` in a later life), and `ticks-worker --finish
+  <status>` (0 done, 124 the wall fired, 1 otherwise) once it settles. The
+  finish phase's exit code is the attempt's — what the all-in-one
+  entrypoint's always was. The wall is ABSOLUTE (fixed at start), steer
+  places input after the running tool round, and reclaim stops the attempt
+  where it stands without a finish. Before the finish the host restores a
+  workspace lost after the last round and rewrites the boot's branch record
+  for the finish phase's own process.
+- **The cloud host** is the factory's `WorkerAgent` Durable Object
+  (`cloudflare/src/worker-agent.ts`), which links this package as
+  `ticfac-harness` and reaches pi-durable only through `src/host/cloud.ts`:
+  `openDurableObjectStorage` (pi-durable's `SqliteStorage` over its own DO
+  SQLite), `gatewayModelAccess` (the gateway provider, the only provider) and
+  `watchAttemptEvents` (the conversation's agent events for its watch
+  sockets). `ticfac-harness/testing` (`src/host/testing.ts`) is a faux model
+  under the gateway provider's id, for the factory's own suites only.
+- Tested here (`test/worker-attempt-host.test.ts`, workerd, the real Harness
+  over the scripted door and a faux model): the whole attempt, a boot that
+  stops, a boot with no handoff, a container lost mid-boot, a host killed
+  mid-tool and resumed in a new life (the prompt once, the tool once), a
+  steer, the wall, a reclaim. The factory's suites drive the real
+  `WorkerAgent` through the dispatch door (`cloudflare/test/
+  worker-agent.test.ts`) and the door's hosted routes against a fake agent
+  (`cloudflare/test/worker-agent-door.test.ts`).
+
 ## What comes next (the epic's steps)
 
-6. The `WorkerAgent` DO host — this package's `HarnessStorage` DO is its
-   seed, and it is what wires `FactorySandboxEnv` to the SANDBOXES_V1 stub
-   the `run` door was built for.
 7. The local Node host, on `createGuardedNodeExecutionEnv`.
 8. Watch surfaces, and the proof runs (kill the host mid-tool, destroy the
    container mid-turn, deploy mid-run) — the wip checkpoints and the
-   restore here are the machinery those runs will exercise.
+   restore here are the machinery those runs will exercise; the WorkerAgent's
+   watch socket and steer route are what `ticfac watch` and the stuck nudge
+   reach in the cloud.
