@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 52,
-  "state": "running",
-  "reason": "v16 is running as attempt 8",
-  "updated_at": "2026-10-04T13:53:40Z",
+  "sequence": 53,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for v16",
+  "updated_at": "2026-10-04T13:58:45Z",
   "ticks": [
     {
       "tick_id": "q8m",
