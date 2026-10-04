@@ -19,7 +19,8 @@
  */
 
 import { getSandbox, type Sandbox } from "@cloudflare/sandbox";
-import { factorySandboxBindingFromEnv } from "./factory-sandbox";
+import type { SandboxDoor } from "ticfac-harness";
+import { factorySandboxBindingFromEnv, RUN_MAX_BYTES, utf8Boundary } from "./factory-sandbox";
 import type { Env } from "./index";
 import { type RunSubstrateRecord, readRunSubstrate, routedSandboxBinding } from "./run-substrate";
 import { WORKER_TRACE_ID_ENV } from "./worker-boot";
@@ -411,6 +412,16 @@ export type SdkSandbox = {
   destroy(): Promise<void>;
   /** The Container class's own state record — a storage read, never a start. */
   getState?(): Promise<{ status: string }>;
+  /**
+   * One command run to completion in one call — the SDK's `exec` (ISandbox):
+   * started, waited for and read in one RPC, with the exit code the
+   * command's own. This is the 0.x class's own answer to the `run` door a
+   * WorkerAgent's env drives its short commands through (tick hxd).
+   */
+  exec(
+    command: string,
+    options?: { env?: Record<string, string | undefined>; cwd?: string; timeout?: number },
+  ): Promise<{ exitCode: number; stdout: string; stderr: string }>;
 };
 
 /** What the SDK reports about one process. */
@@ -547,6 +558,80 @@ function processState(status: string): SandboxProcessState {
     default:
       return "failed";
   }
+}
+
+// --------------------------------------- the harness door over the 0.x SDK ---
+
+/**
+ * The harness package's `SandboxDoor` over one 0.x SDK sandbox — what a
+ * WorkerAgent drives an attempt's tools through on the `sdk0` substrate
+ * (epic 43y, tick hxd).
+ *
+ * Until this adapter, the harness door existed only over FactorySandbox: the
+ * 0.x class had the five process doors (`adaptSandbox`, above) but no `run`
+ * door, and `workerAgentsFromEnv` answered null for every run that did not
+ * ask for `do_v1` — so the default substrate's workers kept the container's
+ * own all-in-one pi-CLI worker (tick hxd's finding against [A1]). The SDK's
+ * own `exec` IS that door's primitive: one call, started, waited for and
+ * read, exactly what `FactorySandboxCore.run` serves on the other substrate.
+ *
+ * The process doors are `adaptSandbox`'s, unchanged — the supervision loop
+ * and the harness env share them. Only the two shapes the door spells wider
+ * than the seam are adapted here: `startProcess` takes its environment
+ * positionally, and `run` is new.
+ */
+export type SdkSandboxDoor = SandboxDoor & Pick<OrchestratorSandbox, "destroy" | "isRunning">;
+
+/**
+ * The line one `run`-door command executes as on this substrate.
+ *
+ * POSIX, deliberately: the do_v1 door's line runs under `bash -c` and keeps
+ * the command's own exit code with `PIPESTATUS`, but the 0.x container's
+ * control server hands a command to `/bin/sh`, where `PIPESTATUS` is
+ * spelling a pipeline that does not exist. The command's output goes to a
+ * temp file, `head -c` answers the first `max`+1 bytes of it — the bound
+ * that protects the calling Durable Object's memory, taken IN the container
+ * where the output is produced, never over the RPC — and the exit code
+ * carried back is the command's own, not `head`'s. The trap removes the
+ * temp file on every exit, a failing `exit 1` included.
+ */
+export function sdkRunLine(command: string, max: number): string {
+  return (
+    `T="$(mktemp)"; trap 'rm -f "$T"' EXIT; { ${command}; } >"$T" 2>&1; ec=$?; ` +
+    `head -c ${max + 1} "$T"; exit "$ec"`
+  );
+}
+
+const doorDecoder = new TextDecoder();
+
+/** One 0.x SDK sandbox behind the harness door. */
+export function sdkSandboxDoor(sandbox: SdkSandbox): SdkSandboxDoor {
+  const seam = adaptSandbox(sandbox);
+  return {
+    async run(command, env, options = {}) {
+      const max = options.maxBytes ?? RUN_MAX_BYTES;
+      // The SDK waits for a starting container itself — an exec against a
+      // cold box returns when the box answers, never before — so there is
+      // no `ready: false` to answer here: the caller's retry loop for a
+      // container that is still pulling never fires on this substrate.
+      const out = await sandbox.exec(sdkRunLine(command, max), { env });
+      const bytes = new TextEncoder().encode(out.stdout);
+      const whole = utf8Boundary(bytes.subarray(0, max));
+      return {
+        ready: true,
+        exitCode: out.exitCode,
+        output: doorDecoder.decode(bytes.subarray(0, whole)),
+        truncated: bytes.length > max,
+      };
+    },
+    startProcess: (command, env) => seam.startProcess(command, { env }),
+    getProcess: (id) => seam.getProcess(id),
+    listProcesses: () => seam.listProcesses(),
+    readOutput: (id, offset) => seam.readOutput(id, offset),
+    killProcess: (id) => seam.killProcess(id),
+    destroy: () => seam.destroy(),
+    isRunning: () => seam.isRunning?.() ?? Promise.resolve(true),
+  };
 }
 
 /** The sandbox name a run's containers are addressed by. */

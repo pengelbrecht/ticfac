@@ -13,6 +13,7 @@
  * attempt host, the harness, the tools, the hooks.
  */
 import { env, runInDurableObject, SELF } from "cloudflare:test";
+import type { SandboxDoor } from "ticfac-harness";
 import {
   type FauxResponseFactory,
   fauxAssistantMessage,
@@ -27,6 +28,7 @@ import { insertRun, type Run } from "../src/db";
 import { issueWorkerRunToken } from "../src/gateway";
 import { recordRunSubstrate } from "../src/run-substrate";
 import { roomFor } from "../src/runs";
+import type { SandboxNamespace, SdkSandbox } from "../src/sandbox";
 import { attemptSandboxName } from "../src/sandbox-executor";
 import type { WorkerAgent, WorkerAgentNamespace, WorkerAgentState } from "../src/worker-agent";
 
@@ -70,7 +72,8 @@ function scriptedContainer(bashMs: number, finishExit: number) {
   });
 }
 
-async function liveRun(): Promise<void> {
+/** A live run holding its project's lease, on the do_v1 substrate unless told otherwise. */
+async function liveRun(substrate: "do_v1" | "sdk0" = "do_v1"): Promise<void> {
   counter += 1;
   RUN_ID = `run_xd3_agent_${counter}`;
   const run: Run = {
@@ -87,7 +90,7 @@ async function liveRun(): Promise<void> {
     credential_grade: "write",
   };
   await insertRun(env.DB, run);
-  await recordRunSubstrate(env.DB, RUN_ID, "do_v1", null);
+  if (substrate === "do_v1") await recordRunSubstrate(env.DB, RUN_ID, "do_v1", null);
   const lease = await roomFor(env, run.project).acquireDispatchLease({
     run_id: RUN_ID,
     epic: EPIC,
@@ -109,6 +112,95 @@ async function seededAgent(
     instance.seams = { door: () => container.sandbox, models: () => faux.models, pollMs: 5 };
   });
   return { calls: faux.calls, stub };
+}
+
+/**
+ * The attempt's real WorkerAgent on the 0.x substrate: NO door seam — the
+ * object builds its own door from `env.SANDBOXES`, the SDK namespace a
+ * test substitutes (tick hxd). Only the model is seeded.
+ */
+async function seededAgentOnSdk0(
+  responses: FauxResponseFactory[],
+): Promise<{ calls: () => number; stub: DurableObjectStub<WorkerAgent> }> {
+  const namespace = env.WORKER_AGENTS as unknown as DurableObjectNamespace<WorkerAgent>;
+  const stub = namespace.get(namespace.idFromName(attemptSandboxName(RUN_ID, TICK, 1)));
+  const faux = fauxGatewayModels(responses);
+  await runInDurableObject(stub, (instance: WorkerAgent) => {
+    instance.seams = { models: () => faux.models, pollMs: 5 };
+  });
+  return { calls: faux.calls, stub };
+}
+
+/**
+ * A 0.x SANDBOXES namespace for the sdk0 e2e: the structural fake the door's
+ * `isSandboxNamespace` recognises, handing every name the same scripted
+ * SDK sandbox.
+ */
+function fakeSdkNamespace(sandbox: SdkSandbox): SandboxNamespace {
+  return {
+    idFromName: (name: string) => name as unknown as DurableObjectId,
+    get: () => sandbox,
+  } as unknown as SandboxNamespace;
+}
+
+/** One scripted FactorySandbox door, behind the SDK's own shapes. */
+function sdkOverDoor(door: SandboxDoor): SdkSandbox & { destroyedCount: () => number } {
+  let destroyed = 0;
+  const statusOf = (state: string): string =>
+    state === "running" || state === "completed" || state === "failed" ? state : "error";
+  return {
+    async exec(command, options) {
+      const out = await door.run(command, (options?.env ?? {}) as Record<string, string>, {});
+      return out.ready
+        ? { exitCode: out.exitCode, stdout: out.output, stderr: "" }
+        : { exitCode: 1, stdout: "", stderr: "" };
+    },
+    async startProcess(command, options) {
+      const started = await door.startProcess(
+        command,
+        (options?.env ?? {}) as Record<string, string>,
+      );
+      return {
+        id: started.id,
+        status: statusOf(started.state),
+        exitCode: started.exit_code,
+        ...(started.command === undefined ? {} : { command: started.command }),
+      };
+    },
+    async getProcess(id) {
+      const view = await door.getProcess(id);
+      if (view === null) return null;
+      return {
+        id: view.id,
+        status: statusOf(view.state),
+        exitCode: view.exit_code,
+        ...(view.command === undefined ? {} : { command: view.command }),
+      };
+    },
+    async listProcesses() {
+      const listed = await door.listProcesses();
+      return listed.map((view) => ({
+        id: view.id,
+        status: statusOf(view.state),
+        exitCode: view.exit_code,
+        ...(view.command === undefined ? {} : { command: view.command }),
+      }));
+    },
+    async getProcessLogs(id) {
+      const whole = await door.readOutput(id, 0);
+      return { stdout: whole.text, stderr: "" };
+    },
+    async killProcess(id) {
+      await door.killProcess(id);
+    },
+    async destroy() {
+      destroyed += 1;
+    },
+    async getState() {
+      return { status: "running" };
+    },
+    destroyedCount: () => destroyed,
+  };
 }
 
 function postStart(): Promise<Response> {
@@ -203,6 +295,68 @@ describe("a cloud worker attempt on its WorkerAgent", () => {
     expect(log.text).toContain("ticks-worker: pushed");
     // A cursor at the end reads nothing new.
     expect((await stub.readLog(log.offset)).text).toBe("");
+  });
+
+  it("runs end to end on the 0.x substrate too: the object builds its own door from SANDBOXES, and the SDK's exec serves the run door (tick hxd)", async () => {
+    // sdk0: no substrate row at all — the substrate every run that asks for
+    // none is on, which is the gap this tick closes. The container is the
+    // same scripted door, behind the SDK's own shapes, handed to the object
+    // through the SANDBOXES binding — no door seam, so `attemptDoor` reads
+    // the run's substrate itself and routes to the SDK adapter.
+    await liveRun("sdk0");
+    const container = fakeSandboxDoor({
+      runOutput: (command) => (command.includes("git rev-parse HEAD") ? "cafef00d\n" : ""),
+      processScript: (command) => {
+        // The 0.x door merges stderr with a ` 2>&1` suffix, so every match
+        // here is a contents match, never an equality.
+        if (command.includes(contract.boot_command))
+          return { output: BOOT_OUTPUT, exit: 0, ms: 10 };
+        if (command.startsWith(contract.finish_command))
+          return { output: "ticks-worker: pushed\n", exit: 0, ms: 10 };
+        return { output: "tests pass\n", exit: 0, ms: 20 };
+      },
+    });
+    const sdk = sdkOverDoor(container.sandbox);
+    set("SANDBOXES", fakeSdkNamespace(sdk));
+    const { calls } = await seededAgentOnSdk0([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("done: the report is written"),
+    ]);
+
+    const started = await postStart();
+    expect(started.status).toBe(201);
+
+    let status = await doorState();
+    const deadline = Date.now() + 20_000;
+    while (status.state === "running" && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      status = await doorState();
+    }
+    expect(status.state).toBe("succeeded");
+    expect(calls()).toBe(2);
+
+    // The boot, the model's bash and the finish all ran in the 0.x sandbox,
+    // stderr merged into the one buffer the cursor follows.
+    const commands = container.starts.map((s) => s.command);
+    expect(commands[0]).toBe(`${contract.boot_command} 2>&1`);
+    expect(commands.filter((c) => c.includes("make test")).length).toBe(1);
+    expect(commands.at(-1)).toBe(`${contract.finish_command} 0 2>&1`);
+    expect(container.starts[0]?.env.TICKS_RUN_ID).toBe(RUN_ID);
+
+    // The short commands went through the run door — the SDK's exec, under
+    // the bounded POSIX line.
+    expect(
+      container.runs.some(
+        (r) => r.command.includes("git rev-parse HEAD") && r.command.includes("head -c"),
+      ),
+    ).toBe(true);
+
+    // And a settled attempt released its container: destroyed once, by the
+    // agent, through the same door it drove the attempt with.
+    expect(sdk.destroyedCount()).toBe(1);
   });
 
   it("is watched and steered over its socket while it converses", async () => {

@@ -194,9 +194,10 @@
  *
  * ### The WorkerAgent routes (DECIDED, epic 43y tick xd3)
  *
- * That change: every worker of a run on the `do_v1` substrate is a
- * WorkerAgent (worker-agent.ts) — the attempt's pi-durable conversation in a
- * Durable Object of its own, its tools in its container. The two routes
+ * That change: every worker is a WorkerAgent (worker-agent.ts) — the
+ * attempt's pi-durable conversation in a Durable Object of its own, its
+ * tools in its container, on whichever substrate the run was submitted on
+ * (`do_v1` or the default `sdk0`, tick hxd). The two routes
  * above answer from the agent for such a run: the start records the attempt
  * on its agent (an agent already holding it is the adoption), and the state
  * route answers the agent's phase — `running` until it settles, then the
@@ -815,8 +816,14 @@ async function agentFor(
       refusal: refuse(
         409,
         NOT_HOSTED,
+<<<<<<< HEAD
         `run ${runID}'s workers are not WorkerAgents (only a run on the do_v1 substrate, on a ` +
           "deployment that binds WORKER_AGENTS, has a live conversation to watch or steer)",
+=======
+        `run ${run.run_id}'s workers are not WorkerAgents (no WORKER_AGENTS binding on this ` +
+          "deployment, or no D1 to read the run's substrate with — a hosted attempt has no live " +
+          "conversation to watch or steer)",
+>>>>>>> 5d5f78e9229c4ea8c899b3a6f63852c8742a5799
       ),
     };
   }

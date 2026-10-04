@@ -345,6 +345,10 @@ async function denialOf(response: Response): Promise<{ error: string; detail: st
 beforeEach(async () => {
   binding = new FakeSandboxes();
   set("SANDBOXES", binding);
+  // A deployment without WORKER_AGENTS (tick hxd): this file holds the
+  // container's own all-in-one worker path end to end — the hosted door
+  // (every run, either substrate) is worker-agent-door.test.ts's.
+  set("WORKER_AGENTS", undefined);
   // The D1 index persists across this file's tests, and every test leaves a
   // live run — an orchestrator slot by the door's count. Capacity has its own
   // describe below, which sets the ceiling against what is held; every other
