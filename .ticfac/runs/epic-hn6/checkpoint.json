@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 61,
-  "state": "running",
-  "reason": "ghh is closed",
-  "updated_at": "2026-10-04T18:51:41Z",
+  "sequence": 62,
+  "state": "dispatching",
+  "reason": "dispatching jkb as attempt 12",
+  "updated_at": "2026-10-04T18:51:52Z",
   "ticks": [
     {
       "tick_id": "v16",
