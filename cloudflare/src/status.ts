@@ -643,7 +643,10 @@ export function resumeCommand(host: string, epicID: string): string {
 /**
  * Classifies one run's document into the listing's row — the same read of the
  * model the bare `ticfac` overview performs (attention first, a live
- * incarnation next, the terminal phases last), ported so the phone page and
+ * incarnation next, the terminal read last: the lifecycle phase, then —
+ * where the liveness answer carries the run's own durable terminal word —
+ * that word, which is the one the overview reads a stopped run by, so a
+ * run that dies mid-waves is never "done"), ported so the phone page and
  * the terminal answer the same question with the same words.
  *
  * The reason and the one clearing command come from the MODEL, never from a
@@ -669,9 +672,10 @@ export function classifyStatusDoc(doc: StatusDoc): {
     }
     return { state: "running", reason: "working", clear_with: null };
   }
+  let answer: { state: RunClass; reason: string; clear_with: string | null };
   switch (doc.lifecycle.phase) {
     case "failed":
-      return {
+      answer = {
         state: "failed",
         reason: doc.liveness.reason,
         // The resume is the host's, not always the local foreground form: a
@@ -679,11 +683,43 @@ export function classifyStatusDoc(doc: StatusDoc): {
         // epic on their own machine (tick tt6).
         clear_with: resumeCommand(doc.host, doc.epic_id),
       };
+      break;
     case "cancelled":
-      return { state: "cancelled", reason: doc.liveness.reason, clear_with: null };
+      answer = { state: "cancelled", reason: doc.liveness.reason, clear_with: null };
+      break;
     default:
-      return { state: "done", reason: doc.liveness.reason, clear_with: null };
+      answer = { state: "done", reason: doc.liveness.reason, clear_with: null };
   }
+  // The liveness answer's own state may carry the run's DURABLE terminal
+  // word — the ended vocabulary the model writes (completed, stopped,
+  // failed: the same three words the Go model's livenessNamesAnEnd names),
+  // which is the word the bare `ticfac` overview reads a stopped run's
+  // row by (the classifier is that read's port, tick 2qz, and this second
+  // switch is the half the port missed — tick c65). Without it, a run that
+  // dies mid-waves reads "done" off a phase the run never wrote an end
+  // into — the phase is a checkpoint the run updates as it goes, not a
+  // terminal record — and the contract's own dashboard_stopped golden said
+  // done on its chip while its headline verdict said stopped. The local
+  // probe's words (alive, dead, not_running, unknown) name no end and
+  // override nothing: a local run's ending is stated by its phase (its own
+  // records wrote it) or by the model's attention (the dead-run wait),
+  // never by its probe.
+  switch (doc.liveness.state) {
+    case "failed":
+      answer = {
+        state: "failed",
+        reason: doc.liveness.reason,
+        clear_with: resumeCommand(doc.host, doc.epic_id),
+      };
+      break;
+    case "stopped":
+      answer = { state: "cancelled", reason: doc.liveness.reason, clear_with: null };
+      break;
+    case "completed":
+      answer = { state: "done", reason: doc.liveness.reason, clear_with: null };
+      break;
+  }
+  return answer;
 }
 
 /**
