@@ -2188,3 +2188,4 @@
 {"ts":"2026-10-04T03:58:09.949453131Z","tick":"z3p","action":"close","actor":"cloud:orchestrator","epic":"hn6","data":{"title":"An earlier run's hold never reaches needs-you across runs"}}
 {"ts":"2026-10-04T03:58:25.491784008Z","tick":"d23","action":"start","actor":"cloud:orchestrator","epic":"hn6","data":{"title":"Untriaged findings without a hold line never reach needs-you across runs"}}
 {"ts":"2026-10-04T03:58:48.326825702Z","tick":"eli","action":"start","actor":"cloud:orchestrator","epic":"hn6","data":{"title":"Try panel's next step disagrees with needs-you for a prior-held tick"}}
+{"ts":"2026-10-04T03:59:09.553158464Z","tick":"ulw","action":"start","actor":"cloud:orchestrator","epic":"hn6","data":{"title":"A held cloud run's needs-you command cannot release the attempt it names"}}
