@@ -49,3 +49,13 @@ export {
   type SandboxRunOutcome,
 } from "./env/sandbox-door.js";
 export { createTrackedBashTool } from "./tools/tracked-bash.js";
+export {
+  type HostShell,
+  type RestoreOutcome,
+  restoreWorkspace,
+  WIP_COMMIT_SUBJECT,
+  type WipOutcome,
+  type WorkspaceCheckpointOptions,
+  type WorkspaceGit,
+  workspaceCheckpointExtension,
+} from "./workspace/checkpoints.js";

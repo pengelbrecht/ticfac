@@ -17,7 +17,15 @@
  *    process — the env finds the STILL-RUNNING process by nonce through
  *    `listProcesses` and reattaches to it, reading on from the cursor,
  *    instead of running the command again. This is the prototype's
- *    experiment 3, and the tick's acceptance test.
+ *    experiment 3, and tick kgk's acceptance test.
+ *
+ * Workspace checkpoints (epic 43y step 4, tick dwn): with `workspace` set,
+ * a container LOST mid-command — its process gone, or ended with no exit
+ * code — is restored from the attempt branch (./workspace/checkpoints.ts):
+ * the fresh box boots empty, the env clears, clones, checks out the last
+ * wip commit, runs setup, and hands the model a "restored to …; re-check
+ * and re-run" result so the turn continues. A replay whose process is
+ * gone checks the workspace is there before re-starting on it.
  *
  * Runtime-neutral on purpose: the door is structural (./sandbox-door.ts), so
  * the same env code runs in the cloud (a DO stub) and in tests (a local
@@ -38,6 +46,12 @@ import {
   type ShellExecResult,
   type TextLineReader,
 } from "@earendil-works/pi-durable/env";
+import {
+  type HostShell,
+  type RestoreOutcome,
+  restoreWorkspace,
+  type WorkspaceGit,
+} from "../workspace/checkpoints.js";
 import {
   defaultGuardDir,
   type GuardInstallBase,
@@ -115,6 +129,13 @@ export type FactorySandboxEnvOptions = {
   readonly pollMs?: number;
   /** A clock, for tests. */
   readonly now?: () => number;
+  /**
+   * This attempt's workspace git (epic 43y step 4, tick dwn): the attempt
+   * branch a lost container is restored from, and whose wip commits the
+   * checkpoint extension pushes ({@link hostShell} feeds it). Without it a
+   * lost container is only reported, never restored.
+   */
+  readonly workspace?: WorkspaceGit;
 };
 
 /** One short command's outcome, as the env classifies it. */
@@ -182,7 +203,9 @@ export class FactorySandboxEnv implements ExecutionEnv {
   private readonly readyTimeoutMs: number;
   private readonly pollMs: number;
   private readonly now: () => number;
+  private readonly workspace: WorkspaceGit | null;
   private guardInstalling: Promise<void> | undefined;
+  private restoring: Promise<RestoreOutcome> | undefined;
 
   constructor(options: FactorySandboxEnvOptions) {
     this.door = options.sandbox;
@@ -192,6 +215,7 @@ export class FactorySandboxEnv implements ExecutionEnv {
     this.readyTimeoutMs = options.readyTimeoutMs ?? READY_TIMEOUT_MS;
     this.pollMs = options.pollMs ?? BASH_POLL_MS;
     this.now = options.now ?? Date.now;
+    this.workspace = options.workspace ?? null;
   }
 
   // ------------------------------------------------------------ the guard ---
@@ -266,6 +290,17 @@ export class FactorySandboxEnv implements ExecutionEnv {
   /** The command line the door sees: the guard's `tk` ahead of every other. */
   private withGuard(line: string): string {
     return this.guardDir === null ? line : guardPathPrefix(this.guardDir) + line;
+  }
+
+  /**
+   * The host-side git shell: one short command per line through the run
+   * door, the guard's PATH in front, at the workspace root — what the wip
+   * checkpoint and the lost-container restore drive `git` through
+   * (./workspace/checkpoints.ts). Host commands, never the model's tracked
+   * bash: untracked, un-nonce'd, and the door's output bound applies.
+   */
+  hostShell(): HostShell {
+    return { execLine: (line, vars) => this.short(line, vars) };
   }
 
   /** Writes `content` as `path`, in chunks: one env var's value is bounded. */
@@ -638,9 +673,20 @@ export class FactorySandboxEnv implements ExecutionEnv {
       // whether it is still running (reattach) or already finished (its exit
       // code is the answer).
       const marker = bashNonceMarker(nonce);
-      id =
-        (await this.door.listProcesses()).find((view) => view.command?.includes(marker))?.id ??
-        (await this.door.startProcess(`${marker}\n${line}`, vars, { keepAlive: true })).id;
+      const found = (await this.door.listProcesses()).find((view) =>
+        view.command?.includes(marker),
+      )?.id;
+      if (found !== undefined) {
+        id = found;
+      } else {
+        // No process for this nonce: either the command never started, or
+        // the CONTAINER it ran in is gone and the fresh one booted empty.
+        // Tell the two apart before starting — a replay that starts on an
+        // empty workspace would silently lose everything since the last wip
+        // (epic 43y step 4). One short command, on this rare path only.
+        await this.ensureWorkspaceRestored();
+        id = (await this.door.startProcess(`${marker}\n${line}`, vars, { keepAlive: true })).id;
+      }
     }
 
     const deadline = timeoutMs === undefined ? Number.POSITIVE_INFINITY : this.now() + timeoutMs;
@@ -648,13 +694,7 @@ export class FactorySandboxEnv implements ExecutionEnv {
     while (true) {
       const view = await this.door.getProcess(id);
       if (view === null) {
-        return err(
-          new ExecutionError(
-            "unknown",
-            "the container no longer knows this process — it was lost mid-command; " +
-              "the workspace will be restored by the next tool round (epic 43y step 4)",
-          ),
-        );
+        return this.containerLost("the container no longer knows this process");
       }
       const chunk: SandboxOutput = await this.door.readOutput(id, cursor);
       if (chunk.text !== "" && options?.onOutput !== undefined) {
@@ -663,7 +703,7 @@ export class FactorySandboxEnv implements ExecutionEnv {
       cursor = chunk.offset;
       if (view.state !== "running") {
         if (view.exit_code === null) {
-          return err(new ExecutionError("unknown", "the process was lost without an exit code"));
+          return this.containerLost("the process was lost without an exit code");
         }
         return ok({ exitCode: view.exit_code });
       }
@@ -694,6 +734,95 @@ export class FactorySandboxEnv implements ExecutionEnv {
       };
       signal?.addEventListener("abort", onAbort, { once: true });
     });
+  }
+
+  // ------------------------------------------- workspace restore (step 4) ---
+
+  /**
+   * Whether a replay's fresh start is on a live workspace: a container
+   * destroyed while no harness watched boots EMPTY, and a re-started
+   * command would run on nothing. One short command; restore only when the
+   * workspace is missing. Throws the restore's failure — the replay must
+   * not start on a box it could not rebuild.
+   */
+  private async ensureWorkspaceRestored(): Promise<void> {
+    if (this.workspace === null) return;
+    const check = await this.short('test -e "$CWD/.git"', { CWD: this.cwd });
+    if (check.exitCode === 0) return;
+    const restore = await this.restoreLostWorkspace();
+    if (restore.kind === "failed") {
+      throw new Error(`the workspace could not be restored: ${restore.error}`);
+    }
+  }
+
+  /**
+   * Restores this attempt's workspace into the container the door boots
+   * next — the fresh one after a loss boots EMPTY: clear it, clone the
+   * attempt branch, check out its tip (the last wip commit, the round's
+   * checkpoint) and run the setup command
+   * (./workspace/checkpoints.ts). One restore at a time per env; a failed
+   * one is retried by the next loss. Public: the WorkerAgent host (epic
+   * step 6), which owns the container's lifetime, may restore ahead of a
+   * round it knows the box under.
+   */
+  async restoreLostWorkspace(): Promise<RestoreOutcome> {
+    const git = this.workspace;
+    if (git === null) {
+      return {
+        kind: "failed",
+        error: "this env carries no workspace git, so the workspace cannot be restored",
+      };
+    }
+    // The guard directory died with the container; the next command into the
+    // fresh box reinstalls it.
+    this.guardInstalling = undefined;
+    this.restoring ??= restoreWorkspace(this.hostShell(), git).then(
+      (outcome) => {
+        if (outcome.kind === "failed") this.restoring = undefined; // the next loss retries
+        return outcome;
+      },
+      (error: unknown) => {
+        this.restoring = undefined;
+        throw error;
+      },
+    );
+    return this.restoring;
+  }
+
+  /**
+   * The container was lost mid-command (its process is gone, or ended with
+   * no exit code): restore the workspace from the last wip commit and hand
+   * the model the message the prototype's experiment 4 proved — restored
+   * to N, re-check and re-run. The model re-reads the files and re-runs the
+   * command on the restored tree; edits since the last tool round are the
+   * only loss.
+   */
+  private async containerLost(what: string): Promise<Result<ShellExecResult, ExecutionError>> {
+    if (this.workspace === null) {
+      return err(
+        new ExecutionError(
+          "unknown",
+          `the container was lost mid-command (${what}) and this env carries no workspace git to restore from`,
+        ),
+      );
+    }
+    const restore = await this.restoreLostWorkspace();
+    if (restore.kind === "failed") {
+      return err(
+        new ExecutionError(
+          "unknown",
+          `the container was lost mid-command (${what}) and the workspace restore failed: ${restore.error}`,
+        ),
+      );
+    }
+    return err(
+      new ExecutionError(
+        "unknown",
+        `the container was lost mid-command (${what}); the workspace was restored to ` +
+          `${restore.sha.slice(0, 12)} (${restore.subject}) — ` +
+          "re-check the files you were working on and re-run what you were doing",
+      ),
+    );
   }
 
   // --------------------------------------------------------------- helpers ---
