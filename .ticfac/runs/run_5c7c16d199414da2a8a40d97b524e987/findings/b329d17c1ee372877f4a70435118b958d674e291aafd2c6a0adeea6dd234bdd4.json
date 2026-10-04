@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "u4l",
   "attempt": 3,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T01:07:11Z",
+  "triaged_at": "2026-10-04T01:07:22Z",
+  "triaged_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987 absorbing 9um",
+  "promoted_as": "9um",
   "provenance": {
     "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
     "tick_id": "u4l",
