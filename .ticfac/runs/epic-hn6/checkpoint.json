@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 45,
-  "state": "gating",
-  "reason": "running the integrated gate for e6g on cae7e47f6758",
-  "updated_at": "2026-10-04T17:36:05Z",
+  "sequence": 46,
+  "state": "publishing",
+  "reason": "closing e6g behind the integrated gate on cae7e47f6758",
+  "updated_at": "2026-10-04T17:42:25Z",
   "ticks": [
     {
       "tick_id": "v16",
