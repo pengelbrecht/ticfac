@@ -289,6 +289,25 @@ func buildRunElapsed(src Sources, merged *mergedRuns, recs Records) *int64 {
 	return &elapsed
 }
 
+// endedRunReason is the sentence and the moment the run's own ending stated:
+// the terminal checkpoint's own reason and updated_at, else the terminal
+// line's own detail and its own stamp. The state word the ending was
+// classified by is cut from the front of whichever sentence it leads, so
+// the wait words it once — the sentence is the run's own either way. Both
+// empty when neither record states them — a reason nobody wrote is never
+// invented.
+func endedRunReason(src Sources, recs Records, ending string) (string, string) {
+	if recs.Checkpoint != nil && recs.Checkpoint.State.Terminal() {
+		return strings.TrimSpace(strings.TrimPrefix(recs.Checkpoint.Reason, ending+":")),
+			recs.Checkpoint.UpdatedAt
+	}
+	if line := lastTerminalLine(src.Feed); line != nil {
+		reason := strings.TrimSpace(strings.TrimPrefix(line.Detail, ending+":"))
+		return reason, line.At
+	}
+	return "", ""
+}
+
 // runEndedAt answers when the run's own records say it ended. A run's end is
 // its own word, in the order of the authorities: the terminal checkpoint it
 // wrote (the moment of the state change is its own updated_at), else its own
@@ -304,18 +323,7 @@ func runEndedAt(src Sources, recs Records) (time.Time, bool) {
 			return at, true
 		}
 	}
-	var terminal *runfeed.Event
-	for i := range src.Feed {
-		switch src.Feed[i].Stage {
-		case reconcile.StageRunFinished, reconcile.StageRunDied:
-			terminal = &src.Feed[i]
-		case reconcile.StageResumed, reconcile.StageResumedAutomatically:
-			// A resume standing after a terminal line makes that line the
-			// previous incarnation's history — position in the feed is the
-			// clock, never the line's own stamp (the file is append-only).
-			terminal = nil
-		}
-	}
+	terminal := lastTerminalLine(src.Feed)
 	if terminal == nil {
 		return time.Time{}, false
 	}
@@ -710,12 +718,12 @@ func buildLifecycle(src Sources, recs Records, m Model) Lifecycle {
 	}
 
 	lifecycle := Lifecycle{Phases: phases}
-	switch {
-	case recs.Checkpoint != nil && recs.Checkpoint.State == "failed":
+	switch ending := runEnding(src, recs); {
+	case ending == endFailed:
 		lifecycle.Phase = PhaseFailed
-	case recs.Checkpoint != nil && recs.Checkpoint.State == "cancelled":
+	case ending == endCancelled:
 		lifecycle.Phase = PhaseCancelled
-	case runCompleted(src, recs):
+	case ending == endCompleted:
 		// The run's own work is finished. What is left is the person's: the
 		// merge while the PR stands open, and nothing once it is gone.
 		if mergeState == PhaseStateActive {
@@ -724,6 +732,11 @@ func buildLifecycle(src Sources, recs Records, m Model) Lifecycle {
 			lifecycle.Phase = PhaseDone
 		}
 	default:
+		// A run that has not ended by its own word — going, dead without a
+		// terminal word, or ended by the factory's own "stopped" word, an
+		// ending that is no phase of the epic's: the phase is where the
+		// EPIC stands (tick jkb), never a terminal answer the run did not
+		// write.
 		for _, p := range phases {
 			if p.State != PhaseStateDone {
 				lifecycle.Phase = p.Phase
@@ -802,27 +815,110 @@ func latestStage(feed []runfeed.Event, tickID, stage string) *runfeed.Event {
 	return latest
 }
 
-// runCompleted says whether the run's own records say it finished: the
-// checkpoint's terminal completion, or its own run_finished line. The
-// feed's own LAST run_finished line is the run's word, and only its word
-// (tick bkg): a failed run is resumable under the same run id, so a resumed
-// run's feed still carries the failed incarnation's run_finished, and ANY
-// line would read a run that stopped failed and just began again as
-// finished — surfacing a person's merge wait for work that is still going.
-// The reconciler writes the line's detail LED by the runstate word it
-// checkpointed ("failed: the integrated gate refused ...", "completed:
-// every tick closed ..."), the same authority `ticfac watch`'s own
-// ended-failed question reads, so a line that names a failure is an ending
-// that is not a completion.
+// The run's own ending vocabulary, as its durable records spell it: the
+// state word a terminal checkpoint leads with, or the one a terminal feed
+// line leads with. Empty is "no end stated" — a run that is going, or one
+// whose ending nobody recorded (tick jkb). The words overlap runstate's
+// own closed vocabulary, and the one that does not — "stopped" — is the
+// cloud factory's own word for a deliberate stop, the same word its
+// finalize writes to the run_finished stage every surface reads.
+const (
+	endCompleted = string(runstate.StateCompleted)
+	endFailed    = string(runstate.StateFailed)
+	endCancelled = string(runstate.StateCancelled)
+	endStopped   = "stopped"
+)
+
+// runEnding answers how the run's own records say it ended, by the order of
+// the authorities: the terminal checkpoint it wrote, else its own terminal
+// line — run_finished or run_died — when no resume stands after it in the
+// feed, because the feed is append-only per run id and a resumed run still
+// carries its previous incarnation's terminal line as history (the same
+// position rule runEndedAt holds). The line's DETAIL is classified by the
+// state word it leads with — the vocabulary the reconciler and the factory
+// both write, never prose to parse. A detail no closed word leads is no
+// end stated: the OLD rule read any run_finished not naming a failure as a
+// completion, and the factory's "stopped: …" line made every
+// operator-stopped run a finished one — phase done, merge done, a healthy
+// verdict and an ETA beside 33 open ticks (tick jkb). An ending is now a
+// POSITIVE reading of the run's own word.
+func runEnding(src Sources, recs Records) string {
+	if recs.Checkpoint != nil && recs.Checkpoint.State.Terminal() {
+		switch recs.Checkpoint.State {
+		case runstate.StateCompleted:
+			return endCompleted
+		case runstate.StateFailed:
+			return endFailed
+		case runstate.StateCancelled:
+			return endCancelled
+		}
+	}
+	line := lastTerminalLine(src.Feed)
+	if line == nil {
+		return ""
+	}
+	return classifyEnding(line.Stage, line.Detail)
+}
+
+// lastTerminalLine is the run's own last terminal word that no resume
+// answered: the newest run_finished or run_died line, when no resume
+// (deliberate or automatic) stands after it in the feed — position in the
+// file is the clock, and a resume standing after a terminal line makes that
+// line the previous incarnation's history.
+func lastTerminalLine(feed []runfeed.Event) *runfeed.Event {
+	var terminal *runfeed.Event
+	for i := range feed {
+		switch feed[i].Stage {
+		case reconcile.StageRunFinished, reconcile.StageRunDied:
+			terminal = &feed[i]
+		case reconcile.StageResumed, reconcile.StageResumedAutomatically:
+			terminal = nil
+		}
+	}
+	return terminal
+}
+
+// classifyEnding reads the state word a terminal line leads with — the same
+// closed vocabulary `ticfac watch`'s own ended classifiers read, so no two
+// surfaces answer one ending with different words. A death (run_died) is
+// the failed class unless its line carries the cancelled word (a person's
+// SIGINT, tick vqc); run_finished carries the reconciler's own state words,
+// the resume path's "the run is already <state>: …" replays, and the
+// factory's "stopped:". A line no closed word leads states no ending.
+func classifyEnding(stage, detail string) string {
+	switch stage {
+	case reconcile.StageRunDied:
+		if strings.HasPrefix(detail, endCancelled+":") {
+			return endCancelled
+		}
+		return endFailed
+	case reconcile.StageRunFinished:
+		switch {
+		case strings.HasPrefix(detail, endFailed+":"),
+			strings.HasPrefix(detail, "the run is already "+endFailed+":"):
+			return endFailed
+		case strings.HasPrefix(detail, endCancelled+":"),
+			strings.HasPrefix(detail, "the run is already "+endCancelled+":"):
+			return endCancelled
+		case strings.HasPrefix(detail, endStopped+":"):
+			return endStopped
+		case strings.HasPrefix(detail, endCompleted+":"),
+			strings.HasPrefix(detail, "the run is already "+endCompleted+":"):
+			return endCompleted
+		}
+	}
+	return ""
+}
+
+// runCompleted says whether the run's own records say it finished its work:
+// the ending word "completed", by the derivation above. The feed's own LAST
+// terminal line is the run's word, and only its word (tick bkg): a failed
+// run is resumable under the same run id, so a resumed run's feed still
+// carries the failed incarnation's ending, and ANY line would read a run
+// that stopped failed and just began again as finished — surfacing a
+// person's merge wait for work that is still going.
 func runCompleted(src Sources, recs Records) bool {
-	if recs.Checkpoint != nil && recs.Checkpoint.State == "completed" {
-		return true
-	}
-	last := latestStage(src.Feed, "", reconcile.StageRunFinished)
-	if last == nil {
-		return false
-	}
-	return !strings.HasPrefix(last.Detail, string(runstate.StateFailed)+":")
+	return runEnding(src, recs) == endCompleted
 }
 
 // buildWaits states what the run is blocked on, and everything a person must
@@ -857,6 +953,10 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 		ownRunID = recs.Checkpoint.RunID
 	}
 
+	// The run's own ending word, computed once for every wait below to
+	// read: one derivation, never two that could disagree (tick jkb).
+	ending := runEnding(src, recs)
+
 	// A run whose process is gone without its own terminal record: nothing
 	// advances it, and only a person can say whether it resumes. The
 	// liveness answer itself may carry the run's own durable word that it
@@ -865,8 +965,11 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 	// checkout that cannot read that record fails to hold. Without this, the
 	// factory's finished runs — the ones this checkout holds no run state
 	// for at all, because they belong to other projects — were every one of
-	// them "dead" on the surface that aggregates every run (tick 2qz).
-	if !src.Liveness.Alive && !runTerminal(recs) && !livenessNamesAnEnd(src.Liveness.State) {
+	// them "dead" on the surface that aggregates every run (tick 2qz). A
+	// run whose own ending IS stated — failed, stopped — is not this
+	// wait's either: the ended-run wait below words the same stop from the
+	// ending's own sentence, never twice over one ending.
+	if !src.Liveness.Alive && ending == "" && !livenessNamesAnEnd(src.Liveness.State) {
 		w := Wait{
 			Kind:        WaitDeadRun,
 			What:        fmt.Sprintf("run %s is %s: %s", m.RunID, src.Liveness.State, src.Liveness.Reason),
@@ -940,6 +1043,52 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 			w.UnblockCommand = command
 		}
 		claim(w)
+	}
+
+	// A run that ended by its own word and is not going — it failed, or the
+	// factory stopped it — holds one thing only: the resume, a person's
+	// decision nothing makes for them (tick jkb). The dead-run wait below
+	// once starved exactly these runs: runTerminal exempted a failed run on
+	// the grounds that its own word was terminal, and the frame said "needs
+	// you: nothing" beside a stopped verdict for an epic only a person can
+	// start again. The wait lands AFTER the holds, current and prior: a
+	// standing hold is the harder stop, the same rule the rows' next steps
+	// hold — a resume replays a hold rather than clearing it — and the
+	// needs-you list carries both entries either way. A cancelled run is
+	// deliberately quiet (its own terminal answer stands), and a completed
+	// one waits on the merge below.
+	//
+	// The wait is stated only where this checkout could read the run's own
+	// durable records (a checkpoint it holds, terminal or not — the same
+	// boundary the dead-run wait's liveness exemption holds for a foreign
+	// cloud run): the command it names is one THIS checkout types, and a run
+	// whose records live on another project's origin is not this checkout's
+	// to resume — the ending is still stated (the phase, the verdict), but
+	// no wait of this repo's commands may claim a person for it.
+	if !src.Liveness.Alive {
+		if recs.Checkpoint != nil && (ending == endFailed || ending == endStopped) {
+			reason, since := endedRunReason(src, recs, ending)
+			w := Wait{Kind: WaitDeadRun, NeedsPerson: true}
+			switch {
+			case reason == "" && ending == endFailed:
+				w.What = fmt.Sprintf("run %s failed", m.RunID)
+			case reason == "":
+				w.What = fmt.Sprintf("run %s is stopped", m.RunID)
+			case ending == endFailed:
+				w.What = fmt.Sprintf("run %s failed: %s", m.RunID, reason)
+			default:
+				w.What = fmt.Sprintf("run %s is stopped: %s", m.RunID, reason)
+			}
+			if since != "" {
+				w.Since = &since
+			}
+			// The resume is named by the host the run lives on (tick gtk): a
+			// cloud run's is a new submission to its factory, because
+			// run-epic here would restart the epic LOCALLY.
+			unblock := ResumeCommand(m.Host, m.EpicID)
+			w.UnblockCommand = &unblock
+			claim(w)
+		}
 	}
 
 	// A completed run's open PR is the person's to merge.
@@ -1288,15 +1437,6 @@ func mergedStateOf(m Model, tickID string) string {
 	return ""
 }
 
-// runTerminal says whether the run's own records say it ended by its own
-// word — the states a run only reaches by writing them.
-func runTerminal(recs Records) bool {
-	if recs.Checkpoint == nil {
-		return false
-	}
-	return recs.Checkpoint.State.Terminal()
-}
-
 // livenessNamesAnEnd says whether the liveness state IS the run's own
 // durable word that it ended: the cloud record's finished vocabulary
 // (completed, stopped, failed), written by the Workflow the run lives in and
@@ -1312,6 +1452,7 @@ func livenessNamesAnEnd(state string) bool {
 }
 
 // buildRemaining estimates the time left ONLY where measured tick durations
+<<<<<<< HEAD
 // support it AND the run is still going: the median of what the epic's closed
 // ticks measurably took — each row's own duration, the last run that touched
 // it, dispatch to gate — times the ticks still open. Fewer than three
@@ -1320,11 +1461,29 @@ func livenessNamesAnEnd(state string) bool {
 // probe's end-word vocabulary when the checkpoint lags the end — states no
 // remaining time at all (tick onv): nobody is working towards the open
 // ticks, and an ETA beside "● stopped" is a promise the run cannot keep.
+=======
+// support it: the median of what the epic's closed ticks measurably took —
+// each row's own duration, the last run that touched it, dispatch to gate —
+// times the ticks still open. Fewer than three measured closes support
+// nothing, and the estimate names its basis. A run that ended by its own
+// word supports nothing either (tick jkb): the estimate is the GOING run's
+// answer to "how long is left", and a run that failed or was stopped will
+// finish nothing in the time it states — an ETA beside "● stopped" is the
+// same lie a phase of done was, read forward.
+>>>>>>> 6f000a0fc682979ea739d30c89fd4b4651c42c6c
 func buildRemaining(src Sources, m Model) *Remaining {
 	if m.Progress.Ticks == nil || m.Progress.Ticks.Open == 0 {
 		return nil
 	}
+<<<<<<< HEAD
 	if (src.Records != nil && runTerminal(*src.Records)) || livenessNamesAnEnd(src.Liveness.State) {
+=======
+	recs := Records{}
+	if src.Records != nil {
+		recs = *src.Records
+	}
+	if runEnding(src, recs) != "" {
+>>>>>>> 6f000a0fc682979ea739d30c89fd4b4651c42c6c
 		return nil
 	}
 	durations := []time.Duration{}

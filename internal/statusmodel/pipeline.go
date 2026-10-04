@@ -81,6 +81,11 @@ type pipelineIndex struct {
 	standing       map[string]bool
 	priorHold      map[string]PriorHold
 	feed           []runfeed.Event
+	// notGoing says the run that owns this row's work is not going and will
+	// not retry anything by itself: not alive, and its own ending word — if
+	// it stated one — neither completed nor cancelled (tick jkb). A refused
+	// try's honest next step is then the resume, never the tier ladder.
+	notGoing bool
 }
 
 // newPipelineIndex groups the sources' per-tick facts once, so decorating a
@@ -164,6 +169,12 @@ func newPipelineIndex(src Sources, merged *mergedRuns, priorHolds []PriorHold, e
 	for _, attempt := range src.Standing {
 		p.standing[tryKey(attempt.TickID, attempt.Attempt)] = true
 	}
+	recs := Records{}
+	if src.Records != nil {
+		recs = *src.Records
+	}
+	ending := runEnding(src, recs)
+	p.notGoing = !src.Liveness.Alive && ending != endCompleted && ending != endCancelled
 	return p
 }
 
@@ -608,6 +619,15 @@ func (p *pipelineIndex) nextStepOf(tick *Tick, last Try) *string {
 	}
 	if p.heldForPerson(tick.TickID, last.Attempt) {
 		step := "held — see needs-you"
+		return &step
+	}
+	// A run that is not going (tick jkb): dead without a terminal word,
+	// failed by its own word, or stopped by the factory — the ladder's
+	// "will retry" was a promise nothing would keep, and the honest next
+	// step is the resume, the same command the header's needs-you entry
+	// carries (one answer, two wordings, the rule tick eli holds).
+	if p.notGoing {
+		step := "the run is not going — " + ResumeCommand(p.host, p.epicID) + " takes it up"
 		return &step
 	}
 	step := "the run will retry or escalate the tier"

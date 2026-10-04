@@ -339,8 +339,26 @@ func TestBuildDerivesTheEpicAcrossRuns(t *testing.T) {
 		*model.WaitsOn.UnblockCommand != `ticfac settle hpd at3 12 --run-id run_bbb --release "<who>"` {
 		t.Errorf("the hold's command is %+v, want the release addressed to the holding run", model.WaitsOn.UnblockCommand)
 	}
-	if len(model.Attention) != 1 || model.Attention[0].Kind != WaitHeldForPerson {
-		t.Errorf("the attention reads %+v, want the single held-for-person entry", model.Attention)
+	if len(model.Attention) != 2 {
+		t.Fatalf("the attention reads %+v, want the prior hold and the newest run's own failed resume (tick jkb)", model.Attention)
+	}
+	for _, a := range model.Attention {
+		switch a.Kind {
+		case WaitHeldForPerson:
+			if !strings.Contains(a.What, "run_bbb") || !strings.Contains(a.What, "at3") {
+				t.Errorf("the held-for-person entry reads %q, want the holding run and the tick named", a.What)
+			}
+		case WaitDeadRun:
+			// The newest run failed by its own word and is not going: the
+			// resume is a person's, beside the hold — the hold is the harder
+			// stop, so it is the one the run waits ON.
+			if !strings.Contains(a.What, "failed") || a.UnblockCommand == nil ||
+				*a.UnblockCommand != "ticfac run hpd --cloud" {
+				t.Errorf("the failed run's resume entry reads %+v, want the cloud resume", a)
+			}
+		default:
+			t.Errorf("the attention carries an entry nobody states: %+v", a)
+		}
 	}
 
 	// Run aaa's hold was answered — the resume stands after it in its own
@@ -392,6 +410,7 @@ func epicStillWorkingSources() Sources {
 }
 
 // TestBuildETAAcrossRuns: the estimate is built from every closed tick the
+<<<<<<< HEAD
 // epic has measured, earlier runs included — with the duplicate excluded —
 // but only for a run that is still going. The fixture's own newest run
 // failed, so the estimate is pinned on the same sources with the run back
@@ -399,8 +418,45 @@ func epicStillWorkingSources() Sources {
 func TestBuildETAAcrossRuns(t *testing.T) {
 	t.Parallel()
 	model := Build(epicStillWorkingSources())
+=======
+// epic has measured, earlier runs included — with the duplicate excluded.
+// A run that ended by its own word states NONE (tick jkb): the estimate is
+// the going run's answer to "how long is left", and a failed or stopped run
+// will finish nothing in the time it would state — so the same fixture is
+// turned going (the failed ending answered by a resume, the run alive
+// again) to pin the across-runs estimate where it belongs.
+func TestBuildETAAcrossRuns(t *testing.T) {
+	t.Parallel()
+	ended := Build(failedNewestSources())
+	if ended.Remaining != nil {
+		t.Errorf("a run whose own word says it failed states an ETA of %+v, want none: nothing is going to finish in that time",
+			ended.Remaining)
+	}
+
+	// The same epic, going again: the failed incarnation's ending is
+	// history — the resume stands after it — and the estimate returns,
+	// measured across runs as before.
+	src := failedNewestSources()
+	src.Records.Checkpoint.State = "running"
+	src.Records.Checkpoint.Reason = "at4 is dispatched again"
+	two := 2
+	src.Feed = append(src.Feed,
+		runfeed.Event{SchemaVersion: 1, At: src.Now.Add(-20 * time.Minute).UTC().Format(time.RFC3339),
+			RunID: "run_ccc", Stage: reconcile.StageResumed,
+			Detail: "the run stopped at failed and is resumed under the same run id: the orchestrator could not claim the epic's width"},
+		runfeed.Event{SchemaVersion: 1, At: src.Now.Add(-15 * time.Minute).UTC().Format(time.RFC3339),
+			RunID: "run_ccc", TickID: tickPtr("at4"), Attempt: &two, Stage: reconcile.StageDispatched,
+			Detail: "at4 try 2 dispatched"},
+	)
+	src.Liveness = LivenessInput{
+		Alive: true, State: "running",
+		Reason: "the Workflow's supervisor says the orchestrator container is running",
+		Source: "workflow-supervisor",
+	}
+	model := Build(src)
+>>>>>>> 6f000a0fc682979ea739d30c89fd4b4651c42c6c
 	if model.Remaining == nil {
-		t.Fatal("three measured closes support an estimate and the fixture has them: the model must state one")
+		t.Fatal("three measured closes support an estimate and the going fixture has them: the model must state one")
 	}
 	// The measured durations are t1 1h55m (run aaa), t2 2h55m (run bbb),
 	// t5 35m (run bbb) — median 1h55m, times the two ticks still open
@@ -702,6 +758,26 @@ func priorHoldSources(mutate func(*Sources)) Sources {
 // model's attention names it with the command that clears THAT run's hold.
 func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
 	t.Parallel()
+	// The prior-hold tests below answer one hold at a time; the fixture's
+	// newest run has ALSO failed by its own word, so the model states its
+	// resume beside whatever the sub-case leaves standing (tick jkb) — the
+	// assertions that the hold is gone are assertions about the HOLD, read
+	// through this helper: the only wait left is the failed run's own
+	// resume, and no held-for-person entry remains.
+	answeredHold := func(t *testing.T, model Model) {
+		t.Helper()
+		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitDeadRun ||
+			!strings.Contains(model.WaitsOn.What, "failed") ||
+			model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run-epic hpd" {
+			t.Fatalf("the run waits on %+v, want only the failed newest run's own resume", model.WaitsOn)
+		}
+		for _, a := range model.Attention {
+			if a.Kind == WaitHeldForPerson {
+				t.Errorf("an answered hold still reads as a held-for-person wait: %+v", a)
+			}
+		}
+	}
+
 	t.Run("the hold stands and names the clearing command", func(t *testing.T) {
 		t.Parallel()
 		model := Build(priorHoldSources(nil))
@@ -725,9 +801,7 @@ func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
 				Stage: reconcile.StageResumed, Detail: "resumed after the person released the attempt",
 			})
 		}))
-		if model.WaitsOn != nil || len(model.Attention) != 0 {
-			t.Errorf("an answered hold still reads as a wait: %+v / %+v", model.WaitsOn, model.Attention)
-		}
+		answeredHold(t, model)
 	})
 
 	t.Run("a person's release answers it", func(t *testing.T) {
@@ -745,9 +819,7 @@ func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
 			}}
 			src.PriorRecords[0] = prior
 		}))
-		if model.WaitsOn != nil || len(model.Attention) != 0 {
-			t.Errorf("a released hold still reads as a wait: %+v / %+v", model.WaitsOn, model.Attention)
-		}
+		answeredHold(t, model)
 	})
 
 	t.Run("the newest run's own hold on the tick is the live word", func(t *testing.T) {
@@ -779,9 +851,7 @@ func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
 				Detail: "at1 try 1 dispatched",
 			})
 		}))
-		if model.WaitsOn != nil || len(model.Attention) != 0 {
-			t.Errorf("a superseded hold still reads as a wait: %+v / %+v", model.WaitsOn, model.Attention)
-		}
+		answeredHold(t, model)
 	})
 
 	t.Run("a closed tick's hold is history", func(t *testing.T) {
@@ -796,9 +866,7 @@ func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
 				},
 			})
 		}))
-		if model.WaitsOn != nil || len(model.Attention) != 0 {
-			t.Errorf("a hold on a closed tick still reads as a wait: %+v / %+v", model.WaitsOn, model.Attention)
-		}
+		answeredHold(t, model)
 	})
 
 	t.Run("the untriaged-findings hold is cleared by triage, addressed to the holding run", func(t *testing.T) {

@@ -368,6 +368,45 @@ describe("the stop vocabulary (pure)", () => {
     }
   });
 
+  it("keeps a failed run's own resume one message and one class (tick jkb)", () => {
+    // A failed run's model now carries its resume in attention, as the Go
+    // model states it: the row keeps the failed class with the same resume
+    // (never the held band), and the page is the one stop — never a second
+    // "terminal:failed" message about the same move.
+    const failed = doc("epic-2jn", "2jn", {
+      liveness: {
+        alive: false,
+        state: "dead",
+        reason: "the gate refused the attempt",
+        source: "run.pid",
+      },
+      lifecycle: { phase: "failed", phases: [], wave: null },
+      waits_on: {
+        kind: "dead-run",
+        what: "run epic-2jn failed: the gate refused the attempt",
+        since: null,
+        needs_person: true,
+        unblock_command: "ticfac run-epic 2jn",
+      },
+      attention: [
+        {
+          kind: "dead-run",
+          what: "run epic-2jn failed: the gate refused the attempt",
+          since: null,
+          needs_person: true,
+          unblock_command: "ticfac run-epic 2jn",
+        },
+      ],
+    }) as unknown as StatusDoc;
+    const page = classifyStatusDoc(failed);
+    expect(page.state).toBe("failed");
+    expect(page.clear_with).toBe("ticfac run-epic 2jn");
+    const stops = stopsFromStatusDoc(failed);
+    expect(stops).toHaveLength(1);
+    expect(stops[0]!.kind).toBe("person");
+    expect(stops[0]!.clear_with).toBe("ticfac run-epic 2jn");
+  });
+
   it("names no tick when the run pushed no labels", () => {
     const html = stopAlertHTML(
       "epic-2jn",
