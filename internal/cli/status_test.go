@@ -291,6 +291,42 @@ func TestStatusNamesAnAttemptByItsLabel(t *testing.T) {
 	}
 }
 
+// Status reports the run's escalation record (internal/escalation) from the
+// feed the run already wrote: implementation ticks started, how many needed a
+// higher tier and whose failure made them, and the first-tier share. The
+// fixture feed is the escalation package's own.
+func TestStatusReportsTheRunsEscalationRecord(t *testing.T) {
+	t.Parallel()
+	repo := statusFixture(t, time.Now())
+	runID := "r-status"
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+	raw, err := os.ReadFile(filepath.Join("..", "escalation", "testdata", "feed.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := runfeed.Path(repo, runID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out syncBuffer
+	if code := Run([]string{"status", "--repo", repo, runID}, &out, &syncBuffer{}); code != 0 {
+		t.Fatalf("a live run exited %d: %s", code, out.String())
+	}
+	want := "escalation: 8 implementation tick(s) started here (+1 picked up past their first try); " +
+		"5 needed a higher tier (2 model, 2 infrastructure, 1 other); 3 of 8 succeeded on their first tier (38%); 1 not closed"
+	if !strings.Contains(out.String(), want) {
+		t.Errorf("status does not report the escalation record:\n%s\nwant a line:\n%s", out.String(), want)
+	}
+}
+
 // A tracker that cannot be read costs the labels, never the line.
 func TestTickLabelsOnAnUnreadableTrackerIsEmpty(t *testing.T) {
 	t.Parallel()
