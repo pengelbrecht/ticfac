@@ -1,0 +1,14 @@
+{
+  "id": "jd3",
+  "title": "Upgrade workers to Pi 1.0 (cloud image and local pi profiles)",
+  "gloss": "pi 1.0 upgrade",
+  "description": "Pi 1.0 shipped 2026-10-01 (https://earendil.com/posts/pi-1-0/, MIT): first stable release; Codemode (MCP and non-LLM models like Jev native), extension support for virtual models, deferred tool loading, mid-conversation system messages (transcript-aware prompt/tool changes — useful for report-linter pushback #183 and stuck nudges), new TUI, fullscreen by default. Upgrade the pi in image/Dockerfile (cloud workers) and whatever local pi the herdr/subprocess profiles run; review breaking changes against image/worker.sh (session resume flags, --approve, print/headless mode, provider config for cloudflare-workers-ai/* via the gateway), profiles-*/ and the pushback path; keep Workers-AI-only in the cloud.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "[1] Image builds with Pi 1.0; internal/sandboximage tests and a real worker probe (ticks-worker --probe on staging) pass. [2] Local pi profiles run Pi 1.0; the pushback/resume paths are tested. [3] make gate passes; merged only when no epic run is live (or the live run is unaffected).",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-04T10:50:20.999558Z",
+  "updated_at": "2026-10-04T10:50:20.999558Z"
+}

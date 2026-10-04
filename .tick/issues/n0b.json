@@ -1,17 +1,15 @@
 {
   "id": "n0b",
-  "title": "Spike: pi's durable harness (Agents SDK PiHarness) as the cloud worker's agent loop, with the container as its hands",
-  "gloss": "pi durable harness spike",
-  "description": "Cloudflare Agents SDK now runs pi via the PiHarness class + @earendil-works/pi-durable inside a Durable Object, durably persisting mid-turn (2026-10-02). Our cloud workers run pi inside a container, so a container death loses the in-flight turn (work is salvaged only via pushed branches). Investigate: can the agent loop live in a DO (survives restarts) while tools (shell, git, go toolchain, tests) execute in our FactorySandbox container (umq) or @cloudflare/computer? Model routing through our AI Gateway; Workers AI only. Read-only spike + a throwaway prototype; deliver a recommendation and an epic sketch if worth it.",
+  "title": "Spike (round 2): pi-durable as ticfac's single worker harness, local and cloud — harness beside the orchestrator, tools in the container, storage that outlives it",
+  "gloss": "pi-durable worker harness",
+  "description": "Round 1 (#207, docs/spikes/n0b-pi-durable-harness.md) tested Cloudflare's PiHarness-in-a-DO packaging: agent loop survives eviction/redeploy, but a dead container loses clone/edits/cache; verdict 'later'. Round 2 looks at Earendil's own Pi Durable (https://earendil.com/posts/pi-durable/, repo github.com/earendil-works/pi packages/durable, MIT, experimental): runtime-agnostic (memory/SQLite/JSONL storage, no Node-only APIs), every model call and tool call a checkpointed task, a NEW process resumes from the same storage, storage separated from execution ('harness on one machine, tools on another' via execution-environment adapters), one harness runs many conversations, any number of clients can attach to watch/steer. Question: should pi-durable be ticfac's ONE worker harness everywhere — the harness hosted beside the orchestrator (local process / orchestrator container / a DO), tools executed in the worker container (FactorySandbox, umq) or a local worktree via an execution adapter — giving (a) crash resume across processes, (b) the same harness local and cloud, (c) live watch/steer of worker conversations in ticfac watch (thinking, tool calls; f6o heartbeat) and stuck nudges as real steering. Operator, 2026-10-04: consider storage in different Cloudflare stores — e.g. D1 (SQL), JSONL in R2, DO SQLite (+ K2 streams for the live event fan-out) — compare durability, latency per checkpoint, cost, size limits, multi-reader watch. Pair with the workspace half: wip commits as the worker goes and/or container snapshots, so a resumed turn has its files. Prototype: kill the harness process mid-tool and the container mid-turn; show resume with workspace restored; one storage backend in a CF store. Deliver a decision doc + epic sketch.",
   "notes": "2026-10-04 12:16 - Spike done: docs/spikes/n0b-pi-durable-harness.md (PR #207). Feasible (staging prototype: DO eviction/redeploy mid-tool resumes; 17-min tool call ok) but recommended LATER: container death still loses the workspace, umq removes the rollout cause, packages experimental. Cheaper alternative: persist+resume pi CLI session in a fresh container.",
-  "status": "closed",
+  "status": "open",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
-  "acceptance_criteria": "A committed decision doc: feasibility, what moves where, what it fixes (container death mid-turn), costs/risks, recommendation.",
+  "acceptance_criteria": "[1] Decision doc committed: architecture, storage comparison (D1 / R2 JSONL / DO SQLite / local), what it fixes, risks (experimental API), recommendation. [2] Prototype evidence of cross-process resume with workspace restored. [3] If adopt: an epic sketch with PR-sized steps.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T08:48:55.004066Z",
-  "updated_at": "2026-10-04T10:16:40.562233Z",
-  "closed_at": "2026-10-04T10:16:40.562233Z",
-  "closed_reason": "decision doc delivered (PR #207): later, not now"
+  "updated_at": "2026-10-04T10:50:21.092808Z"
 }
