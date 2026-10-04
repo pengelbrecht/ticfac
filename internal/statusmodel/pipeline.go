@@ -625,12 +625,21 @@ func (p *pipelineIndex) hasLaterDispatch(tickID string, attempt int) bool {
 // attentionCommand mirrors the attention entry buildWaits states for a hold
 // that names this tick: the same newest run_held line (one this incarnation
 // left — a hold a later resume settled is history, and holdSettledByAResume
+<<<<<<< HEAD
 // says so), and the same unblock command that entry carries — including the
 // run id it names when the run's own id is not the epic spelling settle
 // defaults to (tick ulw). Mirrored rather than read because decorateTicks
 // runs before buildWaits assembles the list; one spelling there, one mirror
 // here, and a disagreement between a row's next step and the header's
 // command is a drift this comment points at.
+=======
+// says so), and the same unblock command that entry carries. Mirrored rather
+// than read because decorateTicks runs before buildWaits assembles the list;
+// the command itself is the shared spelling in commands.go, the same one the
+// header carries — one sentence there, one call here, and a disagreement
+// between a row's next step and the header's command is a drift this
+// comment points at.
+>>>>>>> 01480f505216d82adece94879f1c5d940fca6372
 func (p *pipelineIndex) attentionCommand(tickID string) *string {
 	held := latestStage(p.feed, "", reconcile.StageRunHeld)
 	if held == nil || held.TickID == nil || *held.TickID != tickID {
@@ -644,7 +653,11 @@ func (p *pipelineIndex) attentionCommand(tickID string) *string {
 		return &command
 	}
 	if held.Attempt != nil {
+<<<<<<< HEAD
 		command := SettleCommandForCurrentRun(p.epicID, tickID, *held.Attempt, p.runID)
+=======
+		command := SettleCommand(p.epicID, tickID, *held.Attempt, "")
+>>>>>>> 01480f505216d82adece94879f1c5d940fca6372
 		return &command
 	}
 	return nil
