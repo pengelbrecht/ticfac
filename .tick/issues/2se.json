@@ -2,6 +2,7 @@
   "id": "2se",
   "title": "Reconciler prose spells the settle imperative inline in 4 files, unguarded",
   "description": "The same second-spelling class l1t fixed in the status model exists one layer down: internal/reconcile/blocked.go, dispatch.go, finish.go and resolve.go each format the full `ticfac settle ... --release ...` imperative into worker/person-facing prose. If the CLI's settle syntax ever changes (flags, --carry-work wording), those sentences drift from the command a person must actually type. A package-scoped guard like statusmodel's commands_guard_test.go over internal/reconcile (with the prose composed from a shared spelling or pinned by test) would close it.\nevidence: grep -rn 'ticfac settle %s %s %d --release' internal/reconcile/*.go — blocked.go:244,473,479; dispatch.go:785,2805; finish.go:172; resolve.go:191,203\n\nticfac run run_5c7c16d199414da2a8a40d97b524e987 filed this backlog tick from the finding 940b7700ba5dab5fb8faaf61a0cfda52b7b8316e3c2bec8e512a6a8820ba8ecb (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-l1t/attempt-14): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/940b7700ba5dab5fb8faaf61a0cfda52b7b8316e3c2bec8e512a6a8820ba8ecb.json on the run branch.",
+  "notes": "2026-10-04 05:12 - ticfac run run_5c7c16d199414da2a8a40d97b524e987: created by absorbing finding 940b7700ba5dab5fb8faaf61a0cfda52b7b8316e3c2bec8e512a6a8820ba8ecb — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/940b7700ba5dab5fb8faaf61a0cfda52b7b8316e3c2bec8e512a6a8820ba8ecb.json on epic/hn6, and it says: the classifier put 0.10 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_5c7c16d199414da2a8a40d97b524e987/tick-l1t/attempt-14",
   "created_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987",
   "created_at": "2026-10-04T05:12:23Z",
-  "updated_at": "2026-10-04T05:12:23Z"
+  "updated_at": "2026-10-04T05:12:27.734884345Z"
 }
