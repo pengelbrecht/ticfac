@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
   "epic_id": "hn6",
-  "sequence": 10,
-  "state": "collecting",
-  "reason": "collecting yjq attempt 4",
-  "updated_at": "2026-10-04T00:41:33Z",
+  "sequence": 11,
+  "state": "running",
+  "reason": "yjq try 1 (run dispatch #4) is rejected (ready-to-merge): BLOCKED: the decide rung's decision, logged under the standing orders: the re-flow of hn6's acceptance_criteria (the exact six-line text is in this report, re-proven to parse as A1–A6) is a write under the protected prefix .tick/ that no worker may commit, no delegated class of the standing orders transfers the tracker's write authority, and the tick itself says no code change is needed; the field still reads 0 newlines in this tree and on epic/hn6 and main, so the run's tracker authority (via l89, still open) or a person at the PR must apply it, after which acceptance.Parse yields six items, findings can cite A2–A6, and the final review unblocks — asked again by the worker that was told to decide it, this question now holds.",
+  "updated_at": "2026-10-04T00:41:36Z",
   "ticks": [
     {
       "tick_id": "gmo",
@@ -32,7 +32,7 @@
     },
     {
       "tick_id": "yjq",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 4
     },
     {
