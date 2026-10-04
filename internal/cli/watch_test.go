@@ -112,6 +112,52 @@ func TestWatchHoldAlertNamesTriageForAFindingHold(t *testing.T) {
 	}
 }
 
+// The alert addresses the run whose store carries the drafts (tick q8m):
+// a cloud run is named by the factory's run_<hex>, and its untriaged
+// findings live in ITS store — the bare command's default (epic-<epic-id>,
+// the local id) names a store a cloud run never wrote, so a person
+// following it finds nothing while the hold stands.
+func TestWatchHoldAlertForACloudRunNamesTheRunItsStoreLivesAt(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	cloudRun := cloudRunIDOf("e777")
+
+	at := time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC)
+	feed := feedLine(t, runfeed.NewEvent(at, cloudRun, "rrl", nil, reconcile.StageRunHeld,
+		"finding_untriaged: 1 finding(s) this run drafted are still waiting for a person"))
+	feed += feedLine(t, runfeed.NewEvent(at.Add(time.Second), cloudRun, "", nil, reconcile.StageRunFinished,
+		"holding: the close-out waits on untriaged findings"))
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch request.Path {
+		case "/api/runs":
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}}
+		case "/api/runs/" + cloudRun:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}
+		case "/api/runs/" + cloudRun + "/events":
+			return 200, map[string]any{
+				"run_id": cloudRun, "state": "completed",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, cloudRun}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ticfac triage epic1 --run-id "+cloudRun) {
+		t.Errorf("the cloud finding hold's alert does not name the triage addressed to the run's own store: %q",
+			stderr.String())
+	}
+}
+
 // The '<tick>#<n>' prefix is the tick's own TRY (tick h58), not the run-wide
 // dispatch number the line's `attempt` field carries. The operator's run: 0ju
 // was dispatch 1, mrn 2, and w9b 3, 4 and 5 — so dispatch 5 is w9b#3, and a

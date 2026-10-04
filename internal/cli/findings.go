@@ -14,6 +14,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -213,6 +214,10 @@ func findingsCommand(args []string, repo, remote, branch, runID *string, asJSON 
 		fmt.Fprintf(stdout, "run %s has no findings drafted for triage.\n", store.RunID())
 		return 0
 	}
+	// The triage command the listing's hints name, addressed to the store
+	// this listing was opened for (tick q8m): the local default is only
+	// right when the run wrote under it.
+	triageCmd := statusmodel.TriageCommandForCurrentRun(epicID, store.RunID())
 	untriaged := 0
 	for _, finding := range findings {
 		if finding.Status == runstate.FindingProposed {
@@ -247,20 +252,20 @@ func findingsCommand(args []string, repo, remote, branch, runID *string, asJSON 
 			// command at the moment of need.
 			prefix := triageKeyPrefix(findings, finding.Key)
 			if finding.Target == "" {
-				fmt.Fprintf(stdout, "    triage: ticfac triage %s %s=absorb|file|fixed:<commit>|discard\n",
-					epicID, prefix)
+				fmt.Fprintf(stdout, "    triage: %s %s=absorb|file|fixed:<commit>|discard\n",
+					triageCmd, prefix)
 			} else {
-				fmt.Fprintf(stdout, "    triage: ticfac triage %s %s=discard — or promote it into %s with ticfac finding\n",
-					epicID, prefix, finding.Target)
+				fmt.Fprintf(stdout, "    triage: %s %s=discard — or promote it into %s with ticfac finding\n",
+					triageCmd, prefix, finding.Target)
 			}
 		}
 	}
 	if untriaged == 0 {
 		fmt.Fprintf(stdout, "%d finding(s), none waiting for a person; the triage gate is down.\n", len(findings))
 	} else {
-		fmt.Fprintf(stdout, "%d finding(s), %d waiting for a person; ticfac triage %s settles each by short key "+
+		fmt.Fprintf(stdout, "%d finding(s), %d waiting for a person; %s settles each by short key "+
 			"prefix, and the epic's close-out does not hand over while a finding is untriaged.\n",
-			len(findings), untriaged, epicID)
+			len(findings), untriaged, triageCmd)
 	}
 	return 0
 }

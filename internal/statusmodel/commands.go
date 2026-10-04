@@ -45,6 +45,24 @@ func TriageCommandForRun(epicID, runID string) string {
 	return fmt.Sprintf("ticfac triage %s --run-id %s", epicID, runID)
 }
 
+// TriageCommandForCurrentRun is the triage command for a hold the run the
+// model answers for left. It names the run whenever that run's id is NOT
+// the epic spelling (epic-<epic-id>): triage without --run-id defaults to
+// that spelling — the local id run-epic derives — which is the right
+// address for a run under it, and a refused one for a run whose drafts live
+// under another id: today's cloud runs, whose orchestrator container execs
+// `run-epic --run-id` the factory's run_<hex> (tick ulw), so their untriaged
+// findings settle in their own store, never the one the bare command's
+// default spells (tick q8m). The empty run id says the caller does not know
+// it; either way the flag is left off and the spelling every local run's
+// needs-you has always carried stands.
+func TriageCommandForCurrentRun(epicID, runID string) string {
+	if runID == "" || runID == "epic-"+epicID {
+		return TriageCommand(epicID)
+	}
+	return TriageCommandForRun(epicID, runID)
+}
+
 // SettleCommand is the one command that releases a held attempt: the epic,
 // tick and run-wide attempt number it is addressed by — and, when the
 // holding run is NOT the run the model answers for, the --run-id that names

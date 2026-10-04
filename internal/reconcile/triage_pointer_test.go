@@ -22,7 +22,7 @@ import (
 func TestTheTriagePointerTeachesTheEverydayPathNotThe64HexCommand(t *testing.T) {
 	t.Parallel()
 
-	p := triagePointer("qeu")
+	p := triagePointer("qeu", "epic-qeu")
 	for _, want := range []string{
 		"ticfac triage qeu",
 		"short key prefix",
@@ -63,5 +63,35 @@ func TestTheTriagePointerTeachesTheEverydayPathNotThe64HexCommand(t *testing.T) 
 		if strings.Contains(p, old) {
 			t.Errorf("the triage pointer still teaches the old 64-hex command %q: %q", old, p)
 		}
+	}
+}
+
+// The pointer addresses the run whose drafts it points at (tick q8m): the
+// drafts live in the run's own store, and the bare command's default
+// (epic-<epic-id>, the local id run-epic derives) is only right when the
+// run wrote under it. A cloud run writes under the factory's run_<hex>
+// (tick ulw), so its pointer must spell --run-id — a person following the
+// pointer must reach the drafts without discovering the flag on their own.
+//
+// short: reads one pure function's output — no repository is built and no
+// process is spawned — and the per-tick gate is exactly where a pointer
+// that regresses to the local default (a store a cloud run never wrote)
+// must be caught.
+func TestTheTriagePointerNamesTheRunWhoseStoreHoldsTheDrafts(t *testing.T) {
+	t.Parallel()
+
+	p := triagePointer("qeu", "run_a1b2c3d4e5")
+	if !strings.Contains(p, "ticfac triage qeu --run-id run_a1b2c3d4e5") {
+		t.Errorf("the triage pointer does not address the run's own store: %q", p)
+	}
+	// The everyday path itself is unchanged: the short prefixes, the four
+	// verdicts, and never the old 64-hex shape.
+	for _, want := range []string{"short key prefix", "absorb", "file", "fixed <commit>", "discard"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("the run-addressed triage pointer does not carry %q: %q", want, p)
+		}
+	}
+	if strings.Contains(p, "ticfac finding qeu") || strings.Contains(p, "--promote-as") {
+		t.Errorf("the run-addressed triage pointer teaches the old 64-hex command: %q", p)
 	}
 }

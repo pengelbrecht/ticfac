@@ -113,7 +113,7 @@ func (r *Reconciler) findingLeftNote(marker attemptHandle, finding subprocess.Fi
 		"(key %s, severity %s, for %s). %s; the tick closes and the finding rides to the close-out, "+
 		"which does not hand over while it is untriaged.",
 		r.runID, r.attemptName(marker.TickID, marker.Attempt), finding.Kind, finding.Title, key,
-		finding.Severity, targetName(finding.Target), triagePointer(r.opts.EpicID))
+		finding.Severity, targetName(finding.Target), triagePointer(r.opts.EpicID, r.runID))
 }
 
 // decideFinding takes one drafted finding through the absorption decision. It
@@ -276,7 +276,7 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 					"it by",
 				standing.Key, standing.Title, r.attemptName(marker.TickID, marker.Attempt),
 				ordinal(len(links)+1), len(links), bound, chainNarrative(links),
-				triagePointer(r.opts.EpicID))
+				triagePointer(r.opts.EpicID, r.runID))
 		}
 	}
 

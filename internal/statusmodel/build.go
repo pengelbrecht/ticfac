@@ -759,6 +759,21 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 			attention = append(attention, Attention(w))
 		}
 	}
+	// The run id the current run's own store lives at: the id its durable
+	// records were written under, falling back to the id the surface names
+	// when the records name none. This is the store the run's untriaged
+	// findings settle in — the same derivation the prior-runs half reads
+	// from each holding run's checkpoint (tick z3p) — and NOT always the id
+	// the surface names: a cloud run is addressed by the factory's run_<hex>
+	// (tick ulw) and writes its records under that same id, so the bare
+	// triage command's default (the local spelling epic-<epic-id>) names a
+	// store a cloud run never wrote (tick q8m). A run whose records were
+	// read under an older layout's epic spelling is addressed by that
+	// spelling — the spelling its store actually lives at.
+	ownRunID := m.RunID
+	if recs.Checkpoint != nil && recs.Checkpoint.RunID != "" {
+		ownRunID = recs.Checkpoint.RunID
+	}
 
 	// A run whose process is gone without its own terminal record: nothing
 	// advances it, and only a person can say whether it resumes. The
@@ -803,13 +818,14 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 		// The command is named by WHAT the run is holding, not by the line's
 		// own shape (tick gtk): the close-out's untriaged-findings hold is
 		// cleared by triage — settle releases an attempt, and this hold
-		// holds a person's decision about findings, not an attempt. Every
-		// other hold is the settle command the run-wide dispatch number
-		// addresses — the same sentence `ticfac watch` prints — addressed to
-		// the run whose store carries the attempt when that run's id is not
-		// the spelling settle defaults to (tick ulw).
+		// holds a person's decision about findings, not an attempt. The
+		// triage is addressed to the run's own store (tick q8m), the same
+		// address rule the settle keeps for a run whose id the default does
+		// not spell (tick ulw). Every other hold is the settle command the
+		// run-wide dispatch number addresses — the same sentence `ticfac
+		// watch` prints.
 		if strings.HasPrefix(held.Detail, reconcile.RefusedFindingUntriaged+":") {
-			unblock := TriageCommand(m.EpicID)
+			unblock := TriageCommandForCurrentRun(m.EpicID, ownRunID)
 			w.UnblockCommand = &unblock
 		} else if held.TickID != nil && held.Attempt != nil {
 			unblock := SettleCommandForCurrentRun(m.EpicID, *held.TickID, *held.Attempt, m.RunID)
@@ -918,8 +934,9 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 			// The command that settles the findings, not the one that only
 			// lists them (tick gtk): `ticfac findings` walks away having
 			// changed nothing, and a person following it finds the close-out
-			// still held.
-			unblock := TriageCommand(m.EpicID)
+			// still held. Addressed to the run's own store (tick q8m): the
+			// drafts live where the run's records were written.
+			unblock := TriageCommandForCurrentRun(m.EpicID, ownRunID)
 			w.UnblockCommand = &unblock
 			attention = append(attention, Attention(w))
 		}

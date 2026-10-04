@@ -95,7 +95,7 @@ func (r *Reconciler) decideProseFinding(ctx context.Context, marker attemptHandl
 					"of ONE chain that already carries %d and the bound is %d (tick qjj). The chain: %s. %s. Raise "+
 					"the bound with --absorption-depth and run the epic again instead",
 				standing.Key, standing.Title, ordinal(len(links)+1), len(links), bound, chainNarrative(links),
-				triagePointer(r.opts.EpicID))
+				triagePointer(r.opts.EpicID, r.runID))
 		}
 	}
 	tickID, err := r.mintTickID()

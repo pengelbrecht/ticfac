@@ -163,6 +163,44 @@ func TestFindingsListsTheDraftsAndHowToTriageThem(t *testing.T) {
 	}
 }
 
+// The listing's triage hints address the store the listing was opened for
+// (tick q8m): when the drafts were read from a non-default run id — a
+// cloud run's factory run_<hex> — the hints must repeat that address, or
+// a person copying them runs triage against the local default and finds
+// nothing while the close-out stays held.
+func TestTheFindingsListingHintsAddressTheRunTheyWereOpenedFor(t *testing.T) {
+	repo := newFindingsRepo(t)
+	cloudRun := "run_a1b2c3d4e5"
+	store, err := runstate.Open(runstate.Options{Repo: repo, Remote: "origin", Branch: "epic/qeu", RunID: cloudRun})
+	if err != nil {
+		t.Fatal(err)
+	}
+	finding := testDraftFinding("d34db33f", "")
+	finding.Provenance.RunID = cloudRun
+	if _, err := store.PutFinding(finding); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := Run([]string{"findings", "--repo", repo, "qeu", "--run-id", cloudRun}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, stderr.String())
+	}
+	out := stdout.String()
+	for _, want := range []string{
+		"ticfac triage qeu --run-id " + cloudRun + " d34=absorb|file|fixed:<commit>|discard",
+		"ticfac triage qeu --run-id " + cloudRun + " settles each by short key prefix",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the listing does not address triage to the run it was opened for (%q):\n%s", want, out)
+		}
+	}
+	// The default spelling keeps the bare command it has always carried.
+	if strings.Contains(out, "--run-id") && !strings.Contains(out, "--run-id "+cloudRun) {
+		t.Errorf("the listing names some other run id than the one it was opened for:\n%s", out)
+	}
+}
+
 // The prefix the pointer shows names ONE draft: two drafts sharing a prefix
 // get a longer one, because a person who copies the pointer's prefix into
 // `ticfac triage` must land on the draft they read, not on an ambiguity the

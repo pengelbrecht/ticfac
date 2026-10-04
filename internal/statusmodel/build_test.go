@@ -701,6 +701,65 @@ func TestTheUntriagedFindingWaitIsClearedByTriage(t *testing.T) {
 	t.Errorf("the untriaged finding is not attention: %+v", model.Attention)
 }
 
+// TestACloudRunsOwnFindingHoldNamesTheRunItsStoreLivesAt (tick q8m): a
+// hold the CURRENT run left is cleared by triage addressed to THAT run's
+// own store. A cloud run is addressed by the factory's run_<hex> (tick
+// ulw) and writes its records — its drafted findings included — under that
+// id, so the bare command's default (the local spelling epic-<epic-id>)
+// names a store a cloud run never wrote: a person following it finds no
+// findings and the hold stands. Local runs keep the bare spelling — that
+// half is pinned by TestAFindingHoldIsClearedByTriage above.
+func TestACloudRunsOwnFindingHoldNamesTheRunItsStoreLivesAt(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Host = HostCloud
+	src.RunID = "run_a1b2c3d4e5"
+	src.Records.Checkpoint.RunID = "run_a1b2c3d4e5"
+	four := 4
+	src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "run_a1b2c3d4e5", "rrl", &four,
+		reconcile.StageRunHeld, "finding_untriaged: 1 finding(s) this run drafted are still waiting for a person"))
+	model := Build(src)
+
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+		t.Fatalf("a run holding for triage waits on %+v, want held-for-person", model.WaitsOn)
+	}
+	if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac triage 2jn --run-id run_a1b2c3d4e5" {
+		t.Errorf("the cloud finding hold's unblocking command is %+v, want the triage addressed to the run's own store",
+			model.WaitsOn.UnblockCommand)
+	}
+}
+
+// TestACloudRunsUntriagedFindingsWaitNamesTheRunItsStoreLivesAt (tick
+// q8m): the WaitFinding attention for a dead run's own drafts names the
+// triage command addressed to the store those drafts were read from — for
+// a cloud run, the factory's run_<hex>, never the bare command's local
+// default.
+func TestACloudRunsUntriagedFindingsWaitNamesTheRunItsStoreLivesAt(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Host = HostCloud
+	src.RunID = "run_a1b2c3d4e5"
+	src.Records.Checkpoint.RunID = "run_a1b2c3d4e5"
+	src.Liveness.Alive = false
+	src.Liveness.State = "not_running"
+	src.Liveness.Reason = "no process holds this run: the last one released it, or none has claimed it here"
+	src.Session = nil
+	src.Standing = nil
+	model := Build(src)
+
+	for _, a := range model.Attention {
+		if a.Kind != WaitFinding {
+			continue
+		}
+		if a.UnblockCommand == nil || *a.UnblockCommand != "ticfac triage 2jn --run-id run_a1b2c3d4e5" {
+			t.Errorf("the cloud run's untriaged finding's unblocking command is %+v, want the triage addressed to the run's own store",
+				a.UnblockCommand)
+		}
+		return
+	}
+	t.Errorf("the untriaged finding is not attention: %+v", model.Attention)
+}
+
 // priorCheckpoint is an earlier run's checkpoint as the records read it:
 // one run of this epic, in the state it ended (or stands) in.
 func priorCheckpoint(runID, state string) *runstate.Checkpoint {
