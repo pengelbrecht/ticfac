@@ -847,16 +847,21 @@ func renderOverview(stdout io.Writer, doc overviewModel, cloudNote string, all b
 			// renders with, so the two cannot disagree. History rows and
 			// the cheap rows whose model was never gathered print exactly
 			// as they did.
-			headline := dashboardHeadline(run.Model, styles, width)
-			for _, hl := range headline[1:] {
-				fmt.Fprintln(stdout, "  "+hl)
-			}
-			// The holds' own lines, wrapped to the width the indent leaves
-			// them — the clearing command survives a narrow terminal by
-			// wrapping under the announcement, not by being cut (tick 9um).
+			//
+			// Both are laid out at the width the two-space indent leaves
+			// them, not the terminal's own: the phase line pads to exactly
+			// the width it is given, so a headline made at the full width
+			// would overflow the terminal by the indent's two cells and
+			// wrap (tick kce). The holds' lines wrap to that same width —
+			// the clearing command survives a narrow terminal by wrapping
+			// under the announcement, not by being cut (tick 9um).
 			avail := width - 2
 			if avail < 1 {
 				avail = 0
+			}
+			headline := dashboardHeadline(run.Model, styles, avail)
+			for _, hl := range headline[1:] {
+				fmt.Fprintln(stdout, "  "+hl)
 			}
 			for _, al := range dashboardAttentionLines(run.Model, styles, avail) {
 				fmt.Fprintln(stdout, "  "+al)
