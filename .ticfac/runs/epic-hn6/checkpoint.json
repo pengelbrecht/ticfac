@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 90,
-  "state": "dispatching",
-  "reason": "dispatching fzt as attempt 16",
-  "updated_at": "2026-10-04T19:30:09Z",
+  "sequence": 91,
+  "state": "running",
+  "reason": "fzt is running as attempt 16",
+  "updated_at": "2026-10-04T19:30:21Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -92,7 +92,8 @@
     },
     {
       "tick_id": "fzt",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 16
     },
     {
       "tick_id": "c65",
