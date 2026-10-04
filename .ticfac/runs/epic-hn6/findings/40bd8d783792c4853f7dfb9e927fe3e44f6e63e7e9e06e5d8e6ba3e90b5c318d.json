@@ -12,8 +12,11 @@
   "attempt": 1,
   "done_item": "A2",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T16:15:35Z",
+  "triaged_at": "2026-10-04T16:15:47Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing jkb",
+  "promoted_as": "jkb",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "v16",
