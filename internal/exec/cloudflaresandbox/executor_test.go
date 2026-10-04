@@ -535,6 +535,40 @@ func TestDoorRefusalsArriveTyped(t *testing.T) {
 	if !door.PermanentStart() {
 		t.Error("a refused container name is not read as a start that can never succeed")
 	}
+
+	// hn6's restarted cloud run (run_3ca22fbd): a lease that lapsed with
+	// NOBODY else holding it is the door's to take back, and when it cannot
+	// (no lapse of this run's to reclaim) the supervisor's next renewal can —
+	// so `lease_lost` is a wait on the factory, never a stop for a person.
+	h.door.refuseWith(http.StatusConflict, "lease_lost",
+		"run r holds no dispatch lease for p and none of its own lapsed here to take back")
+	_, err = h.start("another")
+	door, ok = AsDoorError(err)
+	if !ok || door.Class != "lease_lost" {
+		t.Fatalf("a lost lease did not arrive typed: %v", err)
+	}
+	if !door.TransientRemote() {
+		t.Error("an unheld, lapsed lease is not read as the remote's transient failure")
+	}
+	if door.LeaseTaken() {
+		t.Error("an unheld lease is read as taken by another run")
+	}
+
+	// Another run holding the project is the one lease answer that stops a
+	// run — typed, so the halt can say so in words, never as unclassified.
+	h.door.refuseWith(http.StatusConflict, "lease_held_by",
+		"the dispatch lease for p is held by run_successor, not r")
+	_, err = h.start("another")
+	door, ok = AsDoorError(err)
+	if !ok || door.Class != "lease_held_by" {
+		t.Fatalf("a taken lease did not arrive typed: %v", err)
+	}
+	if door.TransientRemote() {
+		t.Error("a lease another run holds is read as a transient failure")
+	}
+	if !door.LeaseTaken() {
+		t.Error("a lease another run holds is not read as taken")
+	}
 }
 
 // The three operations the door does not carry: refused, typed, and naming
