@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 96,
-  "state": "integrating",
-  "reason": "integrating y03 attempt 17 into epic/43y",
-  "updated_at": "2026-10-04T20:48:12Z",
+  "sequence": 97,
+  "state": "gating",
+  "reason": "running the integrated gate for y03 on 8121d928a48f",
+  "updated_at": "2026-10-04T20:48:27Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -44,7 +44,7 @@
     },
     {
       "tick_id": "y03",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 17
     },
     {
