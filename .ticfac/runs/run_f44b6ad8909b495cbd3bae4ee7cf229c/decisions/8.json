@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The final-review hold fires after the review attempt was dispatched, so it carries an attempt and the per-kind decision names the settle release for it — but releasing the review attempt clears nothing: the next resume re-reads the NOT READY verdict from the PR and holds again. The refusal's own message names the real moves (fix and run again, merge the PR by hand, or close it), so the hold's clearing command is arguably the resume, the same shape the world holds got here.\nevidence: internal/reconcile/land.go:501 (the refusal prose) — the command named is the settle for the review attempt, which no run_held line's release disposes\n\nticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c created this tick by absorbing the finding 5300f9f6b90c4c765b4c33d8907a158d7d16ee757056dfd98dea1c9f46235d0b (reported by run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-gf0/attempt-6): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/5300f9f6b90c4c765b4c33d8907a158d7d16ee757056dfd98dea1c9f46235d0b.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "quz",
+    "title": "land_review_not_ready hold names a release that does not clear it"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.43,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.01,
+      "design": 0.42,
+      "diagnosis": 0.53,
+      "mechanical": 0.03,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1406,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T12:51:38Z",
+  "answered_at": "2026-10-04T12:51:38Z",
+  "provenance": {
+    "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
+    "tick_id": "quz",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "dea9e449a24219c1365c0b48607b7234fda9c23f",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
