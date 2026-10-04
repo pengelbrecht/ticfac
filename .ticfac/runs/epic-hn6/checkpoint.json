@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 37,
-  "state": "integrating",
-  "reason": "integrating bd5 attempt 5 into epic/hn6",
-  "updated_at": "2026-10-04T17:32:10Z",
+  "sequence": 38,
+  "state": "gating",
+  "reason": "running the integrated gate for bd5 on b4ed66a6572f",
+  "updated_at": "2026-10-04T17:32:22Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -33,7 +33,7 @@
     },
     {
       "tick_id": "bd5",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 5
     },
     {
