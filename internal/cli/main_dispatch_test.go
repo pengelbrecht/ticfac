@@ -59,8 +59,14 @@ func TestTheDispatchedRunEpicChildClaimsIntoTheRedirectedRegistry(t *testing.T) 
 	// production spawn builds, and nothing else. The epic id carries this
 	// process's pid so the run id names THIS test's child alone: attempts of
 	// this tick may run as sibling suites on one host, and a shared id would
-	// let one suite's stray read as the other's claim.
-	epicID := fmt.Sprintf("dispatch-%d", os.Getpid())
+	// let one suite's stray read as the other's claim. And the time, so the
+	// id names this INVOCATION alone: under -count=N the same process runs the
+	// test again, and the previous child's registration — still standing,
+	// because a SIGTERMed child leaves it for the registry's own sweep — would
+	// otherwise satisfy the wait below before this child ever claimed, and be
+	// read back as this child's (a stress run of the short suite caught it
+	// naming the previous repetition's repo).
+	epicID := fmt.Sprintf("dispatch-%d-%d", os.Getpid(), time.Now().UnixNano())
 	runID := "epic-" + epicID
 	repo := t.TempDir()
 	self, err := os.Executable()

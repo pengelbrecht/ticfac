@@ -1,4 +1,4 @@
-import { env, runInDurableObject, SELF } from "cloudflare:test";
+import { env, introspectWorkflow, runInDurableObject, SELF } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { type RunRecord, readHarnessOutput, readRunRecord, reconcileKey } from "../src/artifacts";
@@ -767,6 +767,42 @@ async function handLeaseTo(project: string, runID: string, epic = "ko8"): Promis
     return taken.lease;
   });
 }
+
+/**
+ * Every Workflow instance created for the rest of the calling test runs
+ * its step retries back to back: every attempt still executes, only the
+ * backoff between them is gone. For the tests that drive a step to EXHAUST
+ * its retries, which assert the exhaustion and never the backoff.
+ *
+ * Why (a flake, so a bug): in local workerd the whole test isolate
+ * intermittently stalls for ~300 s at 0% CPU while a Workflow is waiting out a
+ * timer of a few seconds — the test's own `scheduler.wait(10)` and its D1
+ * reads stall with it, and `settled` times out. Measured on miniflare
+ * 5.20260930.0-alpha / workerd 1.20260930.2: about one run in five for the
+ * boot-exhaustion test ALONE (so not a leak from earlier tests), more under
+ * host load; not miniflare's 5-minute engine grace timer (shortening it left
+ * the stall at 300 s). A retry backoff is such a wait, and these three tests
+ * spend 1-7 s in them for nothing they assert: with the backoff off they went
+ * 15 of 15 green under a load average of ~95. The stall itself is below this
+ * suite — the 7eq tests' 2 s event wait has been seen hitting it too — and is
+ * reported as such, not fixed here.
+ */
+async function withoutRetryDelays(): Promise<void> {
+  const introspector = await introspectWorkflow(env.RUN_WORKFLOW as unknown as Workflow);
+  // Disposed after the test (below): the introspector's mocks outlive it
+  // otherwise. `dispose` is named structurally, because this bundle's lib
+  // (ES2022) has no AsyncDisposable for the introspector's declared type.
+  introspectors.push(introspector as unknown as { dispose(): Promise<void> });
+  await introspector.modifyAll(async (m) => {
+    await m.disableRetryDelays();
+  });
+}
+
+const introspectors: { dispose(): Promise<void> }[] = [];
+
+afterEach(async () => {
+  for (const introspector of introspectors.splice(0)) await introspector.dispose();
+});
 
 async function waitFor<T>(
   what: string,
@@ -1590,6 +1626,7 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
   // finalize: an ending that skips the last verb is not an ending, whatever
   // the process did before it died.
   it("still finalizes when the boot step exhausts its retries", async () => {
+    await withoutRetryDelays();
     const { runID, project, epic } = await ignite({
       // The container is provisioned (the `get` that starts a boot is what
       // provisions it) but refuses to start anything, every attempt — a boot
@@ -1644,6 +1681,7 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
 // with the recorded reason naming the step that threw.
 describe("every step that can throw still ends in finalize (tick 0ye)", () => {
   it("still finalizes when the context step exhausts its retries", async () => {
+    await withoutRetryDelays();
     // The one read inside `acquireContext` that nothing in finalize needs:
     // the review lookup. Poisoning it makes the context step throw on every
     // attempt, so the step exhausts CONTEXT_RETRIES rather than failing once
@@ -1685,6 +1723,7 @@ describe("every step that can throw still ends in finalize (tick 0ye)", () => {
   });
 
   it("still finalizes when the progress step exhausts its retries", async () => {
+    await withoutRetryDelays();
     const { runID, project, epic } = await ignite();
     const process = await firstProcess();
     // The orchestrator did its work and exited cleanly: the run is past the
