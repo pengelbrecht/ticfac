@@ -1,0 +1,14 @@
+{
+  "id": "cdy",
+  "title": "Give cloud workers web search through the AI Gateway Web Search API",
+  "gloss": "worker web search",
+  "description": "AI Gateway Web Search API (2026-10-02, https://blog.cloudflare.com/introducing-web-search-api/; partners Ceramic.ai, Exa, Linkup). Cloud workers (pi) could look up docs/error messages through our gateway route (no new credential in the container). Low priority: wire as an optional pi tool via the gateway, off by default, with a per-run budget.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "An opt-in pi tool in the worker image calls web search through the run's gateway token; off by default; tested with a fake gateway.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-04T08:48:55.085008Z",
+  "updated_at": "2026-10-04T08:48:55.085008Z"
+}
