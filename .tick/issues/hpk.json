@@ -3,6 +3,7 @@
   "title": "Local host: the Go executor runs a Node pi-durable harness per worker on local SQLite",
   "gloss": "local harness host",
   "description": "Step 7, no flag: the local executors spawn the Node harness per worker (local SQLite, tools in the worktree); implement the local frontier rung per the operator's decision recorded on the epic (today the claude CLI on the Max subscription, which pi-durable cannot host).",
+  "notes": "2026-10-04 19:30 - Must use the confinement from tick ptb: local pi-durable workers (and the local claude rung) run with a per-worker HOME/TMPDIR and a path allowlist (worktree, run scratch, toolchains, caches) — operator hit a macOS privacy dialog from a worker on 2026-10-04.",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -16,5 +17,5 @@
   "acceptance_criteria": "a local epic run's workers run on the harness; the stuck nudge is a steer",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.535379Z",
-  "updated_at": "2026-10-04T11:59:00.535379Z"
+  "updated_at": "2026-10-04T17:30:19.05628Z"
 }
