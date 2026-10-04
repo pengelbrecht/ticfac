@@ -9,9 +9,12 @@ package cli
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
@@ -99,6 +102,93 @@ func TestTickViewSaysReportNotRead(t *testing.T) {
 	tall := renderTickView(m, "46x", plainStyles(), 100, 3)
 	if len(tall) != 3 || tall[len(tall)-1] != "[esc] back" {
 		t.Errorf("a 3-line pane did not keep the footer and count the rest:\n%s", strings.Join(tall, "\n"))
+	}
+}
+
+// TestTickViewFitsThePane (tick aro): every line the tick drill-in renders
+// fits the pane's width, the way renderWatchFrame and renderFeedView already
+// cut their lines — a report summary, try reason or finding title written to
+// the terminal unbounded wraps inside a real pane, pushes the block down rows
+// the redraw's cursor arithmetic does not know about, and the next frame
+// draws over the block's own rows. Width 0 stays the unknown-width contract:
+// everything, unbounded, for the caller that knows nothing.
+func TestTickViewFitsThePane(t *testing.T) {
+	t.Parallel()
+	const wide = 200
+	summary := strings.Repeat("s", wide)
+	reason := strings.Repeat("r", wide)
+	next := strings.Repeat("n", wide)
+	title := strings.Repeat("t", wide)
+	m := dashboardFixture()
+	if tick := watchTickOf(m, "t2"); tick == nil || len(tick.Tries) < 2 {
+		t.Fatal("the dashboard fixture carries no t2 tries to drill into")
+	} else {
+		tick.Gloss = title
+		tick.Tries[1].Reason = ptr(reason)
+		tick.Tries[1].NextStep = ptr(next)
+		tick.Report = &statusmodel.TickReport{
+			Summary: ptr(summary),
+			Diff:    &statusmodel.ReportDiff{Files: 3, Insertions: 40, Deletions: 7},
+		}
+		tick.Findings = []statusmodel.TickFinding{{Key: "efdc8f82", Title: title, Gating: ptr(true)}}
+	}
+
+	// The defect's own shape: a 200-cell report summary must not render as a
+	// 200-cell line in an 80-column pane — nor any other line over its pane,
+	// at either width the finding's family fixes for the drill view.
+	for _, width := range []int{80, 47} {
+		for i, line := range renderTickView(m, "t2", plainStyles(), width, 0) {
+			if got := ansi.StringWidth(line); got > width {
+				t.Errorf("width %d: the tick view's line %d is %d cells wide: %q", width, i, got, line)
+			}
+		}
+		// The seam is the content builder: any caller holding its width gets
+		// a content that fits, footer or not.
+		for i, line := range renderTickContent(m, "t2", plainStyles(), width) {
+			if got := ansi.StringWidth(line); got > width {
+				t.Errorf("width %d: the tick content's line %d is %d cells wide: %q", width, i, got, line)
+			}
+		}
+	}
+
+	// The cut keeps the line's start — the part a person scans for — the
+	// same way the dashboard's final pass and the feed view cut. The 200-cell
+	// summary at an 80-column pane shows its first 80 cells, not a paraphrase.
+	view := strings.Join(renderTickView(m, "t2", plainStyles(), 80, 0), "\n")
+	if !strings.Contains(view, strings.Repeat("s", 80)) {
+		t.Errorf("the report summary lost its start in the cut:\n%s", view)
+	}
+
+	// The styles ride along: a styled line is cut by display width, and the
+	// escapes neither widen the line nor survive the cut unbalanced.
+	for i, line := range renderTickView(m, "t2", ansiWatchStyles(), 47, 0) {
+		if got := ansi.StringWidth(line); got > 47 {
+			t.Errorf("width 47: the styled tick view's line %d is %d cells wide: %q", i, got, line)
+		}
+	}
+
+	// Width 0 is the unknown-width contract: everything, unbounded — the
+	// caller that knows nothing draws it all and lets the terminal scroll.
+	// The summary and the finding title are lines of their own, so they are
+	// pinned whole; the reason and next step ride inside a try line.
+	content0 := renderTickContent(m, "t2", plainStyles(), 0)
+	full := strings.Join(content0, "\n")
+	for _, want := range []string{summary, "  " + title} {
+		if !slices.Contains(content0, want) {
+			t.Errorf("an unknown width truncated the %d-cell line %q:\n%s", wide, want, full)
+		}
+	}
+	if !strings.Contains(full, reason) || !strings.Contains(full, next) {
+		t.Errorf("an unknown width truncated the try's reason or next step:\n%s", full)
+	}
+
+	// The padding a try line carries for its columns is not drawn out to the
+	// edge: a line with nothing after its cells ends at its last cell.
+	plain := renderTickContent(m, "t3", plainStyles(), 80)
+	for i, line := range plain {
+		if line != strings.TrimRight(line, " ") {
+			t.Errorf("the tick content's line %d carries trailing padding: %q", i, line)
+		}
 	}
 }
 
