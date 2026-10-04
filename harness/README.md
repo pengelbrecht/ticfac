@@ -189,7 +189,7 @@ The tests are split by what they can prove where:
 ## What comes next (the epic's steps)
 
 6. The `WorkerAgent` DO host — this package's `HarnessStorage` DO is its
-   seed, and it is what wires `FactorySandboxEnv` to the SANDBXES_V1 stub
+   seed, and it is what wires `FactorySandboxEnv` to the SANDBOXES_V1 stub
    the `run` door was built for.
 8. Watch surfaces (`ticfac watch` from the commit stream), and the proof
    runs (kill the host mid-tool, destroy the container mid-turn, deploy
