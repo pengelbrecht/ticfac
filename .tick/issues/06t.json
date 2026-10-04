@@ -1,0 +1,13 @@
+{
+  "id": "06t",
+  "title": "Epic branch carries 8 worker RESULT-*.md reports to main's root",
+  "description": "RESULT-{378,3gk,7uv,hn6,ltg,oro,r5i,v16}.md sit at the repository root on the integration branch; the epic's PR would land them on main, which #172 cleaned of exactly this ('a worker's report is a run's transport, not a file of the project'). report_merge.go says existing reports 'stay until somebody removes them'. And #169's guard does not cover the base-fold-through-resolve path: ab0cdab4 (2026-10-04, after #169 was on the branch) rewrote RESULT-hn6.md. Remove the eight files from epic/hn6 and route the base-fold resolve merge through keepReportsOut.\nevidence: git ls-tree HEAD --name-only | grep RESULT; git diff ab0cdab4^1 ab0cdab4 --stat -- RESULT-hn6.md; internal/reconcile/report_merge.go:1-30\n\nticfac run epic-hn6 filed this backlog tick from the finding 0f60cb7e645be8550868116f17d1ff70a97e09726e80d29f2f899f685ec3acd0 (reported by run-epic-hn6/tick-v16/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/0f60cb7e645be8550868116f17d1ff70a97e09726e80d29f2f899f685ec3acd0.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T16:16:56Z",
+  "updated_at": "2026-10-04T16:16:56Z"
+}
