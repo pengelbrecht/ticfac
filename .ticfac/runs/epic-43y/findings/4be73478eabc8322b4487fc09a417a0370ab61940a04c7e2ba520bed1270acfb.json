@@ -12,8 +12,11 @@
   "attempt": 9,
   "done_item": "A1",
   "demonstrating_check": "ticfac run-epic under substrate auto on a herdr host dispatches pi-kind implement workers to herdr's pi-CLI agents",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T18:34:46Z",
+  "triaged_at": "2026-10-04T18:35:13Z",
+  "triaged_by": "ticfac run epic-43y absorbing 2q5",
+  "promoted_as": "2q5",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "hpk",
