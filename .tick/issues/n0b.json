@@ -3,12 +3,15 @@
   "title": "Spike: pi's durable harness (Agents SDK PiHarness) as the cloud worker's agent loop, with the container as its hands",
   "gloss": "pi durable harness spike",
   "description": "Cloudflare Agents SDK now runs pi via the PiHarness class + @earendil-works/pi-durable inside a Durable Object, durably persisting mid-turn (2026-10-02). Our cloud workers run pi inside a container, so a container death loses the in-flight turn (work is salvaged only via pushed branches). Investigate: can the agent loop live in a DO (survives restarts) while tools (shell, git, go toolchain, tests) execute in our FactorySandbox container (umq) or @cloudflare/computer? Model routing through our AI Gateway; Workers AI only. Read-only spike + a throwaway prototype; deliver a recommendation and an epic sketch if worth it.",
-  "status": "open",
+  "notes": "2026-10-04 12:16 - Spike done: docs/spikes/n0b-pi-durable-harness.md (PR #207). Feasible (staging prototype: DO eviction/redeploy mid-tool resumes; 17-min tool call ok) but recommended LATER: container death still loses the workspace, umq removes the rollout cause, packages experimental. Cheaper alternative: persist+resume pi CLI session in a fresh container.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "A committed decision doc: feasibility, what moves where, what it fixes (container death mid-turn), costs/risks, recommendation.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T08:48:55.004066Z",
-  "updated_at": "2026-10-04T08:48:55.004066Z"
+  "updated_at": "2026-10-04T10:16:40.562233Z",
+  "closed_at": "2026-10-04T10:16:40.562233Z",
+  "closed_reason": "decision doc delivered (PR #207): later, not now"
 }
