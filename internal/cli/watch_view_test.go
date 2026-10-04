@@ -22,6 +22,7 @@ package cli
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -984,19 +985,47 @@ func TestTheFrameCILine(t *testing.T) {
 // TestTheFrameTailIsTheFeedOwnWords: the tail is the feed's last two lines
 // through the same one-line form the stream path prints — the same words on
 // both paths — under the "─ recent" rule, with the key hint at the right.
+// The try each line's prefix names is the MODEL's own try for the event's
+// attempt (tick s71): the whole try history the rows carry, not the
+// five-line window the tail itself is — expected here independently, off
+// the tick's own Try row, so the test says the number rather than the
+// implementation's way of counting it.
 func TestTheFrameTailIsTheFeedOwnWords(t *testing.T) {
 	t.Parallel()
 	m := dashboardFixture()
 	frame := renderWatchFrame(m, plainStyles(), 0, 0, "")
 	joined := strings.Join(frame, "\n")
 
-	var tries runfeed.Tries
-	for _, e := range m.Recent {
-		tries.Observe(e)
+	modelTry := func(e runfeed.Event) (int, bool) {
+		if e.TickID == nil || e.Attempt == nil || m.Waves == nil {
+			return 0, false
+		}
+		for wi := range *m.Waves {
+			for ti := range (*m.Waves)[wi].Ticks {
+				tick := &(*m.Waves)[wi].Ticks[ti]
+				if tick.TickID != *e.TickID {
+					continue
+				}
+				for _, try := range tick.Tries {
+					if try.Attempt == *e.Attempt {
+						return try.Try, true
+					}
+				}
+			}
+		}
+		return 0, false
 	}
 	seen := 0
 	for _, e := range m.Recent[len(m.Recent)-2:] {
-		if !strings.Contains(joined, watchEventLine(e, &tries)) {
+		who := "run"
+		if e.TickID != nil && *e.TickID != "" {
+			who = *e.TickID
+			if try, ok := modelTry(e); ok {
+				who = fmt.Sprintf("%s#%d", who, try)
+			}
+		}
+		line := fmt.Sprintf("%s %-12s %s: %s", clockOf(e.At), who, e.Stage, e.Detail)
+		if !strings.Contains(joined, line) {
 			t.Errorf("the tail does not carry the feed's own line for %s:\n%s", e.Stage, joined)
 		}
 		seen++
@@ -1016,6 +1045,76 @@ func TestTheFrameTailIsTheFeedOwnWords(t *testing.T) {
 	joined = strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
 	if !strings.Contains(joined, "─ recent") || !strings.Contains(joined, "[e] events  [enter] tick") {
 		t.Errorf("an empty feed lost the rule or the hint:\n%s", joined)
+	}
+}
+
+// TestTheTailCountsTheTryFromTheWholeModel: the tail's "<tick>#<n>" prefix
+// names the tick's own try as the WHOLE model states it (tick s71), not as
+// the five-line window the tail itself is — a tick on its third try whose
+// recent events are all its third attempt counted #1 there, disagreeing
+// with the model's own row and with the [e] feed, which count the whole
+// run. The prefix is counted from the try histories the rows carry, so the
+// tail, the table and the feed read one number.
+func TestTheTailCountsTheTryFromTheWholeModel(t *testing.T) {
+	t.Parallel()
+	strong := "strong"
+	m := statusmodel.Model{
+		RunID:       "epic-rmod",
+		EpicID:      "rmod",
+		Host:        statusmodel.HostLocal,
+		GeneratedAt: "2026-10-04T12:30:00Z",
+		Liveness: statusmodel.Liveness{
+			Alive: true, State: "alive", Reason: "pid 4242", Source: "run.pid",
+		},
+		Health: statusmodel.Health{Verdict: statusmodel.HealthVerdict{
+			State: statusmodel.VerdictHealthy,
+		}},
+		// The recent window carries only the third attempt — five lines of
+		// it, exactly what the model keeps, and none of the two tries before.
+		Recent: []runfeed.Event{
+			{SchemaVersion: runfeed.SchemaVersion, At: "2026-10-04T12:04:00Z", RunID: "epic-rmod",
+				TickID: ptr("t9"), Attempt: ptr(3), Stage: "dispatched",
+				Detail: "t9 dispatched again"},
+			{SchemaVersion: runfeed.SchemaVersion, At: "2026-10-04T12:05:00Z", RunID: "epic-rmod",
+				TickID: ptr("t9"), Attempt: ptr(3), Stage: "collected",
+				Detail: "t9 collected its attempt"},
+			{SchemaVersion: runfeed.SchemaVersion, At: "2026-10-04T12:06:00Z", RunID: "epic-rmod",
+				TickID: ptr("t9"), Attempt: ptr(3), Stage: "report_ready",
+				Detail: "t9 wrote its report"},
+			{SchemaVersion: runfeed.SchemaVersion, At: "2026-10-04T12:07:00Z", RunID: "epic-rmod",
+				TickID: ptr("t9"), Attempt: ptr(3), Stage: "gate_passed",
+				Detail: "t9 passed the integrated gate"},
+			{SchemaVersion: runfeed.SchemaVersion, At: "2026-10-04T12:08:00Z", RunID: "epic-rmod",
+				TickID: ptr("t9"), Attempt: ptr(3), Stage: "merged",
+				Detail: "t9 merged"},
+		},
+		Waves: &[]statusmodel.Wave{{
+			Wave: 1, State: statusmodel.WaveActive, Ticks: []statusmodel.Tick{{
+				TickID: "t9", Title: "the retried tick", State: "dispatched",
+				Attempt: ptr(3), Try: ptr(3), Tier: &strong,
+				Tries: []statusmodel.Try{
+					{Try: 1, Attempt: 1, Outcome: statusmodel.TryRejected,
+						DispatchedAt: "2026-10-04T10:00:00Z", Tier: &strong,
+						Reason: ptr("gofmt drifted in two files")},
+					{Try: 2, Attempt: 2, Outcome: statusmodel.TryGateFailed,
+						DispatchedAt: "2026-10-04T11:00:00Z", Tier: &strong},
+					{Try: 3, Attempt: 3, Outcome: statusmodel.TryInFlight,
+						DispatchedAt: "2026-10-04T12:04:00Z", Tier: &strong},
+				},
+			}},
+		}},
+	}
+	joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	// The tail's two lines (the merged and gate_passed events) both name the
+	// tick's THIRD try — the number the model's own row and the [e] feed say.
+	if !strings.Contains(joined, "t9#3") {
+		t.Errorf("the tail does not name the model's own try for its events:\n%s", joined)
+	}
+	if !strings.Contains(joined, "merged: t9 merged") || !strings.Contains(joined, "gate_passed: t9 passed the integrated gate") {
+		t.Errorf("the tail is not the feed's own last words:\n%s", joined)
+	}
+	if strings.Contains(joined, "t9#1") || strings.Contains(joined, "t9#2") {
+		t.Errorf("the tail counted the try from the five-line window, not the model:\n%s", joined)
 	}
 }
 
