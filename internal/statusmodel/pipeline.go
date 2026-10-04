@@ -41,7 +41,7 @@ const tickIntegrated = "integrated"
 // merged view's (epic.go): each tick's own from the last run that touched
 // it.
 func decorateTicks(src Sources, merged *mergedRuns, m *Model) {
-	index := newPipelineIndex(src, merged, m.EpicID)
+	index := newPipelineIndex(src, merged, m.EpicID, m.RunID)
 	for wi := range deref(m.Waves) {
 		wave := &(*m.Waves)[wi]
 		for ti := range wave.Ticks {
@@ -57,6 +57,7 @@ func decorateTicks(src Sources, merged *mergedRuns, m *Model) {
 // once per model; read per tick.
 type pipelineIndex struct {
 	epicID         string
+	runID          string
 	host           string
 	nonNewestOwner map[string]bool
 	tasks          map[string]tk.GraphTask
@@ -72,10 +73,11 @@ type pipelineIndex struct {
 
 // newPipelineIndex groups the sources' per-tick facts once, so decorating a
 // hundred ticks costs one pass over each record kind rather than a hundred.
-func newPipelineIndex(src Sources, merged *mergedRuns, epicID string) *pipelineIndex {
+func newPipelineIndex(src Sources, merged *mergedRuns, epicID, runID string) *pipelineIndex {
 	newest := merged.newestRun()
 	p := &pipelineIndex{
 		epicID:         epicID,
+		runID:          runID,
 		host:           src.Host,
 		nonNewestOwner: map[string]bool{},
 		tasks:          map[string]tk.GraphTask{},
@@ -590,10 +592,12 @@ func (p *pipelineIndex) hasLaterDispatch(tickID string, attempt int) bool {
 // attentionCommand mirrors the attention entry buildWaits states for a hold
 // that names this tick: the same newest run_held line (one this incarnation
 // left — a hold a later resume settled is history, and holdSettledByAResume
-// says so), and the same unblock command that entry carries. Mirrored rather
-// than read because decorateTicks runs before buildWaits assembles the list;
-// one spelling there, one mirror here, and a disagreement between a row's
-// next step and the header's command is a drift this comment points at.
+// says so), and the same unblock command that entry carries — including the
+// run id it names when the run's own id is not the epic spelling settle
+// defaults to (tick ulw). Mirrored rather than read because decorateTicks
+// runs before buildWaits assembles the list; one spelling there, one mirror
+// here, and a disagreement between a row's next step and the header's
+// command is a drift this comment points at.
 func (p *pipelineIndex) attentionCommand(tickID string) *string {
 	held := latestStage(p.feed, "", reconcile.StageRunHeld)
 	if held == nil || held.TickID == nil || *held.TickID != tickID {
@@ -607,7 +611,7 @@ func (p *pipelineIndex) attentionCommand(tickID string) *string {
 		return &command
 	}
 	if held.Attempt != nil {
-		command := fmt.Sprintf("ticfac settle %s %s %d --release \"<who>\"", p.epicID, tickID, *held.Attempt)
+		command := SettleCommandForCurrentRun(p.epicID, tickID, *held.Attempt, p.runID)
 		return &command
 	}
 	return nil

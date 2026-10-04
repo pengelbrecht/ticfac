@@ -420,13 +420,15 @@ func TestStatusJSONEmitsTheModelForACloudRun(t *testing.T) {
 		t.Errorf("the fake tracker's wave did not ride: %+v", model.Waves)
 	}
 	// The run's own typed hold line is the wait, addressed to a person, with
-	// the settle command spelled the way watch spells it.
+	// the settle command named for the run whose store carries the attempt:
+	// this run's id is the factory's run_<hex>, not the epic spelling settle
+	// defaults to, so the command names it (tick ulw).
 	if model.WaitsOn == nil || model.WaitsOn.Kind != statusmodel.WaitHeldForPerson {
 		t.Fatalf("a cloud run holding an attempt waits on %+v, want held-for-person", model.WaitsOn)
 	}
 	if model.WaitsOn.UnblockCommand == nil ||
-		*model.WaitsOn.UnblockCommand != `ticfac settle cld t1 1 --release "<who>"` {
-		t.Errorf("the unblocking command is %+v, want the settle command", model.WaitsOn.UnblockCommand)
+		*model.WaitsOn.UnblockCommand != `ticfac settle cld t1 1 --run-id `+runID+` --release "<who>"` {
+		t.Errorf("the unblocking command is %+v, want the settle command addressed to the holding run", model.WaitsOn.UnblockCommand)
 	}
 	if len(*requests) == 0 {
 		t.Error("the factory was never asked")
