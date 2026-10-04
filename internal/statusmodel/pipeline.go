@@ -39,17 +39,11 @@ const tickIntegrated = "integrated"
 // it decides nothing a record did not state. Where nothing states a fact the
 // tick says null or pending, never a guess. The per-tick records are the
 // merged view's (epic.go): each tick's own from the last run that touched
-<<<<<<< HEAD
 // it. priorHolds is the standing prior-run hold answer the model computed
 // once for both of its readers — the header's needs-you and the rows'
 // next steps.
 func decorateTicks(src Sources, merged *mergedRuns, priorHolds []PriorHold, m *Model) {
-	index := newPipelineIndex(src, merged, priorHolds, m.EpicID)
-=======
-// it.
-func decorateTicks(src Sources, merged *mergedRuns, m *Model) {
-	index := newPipelineIndex(src, merged, m.EpicID, m.RunID)
->>>>>>> 115cda72c93bdcc18234ad3f7bfe42d4f5514ced
+	index := newPipelineIndex(src, merged, priorHolds, m.EpicID, m.RunID)
 	for wi := range deref(m.Waves) {
 		wave := &(*m.Waves)[wi]
 		for ti := range wave.Ticks {
@@ -84,11 +78,7 @@ type pipelineIndex struct {
 
 // newPipelineIndex groups the sources' per-tick facts once, so decorating a
 // hundred ticks costs one pass over each record kind rather than a hundred.
-<<<<<<< HEAD
-func newPipelineIndex(src Sources, merged *mergedRuns, priorHolds []PriorHold, epicID string) *pipelineIndex {
-=======
-func newPipelineIndex(src Sources, merged *mergedRuns, epicID, runID string) *pipelineIndex {
->>>>>>> 115cda72c93bdcc18234ad3f7bfe42d4f5514ced
+func newPipelineIndex(src Sources, merged *mergedRuns, priorHolds []PriorHold, epicID, runID string) *pipelineIndex {
 	newest := merged.newestRun()
 	p := &pipelineIndex{
 		epicID:         epicID,
