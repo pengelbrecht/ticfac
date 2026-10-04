@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 53,
-  "state": "dispatching",
-  "reason": "dispatching hpk as attempt 9",
-  "updated_at": "2026-10-04T16:01:32Z",
+  "sequence": 54,
+  "state": "running",
+  "reason": "hpk is running as attempt 9",
+  "updated_at": "2026-10-04T16:01:43Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -34,7 +34,8 @@
     },
     {
       "tick_id": "hpk",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 9
     },
     {
       "tick_id": "xd3",
