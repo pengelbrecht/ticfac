@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "q8m",
   "attempt": 1,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T09:49:47Z",
+  "triaged_at": "2026-10-04T09:49:57Z",
+  "triaged_by": "ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c absorbing bxi",
+  "promoted_as": "bxi",
   "provenance": {
     "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
     "tick_id": "q8m",
