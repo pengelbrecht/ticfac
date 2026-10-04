@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 59,
+  "sequence": 60,
   "state": "running",
-  "reason": "v16 is running as attempt 9",
-  "updated_at": "2026-10-04T14:33:01Z",
+  "reason": "stopped by terminated: the container was evicted mid-run; the run is resumable",
+  "updated_at": "2026-10-04T14:44:59Z",
   "ticks": [
     {
       "tick_id": "q8m",
