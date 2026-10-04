@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 117,
-  "state": "integrating",
-  "reason": "integrating jkb attempt 12 into epic/hn6",
-  "updated_at": "2026-10-04T20:14:30Z",
+  "sequence": 118,
+  "state": "gating",
+  "reason": "running the integrated gate for jkb on 340f9cf37077",
+  "updated_at": "2026-10-04T20:33:39Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -68,7 +68,7 @@
     },
     {
       "tick_id": "jkb",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 12
     },
     {
