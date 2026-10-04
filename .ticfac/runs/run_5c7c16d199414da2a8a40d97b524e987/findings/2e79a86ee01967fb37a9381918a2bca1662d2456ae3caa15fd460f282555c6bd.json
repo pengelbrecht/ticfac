@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "qxj",
   "attempt": 15,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T06:14:41Z",
+  "triaged_at": "2026-10-04T08:48:05Z",
+  "triaged_by": "Peter Engelbrecht",
+  "promoted_as": "km5",
   "provenance": {
     "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
     "tick_id": "qxj",
