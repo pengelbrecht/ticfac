@@ -1,0 +1,14 @@
+{
+  "id": "9um",
+  "title": "Narrow panes truncate a hold's clearing command out of the dashboard",
+  "description": "hn6 rule 2 says a hold shows in the header with the one command that clears it, but at panes narrower than the hold line the renderer truncates that line and the command falls off (a realistic settle command alone is 40+ columns). u4l's P2 pins the full line wherever the pane seats it and the announcement everywhere, because the command cannot physically fit a 30-column pane as one line. If the narrow-pane case matters in practice, the smallest change is a renderer rule that keeps the command by wrapping it under the announcement — a person's tick, since it touches watch_view.go and two pinned goldens.\nevidence: internal/cli/watch_view.go dashboardAttentionLines + the width truncation in renderWatchFrame; rendered at width 30 the line reads 'needs you: attempt 2 of t2 str'\n\nticfac run run_5c7c16d199414da2a8a40d97b524e987 created this tick by absorbing the finding b329d17c1ee372877f4a70435118b958d674e291aafd2c6a0adeea6dd234bdd4 (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-u4l/attempt-3): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/b329d17c1ee372877f4a70435118b958d674e291aafd2c6a0adeea6dd234bdd4.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-run_5c7c16d199414da2a8a40d97b524e987/tick-u4l/attempt-3",
+  "created_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987",
+  "created_at": "2026-10-04T01:07:17Z",
+  "updated_at": "2026-10-04T01:07:17Z"
+}
