@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 17,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "A hosted attempt's job handle names the dispatch's requested harness ('pi', from profiles-cloudflare-sandbox) because the Go client refuses a handle whose harness differs from the request (internal/exec/cloudflaresandbox/executor.go:431). The attempt actually runs on pi-durable (WorkerAgentState.harness). The cloud profiles' runner and the boot env's TICKS_HARNESS should say pi-durable once the pi-CLI path is deleted (jhp), so provenance names what ran.\nevidence: cloudflare/src/sandbox-executor.ts startHostedAttempt (harness: bootedHarness(boot))\n\nticfac run epic-43y created this tick by absorbing the finding 270d4285800544591c8e0355a6fa723a7b0b7be030f568b1acf346e2e3d88a1f (reported by run-epic-43y/tick-xd3/attempt-11): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/270d4285800544591c8e0355a6fa723a7b0b7be030f568b1acf346e2e3d88a1f.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "4uj",
+    "title": "Name pi-durable in a hosted attempt's handle and the cloud profiles"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.42,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.4,
+      "design": 0.02,
+      "diagnosis": 0.03,
+      "mechanical": 0.53,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1359,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T18:52:16Z",
+  "answered_at": "2026-10-04T18:52:16Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "4uj",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "a90932b0a0d1c9b59079b60db288c664a13de150",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
