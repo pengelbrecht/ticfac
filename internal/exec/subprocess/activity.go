@@ -613,6 +613,16 @@ const EnvStuckNudge = "TICFAC_STUCK_NUDGE"
 // is memory, not a file.
 type activityWatch struct {
 	state ActivityState
+
+	// steers counts the stuck nudges this watch delivered as STEERS on a
+	// durable runner (tick hpk), so each is its own idempotent submission: a
+	// retry of an unacknowledged steer reuses the id of the one it retries,
+	// and a LATER stuck episode — activity clears StuckNudgedAt, so a later
+	// silence earns a nudge of its own — takes the next one. A supervisor
+	// that dies loses the count, and its successor's first steer reuses
+	// "stuck-nudge-1": a dedupe against an earlier episode's steer, which
+	// is the safe side for that rare collision to land on.
+	steers int
 }
 
 // look takes one look at the runner and answers what to do.

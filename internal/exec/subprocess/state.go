@@ -118,6 +118,13 @@ type attemptRecord struct {
 	StuckAfterMS int64    `json:"stuck_after_ms,omitempty"`
 	StuckArgv    []string `json:"stuck_argv,omitempty"`
 
+	// SteerSock is the pi-durable runner's steer socket (tick hpk): the
+	// Unix domain path the supervisor's stuck watch steers a LIVE runner
+	// through instead of interrupting it, one per attempt beside the
+	// worker.json and the conversation's SQLite storage. Empty is a runner
+	// with no door to steer through — every kind but the durable one.
+	SteerSock string `json:"steer_sock,omitempty"`
+
 	// Model and RolePrompt are what the caller's PROFILE resolved for this
 	// job. They are recorded because "which model ran this, under which role
 	// instruction" is a question an attempt has to be able to answer after the
