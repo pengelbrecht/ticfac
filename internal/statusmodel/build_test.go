@@ -1240,8 +1240,14 @@ func TestTheFeedLastRunFinishedLineIsTheRunsOwnWord(t *testing.T) {
 	if w := mergeWait([]runfeed.Event{failed, completed}); w == nil || w.Kind != WaitMerge {
 		t.Errorf("a run whose last run_finished names its completion waits on %+v, want the merge", w)
 	}
-	if w := mergeWait([]runfeed.Event{failed}); w != nil {
-		t.Errorf("a run whose only run_finished names a failure waits on %+v, want nothing: a failed ending is not a completion", w)
+	// A failed ending is not a completion (the merge stays unstated), and
+	// since the run is not going it needs the one thing nothing makes for
+	// itself: the resume — the dead-run wait the ended run now states
+	// (tick jkb), with the run's own failure worded once.
+	if w := mergeWait([]runfeed.Event{failed}); w == nil || w.Kind != WaitDeadRun ||
+		!strings.Contains(w.What, "failed") || w.NeedsPerson != true ||
+		w.UnblockCommand == nil || *w.UnblockCommand != "ticfac run-epic 2jn" {
+		t.Errorf("a run whose only run_finished names a failure waits on %+v, want its own resume: a failed ending is not a completion, and only a person starts it again", w)
 	}
 }
 

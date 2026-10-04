@@ -675,7 +675,7 @@ func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
 		t.Helper()
 		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitDeadRun ||
 			!strings.Contains(model.WaitsOn.What, "failed") ||
-			model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run hpd --cloud" {
+			model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run-epic hpd" {
 			t.Fatalf("the run waits on %+v, want only the failed newest run's own resume", model.WaitsOn)
 		}
 		for _, a := range model.Attention {
@@ -708,9 +708,7 @@ func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
 				Stage: reconcile.StageResumed, Detail: "resumed after the person released the attempt",
 			})
 		}))
-		if model.WaitsOn != nil || len(model.Attention) != 0 {
-			t.Errorf("an answered hold still reads as a wait: %+v / %+v", model.WaitsOn, model.Attention)
-		}
+		answeredHold(t, model)
 	})
 
 	t.Run("a person's release answers it", func(t *testing.T) {
@@ -728,9 +726,7 @@ func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
 			}}
 			src.PriorRecords[0] = prior
 		}))
-		if model.WaitsOn != nil || len(model.Attention) != 0 {
-			t.Errorf("a released hold still reads as a wait: %+v / %+v", model.WaitsOn, model.Attention)
-		}
+		answeredHold(t, model)
 	})
 
 	t.Run("the newest run's own hold on the tick is the live word", func(t *testing.T) {
@@ -762,9 +758,7 @@ func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
 				Detail: "at1 try 1 dispatched",
 			})
 		}))
-		if model.WaitsOn != nil || len(model.Attention) != 0 {
-			t.Errorf("a superseded hold still reads as a wait: %+v / %+v", model.WaitsOn, model.Attention)
-		}
+		answeredHold(t, model)
 	})
 
 	t.Run("a closed tick's hold is history", func(t *testing.T) {
@@ -779,9 +773,7 @@ func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
 				},
 			})
 		}))
-		if model.WaitsOn != nil || len(model.Attention) != 0 {
-			t.Errorf("a hold on a closed tick still reads as a wait: %+v / %+v", model.WaitsOn, model.Attention)
-		}
+		answeredHold(t, model)
 	})
 
 	t.Run("the untriaged-findings hold is cleared by triage, addressed to the holding run", func(t *testing.T) {
