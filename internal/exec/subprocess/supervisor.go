@@ -278,6 +278,25 @@ func Supervise(stateDir string) error {
 				}
 				switch step, evidence := watch.look(record, runnerPID, stuckAfter); step {
 				case StuckNudge:
+					// THE STUCK NUDGE IS A STEER on a durable runner (tick hpk): a
+					// live pi-durable conversation takes the message after the current
+					// tool round and keeps running — no interrupt, no relaunch. Only a
+					// steer that cannot be delivered falls back to the CLI runner's
+					// interrupt-and-re-prompt, and a runner with no door and no argv is
+					// nudged as observed-only, as before.
+					if record.SteerSock != "" {
+						watch.steers++
+						steerText := StuckPrompt(evidence+", and the supervisor steered you rather than stopping you", stuckAfter)
+						if err := steerRunner(record.SteerSock, steerText, fmt.Sprintf("stuck-nudge-%d", watch.steers)); err == nil {
+							watch.state.StuckNudgedAt = time.Now()
+							observe(ObsHeartbeat, StuckNudgeDetail(fmt.Sprintf("the %s runner (pid %d) was steered in its own "+
+								"conversation, placed after the current tool round", record.Runner, runnerPID), evidence))
+							note("the runner appears stuck; steered it to commit and carry on (not stopped): %s", evidence)
+							break
+						} else {
+							note("the steer could not be delivered (%v); falling back to interrupt and re-prompt", err)
+						}
+					}
 					if len(record.StuckArgv) == 0 {
 						watch.state.StuckNudgedAt = time.Now()
 						observe(ObsHeartbeat, StuckNudgeDetail("the runner cannot be spoken to mid-turn and carries no stuck argv", evidence))
@@ -350,7 +369,12 @@ func Supervise(stateDir string) error {
 	// session, a bounded number of times. The two bounds are separate: a
 	// worker that forgot its report and then wrote a bad one is owed both.
 	how := "running it again on the same worktree: it has no session to resume"
-	if record.Session != "" {
+	switch {
+	case record.SteerSock != "":
+		// The durable runner (tick hpk): the “session” is the attempt's own
+		// storage, and a re-prompt is the same argv with a follow-up message.
+		how = "resuming its own conversation from the attempt storage"
+	case record.Session != "":
 		how = "re-prompting its own session " + record.Session
 	}
 	for nudged, pushed := 0, 0; !settled; {

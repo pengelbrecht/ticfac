@@ -32,6 +32,8 @@ const (
 	promptPlaceholder       = "{{prompt}}"
 	gitCommonDirPlaceholder = "{{git_common_dir}}"
 	sessionPlaceholder      = "{{session}}"
+	harnessDirPlaceholder   = "{{harness_dir}}"
+	stateDirPlaceholder     = "{{state_dir}}"
 )
 
 // runnerDef is one runner's entry: how to launch it headless, and the flag
@@ -55,6 +57,15 @@ type runnerDef struct {
 	// run on the same worktree instead.
 	SessionStart  []string
 	SessionResume []string
+
+	// DurableResume names a runner whose conversation survives its process
+	// in storage of the attempt's own (epic 43y, tick hpk): a re-prompt is
+	// the SAME argv with a different message, and the relaunched process
+	// reopens the conversation from where the last one left it — no session
+	// flag to insert, and no "this job already ran once" section to append,
+	// because the relaunched runner reads the whole history from its
+	// storage rather than starting blind on the worktree.
+	DurableResume bool
 
 	// Env is what this runner is launched with beyond the job's own
 	// variables: settings that belong to the CLI, not to the job.
@@ -110,23 +121,45 @@ var runners = map[string]runnerDef{
 		ModelFlag: "-m",
 	},
 
-	// pi's headless mode is `--print` / `-p`: "process prompt and exit". Its
-	// tools are enabled by default in that mode and it has no approval flag to
-	// pass — the trust flags it does have (`-a`, `-na`) are about project-local
-	// extensions and skills, not about tool use, so this executor does not
-	// hand it one.
-	// pi spells it `--model <pattern>`, which takes a pattern, a `provider/id`
-	// or a bare id.
+	// `pi` IS the pi-durable Node harness since epic 43y (tick hpk): the
+	// operator's decision — all-in, one harness, no flag — so a local run's
+	// pi-kind workers run on the durable host and there is no parallel local
+	// pi-CLI path. What the argv names is the harness package's own entry
+	// (harness/src/local/main.ts), run from source under plain `node` through
+	// the register shim (harness/runtime/register.mjs) — the harness is
+	// package source in the repository this run works on, and the runner
+	// table is the one place a future packaging change (an embedded bundle,
+	// say) would land.
 	//
-	// `--session-id <id>` is "use exact project session ID, creating it if
-	// missing" (pi 0.85.1 --help), so ONE flag both starts the session and
-	// prompts it again. Verified: a second `pi -p --session-id <id>` in the
-	// same directory answered from the first one's turn.
+	// `--experimental-strip-types` because type stripping is flagged on the
+	// Node this tree's CI pins (22) and default only from 23.6; passing it
+	// explicitly is a no-op where it is already default.
+	//
+	// `--config` names the worker.json the executor writes beside the attempt
+	// record — storage, worktree, branch, report, steer socket, the wall
+	// deadline: the WHOLE per-attempt interface, so the argv stays short and
+	// the attempt record's RunnerArgv reads as what it is. `--message` is the
+	// input: the job prompt for the attempt's first process, the supervisor's
+	// follow-up text (nudge, report pushback, stuck re-prompt) for a relaunch
+	// — the relaunch reopens the same local SQLite storage and continues the
+	// same conversation, which is this runner's "session".
+	//
+	// Model credentials are the host's own environment (CLOUDFLARE_API_KEY /
+	// CLOUDFLARE_ACCOUNT_ID, resolved by pi-ai exactly as the pi CLI resolved
+	// them); a container's gateway token is the cloud host's, not this one.
+	// The pi CLI itself remains reachable only through TICFAC_RUNNER_ARGV,
+	// the escape hatch for a host that cannot run the harness; jhp (epic step
+	// 9) deletes the CLI path outright.
 	"pi": {
-		Argv:          []string{"pi", "-p", promptPlaceholder},
+		Argv: []string{
+			"node", "--experimental-strip-types",
+			"--import", harnessDirPlaceholder + "/runtime/register.mjs",
+			harnessDirPlaceholder + "/src/local/main.ts",
+			"--config", stateDirPlaceholder + "/worker.json",
+			"--message", promptPlaceholder,
+		},
 		ModelFlag:     "--model",
-		SessionStart:  []string{"--session-id", sessionPlaceholder},
-		SessionResume: []string{"--session-id", sessionPlaceholder},
+		DurableResume: true,
 	},
 }
 
@@ -165,6 +198,16 @@ type launch struct {
 	// given it explicitly, because a linked worktree's git state lives outside
 	// the worktree.
 	GitCommonDir string
+
+	// HarnessDir is the harness package this runner runs from, resolved from
+	// the checkout the executor works against (or $TICFAC_HARNESS_DIR): the
+	// pi-durable host is package source in the repository, and the argv points
+	// at the entry and register shim inside it.
+	HarnessDir string
+
+	// StateDir is the attempt's state directory, where worker.json, the
+	// conversation's SQLite storage and the steer socket live.
+	StateDir string
 
 	// Session is the runner session this attempt runs in, empty for a runner
 	// with none this executor can name. Resume says the argv prompts that
@@ -228,6 +271,28 @@ func resolveRunner(name string, override []string, at launch) ([]string, error) 
 			}
 			out = append(out, at.Session)
 		default:
+			// The harness and state directories reach the argv as PATH
+			// PREFIXES ({{harness_dir}}/runtime/register.mjs), not whole
+			// arguments, so they are substituted wherever they appear in an
+			// argument — and a placeholder whose value this attempt resolved
+			// none of is a refusal, not an argv that would fail in a subprocess
+			// two steps later.
+			for _, ph := range []struct{ placeholder, value, missing string }{
+				{
+					harnessDirPlaceholder, at.HarnessDir,
+					"the pi-durable harness runs from the repository's harness/ package — the checkout this " +
+						"executor works against has none, and $TICFAC_HARNESS_DIR names none",
+				},
+				{stateDirPlaceholder, at.StateDir, "this attempt resolved no state directory"},
+			} {
+				if !strings.Contains(arg, ph.placeholder) {
+					continue
+				}
+				if ph.value == "" {
+					return nil, fmt.Errorf("the %s argv needs %s and this attempt resolved none: %s", name, ph.placeholder, ph.missing)
+				}
+				arg = strings.ReplaceAll(arg, ph.placeholder, ph.value)
+			}
 			out = append(out, arg)
 		}
 	}
@@ -257,8 +322,25 @@ func withModel(name string, def runnerDef, model string) ([]string, error) {
 	}
 	out := make([]string, 0, len(def.Argv)+2)
 	inserted := false
-	for _, arg := range def.Argv {
-		if arg == promptPlaceholder && !inserted {
+	// The model flag goes in FRONT of the prompt's place. For a CLI the
+	// prompt is a positional argument, so "in front of it" is directly
+	// before it; for a runner that takes the prompt as a FLAG'S VALUE —
+	// `--message {{prompt}}` — "directly before it" would land BETWEEN the
+	// flag and its value, so the insertion point moves back to the flag
+	// instead. Either shape puts the model before the prompt, and no
+	// runner's argv is special-cased.
+	before := len(def.Argv)
+	for i, arg := range def.Argv {
+		if arg == promptPlaceholder {
+			before = i
+			if i > 0 && strings.HasPrefix(def.Argv[i-1], "-") {
+				before = i - 1
+			}
+			break
+		}
+	}
+	for i, arg := range def.Argv {
+		if i == before && !inserted {
 			out = append(out, def.ModelFlag, model)
 			inserted = true
 		}

@@ -21,7 +21,7 @@ func TestEveryKnownRunnerCarriesTheModelBeforeThePrompt(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s is a known runner this test does not pin a model flag for", name)
 		}
-		argv, err := resolveRunner(name, nil, launch{Prompt: "PROMPT-BODY", GitCommonDir: "/repo/.git", Model: "a-model"})
+		argv, err := resolveRunner(name, nil, launch{Prompt: "PROMPT-BODY", GitCommonDir: "/repo/.git", HarnessDir: "/repo/harness", StateDir: "/state/attempt", Model: "a-model"})
 		if err != nil {
 			t.Errorf("%s: %v", name, err)
 			continue
@@ -44,7 +44,7 @@ func TestEveryKnownRunnerCarriesTheModelBeforeThePrompt(t *testing.T) {
 // No model routed, no flag: the runner is launched exactly as it was before,
 // on whatever model its own configuration chooses.
 func TestNoModelLeavesTheArgvAlone(t *testing.T) {
-	at := launch{Prompt: "P", GitCommonDir: "/repo/.git"}
+	at := launch{Prompt: "P", GitCommonDir: "/repo/.git", HarnessDir: "/repo/harness", StateDir: "/state/attempt"}
 	for _, name := range KnownRunners() {
 		argv, err := resolveRunner(name, nil, at)
 		if err != nil {

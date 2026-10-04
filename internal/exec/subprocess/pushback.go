@@ -30,6 +30,12 @@ const lintErrorsPlaceholder = "\x00TICFAC_LINT_ERRORS\x00"
 // attempt's runner, with the errors still a placeholder.
 func lintPushbackArgv(name string, override []string, at launch, record *attemptRecord) ([]string, error) {
 	text := LintPushbackPrompt(record.ResultPath, record.LintCommand, lintErrorsPlaceholder)
+	if durableResume(name, override) {
+		resume := at
+		resume.Session = ""
+		resume.Prompt = text
+		return resolveRunner(name, nil, resume)
+	}
 	if at.Session != "" && len(override) == 0 {
 		resume := at
 		resume.Resume = true

@@ -161,12 +161,52 @@ The tests are split by what they can prove where:
   processes. The node suite exists because a shell behaviour test that
   never runs a shell certifies nothing, and workerd cannot run one.
 
+## The local worker host (epic 43y step 7, tick hpk)
+
+- **`runLocalWorker`** (`src/local/worker-host.ts`): the process the Go
+  executor's `pi` runner IS on a local run — one Node process per worker,
+  spawned by the supervisor, running the whole conversation on pi-durable
+  over LOCAL SQLite (`openNodeSqliteStorage`, one `worker.sqlite` per
+  attempt in its state directory), tools in the worktree through
+  `createGuardedNodeExecutionEnv`. It assembles the pieces the earlier steps
+  built — `workerOnYield` and `armWallDeadline` (tick pom),
+  `workspaceCheckpointExtension` (tick dwn) — plus the local rung's model
+  access: pi-ai's own `cloudflare-workers-ai` provider with the GLM
+  catalog corrections, credentials resolved exactly the way the pi CLI
+  resolves them — the stored credential in pi's own
+  `~/.pi/agent/auth.json` first, the ambient environment as pi-ai's own
+  fallback (`src/local/pi-auth-store.ts`). There is no factory gateway
+  locally: no run token, no exchange, and the harness holds no credential
+  the host did not already have.
+- **The steer socket** (`src/local/steer-socket.ts`): a Unix domain socket
+  beside the storage, and the one door the Go supervisor has into a RUNNING
+  conversation. One JSON line in (`{"requestId","text"}`), one JSON line out
+  (`{"ok":true}` once the steer is DURABLY admitted — pi-durable's
+  idempotent `submit({ whenBusy: "steer" })`). The supervisor's STUCK NUDGE
+  goes through it: the tick's acceptance criterion, "the stuck nudge is a
+  steer" — input placed after the current tool round, the same conversation,
+  no relaunch. The protocol is pinned from all three sides: this server, the
+  node suite's `steerOnce` client, and Go's client
+  (internal/exec/subprocess/steer.go).
+- **`src/local/main.ts`**: the entry the supervisor execs. No build step:
+  `runtime/register.mjs` installs a resolve hook that maps the package's
+  `./x.js` imports onto its `./x.ts` sources, so plain `node
+  --experimental-strip-types` runs them (Node ≥ 22.6; default from 23.6).
+  The config (`worker.json`, written by the executor beside the attempt
+  record) is the whole interface; the argv carries only its path, the model
+  and the message. Exit codes: 0 settled, 1 unanswered, 2 cannot-run.
+- The node suite's `local-host.test.ts` drives the real entry as a real
+  child process over real git and real SQLite: a whole worker to settlement,
+  the steer placed after a live tool round, a `kill -9` mid-tool resumed
+  from the storage without re-running the tool, and a follow-up relaunch
+  continuing the SAME conversation.
+
 ## What comes next (the epic's steps)
 
 6. The `WorkerAgent` DO host — this package's `HarnessStorage` DO is its
    seed, and it is what wires `FactorySandboxEnv` to the SANDBOXES_V1 stub
    the `run` door was built for.
-7. The local Node host, on `createGuardedNodeExecutionEnv`.
-8. Watch surfaces, and the proof runs (kill the host mid-tool, destroy the
-   container mid-turn, deploy mid-run) — the wip checkpoints and the
-   restore here are the machinery those runs will exercise.
+8. Watch surfaces (`ticfac watch` from the commit stream), and the proof
+   runs (kill the host mid-tool, destroy the container mid-turn, deploy
+   mid-run) — the wip checkpoints, the restore and the local host's resume
+   here are the machinery those runs will exercise.

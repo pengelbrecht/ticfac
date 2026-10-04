@@ -192,12 +192,19 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: cloudflare/pnpm-lock.yaml
+          # Both lockfiles: cloudflare's (the factory) and harness/'s (the
+          # pi-durable worker host, tick hpk) — the jobs that set `node`
+          # install whichever the affected packages need, and a change to
+          # either lockfile invalidates the pnpm store cache.
+          cache-dependency-path: |
+            cloudflare/pnpm-lock.yaml
+            harness/pnpm-lock.yaml
 
-      - name: Install the worker workspace
+      - name: Install the node workspaces
         if: matrix.node
-        working-directory: cloudflare
-        run: pnpm install --frozen-lockfile --prefer-offline
+        run: |
+          (cd cloudflare && pnpm install --frozen-lockfile --prefer-offline)
+          (cd harness && pnpm install --frozen-lockfile --prefer-offline)
 
       - name: go test
         run: .github/scripts/go-test-shard.sh "${{ matrix.pkgs }}" "${{ matrix.shard }}" "${{ matrix.of }}"

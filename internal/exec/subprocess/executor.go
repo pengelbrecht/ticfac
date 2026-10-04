@@ -104,6 +104,13 @@ type Options struct {
 	// DefaultStuckAfter; negative turns the watch off.
 	StuckAfter time.Duration
 
+	// HarnessFauxTranscript is a TEST-ONLY seam for the pi-durable runner
+	// (tick hpk): a scripted faux-model transcript file, handed to the
+	// harness through worker.json so this package's end-to-end tests can
+	// run a real worker with no model credential. Empty on every production
+	// attempt; no other Options field reaches the harness.
+	HarnessFauxTranscript string
+
 	Now func() time.Time
 
 	// guardsOff disables one named guard, for the invariants suite's negative
@@ -422,7 +429,14 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("name the runner's session: %w", err)
 	}
-	at := launch{Prompt: prompt, GitCommonDir: common, Model: e.opts.Model, Session: session}
+	at := launch{
+		Prompt:       prompt,
+		GitCommonDir: common,
+		Model:        e.opts.Model,
+		HarnessDir:   e.harnessDir(),
+		StateDir:     dir,
+		Session:      session,
+	}
 	argv, err := resolveRunner(e.opts.Runner, e.opts.RunnerArgv, at)
 	if err != nil {
 		return nil, err
@@ -457,6 +471,17 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 			return nil, err
 		}
 		record.StuckArgv = stuck
+	}
+	// The pi-durable runner's own halves (tick hpk): the worker.json its argv
+	// points at — storage, worktree, branch, report, steer socket, wall —
+	// and the socket the supervisor's stuck watch steers a live runner
+	// through. Written before any runner process exists, beside the record,
+	// so every process this attempt runs reads the same one.
+	if durableResume(e.opts.Runner, e.opts.RunnerArgv) {
+		record.SteerSock = steerSockPath(dir)
+		if err := writeWorkerConfig(e.opts.writeFile, dir, record, &e.opts); err != nil {
+			return nil, fmt.Errorf("write the pi-durable runner's worker.json: %w", err)
+		}
 	}
 
 	if err := e.makeWorktree(record, start); err != nil {
@@ -644,6 +669,18 @@ func (e *Executor) spawnSupervisor(st *store, record *attemptRecord) (int, error
 	go func() { _ = cmd.Wait() }()
 
 	return pid, nil
+}
+
+// harnessDir is where the pi-durable harness package lives for THIS run: the
+// repository's own harness/ — the harness is package source in the repository
+// this executor works against — or $TICFAC_HARNESS_DIR where an operator
+// points it elsewhere (the operator-preference surface the environment is,
+// the same layer as TICFAC_RUNNER).
+func (e *Executor) harnessDir() string {
+	if dir := os.Getenv("TICFAC_HARNESS_DIR"); dir != "" {
+		return dir
+	}
+	return filepath.Join(e.repo, "harness")
 }
 
 func (e *Executor) handleFor(record *attemptRecord) *JobHandle {
