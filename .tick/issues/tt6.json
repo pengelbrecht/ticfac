@@ -1,0 +1,14 @@
+{
+  "id": "tt6",
+  "title": "A failed cloud run's page tells the person to resume it locally",
+  "description": "stopsFromStatusDoc hardcodes clear_with `ticfac run-epic \u003cepic\u003e` for the failed-phase stop, and notifyRunEnded feeds it a doc with host \"cloud\" straight from the Run Workflow's finalize. So the page a person receives for a failed cloud run names the LOCAL foreground resume — exactly the move ResumeCommand (tick gtk) exists to prevent: run-epic on the reader's machine restarts the epic locally instead of resubmitting to the factory (`ticfac run \u003cepic\u003e --cloud`). The Go model spells the resume by host; the TS stop builder ignores doc.host.\nevidence: cloudflare/src/notify.ts:87 (clear_with) fed by the cloud doc at cloudflare/src/notify.ts:299-313; compare internal/statusmodel/commands.go ResumeCommand's cloud branch\n\nticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c created this tick by absorbing the finding b4effa80fbc7f99e5113e4f70c6ce5804f3399134f9c0e9db7f2eecf1c2d07f8 (reported by run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-q8m/attempt-1): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/b4effa80fbc7f99e5113e4f70c6ce5804f3399134f9c0e9db7f2eecf1c2d07f8.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-q8m/attempt-1",
+  "created_by": "ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c",
+  "created_at": "2026-10-04T09:49:34Z",
+  "updated_at": "2026-10-04T09:49:34Z"
+}
