@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 47,
-  "state": "integrating",
-  "reason": "integrating quz attempt 7 into epic/hn6",
-  "updated_at": "2026-10-04T13:37:34Z",
+  "sequence": 48,
+  "state": "gating",
+  "reason": "running the integrated gate for quz on 242d6e795b9f",
+  "updated_at": "2026-10-04T13:42:39Z",
   "ticks": [
     {
       "tick_id": "q8m",
@@ -47,7 +47,7 @@
     },
     {
       "tick_id": "quz",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 7
     }
   ],
