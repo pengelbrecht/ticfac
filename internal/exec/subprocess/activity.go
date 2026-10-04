@@ -687,6 +687,8 @@ func (w *activityWatch) look(record *attemptRecord, runnerPID int, after time.Du
 	// files, which would be some other pi's progress.
 	if durableResume(record.Runner, record.RunnerArgv) {
 		a.TranscriptSource = sourceStorage
+	} else {
+		a.TranscriptSource = sourceTranscript
 	}
 	if ev, ok := lastRunnerEvent(record); ok {
 		a.Transcript, a.HasTranscript = ev, true
