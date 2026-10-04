@@ -3,10 +3,10 @@
   "title": "Workspace checkpoints: wip commit after every tool round; restore on a lost container",
   "gloss": "wip checkpoints + restore",
   "description": "Step 4: an afterTools wip commit pushed to the attempt branch; on a lost container, clone the branch, check out the wip commit, run setup, continue — reusing the carried-work code.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "kgk"
   ],
@@ -14,5 +14,6 @@
   "acceptance_criteria": "test: destroy the container mid-turn; the next turn sees both edits",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.327402Z",
-  "updated_at": "2026-10-04T11:59:00.327402Z"
+  "updated_at": "2026-10-04T14:47:55.928133Z",
+  "started_at": "2026-10-04T14:47:55.928132Z"
 }
