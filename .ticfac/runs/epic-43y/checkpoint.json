@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 15,
-  "state": "running",
-  "reason": "lid is running as attempt 3",
-  "updated_at": "2026-10-04T13:14:15Z",
+  "sequence": 16,
+  "state": "dispatching",
+  "reason": "dispatching oq4 as attempt 4",
+  "updated_at": "2026-10-04T13:14:25Z",
   "ticks": [
     {
       "tick_id": "92k",
