@@ -79,6 +79,22 @@ const READY_TIMEOUT_MS = 20 * 60 * 1000;
 /** How long one run-door call may itself wait for a starting container. */
 const READY_WAIT_MS = 30_000;
 
+/**
+ * One directory listing, one command: kinds by shell tests, sizes and
+ * mtimes by whichever `stat` answers — GNU (the image) or BSD (the node
+ * suite's macOS host) — sorted for a stable answer. `find -printf` would
+ * be one command shorter, and BSD find does not have it.
+ */
+const LISTING_LINE = [
+  'find "$P" -mindepth 1 -maxdepth 1 -exec sh -c',
+  "'for f do",
+  'if [ -L "$f" ]; then t=l; elif [ -d "$f" ]; then t=d; else t=f; fi;',
+  's=$(stat -c %s "$f" 2>/dev/null || stat -f %z "$f");',
+  'm=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f");',
+  'printf "%s|%s|%s|%s\\n" "$t" "$(basename "$f")" "$s" "$m"; done\' sh {} +',
+  "| sort",
+].join(" ");
+
 export type FactorySandboxEnvOptions = {
   /** The FactorySandbox DO, structurally (or a test's stand-in for it). */
   readonly sandbox: SandboxDoor;
@@ -260,13 +276,13 @@ export class FactorySandboxEnv implements ExecutionEnv {
   ): Promise<Result<void, FileError>> {
     const bytes = typeof content === "string" ? new TextEncoder().encode(content) : content;
     if (bytes.length === 0) {
-      const out = await this.short(append ? 'touch "$F"' : ': >"$F"', { F: path });
+      const out = await this.rawShort(append ? 'touch "$F"' : ': >"$F"', { F: path });
       return this.voidOf(out, path);
     }
     for (let offset = 0; offset < bytes.length; offset += WRITE_CHUNK_BYTES) {
       const chunk = bytes.subarray(offset, Math.min(offset + WRITE_CHUNK_BYTES, bytes.length));
       const redirect = offset === 0 && !append ? ">" : ">>";
-      const out = await this.short(`printf '%s' "$B64" | base64 -d ${redirect} "$F"`, {
+      const out = await this.rawShort(`printf '%s' "$B64" | base64 -d ${redirect} "$F"`, {
         B64: base64Encode(chunk),
         F: path,
       });
@@ -315,7 +331,7 @@ export class FactorySandboxEnv implements ExecutionEnv {
 
   canonicalPath(path: string, _context: Context): Promise<Result<string, FileError>> {
     return this.attempt(() =>
-      this.guardedRead(path, "file", 'cd -P "$P" && pwd', (out) => out.output.trim()),
+      this.guardedRead(path, "exists", 'realpath "$P"', (out) => out.output.trim()),
     );
   }
 
@@ -341,7 +357,10 @@ export class FactorySandboxEnv implements ExecutionEnv {
 
   readBinaryFile(path: string, _context: Context): Promise<Result<Uint8Array, FileError>> {
     return this.attempt(() =>
-      this.guardedRead(path, "file", 'base64 -w 0 "$P"', (out) => base64Decode(out.output)),
+      // Redirected, not an operand: BSD base64 reads no file arguments, and
+      // the decode strips the line wraps GNU adds anyway (`-w 0` is not
+      // portable either).
+      this.guardedRead(path, "file", 'base64 < "$P"', (out) => base64Decode(out.output)),
     );
   }
 
@@ -415,30 +434,36 @@ export class FactorySandboxEnv implements ExecutionEnv {
 
   fileInfo(path: string, _context: Context): Promise<Result<FileInfo, FileError>> {
     return this.attempt(() =>
-      this.guardedRead(path, "exists", "stat -c '%F|%s|%Y' \"$P\"", (out) => {
-        const fields = out.output.trim().split("\n")[0]?.split("|") ?? [];
-        const kindText = fields[0];
-        const kind =
-          kindText === "directory"
+      // GNU stat first (the image), BSD stat as the fallback (the node
+      // suite's macOS host): the two agree on nothing except being stat.
+      this.guardedRead(
+        path,
+        "exists",
+        'stat -c "%F|%s|%Y" "$P" 2>/dev/null || stat -f "%HT|%z|%m" "$P"',
+        (out) => {
+          const fields = out.output.trim().split("\n")[0]?.split("|") ?? [];
+          const kindText = (fields[0] ?? "").toLowerCase();
+          const kind = kindText.includes("directory")
             ? "directory"
-            : kindText === "regular file"
-              ? "file"
-              : kindText === "symbolic link"
-                ? "symlink"
+            : kindText.includes("symbolic")
+              ? "symlink"
+              : kindText.includes("regular")
+                ? "file"
                 : undefined;
-        const size = Number(fields[1]);
-        const mtime = Number(fields[2]);
-        if (kind === undefined || !Number.isFinite(size) || !Number.isFinite(mtime)) {
-          throw new Error(`stat answered oddly: ${out.output.trim().slice(0, 200)}`);
-        }
-        return {
-          name: path.split("/").at(-1) ?? path,
-          path,
-          kind,
-          size,
-          mtimeMs: mtime * 1000,
-        } satisfies FileInfo;
-      }),
+          const size = Number(fields[1]);
+          const mtime = Number(fields[2]);
+          if (kind === undefined || !Number.isFinite(size) || !Number.isFinite(mtime)) {
+            throw new Error(`stat answered oddly: ${out.output.trim().slice(0, 200)}`);
+          }
+          return {
+            name: path.split("/").at(-1) ?? path,
+            path,
+            kind,
+            size,
+            mtimeMs: mtime * 1000,
+          } satisfies FileInfo;
+        },
+      ),
     );
   }
 
@@ -447,7 +472,13 @@ export class FactorySandboxEnv implements ExecutionEnv {
       this.guardedRead(
         path,
         "dir",
-        "find \"$P\" -mindepth 1 -maxdepth 1 -printf '%y|%f|%s|%@\\n' | sort",
+        // One listing command, portable across the image's GNU userland and
+        // the BSD one the node suite's macOS host runs: kinds by test (not
+        // by find's `-printf`, which BSD find does not have), sizes and
+        // mtimes by whichever stat answers. Built by join, not one string
+        // with continuations: an escaped backslash before a raw newline is
+        // an unterminated string, and this line is long enough to need two.
+        LISTING_LINE,
         (out) => {
           const entries: FileInfo[] = [];
           for (const line of out.output.split("\n")) {
@@ -537,9 +568,15 @@ export class FactorySandboxEnv implements ExecutionEnv {
     _context: Context,
   ): Promise<Result<string, FileError>> {
     return this.attempt(async () => {
-      const out = await this.short('mktemp "$T"', {
-        T: `/tmp/${options?.prefix ?? "ticfac"}-XXXXXXXX${options?.suffix ?? ""}`,
-      });
+      const out = await this.short(
+        // The suffix is appended AFTER mktemp answers: BSD mktemp only
+        // replaces TRAILING Xs, so the template cannot carry one.
+        'f=$(mktemp "$T"); { [ -z "$S" ] || mv "$f" "$f$S"; } && printf "%s\\n" "$f$S"',
+        {
+          T: `/tmp/${options?.prefix ?? "ticfac"}-XXXXXXXX`,
+          S: options?.suffix ?? "",
+        },
+      );
       return out.exitCode === 0
         ? ok(out.output.trim())
         : err(this.fileError(out.exitCode, out.output, options?.prefix ?? ""));

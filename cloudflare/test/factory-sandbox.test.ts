@@ -747,7 +747,7 @@ describe("FactorySandbox: the run door", () => {
     // buffers finite, and PIPESTATUS keeps the command's own exit code.
     expect(seen).toEqual([
       {
-        line: `exec 2>&1; { cat "$FILE" } | head -c ${RUN_MAX_BYTES + 1}; exit "\${PIPESTATUS[0]}"`,
+        line: `exec 2>&1; { cat "$FILE"; } | head -c ${RUN_MAX_BYTES + 1}; exit "\${PIPESTATUS[0]}"`,
         env: { FILE: "result.md" },
       },
     ]);
