@@ -632,6 +632,79 @@ func TestAnAbsorptionBoundHoldNamesTheFindingsDecision(t *testing.T) {
 	}
 }
 
+// TestAFinalReviewHoldNamesTheRunAgainCommand (tick quz): the final-review
+// hold is the one hold that fires AFTER an attempt was dispatched — the
+// close-out's — so its run_held line CARRIES an attempt, and the per-kind
+// decision used to name the settle that attempt addresses. Releasing it
+// clears nothing: the hold is the review's NOT READY verdict recorded on
+// the PR, which the next resume re-reads and holds on again. The moves are
+// the refusal's own — fix what it names and run the epic again, merge the
+// PR by hand to accept it (a re-run then finds it merged), or close it —
+// so the command is the run again, the same shape the world holds got: the
+// reason decides, never the attempt the line happens to carry.
+func TestAFinalReviewHoldNamesTheRunAgainCommand(t *testing.T) {
+	t.Parallel()
+
+	finalReviewHold := func(at time.Time) runfeed.Event {
+		attempt := 2
+		return runfeed.NewEvent(at, "epic-2jn", "rrl", &attempt, reconcile.StageRunHeld,
+			"land_review_not_ready: the run does not merge the epic 2jn: its final review (decision 3) still judges "+
+				"it NOT READY after 2 review round(s), the bound being 2. The verdict is on the epic PR, and accepting "+
+				"work the run's own review rejected is a person's judgement: fix what it names and run the epic again, "+
+				"merge the PR by hand to accept it (a re-run then finds it merged), or close it")
+	}
+
+	t.Run("a local run's final-review hold", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Feed = append(src.Feed, finalReviewHold(testNow.Add(-10*time.Minute)))
+		model := Build(src)
+		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+			t.Fatalf("the final-review hold waits on %+v, want held-for-person", model.WaitsOn)
+		}
+		if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run-epic 2jn" {
+			t.Errorf("the final-review hold's command is %+v, want the run-again command: releasing the attempt "+
+				"the line carries clears nothing, the verdict on the PR is what it holds", model.WaitsOn.UnblockCommand)
+		}
+	})
+
+	t.Run("a cloud run's final-review hold", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Host = HostCloud
+		src.Feed = append(src.Feed, finalReviewHold(testNow.Add(-10*time.Minute)))
+		model := Build(src)
+		if model.WaitsOn == nil || model.WaitsOn.UnblockCommand == nil {
+			t.Fatalf("the cloud final-review hold carries no command: %+v", model.WaitsOn)
+		}
+		if *model.WaitsOn.UnblockCommand != "ticfac run 2jn --cloud" {
+			t.Errorf("the cloud final-review hold's command is %q, want the factory resubmission a resume on "+
+				"the cloud host is", *model.WaitsOn.UnblockCommand)
+		}
+	})
+
+	t.Run("a prior run's final-review hold", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.PriorRecords = []Records{{Checkpoint: priorCheckpoint("run_prior", "failed")}}
+		src.PriorFeeds = map[string][]runfeed.Event{"run_prior": {finalReviewHold(testNow.Add(-2 * time.Hour))}}
+		model := Build(src)
+		var attention *Attention
+		for i := range model.Attention {
+			if model.Attention[i].Kind == WaitHeldForPerson && strings.Contains(model.Attention[i].What, "run_prior") {
+				attention = &model.Attention[i]
+			}
+		}
+		if attention == nil {
+			t.Fatalf("the prior run's final-review hold is not attention: %+v", model.Attention)
+		}
+		if attention.UnblockCommand == nil || *attention.UnblockCommand != "ticfac run-epic 2jn" {
+			t.Errorf("the prior run's final-review hold command is %+v, want the run-again command a resume "+
+				"addresses", attention.UnblockCommand)
+		}
+	})
+}
+
 // TestAPriorRunsWorldHoldNamesTheRunAgainCommand: a hold an earlier run left
 // about the world clears by the same per-kind decision the newest run's own
 // hold answers with — the run again, never a settle the dash attempt would

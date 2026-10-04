@@ -127,6 +127,18 @@ func HoldReason(detail string) string {
 //     so no attempt stands behind them and a settle addressed by one
 //     refuses ("-" is not an attempt number).
 //
+//   - land_review_not_ready is cleared by the same RUN AGAIN (tick quz).
+//     It is the one hold that fires AFTER an attempt was dispatched — the
+//     close-out's — so its line CARRIES one, and the release a settle
+//     addresses would take it happily; but releasing that attempt clears
+//     nothing: the hold is the final review's NOT READY verdict recorded
+//     on the PR, which the next resume re-reads and holds on again. The
+//     refusal's own message names the moves — fix what the review names and
+//     run the epic again, merge the PR by hand to accept it (a re-run then
+//     finds it merged), or close it — and every one of them ends at a
+//     resume or never needs the run again. The reason decides, never the
+//     attempt the line happens to carry.
+//
 //   - every other hold names an attempt the run dispatched, and the release
 //     a person types is the settle command that attempt addresses.
 //
@@ -147,7 +159,7 @@ func HoldClearingCommand(epicID, host, storeRunID, runID string, held runfeed.Ev
 	case reconcile.RefusedFindingUntriaged, reconcile.RefusedAbsorptionDepth:
 		command := TriageCommandForCurrentRun(epicID, storeRunID)
 		return &command
-	case reconcile.RefusedClaimWidth, reconcile.RefusedForeignClaim:
+	case reconcile.RefusedClaimWidth, reconcile.RefusedForeignClaim, reconcile.RefusedLandReviewNotReady:
 		command := ResumeCommand(host, epicID)
 		return &command
 	}
