@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 18,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The needs-you fix (ulw) covers the status model, but the same release command is spelled without --run-id in the reconciler's own refusal prose and in the watch's stderr hold alert. For a cloud run whose records live under the factory's run_<hex>, those commands default to epic-<epic-id>, a store that carries no such attempt, and refuse — the same broken release ulw fixed on the model surface, still live on the surfaces a person reads during a hold. The run's own run id is available at every site (r.opts.RunID, runID in the watch's fprintf).\nevidence: internal/cli/watch.go:357; internal/reconcile/dispatch.go:785,2805; internal/reconcile/finish.go:172; internal/reconcile/blocked.go:245,473,479; internal/reconcile/resolve.go:191,203\n\nticfac run run_5c7c16d199414da2a8a40d97b524e987 created this tick by absorbing the finding 18e87b724c6badc5645af43f5b713436655718bcf28808e1b750572a37ca0229 (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-ulw/attempt-13): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/18e87b724c6badc5645af43f5b713436655718bcf28808e1b750572a37ca0229.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "qxj",
+    "title": "Release commands in run prose and the watch alert still omit --run-id"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.72,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.09,
+      "design": 0,
+      "diagnosis": 0.03,
+      "mechanical": 0.77,
+      "translation": 0.11
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1495,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T05:11:53Z",
+  "answered_at": "2026-10-04T05:11:53Z",
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "qxj",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "346e4c22ef8b08b787500c9e3a68bbca1c041636",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
