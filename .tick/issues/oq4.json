@@ -3,10 +3,10 @@
   "title": "pi-ai gateway provider: Workers AI via the factory gateway with the run token",
   "gloss": "gateway provider",
   "description": "Step 2: a pi-ai provider over /api/gateway/workers-ai with the run token, carrying GLM maxTokens/thinkingFormat overrides; prove on staging that attribution holds and a revoked token stops the next request. Never claude in the cloud.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "92k"
   ],
@@ -14,5 +14,6 @@
   "acceptance_criteria": "staging proof recorded; unit tests for the provider",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.194176Z",
-  "updated_at": "2026-10-04T11:59:00.194176Z"
+  "updated_at": "2026-10-04T13:14:29.958409Z",
+  "started_at": "2026-10-04T13:14:29.958408Z"
 }
