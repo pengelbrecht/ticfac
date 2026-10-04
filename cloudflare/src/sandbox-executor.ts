@@ -846,7 +846,10 @@ async function startHostedAttempt(
   });
 
   const state = await agent.state();
-  if (state.phase !== "absent") {
+  // An attempt the agent holds and has NOT settled is adopted; a settled one
+  // is started afresh below, as a fresh boot under a settled container's name
+  // is (its boot record replaces the old one and clears the settlement).
+  if (state.phase !== "absent" && state.phase !== "settled") {
     const recorded = await deps.boots.modelOf(spec);
     const runningModel =
       recorded !== null && recorded.trim() !== "" ? recorded : (state.model ?? "");
@@ -873,6 +876,17 @@ async function startHostedAttempt(
     model: bootedModel(boot),
     at: new Date().toISOString(),
   });
+  // The agent's log is one stream per attempt, from its start: the state
+  // route continues it from 0 (a fresh start under a settled name included).
+  if (deps.jobLogs !== undefined) {
+    try {
+      await deps.jobLogs.started(spec, WORKER_AGENT_LOG_ID, 0);
+    } catch (error) {
+      console.error(
+        `factory sandbox door: could not reset ${ids.name}'s log cursor: ${String(error)}`,
+      );
+    }
+  }
   await agent.start({
     name: ids.name,
     tick: spec.tick_id,

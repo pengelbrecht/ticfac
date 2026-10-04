@@ -261,6 +261,35 @@ describe("a cloud worker attempt on its WorkerAgent", () => {
     socket.close();
   });
 
+  it("starts afresh under a settled name: a new conversation, a new log, a new settlement", async () => {
+    const container = scriptedContainer(10, 0);
+    const { calls, stub } = await seededAgent(container, [
+      () => fauxAssistantMessage("the first attempt's answer"),
+      () => fauxAssistantMessage("the second attempt's answer"),
+    ]);
+    const settle = async () => {
+      let status = await doorState();
+      const deadline = Date.now() + 20_000;
+      while (status.state === "running" && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        status = await doorState();
+      }
+      return status.state;
+    };
+    expect((await postStart()).status).toBe(201);
+    expect(await settle()).toBe("succeeded");
+    const firstLog = (await stub.readLog(0)).text;
+    expect(firstLog).toContain("the first attempt's answer");
+
+    expect((await postStart()).status).toBe(201);
+    expect(await settle()).toBe("succeeded");
+    expect(calls()).toBe(2);
+    const secondLog = (await stub.readLog(0)).text;
+    expect(secondLog).toContain("the second attempt's answer");
+    expect(secondLog).not.toContain("the first attempt's answer");
+    expect(container.starts.filter((s) => s.command === contract.boot_command).length).toBe(2);
+  });
+
   it("answers the door's lost for an agent that never started, and a reclaim stops it for good", async () => {
     const namespace = env.WORKER_AGENTS as unknown as WorkerAgentNamespace;
     const stub = namespace.get(namespace.idFromName(attemptSandboxName(RUN_ID, TICK, 9)));

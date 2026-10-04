@@ -55,8 +55,11 @@ class FakeAgent implements WorkerAgentStub {
 
   async start(spec: StartedSpec): Promise<WorkerAgentState> {
     this.started.push(spec);
-    if (this.phase === "absent") {
+    // A settled attempt is started afresh, as the real agent does.
+    if (this.phase === "absent" || this.phase === "settled") {
       this.phase = "booting";
+      this.exitCode = null;
+      this.log = "";
       this.model = spec.model;
     }
     return this.state();
@@ -316,6 +319,20 @@ describe("the start route on a run whose workers are WorkerAgents", () => {
     expect(body.adopted).toBe(true);
     expect(body.handle.handle.model).toBe(MODEL);
     expect(agentOf().started.length).toBe(1);
+  });
+
+  it("starts a settled attempt afresh — running again, not its old settlement", async () => {
+    expect((await postStart(startBody())).status).toBe(201);
+    const agent = agentOf();
+    agent.phase = "settled";
+    agent.exitCode = 1;
+    expect(((await (await getState()).json()) as { state: string }).state).toBe("failed");
+
+    const again = await postStart(startBody());
+    expect(again.status).toBe(201);
+    expect(((await again.json()) as { adopted: boolean }).adopted).toBe(false);
+    expect(agent.started.length).toBe(2);
+    expect(((await (await getState()).json()) as { state: string }).state).toBe("running");
   });
 
   it("leaves a run on the 0.x substrate to its container, agents bound or not", async () => {

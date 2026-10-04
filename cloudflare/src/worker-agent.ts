@@ -243,23 +243,34 @@ export class WorkerAgent extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    ctx.storage.sql.exec(
+    this.logEnd = this.prepareLog();
+  }
+
+  /** The log table, created when missing; answers where the log ends. */
+  private prepareLog(): number {
+    this.ctx.storage.sql.exec(
       `CREATE TABLE IF NOT EXISTS ticfac_worker_log (
          seq INTEGER PRIMARY KEY AUTOINCREMENT,
          start INTEGER NOT NULL,
          end INTEGER NOT NULL,
          text TEXT NOT NULL)`,
     );
-    const last = ctx.storage.sql
+    const last = this.ctx.storage.sql
       .exec<{ end: number }>("SELECT end FROM ticfac_worker_log ORDER BY seq DESC LIMIT 1")
       .toArray()[0];
-    this.logEnd = last?.end ?? 0;
+    return last?.end ?? 0;
   }
 
   // ------------------------------------------------------------- the RPCs ---
 
   /** Records the attempt (once) and starts driving it; answers its state. */
   async start(spec: WorkerAttemptSpec): Promise<WorkerAgentState> {
+    // A start under a SETTLED identity is a fresh attempt, as a fresh boot
+    // under a settled container's name is a new work process (the door
+    // records the boot again, which clears the settlement): everything this
+    // object held — the conversation, the record, the log — goes, and the
+    // attempt starts from nothing. An unsettled one is the adoption below.
+    if ((await this.load())?.phase === "settled") await this.forget();
     const host = this.hostFor(spec);
     const { fresh } = await host.start(spec);
     if (fresh) await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_MS);
@@ -323,6 +334,19 @@ export class WorkerAgent extends DurableObject<Env> {
     const state = stateOf(await this.load());
     this.broadcast({ type: "state", state });
     return state;
+  }
+
+  /** Drops everything this object holds, for a fresh attempt under its name. */
+  private async forget(): Promise<void> {
+    const host = this.host;
+    this.host = undefined;
+    await host?.close();
+    const stream = this.stream;
+    this.stream = undefined;
+    await stream?.stop();
+    await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.deleteAll();
+    this.logEnd = this.prepareLog();
   }
 
   /** Destroys the attempt's container: a settled attempt holds a slot for nothing. */
