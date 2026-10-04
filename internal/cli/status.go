@@ -20,6 +20,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -120,6 +121,18 @@ func statusFollow(ctx context.Context, repo, runID string, interval time.Duratio
 		}
 		ended, lines, err := renderStatusFrame(ctx, source, cloudSource, kind, repo, runID, labels, cursor, first, stdout)
 		first = nil
+		if err != nil && errors.Is(err, errFeedRead) && previous > 0 {
+			// A follow that has drawn a frame keeps going through a failed
+			// read — a factory redeploying under it is one missed frame, said
+			// on stderr, and the last frame stands until the next one.
+			fmt.Fprintf(stderr, "# %v\n", err)
+			select {
+			case <-ctx.Done():
+				return 1
+			case <-time.After(interval):
+			}
+			continue
+		}
 		if err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
 			return 1
@@ -565,9 +578,16 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 		Reason:         answer.Reason,
 		CurrentStep:    answer.Current,
 	}
+	// The run's last event, read from the END of its feed — a long run's
+	// feed is never walked whole for one line (run_5c7c16d1). A read that
+	// failed is said to have failed, never left out as though the run had
+	// said nothing.
+	feedProblem := ""
 	if client, err := newCloudClient(); err == nil {
 		source := &cloudFeedSource{client: client, runID: runID, warn: stderr}
-		if located, absent, err := feedStanding(ctx, source); err == nil && !absent && len(located) > 0 {
+		if located, _, err := feedTail(ctx, source, 1); err != nil {
+			feedProblem = err.Error()
+		} else if len(located) > 0 {
 			last := located[len(located)-1].Event
 			status.LastEvent = &last
 			if at, err := time.Parse(time.RFC3339, last.At); err == nil {
@@ -598,6 +618,9 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 		}
 		fmt.Fprintf(stdout, "last event %s ago: %s %s %s\n",
 			status.EventAge, status.LastEvent.Stage, tick, status.LastEvent.Detail)
+	}
+	if feedProblem != "" {
+		fmt.Fprintf(stdout, "last event: unknown — %s\n", feedProblem)
 	}
 	if answer.Alive {
 		return 0
