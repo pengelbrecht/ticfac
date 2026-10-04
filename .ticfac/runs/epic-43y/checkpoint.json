@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 74,
-  "state": "running",
-  "reason": "bgx is running as attempt 13",
-  "updated_at": "2026-10-04T18:40:54Z",
+  "sequence": 75,
+  "state": "collecting",
+  "reason": "collecting xd3 attempt 11",
+  "updated_at": "2026-10-04T18:45:18Z",
   "ticks": [
     {
       "tick_id": "92k",
