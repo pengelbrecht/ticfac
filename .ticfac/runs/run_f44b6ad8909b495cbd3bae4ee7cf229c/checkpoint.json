@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 14,
-  "state": "publishing",
-  "reason": "closing q8m behind the integrated gate on a82695400f56",
-  "updated_at": "2026-10-04T10:05:24Z",
+  "sequence": 15,
+  "state": "running",
+  "reason": "q8m is closed",
+  "updated_at": "2026-10-04T10:05:32Z",
   "ticks": [
     {
       "tick_id": "q8m",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
