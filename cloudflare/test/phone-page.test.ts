@@ -731,9 +731,9 @@ describe("a cloud run renders the model its own orchestrator pushed (hn6 h7w)", 
 
   it("renders the golden's elapsed, live workers and CI — the sections the same model gives the terminal", async () => {
     const body = await renderedLocalPage(goldens.dashboard);
-    // The run's elapsed, from the earliest dispatch the tries state to the
-    // model's own clock — the same 2h9m the terminal's headline renders.
-    expect(body).toContain('<span class="heta">2h9m</span>');
+    // The run's elapsed, the model's own clamped clock (tick e6g) — the
+    // same 2h9m the terminal's headline renders.
+    expect(body).toContain('<span class="helapsed">2h9m</span>');
     // The live worker, in the terminal's own words: its tick, its model,
     // its executor, the handle a person finds it by, the measured activity
     // sparkline, its last action with its age, and the nudge.

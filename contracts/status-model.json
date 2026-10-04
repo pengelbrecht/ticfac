@@ -1392,7 +1392,8 @@
           "total": 3,
           "done": 1,
           "active": 2
-        }
+        },
+        "run_elapsed_seconds": 7740
       },
       "epic_title": "ticfac Phase 7: cut over and simplify ticks",
       "recent": [
@@ -1915,7 +1916,8 @@
           "total": 3,
           "done": 1,
           "active": 2
-        }
+        },
+        "run_elapsed_seconds": 7740
       },
       "epic_title": "ticfac Phase 7: cut over and simplify ticks",
       "recent": [

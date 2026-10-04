@@ -53,6 +53,30 @@ loud.
 
 ---
 
+## 1.6.0
+
+MINOR: `status-model.json` gains two goldens, `dashboard_degraded` and
+`dashboard_stopped` (tick h7w, epic hn6 — A5/rule 8, "two renderers, they
+cannot disagree"). The phone page (i1r) and the terminal watch are two
+renderers of one model, and until now every golden answered "is it healthy"
+with `healthy`, so the two states a person most needs to read the same way
+— something is wrong but the run is going, and the run is not going — had
+no fixture a cross-renderer test could render. The wording this pins is the
+verdict's own: a degraded summary already carries its `degraded: ` prefix
+(internal/statusmodel/verdict.go's degradedCause), so a renderer that
+prefixes the state again reads "degraded: degraded: …", and a stopped run
+whose probe said nothing has an EMPTY summary, which no renderer may spell
+"stopped: ". Both goldens are the dashboard golden's own run with only the
+health verdict (and, for the stopped one, the liveness answer, its waits and
+its census) changed, so every derivation rule the agreement guard runs —
+durations, elapsed, try outcomes, the CI cell — still holds at the golden's
+own stamps; both carry 1.5.0's `progress.run_elapsed_seconds` at the
+dashboard golden's own 7740 (their tails end on no terminal line, so the
+clock is not clamped). h7w first cut these goldens as a 1.5.0 concurrent
+with e6g's; they land here, on top of 1.5.1, so no version means two cuts.
+Consumers: no field changed shape, so an unchanged reader is still correct —
+the cloudflare pin bumps in the same commit.
+
 ## 1.5.1
 
 PATCH: `status-model.json`'s `last_action` description states the credential
@@ -90,25 +114,6 @@ which does not move. Consumers: the Go renderers read the field instead of
 deriving; the phone page renders it beside the counts and the ETA — an
 unchanged consumer is still correct but no longer complete, so the
 cloudflare pin bumps in the same commit.
-## 1.5.0
-
-MINOR: `status-model.json` gains two goldens, `dashboard_degraded` and
-`dashboard_stopped` (tick h7w, epic hn6 — A5/rule 8, "two renderers, they
-cannot disagree"). The phone page (i1r) and the terminal watch are two
-renderers of one model, and until now every golden answered "is it healthy"
-with `healthy`, so the two states a person most needs to read the same way
-— something is wrong but the run is going, and the run is not going — had
-no fixture a cross-renderer test could render. The wording this pins is the
-verdict's own: a degraded summary already carries its `degraded: ` prefix
-(internal/statusmodel/verdict.go's degradedCause), so a renderer that
-prefixes the state again reads "degraded: degraded: …", and a stopped run
-whose probe said nothing has an EMPTY summary, which no renderer may spell
-"stopped: ". Both goldens are the dashboard golden's own run with only the
-health verdict (and, for the stopped one, the liveness answer, its waits and
-its census) changed, so every derivation rule the agreement guard runs —
-durations, elapsed, try outcomes, the CI cell — still holds at the golden's
-own stamps. Consumers: no field changed shape, so an unchanged reader is
-still correct — the cloudflare pin bumps in the same commit.
 
 ## 1.4.0
 

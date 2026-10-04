@@ -7,7 +7,7 @@
  *
  * A run card answers the terminal dashboard's questions from the SAME status
  * model, never a second opinion: how far along (a progress bar and `n/m
- * ticks` from progress, the elapsed the tries state, the ETA only where
+ * ticks` from progress, the elapsed the model states, the ETA only where
  * remaining states one), is it healthy (the verdict with its coloured dot and
  * its recovered facts), does anything need me (needs-you, quiet when nothing
  * does), then the per-tick table (plan order, children indented, one glyph per
@@ -672,24 +672,16 @@ function dashboardHTML(row: RunRow): {
 /**
  * The headline's progress and verdict. The bar is a CSS width percentage —
  * closed over total, never a guess when the model states no counts — with
-<<<<<<< HEAD
  * `n/m ticks` beside it, the elapsed and the ETA only where the model states
  * them (the elapsed is the same clamped clock the terminal header renders,
  * tick e6g), and the health verdict with its coloured dot and, where it
  * recovered things on its own, that calm fact rather than an alarm.
-=======
- * `n/m ticks` beside it, the elapsed the tries state (from the earliest
- * dispatch the model carries to the model's own clock), the ETA only where
- * the model states one, and the health verdict with its coloured dot and,
- * where it recovered things on its own, that calm fact rather than an
- * alarm.
  *
  * The verdict's words are the shared vocabulary ([verdictWord] — the same
  * one the terminal's dashVerdict spells, pinned on both renderers by the
  * degraded and stopped goldens): a degraded summary already carries its own
  * prefix and a stopped run that said nothing reads the bare word, so no
  * headline here can double a prefix or hang a colon off nothing.
->>>>>>> 588ee72865de453466358367f5475da6d91f02ed
  */
 function headlineHTML(doc: StatusDoc): string {
   const ticks = doc.progress?.ticks;
@@ -700,7 +692,6 @@ function headlineHTML(doc: StatusDoc): string {
     ticks === undefined || ticks === null
       ? ""
       : `<span class="hcount">${escapeHTML(`${closed}/${total} ticks`)}</span>`;
-<<<<<<< HEAD
   // The epic's own clock, the same field the terminal header renders — a
   // renderer that derived it here would count past a finished run, the
   // exact defect the field exists to end (tick e6g).
@@ -709,13 +700,6 @@ function headlineHTML(doc: StatusDoc): string {
     elapsedSeconds === undefined || elapsedSeconds === null
       ? ""
       : `<span class="helapsed">${escapeHTML(humanDuration(elapsedSeconds))}</span>`;
-=======
-  const elapsedSeconds = runElapsedSeconds(doc);
-  const elapsed =
-    elapsedSeconds === null
-      ? ""
-      : `<span class="heta">${escapeHTML(humanDuration(elapsedSeconds))}</span>`;
->>>>>>> 588ee72865de453466358367f5475da6d91f02ed
   const remaining = doc.remaining?.approximate_seconds;
   const eta =
     remaining === undefined || remaining === null
@@ -736,29 +720,6 @@ function headlineHTML(doc: StatusDoc): string {
 <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
 <div class="headline-line">${count}${elapsed}${eta}<span class="verdict verdict-${escapeHTML(state)}"><span class="dot"></span>${escapeHTML(verdictText)}</span></div>
 </div>`;
-}
-
-/**
- * How long the run has been going, from its own records — the earliest
- * dispatch any try of any wave states, measured to the model's own clock,
- * exactly the way the terminal's headline measures it. Null when no try
- * states a parseable dispatch: an elapsed nobody measured is nobody's guess.
- */
-function runElapsedSeconds(doc: StatusDoc): number | null {
-  let earliest: number | null = null;
-  for (const wave of doc.waves ?? []) {
-    for (const tick of wave.ticks) {
-      for (const try_ of tick.tries ?? []) {
-        const at = Date.parse(try_.dispatched_at ?? "");
-        if (Number.isNaN(at)) continue;
-        if (earliest === null || at < earliest) earliest = at;
-      }
-    }
-  }
-  const now = Date.parse(doc.generated_at);
-  if (earliest === null || Number.isNaN(now)) return null;
-  const seconds = Math.round((now - earliest) / 1000);
-  return seconds >= 0 ? seconds : null;
 }
 
 /**
