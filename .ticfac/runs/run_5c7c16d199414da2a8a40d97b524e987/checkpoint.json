@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
   "epic_id": "hn6",
-  "sequence": 30,
-  "state": "publishing",
-  "reason": "closing u4l behind the integrated gate on cafcdfdff831",
-  "updated_at": "2026-10-04T01:09:00Z",
+  "sequence": 31,
+  "state": "running",
+  "reason": "u4l is closed",
+  "updated_at": "2026-10-04T01:09:07Z",
   "ticks": [
     {
       "tick_id": "gmo",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "u4l",
-      "state": "dispatched",
+      "state": "closed",
       "attempt": 3
     },
     {
