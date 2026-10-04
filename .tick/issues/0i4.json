@@ -1,0 +1,13 @@
+{
+  "id": "0i4",
+  "title": "pi-durable wall abort waits for an in-flight tool to finish",
+  "description": "armWallDeadline's Conversation.abort() marks the conversation's live tasks and resolves only once the scope is idle, so a tool already running (a long bash command) runs to completion before the abort takes hold: the wall stops the NEXT model call, not the in-flight tool's spend. The cloud host (xd3, epic 43y step 6) should pair the wall with whatever bound it wants on individual tool calls, or accept that the tool round completes after the deadline fires. Proven by the wall test: the abort settles the submission unanswered and no further model call happens, but the slow tool was never interrupted.\nevidence: harness/test/worker-followups.test.ts (the wall deadline tests); pi-durable Conversation.abort docs: 'mark every live non-background task … and resolve once the scope is idle'\n\nticfac run epic-43y filed this backlog tick from the finding bb046869dd03b81566d6989fcc952a1ae436c1d18b80ff7f941235adbded3559 (reported by run-epic-43y/tick-pom/attempt-7): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/bb046869dd03b81566d6989fcc952a1ae436c1d18b80ff7f941235adbded3559.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-pom/attempt-7",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-04T15:55:25Z",
+  "updated_at": "2026-10-04T15:55:25Z"
+}
