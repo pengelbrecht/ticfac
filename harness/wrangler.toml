@@ -1,0 +1,23 @@
+# The harness package's worker.
+#
+# TEST-ONLY: never deployed. @cloudflare/vitest-pool-workers reads this config
+# to run this package's suites inside real workerd, where a Durable Object
+# instance's SQLite (`ctx.storage.sql`) is the storage a cloud attempt will use
+# (docs/spikes/n0b-round2-pi-durable.md).
+name = "ticfac-harness"
+main = "src/worker.ts"
+# Current at merge time, matching cloudflare/wrangler.toml: DO SQLite storage
+# needs a recent date.
+compatibility_date = "2026-08-11"
+
+# One HarnessStorage DO instance per conformance case (fresh instance = fresh
+# SQLite, the per-case isolation the suite assumes), and, later in the epic,
+# one per worker attempt.
+[[durable_objects.bindings]]
+name = "HARNESS_STORAGE"
+class_name = "HarnessStorage"
+
+[[migrations]]
+tag = "v1"
+# SQLite-backed storage — requires the recent compatibility_date above.
+new_sqlite_classes = ["HarnessStorage"]

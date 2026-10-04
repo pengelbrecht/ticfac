@@ -1,0 +1,44 @@
+{
+  // The same shape and reasons as cloudflare/biome.jsonc: Biome is this side's
+  // gofmt AND its vet, JSONC so comments parse, 2 spaces / double quotes /
+  // lineWidth 100 to read like the TypeScript this repository already has,
+  // `noFloatingPromises` because a dropped promise in a Workers runtime is a
+  // request that returns before its own writes land.
+  "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["src/**", "test/**", "vitest.config.ts"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double"
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "nursery": {
+        "noFloatingPromises": "error"
+      }
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  }
+}
