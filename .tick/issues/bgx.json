@@ -1,0 +1,14 @@
+{
+  "id": "bgx",
+  "title": "The stuck watch reads pi-CLI session transcripts for a runner that has none",
+  "description": "The subprocess supervisor's activity watch still reads the pi CLI's session transcripts (LastTranscriptEvent's `pi` case) for the runner now named `pi` — which is the Node pi-durable host and writes its conversation to the attempt's SQLite, not to pi's session files. The watch still decides correctly (tool-process CPU, worktree and branch moves carry it; the harness's own partial commits every ~100ms keep the runner's CPU moving during streaming), but the evidence sentence a stuck nudge carries now always says \"no session transcript could be read\", which misleads an operator reading where a live worker's progress lives. The honest signal is the storage file's mtime — commits are the heartbeat — or y03's commit-stream view.\nevidence: internal/exec/subprocess/activity.go LastTranscriptEvent (case \"pi\"), and its Evidence sentence; the storage is internal/exec/subprocess/workerconfig.go fileWorkerStorage\n\nticfac run epic-43y created this tick by absorbing the finding 8794627c1b2648dc6c2d5e88bf9f055f2b2518cf87e34c1c68534468aae6c0ab (reported by run-epic-43y/tick-hpk/attempt-9): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/8794627c1b2648dc6c2d5e88bf9f055f2b2518cf87e34c1c68534468aae6c0ab.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-hpk/attempt-9",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-04T18:35:30Z",
+  "updated_at": "2026-10-04T18:35:30Z"
+}
