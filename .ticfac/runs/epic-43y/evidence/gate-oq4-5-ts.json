@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-oq4-5-ts",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "oq4",
+    "attempt": 5,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "8b8469824ee3545ad90fc65e6413713448258c32",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "frontier",
+    "profile_digest": "sha256:c376308ac1a3cb3f15f8abda7bcc718f2352a388daf376bc11c6b4ce3f98a044",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  },
+  "check": {
+    "id": "ts",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit"
+    ]
+  },
+  "started_at": "2026-10-04T14:14:14Z",
+  "finished_at": "2026-10-04T14:14:19Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "✓ Lockfile passes supply-chain policies (verified 10h ago)\nLockfile is up to date, resolution step is skipped\nPackages are cloned from the content-addressable store to the virtual store.\n  Content-addressable store is at: \u003credacted-host-path\u003e/Library/pnpm/store/v11\n  Virtual store is at:             node_modules/.pnpm\nPackages: +89\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\nProgress: resolved 89, reused 89, downloaded 0, added 89, done\n\ndependencies:\n+ @cloudflare/sandbox 0.12.7\n\ndevDependencies:\n+ @biomejs/biome 2.5.13\n+ @cloudflare/vitest-pool-workers 0.22.0\n+ @cloudflare/workers-types 5.20261001.1\n+ esbuild 0.28.1\n+ miniflare 5.20261001.0-alpha\n+ typescript 5.9.3\n+ vite 8.2.1\n+ vitest 4.1.11\n+ wrangler 4.147.0\n\nDone in 327ms using pnpm v12.3.4\n\u001b[0m\u001b[34mChecked 151 files in 372\u001b[0m\u001b[0m\u001b[2m\u001b[34mms\u001b[0m\u001b[0m\u001b[34m.\u001b[0m\u001b[0m\u001b[34m No fixes applied.\u001b[0m\ncontracts: ok — 16 contract(s) at bundle 1.1.0 read in place from \u003credacted-host-path\u003e/contracts (mode: workspace)\n",
+    "stderr": "$ biome ci --error-on-warnings\n$ node scripts/contracts.mjs check\n",
+    "truncated": false,
+    "redacted": true,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:6bcadebfb555f510b427f15ea2d62957853026e8370f4c2e1407714528c76145",
+  "persistence_uri": "git:refs/heads/epic/43y:.ticfac/runs/epic-43y/evidence/gate-oq4-5-ts.json"
+}
