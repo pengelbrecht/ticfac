@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 27,
-  "state": "dispatching",
-  "reason": "dispatching e6g as attempt 7",
-  "updated_at": "2026-10-04T16:34:19Z",
+  "sequence": 28,
+  "state": "running",
+  "reason": "e6g is running as attempt 7",
+  "updated_at": "2026-10-04T16:34:29Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -43,7 +43,8 @@
     },
     {
       "tick_id": "e6g",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 7
     },
     {
       "tick_id": "ghh",
