@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 41,
-  "state": "dispatching",
-  "reason": "dispatching h7w as attempt 9",
-  "updated_at": "2026-10-04T17:35:24Z",
+  "sequence": 42,
+  "state": "running",
+  "reason": "h7w is running as attempt 9",
+  "updated_at": "2026-10-04T17:35:35Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -53,7 +53,8 @@
     },
     {
       "tick_id": "h7w",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 9
     },
     {
       "tick_id": "ihw",
