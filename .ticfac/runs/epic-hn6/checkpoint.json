@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 112,
-  "state": "integrating",
-  "reason": "integrating c65 attempt 17 into epic/hn6",
-  "updated_at": "2026-10-04T20:09:08Z",
+  "sequence": 113,
+  "state": "gating",
+  "reason": "running the integrated gate for c65 on 77d2e56f19cb",
+  "updated_at": "2026-10-04T20:09:23Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -97,7 +97,7 @@
     },
     {
       "tick_id": "c65",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 17
     },
     {
