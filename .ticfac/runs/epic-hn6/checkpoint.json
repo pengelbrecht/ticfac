@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching v16 as attempt 1",
-  "updated_at": "2026-10-04T16:00:56Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "v16 is running as attempt 1",
+  "updated_at": "2026-10-04T16:01:08Z",
   "ticks": [
     {
       "tick_id": "v16",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "qjl",
