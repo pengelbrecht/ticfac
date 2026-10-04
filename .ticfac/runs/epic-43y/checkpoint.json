@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 46,
-  "state": "dispatching",
-  "reason": "dispatching 4fs as attempt 8",
-  "updated_at": "2026-10-04T15:38:01Z",
+  "sequence": 47,
+  "state": "running",
+  "reason": "4fs is running as attempt 8",
+  "updated_at": "2026-10-04T15:38:12Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -63,7 +63,8 @@
     },
     {
       "tick_id": "4fs",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 8
     }
   ],
   "provenance": {
