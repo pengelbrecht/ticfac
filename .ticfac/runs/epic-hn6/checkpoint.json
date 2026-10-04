@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 16,
-  "state": "integrating",
-  "reason": "integrating 15b attempt 3 into epic/hn6",
-  "updated_at": "2026-10-04T16:28:38Z",
+  "sequence": 17,
+  "state": "gating",
+  "reason": "running the integrated gate for 15b on e6e812db0d49",
+  "updated_at": "2026-10-04T16:28:49Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -23,7 +23,7 @@
     },
     {
       "tick_id": "15b",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 3
     },
     {
