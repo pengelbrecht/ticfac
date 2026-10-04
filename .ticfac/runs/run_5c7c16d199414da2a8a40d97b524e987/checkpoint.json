@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
   "epic_id": "hn6",
-  "sequence": 31,
-  "state": "running",
-  "reason": "u4l is closed",
-  "updated_at": "2026-10-04T01:09:07Z",
+  "sequence": 32,
+  "state": "dispatching",
+  "reason": "dispatching 9um as attempt 8",
+  "updated_at": "2026-10-04T01:09:17Z",
   "ticks": [
     {
       "tick_id": "gmo",
@@ -43,6 +43,10 @@
     },
     {
       "tick_id": "qjl",
+      "state": "ready"
+    },
+    {
+      "tick_id": "9um",
       "state": "ready"
     }
   ],
