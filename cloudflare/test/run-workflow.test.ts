@@ -1863,7 +1863,7 @@ describe("a run that outlives what one instance can watch", () => {
     // Running out of looks is not a dead orchestrator. Rebooting here would put
     // two live orchestrators on the same project's `.tick/` (D4).
     set("RUN_MAX_OBSERVATIONS", "2");
-    const { runID } = await ignite();
+    const { runID, project, epic } = await ignite();
     const process = await firstProcess();
     process.say("orchestrator: still working\n");
 
@@ -1871,10 +1871,24 @@ describe("a run that outlives what one instance can watch", () => {
     // stops cleanly — the container is killed and destroyed — and nothing is
     // booted after it: not a replacement beside a live one, and not the
     // closeout that used to follow the trip (tick dl8).
-    expect((await settled(runID)).state).toBe("stopped");
+    const run = await settled(runID);
+    expect(run.state).toBe("stopped");
     expect(process.killed).toBe(true);
     expect(sandboxes.booted).toHaveLength(1);
     expect(sandboxes.phase("reconcile")).toBeUndefined();
+
+    // And the record says what happened (hn6): a supervisor limit with the
+    // orchestrator alive and wall clock left — never a wall-clock breach —
+    // and how the run carries on from the branch.
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.detail).toContain("ran out of looks (2 for this watch)");
+    expect(record.detail).toContain("orchestrator still alive");
+    expect(record.detail).toContain("not a budget the run breached");
+    expect(record.detail).toContain("resubmitting the epic resumes it");
+    expect(record.detail).not.toContain("wall-clock budget is exhausted");
+    const logged = await listDispatchLogs(env.DB, runID, epic);
+    expect(logged.some((entry) => entry.decision === "stopping:budget:observations")).toBe(true);
+    expect(logged.some((entry) => entry.decision === "stopping:budget:wall_clock")).toBe(false);
   });
 });
 
@@ -3295,6 +3309,32 @@ describe("a local orchestrator's run (ticfac run --cloud-workers)", () => {
     expect(sandboxes.booted.filter((sandbox) => !fromAnEarlierTest(sandbox))).toHaveLength(0);
     const record = await readRunRecord(env.ARTIFACTS, run.project, runID);
     expect(JSON.stringify(record)).toMatch(/stopped heartbeating/);
+  });
+
+  it("says honestly that the supervisor ran out of looks, and how to resume (hn6)", async () => {
+    // A pinned cadence and a pinned look count: the one way left to reach the
+    // end of the watch before the wall clock (the backoff is paced to it).
+    set("RUN_MAX_OBSERVATIONS", "2");
+    const { runID, epic } = await ignite({ local: true });
+    const token = await credential(runID);
+    await waitFor("the run to be running", async () => {
+      const run = await getRun(env.DB, runID);
+      return run?.state === "running" ? run : null;
+    });
+    await SELF.fetch(`${FACTORY}/api/heartbeat`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    const run = await settled(runID);
+    expect(run.state).toBe("stopped");
+    const record = JSON.stringify(await readRunRecord(env.ARTIFACTS, run.project, runID));
+    expect(record).toContain("ran out of looks (2 for this watch)");
+    expect(record).toContain("not a budget the run breached");
+    expect(record).toContain("--cloud-workers` resumes it");
+    expect(record).not.toContain("wall-clock budget is exhausted");
+    const logged = await listDispatchLogs(env.DB, runID, epic);
+    expect(logged.some((entry) => entry.decision === "stopping:budget:observations")).toBe(true);
   });
 
   it("stops cleanly when the operator asks, and the machine hears it at its next beat", async () => {
