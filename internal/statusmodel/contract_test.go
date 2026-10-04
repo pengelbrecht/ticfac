@@ -1087,7 +1087,7 @@ func goldenProgressAgreesWithTheClock(t *testing.T, golden string, model *Model,
 	if start.IsZero() {
 		if model.Progress.RunElapsedSeconds != nil {
 			t.Errorf("%s states progress.run_elapsed_seconds %d beside no try stamp at all: buildRunElapsed measures the span off the dispatch markers, and no marker is a span nobody measured",
-					where, *model.Progress.RunElapsedSeconds)
+				where, *model.Progress.RunElapsedSeconds)
 		}
 		return
 	}
@@ -1110,8 +1110,8 @@ func goldenProgressAgreesWithTheClock(t *testing.T, golden string, model *Model,
 			where, start.Format(time.RFC3339))
 	} else if *got != want {
 		t.Errorf("%s states progress.run_elapsed_seconds %d, want %d: the earliest dispatch (%s) to %s (%s)",
-				where, *got, want, start.Format(time.RFC3339),
-				end.Format(time.RFC3339), endTimestampWord(end, now))
+			where, *got, want, start.Format(time.RFC3339),
+			end.Format(time.RFC3339), endTimestampWord(end, now))
 	}
 }
 
