@@ -2,6 +2,7 @@
   "id": "5xp",
   "title": "Reap orphaned workerd for the harness vitest suite when it grows",
   "description": "cloudflare's vitest suite has scripts/workerd-watchdog.mjs because a SIGKILLed vitest leaves workerd running forever (two dozen had piled up on this shared host). The harness suite is ~5 s today so the risk is small, but epic steps 6-7 add crash-resume and kill-mid-tool tests to it, which is exactly the shape that orphans workerd. When that lands, reuse the watchdog pattern for harness/vitest.config.ts.\n\nticfac run epic-43y filed this backlog tick from the finding f58cf3f9b57a5428696d40ba3b7d66a6916383134363ec3bc3836bef55639cc6 (reported by run-epic-43y/tick-92k/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/f58cf3f9b57a5428696d40ba3b7d66a6916383134363ec3bc3836bef55639cc6.json on the run branch.",
+  "notes": "2026-10-04 14:46 - ticfac run epic-43y: created by absorbing finding f58cf3f9b57a5428696d40ba3b7d66a6916383134363ec3bc3836bef55639cc6 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-43y/absorptions/f58cf3f9b57a5428696d40ba3b7d66a6916383134363ec3bc3836bef55639cc6.json on epic/43y, and it says: the classifier put 0.23 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-43y/tick-92k/attempt-1",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-04T12:46:49Z",
-  "updated_at": "2026-10-04T12:46:49Z"
+  "updated_at": "2026-10-04T12:46:55.47137Z"
 }
