@@ -76,14 +76,26 @@ func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, finding
 			"\"resolve-conflict: …\"): check each resolution keeps both sides' intent.",
 			strings.Join(dedupe(resolves), ", ")))
 	}
-	var absorbed, liveRun []string
+	var absorbed, liveRun, pastBound []string
 	for _, record := range absorptions {
 		switch {
 		case record.Gating:
 			absorbed = append(absorbed, record.TickID)
 		case isLiveRun(record):
 			liveRun = append(liveRun, record.TickID)
+		case isPastBound(record):
+			pastBound = append(pastBound, record.TickID)
 		}
+	}
+	if len(pastBound) > 0 {
+		// The bound's deferrals (absorb_bound.go): findings the run would
+		// have absorbed, filed to the backlog instead because their chain was
+		// at the bound. The run did not halt for them, so THIS is where a
+		// person judges them.
+		items = append(items, fmt.Sprintf("%d finding(s) were deferred past the absorption bound: each would "+
+			"have extended a chain of absorbed fixes already at the bound, so the run filed it as a backlog tick "+
+			"with an owner rather than absorb it, whatever done item it claims. Judge whether any must land "+
+			"before this merges: %s.", len(pastBound), strings.Join(pastBound, ", ")))
 	}
 	if len(absorbed) > 0 {
 		items = append(items, fmt.Sprintf("The run ABSORBED %d tick(s) into the epic mid-run, fixes its own "+

@@ -72,3 +72,36 @@ func TestARoutedAbsorptionRecordAgreesWithItself(t *testing.T) {
 		}
 	}
 }
+
+// A finding DEFERRED PAST THE ABSORPTION BOUND (run_5c7c16d1, epic hn6) is the
+// bound's rule decision about THIS repository: a backlog tick with an owner,
+// gating nothing whatever the verdict said — and it cannot be crossed with a
+// gating, routed or predicted record.
+//
+// short: Validate over records already in memory
+func TestAPastBoundAbsorptionRecordAgreesWithItself(t *testing.T) {
+	t.Parallel()
+	pastBound := func() Absorption {
+		a := testAbsorption("5e1ec7ed")
+		a.Gating, a.ItemID, a.Basis = false, "", AbsorptionRule
+		a.TickID, a.Placement = "k2p", AbsorptionPastBound
+		a.Reason = "deferred past the absorption bound: the chain already carries 3 and the bound is 3"
+		return a
+	}
+	if err := pastBound().Validate(); err != nil {
+		t.Fatalf("a finding deferred past the bound does not validate: %v", err)
+	}
+	for name, mutate := range map[string]func(*Absorption){
+		"gating":      func(a *Absorption) { a.Gating = true },
+		"an item":     func(a *Absorption) { a.ItemID = "A1" },
+		"predicted":   func(a *Absorption) { a.Basis, a.Confidence = AbsorptionPredicted, 0.7 },
+		"routed":      func(a *Absorption) { a.Target = "example/upstream" },
+		"a repo tick": func(a *Absorption) { a.TickID = "example/upstream:k2p" },
+	} {
+		a := pastBound()
+		mutate(&a)
+		if err := a.Validate(); err == nil {
+			t.Errorf("%s: a past-bound decision that contradicts itself validated: %+v", name, a)
+		}
+	}
+}

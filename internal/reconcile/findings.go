@@ -359,8 +359,7 @@ func (r *Reconciler) carriedUntriaged(tick string) int {
 
 // triagePointer is the one sentence every surface that TELLS somebody how
 // to triage a finding embeds (tick 8yn): the note the discovering tick's
-// record carries (findingLeftNote), the close-out's hold below, and the
-// absorption-depth stop (absorb.go). It teaches the everyday path —
+// record carries (findingLeftNote) and the close-out's hold below. It teaches the everyday path —
 // `ticfac triage <epic>`, each finding addressed by a SHORT key prefix —
 // never the old `ticfac finding <epic> <64-hex> --promote-as ... --by ...`
 // shape: a person following the pointer must not be sent to type the very

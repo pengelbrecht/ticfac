@@ -130,7 +130,7 @@ import { statusPageRoute } from "./phone";
 import { postReviewFindings, REVIEW_PATH } from "./pr-review";
 import { RepoRoom } from "./repo-room";
 import { signalRunDone } from "./run-done";
-import { readRunFeed } from "./run-feed";
+import { FEED_PAGE_MAX_BYTES, type FeedPageRequest, readRunFeedPage } from "./run-feed";
 import {
   type MessageRef,
   type Outcome,
@@ -544,7 +544,7 @@ const TICK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
  * answers `feed_unavailable`, and no run is refused, gated or slowed by
  * whether this route can serve it.
  */
-async function runFeedRoute(runID: string, env: Env): Promise<Response> {
+async function runFeedRoute(url: URL, runID: string, env: Env): Promise<Response> {
   // getRun, not runStatus, for the same reason logsRoute gives: the feed is
   // R2 and the run's index row, and a read that consulted the Workflows
   // binding would make observability depend on the layer being diagnosed.
@@ -561,20 +561,41 @@ async function runFeedRoute(runID: string, env: Env): Promise<Response> {
       { status: 503 },
     );
   }
-  const text = await readRunFeed(env.ARTIFACTS, run.project, runID);
-  // UTF-8 bytes, never `text.length`: the size is the cursor a follower walks
-  // the feed's bytes by, and `length` counts UTF-16 code units — every line
-  // carrying an em dash read two bytes "short", and the client warned that
-  // the read had been bounded on every cloud run, every time.
-  const bytes = new TextEncoder().encode(text).length;
+  // One PAGE of the feed, never the whole of it (run_5c7c16d1, epic hn6: a
+  // ~5h run's feed is thousands of relayed segments, and reading every one on
+  // every poll never answered inside the client's deadline). `from` is the
+  // UTF-8 byte cursor a follower holds, `tail` asks for the last N bytes
+  // (rounded back to a line boundary), `limit` bounds the page. Every size
+  // here is UTF-8 bytes, never `text.length`: the size is the cursor a
+  // follower walks the feed's bytes by, and `length` counts UTF-16 code units.
+  const request: FeedPageRequest = {};
+  for (const name of ["from", "tail", "limit"] as const) {
+    const raw = url.searchParams.get(name);
+    if (raw === null) continue;
+    const parsed = Number(raw);
+    const max = name === "limit" ? FEED_PAGE_MAX_BYTES : Number.MAX_SAFE_INTEGER;
+    if (!Number.isSafeInteger(parsed) || parsed < (name === "limit" ? 1 : 0) || parsed > max) {
+      return badRequest(
+        `${name} must be a non-negative integer${name === "limit" ? ` of at most ${max}` : ""}`,
+      );
+    }
+    request[name] = parsed;
+  }
+  if (request.from !== undefined && request.tail !== undefined) {
+    return badRequest("from and tail are two ways to say where the page starts: name one");
+  }
+  const page = await readRunFeedPage(env.ARTIFACTS, run.project, runID, request);
   return Response.json({
     run_id: runID,
     project: run.project,
     state: run.state,
     trace_id: run.trace_id,
-    text,
-    bytes,
-    total_bytes: bytes,
+    text: page.text,
+    from: page.from,
+    bytes: page.bytes,
+    next: page.next,
+    total_bytes: page.total_bytes,
+    more: page.more,
   });
 }
 
@@ -1781,7 +1802,7 @@ export default {
       // that a lost line changes no verdict.
       if (segments.length === 4 && segments[3] === "events") {
         if (request.method !== "GET") return methodNotAllowed(["GET"]);
-        return await runFeedRoute(segments[2]!, env);
+        return await runFeedRoute(url, segments[2]!, env);
       }
     }
 

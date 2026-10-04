@@ -300,38 +300,176 @@ export async function appendFeed(
 // ---------------------------------------------------------------- the reader ---
 
 /**
- * The run's feed so far, oldest segment first — the R2 twin of opening
- * `.ticfac/logs/<run-id>/events.jsonl`: the segments ARE the appends, so the
- * concatenation in key order is the file.
- *
- * No truncation, unlike the harness tail: a feed line is bounded by the
- * run's own structure (one per dispatch, collect and terminal event), so the
- * whole feed is what a subscriber follows from, and a read that bounded it
- * from the end would hand a follower a cursor it cannot resume from.
+ * The most bytes one page of the feed carries by default, and the most a
+ * caller may ask for. A page is bounded so a long run's feed is never read
+ * whole in one request: run_5c7c16d1 (epic hn6, ~5h, the orchestrator's feed
+ * relayed every two seconds) left thousands of segments, and the route that
+ * fetched every one of them, one R2 GET after another, on EVERY poll, never
+ * answered inside the client's deadline — `ticfac events` and `ticfac status`
+ * failed on it every time.
  */
-export async function readRunFeed(
-  bucket: R2Bucket,
-  project: string,
-  runID: string,
-): Promise<string> {
-  const prefix = feedPrefix(project, runID);
-  const keys: string[] = [];
+export const FEED_PAGE_DEFAULT_BYTES = 512 * 1024;
+export const FEED_PAGE_MAX_BYTES = 4 * 1024 * 1024;
+
+/**
+ * The most segments one page fetches, whatever their size: the per-request
+ * subrequest budget is the Worker's, and a page of tiny segments must not
+ * spend it all.
+ */
+export const FEED_PAGE_MAX_SEGMENTS = 256;
+
+/** How many segment GETs a page has in flight at once. */
+const FEED_READ_CONCURRENCY = 8;
+
+/** One page of the feed, addressed by UTF-8 byte cursor. */
+export type FeedPage = {
+  /** The bytes of the feed from `from`, decoded: whole lines only. */
+  text: string;
+  /** The byte cursor the page starts at. */
+  from: number;
+  /** The UTF-8 bytes this page carries. */
+  bytes: number;
+  /** The cursor the next page starts at: `from + bytes`. */
+  next: number;
+  /** The feed's standing size in UTF-8 bytes. */
+  total_bytes: number;
+  /** Whether bytes stand past `next` that this page did not carry. */
+  more: boolean;
+};
+
+/**
+ * Where the page should start: a byte cursor a follower already holds, or
+ * the last `tail` bytes of the feed (rounded back to the start of the
+ * segment that holds that byte, so a tail read starts on a line boundary).
+ */
+export type FeedPageRequest = {
+  from?: number;
+  tail?: number;
+  limit?: number;
+};
+
+type Segment = { key: string; size: number; start: number };
+
+async function listFeedSegments(bucket: R2Bucket, prefix: string): Promise<Segment[]> {
+  const listed: { key: string; size: number }[] = [];
   let cursor: string | undefined;
   for (;;) {
     const page: R2Objects = await bucket.list({
       prefix,
       ...(cursor === undefined ? {} : { cursor }),
     });
-    keys.push(...page.objects.map((object) => object.key));
+    for (const object of page.objects) listed.push({ key: object.key, size: object.size });
     if (!page.truncated) break;
     cursor = page.cursor;
   }
-  keys.sort();
+  listed.sort((a, b) => (a.key < b.key ? -1 : a.key > b.key ? 1 : 0));
+  const segments: Segment[] = [];
+  let start = 0;
+  for (const object of listed) {
+    segments.push({ key: object.key, size: object.size, start });
+    start += object.size;
+  }
+  return segments;
+}
 
+/**
+ * One page of the run's feed — the R2 twin of reading
+ * `.ticfac/logs/<run-id>/events.jsonl` from a byte offset: the segments ARE
+ * the appends, so the concatenation in key order is the file, and a byte
+ * cursor into it is what a follower resumes from.
+ *
+ * The LISTING carries every segment's size, so the cursor is placed without
+ * fetching anything; only the segments the page carries are fetched, a few
+ * at a time, and the page stops at `limit` bytes or FEED_PAGE_MAX_SEGMENTS
+ * segments — so a request costs the same at hour five as at minute one.
+ * A page always carries at least one whole segment when any stands past
+ * `from`, so a follower can never be stuck behind one segment bigger than
+ * its limit.
+ */
+export async function readRunFeedPage(
+  bucket: R2Bucket,
+  project: string,
+  runID: string,
+  request: FeedPageRequest = {},
+): Promise<FeedPage> {
+  const limit = Math.min(
+    Math.max(request.limit ?? FEED_PAGE_DEFAULT_BYTES, 1),
+    FEED_PAGE_MAX_BYTES,
+  );
+  const segments = await listFeedSegments(bucket, feedPrefix(project, runID));
+  const total =
+    segments.length === 0
+      ? 0
+      : segments[segments.length - 1]!.start + segments[segments.length - 1]!.size;
+
+  let from = Math.min(Math.max(request.from ?? 0, 0), total);
+  if (request.tail !== undefined) {
+    const wanted = Math.max(total - Math.max(request.tail, 0), 0);
+    // Back to the start of the segment holding that byte: segments end on a
+    // line boundary, so a segment's start is always one.
+    const holding = segments.find((segment) => wanted < segment.start + segment.size);
+    from = holding === undefined ? total : holding.start;
+  }
+
+  const chosen: Segment[] = [];
+  let planned = 0;
+  for (const segment of segments) {
+    if (segment.start + segment.size <= from) continue;
+    if (chosen.length > 0 && (planned >= limit || chosen.length >= FEED_PAGE_MAX_SEGMENTS)) break;
+    chosen.push(segment);
+    planned += segment.start + segment.size - Math.max(from, segment.start);
+  }
+
+  const parts: Uint8Array[] = new Array(chosen.length);
+  let index = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const mine = index;
+      index += 1;
+      if (mine >= chosen.length) return;
+      const segment = chosen[mine]!;
+      const object = await bucket.get(segment.key);
+      const body = object === null ? new Uint8Array() : new Uint8Array(await object.arrayBuffer());
+      parts[mine] = segment.start < from ? body.subarray(from - segment.start) : body;
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(FEED_READ_CONCURRENCY, chosen.length) }, worker));
+
+  let bytes = 0;
+  for (const part of parts) bytes += part.length;
+  const joined = new Uint8Array(bytes);
+  let at = 0;
+  for (const part of parts) {
+    joined.set(part, at);
+    at += part.length;
+  }
+  const next = from + bytes;
+  return {
+    text: new TextDecoder().decode(joined),
+    from,
+    bytes,
+    next,
+    total_bytes: total,
+    more: next < total,
+  };
+}
+
+/**
+ * The run's whole feed, oldest segment first: every page, walked by cursor.
+ * For tests and small feeds; the route serves pages.
+ */
+export async function readRunFeed(
+  bucket: R2Bucket,
+  project: string,
+  runID: string,
+): Promise<string> {
   const chunks: string[] = [];
-  for (const key of keys) {
-    const object = await bucket.get(key);
-    if (object !== null) chunks.push(await object.text());
+  let from = 0;
+  for (;;) {
+    const page = await readRunFeedPage(bucket, project, runID, { from });
+    chunks.push(page.text);
+    if (!page.more || page.bytes === 0) break;
+    from = page.next;
   }
   return chunks.join("");
 }

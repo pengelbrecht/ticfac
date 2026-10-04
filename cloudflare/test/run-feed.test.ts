@@ -11,6 +11,7 @@ import {
   feedSegmentKey,
   orchestratorUnanswerableFeedEvent,
   readRunFeed,
+  readRunFeedPage,
   runFinishedFeedEvent,
   runStartedFeedEvent,
   START_FEED_SEQ,
@@ -275,5 +276,129 @@ describe("the feed sink", () => {
         events: [runStartedFeedEvent({ run_id: "run_feed_skip", detail: "started" })],
       }),
     ).resolves.toBe(false);
+  });
+});
+
+describe("a long run's feed, read a page at a time", () => {
+  // run_5c7c16d1 (epic hn6, ~5h): the orchestrator's feed is relayed every
+  // two seconds, so a long run leaves thousands of segments — and the reader
+  // fetched EVERY one, one R2 GET after another, on every poll. The route
+  // never answered inside the client's deadline, and `ticfac events` and
+  // `ticfac status` failed on it every time. A page costs the same at hour
+  // five as at minute one: the listing places the cursor, and only the
+  // page's own segments are fetched.
+  const SEGMENTS = 1200;
+
+  async function writeLargeFeed(runID: string): Promise<string> {
+    let whole = "";
+    const puts: Promise<unknown>[] = [];
+    for (let seq = 1; seq <= SEGMENTS; seq += 1) {
+      const events = [
+        tickDispatchedFeedEvent({
+          run_id: runID,
+          tick_id: `t${seq}`,
+          attempt: 1,
+          detail: `dispatched — segment ${seq}`,
+          at: "2026-10-04T06:00:00Z",
+        }),
+        tickCollectedFeedEvent({
+          run_id: runID,
+          tick_id: `t${seq}`,
+          attempt: 1,
+          detail: `verdict done — segment ${seq}`,
+          at: "2026-10-04T06:00:01Z",
+        }),
+      ];
+      const text = `${events.map((event) => JSON.stringify(event)).join("\n")}\n`;
+      whole += text;
+      puts.push(env.ARTIFACTS!.put(feedSegmentKey(PROJECT, runID, seq), text));
+    }
+    await Promise.all(puts);
+    return whole;
+  }
+
+  function counting(bucket: R2Bucket): { bucket: R2Bucket; gets: () => number } {
+    let gets = 0;
+    const wrapped = {
+      list: (options: R2ListOptions) => bucket.list(options),
+      get: (key: string) => {
+        gets += 1;
+        return bucket.get(key);
+      },
+    } as unknown as R2Bucket;
+    return { bucket: wrapped, gets: () => gets };
+  }
+
+  it("serves a bounded page, fetching only the page's segments, and the pages walk back to the whole feed", async () => {
+    const runID = "run_feed_large";
+    const whole = await writeLargeFeed(runID);
+    const total = new TextEncoder().encode(whole).length;
+
+    const probe = counting(env.ARTIFACTS!);
+    const first = await readRunFeedPage(probe.bucket, PROJECT, runID, { limit: 16 * 1024 });
+    expect(first.from).toBe(0);
+    expect(first.total_bytes).toBe(total);
+    expect(first.more).toBe(true);
+    expect(first.bytes).toBeLessThan(total);
+    expect(first.bytes).toBeLessThanOrEqual(16 * 1024 + 1024);
+    expect(probe.gets()).toBeLessThan(SEGMENTS / 10);
+    expect(first.text.endsWith("\n")).toBe(true);
+
+    // Walked by cursor, the pages ARE the feed: no line twice, no hole.
+    let walked = "";
+    let from = 0;
+    let pages = 0;
+    for (;;) {
+      const page = await readRunFeedPage(env.ARTIFACTS!, PROJECT, runID, {
+        from,
+        limit: 64 * 1024,
+      });
+      expect(page.from).toBe(from);
+      walked += page.text;
+      pages += 1;
+      if (!page.more) break;
+      from = page.next;
+    }
+    expect(pages).toBeGreaterThan(1);
+    expect(walked).toBe(whole);
+    expect(await readRunFeed(env.ARTIFACTS!, PROJECT, runID)).toBe(whole);
+  });
+
+  it("resumes from a cursor inside a segment, at the line it names", async () => {
+    const runID = "run_feed_mid";
+    const whole = await writeLargeFeed(runID);
+    const bytes = new TextEncoder().encode(whole);
+    // The end of the first line: a cursor a follower holds after reading it.
+    const cursor = bytes.indexOf(0x0a) + 1;
+    const page = await readRunFeedPage(env.ARTIFACTS!, PROJECT, runID, {
+      from: cursor,
+      limit: 1024,
+    });
+    expect(page.from).toBe(cursor);
+    expect(whole.startsWith(new TextDecoder().decode(bytes.subarray(0, cursor)) + page.text)).toBe(
+      true,
+    );
+    expect((JSON.parse(page.text.split("\n")[0]!) as FeedEvent).stage).toBe("collected");
+  });
+
+  it("answers a tail from the feed's end, starting on a line boundary", async () => {
+    const runID = "run_feed_tail";
+    const whole = await writeLargeFeed(runID);
+    const total = new TextEncoder().encode(whole).length;
+    const probe = counting(env.ARTIFACTS!);
+    const page = await readRunFeedPage(probe.bucket, PROJECT, runID, { tail: 2000 });
+    expect(probe.gets()).toBeLessThan(20);
+    expect(page.more).toBe(false);
+    expect(page.next).toBe(total);
+    expect(page.bytes).toBeGreaterThanOrEqual(2000);
+    expect(whole.endsWith(page.text)).toBe(true);
+    const lines = page.text.trim().split("\n");
+    expect((JSON.parse(lines[0]!) as FeedEvent).stage).toBe("dispatched");
+    expect((JSON.parse(lines[lines.length - 1]!) as FeedEvent).tick_id).toBe(`t${SEGMENTS}`);
+  });
+
+  it("answers an empty page for a feed with no segment", async () => {
+    const page = await readRunFeedPage(env.ARTIFACTS!, PROJECT, "run_feed_none", {});
+    expect(page).toEqual({ text: "", from: 0, bytes: 0, next: 0, total_bytes: 0, more: false });
   });
 });

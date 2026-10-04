@@ -155,7 +155,7 @@ func defineRunEpicFlags(fs *flag.FlagSet) *runEpicFlags {
 		// clock: depth counts how far the run has travelled from the epic
 		// anyone asked for, and only a person can judge that. The default's
 		// reasoning lives on the constant; here the operator reads what the
-		// number governs and where to raise it when the stop is wrong.
+		// number governs and where to raise it when the deferral is wrong.
 		//
 		// The default here is 0 — NOT NAMED — rather than the constant,
 		// because the reconciler cannot tell an operator who wrote
@@ -168,11 +168,12 @@ func defineRunEpicFlags(fs *flag.FlagSet) *runEpicFlags {
 		absorptionDepth: fs.Int("absorption-depth", 0,
 			"how many absorptions ONE chain of the recursion may carry — a gating defect found in the "+
 				"epic's own ground is the first link, one found while fixing an absorbed defect the next — "+
-				"before the run stops for a person carrying the whole chain (0, the default, means not "+
-				"named: the run adopts the bound recorded on the run branch, defaulting to 3 — the first "+
-				"link is what the epic exists to absorb, the second is a defect in the absorbed fix's own "+
-				"ground, a third is already far from home, and past that a person should judge the chain "+
-				"rather than let the run keep going)"),
+				"before the run defers the next link: past the bound a finding becomes a backlog tick with an "+
+				"owner, named with its whole chain in the epic PR, and the run carries on — it never halts "+
+				"for this (0, the default, means not named: the run adopts the bound recorded on the run "+
+				"branch, defaulting to 3 — the first link is what the epic exists to absorb, the second is a "+
+				"defect in the absorbed fix's own ground, a third is already far from home, and past that a "+
+				"person should judge the chain on the PR rather than let the run keep absorbing)"),
 		// The remote view (tick i1r): opted in, the run pushes its status model
 		// to the configured factory on a short cadence, so the factory's phone
 		// page (/status) lists it beside the cloud runs it hosts - and a run

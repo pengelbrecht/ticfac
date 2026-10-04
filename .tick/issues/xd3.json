@@ -1,0 +1,20 @@
+{
+  "id": "xd3",
+  "title": "Cloud host: a WorkerAgent DO per attempt (harness + DO SQLite + watch/steer sockets); the door answers from it",
+  "gloss": "cloud WorkerAgent DO",
+  "description": "Step 6, no flag: every cloud worker runs as a WorkerAgent DO with its tools in the attempt's FactorySandbox; the dispatch door's state/output/reclaim routes answer from it; hibernatable watch/steer WebSockets.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "blocked_by": [
+    "oq4",
+    "dwn",
+    "pom"
+  ],
+  "parent": "43y",
+  "acceptance_criteria": "a cloud attempt runs end to end on staging; door routes tested",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-04T11:59:00.482312Z",
+  "updated_at": "2026-10-04T11:59:00.482312Z"
+}

@@ -91,3 +91,14 @@ the factory URL, account ids or tokens into a log, commit or PR.
 `ticfac run-epic` works from the main checkout. Do your work in a git
 worktree, and never kill processes by pattern (`pkill -f`): this host is
 shared with other agents' runs. Kill by exact pid only.
+
+## Never change machine-wide tools
+
+`pi`, `tk`, `ticfac`, `claude`, `herdr` and the Node/Go toolchains on this
+host are shared by every live run and every other agent. Never install,
+upgrade or downgrade them globally (`npm i -g`, `go install` into the shared
+bin, `brew upgrade`) to test something: install into a scratch prefix
+(`npm i --prefix <scratch>`, `GOBIN=<scratch>`) or a container. A global pi
+upgrade to test Pi 1.0 left a 1.0-format `~/.pi/agent/models-store.json`
+behind; after the downgrade the old pi crashed listing models and a live
+local run died dispatching its next tick (epic 43y, 2026-10-04).
