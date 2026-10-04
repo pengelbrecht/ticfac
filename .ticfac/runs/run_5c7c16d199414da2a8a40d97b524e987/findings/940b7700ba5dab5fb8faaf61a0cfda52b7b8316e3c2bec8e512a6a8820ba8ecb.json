@@ -10,8 +10,11 @@
   "target": "pengelbrecht/ticfac",
   "tick_id": "l1t",
   "attempt": 14,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T05:12:18Z",
+  "triaged_at": "2026-10-04T05:12:26Z",
+  "triaged_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987 absorbing 2se",
+  "promoted_as": "2se",
   "provenance": {
     "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
     "tick_id": "l1t",
