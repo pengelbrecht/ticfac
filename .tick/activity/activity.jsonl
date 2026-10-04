@@ -2090,3 +2090,4 @@
 {"ts":"2026-10-04T16:01:15.604494Z","tick":"pom","action":"note","actor":"ticfac","epic":"43y","data":{"note":"\n2026-10-04 18:01 - ticfac run epic-43y: pom try 1 (run dispatch #7) merged into epic/43y as 70f499ace448; the integrated gate (go, ts) passed.","title":"Worker contract as hooks and phases on pi-durable"}}
 {"ts":"2026-10-04T16:01:18.385178Z","tick":"pom","action":"close","actor":"ticfac","epic":"43y","data":{"title":"Worker contract as hooks and phases on pi-durable"}}
 {"ts":"2026-10-04T16:01:37.296736Z","tick":"hpk","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Local host: the Go executor runs a Node pi-durable harness per worker on local SQLite"}}
+{"ts":"2026-10-04T16:01:58.469877Z","tick":"xd3","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Cloud host: a WorkerAgent DO per attempt (harness + DO SQLite + watch/steer sockets); the door answers from it"}}
