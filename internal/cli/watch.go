@@ -354,35 +354,6 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 				try, _ := tries.Of(tick, *event.Attempt)
 				what = reconcile.AttemptLabel(tick, try, *event.Attempt)
 			}
-<<<<<<< HEAD
-			if strings.HasPrefix(event.Detail, reconcile.RefusedFindingUntriaged+":") {
-				// The triage is addressed to the run whose store carries the
-				// drafts — the run that wrote this line, named by the line's
-				// own run id (tick q8m): a cloud run's store lives under the
-				// factory's run_<hex>, one the bare command's default (the
-				// local spelling epic-<epic-id>) holds nothing for.
-				address := runID
-				if event.RunID != "" {
-					address = event.RunID
-				}
-				triage := statusmodel.TriageCommandForCurrentRun(epicOf(), address)
-				fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
-					"Nothing proceeds until somebody decides. Triage the finding(s) with `%s` — "+
-					"every untriaged finding of the run settles there, by short key prefix — "+
-					"or answer what the tick is waiting for. The "+
-					"evidence is on the integration branch, not in this line.\n\n",
-					runID, what, event.Detail, triage)
-			} else {
-				// The release command is addressed by the run the hold belongs
-				// to, whenever that run's id is NOT the spelling a settle
-				// without --run-id opens (tick ulw fixed the model surface;
-				// tick qxj this alert): a cloud run's attempt is recorded under
-				// the factory's run_<hex>, which the bare command's default
-				// (epic-<epic-id>) does not carry, and the release refuses.
-				settle := fmt.Sprintf("ticfac settle %s %s %s --release \"<who>\"", epicOf(), tick, attempt)
-				if n, err := strconv.Atoi(attempt); err == nil {
-					settle = statusmodel.SettleCommandForCurrentRun(epicOf(), tick, n, runID)
-=======
 			host := statusmodel.HostLocal
 			if kind == "cloud" {
 				host = statusmodel.HostCloud
@@ -398,7 +369,7 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 			if event.RunID != "" {
 				address = event.RunID
 			}
-			clearing := statusmodel.HoldClearingCommand(epicID, host, address, runID, event)
+			clearing := statusmodel.HoldClearingCommand(epicOf(), host, address, runID, event)
 			head := fmt.Sprintf("\nticfac watch: run %s is HOLDING %s for a person:\n%s\n", runID, what, event.Detail)
 			switch statusmodel.HoldReason(event.Detail) {
 			case reconcile.RefusedFindingUntriaged:
@@ -431,7 +402,6 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 						"Nothing proceeds until somebody decides. No one command clears this hold — "+
 						"answer what the tick is waiting for. The evidence is on the integration branch, not in this line.\n\n",
 						head)
->>>>>>> 7bfabda3127faa12889688c0ce63864036a2fb0c
 				}
 			}
 		}
