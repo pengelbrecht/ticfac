@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "ghh",
   "attempt": 8,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T18:36:13Z",
+  "triaged_at": "2026-10-04T18:36:25Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing edd",
+  "promoted_as": "edd",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "ghh",
