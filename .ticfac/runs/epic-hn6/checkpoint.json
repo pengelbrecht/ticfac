@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 87,
-  "state": "gating",
-  "reason": "running the integrated gate for qwb on 321e37842630",
-  "updated_at": "2026-10-04T19:26:28Z",
+  "sequence": 88,
+  "state": "publishing",
+  "reason": "closing qwb behind the integrated gate on 321e37842630",
+  "updated_at": "2026-10-04T19:29:45Z",
   "ticks": [
     {
       "tick_id": "v16",
