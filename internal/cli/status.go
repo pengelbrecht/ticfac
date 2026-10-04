@@ -32,6 +32,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/pengelbrecht/ticfac/internal/escalation"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
@@ -492,6 +493,9 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 		if orchestratedHere {
 			fmt.Fprintln(stdout, factoryWorkersLine(ctx, runID))
 		}
+		if line := localEscalationLine(*repo, runID); line != "" {
+			fmt.Fprintln(stdout, line)
+		}
 	}
 	if status.State == runlife.Alive {
 		return 0
@@ -622,10 +626,42 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 	if feedProblem != "" {
 		fmt.Fprintf(stdout, "last event: unknown — %s\n", feedProblem)
 	}
+	if client, err := newCloudClient(); err == nil {
+		fmt.Fprintln(stdout, sourceEscalationLine(ctx, &cloudFeedSource{client: client, runID: runID, warn: stderr}))
+	}
 	if answer.Alive {
 		return 0
 	}
 	return 1
+}
+
+// localEscalationLine is the run's escalation record (internal/escalation),
+// read from the feed this checkout holds for it: implementation ticks
+// started, how many climbed to a higher tier and whose failure made them,
+// and the share that succeeded on the tier they started at. A run with no
+// feed here says nothing; a feed that cannot be read says so — the feed is
+// exhaust, and its absence is never reported as "no escalations".
+func localEscalationLine(repo, runID string) string {
+	path := runfeed.Path(repo, runID)
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return sourceEscalationLine(context.Background(), runfeed.FileSource(path))
+}
+
+// sourceEscalationLine reads a whole feed from source and renders its
+// escalation line. The whole feed, deliberately: an escalation is a relation
+// between a tick's tries, which a tail cannot see.
+func sourceEscalationLine(ctx context.Context, source runfeed.Source) string {
+	located, _, err := feedStanding(ctx, source)
+	if err != nil {
+		return "escalation: unknown — the feed could not be read: " + err.Error()
+	}
+	events := make([]runfeed.Event, 0, len(located))
+	for _, l := range located {
+		events = append(events, l.Event)
+	}
+	return escalation.FromFeed(events).Line()
 }
 
 // factoryWorkersLine is the factory's half of a locally orchestrated cloud
