@@ -1,0 +1,56 @@
+{
+  "schema_version": 3,
+  "attempt": 1,
+  "tick_id": "v16",
+  "dispatched_at": "2026-10-04T14:58:31Z",
+  "job_handle": {
+    "attempt": 1,
+    "base_sha": "aad30c790b6420ebc91e60a80e5159a960c55a6b",
+    "collected_from": null,
+    "executor": "cloudflare-sandbox",
+    "job_id": "run-run_3ca22fbdfaea43c7a1c27b7f9bd0acff/tick-v16/attempt-1",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "prompt_digest": "sha256:939a51751ae0536da27f07d9c3684910bb06ecc6a1475781563784588af1a9e9",
+    "remote": "origin",
+    "resumed_from": {
+      "tick_id": "v16",
+      "attempt": 9,
+      "write_ref": "refs/heads/tick/hn6/attempt-9/v16",
+      "sha": "aad30c790b6420ebc91e60a80e5159a960c55a6b",
+      "released_by": "ticfac (took over the claim of run run_f44b6ad8909b495cbd3bae4ee7cf229c, which ended: the factory's record says stopped and its Workflow instance is complete)",
+      "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c"
+    },
+    "role": "review-epic",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "taken_over": {
+      "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
+      "evidence": "the factory's record says stopped and its Workflow instance is complete"
+    },
+    "tick_id": "v16",
+    "tier": "",
+    "touch": null,
+    "try": 1,
+    "wall_seconds": 28800,
+    "write_ref": "refs/heads/ticfac/run-run_3ca22fbdfaea43c7a1c27b7f9bd0acff/tick-v16/attempt-1"
+  },
+  "provenance": {
+    "run_id": "run_3ca22fbdfaea43c7a1c27b7f9bd0acff",
+    "tick_id": "v16",
+    "attempt": 1,
+    "source_ref": "refs/heads/tick/hn6/attempt-9/v16",
+    "source_sha": "aad30c790b6420ebc91e60a80e5159a960c55a6b",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:cb63ed691ced77601583b5c90f5edbafb9d44205d5755c21d6313e767d1a6d71",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
