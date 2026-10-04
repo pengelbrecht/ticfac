@@ -57,7 +57,12 @@ func renderTickView(m statusmodel.Model, tickID string, st watchStyles, width, h
 }
 
 // renderTickContent is the tick view without its footer, so the height fit
-// can count what it drops.
+// can count what it drops. Width is the pane's own: every line is cut to it
+// — the same pass renderWatchFrame and renderFeedView give theirs — because
+// a report summary, try reason or finding title written to the terminal
+// unbounded wraps inside a real pane and the redraw draws over its own rows.
+// Width 0 means unknown: everything, unbounded, for the caller that knows
+// nothing.
 func renderTickContent(m statusmodel.Model, tickID string, st watchStyles, width int) []string {
 	lines := []string{}
 	tick := watchTickOf(m, tickID)
@@ -126,6 +131,17 @@ func renderTickContent(m statusmodel.Model, tickID string, st watchStyles, width
 			lines = append(lines, finding.Key+"  "+watchFindingGating(finding.Gating))
 			lines = append(lines, "  "+finding.Title)
 		}
+	}
+	// Width: no line carries spaces out to the edge it padded to (a trailing
+	// space is a column nobody reads), and no line is wider than the pane
+	// it was built for — the same two rules the dashboard frame's final pass
+	// and the feed view run over theirs.
+	for i, line := range lines {
+		line = strings.TrimRight(line, " ")
+		if width > 0 {
+			line = ansi.Truncate(line, width, "")
+		}
+		lines[i] = line
 	}
 	return lines
 }
