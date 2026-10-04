@@ -27,11 +27,14 @@
     "schema_version 1: the per-tick pipeline cell, parent, duration, findings",
     "and report, the per-try tier/reason/next_step, the per-worker handle and",
     "activity window, the health verdict, the per-source cost lines, recent,",
-    "epic_title and gloss. The `dashboard` golden carries every one of them",
-    "populated — it is the fixture the wave-3 renderers and the phone page",
-    "test against. The version does not move: the phone page's snapshot",
-    "parser refuses any model version other than 1, and every reader of this",
-    "contract lives in this repository."
+    "epic_title and gloss — and, once the header's clock was found counting",
+    "past a finished run (tick e6g), progress.run_elapsed_seconds: the epic's",
+    "own elapsed, measured and clamped at the run's end, carried by the model",
+    "so no renderer derives it a second time. The `dashboard` golden carries",
+    "every one of them populated — it is the fixture the wave-3 renderers and",
+    "the phone page test against. The version does not move: the phone page's",
+    "snapshot parser refuses any model version other than 1, and every reader",
+    "of this contract lives in this repository."
   ],
   "schema_version": 1,
   "contract": "ticfac.status_model",
@@ -60,7 +63,8 @@
     "null and empty are different claims wherever the schema allows a null: waves null means the tracker could not be read, waves [] means it read and layered nothing; workers null means the census could not be taken (a cloud run), workers [] means no attempt stands",
     "recent holds at most the last five feed lines, oldest first — the schema cannot count or order; the builder's test does",
     "a cost line with metered false carries usd null — the anyOf pins it, the negative refuses it, and no renderer may print $0.00 for spend nobody measured",
-    "the progress counts count the epic's real ticks: a tick whose duplicate_of is non-null is excluded from total and closed — a duplicate closed as one is not work the epic owes, though its row still stands (dimmed, naming the tick the work belongs to)"
+    "the progress counts count the epic's real ticks: a tick whose duplicate_of is non-null is excluded from total and closed — a duplicate closed as one is not work the epic owes, though its row still stands (dimmed, naming the tick the work belongs to)",
+    "progress.run_elapsed_seconds is a measured span, never a renderer derivation: the earliest dispatch the try history states, to generated_at — and CLAMPED at the run's end when the run's own records state one (a terminal checkpoint, or a run_finished or run_died line no resume stands after), so a finished run's clock stops where the run did; null when no dispatch marker states a start. The golden value rule derives it from the document's own stamps, the tail's own last line the only end it can see — the builder's tests pin the resume that lifts the freeze"
   ],
 
   "records": {
@@ -193,7 +197,7 @@
     },
     "progress": {
       "type": "object",
-      "required": ["ticks", "waves"],
+      "required": ["ticks", "waves", "run_elapsed_seconds"],
       "additionalProperties": false,
       "properties": {
         "ticks": {
@@ -227,6 +231,10 @@
             { "type": "null" }
           ],
           "description": "The waves counted; active is the frontier wave's own number, 0 when none is active. Null when the tracker could not be read."
+        },
+        "run_elapsed_seconds": {
+          "$ref": "#/$defs/nullable_integer",
+          "description": "The epic's own clock: the earliest dispatch any tick's try history states, to generated_at — clamped at the run's end when the run's own records state one, so a finished run's clock stops instead of counting on while a person reads it. The span every surface renders (watch's header, the phone page's headline), carried by the model so they cannot disagree. Null when no dispatch marker states a start."
         }
       }
     },
@@ -613,7 +621,8 @@
       },
       "progress": {
         "ticks": { "total": 4, "closed": 1, "open": 3 },
-        "waves": { "total": 3, "done": 0, "active": 1 }
+        "waves": { "total": 3, "done": 0, "active": 1 },
+        "run_elapsed_seconds": 7855
       },
       "epic_title": "ticfac devex: one command to run, watch and triage an epic, locally and in the cloud",
       "recent": [
@@ -876,7 +885,8 @@
       },
       "progress": {
         "ticks": null,
-        "waves": null
+        "waves": null,
+        "run_elapsed_seconds": null
       },
       "epic_title": "ticfac devex: one command to run, watch and triage an epic, locally and in the cloud",
       "recent": [
@@ -1011,7 +1021,8 @@
       },
       "progress": {
         "ticks": { "total": 4, "closed": 2, "open": 2 },
-        "waves": { "total": 3, "done": 1, "active": 2 }
+        "waves": { "total": 3, "done": 1, "active": 2 },
+        "run_elapsed_seconds": 7740
       },
       "epic_title": "ticfac Phase 7: cut over and simplify ticks",
       "recent": [
@@ -1352,7 +1363,8 @@
       },
       "progress": {
         "ticks": { "total": 2, "closed": 1, "open": 1 },
-        "waves": { "total": 1, "done": 0, "active": 1 }
+        "waves": { "total": 1, "done": 0, "active": 1 },
+        "run_elapsed_seconds": 2340
       },
       "epic_title": "The orchestrator runs where git is: ticfac in the container, the Workflow supervising",
       "recent": [
@@ -1531,7 +1543,7 @@
         "degraded": [],
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
-        "progress": { "ticks": null, "waves": null },
+        "progress": { "ticks": null, "waves": null, "run_elapsed_seconds": null },
         "epic_title": null,
         "recent": [],
         "waves": null,
@@ -1558,7 +1570,7 @@
         "degraded": [],
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
-        "progress": { "ticks": null, "waves": null },
+        "progress": { "ticks": null, "waves": null, "run_elapsed_seconds": null },
         "epic_title": null,
         "recent": [],
         "waves": null,
@@ -1585,7 +1597,7 @@
         "degraded": [],
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
-        "progress": { "ticks": null, "waves": null },
+        "progress": { "ticks": null, "waves": null, "run_elapsed_seconds": null },
         "epic_title": null,
         "recent": [],
         "workers": null,
@@ -1611,7 +1623,7 @@
         "degraded": [],
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
-        "progress": { "ticks": null, "waves": null },
+        "progress": { "ticks": null, "waves": null, "run_elapsed_seconds": null },
         "epic_title": null,
         "recent": [],
         "waves": null,
@@ -1638,7 +1650,7 @@
         "degraded": [],
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
-        "progress": { "ticks": null, "waves": null },
+        "progress": { "ticks": null, "waves": null, "run_elapsed_seconds": null },
         "epic_title": null,
         "recent": [],
         "waves": null,
@@ -1666,7 +1678,7 @@
         "degraded": [],
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
-        "progress": { "ticks": null, "waves": null },
+        "progress": { "ticks": null, "waves": null, "run_elapsed_seconds": null },
         "epic_title": null,
         "recent": [],
         "waves": null,
@@ -1693,7 +1705,7 @@
         "degraded": [],
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "waves", "phases": [], "wave": null },
-        "progress": { "ticks": null, "waves": null },
+        "progress": { "ticks": null, "waves": null, "run_elapsed_seconds": null },
         "epic_title": null,
         "recent": [],
         "waves": [
@@ -1750,7 +1762,7 @@
         "degraded": [],
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "waves", "phases": [], "wave": null },
-        "progress": { "ticks": null, "waves": null },
+        "progress": { "ticks": null, "waves": null, "run_elapsed_seconds": null },
         "epic_title": null,
         "recent": [],
         "waves": [
@@ -1807,7 +1819,7 @@
         "degraded": [],
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
-        "progress": { "ticks": null, "waves": null },
+        "progress": { "ticks": null, "waves": null, "run_elapsed_seconds": null },
         "epic_title": null,
         "recent": [],
         "waves": null,
@@ -1841,7 +1853,7 @@
         "degraded": [],
         "liveness": { "alive": true, "state": "alive", "reason": "pid 4242", "source": "run.pid", "last_event": null, "last_event_age_seconds": null },
         "lifecycle": { "phase": "plan", "phases": [], "wave": null },
-        "progress": { "ticks": null, "waves": null },
+        "progress": { "ticks": null, "waves": null, "run_elapsed_seconds": null },
         "epic_title": null,
         "recent": [],
         "waves": null,

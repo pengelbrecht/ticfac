@@ -204,6 +204,10 @@ func Build(src Sources) Model {
 	merged := newMergedRuns(recs, src.PriorRecords)
 	absorbed := merged.absorbed
 	m.Waves, m.Progress = buildWaves(src, merged, absorbed)
+	// The epic's own clock, beside the counts it shares progress with: the
+	// span is read off the dispatch markers, not the waves, so an unread
+	// tracker costs the model the counts but not the clock (tick e6g).
+	m.Progress.RunElapsedSeconds = buildRunElapsed(src, merged, recs)
 	// The prior runs' standing holds, answered once by the rules buildWaits
 	// applies — and the same answer handed to the pipeline index, so a row's
 	// next step and the header's command are wordings of one answer, not two
@@ -243,6 +247,76 @@ func buildLiveness(src Sources) Liveness {
 		}
 	}
 	return l
+}
+
+// buildRunElapsed measures the epic's whole span from the records the model
+// merges: the earliest dispatch any tick's try history states, to the
+// model's own now — frozen at the run's end when the run's own records say
+// it ended. The header's clock was once a renderer derivation (the exact
+// defect tick e6g absorbed): measured here, one field carries it to every
+// surface, and the freeze lands with the measurement instead of never.
+func buildRunElapsed(src Sources, merged *mergedRuns, recs Records) *int64 {
+	start := time.Time{}
+	for _, markers := range merged.markers {
+		for _, marker := range markers {
+			at, err := time.Parse(time.RFC3339, marker.DispatchedAt)
+			if err != nil {
+				continue
+			}
+			if start.IsZero() || at.Before(start) {
+				start = at
+			}
+		}
+	}
+	if start.IsZero() {
+		return nil
+	}
+	end := src.Now
+	if stopped, ok := runEndedAt(src, recs); ok && stopped.Before(end) {
+		end = stopped
+	}
+	if end.Before(start) {
+		return nil
+	}
+	elapsed := int64(end.Sub(start).Round(time.Second).Seconds())
+	return &elapsed
+}
+
+// runEndedAt answers when the run's own records say it ended. A run's end is
+// its own word, in the order of the authorities: the terminal checkpoint it
+// wrote (the moment of the state change is its own updated_at), else its own
+// terminal line — run_finished or run_died — when no resume stands after it
+// in the feed, because the feed is append-only per run id and a resumed run
+// still carries its previous incarnation's terminal line as history. No
+// end is answered for a run whose records state none: a run that died
+// without a word has an end nobody measured, and an elapsed nobody measured
+// is an elapsed nobody prints.
+func runEndedAt(src Sources, recs Records) (time.Time, bool) {
+	if recs.Checkpoint != nil && recs.Checkpoint.State.Terminal() {
+		if at, err := time.Parse(time.RFC3339, recs.Checkpoint.UpdatedAt); err == nil {
+			return at, true
+		}
+	}
+	var terminal *runfeed.Event
+	for i := range src.Feed {
+		switch src.Feed[i].Stage {
+		case reconcile.StageRunFinished, reconcile.StageRunDied:
+			terminal = &src.Feed[i]
+		case reconcile.StageResumed, reconcile.StageResumedAutomatically:
+			// A resume standing after a terminal line makes that line the
+			// previous incarnation's history — position in the feed is the
+			// clock, never the line's own stamp (the file is append-only).
+			terminal = nil
+		}
+	}
+	if terminal == nil {
+		return time.Time{}, false
+	}
+	at, err := time.Parse(time.RFC3339, terminal.At)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return at, true
 }
 
 // buildWaves lays the epic out as the tracker itself layers it, with every

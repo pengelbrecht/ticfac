@@ -63,6 +63,11 @@ func epicStateFixture() statusmodel.Model {
 		Progress: statusmodel.Progress{
 			Ticks: &statusmodel.TickProgress{Total: 5, Closed: 3, Open: 2},
 			Waves: &statusmodel.WaveProgress{Total: 2, Done: 0, Active: 1},
+			// The epic's own clock, stated by the model (tick e6g): the earliest
+			// dispatch the merged try history carries (t1's, 2026-09-26T10:00:00Z)
+			// frozen at the run's own end — its run_finished line, 05:00:00Z, no
+			// resume standing after it — not the clock the reader reads on.
+			RunElapsedSeconds: ptr(int64(241200)),
 		},
 		EpicTitle: ptr("the epic the runs worked"),
 		Recent: []runfeed.Event{

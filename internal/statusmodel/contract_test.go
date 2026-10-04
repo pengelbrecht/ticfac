@@ -486,6 +486,7 @@ func TestEveryGoldenAgreesWithThePipelineDerivation(t *testing.T) {
 				t.Fatalf("the golden %s carries generated_at %q, which does not parse: every duration and elapsed the guard derives is measured against it", name, model.GeneratedAt)
 			}
 			goldenProgressAgreesWithTheWaves(t, name, &model)
+			goldenProgressAgreesWithTheClock(t, name, &model, now)
 			goldenGatesAgreeWithTheRecords(t, name, &model)
 			goldenWorkersAgreeWithTheStamps(t, name, &model, now)
 			for _, wave := range deref(model.Waves) {
@@ -1052,6 +1053,75 @@ func goldenProgressAgreesWithTheWaves(t *testing.T, golden string, model *Model)
 		t.Errorf("%s's progress.waves is {total %d, done %d, active %d}, want {total %d, done %d, active %d}: buildWaves counts the waves it lists, and active is the frontier wave's own number",
 			where, got.Total, got.Done, got.Active, len(waves), done, active)
 	}
+}
+
+// goldenProgressAgreesWithTheClock mirrors buildRunElapsed (tick e6g): the
+// run's elapsed is the earliest dispatch the document's own try history
+// states, to generated_at — clamped at the run's end when the document's
+// own tail shows one, because the tail holds the NEWEST lines and a terminal
+// line nothing stands after is the run's own last word. The end the tail can
+// see is its last line being run_finished or run_died: a run that ended
+// writes nothing after its terminal line, so the line is the newest one;
+// a run that resumed writes the resume after it, and then the last line is
+// ordinary and the clock runs on. A resume that stands after a terminal
+// line cannot hide: it is the newer line, so IT is the last one. And an
+// elapsed nobody measured is an elapsed nobody prints — no parseable try
+// stamp answers null, never a zero.
+func goldenProgressAgreesWithTheClock(t *testing.T, golden string, model *Model, now time.Time) {
+	t.Helper()
+	where := fmt.Sprintf("golden %s", golden)
+	start := time.Time{}
+	for _, wave := range deref(model.Waves) {
+		for _, tick := range wave.Ticks {
+			for _, try := range tick.Tries {
+				at, err := time.Parse(time.RFC3339, try.DispatchedAt)
+				if err != nil {
+					continue
+				}
+				if start.IsZero() || at.Before(start) {
+					start = at
+				}
+			}
+		}
+	}
+	if start.IsZero() {
+		if model.Progress.RunElapsedSeconds != nil {
+			t.Errorf("%s states progress.run_elapsed_seconds %d beside no try stamp at all: buildRunElapsed measures the span off the dispatch markers, and no marker is a span nobody measured",
+				where, *model.Progress.RunElapsedSeconds)
+		}
+		return
+	}
+	end := now
+	if n := len(model.Recent); n > 0 {
+		last := model.Recent[n-1]
+		switch last.Stage {
+		case reconcile.StageRunFinished, reconcile.StageRunDied:
+			if at, err := time.Parse(time.RFC3339, last.At); err == nil {
+				end = at
+			}
+		}
+	}
+	if end.Before(start) {
+		return
+	}
+	want := int64(end.Sub(start).Round(time.Second).Seconds())
+	if got := model.Progress.RunElapsedSeconds; got == nil {
+		t.Errorf("%s states no progress.run_elapsed_seconds beside a try history that starts at %s: the header's clock is the model's own field, measured from the earliest dispatch",
+			where, start.Format(time.RFC3339))
+	} else if *got != want {
+		t.Errorf("%s states progress.run_elapsed_seconds %d, want %d: the earliest dispatch (%s) to %s (%s)",
+			where, *got, want, start.Format(time.RFC3339),
+			end.Format(time.RFC3339), endTimestampWord(end, now))
+	}
+}
+
+// endTimestampWord names the moment the guard's want is measured to, the
+// one fact an error message needs to say which clock it read.
+func endTimestampWord(end, now time.Time) string {
+	if end.Equal(now) {
+		return "generated_at"
+	}
+	return "the tail's own terminal line"
 }
 
 // goldenGatesAgreeWithTheRecords mirrors buildGates: one gate per evidence

@@ -181,6 +181,14 @@ export type StatusDoc = {
   progress?: {
     ticks?: { total: number; closed: number; open?: number } | null;
     waves?: { total: number; done: number; active: number } | null;
+    /**
+     * The epic's own clock (tick e6g): the earliest dispatch the try
+     * history states, to generated_at — clamped at the run's end when the
+     * run's own records state one, so a finished run's clock stops. The
+     * same field the terminal header renders; null when no dispatch
+     * marker states a start.
+     */
+    run_elapsed_seconds?: number | null;
   } | null;
   /**
    * The approximate time left, only where measured tick durations support

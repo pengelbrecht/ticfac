@@ -53,6 +53,29 @@ loud.
 
 ---
 
+## 1.5.0
+
+MINOR: `status-model.json` gains `progress.run_elapsed_seconds` (tick e6g,
+epic hn6). The dashboard header's elapsed was a renderer derivation — earliest
+`tries[].dispatched_at` to `generated_at`, computed inside the watch view —
+so no contract field carried it (the phone page could not show it) and
+nothing clamped it at the run's end (a finished run's header kept counting
+while a person read it). The field is the model's own answer, measured once
+off the merged dispatch markers: the earliest dispatch any tick's try
+history states, to `generated_at`, CLAMPED at the run's end when the run's
+own records state one — a terminal checkpoint, or a `run_finished`/
+`run_died` line no resume stands after (a resumed run's previous end is
+history, the feed being append-only per run id). Null when no dispatch
+marker states a start. `checked_beyond_schema` states the rule and a new
+golden value guard derives it from each document's own stamps; every golden
+carries the measured value (`status_model_completed_awaiting_merge` carries
+null — it states no dispatch at all), and every negative document carries it
+at null beside its own pinned refusal. Additive within schema_version 1,
+which does not move. Consumers: the Go renderers read the field instead of
+deriving; the phone page renders it beside the counts and the ETA — an
+unchanged consumer is still correct but no longer complete, so the
+cloudflare pin bumps in the same commit.
+
 ## 1.4.0
 
 MINOR: `status-model.json` gains a per-tick `duplicate_of` (tick gmo, epic

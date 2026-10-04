@@ -1019,6 +1019,30 @@ func TestTheFrameTailIsTheFeedOwnWords(t *testing.T) {
 	}
 }
 
+// TestTheFrameRendersTheModelsOwnElapsed: the header's clock is the model's
+// own field, not a renderer derivation — the golden's measured span renders
+// beside the counts (2h9m: the golden's earliest dispatch to its own
+// generated_at), and a model that states no elapsed renders none: the
+// renderer derives nothing, so the field cannot lie and the TUI cannot drift
+// from the phone page that reads the same model (tick e6g).
+func TestTheFrameRendersTheModelsOwnElapsed(t *testing.T) {
+	t.Parallel()
+	golden := dashboardContractGolden(t)
+	if golden.Progress.RunElapsedSeconds == nil {
+		t.Fatal("the dashboard golden carries no run elapsed: the fixture for the header's clock is missing")
+	}
+	joined := strings.Join(renderWatchFrame(golden, plainStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(joined, "2/4 ticks · 2h9m") {
+		t.Errorf("the model's own elapsed does not render beside the counts:\n%s", joined)
+	}
+
+	golden.Progress.RunElapsedSeconds = nil
+	joined = strings.Join(renderWatchFrame(golden, plainStyles(), 0, 0, ""), "\n")
+	if strings.Contains(joined, "2h9m") {
+		t.Errorf("a model that states no elapsed still renders one:\n%s", joined)
+	}
+}
+
 // TestTheFrameShowsTheETAOnlyWhenMeasured: the approximate time left shows
 // as "ETA ~…" only where the model measured it — a number nobody measured
 // is a number that lies.

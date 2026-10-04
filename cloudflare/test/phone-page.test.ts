@@ -465,6 +465,11 @@ describe("the phone page renders the dashboard model (hn6, tick 0rx)", () => {
     // the golden's own progress states.
     expect(body).toContain('style="width:50%"');
     expect(body).toContain("2/4 ticks");
+    // The elapsed is the model's own clock (tick e6g) — the same clamped
+    // span the terminal header renders, never a derivation here: the
+    // golden states 7740s (2h9m), from its earliest dispatch to its own
+    // generated_at.
+    expect(body).toContain('<span class="helapsed">2h9m</span>');
     // The phase row, one chip per lifecycle phase with its own state glyph.
     expect(body).toContain(
       '<span class="ph ph-done">plan ✓</span> <span class="ph ph-active">waves ●</span> ' +
@@ -483,6 +488,19 @@ describe("the phone page renders the dashboard model (hn6, tick 0rx)", () => {
       },
     });
     expect(withEta).toContain("ETA ~40m");
+
+    // A model that states no elapsed renders none — the page derives
+    // nothing (the old terminal derivation counted past a finished run;
+    // the field is how that ends).
+    await env.DB.prepare("DELETE FROM status_snapshots").run();
+    const withoutElapsed = await renderedPage({
+      ...golden,
+      progress: {
+        ...((golden.progress as Record<string, unknown>) ?? {}),
+        run_elapsed_seconds: null,
+      },
+    });
+    expect(withoutElapsed).not.toContain('class="helapsed"');
   });
 
   it("names each needs-person attention with its command", async () => {

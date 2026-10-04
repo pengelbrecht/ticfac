@@ -1225,35 +1225,18 @@ func watchPhaseName(phase string) string {
 	return phase
 }
 
-// watchRunElapsed measures the whole run from the records the model carries:
-// the earliest dispatch any tick's try history states. The second return
-// says whether a moment was stated at all — an elapsed of zero for a run
-// with no readable dispatch would be a number nobody measured.
+// watchRunElapsed reads the run's whole span off the model's own field —
+// the span was once derived here, from the earliest try stamp to
+// generated_at, and the derivation was the defect (tick e6g): it counted
+// past a finished run, and no other surface could share it because no
+// contract field carried it. The model measures and clamps it now; the
+// second return says whether the model stated one at all — an elapsed
+// nobody measured is an elapsed nobody prints.
 func watchRunElapsed(m statusmodel.Model) (int64, bool) {
-	earliest := time.Time{}
-	if m.Waves != nil {
-		for _, wave := range *m.Waves {
-			for _, tick := range wave.Ticks {
-				for _, try := range tick.Tries {
-					at, err := time.Parse(time.RFC3339, try.DispatchedAt)
-					if err != nil {
-						continue
-					}
-					if earliest.IsZero() || at.Before(earliest) {
-						earliest = at
-					}
-				}
-			}
-		}
-	}
-	if earliest.IsZero() {
+	if m.Progress.RunElapsedSeconds == nil {
 		return 0, false
 	}
-	now, err := time.Parse(time.RFC3339, m.GeneratedAt)
-	if err != nil || now.Before(earliest) {
-		return 0, false
-	}
-	return int64(now.Sub(earliest).Round(time.Second).Seconds()), true
+	return *m.Progress.RunElapsedSeconds, true
 }
 
 // humanDuration is a person's clock for the frame's timers: seconds under a
