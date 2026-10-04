@@ -379,7 +379,7 @@ func (r *Reconciler) settle(ctx context.Context, tickID string, attempt int, by 
 			State: subprocess.StateLost, Recorded: false, Carried: was.carry, CarryRef: was.carryRef}, nil
 	}
 
-	handle, executor, state, err := r.addressForSettlement(marker)
+	handle, executor, state, err := r.addressForSettlement(ctx, marker)
 	if err != nil {
 		return nil, err
 	}
@@ -470,33 +470,43 @@ func (r *Reconciler) workWhereabouts(marker attemptHandle) (ref, sha string, dur
 	return "", "", false, ""
 }
 
-// addressForSettlement asks the executor what it can still say about the
-// attempt, and refuses every answer but the one a person may release.
+// addressForSettlement asks what can still be said about the attempt, and
+// refuses every answer but the one a person may release.
 //
 // A live attempt is not settled here (A6): it is addressable, so it is
-// cancelled through the executor and not released behind its back. An attempt
-// this host has no state for was never started here, so the next run starts it
-// rather than holding it. That leaves two a person may release: `lost` —
-// started, and nobody can say whether it is running — and an attempt that
-// settled itself and THIS RUN REJECTED, whose commits no run will merge and no
-// run will dispatch over until somebody says what happens to them. A settled
-// attempt the run has not rejected is still refused: the next run collects it,
-// and releasing it would throw away the report it left.
-func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.JobHandle, Executor, string, error) {
+// cancelled through the executor and not released behind its back. An
+// attempt this host has no state for was never started here — and when no
+// factory answers for it, the next run starts it rather than holding it.
+// That leaves two a person may release: `lost` — started, and nobody can say
+// whether it is running — and an attempt that settled itself and THIS RUN
+// REJECTED, whose commits no run will merge and no run will dispatch over
+// until somebody says what happens to them. A settled attempt the run has
+// not rejected is still refused: the next run collects it, and releasing it
+// would throw away the report it left.
+//
+// The witness is whoever can still address the attempt. That is the
+// executor this host built it under when this host holds its state — and,
+// when it holds none, the factory that ran the worker for a cloud run.
+// A cloud run's hold prints `ticfac settle <epic> <tick> <n> --run-id run_…`,
+// and the person who reads it types it on THEIR machine, which holds none of
+// the container's state and cannot build its executor — so a settle that
+// stopped at "this host holds no state" named a command its own hold could
+// not clear (tick bd5). The factory is asked instead (Options.FactoryAttempt),
+// and its answer is ruled on by exactly the same rule; nothing is torn down
+// on that path, because the worker's state is the factory's to dispose — a
+// settlement stands on the decision it records either way.
+func (r *Reconciler) addressForSettlement(ctx context.Context, marker attemptHandle) (*subprocess.JobHandle, Executor, string, error) {
 	dispatch, err := r.dispatchFor(marker)
 	if err != nil {
 		return nil, nil, "", err
 	}
+	state, found := findAttemptState(marker.StateRoot)
+	if !found {
+		return r.addressAttemptThroughFactory(ctx, marker)
+	}
 	executor, _, err := r.opts.NewExecutor(dispatch)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("reconcile: build the executor for %s: %w", marker.TickID, err)
-	}
-	state, found := findAttemptState(marker.StateRoot)
-	if !found {
-		return nil, nil, "", fmt.Errorf(
-			"reconcile: this host holds no state for %s: nothing was started here, so the next run "+
-				"starts it rather than holding it — there is nothing to release",
-			r.attemptName(marker.TickID, marker.Attempt))
 	}
 	// The handle names the executor the attempt was DISPATCHED under, from its
 	// own durable marker. It used to be hardcoded to the local subprocess
@@ -520,6 +530,67 @@ func (r *Reconciler) addressForSettlement(marker attemptHandle) (*subprocess.Job
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("reconcile: inspect %s: %w", r.attemptName(marker.TickID, marker.Attempt), err)
 	}
+	return r.ruleOnSettlement(marker, handle, executor, status)
+}
+
+// addressAttemptThroughFactory is the settle's other witness: the factory
+// that ran the attempt's worker, asked when this host holds none of the
+// attempt's state (addressForSettlement). It refuses exactly as before when
+// no factory can answer — an attempt nothing can address here is not this
+// release's to rule on — and otherwise rules the factory's answer on the
+// same settlement rule the executor's own Inspect is ruled on.
+func (r *Reconciler) addressAttemptThroughFactory(ctx context.Context, marker attemptHandle) (*subprocess.JobHandle, Executor, string, error) {
+	name := r.attemptName(marker.TickID, marker.Attempt)
+	if err := ctx.Err(); err != nil {
+		return nil, nil, "", err
+	}
+	if r.opts.FactoryAttempt == nil {
+		return nil, nil, "", fmt.Errorf(
+			"reconcile: this host holds no state for %s: nothing was started here, so the next run "+
+				"starts it rather than holding it — there is nothing to release", name)
+	}
+	answer := r.opts.FactoryAttempt(ctx, r.runID, marker.TickID, marker.Attempt)
+	if !answer.Asked {
+		refusal := fmt.Errorf(
+			"reconcile: this host holds no state for %s: nothing was started here, so the next run "+
+				"starts it rather than holding it — there is nothing to release", name)
+		if answer.Evidence != "" {
+			refusal = fmt.Errorf(
+				"reconcile: this host holds no state for %s and the factory could not say either (%s): "+
+					"a release rules on what can still address the attempt, and nothing it can reach can — "+
+					"there is nothing to release here", name, answer.Evidence)
+		}
+		return nil, nil, "", refusal
+	}
+	switch {
+	case answer.Live:
+		return nil, nil, "", fmt.Errorf(
+			"reconcile: %s is still the run's to address — the factory answers for it (%s). A live attempt is "+
+				"cancelled, never released: Appendix A #6 is not an operator's to waive", name, answer.Evidence)
+	case answer.Terminal:
+		// The factory's own last word, ruled on by the same rule below: a
+		// handle and an executor are not passed because this host has none —
+		// there is nothing here to cancel or dispose, and the settlement
+		// stands on the decision it records.
+		status := &subprocess.JobStatus{
+			SchemaVersion: subprocess.SchemaVersion,
+			JobID:         marker.JobID,
+			State:         answer.State,
+			Terminal:      true,
+		}
+		return r.ruleOnSettlement(marker, nil, nil, status)
+	case answer.Lost:
+		return nil, nil, subprocess.StateLost, nil
+	}
+	return nil, nil, "", fmt.Errorf(
+		"reconcile: the factory's answer for %s says nothing a release can rule on (%s)", name, answer.Evidence)
+}
+
+// ruleOnSettlement is the rule every addressable answer is ruled on — the
+// executor's own Inspect and a factory's answer alike. handle and executor
+// are what a release through that witness may still tear down; both are nil
+// on the factory path, where this host holds nothing of the worker.
+func (r *Reconciler) ruleOnSettlement(marker attemptHandle, handle *subprocess.JobHandle, executor Executor, status *subprocess.JobStatus) (*subprocess.JobHandle, Executor, string, error) {
 	switch {
 	case status.Terminal && r.rejectedDurably(marker):
 		// A settled attempt this run already REJECTED is the other thing a

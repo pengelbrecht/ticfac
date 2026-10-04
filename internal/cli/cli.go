@@ -969,7 +969,13 @@ attempt AND base the next one on its branch, so the next worker starts from the
 work rather than redoing it. Nothing merges unproven — the gate still decides —
 but the evidence the interrupted attempt produced is not thrown away, and the
 next attempt's provenance records that its source is the released attempt's
-ref and commit (tick 0z0).`,
+ref and commit (tick 0z0).
+
+A cloud run's attempt is answered by the factory that ran its worker: this
+command opens the run's records by --run-id, and when the machine it runs on
+holds none of the attempt's state — an operator's machine, never the factory's
+container — the factory's own record of the worker is what the release rules
+on. A live attempt is still refused there, exactly as it is here.`,
 	}
 	fs := flag.NewFlagSet("settle", flag.ContinueOnError)
 	fl := defineSettleFlags(fs)
@@ -1040,6 +1046,7 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 		GateConfig:        *fl.gate,
 		ProfileDir:        *fl.profiles,
 		Tier:              *fl.tier,
+		FactoryAttempt:    factoryAttemptAnswer,
 		ReleaseOnly:       true,
 	})
 	if err != nil {
