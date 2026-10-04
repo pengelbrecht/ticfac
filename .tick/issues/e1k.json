@@ -2,6 +2,7 @@
   "id": "e1k",
   "title": "Close-out BLOCKED over red CI is not resumed into the repair job; the supervised run ends failed",
   "description": "Both closeout red-CI tests fail deterministically (repeated runs, standalone) on this tick's base 6a32e734 and on origin/main tip e0658034: after the close-out answers BLOCKED over code whose CI the run reads red, the supervised run ends failed at closeout_dispatched_over_red_ci instead of the next incarnation's admission repairing the red CI and dispatching a fresh close-out over the green. Unrelated to this tick's change (the closeout_red fixture's reports carry no tracker-edits block and the path is closeout-epic-only); it reproduces at the base, so it predates this branch.\nfolded breaks.item: \nfolded breaks.check: go test -run TestACloseoutBlockedOnRedCI ./internal/reconcile/\nevidence: internal/reconcile/closeout_test.go:658 TestACloseoutBlockedOnRedCIIsRepairedAndRedispatchedWithoutAPerson and internal/reconcile/closeout_carry_test.go:42 both end failed with the RefusedCloseoutOverRedCI message on base 6a32e734 and on main e0658034\n\nticfac run run_5c7c16d199414da2a8a40d97b524e987 filed this backlog tick from the finding 14732408161a7c23a4dcd121fb0efcc8b4c639790a4bbd3767ba440ec0fdf687 (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-l89/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/14732408161a7c23a4dcd121fb0efcc8b4c639790a4bbd3767ba440ec0fdf687.json on the run branch.",
+  "notes": "2026-10-04 01:10 - ticfac run run_5c7c16d199414da2a8a40d97b524e987: created by absorbing finding 14732408161a7c23a4dcd121fb0efcc8b4c639790a4bbd3767ba440ec0fdf687 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/14732408161a7c23a4dcd121fb0efcc8b4c639790a4bbd3767ba440ec0fdf687.json on epic/hn6, and it says: the classifier put 0.17 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_5c7c16d199414da2a8a40d97b524e987/tick-l89/attempt-1",
   "created_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987",
   "created_at": "2026-10-04T01:10:32Z",
-  "updated_at": "2026-10-04T01:10:32Z"
+  "updated_at": "2026-10-04T01:10:36.348071457Z"
 }
