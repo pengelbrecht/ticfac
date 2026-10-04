@@ -239,9 +239,17 @@ func dashVerdict(m statusmodel.Model, st watchStyles) string {
 	case statusmodel.VerdictHealthy:
 		head = st.green("● healthy")
 	case statusmodel.VerdictDegraded:
-		if strings.HasPrefix(v.Summary, "degraded:") || v.Summary == "" {
+		// The summary the builder spells already carries its own "degraded: "
+		// prefix (degradedCause), so the renderer prefixes the state only
+		// where the summary does not — one vocabulary, never a doubled one
+		// ("degraded: degraded: …", the cross-renderer defect h7w pins). An
+		// empty summary reads the bare word, exactly as stopped's does.
+		switch {
+		case v.Summary == "":
+			head = st.amber("● degraded")
+		case strings.HasPrefix(v.Summary, "degraded:"):
 			head = st.amber("● " + v.Summary)
-		} else {
+		default:
 			head = st.amber("● degraded: " + v.Summary)
 		}
 	case statusmodel.VerdictStopped:
