@@ -3,10 +3,10 @@
   "title": "ticfac watch shows a worker's thinking and tool calls live; operator steer; heartbeat from commits",
   "gloss": "watch: live worker + steer",
   "description": "Step 8: watch renders thinking and tool calls from the commit stream (local and cloud), a ticfac steer command, the f6o heartbeat from the commit sequence; optionally publish settled events to the run feed (n0r).",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "xd3",
     "hpk"
@@ -15,5 +15,6 @@
   "acceptance_criteria": "frame/model tests for the live worker view; steer round-trip test",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.58291Z",
-  "updated_at": "2026-10-04T11:59:00.58291Z"
+  "updated_at": "2026-10-04T18:52:01.559753Z",
+  "started_at": "2026-10-04T18:52:01.559752Z"
 }
