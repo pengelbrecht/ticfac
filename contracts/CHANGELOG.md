@@ -53,6 +53,26 @@ loud.
 
 ---
 
+## 1.3.0
+
+MINOR: two fields added. `worker-boot-contract.json` gains `setup_arg` and
+`setup_command` — the pi-durable worker host's RESTORE half of the per-tick
+worker contract (epic 43y, tick i3h). A container lost mid-turn is rebuilt
+from the last wip snapshot by the host's own git plumbing, which re-runs the
+repository's `[sandbox]` setup through `ticks-worker --setup` in the restored
+box, so its dependency installs die with the container and are reborn with
+the restore. The entry takes none of the boot's inputs and honours the wave's
+`TICKS_WORKER_SETUP` lever; its faults keep the boot's own classes (2, 3, 6).
+An unchanged consumer is still correct: the all-in-one and the boot/finish
+phases run exactly as before, and the new args are additive. All readers
+follow in the same change — `image/worker.sh` answers the arg,
+`internal/sandboximage` (`WorkerSetupArg`, `WorkerSetupCommand`),
+`cloudflare/src/worker-boot.ts` (`WORKER_SETUP_ARG`, `WORKER_SETUP_COMMAND`)
+and the harness host's `WORKER_BOOT_PROTOCOL` (`setupCommand`, wired as the
+`WorkspaceGit.setup` the restore runs) assert it.
+
+---
+
 ## 1.2.0
 
 MINOR: six fields added. `worker-boot-contract.json` gains `boot_arg`,
