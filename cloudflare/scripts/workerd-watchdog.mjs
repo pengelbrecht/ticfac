@@ -13,16 +13,22 @@
  * process-group kill of the test run does not take the watchdog with it) with
  * the vitest process's pid. While vitest lives, the watchdog records the
  * workerd processes descended from it. Once vitest is gone, it SIGKILLs every
- * recorded pid that still runs the same command (never a recycled pid), then
- * exits. A normal exit leaves nothing to reap and the watchdog just exits.
+ * recorded pid that still runs the same command (never a recycled pid) — plus
+ * any orphaned workerd running this checkout's own binary, which covers one
+ * started between the last poll and the kill — then exits. A normal exit
+ * leaves nothing to reap, and the watchdog just exits.
  *
  * Kill by exact pid only, never by pattern: the host is shared, and another
  * worktree's live workerd is not this run's to touch.
  */
 import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const parent = Number(process.argv[2]);
 const POLL_MS = 1_000;
+// This checkout's node_modules: the only workerd binaries an orphan sweep may
+// take (the cloudflare/ directory this script lives in).
+const checkout = fileURLToPath(new URL("../node_modules/", import.meta.url));
 
 if (!Number.isInteger(parent) || parent <= 1) {
   process.exit(2);
@@ -30,7 +36,7 @@ if (!Number.isInteger(parent) || parent <= 1) {
 
 /** Every process as pid -> { ppid, command }. */
 function table() {
-  const out = execFileSync("ps", ["-axo", "pid=,ppid=,command="], { encoding: "utf8" });
+  const out = execFileSync("ps", ["-A", "-o", "pid=,ppid=,command="], { encoding: "utf8" });
   const rows = new Map();
   for (const line of out.split("\n")) {
     const match = /^\s*(\d+)\s+(\d+)\s+(.*)$/.exec(line);
@@ -86,6 +92,16 @@ for (;;) {
     rows = table();
   } catch {
     process.exit(1);
+  }
+  // And the workerd vitest started in its last moments, between two polls
+  // (seen: a vitest killed within a second of its workerd starting): an
+  // ORPHAN — reparented to init — running this checkout's own workerd binary.
+  // A live vitest's workerd still has its live parent, so nothing another
+  // test run in this checkout owns is ever taken.
+  for (const [pid, row] of rows) {
+    if (row.ppid === 1 && /\/workerd(\s|$)/.test(row.command) && row.command.startsWith(checkout)) {
+      recorded.set(pid, row.command);
+    }
   }
   for (const [pid, command] of recorded) {
     if (rows.get(pid)?.command !== command) continue;
