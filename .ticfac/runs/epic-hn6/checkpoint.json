@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 17,
-  "state": "gating",
-  "reason": "running the integrated gate for 15b on e6e812db0d49",
-  "updated_at": "2026-10-04T16:28:49Z",
+  "sequence": 18,
+  "state": "publishing",
+  "reason": "closing 15b behind the integrated gate on e6e812db0d49",
+  "updated_at": "2026-10-04T16:31:13Z",
   "ticks": [
     {
       "tick_id": "v16",
