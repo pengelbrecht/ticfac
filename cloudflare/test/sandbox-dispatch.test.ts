@@ -850,6 +850,62 @@ describe("start", () => {
     expect(binding.addressed).toEqual([]);
   });
 
+  /**
+   * hn6's restarted cloud run (run_3ca22fbd, 2026-10-04): the Workflow renewed
+   * the lease at 14:55:41 for 60s, then took no step for three minutes (its
+   * next wait was recorded starting at 14:58:41). The lease lapsed and was
+   * swept with nobody else holding it; the healthy orchestrator's first
+   * dispatch at 14:58:37 was refused `lease_lost` and the run halted as
+   * unclassified. A lapsed lease NOBODY else holds is reclaimed by the door
+   * for the run whose credential is asking — under the run's own token, so
+   * the Workflow's next renewal still works — and the dispatch goes ahead.
+   */
+  it("reclaims a lapsed, unheld lease for its own run and dispatches (hn6)", async () => {
+    const room = roomFor(env, project);
+    // The lease lapses under the run (a 100ms renewal), and the alarm sweeps it.
+    const shortened = await room.renewDispatchLease({
+      run_id: RUN_ID,
+      token: leaseToken,
+      ttl_ms: 100,
+    });
+    if (!shortened.ok) throw new Error(`the lease was not renewed: ${JSON.stringify(shortened)}`);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    expect(await room.leaseStatus()).toBeNull();
+
+    const response = await postStart(runToken, startBody());
+    expect(response.status).toBe(201);
+
+    // The run holds the lease again, and under the SAME token: the Workflow
+    // carries it immutably and its next renewal must not be refused.
+    const held = await room.leaseStatus();
+    expect(held?.run_id).toBe(RUN_ID);
+    const renewed = await room.renewDispatchLease({ run_id: RUN_ID, token: leaseToken });
+    expect(renewed.ok).toBe(true);
+  });
+
+  it("does not reclaim a lapsed lease another run has since taken (hn6)", async () => {
+    const room = roomFor(env, project);
+    const shortened = await room.renewDispatchLease({
+      run_id: RUN_ID,
+      token: leaseToken,
+      ttl_ms: 100,
+    });
+    if (!shortened.ok) throw new Error(`the lease was not renewed: ${JSON.stringify(shortened)}`);
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    const taken = await room.acquireDispatchLease({ run_id: "run_successor", epic: EPIC });
+    if (!taken.ok) throw new Error(`the lease was not taken: ${JSON.stringify(taken)}`);
+
+    const response = await postStart(runToken, startBody());
+    expect(response.status).toBe(409);
+    const denial = await denialOf(response);
+    expect(denial.error).toBe("lease_held_by");
+    expect(denial.detail).toContain("run_successor");
+    expect((await room.leaseStatus())?.run_id).toBe("run_successor");
+    expect(binding.addressed).toEqual([]);
+  });
+
   it("refuses a dispatch when no lease is live at all", async () => {
     const room = roomFor(env, project);
     const released = await room.releaseDispatchLease({ run_id: RUN_ID, token: leaseToken });

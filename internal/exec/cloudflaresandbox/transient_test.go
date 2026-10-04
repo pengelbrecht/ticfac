@@ -77,7 +77,12 @@ func TestOnlyTheEdgesFailuresAreTransientNeverTheDoorsAnswers(t *testing.T) {
 		{"the door naming its own configuration", http.StatusServiceUnavailable,
 			`{"error":"sandbox_dispatch_not_wired","detail":"no binding"}`, false},
 		{"the door refusing the run", http.StatusConflict,
-			`{"error":"lease_lost","detail":"the lease expired"}`, false},
+			`{"error":"lease_held_by","detail":"the lease is held by run_b"}`, false},
+		// hn6 (run_3ca22fbd): an unheld, lapsed lease is the factory's to take
+		// back — the door reclaims it, or the supervisor's next renewal does —
+		// so it is a wait, not the door's verdict on the run.
+		{"the door finding no lease held at all", http.StatusConflict,
+			`{"error":"lease_lost","detail":"the lease expired"}`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			door := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
