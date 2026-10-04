@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "conformance + replay tests run in CI and pass; make gate passes",
+    "description": "Step 1 of docs/spikes/n0b-round2-pi-durable.md: a harness/ TypeScript package (pnpm) pinning exact pi-durable, pi-ai and chord versions (release-age exemption); CI runs pi-durable's storage conformance suite against a DurableObjectSqlite adapter (vitest pool workers) and a faux-provider transcript replay test so API churn fails CI, not a run.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "92k",
+    "title": "Harness package: pinned pi-durable/pi-ai, DO-SQLite storage conformance, replay test in CI"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.94,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.96,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.02,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1115,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T12:01:19Z",
+  "answered_at": "2026-10-04T12:01:19Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "92k",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "b32fa8445b8d27c3849abd8bfdf6e6d9daca8e8b",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
