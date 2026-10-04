@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "eli",
   "attempt": 12,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T04:14:32Z",
+  "triaged_at": "2026-10-04T04:14:43Z",
+  "triaged_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987 absorbing l1t",
+  "promoted_as": "l1t",
   "provenance": {
     "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
     "tick_id": "eli",
