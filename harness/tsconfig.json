@@ -19,13 +19,10 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-<<<<<<< HEAD
-  "include": ["src/**/*", "test/**/*", "proof/**/*", "vitest.config.ts"]
-}
-=======
   "include": [
     "src/**/*",
     "test/**/*",
+    "proof/**/*",
     "vitest.config.ts"
   ],
   "exclude": [
@@ -33,4 +30,3 @@
     "node_modules"
   ]
 }
->>>>>>> 461eda7b2d92eb7b3d1b44ae630f30787b053268

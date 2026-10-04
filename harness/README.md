@@ -95,15 +95,8 @@ The tests are split by what they can prove where:
 
 ## What comes next (the epic's steps)
 
-<<<<<<< HEAD
-3. Execution environments (`FactorySandboxEnv`, the replay-safe tracked
-   `bash`, `NodeExecutionEnv`).
-4. Workspace checkpoints (`afterTools` wip commits).
-=======
-2. A gateway provider over `/api/gateway/workers-ai` with the run token.
 4. Workspace checkpoints (`afterTools` wip commits, restore on a lost
    container).
->>>>>>> 461eda7b2d92eb7b3d1b44ae630f30787b053268
 5. The worker contract as hooks and phases.
 6. The `WorkerAgent` DO host — this package's `HarnessStorage` DO is its
    seed, and it is what wires `FactorySandboxEnv` to the SANDBOXES_V1 stub
