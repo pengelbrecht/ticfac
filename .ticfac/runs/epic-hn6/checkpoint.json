@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 96,
-  "state": "running",
-  "reason": "kce is closed",
-  "updated_at": "2026-10-04T19:34:20Z",
+  "sequence": 97,
+  "state": "dispatching",
+  "reason": "dispatching c65 as attempt 17",
+  "updated_at": "2026-10-04T19:34:35Z",
   "ticks": [
     {
       "tick_id": "v16",
