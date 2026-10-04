@@ -12,8 +12,11 @@
   "attempt": 6,
   "done_item": "A1",
   "demonstrating_check": "go test -short -timeout 20m -run TestBuildDerivesTheEpicAcrossRuns ./internal/statusmodel/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T02:18:05Z",
+  "triaged_at": "2026-10-04T02:18:16Z",
+  "triaged_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987 absorbing z3p",
+  "promoted_as": "z3p",
   "provenance": {
     "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
     "tick_id": "gmo",
