@@ -3,7 +3,7 @@
   "title": "Epic branch carries 8 worker RESULT-*.md reports to main's root",
   "description": "RESULT-{378,3gk,7uv,hn6,ltg,oro,r5i,v16}.md sit at the repository root on the integration branch; the epic's PR would land them on main, which #172 cleaned of exactly this ('a worker's report is a run's transport, not a file of the project'). report_merge.go says existing reports 'stay until somebody removes them'. And #169's guard does not cover the base-fold-through-resolve path: ab0cdab4 (2026-10-04, after #169 was on the branch) rewrote RESULT-hn6.md. Remove the eight files from epic/hn6 and route the base-fold resolve merge through keepReportsOut.\nevidence: git ls-tree HEAD --name-only | grep RESULT; git diff ab0cdab4^1 ab0cdab4 --stat -- RESULT-hn6.md; internal/reconcile/report_merge.go:1-30\n\nticfac run epic-hn6 filed this backlog tick from the finding 0f60cb7e645be8550868116f17d1ff70a97e09726e80d29f2f899f685ec3acd0 (reported by run-epic-hn6/tick-v16/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/0f60cb7e645be8550868116f17d1ff70a97e09726e80d29f2f899f685ec3acd0.json on the run branch.",
   "notes": "2026-10-04 18:17 - ticfac run epic-hn6: created by absorbing finding 0f60cb7e645be8550868116f17d1ff70a97e09726e80d29f2f899f685ec3acd0 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-hn6/absorptions/0f60cb7e645be8550868116f17d1ff70a97e09726e80d29f2f899f685ec3acd0.json on epic/hn6, and it says: the classifier put 0.07 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb\n2026-10-04 18:20 - ticfac run epic-hn6: absorbed into the epic hn6 — the final review (decision 1, v16) judged the epic NOT READY and named this finding as blocking (severity high). A review's NOT READY is its own definition-of-done judgement, so its blocking findings are the epic's work whatever the shape of the epic's acceptance; the epic is reviewed again once this tick closes.\n2026-10-04 18:31 - 2026-10-05 - tick 06t attempt 2: delivered. The base-fold resolve mint (mintBaseFold) now takes its tree through treeWithoutReports against the epic head the job resolved over — the ab0cdab4 path — and the seven reports at the branch root were removed. The eighth the description names, RESULT-v16.md, never landed on epic/hn6 (git log --full-history is empty for it; it exists only on the v16 attempt branches, 3c4fc381), so there was no eighth file to remove.\n2026-10-04 18:34 - ticfac run epic-hn6: 06t try 1 (run dispatch #2) merged into epic/hn6 as eb368babe036; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-04T16:16:56Z",
-  "updated_at": "2026-10-04T16:34:03.303565Z",
-  "started_at": "2026-10-04T16:21:27.952719Z"
+  "updated_at": "2026-10-04T16:34:06.296796Z",
+  "closed_at": "2026-10-04T16:34:06.296796Z"
 }
