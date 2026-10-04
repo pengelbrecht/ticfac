@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 83,
-  "state": "running",
-  "reason": "4uj is running as attempt 15",
-  "updated_at": "2026-10-04T18:52:48Z",
+  "sequence": 84,
+  "state": "collecting",
+  "reason": "collecting bgx attempt 13",
+  "updated_at": "2026-10-04T18:59:02Z",
   "ticks": [
     {
       "tick_id": "92k",
