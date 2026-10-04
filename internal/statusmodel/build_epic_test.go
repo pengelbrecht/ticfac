@@ -734,7 +734,7 @@ func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
 		}
 	})
 
-	t.Run("a hold that names no attempt carries no release command", func(t *testing.T) {
+	t.Run("the absorption bound's hold is cleared by the triage that decides the finding", func(t *testing.T) {
 		t.Parallel()
 		model := Build(priorHoldSources(func(src *Sources) {
 			src.PriorFeeds["run_old"] = []runfeed.Event{{
@@ -746,8 +746,28 @@ func TestAPriorHoldStandsUntilAnswered(t *testing.T) {
 		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
 			t.Fatalf("the run waits on %+v, want the run-level hold", model.WaitsOn)
 		}
+		if model.WaitsOn.UnblockCommand == nil ||
+			*model.WaitsOn.UnblockCommand != "ticfac triage hpd --run-id run_old" {
+			t.Errorf("the hold's command is %+v, want the triage addressed to the holding run: the "+
+				"finding the bound refused to absorb is still that run's to decide (tick gf0)", model.WaitsOn.UnblockCommand)
+		}
+	})
+
+	t.Run("a hold the closed set does not know carries no command", func(t *testing.T) {
+		t.Parallel()
+		model := Build(priorHoldSources(func(src *Sources) {
+			src.PriorFeeds["run_old"] = []runfeed.Event{{
+				SchemaVersion: 1, At: testNow.Add(-47 * time.Hour).UTC().Format(time.RFC3339), RunID: "run_old",
+				Stage:  reconcile.StageRunHeld,
+				Detail: "some_future_hold: a hold kind the decision does not know",
+			}}
+		}))
+		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+			t.Fatalf("the run waits on %+v, want the run-level hold", model.WaitsOn)
+		}
 		if model.WaitsOn.UnblockCommand != nil {
-			t.Errorf("the hold's command is %+v, want none: nothing a settle or a triage addresses", model.WaitsOn.UnblockCommand)
+			t.Errorf("the hold's command is %+v, want none: no command is better than a wrong one a "+
+				"person copies", model.WaitsOn.UnblockCommand)
 		}
 	})
 }
