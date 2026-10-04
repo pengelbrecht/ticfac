@@ -176,4 +176,11 @@ func TestTheSettlementDeadlineIsSpentInTheRunsOwnClock(t *testing.T) {
 	if !strings.Contains(result.Failure.Message, "watched it for") {
 		t.Errorf("the refusal does not say how long this run watched the attempt: %q", result.Failure.Message)
 	}
+	// And its release command is addressed by the run whose store carries the
+	// attempt (tick qxj): this run's records live under r-fixture, not under
+	// the epic spelling a settle without --run-id opens.
+	if !strings.Contains(result.Failure.Message, "ticfac settle qeu a1 1 --run-id r-fixture --release") {
+		t.Errorf("the refusal's release command does not name the run its attempt is recorded under: %q",
+			result.Failure.Message)
+	}
 }

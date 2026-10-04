@@ -168,7 +168,10 @@ func TestResolvesThatNeverAnswerAreBoundedAndTheStopNamesEveryOne(t *testing.T) 
 		t.Fatal("the bound stopped the run with no refusal to read")
 	}
 	for _, want := range []string{"shared-work.txt", "failed without delivering a resolution",
-		"tick-a2/resolve-", "-r2", "-r3", "ticfac settle qeu a2 ", "--carry-work"} {
+		"tick-a2/resolve-", "-r2", "-r3", "ticfac settle qeu a2 ", "--carry-work",
+		// The release the stop names is addressed by the run whose store
+		// carries the attempt (tick qxj).
+		"--run-id r-fixture --release"} {
 		if !strings.Contains(r.failure.Message, want) {
 			t.Errorf("the refusal does not name %q: %s", want, r.failure.Message)
 		}

@@ -781,10 +781,9 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 					"it. This run neither collects it again (the teardown that followed the refusal removed the "+
 					"attempt's worktree, so a second collect would report a missing report rather than the verdict "+
 					"the attempt really had) nor dispatches over it (that would orphan the only copy). Read the "+
-					"branch; then take the work, or release the attempt with "+
-					"`ticfac settle %s %s %d --release \"<who>\"` and run the epic again for a fresh attempt.%s",
-				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), where, r.opts.EpicID,
-				tick, existing.Attempt, why+spent)
+					"branch; then take the work, or release the attempt with `%s` and run the epic again for a fresh attempt.%s",
+				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), where, r.settleCommand(tick, existing.Attempt),
+				why+spent)
 		}
 		// Appendix A #6: the first ADOPTABLE attempt of a newest-first pass is
 		// the highest-numbered one, which is the one the pass remembers — the
@@ -2801,11 +2800,10 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 			refusal := r.refuse(RefusedUnaddressed, marker.TickID,
 				"%s still reads %s %s past the wall clock of %ds it was issued, and this run has "+
 					"watched it for %s without it settling. Its executor could not settle it: %s. Nobody can say "+
-					"it is finished; look at it, stop whatever is still running, then release it with "+
-					"`ticfac settle %s %s %d --release \"<who>\"`",
+					"it is finished; look at it, stop whatever is still running, then release it with `%s`",
 				r.attemptName(marker.TickID, marker.Attempt), status.State, over.Round(time.Second),
 				r.wallOf(marker), watched.Round(time.Second), lastObservation(status),
-				r.opts.EpicID, marker.TickID, marker.Attempt)
+				r.settleCommand(marker.TickID, marker.Attempt))
 			// An attempt whose job lives at the factory is asked of the
 			// factory first (factory_unanswered.go).
 			if settled, answered := r.askFactoryAgain(ctx, fl, refusal); answered {
