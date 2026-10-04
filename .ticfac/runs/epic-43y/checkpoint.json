@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching 92k as attempt 1",
-  "updated_at": "2026-10-04T12:01:24Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "92k is running as attempt 1",
+  "updated_at": "2026-10-04T12:01:36Z",
   "ticks": [
     {
       "tick_id": "92k",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "kgk",
