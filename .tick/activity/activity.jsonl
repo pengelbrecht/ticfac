@@ -2380,3 +2380,4 @@
 {"ts":"2026-10-04T19:39:40.423474Z","tick":"s71","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"Tail's tick#try prefix counted from 5 recent events disagrees with the model"}}
 {"ts":"2026-10-04T19:40:04.834753Z","tick":"onv","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"A stopped run's ETA displaces the progress bar at width 120"}}
 {"ts":"2026-10-04T20:08:18.43312Z","tick":"onv","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-04 22:08 - ticfac run epic-hn6: onv try 1 (run dispatch #18) merged into epic/hn6 as 96567449369f; the integrated gate (go, ts) passed.","title":"A stopped run's ETA displaces the progress bar at width 120"}}
+{"ts":"2026-10-04T20:08:21.919239Z","tick":"onv","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"A stopped run's ETA displaces the progress bar at width 120"}}
