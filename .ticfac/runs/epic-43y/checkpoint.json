@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 92,
-  "state": "running",
-  "reason": "y03 try 1 (run dispatch #14) is rejected (missing-result): it was stopped as stuck: it showed no activity — no transcript event, no tool-process CPU, no worktree or branch change — for the stuck window, was nudged, and showed none for as long again; there is no report at /Users/peterengelbrecht/.herdr/worktrees/ticfac/ticfac-run-epic-43y-tick-y03-attempt-14/runs/epic-43y/y03/RESULT-y03.md. Its work was not lost: the work it had not committed is preserved at refs/ticfac/wip/run-epic-43y/tick-y03/attempt-14 (commit 292d7c59b89b): a work-in-progress snapshot of an interrupted worktree — not evidence of completion, never merged — and `git diff refs/ticfac/wip/run-epic-43y/tick-y03/attempt-14^ refs/ticfac/wip/run-epic-43y/tick-y03/attempt-14` is everything the stop interrupted. A re-dispatch of this tick is still cut from the integration branch, not from this snapshot; what the next attempt gets is its prompt pointed at this ref",
-  "updated_at": "2026-10-04T19:28:05Z",
+  "sequence": 93,
+  "state": "dispatching",
+  "reason": "dispatching y03 as attempt 17",
+  "updated_at": "2026-10-04T19:28:14Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -44,7 +44,7 @@
     },
     {
       "tick_id": "y03",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 14
     },
     {
