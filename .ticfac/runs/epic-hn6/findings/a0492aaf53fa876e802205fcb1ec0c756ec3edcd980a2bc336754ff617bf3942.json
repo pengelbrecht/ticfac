@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "ihw",
   "attempt": 10,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T18:52:44Z",
+  "triaged_at": "2026-10-04T18:52:55Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing h7b",
+  "promoted_as": "h7b",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "ihw",
