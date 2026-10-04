@@ -1,6 +1,7 @@
 package reconcile
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -199,6 +200,66 @@ func TestAResolveJobsReportIsNotMintedIntoTheMerge(t *testing.T) {
 	got, _ := showAt(dir, merged, "shared.txt")
 	if got != "main and side\n" {
 		t.Errorf("the resolution was not minted: shared.txt %q", got)
+	}
+}
+
+// The base fold's mint is the hole #169's guard did not cover (ab0cdab4):
+// the resolve-conflict job of a conflicted fold starts from a tree that
+// still carries the integration branch's reports (the fold brings in what
+// the BASE has; it is the EPIC side that has them), and the job's container
+// commits a report of its own on its branch. The merge minted from the
+// job's whole tree landed a REWRITTEN RESULT-hn6.md on epic/hn6 through
+// exactly this path, after the reports guard was already on the branch.
+// The mint keeps every report as the epic head the job resolved against
+// has it (report_merge.go).
+//
+// short: one small git repository, one conflicted tree and one mint, no harness, no runner
+func TestTheBaseFoldMintKeepsTheResolveJobsReportOut(t *testing.T) {
+	t.Parallel()
+	dir, g := mergeConflictRepo(t,
+		map[string]string{"shared.txt": "base\n"},
+		map[string]string{"shared.txt": "main\n", "RESULT-t1.md": "the integration branch's report\n"},
+		map[string]string{"shared.txt": "side\n", "work.txt": "the base branch's work\n"},
+		nil)
+	r, epicHead, head := reportMergeReconciler(t, dir, g)
+	// `side` plays the BASE branch here: the fold of the base into the
+	// integration branch, handed to the resolve-conflict job conflicted
+	// (refresh_resolve.go's conflictedMerge, reports brought in as they are).
+	marker := attemptHandle{JobID: "run-r/base-fold-1", Attempt: 1,
+		WriteRef: "refs/heads/ticfac/run-r/base-fold-1"}
+	conflicted, err := r.conflictedMerge(epicHead, head, "the conflicted base fold", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustRun(t, dir, "git", "checkout", "--quiet", "--detach", conflicted)
+	write(t, dir+"/shared.txt", "main and side\n")
+	write(t, dir+"/RESULT-t1.md", "the resolve job rewrote the integration branch's report\n")
+	write(t, dir+"/RESULT-bf.md", "the resolve job's own report\n")
+	mustRun(t, dir, "git", "add", "-A")
+	mustRun(t, dir, "git", "commit", "--quiet", "-m", "resolve the fold, and the container's report")
+	resolved := strings.TrimSpace(mustRun(t, dir, "git", "rev-parse", "HEAD"))
+	mustRun(t, dir, "git", "checkout", "--quiet", "main")
+
+	conflict := &mergeConflict{Files: []string{"shared.txt"}, Kind: map[string]string{"shared.txt": "content"}}
+	merged, err := r.mintBaseFold(resolved, head, marker, conflict,
+		func(format string, args ...any) error { return fmt.Errorf(format, args...) })
+	if err != nil {
+		t.Fatal(err)
+	}
+	paths := pathsAt(t, dir, merged)
+	if paths["RESULT-bf.md"] {
+		t.Errorf("the resolve job's report was minted into the base-fold merge")
+	}
+	got, _ := showAt(dir, merged, "RESULT-t1.md")
+	if got != "the integration branch's report\n" {
+		t.Errorf("the integration branch's report was rewritten by the base-fold mint: %q", got)
+	}
+	code, _ := showAt(dir, merged, "shared.txt")
+	if code != "main and side\n" {
+		t.Errorf("the fold's resolution was not minted: shared.txt %q", code)
+	}
+	if !paths["work.txt"] {
+		t.Errorf("the base branch's work did not reach the minted fold")
 	}
 }
 
