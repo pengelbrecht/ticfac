@@ -1,0 +1,14 @@
+{
+  "id": "imy",
+  "title": "Evaluate Kimi K2.7 Code against GLM 5.3 as a cloud ladder rung",
+  "gloss": "Kimi K2.7 Code eval",
+  "description": "Cloudflare's Pi harness announcement (2026-10-02, https://developers.cloudflare.com/changelog/post/2026-10-02-pi-harness/) uses @cf/moonshotai/kimi-k2.7-code on Workers AI — a coding model inside the Workers-AI-only cloud rule. Compare it with GLM 5.3 (strong) and GLM 5.3 Flash (economy) on real ticfac ticks: replay a sample of closed ticks' implement attempts (same base, same prompt) through pi in the cloud worker image, measure pass-rate at the gate, cost, wall time, report linter pushbacks. Decide the ladder (.tick/runners.cloud.toml [tier_policy]) from the evidence.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "[1] A committed comparison report over \u003e=10 replayed ticks per model. [2] runners.cloud.toml updated (or explicitly left) with the reason recorded. [3] No claude anywhere in the cloud path.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-04T08:48:54.978916Z",
+  "updated_at": "2026-10-04T08:48:54.978916Z"
+}

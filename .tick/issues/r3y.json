@@ -1,0 +1,14 @@
+{
+  "id": "r3y",
+  "title": "Switch tick classification from Jev to Clef-flash and re-run the starting-tier evaluation",
+  "gloss": "Jev → Clef-flash",
+  "description": "Cloudflare launched Clef and Clef-flash on Workers AI (2026-10-01, https://blog.cloudflare.com/clef-decision-models/): open-source (Apache-2.0) decision models, API-compatible with Typesafe's Jev, Clef-flash ~39 ms median vs Jev ~524 ms; Clef (Qwen3.8-27B) adds a vision encoder and 64k context. ticfac classifies ticks with Jev (internal/jev, typesafe/jev via Workers AI ai/run) for tier routing; ms9 measured the current mass rule at AUC 0.42 (no signal). Do: make the classifier model configurable, default to Clef-flash (keep Jev selectable), verify the answer shape is identical, and re-run ms9's evaluation (recorded classifications vs attempt outcomes) with Clef and Clef-flash. Note Cloudflare's RL fine-tuning on AI Gateway traffic (currently via their forward-deployed team) as the path to a router trained on our own outcomes — record what data we'd need.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "[1] Classification runs on Clef-flash by default, Jev still selectable; go test ./internal/jev/... passes. [2] An evaluation report (Jev vs Clef vs Clef-flash on recorded ticks: agreement, AUC vs outcome, latency) is committed. [3] make gate passes.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-04T08:48:54.947673Z",
+  "updated_at": "2026-10-04T08:48:54.947673Z"
+}

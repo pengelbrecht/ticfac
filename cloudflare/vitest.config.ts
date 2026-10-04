@@ -28,6 +28,11 @@ export default defineConfig(async () => {
     test: {
       include: ["test/**/*.test.ts"],
       setupFiles: ["./test/apply-migrations.ts"],
+      // A vitest that is SIGKILLed never runs miniflare's exit hook, and the
+      // workerd it started outlives it forever (two dozen had piled up on the
+      // shared host). The watchdog reaps them by exact pid once this vitest
+      // is gone (scripts/workerd-watchdog.mjs).
+      globalSetup: ["./scripts/workerd-watchdog-setup.mjs"],
       // One test file at a time. The suite runs inside real workerd, and
       // run-workflow.test.ts drives Workflows, Durable Objects and D1 with
       // wall-clock budgets; when other files run beside it on a 2-vCPU CI
