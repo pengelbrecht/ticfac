@@ -1,0 +1,57 @@
+{
+  "schema_version": 3,
+  "decision": 19,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 14,
+    "attempt_head": "01480f505216d82adece94879f1c5d940fca6372",
+    "conflict_files": [
+      "internal/statusmodel/pipeline.go"
+    ],
+    "conflicting_ticks": [
+      "l1t",
+      "ulw"
+    ],
+    "epic_id": "hn6",
+    "job_id": "run-run_5c7c16d199414da2a8a40d97b524e987/tick-l1t/resolve-14",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (cloudflare-sandbox/pi, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:2ec895ee2ea6b5afe4e77460bd5ea6902c6c290544d45c7d10f95905341927cb",
+    "resolve_branch": "ticfac/run-run_5c7c16d199414da2a8a40d97b524e987/tick-l1t/resolve-14",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "l1t"
+  },
+  "response": {
+    "conflict_detail": "1 conflict: content in internal/statusmodel/pipeline.go",
+    "conflict_files": [
+      "internal/statusmodel/pipeline.go"
+    ],
+    "job_id": "run-run_5c7c16d199414da2a8a40d97b524e987/tick-l1t/resolve-14",
+    "merge": "d65775a6599807863ad6314843059ce6ac1f5d08",
+    "resolve_head": "ac21eb79001ed5ee504f9b225e6335f1f2e62b8d",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T05:42:58Z",
+  "answered_at": "2026-10-04T05:42:58Z",
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "l1t",
+    "attempt": 14,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "a15057ab448e19076a904b1c8592a391dfb7959e",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "strong",
+    "profile_digest": "sha256:2ec895ee2ea6b5afe4e77460bd5ea6902c6c290544d45c7d10f95905341927cb",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
