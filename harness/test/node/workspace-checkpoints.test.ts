@@ -22,6 +22,7 @@ import { FactorySandboxEnv } from "../../src/env/factory-sandbox.js";
 import { createTrackedBashTool } from "../../src/tools/tracked-bash.js";
 import {
   pushWipCheckpoint,
+  type RestoreOutcome,
   WIP_COMMIT_SUBJECT,
   type WipOutcome,
   type WorkspaceGit,
@@ -252,6 +253,118 @@ describe("workspace checkpoints over real git", () => {
     expect(readFileSync(join(checkout, ".setup-marker"), "utf8")).toBe("ticfac-setup-ok");
     expect(readFileSync(join(checkout, "a.txt"), "utf8")).toBe("the first edit");
     expect(readFileSync(join(checkout, "b.txt"), "utf8")).toBe("the second edit");
+
+    await harness.close(context);
+  });
+
+  /**
+   * The between-rounds loss (tick 4fs): the box is destroyed while NO
+   * harness call is in flight — after one round's wip push, before the next
+   * round's request — so no loss signal ever reaches the env; its
+   * replacement boots EMPTY. Clears the workspace exactly there, twice, so
+   * the acceptance also proves the SECOND between-rounds loss restores
+   * again.
+   */
+  const destroyBetweenRounds = () => {
+    for (const entry of readdirSync(checkout)) {
+      rmSync(join(checkout, entry), { recursive: true, force: true });
+    }
+  };
+
+  it("destroys the container BETWEEN tool rounds, and the ready check restores before each next round", async () => {
+    const context = BACKGROUND_CONTEXT;
+    const faux = fauxProvider();
+    faux.setResponses([
+      () =>
+        fauxAssistantMessage(
+          [fauxToolCall("write", { path: "a.txt", content: "the first edit" })],
+          { stopReason: "toolUse" },
+        ),
+      () =>
+        fauxAssistantMessage([fauxToolCall("read", { path: "a.txt" })], { stopReason: "toolUse" }),
+      () =>
+        fauxAssistantMessage([fauxToolCall("read", { path: "a.txt" })], { stopReason: "toolUse" }),
+      () => fauxAssistantMessage("every read saw the edit after each restore"),
+    ]);
+    const models = createModels();
+    models.setProvider(faux.provider);
+
+    const restores: RestoreOutcome[] = [];
+    const registry = createRegistry();
+    registry.install(
+      defineExtension({
+        name: "tools",
+        tools: [createReadTool(), createWriteTool(), createTrackedBashTool()],
+      }),
+    );
+    registry.install(
+      workspaceCheckpointExtension({
+        shell: env.hostShell(),
+        workspace: git,
+        // The host's wiring: the env's ready check before every round.
+        ensureReady: () => env.ensureWorkspaceReady(),
+        // The box is destroyed after the first two rounds' wip pushes — the
+        // loss sits BETWEEN rounds, invisible to every other path.
+        onCheckpoint: (outcome) => {
+          outcomes.push(outcome);
+          if (outcomes.length <= 2) destroyBetweenRounds();
+        },
+        onRestore: (outcome) => {
+          restores.push(outcome);
+        },
+      }),
+    );
+
+    const storage = new MemoryStorage();
+    const harness = await Harness.open(storage, { models, registry, env: () => env }, context);
+    const conversation = await harness.root(context, {
+      agent: { model: { provider: "faux", modelId: "faux-1" } },
+    });
+    const submission = await conversation.submit(
+      { type: "input", content: "write the edit, then read it twice" },
+      context,
+    );
+    const settled = await submission.wait(context);
+    expect(settled.status).toBe("done");
+
+    // THE ACCEPTANCE: every read after a between-rounds loss saw the edit on
+    // the workspace the ready check rebuilt — not ENOENT, not an empty tree.
+    const view = await conversation.context(context);
+    const readResults = view.messages
+      .map((m) => textOf(m).join(" "))
+      .filter((t) => t.includes("the first edit"));
+    expect(readResults.length).toBe(2);
+    const lost = view.messages
+      .map((m) => textOf(m).join(" "))
+      .filter((t) => t.includes("No such file or directory"));
+    expect(lost).toEqual([]);
+
+    // Both losses restored, from the attempt branch's real tip: the sha each
+    // restore answered is a real wip commit on origin — the second loss
+    // proves one restore does not hold the next one's answer.
+    expect(restores.length).toBe(2);
+    for (const restore of restores) {
+      expect(restore.kind).toBe("restored");
+      if (restore.kind !== "restored") continue;
+      expect(
+        execFileSync("git", ["--git-dir", origin, "show", "-s", "--format=%s", restore.sha], {
+          encoding: "utf8",
+        }).trim(),
+      ).toBe(WIP_COMMIT_SUBJECT);
+    }
+
+    // The restored workspace really is the wip's tree, setup re-run.
+    expect(readFileSync(join(checkout, "a.txt"), "utf8")).toBe("the first edit");
+    expect(readFileSync(join(checkout, ".setup-marker"), "utf8")).toBe("ticfac-setup-ok");
+
+    // The ready check ran before every round's request — four of them —
+    // ahead of the tools that would otherwise have failed on the empty box.
+    const checks = door.runCommands.filter((line) => line.includes('test -e "$CWD/.git"'));
+    expect(checks.length).toBe(4);
+    const prepares = door.runCommands.filter((line) =>
+      line.includes("find . -mindepth 1 -maxdepth 1"),
+    );
+    expect(prepares.length).toBe(2);
 
     await harness.close(context);
   });

@@ -20,6 +20,13 @@ export function fakeSandboxDoor(
     commandOutput?: string;
     /** Scripts `run` answers by command: what a git line would print. */
     runOutput?: (command: string, env: Record<string, string>) => string;
+    /**
+     * Scripts `run`'s EXIT CODE by command: the number it returns is the
+     * answer (the default is 0). What a ready-marker check on an EMPTY
+     * booted container looks like — `test -e` failing — has no other way
+     * through a door that runs nothing.
+     */
+    runExit?: (command: string, env: Record<string, string>) => number | undefined;
   } = {},
 ) {
   type FakeProcess = {
@@ -62,7 +69,7 @@ export function fakeSandboxDoor(
       }
       return Promise.resolve({
         ready: true,
-        exitCode: 0,
+        exitCode: options.runExit?.(command, env) ?? 0,
         output: options.runOutput?.(command, env) ?? "",
         truncated: false,
       });
