@@ -3,7 +3,9 @@
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",
-    "lib": ["ES2022"],
+    "lib": [
+      "ES2022"
+    ],
     "types": [
       "@cloudflare/workers-types",
       "@cloudflare/vitest-pool-workers/types",
@@ -17,5 +19,14 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*", "test/**/*", "proof/**/*", "vitest.config.ts"]
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "proof/**/*",
+    "vitest.config.ts"
+  ],
+  "exclude": [
+    "test/node",
+    "node_modules"
+  ]
 }

@@ -9,7 +9,12 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [cloudflareTest({ wrangler: { configPath: "./wrangler.toml" } })],
   test: {
-    include: ["test/**/*.test.ts"],
+    // FLAT, on purpose: the node-own half of this package's suites lives in
+    // test/node/ (vitest.node.config.ts) and runs real bash, which workerd
+    // cannot — a glob that reached it here would run those tests inside
+    // workerd, where child_process is not implemented and every one of them
+    // fails for a reason that has nothing to do with the code.
+    include: ["test/*.test.ts"],
     // Each conformance case is a fresh Durable Object running migrations and
     // a scripted scenario on a 2-vCPU CI runner; the Vitest default (5 s) is
     // a laptop number, as the factory suite already learned.

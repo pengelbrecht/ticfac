@@ -19,6 +19,7 @@ import {
   parseRunnerState,
   READ_CHUNK_BYTES,
   READY_TIMEOUT_MS,
+  RUN_MAX_BYTES,
   runnerView,
   type SandboxState,
   START_WRAPPER,
@@ -38,9 +39,18 @@ const statusExited = (code: number) => `state=exited\npid=42\nexit_code=${code}\
  * A stand-in for `ctx.container` that runs the process runner's verbs the way
  * the image's `ticfac-proc` answers them: `inspect` prints one state line,
  * `read` prints raw bytes from an offset, `list` prints one id per line.
+ *
+ * `bash` answers the `run` door's short commands: the fake cannot run bash,
+ * so `options.bash` is the test's stand-in for what the container's bash
+ * would print and exit with, keyed on the command line it was handed.
  */
 function fakeContainer(
-  options: { running?: boolean; images?: Record<string, string>; notReadyFor?: number } = {},
+  options: {
+    running?: boolean;
+    images?: Record<string, string>;
+    notReadyFor?: number;
+    bash?: (line: string, env?: Record<string, string>) => { stdout: string; exitCode?: number };
+  } = {},
 ) {
   let notReadyFor = options.notReadyFor ?? 0;
   const processes = new Map<string, FakeProcess>();
@@ -100,6 +110,12 @@ function fakeContainer(
       }
       // A start goes through the environment wrapper; the runner line follows it.
       const line = argv[0] === "sh" && argv[2] === START_WRAPPER ? argv.slice(4) : argv;
+      if (line[0] === "bash") {
+        // The run door: one short command, wrapped for bounding. The test's
+        // stand-in answers with what the container's bash would have.
+        const out = options.bash?.(line[2] ?? "", opts?.env);
+        return out === undefined ? answer("", 127) : answer(out.stdout, out.exitCode ?? 0);
+      }
       if (line[0] !== PROCESS_RUNNER) return answer("", 127);
       const [, verb, id] = line;
       switch (verb) {
@@ -702,5 +718,90 @@ describe("factorySandboxBinding", () => {
 
   it("is bound on this deployment's config", () => {
     expect(env.SANDBOXES_V1).toBeDefined();
+  });
+});
+
+describe("FactorySandbox: the run door", () => {
+  // One short command, started, waited for and read in one RPC (epic 43y
+  // step 3): the harness package's FactorySandboxEnv runs every file
+  // operation through this door, so its contract is asserted on the exact
+  // command line the door hands the container — the bounding, the image
+  // environment and the command's own exit code are all part of what the
+  // env depends on.
+  it("runs a short command through the image environment and returns its output and exit code", async () => {
+    const seen: { line: string; env?: Record<string, string> }[] = [];
+    const c = fakeContainer({
+      bash: (line, env) => {
+        seen.push({ line, env });
+        return { stdout: "hello\n" };
+      },
+    });
+    const { object } = sandbox(c);
+
+    const out = await object.run('cat "$FILE"', { FILE: "result.md" });
+    expect(out).toEqual({ ready: true, exitCode: 0, output: "hello\n", truncated: false });
+
+    // The command reached the container through the environment wrapper, in
+    // the working directory, with the caller's variables laid over the image
+    // environment, and bounded: head -c keeps what this Durable Object
+    // buffers finite, and PIPESTATUS keeps the command's own exit code.
+    expect(seen).toEqual([
+      {
+        line: `exec 2>&1; { cat "$FILE"; } | head -c ${RUN_MAX_BYTES + 1}; exit "\${PIPESTATUS[0]}"`,
+        env: { FILE: "result.md" },
+      },
+    ]);
+    expect(c.execs.at(-1)?.cwd).toBe("/workspace");
+  });
+
+  it("returns the command's own exit code under the bounding pipeline", async () => {
+    const c = fakeContainer({ bash: () => ({ stdout: "", exitCode: 3 }) });
+    const { object } = sandbox(c);
+    const out = await object.run("exit 3", {});
+    expect(out).toEqual({ ready: true, exitCode: 3, output: "", truncated: false });
+  });
+
+  it("marks output beyond maxBytes as truncated and returns only the bound", async () => {
+    const c = fakeContainer({
+      bash: (line) => {
+        const max = Number(line.match(/head -c (\d+)/)?.[1]);
+        return { stdout: "x".repeat(max) };
+      },
+    });
+    const { object } = sandbox(c);
+
+    // The fake answers with exactly what head -c would have passed: maxBytes
+    // + 1 bytes. Anything less proves the door sliced; anything more proves
+    // the container's whole answer reached the Durable Object unbounded.
+    const out = await object.run("yes", {}, { maxBytes: 4096 });
+    expect(out.ready).toBe(true);
+    if (!out.ready) return;
+    expect(out.output).toBe("x".repeat(4096));
+    expect(out.truncated).toBe(true);
+  });
+
+  it("boots the container on the run's boot options and keeps it alive", async () => {
+    const c = fakeContainer({ bash: () => ({ stdout: "" }) });
+    const { object, state } = sandbox(c);
+
+    await object.run("true", {}, { boot: { keepAlive: true } });
+    expect(c.starts[0]?.image).toBe(IMAGE);
+    expect(await state.store.get("keep_alive")).toBe(true);
+  });
+
+  it("refuses to answer, rather than guess, while the container has not answered", async () => {
+    const c = fakeContainer({ notReadyFor: 1, bash: () => ({ stdout: "late" }) });
+    const { object } = sandbox(c);
+
+    const first = await object.run("cat a", {});
+    expect(first).toEqual({ ready: false });
+  });
+
+  it("waits for a starting container up to readyWaitMs and then answers", async () => {
+    const c = fakeContainer({ notReadyFor: 1, bash: () => ({ stdout: "late" }) });
+    const { object } = sandbox(c);
+
+    const out = await object.run("cat a", {}, { readyWaitMs: 15_000 });
+    expect(out).toEqual({ ready: true, exitCode: 0, output: "late", truncated: false });
   });
 });
