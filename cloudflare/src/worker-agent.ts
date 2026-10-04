@@ -157,6 +157,8 @@ export type WorkerAgentResolver = (runID: string) => Promise<WorkerAgentHosting 
  */
 export type WorkerAgentSeams = {
   door?: (name: string) => SandboxDoor;
+  /** What releasing the seam's container does; nothing when unset. */
+  destroy?: (name: string) => Promise<void>;
   models?: () => ReturnType<typeof gatewayModelAccess>;
   pollMs?: number;
 };
@@ -327,6 +329,10 @@ export class WorkerAgent extends DurableObject<Env> {
   async release(): Promise<void> {
     const record = await this.load();
     if (record === undefined) return;
+    if (this.seams?.door !== undefined) {
+      await this.seams.destroy?.(record.spec.name);
+      return;
+    }
     const door = this.sandboxStub(record.spec.name);
     if (door !== null) await door.destroy();
   }
