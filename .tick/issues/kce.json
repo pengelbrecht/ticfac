@@ -1,0 +1,14 @@
+{
+  "id": "kce",
+  "title": "Bare overview headline overflows the terminal by 2 cells",
+  "description": "renderOverview lays dashboardHeadline out at full width then indents it by two spaces; the phase line pads to exactly width, so 'needs you' wraps. TestTheBareOverviewHeadlineMatchesWatch pins the 102-cell form at width 100.\nevidence: internal/cli/overview.go:850-853; internal/cli/watch_view.go:308\n\nticfac run epic-hn6 created this tick by absorbing the finding dbbcff7c07cc735cc8f9ea8110e25dd8d3983a68dbb75919eb4c79af9b043a06 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/dbbcff7c07cc735cc8f9ea8110e25dd8d3983a68dbb75919eb4c79af9b043a06.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T16:18:42Z",
+  "updated_at": "2026-10-04T16:18:42Z"
+}
