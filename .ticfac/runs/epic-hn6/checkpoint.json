@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 5,
-  "state": "publishing",
-  "reason": "closing v16 behind its validated review-epic answer",
-  "updated_at": "2026-10-04T16:20:24Z",
+  "sequence": 6,
+  "state": "running",
+  "reason": "v16 is closed",
+  "updated_at": "2026-10-04T16:20:32Z",
   "ticks": [
     {
       "tick_id": "v16",
-      "state": "reported",
+      "state": "closed",
       "attempt": 1
     },
     {
