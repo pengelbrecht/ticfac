@@ -44,6 +44,15 @@ import (
 // live run's drafts would take a decision out of a run that is still making
 // it, and its drafts stay visible to needs-you, addressed to its own store.
 
+// StageInheritUnreadable is the line the boot sweep leaves for a sibling run
+// whose checkpoint this binary cannot read (tick d9d): the sibling is skipped
+// — its untriaged findings stay where they stand — and the line says so,
+// because a skip nobody can see is indistinguishable from a sweep that never
+// ran. An unreadable checkpoint is a fact about the record, never a reason to
+// stop the run: one newer binary's checkpoint, or one corrupt record, must
+// not abort every boot of the epic over a record no run of this epic can fix.
+const StageInheritUnreadable = "inherit_unreadable"
+
 // adoptInheritedFindings is the boot sweep: every ended sibling run of this
 // epic's untriaged drafts, taken into this run's own store before anything
 // is planned. Idempotent across incarnations — a draft already in this

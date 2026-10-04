@@ -3,6 +3,7 @@ package runstate
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 )
 
@@ -525,6 +526,16 @@ func encodeRecord(record any) ([]byte, error) {
 	}
 	return buf.Bytes(), nil
 }
+
+// ErrUnreadable marks a record whose bytes this binary cannot decode: a
+// document written by a NEWER binary — a field this one cannot express, which
+// decodeRecord refuses by the contract's closed schemas — or a corrupt one.
+// A reader of ANOTHER run's records treats the mark as "the record says
+// nothing" rather than an operational fault: the sibling's record is not this
+// reader's to fix, and one unreadable record must not stop the run that
+// merely reads past it (tick d9d). This run's OWN records still fail the read
+// they fail.
+var ErrUnreadable = errors.New("unreadable record")
 
 // decodeRecord refuses a field the record type cannot express, which is the Go
 // side of `additionalProperties: false`.

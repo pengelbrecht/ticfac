@@ -877,3 +877,69 @@ func TestADeadRunsClaimOffTheHeadOfThePlanIsTakenOverBeforeTheWidthIsCounted(t *
 		t.Errorf("no %s line for a1: the orphan was not taken over\n%s", StageClaimTakenOver, journalText(r))
 	}
 }
+
+// TestATakeoverAsksAnUnreadableCheckpointsHostInsteadOfFailingTheRun (tick
+// d9d): the claim staleness reads the holder's checkpoint too, and the same
+// defect lived there — a holder whose checkpoint this binary cannot decode (a
+// factory run written by a newer binary, or a corrupt record) used to abort
+// the run with a read error, so one unreadable record stopped not just the
+// takeover but the run that waited on the claim. The file's own rule answers:
+// a checkpoint that cannot be read at all says nothing, and nothing is the
+// live answer — the holder's HOST is asked, exactly as it is for a run that
+// wrote no checkpoint at all.
+func TestATakeoverAsksAnUnreadableCheckpointsHostInsteadOfFailingTheRun(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f, head, holder := deadHolderFixture(t, "")
+	if containsCommit(t, f, head, "origin/epic/qeu") {
+		t.Fatal("the dead run's work is already on the integration branch; this fixture proves nothing")
+	}
+
+	// The holder's checkpoint, as a NEWER binary left it: every field this
+	// binary knows plus one it cannot express, refused by the closed schemas.
+	editor := openRunStore(t, f.Repo.Dir, "epic/qeu", "r-edit")
+	raw, ok, err := editor.Read(runstate.CheckpointPath(holder))
+	if err != nil || !ok {
+		t.Fatalf("read the holder's seeded checkpoint: %v %v", ok, err)
+	}
+	var record map[string]any
+	if err := json.Unmarshal(raw, &record); err != nil {
+		t.Fatalf("the holder's seeded checkpoint is not JSON: %v", err)
+	}
+	record["factory_epoch"] = "written by a binary newer than this one"
+	edited, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := editor.UpdateIfSHA(runstate.CheckpointPath(holder), append(edited, '\n')); err != nil {
+		t.Fatalf("overwrite the holder's checkpoint with one this binary cannot read: %v", err)
+	}
+
+	host := &hostSays{run: holder, verdict: HolderDead}
+	f.Runner = fakeRunnerArgv(t, "report")
+	r, result, err := f.run(f.Repo, fixtureOptions{runID: "r-next", claimHolder: host.ask})
+	if err != nil {
+		t.Fatalf("the new run did not finish — an unreadable holder checkpoint must not fail it: %v", err)
+	}
+	if result.State != runstate.StateCompleted || !contains(result.Closed, "a1") {
+		t.Fatalf("the new run ended %s (failure %+v) with a1 not closed: the unreadable checkpoint must "+
+			"be asked of the host, never held over; a1's stages %v", result.State, result.Failure, r.Stages("a1"))
+	}
+	if len(host.asked) == 0 || host.asked[0] != holder {
+		t.Errorf("the holder's host was asked about %v, want %s: a checkpoint this binary cannot read "+
+			"says nothing, and only its host can say the run ended", host.asked, holder)
+	}
+
+	// The takeover is on the feed, on the host's evidence: the run never
+	// learned anything from the checkpoint it could not read.
+	line, ok := journalLine(r, "a1", StageClaimTakenOver)
+	if !ok {
+		t.Fatalf("no %s line: a takeover nobody can see is a claim taken on a guess\n%s",
+			StageClaimTakenOver, journalText(r))
+	}
+	for _, want := range []string{holder, "Workflow instance is complete", short(head)} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the %s line does not name %q: %s", StageClaimTakenOver, want, line)
+		}
+	}
+}

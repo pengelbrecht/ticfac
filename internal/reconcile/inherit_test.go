@@ -1,8 +1,11 @@
 package reconcile
 
 import (
+	"context"
+	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
@@ -207,5 +210,233 @@ func TestADraftAnotherRunAlreadyDecidedIsNotAdoptedAgain(t *testing.T) {
 		if !strings.Contains(line, want) {
 			t.Errorf("the %s line does not name %q: %s", StageFindingDuplicate, want, line)
 		}
+	}
+}
+
+// ------------------------------------------- tick d9d: unreadable siblings ---
+
+// makeCheckpointUnreadable overwrites a sibling run's seeded checkpoint with
+// bytes this binary cannot decode, through the store's raw record primitives:
+// the document is one this binary cannot produce, which is the point.
+func makeCheckpointUnreadable(t *testing.T, repo *testRepo, runID, document string) {
+	t.Helper()
+	editor := openRunStore(t, repo.Dir, "epic/qeu", "r-edit")
+	if _, err := editor.UpdateIfSHA(runstate.CheckpointPath(runID), []byte(document)); err != nil {
+		t.Fatalf("overwrite run %s's checkpoint with one this binary cannot read: %v", runID, err)
+	}
+}
+
+// newerBinaryCheckpoint is run runID's seeded checkpoint with one field a
+// NEWER binary writes and this one does not know: the shape a factory ahead
+// of the local binary leaves on a shared integration branch, which the
+// closed schemas refuse rather than guess at.
+func newerBinaryCheckpoint(t *testing.T, repo *testRepo, runID string) string {
+	t.Helper()
+	editor := openRunStore(t, repo.Dir, "epic/qeu", "r-edit")
+	raw, ok, err := editor.Read(runstate.CheckpointPath(runID))
+	if err != nil || !ok {
+		t.Fatalf("read run %s's seeded checkpoint: %v %v", runID, ok, err)
+	}
+	var record map[string]any
+	if err := json.Unmarshal(raw, &record); err != nil {
+		t.Fatalf("run %s's seeded checkpoint is not JSON: %v", runID, err)
+	}
+	record["factory_epoch"] = "written by a binary newer than this one"
+	edited, err := json.MarshalIndent(record, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(edited) + "\n"
+}
+
+// titledSiblingFinding is seededFinding with its own title, so a test can
+// tell one sibling's draft from another's in the records that name them.
+func titledSiblingFinding(key, runID, title string) runstate.Finding {
+	finding := seededFinding(key, runID)
+	finding.Title = title
+	return finding
+}
+
+// TestAnUnreadableSiblingCheckpointStopsNoBoot (tick d9d): the boot sweep
+// reads every run's checkpoint on the integration branch — other epics'
+// runs ride the same branch, folded in from the base — and decodeRecord
+// refuses a field this binary cannot express. One unreadable checkpoint,
+// wherever it came from, used to abort Run at its boot: a factory-written
+// checkpoint newer than the local binary, or one corrupt record, stopped
+// EVERY run of the epic at its start, forever, over a record no run of this
+// epic can fix. The sweep's own rule answers instead: a checkpoint that
+// cannot say which epic it is, or that its run ended, is a sibling not
+// ended, so its drafts stay where they stand — said on the feed, because a
+// skip nobody can see is indistinguishable from a sweep that never ran —
+// and the readable siblings are still swept, adopted exactly as they were.
+func TestAnUnreadableSiblingCheckpointStopsNoBoot(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+
+	const (
+		deadKey    = "d9ddea4d00000000000000000000000000000000000000000000000000000001"
+		newerKey   = "d9dnewer0000000000000000000000000000000000000000000000000000002"
+		corruptKey = "d9dcorr0000000000000000000000000000000000000000000000000000003"
+	)
+	// The integration branch, as the first inherit test builds it: nothing
+	// but the sibling records is ever written to it before the run under test.
+	mustRun(t, f.Repo.Dir, "git", "push", "--quiet", "origin", "HEAD:refs/heads/epic/qeu")
+	// The READABLE dead sibling, whose draft the sweep must still adopt.
+	seedSibling(t, f.Repo, "r-dead", "qeu", runstate.StateFailed,
+		titledSiblingFinding(deadKey, "r-dead", "the dead run's readable draft"))
+	// The unreadable pair: another EPIC's run written by a newer binary (the
+	// breadth — other epics' records are read before the epic filter can
+	// spare them), and a corrupt checkpoint of THIS epic's own.
+	seedSibling(t, f.Repo, "r-newer", "zso", runstate.StateFailed,
+		titledSiblingFinding(newerKey, "r-newer", "the newer binary's draft"))
+	seedSibling(t, f.Repo, "r-corrupt", "qeu", runstate.StateFailed,
+		titledSiblingFinding(corruptKey, "r-corrupt", "the corrupt run's draft"))
+	makeCheckpointUnreadable(t, f.Repo, "r-newer", newerBinaryCheckpoint(t, f.Repo, "r-newer"))
+	makeCheckpointUnreadable(t, f.Repo, "r-corrupt", "{ not a checkpoint at all\n")
+
+	// A run whose close-out is held over the one ADOPTED draft — the readable
+	// dead sibling's — so the outcome proves the sweep ran and CHOSE, rather
+	// than a boot that never got anywhere at all.
+	r, result, err := f.run(f.Repo, fixtureOptions{runID: "r-next", proseFindingsForAPerson: true})
+	if err != nil {
+		t.Fatalf("the run under the new id did not finish — one unreadable sibling checkpoint must not stop a boot: %v", err)
+	}
+	if result.State != runstate.StateFailed || result.Failure == nil ||
+		result.Failure.Reason != RefusedFindingUntriaged {
+		t.Fatalf("the run ended %s (failure %+v), want the close-out held over the READABLE dead sibling's "+
+			"draft: the sweep must still sweep what it can read", result.State, result.Failure)
+	}
+	if !strings.Contains(result.Failure.Message, "the dead run's readable draft") {
+		t.Errorf("the hold does not name the readable sibling's draft: %s", result.Failure.Message)
+	}
+	for _, title := range []string{"the newer binary's draft", "the corrupt run's draft"} {
+		if strings.Contains(result.Failure.Message, title) {
+			t.Errorf("the hold names %q: an unreadable sibling's draft is never adopted, so it gates nothing", title)
+		}
+	}
+
+	// The readable sibling's draft is IN this run's own store; the unreadable
+	// siblings' drafts are left exactly where they stood.
+	mine := openRunStore(t, f.Repo.Dir, r.IntegrationBranch(), "r-next")
+	if _, ok, err := mine.Finding(deadKey); err != nil || !ok {
+		t.Fatalf("the readable dead sibling's draft is not in this run's store: %v %v", ok, err)
+	}
+	for _, key := range []string{newerKey, corruptKey} {
+		if _, ok, err := mine.Finding(key); err != nil || ok {
+			t.Errorf("finding %s of a sibling whose checkpoint cannot be read was taken over: %v %v", key, ok, err)
+		}
+	}
+
+	// And the skip is SAID, naming each unreadable run.
+	var skipped []string
+	for _, event := range r.Journal() {
+		if event.Stage == StageInheritUnreadable {
+			skipped = append(skipped, event.Detail)
+		}
+	}
+	if len(skipped) != 2 {
+		t.Fatalf("the sweep left %d %s lines, want one per unreadable sibling:\n%s",
+			len(skipped), StageInheritUnreadable, journalText(r))
+	}
+	for _, runID := range []string{"r-newer", "r-corrupt"} {
+		found := false
+		for _, detail := range skipped {
+			if strings.Contains(detail, runID) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("no %s line names run %s: an unreadable sibling nobody can see was skipped", StageInheritUnreadable, runID)
+		}
+	}
+}
+
+// gatingHost is a fake holder host that answers only once every ask has
+// ARRIVED: the first ask blocks waiting for the second, so the test can tell
+// asks made CONCURRENTLY (both arrive while the first is still waiting) from
+// asks made one at a time (the first blocks alone until the test gives up).
+type gatingHost struct {
+	arrived chan string
+	release chan struct{}
+}
+
+func (h *gatingHost) ask(_ context.Context, runID string) HolderState {
+	h.arrived <- runID
+	<-h.release
+	return HolderState{Verdict: HolderDead, Evidence: "the fake host says run " + runID + " ended"}
+}
+
+// TestTheBootSweepAsksTheHostsConcurrently (tick d9d): each non-terminal
+// sibling costs the boot a round trip to another host — the factory, the
+// process table — bounded by that host's own client timeout. A serial sweep
+// pays every sibling's latency before the run plans anything; the asks go out
+// at once, and the answers are folded back in the sweep's own run-id order.
+func TestTheBootSweepAsksTheHostsConcurrently(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+
+	const (
+		oneKey = "d9d0ne4000000000000000000000000000000000000000000000000000000001"
+		twoKey = "d9dtw0400000000000000000000000000000000000000000000000000000002"
+	)
+	mustRun(t, f.Repo.Dir, "git", "push", "--quiet", "origin", "HEAD:refs/heads/epic/qeu")
+	// Two non-terminal siblings of this epic — runs that died without ever
+	// writing a terminal word, the exact siblings only their HOST can speak
+	// for — each with a draft waiting on the answer.
+	seedSibling(t, f.Repo, "r-one", "qeu", runstate.StateRunning,
+		titledSiblingFinding(oneKey, "r-one", "the first dead sibling's draft"))
+	seedSibling(t, f.Repo, "r-two", "qeu", runstate.StateRunning,
+		titledSiblingFinding(twoKey, "r-two", "the second dead sibling's draft"))
+
+	// The bound the test waits for an ask to arrive: generous for a local
+	// fake, and a WAIT ON A CONDITION (an arrival), never on work done.
+	const arrivalBound = 30 * time.Second
+	host := &gatingHost{arrived: make(chan string, 4), release: make(chan struct{})}
+	type bootOutcome struct {
+		r      *Reconciler
+		result *Result
+		err    error
+	}
+	done := make(chan bootOutcome, 1)
+	go func() {
+		r, result, err := f.run(f.Repo, fixtureOptions{runID: "r-next", claimHolder: host.ask})
+		done <- bootOutcome{r, result, err}
+	}()
+
+	var arrivals []string
+	for range 2 {
+		select {
+		case runID := <-host.arrived:
+			arrivals = append(arrivals, runID)
+		case <-time.After(arrivalBound):
+			close(host.release) // let any blocked ask finish rather than leak the run
+			t.Fatalf("only %d host ask(s) arrived in %s: the boot sweep asks siblings' hosts one at a time",
+				len(arrivals), arrivalBound)
+		}
+	}
+	// Both asks are in flight at once — the first never returned before the
+	// second arrived — which is the concurrency this test exists to pin.
+	close(host.release)
+
+	select {
+	case out := <-done:
+		if out.err != nil {
+			t.Fatalf("the run did not finish: %v", out.err)
+		}
+		if out.result.State != runstate.StateCompleted {
+			t.Fatalf("the run ended %s (failure %+v), want completed: both dead siblings' drafts were adopted and decided",
+				out.result.State, out.result.Failure)
+		}
+		mine := openRunStore(t, f.Repo.Dir, out.r.IntegrationBranch(), "r-next")
+		for _, key := range []string{oneKey, twoKey} {
+			if _, ok, err := mine.Finding(key); err != nil || !ok {
+				t.Errorf("finding %s of a host-dead sibling is not in this run's store: %v %v — both answers must be folded back into the sweep",
+					key, ok, err)
+			}
+		}
+	case <-time.After(5 * time.Minute):
+		t.Fatalf("the run never finished after both host asks were released")
 	}
 }

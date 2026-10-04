@@ -912,7 +912,7 @@ func (s *Store) load(path string, record any) (bool, error) {
 		return ok, err
 	}
 	if err := decodeRecord(raw, record); err != nil {
-		return false, fmt.Errorf("runstate: %s: %w", path, err)
+		return false, fmt.Errorf("runstate: %s: %w: %w", path, ErrUnreadable, err)
 	}
 	return true, nil
 }
