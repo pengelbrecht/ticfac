@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 53,
-  "state": "publishing",
-  "reason": "closing d9d behind the integrated gate on 81890be9e870",
-  "updated_at": "2026-10-04T18:34:21Z",
+  "sequence": 54,
+  "state": "running",
+  "reason": "d9d is closed",
+  "updated_at": "2026-10-04T18:34:34Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -38,7 +38,7 @@
     },
     {
       "tick_id": "d9d",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 6
     },
     {
