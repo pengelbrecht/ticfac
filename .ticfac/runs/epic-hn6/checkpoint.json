@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 31,
-  "state": "gating",
-  "reason": "running the integrated gate for 1tm on 43e17c4a4a6a",
-  "updated_at": "2026-10-04T17:19:38Z",
+  "sequence": 32,
+  "state": "publishing",
+  "reason": "closing 1tm behind the integrated gate on 43e17c4a4a6a",
+  "updated_at": "2026-10-04T17:23:57Z",
   "ticks": [
     {
       "tick_id": "v16",
