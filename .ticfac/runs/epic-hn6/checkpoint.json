@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 98,
-  "state": "running",
-  "reason": "c65 is running as attempt 17",
-  "updated_at": "2026-10-04T19:34:49Z",
+  "sequence": 99,
+  "state": "collecting",
+  "reason": "collecting s71 attempt 15",
+  "updated_at": "2026-10-04T19:34:55Z",
   "ticks": [
     {
       "tick_id": "v16",
