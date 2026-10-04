@@ -168,6 +168,72 @@ func TestWatchHoldAlertForACloudRunNamesTheRunItsStoreLivesAt(t *testing.T) {
 	}
 }
 
+// The settle branch of the same alert gets its own test against a cloud run
+// id (tick v2f, the finding of q8m): an attempt hold's release is addressed
+// by the run whose store carries the attempt — the factory's run_<hex> —
+// spelled as the flag, because the bare command's default (epic-<epic-id>)
+// opens a store a cloud run never wrote, and the attempt it names is not
+// there, so the command a person copies refuses while the hold stands. The
+// epic id comes off the factory's record, never a placeholder.
+func TestWatchHoldAlertForACloudAttemptNamesTheRunItsStoreLivesAt(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	cloudRun := cloudRunIDOf("e778")
+
+	at := time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC)
+	attempt := 2
+	feed := feedLine(t, runfeed.NewEvent(at, cloudRun, "rrl", &attempt, "dispatched",
+		"attempt 2 started as run-x/tick-rrl/attempt-2"))
+	feed += feedLine(t, runfeed.NewEvent(at.Add(time.Second), cloudRun, "rrl", &attempt, reconcile.StageRunHeld,
+		"attempt_unaddressed: nobody can say whether the attempt is running"))
+	feed += feedLine(t, runfeed.NewEvent(at.Add(2*time.Second), cloudRun, "", nil, reconcile.StageRunFinished,
+		"failed: rrl did not pass"))
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch request.Path {
+		case "/api/runs":
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}}
+		case "/api/runs/" + cloudRun:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}
+		case "/api/runs/" + cloudRun + "/events":
+			return 200, map[string]any{
+				"run_id": cloudRun, "state": "completed",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, cloudRun}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	// The release command carries the factory's own run id: the attempt lives
+	// in ITS store, not in the one the bare spelling defaults to.
+	release := fmt.Sprintf("ticfac settle epic1 rrl 2 --run-id %s --release", cloudRun)
+	if !strings.Contains(stderr.String(), release) {
+		t.Errorf("the cloud attempt hold's alert does not name the release addressed to the run's own store: %q",
+			stderr.String())
+	}
+	// The bare spelling is the refusal the alert exists to avoid: without the
+	// flag the command defaults to the epic's local store, and there is no
+	// such attempt in it.
+	if strings.Contains(stderr.String(), "ticfac settle epic1 rrl 2 --release") {
+		t.Errorf("the cloud attempt hold's alert names the bare settle, a command addressed to a store the "+
+			"attempt was never recorded under: %q", stderr.String())
+	}
+	// The sentence still leads with the tick's try and says why it is held.
+	if !strings.Contains(stderr.String(), "rrl try 1 (run dispatch #2)") ||
+		!strings.Contains(stderr.String(), "attempt_unaddressed") {
+		t.Errorf("the alert does not name the held attempt and why: %q", stderr.String())
+	}
+}
+
 // The '<tick>#<n>' prefix is the tick's own TRY (tick h58), not the run-wide
 // dispatch number the line's `attempt` field carries. The operator's run: 0ju
 // was dispatch 1, mrn 2, and w9b 3, 4 and 5 — so dispatch 5 is w9b#3, and a
