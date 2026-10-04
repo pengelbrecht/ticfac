@@ -228,8 +228,9 @@ jobs:
           echo "$PWD/node_modules/.bin" >> "$GITHUB_PATH"
 
       # The path check: does the factory already run DEPLOY_SHA's shipped tree?
-      # What ships is the Worker bundle and the image context (cloudflare/ and
-      # image/, embedded.go's factoryFS and sandboxFS), the Go the deploy
+      # What ships is the Worker bundle, the harness package it links and the
+      # image context (cloudflare/, harness/ and image/, embedded.go's
+      # factoryFS, harnessFS and sandboxFS), the Go the deploy
       # cross-compiles INTO the image (ticfac and ticfac-exec-subprocess:
       # cmd/ticfac*, internal/, the embed roots and the pins, contracts and
       # profiles they embed, go.mod/go.sum), and this workflow. Tests and test
@@ -282,6 +283,8 @@ jobs:
           paths=(
             .github/workflows/deploy-factory.yml
             cloudflare image
+            harness/src harness/package.json harness/pnpm-lock.yaml
+            harness/pnpm-workspace.yaml harness/tsconfig.json
             embedded.go go.mod go.sum factory.pin.json contracts.pin.json contracts
             profiles profiles-cloudflare-sandbox profiles-herdr
             cmd/ticfac cmd/ticfac-exec-subprocess internal

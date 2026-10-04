@@ -192,6 +192,33 @@
  * `GET /api/sandbox/attempts/:tick_id/:attempt` are the whole of it, and a
  * third route is a change to this contract that starts here.
  *
+ * ### The WorkerAgent routes (DECIDED, epic 43y tick xd3)
+ *
+ * That change: every worker of a run on the `do_v1` substrate is a
+ * WorkerAgent (worker-agent.ts) — the attempt's pi-durable conversation in a
+ * Durable Object of its own, its tools in its container. The two routes
+ * above answer from the agent for such a run: the start records the attempt
+ * on its agent (an agent already holding it is the adoption), and the state
+ * route answers the agent's phase — `running` until it settles, then the
+ * attempt's exit code, the finish phase's — copies its log by cursor, and
+ * releases its container once settled. The reclaim stops the agent before
+ * its container is destroyed (container-capacity.ts). Nothing about either
+ * route's contract changes for the caller.
+ *
+ * A hosted attempt has a live conversation, and two routes reach it, on the
+ * same run credential and the same identity (`?job_id=` as on the state
+ * route):
+ *
+ *   - `GET /api/sandbox/attempts/:tick_id/:attempt/watch` — a WebSocket: the
+ *     attempt's state, then the conversation's agent events (pi-durable
+ *     `watchEvents`, one batch per commit, a snapshot first) and its log as
+ *     they land; a `{"type":"steer","text":…}` message steers.
+ *   - `POST /api/sandbox/attempts/:tick_id/:attempt/steer` — `{"text": …,
+ *     "request_id"?: …}`, placed after the running tool round: `202
+ *     {submission}`, `409 not_conversing` when nothing is running to steer.
+ *
+ * Both answer `409 not_hosted` for a run whose workers are not WorkerAgents.
+ *
  * ### The lease (D4)
  *
  * `POST` verifies — never acquires — the project's dispatch lease, exactly as
@@ -212,6 +239,7 @@ import { sandboxBinding } from "./sandbox";
 import {
   AdoptionModelUnknownError,
   attemptJobSlot,
+  attemptSandboxName,
   d1JobLogs,
   d1JobRecords,
   InvalidSandboxNameError,
@@ -222,6 +250,7 @@ import {
   specJobID,
   startNamedAttempt,
 } from "./sandbox-executor";
+import { type WorkerAgentStub, workerAgentsFromEnv } from "./worker-agent";
 
 // ------------------------------------------------------------ the results ---
 
@@ -232,6 +261,8 @@ import {
  */
 export type SandboxDispatchResult =
   | { ok: true; status: number; body: Record<string, unknown> }
+  /** A response the door hands back whole: the watch route's WebSocket upgrade. */
+  | { ok: true; status: 101; response: Response }
   | { ok: false; status: number; error: string; detail: string };
 
 function refuse(status: number, error: string, detail: string): SandboxDispatchResult {
@@ -706,8 +737,132 @@ async function attemptStatusRoute(
     // The worker's output past its confirm window, copied on every look and
     // drained before a settled container is reclaimed (tick 86y).
     env.ARTIFACTS === undefined ? undefined : d1JobLogs(env.DB, env.ARTIFACTS, run.project),
+    // A run whose workers are WorkerAgents answers from the agent (tick xd3).
+    workerAgentsFromEnv(env),
   );
   return { ok: true, status: 200, body: status as unknown as Record<string, unknown> };
+}
+
+/** The class for a live-conversation route on a run whose workers are not WorkerAgents. */
+export const NOT_HOSTED = "not_hosted";
+
+/** The class for a steer the attempt cannot take: it is not conversing. */
+export const NOT_CONVERSING = "not_conversing";
+
+/**
+ * The attempt's WorkerAgent, for the routes that only a hosted attempt has —
+ * or the refusal: the run's workers are not WorkerAgents (`409 not_hosted`),
+ * or the deployment binds none.
+ */
+async function hostedAgent(
+  env: Env,
+  request: Request,
+  tickID: string,
+  attemptText: string,
+): Promise<
+  | { ok: true; agent: WorkerAgentStub; run_id: string }
+  | { ok: false; refusal: SandboxDispatchResult }
+> {
+  const authorized = await authorizeGatewayRequest(env, request);
+  if (!authorized.ok) return { ok: false, refusal: fromDenial(authorized.denial) };
+  const run = authorized.run;
+  if (!TICK_ID_PATTERN.test(tickID)) {
+    return {
+      ok: false,
+      refusal: refuse(
+        400,
+        "invalid_request",
+        "the tick id in the path is not a name this door reads",
+      ),
+    };
+  }
+  if (/^[1-9][0-9]*$/.test(attemptText) === false) {
+    return {
+      ok: false,
+      refusal: refuse(400, "invalid_request", "the attempt in the path must be a positive integer"),
+    };
+  }
+  const jobID = jobIDOf(run.run_id, new URL(request.url).searchParams.get("job_id") ?? undefined);
+  if (typeof jobID !== "string" && jobID !== undefined) return { ok: false, refusal: jobID };
+  const agents = workerAgentsFromEnv(env);
+  const hosting = agents === undefined ? null : await agents(run.run_id);
+  if (hosting === null) {
+    return {
+      ok: false,
+      refusal: refuse(
+        409,
+        NOT_HOSTED,
+        `run ${run.run_id}'s workers are not WorkerAgents (only a run on the do_v1 substrate, on a ` +
+          "deployment that binds WORKER_AGENTS, has a live conversation to watch or steer)",
+      ),
+    };
+  }
+  const name = attemptSandboxName(run.run_id, tickID, Number(attemptText), jobID);
+  return { ok: true, agent: hosting.agent(name), run_id: run.run_id };
+}
+
+/**
+ * `GET /api/sandbox/attempts/:tick_id/:attempt/watch` — a WebSocket onto the
+ * attempt's WorkerAgent: its state, the live conversation's agent events and
+ * its log as they are committed; a `{"type":"steer","text":…}` message steers.
+ */
+async function attemptWatchRoute(
+  env: Env,
+  request: Request,
+  tickID: string,
+  attemptText: string,
+): Promise<SandboxDispatchResult> {
+  if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+    return refuse(
+      426,
+      "upgrade_required",
+      "the watch route is a WebSocket: send Upgrade: websocket",
+    );
+  }
+  const found = await hostedAgent(env, request, tickID, attemptText);
+  if (!found.ok) return found.refusal;
+  return { ok: true, status: 101, response: await found.agent.fetch(request) };
+}
+
+/**
+ * `POST /api/sandbox/attempts/:tick_id/:attempt/steer` — `{"text": …,
+ * "request_id"?: …}`: operator input placed after the attempt's running tool
+ * round (pi-durable `whenBusy: "steer"`); the stuck nudge is one of these.
+ * `202 {submission}`, or `409 not_conversing` when there is no running
+ * conversation to place it in.
+ */
+async function attemptSteerRoute(
+  env: Env,
+  request: Request,
+  tickID: string,
+  attemptText: string,
+): Promise<SandboxDispatchResult> {
+  const found = await hostedAgent(env, request, tickID, attemptText);
+  if (!found.ok) return found.refusal;
+  const parsed = await jsonBody(request);
+  if (!parsed.ok) return parsed.refusal;
+  const text = parsed.raw.text;
+  if (!isProse(text, PROMPT_FIELD_PATTERN, PROMPT_FIELD_MAX_BYTES)) {
+    return refuse(
+      400,
+      "invalid_request",
+      `text must be the steer's UTF-8 text (line breaks allowed, at most ${PROMPT_FIELD_MAX_BYTES} bytes)`,
+    );
+  }
+  const requestID = parsed.raw.request_id;
+  if (
+    requestID !== undefined &&
+    (typeof requestID !== "string" || !PLAIN_FIELD_PATTERN.test(requestID))
+  ) {
+    return refuse(
+      400,
+      "invalid_request",
+      "request_id, when present, must be printable ASCII with no spaces (at most 512 characters)",
+    );
+  }
+  const steered = await found.agent.steer(text, requestID);
+  if (!steered.ok) return refuse(409, NOT_CONVERSING, steered.error);
+  return { ok: true, status: 202, body: { submission: steered.submission } };
 }
 
 /**
@@ -801,11 +956,24 @@ async function routeSandboxAttempt(
     }
     return attemptStatusRoute(env, request, segments[0]!, segments[1]!);
   }
+  if (segments.length === 3 && segments[2] === "watch") {
+    if (request.method !== "GET") {
+      return refuse(405, "method_not_allowed", "the watch route is a GET WebSocket upgrade");
+    }
+    return attemptWatchRoute(env, request, segments[0]!, segments[1]!);
+  }
+  if (segments.length === 3 && segments[2] === "steer") {
+    if (request.method !== "POST") {
+      return refuse(405, "method_not_allowed", "the steer route is POST");
+    }
+    return attemptSteerRoute(env, request, segments[0]!, segments[1]!);
+  }
   return refuse(
     404,
     "not_found",
-    "the sandbox dispatch door serves POST /api/sandbox/attempts and " +
-      "GET /api/sandbox/attempts/:tick_id/:attempt",
+    "the sandbox dispatch door serves POST /api/sandbox/attempts, " +
+      "GET /api/sandbox/attempts/:tick_id/:attempt, and for a hosted attempt " +
+      "GET …/:tick_id/:attempt/watch and POST …/:tick_id/:attempt/steer",
   );
 }
 

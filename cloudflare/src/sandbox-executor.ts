@@ -82,6 +82,12 @@ import {
   sandboxBinding,
 } from "./sandbox";
 import {
+  type WorkerAgentHosting,
+  type WorkerAgentResolver,
+  type WorkerAgentStub,
+  workerAgentsFromEnv,
+} from "./worker-agent";
+import {
   attemptLandingBranch,
   WORKER_COMMAND,
   type WorkerBootInput,
@@ -479,6 +485,13 @@ export type SandboxExecutorDeps = {
    * it ended. Absent means nothing continues the stream.
    */
   jobLogs?: SandboxJobLogs;
+  /**
+   * Which runs' attempts are hosted by a WorkerAgent (epic 43y, tick xd3,
+   * worker-agent.ts): asked per run, null for a run whose workers stay the
+   * container's own all-in-one process. Absent on a deployment that binds no
+   * WORKER_AGENTS.
+   */
+  agents?: WorkerAgentResolver;
 };
 
 // ------------------------------------------------------------ job logs ---
@@ -500,7 +513,7 @@ export type SandboxJobLogs = {
   /** Copies what the work process printed since the job's cursor. */
   drain(
     identity: SandboxJobIdentity,
-    sandbox: OrchestratorSandbox,
+    sandbox: Pick<OrchestratorSandbox, "readOutput">,
     processID: string,
   ): Promise<void>;
 };
@@ -563,7 +576,7 @@ export function d1JobLogs(db: D1Database, bucket: R2Bucket, project: string): Sa
 async function drainJobLog(
   logs: SandboxJobLogs | undefined,
   identity: SandboxJobIdentity,
-  sandbox: OrchestratorSandbox,
+  sandbox: Pick<OrchestratorSandbox, "readOutput">,
   processID: string,
 ): Promise<void> {
   if (logs === undefined) return;
@@ -682,6 +695,14 @@ async function startNamedAttemptUnchecked(
     title: spec.title,
   };
 
+  // A run whose workers are WorkerAgents (epic 43y, tick xd3): the attempt
+  // is the agent's, addressed by the same name, and the container is only
+  // where its tools run — asked nothing here.
+  const hosting = deps.agents === undefined ? null : await deps.agents(spec.run_id);
+  if (hosting !== null) {
+    return startHostedAttempt(deps, spec, hosting, { jobID, slot, name, payload });
+  }
+
   // Adoption first: a container already holding a live work process is this
   // attempt's, by the name nobody else would boot under, and starting a
   // second one beside it is how a run pays twice for one tick.
@@ -772,6 +793,118 @@ async function startNamedAttemptUnchecked(
         detail: spawned.detail,
       },
     },
+    adopted: false,
+  };
+}
+
+/**
+ * The process id a hosted attempt's log is drained under: the WorkerAgent's
+ * log is one stream per attempt, whatever container processes it ran.
+ */
+export const WORKER_AGENT_LOG_ID = "worker-agent";
+
+/**
+ * Starts one attempt on its WorkerAgent (epic 43y, tick xd3): the same
+ * identity, the same recorded boot, the same handle — but the attempt's
+ * boot, conversation and finish are the agent's to drive, and the door
+ * returns as soon as the agent has recorded it.
+ *
+ * An agent that already holds the attempt is an ADOPTION, for the same
+ * reason a live work process is one: a door retry must never start a second
+ * worker over a running one. Its handle names the model of the recorded boot
+ * (tick dyo), and the agent's own record when the boot record is missing.
+ */
+async function startHostedAttempt(
+  deps: SandboxExecutorDeps,
+  spec: AttemptSpec,
+  hosting: WorkerAgentHosting,
+  ids: {
+    jobID: string;
+    slot: string | undefined;
+    name: string;
+    payload: Omit<SandboxHandlePayload, "process_id" | "launched" | "detail" | "model" | "harness">;
+  },
+): Promise<{ handle: SandboxJobHandle; adopted: boolean }> {
+  const agent = hosting.agent(ids.name);
+  const handleOf = (boot: WorkerBootInput, model: string, detail: string): SandboxJobHandle => ({
+    schema_version: JOB_HANDLE_SCHEMA_VERSION,
+    job_id: ids.jobID,
+    attempt: spec.attempt,
+    executor: SANDBOX_EXECUTOR_NAME,
+    issued_at: new Date().toISOString(),
+    handle: {
+      ...ids.payload,
+      base_sha: boot.base_sha,
+      model,
+      harness: bootedHarness(boot),
+      // No one container process is the attempt: its boot, its tools and its
+      // finish are each their own, and the agent drives them.
+      process_id: null,
+      launched: true,
+      detail,
+    },
+  });
+
+  const state = await agent.state();
+  // An attempt the agent holds and has NOT settled is adopted; a settled one
+  // is started afresh below, as a fresh boot under a settled container's name
+  // is (its boot record replaces the old one and clears the settlement).
+  if (state.phase !== "absent" && state.phase !== "settled") {
+    const recorded = await deps.boots.modelOf(spec);
+    const runningModel =
+      recorded !== null && recorded.trim() !== "" ? recorded : (state.model ?? "");
+    if (runningModel.trim() === "") throw new AdoptionModelUnknownError(spec);
+    const boot = await deps.boot(spec);
+    return {
+      handle: handleOf(
+        boot,
+        runningModel,
+        `adopted: this attempt's WorkerAgent already holds it (${state.phase})`,
+      ),
+      adopted: true,
+    };
+  }
+
+  const boot = await deps.boot(spec);
+  // Recorded BEFORE the agent is started, as a container boot is: an agent
+  // can never hold an attempt with no durable record of what it was booted on.
+  await deps.boots.record({
+    run_id: spec.run_id,
+    tick_id: spec.tick_id,
+    attempt: spec.attempt,
+    job: ids.slot ?? "",
+    model: bootedModel(boot),
+    at: new Date().toISOString(),
+  });
+  // The agent's log is one stream per attempt, from its start: the state
+  // route continues it from 0 (a fresh start under a settled name included).
+  if (deps.jobLogs !== undefined) {
+    try {
+      await deps.jobLogs.started(spec, WORKER_AGENT_LOG_ID, 0);
+    } catch (error) {
+      console.error(
+        `factory sandbox door: could not reset ${ids.name}'s log cursor: ${String(error)}`,
+      );
+    }
+  }
+  await agent.start({
+    name: ids.name,
+    tick: spec.tick_id,
+    role: spec.role,
+    env: workerBootEnv(boot),
+    model: bootedModel(boot),
+    repoUrl: boot.repo_url,
+    baseSha: boot.base_sha,
+    ...(boot.harness_budget_ms === undefined ? {} : { wallMs: boot.harness_budget_ms }),
+    boot: hosting.boot(ids.name),
+  });
+  return {
+    handle: handleOf(
+      boot,
+      bootedModel(boot),
+      "started: the attempt's WorkerAgent drives it on pi-durable — the container's boot phase, " +
+        "the conversation, the finish phase",
+    ),
     adopted: false,
   };
 }
@@ -922,6 +1055,7 @@ export async function namedAttemptStatus(
   now: () => string = () => new Date().toISOString(),
   records?: SandboxJobRecords,
   logs?: SandboxJobLogs,
+  agents?: WorkerAgentResolver,
 ): Promise<AttemptStatus> {
   // The records first, and the container only when they cannot answer
   // (epic hn6's second cloud run). Through the SDK, ANY call on a container
@@ -944,6 +1078,13 @@ export async function namedAttemptStatus(
     identity.attempt,
     identity.job_id,
   );
+  // A hosted attempt (epic 43y, tick xd3) answers from its WorkerAgent, never
+  // from its container: the container is only where its tools run, and is
+  // stopped and restored under a live attempt by design.
+  const hosting = agents === undefined ? null : await agents(identity.run_id);
+  if (hosting !== null) {
+    return hostedAttemptStatus(hosting.agent(name), identity, jobID, now, records, logs);
+  }
   const sandbox = await namedSandbox(binding, name);
   // A booted, unsettled job whose container is NOT RUNNING has no work
   // process anywhere: a process lives only inside its container, and the
@@ -1001,6 +1142,56 @@ export async function namedAttemptStatus(
     } catch (error) {
       console.error(
         `factory sandbox door: could not reclaim settled container ${name}: ${String(error)}`,
+      );
+    }
+  }
+  return statusFromProcess(settled, jobID, now);
+}
+
+/**
+ * A hosted attempt's state, from its WorkerAgent (epic 43y, tick xd3) — the
+ * same job_status vocabulary a container's work process answers in:
+ *
+ *  - an agent holding no attempt is `lost` (booted, never started: the start
+ *    died between the boot record and the agent) — not terminal, for the
+ *    contract's reason: a start under the same identity starts it;
+ *  - an unsettled attempt is `running`, its log copied on every look;
+ *  - a settled one is `succeeded`/`failed` with the attempt's exit code —
+ *    the finish phase's, which is what the all-in-one's exit code was —
+ *    recorded first, then its container destroyed: its work is on its
+ *    branch, and collect reads git.
+ */
+async function hostedAttemptStatus(
+  agent: WorkerAgentStub,
+  identity: SandboxJobIdentity,
+  jobID: string,
+  now: () => string,
+  records: SandboxJobRecords | undefined,
+  logs: SandboxJobLogs | undefined,
+): Promise<AttemptStatus> {
+  const state = await agent.state();
+  if (state.phase === "absent") return statusFromProcess(null, jobID, now);
+  await drainJobLog(
+    logs,
+    identity,
+    { readOutput: (_id, offset) => agent.readLog(offset) },
+    WORKER_AGENT_LOG_ID,
+  );
+  if (state.phase !== "settled") {
+    return statusFromProcess({ state: "running", exit_code: null }, jobID, now);
+  }
+  const settled = {
+    state: state.exit_code === 0 ? ("completed" as const) : ("failed" as const),
+    exit_code: state.exit_code,
+  };
+  if (records !== undefined) {
+    await records.settle(identity, settled);
+    try {
+      await agent.release();
+    } catch (error) {
+      console.error(
+        `factory sandbox door: could not release ${identity.tick_id} attempt ${identity.attempt}'s ` +
+          `container: ${String(error)}`,
       );
     }
   }
@@ -1326,6 +1517,7 @@ export function sandboxExecutorDepsFromEnv(
     return { refusal: missing.join("; ") };
   }
 
+  const agents = workerAgentsFromEnv(env);
   const git = planSandboxGit({
     grade: "write",
     project: input.project,
@@ -1361,6 +1553,8 @@ export function sandboxExecutorDepsFromEnv(
             jobLogs: d1JobLogs(env.DB as D1Database, env.ARTIFACTS, input.project),
           }),
       boots: d1BootRecord(env.DB),
+      // Every worker of a do_v1 run is a WorkerAgent (epic 43y, tick xd3).
+      ...(agents === undefined ? {} : { agents }),
       boot: async (spec) => {
         const slot = attemptJobSlot(spec.run_id, spec.tick_id, spec.attempt, spec.job_id);
         // Minted per dispatch, revoking NOTHING (tick 53s): the run's workers

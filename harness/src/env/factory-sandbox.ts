@@ -306,7 +306,20 @@ export class FactorySandboxEnv implements ExecutionEnv {
    * bash: untracked, un-nonce'd, and the door's output bound applies.
    */
   hostShell(): HostShell {
-    return { execLine: (line, vars) => this.short(line, vars) };
+    // AT the workspace root: the door runs a command in the container's own
+    // process directory (the factory's /workspace), and the worker's checkout
+    // is elsewhere (TICKS_WORKDIR, /work/repo by default) — every wip
+    // checkpoint of the xd3 staging run failed "not in a git directory"
+    // until the line said where it runs. Created when missing: a fresh
+    // container after a loss has no checkout directory at all, and the
+    // restore is what rebuilds it.
+    return {
+      execLine: (line, vars) =>
+        this.short(`mkdir -p "$TICFAC_WORKSPACE" && cd "$TICFAC_WORKSPACE" || exit 1\n${line}`, {
+          ...vars,
+          TICFAC_WORKSPACE: this.cwd,
+        }),
+    };
   }
 
   /** Writes `content` as `path`, in chunks: one env var's value is bounded. */

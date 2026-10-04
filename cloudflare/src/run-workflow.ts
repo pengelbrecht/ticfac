@@ -144,6 +144,7 @@ import {
   sandboxName,
   terminalExitReason,
 } from "./sandbox";
+import { workerAgentsFromEnv } from "./worker-agent";
 import { workerHarness, workerModel } from "./worker-boot";
 
 // ------------------------------------------------------------- the shape ---
@@ -2216,7 +2217,10 @@ export async function finalize(
   // is where they are given back: each live worker is asked to stop and push
   // (its gateway token is already revoked, so the push is all it can still
   // do), given the grace window, destroyed, and the reclaim recorded.
+  // A run's WorkerAgents (epic 43y, tick xd3) are stopped through the agent.
+  const agents = workerAgentsFromEnv(env);
   await reclaimRunWorkers(env.DB, sandboxBinding(env), params.run_id, {
+    ...(agents === undefined ? {} : { agents }),
     reason: `run_ended:${outcome.state}`,
   });
 

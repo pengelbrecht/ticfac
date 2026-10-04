@@ -16,6 +16,9 @@ importers:
       '@cloudflare/sandbox':
         specifier: 0.12.7
         version: 0.12.7
+      ticfac-harness:
+        specifier: link:../harness
+        version: link:../harness
     devDependencies:
       '@biomejs/biome':
         specifier: 2.5.13
