@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 107,
-  "state": "integrating",
-  "reason": "integrating onv attempt 18 into epic/hn6",
-  "updated_at": "2026-10-04T20:04:50Z",
+  "sequence": 108,
+  "state": "gating",
+  "reason": "running the integrated gate for onv on 96567449369f",
+  "updated_at": "2026-10-04T20:05:03Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -102,7 +102,7 @@
     },
     {
       "tick_id": "onv",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 18
     }
   ],
