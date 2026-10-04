@@ -158,7 +158,12 @@ const claims: Record<string, boolean> = {
   "the fix is on the pushed branch": /Hello, world/.test(greet.output),
   "the fixed script prints Hello, world": runGreet.output.trim() === "Hello, world",
   "the report is on the pushed branch with a STATUS line": /STATUS: /.test(report.output),
-  "wip checkpoints landed on the branch after tool rounds": /wip: tool round/.test(history.output),
+  // Snapshots ride the branch only while the attempt runs: the host retires
+  // the last one before the finish, so the evidence is their pushes.
+  "wip checkpoints were pushed to the attempt branch after tool rounds":
+    /wip checkpoint [0-9a-f]+ pushed/.test(log),
+  "the agent's own commits survived the checkpoints (no wip on the final branch)":
+    !/wip: tool round/.test(history.output) && history.output.trim().split("\n").length >= 2,
   "a watcher saw the conversation live": eventTypes.has("snapshot") && watched > 2,
   "a steer was placed while it worked": (steered as { type?: string } | null)?.type === "steered",
   "the steer's edit is on the pushed branch": /proofed by the WorkerAgent/.test(readme.output),
