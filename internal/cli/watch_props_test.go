@@ -13,10 +13,11 @@ package cli
 //	    frame(m), are a subsequence of plan order; and the ids the two frames
 //	    m and advance(m) both show keep their order across the advance.
 //	P2  needs-you is never empty while a hold exists: a hold is announced —
-//	    with its clearing command wherever the pane seats the whole line —
-//	    and no frame with a hold says "needs you: nothing"; a run with no
-//	    hold says exactly that (at height 0 or ≥ 8, where the header always
-//	    survives the height fit).
+//	    with its clearing command wherever the pane seats the whole line, and
+//	    wrapped under the announcement where it does not (tick 9um), so a
+//	    shown hold is whole — every word of its command — and no frame with a
+//	    hold says "needs you: nothing"; a run with no hold says exactly that
+//	    (at height 0 or ≥ 8, where the header always survives the height fit).
 //	P3  never $0.00 for unmetered spend: when the cost says "not metered"
 //	    anywhere, no fabricated zero shows, and the cost line reads whole
 //	    wherever the pane seats it.
@@ -756,11 +757,13 @@ func propRowsNeverReorder(frame []string, advanceFrame func() []string, m, _ sta
 // "needs you: nothing". A run with a hold never says that, announces the
 // hold, and shows the whole hold line — what and clearing command — wherever
 // the pane seats it (width 0, the unknown width, draws everything, so the
-// whole line is pinned there always). A narrower pane truncates the line to
-// fit (P4 pins the fit); there the property holds the announcement — the
-// invariant it is named for — because demanding a 100-column command inside a
-// 30-column pane would demand the impossible, not honesty.
-func propNeedsYou(frame []string, _ func() []string, m, _ statusmodel.Model, width, height, _ int) error {
+// whole line is pinned there always). Where the pane does not seat the line,
+// the renderer wraps it under the announcement instead of truncating it
+// (tick 9um), and a hold is then shown whole or not at all: whenever its
+// announcement line is in the frame, every line of its block is, and every
+// word of the clearing command with them — a hold whose command fell off
+// the pane's edge is the defect the wrap exists to prevent.
+func propNeedsYou(frame []string, _ func() []string, m, _ statusmodel.Model, width, height, unbounded int) error {
 	joined := strings.Join(frame, "\n")
 	var holds []statusmodel.Attention
 	for _, a := range m.Attention {
@@ -782,18 +785,74 @@ func propNeedsYou(frame []string, _ func() []string, m, _ statusmodel.Model, wid
 	if !strings.Contains(joined, "needs you:") {
 		return fmt.Errorf("a hold exists and no line announces it")
 	}
-	for _, a := range holds {
-		want := "needs you: " + a.What
-		if a.UnblockCommand != nil && *a.UnblockCommand != "" {
-			want += " — " + *a.UnblockCommand
+	if !strings.Contains(joined, "needs you:") {
+		return fmt.Errorf("a hold exists and no line announces it")
+	}
+	if height <= 0 || height >= unbounded {
+		// The pane seats the whole frame — nothing is folded away — so every
+		// hold whose line the width seats pins that line exactly.
+		for _, a := range holds {
+			want := "needs you: " + a.What
+			if a.UnblockCommand != nil && *a.UnblockCommand != "" {
+				want += " — " + *a.UnblockCommand
+			}
+			if width <= 0 || width >= ansi.StringWidth(want) {
+				if !strings.Contains(joined, want) {
+					return fmt.Errorf("the hold line %q is missing where the pane seats it", want)
+				}
+			}
 		}
-		if width <= 0 || width >= ansi.StringWidth(want) {
-			if !strings.Contains(joined, want) {
-				return fmt.Errorf("the hold line %q is missing where the pane seats it", want)
+	}
+	// Where the pane does not seat a line, the renderer wraps it under the
+	// announcement (tick 9um), and a hold is then shown whole or not at all:
+	// whenever its announcement line is in the frame, every line of its
+	// block is, and every word of the clearing command with them — a hold
+	// whose command fell off the pane's edge is the defect the wrap exists
+	// to prevent. The blocks sit in the frame in the model's order; walking
+	// them in order keeps a hold whose twin shares its announcement from
+	// borrowing the twin's lines, and lets the height fold's whole-block
+	// drops pass: a hold the fold dropped has no announcement in the frame
+	// and asks nothing.
+	pos := 0
+	for _, a := range holds {
+		block := dashboardHoldLines(a, plainStyles(), width)
+		at := propLineFrom(frame, block[0], pos)
+		if at < 0 {
+			continue // the height fold dropped the block whole
+		}
+		pos = at + 1
+		for _, line := range block[1:] {
+			if pos >= len(frame) || frame[pos] != line {
+				return fmt.Errorf("the hold's announcement shows but its wrapped line %q is missing", line)
+			}
+			pos++
+		}
+		if a.UnblockCommand == nil || *a.UnblockCommand == "" {
+			continue
+		}
+		if width <= 0 || len(block) == 1 {
+			// The pane seats the whole line: it was the one line it always
+			// was, block[0] among them.
+			continue
+		}
+		for _, word := range strings.Fields(*a.UnblockCommand) {
+			if !strings.Contains(joined, word) {
+				return fmt.Errorf("the clearing command's word %q fell out of the wrapped hold", word)
 			}
 		}
 	}
 	return nil
+}
+
+// propLineFrom returns the index of the first line at or after start that
+// equals want, -1 when none does.
+func propLineFrom(frame []string, want string, start int) int {
+	for i := start; i < len(frame); i++ {
+		if frame[i] == want {
+			return i
+		}
+	}
+	return -1
 }
 
 // propCostHonest is P3: when the cost says "not metered" anywhere, no

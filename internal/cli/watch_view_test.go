@@ -24,6 +24,7 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -449,6 +450,122 @@ func TestDashboardNeedsYou(t *testing.T) {
 	coloured = strings.Join(renderWatchFrame(m, ansiWatchStyles(), 0, 0, ""), "\n")
 	if !strings.Contains(coloured, "\x1b[33m"+want+"\x1b[0m") {
 		t.Errorf("the hold line is not amber:\n%s", coloured)
+	}
+}
+
+// TestDashboardHoldCommandSurvivesNarrowPanes: a hold's clearing command
+// cannot fall out of the dashboard because the pane is narrow (tick 9um).
+// Where the pane seats the whole line it renders as the one line it always
+// was; where it does not, the renderer wraps under the announcement — the
+// what continues indented and the command keeps every one of its words on
+// lines of its own — instead of truncating the line and dropping the
+// command off the pane's edge (the old renderer rendered the line below at
+// width 30 as "needs you: attempt 2 of t2 str").
+func TestDashboardHoldCommandSurvivesNarrowPanes(t *testing.T) {
+	t.Parallel()
+	m := dashboardFixture()
+	m.Attention = []statusmodel.Attention{{
+		Kind:           statusmodel.WaitHeldForPerson,
+		What:           "attempt 2 of t2 struck out: the refusal the run recorded",
+		NeedsPerson:    true,
+		UnblockCommand: ptr(`ticfac settle rmod t2 2 --release "<who>"`),
+	}}
+	want := "needs you: attempt 2 of t2 struck out: the refusal the run recorded — ticfac settle rmod t2 2 --release \"<who>\""
+
+	// A pane that seats the line keeps it whole, exactly as it was.
+	for _, width := range []int{0, 120} {
+		frame := renderWatchFrame(m, plainStyles(), width, 0, "")
+		if !slices.Contains(frame, want) {
+			t.Errorf("at width %d the hold line does not render whole:\n%s", width, strings.Join(frame, "\n"))
+		}
+	}
+
+	// A 30-column pane: the wrap keeps the announcement and every word of
+	// the command, each line inside the pane, nothing cut mid-word.
+	frame := renderWatchFrame(m, plainStyles(), 30, 0, "")
+	joined := strings.Join(frame, "\n")
+	wrapped := []string{
+		"needs you: attempt 2 of t2",
+		"  struck out: the refusal the",
+		"  run recorded",
+		"  ticfac settle rmod t2 2",
+		`  --release "<who>"`,
+	}
+	for i, line := range wrapped {
+		if !slices.Contains(frame, line) {
+			t.Errorf("at width 30 the hold's wrapped line %d is missing:\n%s", i+1, joined)
+		}
+	}
+	for _, word := range []string{"ticfac", "settle", "rmod", "--release", `"<who>"`} {
+		if !strings.Contains(joined, word) {
+			t.Errorf("at width 30 the clearing command lost %q:\n%s", word, joined)
+		}
+	}
+	for i, line := range frame {
+		if w := ansi.StringWidth(line); w > 30 {
+			t.Errorf("frame line %d is %d cells wide in a 30-column pane: %q", i, w, line)
+		}
+	}
+	// The wrap colours every line the hold carries, not only its first.
+	coloured := renderWatchFrame(m, ansiWatchStyles(), 30, 0, "")
+	for i, line := range wrapped {
+		if !slices.Contains(coloured, "\x1b[33m"+line+"\x1b[0m") {
+			t.Errorf("the hold's wrapped line %d is not amber:\n%s", i+1, strings.Join(coloured, "\n"))
+		}
+	}
+}
+
+// TestDashboardShortPaneKeepsHoldBlocksWhole: when a short pane cannot carry
+// every hold, the height fit drops a later hold's block whole rather than
+// cutting one in half — a hold shown without the command that clears it is
+// the defect the wrap exists to prevent (tick 9um), so what the frame shows
+// of a hold is all of it, and a hold that does not fit is not shown at all.
+func TestDashboardShortPaneKeepsHoldBlocksWhole(t *testing.T) {
+	t.Parallel()
+	m := dashboardFixture()
+	m.Attention = []statusmodel.Attention{
+		{
+			Kind:           statusmodel.WaitHeldForPerson,
+			What:           "attempt 2 of t2 struck out: the refusal the run recorded",
+			NeedsPerson:    true,
+			UnblockCommand: ptr(`ticfac settle rmod t2 2 --release "<who>"`),
+		},
+		{
+			Kind:           statusmodel.WaitHeldForPerson,
+			What:           "a findings draft on t2 waits for triage",
+			NeedsPerson:    true,
+			UnblockCommand: ptr("ticfac triage rmod"),
+		},
+	}
+	frame := renderWatchFrame(m, plainStyles(), 30, 8, "")
+	joined := strings.Join(frame, "\n")
+
+	// The first hold fits the pane's height and shows whole, command and
+	// all.
+	for _, line := range []string{
+		"needs you: attempt 2 of t2",
+		"  struck out: the refusal the",
+		"  run recorded",
+		"  ticfac settle rmod t2 2",
+		`  --release "<who>"`,
+	} {
+		if !slices.Contains(frame, line) {
+			t.Errorf("the first hold's wrapped line %q is missing:\n%s", line, joined)
+		}
+	}
+	// The second hold does not fit: it is dropped whole — no announcement
+	// without the command under it, no half a block.
+	for _, line := range []string{
+		"needs you: a findings draft on",
+		"  t2 waits for triage",
+		"  ticfac triage rmod",
+	} {
+		if slices.Contains(frame, line) {
+			t.Errorf("the second hold's block was cut rather than dropped: %q:\n%s", line, joined)
+		}
+	}
+	if got := len(frame); got > 8 {
+		t.Errorf("a 8-line pane rendered %d lines:\n%s", got, joined)
 	}
 }
 

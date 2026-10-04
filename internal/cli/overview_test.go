@@ -1049,9 +1049,10 @@ func TestTheBareOverviewHeadlineMatchesWatch(t *testing.T) {
 		_, block := overviewBlock(out, runID)
 		// The watch's own lines for the same model, at the width the
 		// non-TTY stdout lays out at — the headline, then the attention
-		// lines the watch shows under it.
+		// lines the watch shows under it, wrapped to the width the two-space
+		// indent leaves them.
 		want := dashboardHeadline(model, plainStyles(), overviewHeadlineFallbackWidth)
-		want = append(want, dashboardAttentionLines(model, plainStyles())...)
+		want = append(want, dashboardAttentionLines(model, plainStyles(), overviewHeadlineFallbackWidth-2)...)
 		if len(block) != len(want)-1 {
 			t.Fatalf("%s's row carries %d headline lines, want the watch's %d:\n got %q\nwant %q",
 				runID, len(block), len(want)-1, block, want[1:])
