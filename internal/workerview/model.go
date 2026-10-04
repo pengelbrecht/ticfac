@@ -49,6 +49,11 @@ type Item struct {
 	// stream did not say.
 	At time.Time
 
+	// ID is the item's identity in the conversation — its entry and its
+	// place in it, or the note's sequence — stable across the snapshots a
+	// re-attaching watcher is sent, so a stream prints each item once.
+	ID string
+
 	// entry is an input's conversation entry, so a steer submission that
 	// lands after it can relabel it.
 	entry int64
@@ -113,6 +118,7 @@ type Model struct {
 	Heartbeat Heartbeat
 
 	attached     bool
+	notes        int // notes made so far, for their IDs
 	seen         map[int64]bool
 	partial      []block        // the in-flight assistant message; nil between generations
 	steerSubmits map[int64]bool // submission ids queued as steers
@@ -278,17 +284,17 @@ func (m *Model) apply(e event, now time.Time) {
 		m.Live = false
 	case "auto_retry_start":
 		m.Retry = e.ErrorMessage
-		m.Items = append(m.Items, Item{Kind: KindNote, IsError: true, At: now,
+		m.note(Item{Kind: KindNote, IsError: true, At: now,
 			Text: fmt.Sprintf("the model call failed; retry %d: %s", e.Attempt, oneLine(e.ErrorMessage))})
 	case "auto_retry_end":
 		m.Retry = ""
 	case "task_failed":
 		var text string
 		_ = json.Unmarshal(e.Message, &text)
-		m.Items = append(m.Items, Item{Kind: KindNote, IsError: true, At: now,
+		m.note(Item{Kind: KindNote, IsError: true, At: now,
 			Text: fmt.Sprintf("%s failed: %s", e.Kind, oneLine(text))})
 	case "compaction_start":
-		m.Items = append(m.Items, Item{Kind: KindNote, At: now, Text: "compacting the context (" + e.Reason + ")"})
+		m.note(Item{Kind: KindNote, At: now, Text: "compacting the context (" + e.Reason + ")"})
 	case "usage_changed":
 		m.usage(e.Usage)
 	case "agent_changed":
@@ -304,6 +310,11 @@ func (m *Model) settle(en entry) {
 		return
 	}
 	m.seen[en.ID] = true
+	n := 0
+	id := func() string {
+		n++
+		return fmt.Sprintf("%d.%d", en.ID, n)
+	}
 	for _, msg := range en.Model {
 		at := time.Time{}
 		if msg.Timestamp > 0 {
@@ -315,7 +326,7 @@ func (m *Model) settle(en entry) {
 			if m.steerEntries[en.ID] {
 				kind = KindSteer
 			}
-			m.Items = append(m.Items, Item{Kind: kind, Text: msg.text(), At: at, entry: en.ID})
+			m.Items = append(m.Items, Item{Kind: kind, Text: msg.text(), At: at, ID: id(), entry: en.ID})
 		case "assistant":
 			m.Heartbeat.ModelCalls++
 			for _, b := range msg.blocks() {
@@ -326,14 +337,14 @@ func (m *Model) settle(en entry) {
 						text = "(redacted)"
 					}
 					if strings.TrimSpace(text) != "" {
-						m.Items = append(m.Items, Item{Kind: KindThinking, Text: text, At: at})
+						m.Items = append(m.Items, Item{Kind: KindThinking, Text: text, At: at, ID: id()})
 					}
 				case "text":
 					if strings.TrimSpace(b.Text) != "" {
-						m.Items = append(m.Items, Item{Kind: KindText, Text: b.Text, At: at})
+						m.Items = append(m.Items, Item{Kind: KindText, Text: b.Text, At: at, ID: id()})
 					}
 				case "toolCall":
-					call := Item{Kind: KindToolCall, Tool: b.Name, CallID: b.ID, Args: summarizeArgs(b.Name, b.Arguments), At: at}
+					call := Item{Kind: KindToolCall, Tool: b.Name, CallID: b.ID, Args: summarizeArgs(b.Name, b.Arguments), At: at, ID: id()}
 					m.Items = append(m.Items, call)
 					m.Heartbeat.ToolCalls++
 					last := call
@@ -341,17 +352,24 @@ func (m *Model) settle(en entry) {
 				}
 			}
 			if msg.StopReason == "error" && msg.ErrorMessage != "" {
-				m.Items = append(m.Items, Item{Kind: KindNote, IsError: true, At: at,
+				m.Items = append(m.Items, Item{Kind: KindNote, IsError: true, At: at, ID: id(),
 					Text: "the model answered with an error: " + oneLine(msg.ErrorMessage)})
 			}
 		case "toolResult":
 			m.Items = append(m.Items, Item{Kind: KindToolResult, Tool: msg.ToolName, CallID: msg.ToolCallID,
-				Text: msg.text(), IsError: msg.IsError, At: at})
+				Text: msg.text(), IsError: msg.IsError, At: at, ID: id()})
 		}
 		if at.After(m.Heartbeat.LastActivity) {
 			m.Heartbeat.LastActivity = at
 		}
 	}
+}
+
+// note appends the harness's own word, with an identity no snapshot reuses.
+func (m *Model) note(it Item) {
+	m.notes++
+	it.ID = fmt.Sprintf("note-%d", m.notes)
+	m.Items = append(m.Items, it)
 }
 
 // relabelSteer marks an already-settled input as the steer it was: the
