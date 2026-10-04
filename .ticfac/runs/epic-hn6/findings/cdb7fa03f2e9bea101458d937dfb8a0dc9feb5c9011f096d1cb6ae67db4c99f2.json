@@ -12,8 +12,11 @@
   "attempt": 14,
   "done_item": "A1",
   "demonstrating_check": "go test -run TestDashboardEpicStateGolden ./internal/cli/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T19:25:26Z",
+  "triaged_at": "2026-10-04T19:25:41Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing onv",
+  "promoted_as": "onv",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "qwb",
