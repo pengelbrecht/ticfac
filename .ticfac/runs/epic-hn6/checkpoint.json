@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 4,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for v16",
-  "updated_at": "2026-10-04T16:15:15Z",
+  "sequence": 5,
+  "state": "publishing",
+  "reason": "closing v16 behind its validated review-epic answer",
+  "updated_at": "2026-10-04T16:20:24Z",
   "ticks": [
     {
       "tick_id": "v16",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
