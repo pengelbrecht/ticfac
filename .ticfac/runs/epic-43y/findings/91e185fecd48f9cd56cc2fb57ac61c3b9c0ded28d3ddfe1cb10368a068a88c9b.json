@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "4fs",
   "attempt": 8,
-  "status": "proposed",
+  "status": "fixed",
   "proposed_at": "2026-10-04T16:03:20Z",
+  "triaged_at": "2026-10-04T16:03:28Z",
+  "triaged_by": "ticfac run epic-43y applying the tracker edit the finding carries",
+  "fixed_as": "3931332d790d21cbd31678c7b63c017002737845",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "4fs",
