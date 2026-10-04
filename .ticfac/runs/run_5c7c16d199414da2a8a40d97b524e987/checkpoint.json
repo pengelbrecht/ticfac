@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
   "epic_id": "hn6",
-  "sequence": 28,
-  "state": "integrating",
-  "reason": "integrating u4l attempt 3 into epic/hn6",
-  "updated_at": "2026-10-04T01:07:29Z",
+  "sequence": 29,
+  "state": "gating",
+  "reason": "running the integrated gate for u4l on cafcdfdff831",
+  "updated_at": "2026-10-04T01:07:36Z",
   "ticks": [
     {
       "tick_id": "gmo",
