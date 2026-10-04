@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
   "epic_id": "hn6",
-  "sequence": 80,
-  "state": "dispatching",
-  "reason": "dispatching l1t as attempt 14",
-  "updated_at": "2026-10-04T04:30:24Z",
+  "sequence": 81,
+  "state": "running",
+  "reason": "l1t is running as attempt 14",
+  "updated_at": "2026-10-04T04:30:38Z",
   "ticks": [
     {
       "tick_id": "gmo",
@@ -77,7 +77,8 @@
     },
     {
       "tick_id": "l1t",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 14
     }
   ],
   "provenance": {
