@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 5,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "ulw/qxj add --run-id run_<hex> so the store opens, but settle then calls addressForSettlement, which requires the attempt's executor state on the machine running settle; a cloud attempt's state lives in the factory container, so the command the header prints refuses with 'this host holds no state … nothing to release'. Tests compare strings only. Needs a factory-side release or a different named command for cloud holds.\nevidence: internal/reconcile/settle.go:494-499; internal/reconcile/settle_command.go:18\n\nticfac run epic-hn6 created this tick by absorbing the finding d05163618e902c8f14a05d6f98301a773e866e7055779be8dc504b092d8115a4 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/d05163618e902c8f14a05d6f98301a773e866e7055779be8dc504b092d8115a4.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "bd5",
+    "title": "A cloud attempt hold's printed settle command still cannot release it"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.87,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.01,
+      "design": 0.9,
+      "diagnosis": 0.08,
+      "mechanical": 0.01,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1324,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T16:22:19Z",
+  "answered_at": "2026-10-04T16:22:19Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "bd5",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "82c31d59e64f946ae2478294e53fa5137700b740",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
