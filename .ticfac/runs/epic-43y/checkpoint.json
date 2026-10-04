@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 3,
-  "state": "running",
-  "reason": "92k is running as attempt 1",
-  "updated_at": "2026-10-04T12:01:36Z",
+  "sequence": 4,
+  "state": "collecting",
+  "reason": "collecting 92k attempt 1",
+  "updated_at": "2026-10-04T12:46:15Z",
   "ticks": [
     {
       "tick_id": "92k",
