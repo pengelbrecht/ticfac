@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 13,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The durable local host landed on the harness substrate (the subprocess executor, which spawns headless workers per worktree). But substrate=auto on this host resolves to HERDR, whose agents are interactive CLIs defined in the operator's own herdr config — a herdr agent template is static, so per-attempt state (the worker.json path, the storage, the steer socket) cannot ride one, and pi-durable is a headless host anyway. Until a herdr-side design exists (a herdr agent kind that shells the Node entry with per-attempt arguments, or runs pinning substrate=harness), a local epic run on the herdr substrate runs its non-frontier workers on the pi CLI, not on the harness. The acceptance's real local run can pin substrate=harness today; the alternative is an operator decision about whether herdr hosts pi-durable at all, given its agents are operator-configured outside this repository.\nevidence: internal/exec/herdr/executor.go (Options.Kind — a herdr agent kind); internal/runconfig/substrate.go (Decide: auto → herdr when the probe finds it); this tick's diff touches only internal/exec/subprocess\n\nticfac run epic-43y created this tick by absorbing the finding 4be73478eabc8322b4487fc09a417a0370ab61940a04c7e2ba520bed1270acfb (reported by run-epic-43y/tick-hpk/attempt-9): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/4be73478eabc8322b4487fc09a417a0370ab61940a04c7e2ba520bed1270acfb.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "2q5",
+    "title": "Herdr local runs still run the pi CLI; pi-durable hosting there needs a design"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.98,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0,
+      "design": 0.99,
+      "diagnosis": 0.01,
+      "mechanical": 0,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1459,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T18:40:06Z",
+  "answered_at": "2026-10-04T18:40:06Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "2q5",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "bfcc99e9054424e380bd89138261c252189645b5",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
