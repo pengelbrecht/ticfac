@@ -1,0 +1,14 @@
+{
+  "id": "i3h",
+  "title": "A restored cloud workspace re-runs the repository's setup",
+  "description": "WorkerAttemptHost builds its WorkspaceGit without a setup command, so a container lost mid-turn is restored to the last wip snapshot without the repository's [sandbox] setup (dependency installs). image/worker.sh has no entry that runs only repo_setup; add one (e.g. ticks-worker --setup) and wire it as WorkspaceGit.setup.\nevidence: harness/src/host/worker-attempt.ts workspaceGit() (no setup field)\n\nticfac run epic-43y created this tick by absorbing the finding b3f0b2e963560987fceb76e329d0aa7b93a8e47fa9a5b9dcdccb5ecacd899c46 (reported by run-epic-43y/tick-xd3/attempt-11): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/b3f0b2e963560987fceb76e329d0aa7b93a8e47fa9a5b9dcdccb5ecacd899c46.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-xd3/attempt-11",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-04T18:46:18Z",
+  "updated_at": "2026-10-04T18:46:18Z"
+}
