@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 25,
-  "state": "publishing",
-  "reason": "closing 06t behind the integrated gate on eb368babe036",
-  "updated_at": "2026-10-04T16:34:00Z",
+  "sequence": 26,
+  "state": "running",
+  "reason": "06t is closed",
+  "updated_at": "2026-10-04T16:34:08Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -18,7 +18,7 @@
     },
     {
       "tick_id": "06t",
-      "state": "reported",
+      "state": "closed",
       "attempt": 2
     },
     {
