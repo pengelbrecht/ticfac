@@ -1,5 +1,5 @@
 hpd the epic the runs worked                                                                              cloud · failed
-3/5 ticks · 2d19h · ETA ~3h50m · ● stopped: the Workflow's own record says failed, so the run has ended
+██████████████░░░░░░░░░░ 3/5 ticks · 2d19h · ● stopped: the Workflow's own record says failed, so the run has ended
 ✓ plan ◐ waves ✓ review ✓ close-out ○ ci ○ merge
 needs you: run run_bbb held at3 for a person: rejected_attempt_carries_work: attempt 12 of at3 was rejected with commits
   nothing merged

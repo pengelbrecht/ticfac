@@ -53,6 +53,18 @@ loud.
 
 ---
 
+## 1.6.1
+
+PATCH: `status-model.json`'s `remaining` description names the second
+condition that nulls the field (tick onv, epic hn6): the builder now
+states no remaining time for a run whose own records say it ended — the
+checkpoint's terminal states, or the probe's end-word vocabulary when the
+checkpoint lags the end — because an ETA beside "● stopped" is a promise
+the run cannot keep (and at width 120 it was the line that pushed the
+progress bar out of the watch header). Words only: no field changed
+shape, no golden changed, so an unchanged consumer is still correct — the
+cloudflare pin bumps in the same commit.
+
 ## 1.6.0
 
 MINOR: `status-model.json` gains two goldens, `dashboard_degraded` and

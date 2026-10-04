@@ -100,7 +100,7 @@
           "gates": { "type": "array", "items": { "$ref": "#/$defs/gate" }, "description": "The run's gate evidence, per check per head, exactly as the records state it." },
           "ci": { "$ref": "#/$defs/ci_nullable", "description": "What the forge says on the epic PR's head, per check. Null when no PR exists or the forge could not be asked." },
           "cost": { "$ref": "#/$defs/cost" },
-          "remaining": { "$ref": "#/$defs/remaining_nullable", "description": "The approximate time left, only where measured tick durations support it. Null everywhere else — a number nobody measured is a number that lies." }
+          "remaining": { "$ref": "#/$defs/remaining_nullable", "description": "The approximate time left, only where measured tick durations support it AND the run is still going. Null everywhere else — a number nobody measured is a number that lies, and so is a finish nobody is working towards (a run whose own records say it ended)." }
         }
       }
     }
