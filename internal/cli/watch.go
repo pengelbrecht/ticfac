@@ -295,8 +295,13 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	// The epic id the clearing commands are addressed by (tick gtk): read
 	// out of the run's own id for a local run, carried by the factory's run
 	// record for a cloud one — never a `<epic-id>` placeholder, which is a
-	// second thing to look up, not a command.
-	epicID := watchEpicID(runID, source)
+	// second thing to look up, not a command. A local run whose id is NOT
+	// the epic spelling — `ticfac run <epic> --run-id run-p` — spells its
+	// epic nowhere in the id: the checkpoint carries it, so it is read when
+	// a command is spelled, not when the watch starts (the checkpoint may
+	// not exist yet then). The same read the model path makes (tick fub),
+	// so the two renderers spell one epic, never two (hn6 rule 8).
+	epicOf := func() string { return watchEpicID(*repo, runID, source) }
 	followCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// The '<tick>#<n>' prefix names the tick's own TRY (tick h58), not the
@@ -355,7 +360,7 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 				if event.RunID != "" {
 					address = event.RunID
 				}
-				triage := statusmodel.TriageCommandForCurrentRun(epicID, address)
+				triage := statusmodel.TriageCommandForCurrentRun(epicOf(), address)
 				fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
 					"Nothing proceeds until somebody decides. Triage the finding(s) with `%s` — "+
 					"every untriaged finding of the run settles there, by short key prefix — "+
@@ -369,9 +374,9 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 				// tick qxj this alert): a cloud run's attempt is recorded under
 				// the factory's run_<hex>, which the bare command's default
 				// (epic-<epic-id>) does not carry, and the release refuses.
-				settle := fmt.Sprintf("ticfac settle %s %s %s --release \"<who>\"", epicID, tick, attempt)
+				settle := fmt.Sprintf("ticfac settle %s %s %s --release \"<who>\"", epicOf(), tick, attempt)
 				if n, err := strconv.Atoi(attempt); err == nil {
-					settle = statusmodel.SettleCommandForCurrentRun(epicID, tick, n, runID)
+					settle = statusmodel.SettleCommandForCurrentRun(epicOf(), tick, n, runID)
 				}
 				fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
 					"Nothing proceeds until somebody decides. Release it with `%s` — add --carry-work to base the "+
@@ -494,7 +499,7 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 				"Nothing is held for a person: the work has to be fixed and the epic run again — "+
 				"`%s` resumes it under this run id, without redoing what "+
 				"already passed. The evidence is on the integration branch, not in this line.\n\n",
-				runID, terminalDetail, statusmodel.ResumeCommand(host, epicID))
+				runID, terminalDetail, statusmodel.ResumeCommand(host, epicOf()))
 		}
 		return finish(agentStateFailed, nil)
 	}
@@ -616,12 +621,28 @@ func watchModelEndedCancelled(model statusmodel.Model) bool {
 // Workflow instance and spells no epic at all. A placeholder is not an
 // id — a person copying the command the alert names must not have to
 // look the epic up to fill it in (tick gtk).
-func watchEpicID(runID string, source runfeed.Source) string {
+//
+// A LOCAL run whose id spells neither — one started as `ticfac run <epic>
+// --run-id run-p` — has its epic only in its checkpoint, so that is where
+// the answer comes from: the same records read the model path makes
+// (statusRecords with no epic hint — the run directory this checkout
+// holds; no tracker, no forge, nothing the one-shot surfaces pay for),
+// then the same derivation epicIDOf applies. An id that guesses here and
+// a model that reads there spelled two epics for one run (tick fub); the
+// checkpoint is the truth both renderers now share. A run whose
+// checkpoint cannot be read has no better answer than its own id — the
+// same best-effort word the alert has always ended with.
+func watchEpicID(repo, runID string, source runfeed.Source) string {
 	if rest, ok := strings.CutPrefix(runID, "epic-"); ok && rest != "" {
 		return rest
 	}
 	if cloud, ok := source.(*cloudFeedSource); ok && cloud.epic != "" {
 		return cloud.epic
+	}
+	if records, _, err := statusRecords(repo, runID, ""); err == nil {
+		if epic := epicIDOf(runID, records); epic != "" {
+			return epic
+		}
 	}
 	return runID
 }
