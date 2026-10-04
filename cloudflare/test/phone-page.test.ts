@@ -299,7 +299,10 @@ describe("the listing: cloud live, local from its last snapshot", () => {
     expect(body).toContain("cloud run · epic ko8");
     expect(body).toContain("run_bad");
     expect(body).toContain("failed");
-    expect(body).toContain("clear with: ticfac run-epic ko8");
+    // The resume is spelled by the host the run lives on (tick tt6): a cloud
+    // run's is a new submission to its factory, never the local foreground
+    // `run-epic` — that would restart the epic on the reader's machine.
+    expect(body).toContain("clear with: ticfac run ko8 --cloud");
     // Attention first even between cloud rows: failed before running.
     expect(body.indexOf("run_bad")).toBeLessThan(body.indexOf("run_ok"));
   });

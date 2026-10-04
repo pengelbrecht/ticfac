@@ -34,7 +34,7 @@
 import { getEnrolledProject } from "./db";
 import type { Env } from "./index";
 import type { StatusDoc } from "./status";
-import { primaryAttention } from "./status";
+import { primaryAttention, resumeCommand } from "./status";
 import { escapeHTML, sendTelegramHTML } from "./telegram";
 
 /** The minimum gap between two sends for one run. Batches, never suppresses: a deferred send waits for the next evaluation. */
@@ -84,7 +84,11 @@ export function stopsFromStatusDoc(doc: StatusDoc): StatusStop[] {
         key: `terminal:failed:${keyProse(reason)}`,
         kind: "failed",
         what: reason,
-        clear_with: `ticfac run-epic ${doc.epic_id}`,
+        // The resume is named by the host the run lives on, the Go model's
+        // own answer (statusmodel.ResumeCommand): a failed cloud run's page
+        // must not name `run-epic` — the local foreground form that would
+        // restart the epic on the reader's machine (tick tt6).
+        clear_with: resumeCommand(doc.host, doc.epic_id),
       });
     } else if (doc.lifecycle.phase === "done" && primary === null) {
       const reason =

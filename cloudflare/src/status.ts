@@ -500,6 +500,26 @@ export function cloudStatusDoc(
 export type RunClass = "held" | "failed" | "running" | "done" | "cancelled";
 
 /**
+ * The one command that resumes a stopped run, named by the host the run lives
+ * on — this reader's mirror of the Go model's `statusmodel.ResumeCommand`
+ * (tick gtk, and this tick tt6, which stopped the TS spellings from ignoring
+ * the doc's host). A LOCAL run's resume is the foreground form the
+ * reconciler itself runs (`run-epic` — `ticfac run` starts the same command
+ * in the background and attaches to it). A CLOUD run's resume is a NEW
+ * SUBMISSION to its factory — `ticfac run <epic> --cloud` — because nothing
+ * on the machine reading the model can restart the factory's Workflow except
+ * the factory, and `run-epic` here would restart the epic LOCALLY, in the
+ * foreground, on whatever machine happens to be reading: the same stop, a
+ * different run.
+ */
+export function resumeCommand(host: string, epicID: string): string {
+  if (host === "cloud") {
+    return `ticfac run ${epicID} --cloud`;
+  }
+  return `ticfac run-epic ${epicID}`;
+}
+
+/**
  * Classifies one run's document into the listing's row — the same read of the
  * model the bare `ticfac` overview performs (attention first, a live
  * incarnation next, the terminal phases last), ported so the phone page and
@@ -533,7 +553,10 @@ export function classifyStatusDoc(doc: StatusDoc): {
       return {
         state: "failed",
         reason: doc.liveness.reason,
-        clear_with: `ticfac run-epic ${doc.epic_id}`,
+        // The resume is the host's, not always the local foreground form: a
+        // failed cloud run's page must not send the person to restart the
+        // epic on their own machine (tick tt6).
+        clear_with: resumeCommand(doc.host, doc.epic_id),
       };
     case "cancelled":
       return { state: "cancelled", reason: doc.liveness.reason, clear_with: null };
