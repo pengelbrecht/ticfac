@@ -3,7 +3,7 @@
   "title": "Final review of hn6 (watch becomes a dashboard)",
   "gloss": "review hn6",
   "description": "Review hn6's full epic diff against its description, rules 1-8 and acceptance A1-A6. In particular: one status model, two renderers — the terminal dashboard, bare overview and phone page take every word from ticfac.status.v1 (A5); rule 7 honesty — no path prints $0.00 for unmetered spend; stale claims — grep watch_view.go, watch.go, overview.go, phone.ts and statusmodel doc comments for sentences the rewrite falsified (e.g. 'no keys', 'keep lines above the block', 'only Go reads it today'). A6: J (u4l) proves the layout properties in the gate; the Bombadil-in-CI half is z7w's (outside this epic) — record whether z7w has landed and say so in the verdict rather than holding on it. Fold findings by seam.",
-  "notes": "2026-10-04 18:15 - ticfac run epic-hn6: v16 try 1 (run dispatch #1) reported a finding the run itself decided — defect \"Cost still prints a fabricated $0.00: decisions line and cloud default 0\" (key 9a2119c4bfd29f34c98468360ed7f59a901a9ab023aea9a2bedad710c1c5a339, severity high, for this repository) is absorbed into the running epic as tick 1tm, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-hn6/absorptions/9a2119c4bfd29f34c98468360ed7f59a901a9ab023aea9a2bedad710c1c5a339.json, and the draft is triaged as promoted.",
+  "notes": "2026-10-04 18:15 - ticfac run epic-hn6: v16 try 1 (run dispatch #1) reported a finding the run itself decided — defect \"Cost still prints a fabricated $0.00: decisions line and cloud default 0\" (key 9a2119c4bfd29f34c98468360ed7f59a901a9ab023aea9a2bedad710c1c5a339, severity high, for this repository) is absorbed into the running epic as tick 1tm, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-hn6/absorptions/9a2119c4bfd29f34c98468360ed7f59a901a9ab023aea9a2bedad710c1c5a339.json, and the draft is triaged as promoted.\n2026-10-04 18:15 - ticfac run epic-hn6: v16 try 1 (run dispatch #1) reported a finding the run itself decided — defect \"Ended runs get a false verdict, phase and needs-you (stopped reads done/healthy)\" (key 40bd8d783792c4853f7dfb9e927fe3e44f6e63e7e9e06e5d8e6ba3e90b5c318d, severity high, for this repository) is absorbed into the running epic as tick jkb, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-hn6/absorptions/40bd8d783792c4853f7dfb9e927fe3e44f6e63e7e9e06e5d8e6ba3e90b5c318d.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -46,6 +46,6 @@
   "acceptance_criteria": "REVIEW-VERDICT recorded; findings resolved or filed",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-28T18:41:20.493309Z",
-  "updated_at": "2026-10-04T16:15:33.722083Z",
+  "updated_at": "2026-10-04T16:15:52.764053Z",
   "started_at": "2026-10-04T13:53:29.23020061Z"
 }
