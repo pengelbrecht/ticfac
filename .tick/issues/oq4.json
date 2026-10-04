@@ -4,7 +4,7 @@
   "gloss": "gateway provider",
   "description": "Step 2: a pi-ai provider over /api/gateway/workers-ai with the run token, carrying GLM maxTokens/thinkingFormat overrides; prove on staging that attribution holds and a revoked token stops the next request. Never claude in the cloud.",
   "notes": "2026-10-04 16:12 - ticfac run epic-43y: oq4 try 2 (run dispatch #5) reported a finding the run itself decided — defect \"AI Gateway keeps 5 metadata entries; the gateway stamps 6, so trace_id is lost\" (key 56559a0536361728383b505233c42627e4e470967c23265e9dad2f263b5822dc, severity medium, for this repository) is promoted to a backlog tick with an owner, jrn; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/56559a0536361728383b505233c42627e4e470967c23265e9dad2f263b5822dc.json, and the draft is triaged as promoted.\n2026-10-04 16:12 - ticfac run epic-43y: oq4 try 2 (run dispatch #5) reported a finding the run itself decided — proposed-tick \"Decide GLM 5.3 thinking-level map: pi-ai clamps medium to high\" (key c6542e5e7157338ce799aa689de201d771d46abc9b77136c00799a555d422f4f, severity low, for this repository) is promoted to a backlog tick with an owner, 5y7; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/c6542e5e7157338ce799aa689de201d771d46abc9b77136c00799a555d422f4f.json, and the draft is triaged as promoted.\n2026-10-04 16:14 - ticfac run epic-43y: oq4 try 2 (run dispatch #5) merged into epic/43y as 8b8469824ee3; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -15,6 +15,6 @@
   "acceptance_criteria": "staging proof recorded; unit tests for the provider",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.194176Z",
-  "updated_at": "2026-10-04T14:14:31.17293Z",
-  "started_at": "2026-10-04T13:14:29.958408Z"
+  "updated_at": "2026-10-04T14:14:33.894739Z",
+  "closed_at": "2026-10-04T14:14:33.894739Z"
 }
