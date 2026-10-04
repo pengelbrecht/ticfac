@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "renderFeedView appends '— next:' from the tick's last try to every rejected/gate-failed line without checking the event's attempt, so try 1's rejection shows try 3's next step.\nevidence: internal/cli/watch_drill.go:239-244\n\nticfac run epic-hn6 created this tick by absorbing the finding 2098ee15415c130542f24b4bc393d74804b484caff8141a2bd139599c4c5d6f9 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/2098ee15415c130542f24b4bc393d74804b484caff8141a2bd139599c4c5d6f9.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "15b",
+    "title": "Feed view attaches the last try's next step to older refusal lines"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.53,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.13,
+      "design": 0,
+      "diagnosis": 0.22,
+      "mechanical": 0.63,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1266,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T16:21:40Z",
+  "answered_at": "2026-10-04T16:21:40Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "15b",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "7ea2829d653b1ad1c9aa867cece7e41ad80d7210",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
