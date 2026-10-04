@@ -382,6 +382,7 @@ h1 { font-size: 1.1rem; margin: .4rem 0 1rem; }
 .headline-line { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center;
                  margin: .35rem 0 0; font-size: .9rem; }
 .hcount { font-weight: 600; }
+.helapsed { color: #9aa3b2; }
 .heta { color: #9aa3b2; }
 .verdict { font-weight: 600; }
 .verdict .dot { display: inline-block; width: .55rem; height: .55rem; border-radius: 50%;
@@ -589,9 +590,10 @@ function dashboardHTML(doc: StatusDoc): {
 /**
  * The headline's progress and verdict. The bar is a CSS width percentage —
  * closed over total, never a guess when the model states no counts — with
- * `n/m ticks` beside it, the ETA only where the model states one, and the
- * health verdict with its coloured dot and, where it recovered things on
- * its own, that calm fact rather than an alarm.
+ * `n/m ticks` beside it, the elapsed and the ETA only where the model states
+ * them (the elapsed is the same clamped clock the terminal header renders,
+ * tick e6g), and the health verdict with its coloured dot and, where it
+ * recovered things on its own, that calm fact rather than an alarm.
  */
 function headlineHTML(doc: StatusDoc): string {
   const ticks = doc.progress?.ticks;
@@ -602,6 +604,14 @@ function headlineHTML(doc: StatusDoc): string {
     ticks === undefined || ticks === null
       ? ""
       : `<span class="hcount">${escapeHTML(`${closed}/${total} ticks`)}</span>`;
+  // The epic's own clock, the same field the terminal header renders — a
+  // renderer that derived it here would count past a finished run, the
+  // exact defect the field exists to end (tick e6g).
+  const elapsedSeconds = doc.progress?.run_elapsed_seconds;
+  const elapsed =
+    elapsedSeconds === undefined || elapsedSeconds === null
+      ? ""
+      : `<span class="helapsed">${escapeHTML(humanDuration(elapsedSeconds))}</span>`;
   const remaining = doc.remaining?.approximate_seconds;
   const eta =
     remaining === undefined || remaining === null
@@ -620,7 +630,7 @@ function headlineHTML(doc: StatusDoc): string {
   const verdictText = recovered === "" ? word : `${word} (recovered: ${escapeHTML(recovered)})`;
   return `<div class="headline">
 <div class="bar"><div class="bar-fill" style="width:${pct}%"></div></div>
-<div class="headline-line">${count}${eta}<span class="verdict verdict-${escapeHTML(state)}"><span class="dot"></span>${escapeHTML(verdictText)}</span></div>
+<div class="headline-line">${count}${elapsed}${eta}<span class="verdict verdict-${escapeHTML(state)}"><span class="dot"></span>${escapeHTML(verdictText)}</span></div>
 </div>`;
 }
 
