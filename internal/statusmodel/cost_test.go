@@ -164,6 +164,144 @@ func TestCostDecisionsCarryTheirOwnMeteredUsage(t *testing.T) {
 	assertValidatesAgainstTheContract(t, model)
 }
 
+// TestCostDecisionsWithoutAMeasuredCostAreNeverMeteredZero (tick 1tm): the
+// decisions line is metered ONLY when a record carries a measured cost. The
+// shape every classification record wrote before this tick is a usage block
+// whose cost_usd is the marshalled zero of a field nothing ever set, and a
+// role decision carries no usage block at all — neither is a measurement, so
+// the line says "not metered" with no number and recorded_usd stays a true
+// zero, the decisions still counted. A record that states a price still
+// meters the line, and the number is the stated price alone.
+func TestCostDecisionsWithoutAMeasuredCostAreNeverMeteredZero(t *testing.T) {
+	t.Parallel()
+
+	// The never-set field's marshalled zero, and a role decision with no
+	// usage block at all: nothing measured either spend.
+	src := runningEpicSources()
+	src.Records.Attempts = nil
+	src.Records.Evidence = nil
+	src.Records.Absorptions = nil
+	src.Records.Findings = nil
+	src.Records.Decisions = []runstate.Decision{
+		decisionWithResponse(1, map[string]any{
+			"model": "classifier@example.com",
+			"usage": map[string]any{"cost_usd": 0.0, "input_tokens": 1549, "output_tokens": 60},
+		}),
+		decisionWithResponse(2, map[string]any{
+			"model": "opus",
+			// a role decision: no usage block at all
+		}),
+	}
+	model := Build(src)
+	line := costLineOf(t, model, CostSourceDecisions)
+	if line.Metered || line.USD != nil {
+		t.Errorf("the decisions line is %+v, want unmetered with no number: no record carried a measured cost", line)
+	}
+	if want := "not metered: the decision records carry no measured cost"; line.Basis != want {
+		t.Errorf("the decisions line's basis is %q, want %q", line.Basis, want)
+	}
+	if model.Cost.RecordedUSD != 0 {
+		t.Errorf("recorded_usd is %v, want 0: nothing measured the decisions' spend", model.Cost.RecordedUSD)
+	}
+	// The marshalled JSON, not the struct: no unmetered line states a number.
+	raw, err := json.Marshal(model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Cost struct {
+			RecordedUSD float64    `json:"recorded_usd"`
+			Lines       []CostLine `json:"lines"`
+		} `json:"cost"`
+	}
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	if document.Cost.RecordedUSD != 0 {
+		t.Errorf("the marshalled recorded_usd is %v, want 0", document.Cost.RecordedUSD)
+	}
+	for _, line := range document.Cost.Lines {
+		if !line.Metered && line.USD != nil {
+			t.Errorf("the %s line is unmetered and states usd %v: an unmetered spend wearing a number is a fabricated spend",
+				line.Source, *line.USD)
+		}
+	}
+	assertValidatesAgainstTheContract(t, model)
+
+	// A record that states a price beside them meters the line: the number is
+	// the stated price alone, the line's attempts still counting the records
+	// whose usage the line speaks for.
+	priced := runningEpicSources()
+	priced.Records.Attempts = nil
+	priced.Records.Evidence = nil
+	priced.Records.Absorptions = nil
+	priced.Records.Findings = nil
+	priced.Records.Decisions = append([]runstate.Decision{
+		decisionWithResponse(3, map[string]any{
+			"model": "classifier@example.com",
+			"usage": map[string]any{"cost_usd": 0.02, "input_tokens": 900, "output_tokens": 40},
+		}),
+	}, src.Records.Decisions...)
+	metered := Build(priced)
+	line = costLineOf(t, metered, CostSourceDecisions)
+	if !line.Metered || line.USD == nil || *line.USD != 0.02 {
+		t.Errorf("the decisions line is %+v, want metered with the stated price 0.02", line)
+	}
+	if want := "usage recorded on decision records"; line.Basis != want {
+		t.Errorf("a metered decisions line's basis is %q, want %q", line.Basis, want)
+	}
+	if metered.Cost.RecordedUSD != 0.02 {
+		t.Errorf("recorded_usd is %v, want the stated price 0.02", metered.Cost.RecordedUSD)
+	}
+	assertValidatesAgainstTheContract(t, metered)
+}
+
+// decisionWithResponse is one validated decision record with the response
+// the caller states — the shape the decisions' own cost reading consumes.
+func decisionWithResponse(n int, response map[string]any) runstate.Decision {
+	return runstate.Decision{
+		SchemaVersion: runstate.SchemaVersion,
+		Decision:      n,
+		Role:          runstate.RoleClassifyTick,
+		Request:       map[string]any{"epic_id": "2jn"},
+		Response:      response,
+		Validated:     true,
+		RequestedAt:   "2026-09-27T03:10:00Z",
+		AnsweredAt:    "2026-09-27T03:10:20Z",
+	}
+}
+
+// TestCostAnUnsyncedCloudRunIsNeverAMeteredZero (tick 1tm): the factory's
+// run row is cost_usd NOT NULL DEFAULT 0, and the host states no gateway
+// number until its telemetry answers — so a cloud run before its first cost
+// sync, or one whose telemetry could not be read, gets an UNMETERED
+// workers-ai line that names why in its basis, never a metered $0.00 the
+// row's default dressed up as a measurement.
+func TestCostAnUnsyncedCloudRunIsNeverAMeteredZero(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Host = HostCloud
+	src.RunID = "run_1a2b3c4d5e6f"
+	src.Records.Decisions = nil
+	src.Records.Attempts = []runstate.Attempt{
+		attemptMarker(1, "nwj", "2026-09-27T03:19:05Z", "strong", "cloudflare-workers-ai/@cf/zai-org/glm-5.3", "cloudflare-sandbox"),
+	}
+	src.Standing, src.StandingRead, src.Session = nil, false, nil
+	model := Build(src)
+
+	line := costLineOf(t, model, CostSourceWorkersAI)
+	if line.Metered || line.USD != nil {
+		t.Errorf("an unsynced cloud run's workers-ai line is %+v, want unmetered with no number", line)
+	}
+	if want := "not metered: the gateway's cost telemetry has not answered for this run"; line.Basis != want {
+		t.Errorf("an unsynced cloud run's workers-ai line basis is %q, want %q", line.Basis, want)
+	}
+	if model.Cost.RecordedUSD != 0 {
+		t.Errorf("recorded_usd is %v, want 0: nothing measured the cloud spend yet", model.Cost.RecordedUSD)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
 // TestCostSplitsRiversTheProvenanceNames: the river comes from each
 // dispatch's own provenance — a Claude-family model is claude however the
 // harness was spelled, a codex-shaped model lands on other, and a dispatch

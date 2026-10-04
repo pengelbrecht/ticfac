@@ -676,23 +676,30 @@ func TestStatusModelLocalWiringPassesTheDashboardReaders(t *testing.T) {
 	}
 }
 
-// TestStatusModelCloudWiringCarriesTheHostCost (hn6 wave 1, tick r5i): a
-// CLOUD run's gathering passes no readers — its runners and attempt reports
-// are not on this machine — and passes the factory's own ground-truth cost
-// as the gateway's number when the run record carries one, and nothing when
-// it does not. The command path reads the record the factory serves, so the
-// record's cost_usd must ride through the same fetch the liveness answer
-// rides on; the wave-1 model's cost lines answer empty either way, and only
-// this pin says the river is wired.
+// TestStatusModelCloudWiringCarriesTheHostCost (hn6 wave 1, tick r5i;
+// re-gated by tick 1tm): a CLOUD run's gathering passes no readers — its
+// runners and attempt reports are not on this machine — and passes the
+// factory's own ground-truth cost as the gateway's number ONLY when the
+// record says its cost_source is the gateway: the runs row's cost_usd is
+// NOT NULL DEFAULT 0, so a bare number is not a measurement — a run before
+// its first cost sync, or one whose telemetry reads "unavailable: …", is
+// an unsynced record and the model's cost lines answer empty. The command
+// path reads the record the factory serves, so the record's cost_usd and
+// cost_source must ride through the same fetch the liveness answer rides
+// on; and only this pin says the river is wired.
 func TestStatusModelCloudWiringCarriesTheHostCost(t *testing.T) {
 	runID := "run_6a4b8e0f2c1d5f3a"
 	const cost = 1.23
 	for _, leg := range []struct {
-		name  string
-		carry bool
+		name       string
+		costUSD    any
+		costSource any
+		carry      bool
 	}{
-		{"record carries cost_usd", true},
-		{"record carries no cost_usd", false},
+		{"record carries the gateway's measured cost", cost, "gateway", true},
+		{"record carries cost_usd with no cost_source", cost, nil, false},
+		{"record carries cost_usd with unavailable telemetry", 0, "unavailable: no Cloudflare API token is configured", false},
+		{"record carries no cost fields at all", nil, nil, false},
 	} {
 		t.Run(leg.name, func(t *testing.T) {
 			captured := captureStatusSources(t)
@@ -701,8 +708,11 @@ func TestStatusModelCloudWiringCarriesTheHostCost(t *testing.T) {
 
 			endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
 				run := map[string]any{"run_id": runID, "epic": "cst", "state": "running"}
-				if leg.carry {
-					run["cost_usd"] = cost
+				if leg.costUSD != nil {
+					run["cost_usd"] = leg.costUSD
+				}
+				if leg.costSource != nil {
+					run["cost_source"] = leg.costSource
 				}
 				switch {
 				case request.Path == "/api/runs":
@@ -738,12 +748,13 @@ func TestStatusModelCloudWiringCarriesTheHostCost(t *testing.T) {
 			}
 			switch {
 			case leg.carry && captured.WorkerCost == nil:
-				t.Error("the record carried cost_usd and the gathering passed no WorkerCost: the factory's ground-truth number is the river the wave-2 cost lines read")
+				t.Error("the record carried the gateway's measured cost and the gathering passed no WorkerCost: the factory's ground-truth number is the river the wave-2 cost lines read")
 			case leg.carry && (captured.WorkerCost.USD != cost || captured.WorkerCost.Source != "gateway"):
 				t.Errorf("the gathering passed WorkerCost $%.2f from %q, want the record's own $%.2f from \"gateway\"",
 					captured.WorkerCost.USD, captured.WorkerCost.Source, cost)
 			case !leg.carry && captured.WorkerCost != nil:
-				t.Errorf("a record with no cost_usd passed WorkerCost %+v, want nil", *captured.WorkerCost)
+				t.Errorf("an unsynced record (cost_usd %v, cost_source %v) passed WorkerCost %+v, want nil: the runs row's default zero is not a measurement",
+					leg.costUSD, leg.costSource, *captured.WorkerCost)
 			}
 		})
 	}

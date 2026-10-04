@@ -640,11 +640,14 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		ci = input
 	}
 
-	// The factory's own ground-truth cost, when its run record carries one: the
-	// dashboard's cost lines read it (hn6 wave 1). A record that carries none
-	// states none — the model's cost lines answer empty.
+	// The factory's own ground-truth cost, ONLY when its record says the
+	// number is the gateway's measurement: the runs row's cost_usd is NOT
+	// NULL DEFAULT 0, so a bare number is not a measurement — a run before
+	// its first cost sync, or one whose telemetry reads "unavailable: …",
+	// is an unsynced record and the model's cost lines answer empty (tick
+	// 1tm). A record that carries no number states none either.
 	var workerCost *statusmodel.WorkerCostInput
-	if record.CostUSD != nil {
+	if record.CostSource != nil && strings.TrimSpace(*record.CostSource) == "gateway" && record.CostUSD != nil {
 		workerCost = &statusmodel.WorkerCostInput{USD: *record.CostUSD, Source: "gateway"}
 	}
 
