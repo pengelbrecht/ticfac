@@ -1,0 +1,13 @@
+{
+  "id": "h7b",
+  "title": "the watch rebuilds the report reader every frame, so its cache never holds",
+  "description": "report.go's cache doc promises 'a two-second redraw must not spawn git every frame', but localStatusModel constructs a fresh AttemptReports closure (and therefore a fresh empty cache) on every model build, and the watch builds the model every frame — so the drill-in re-runs rev-parse/merge-base/log per settled tick per redraw. Pre-existing (the closure was already per-frame before the run-key change); out of this tick's scope, but the doc's claim and the wiring disagree.\nevidence: internal/cli/status_model.go:529 (AttemptReports built inside localStatusModel); internal/cli/watch.go:713,827 (localStatusModel per frame); internal/statusmodel/report.go attemptReports cache\n\nticfac run epic-hn6 filed this backlog tick from the finding a0492aaf53fa876e802205fcb1ec0c756ec3edcd980a2bc336754ff617bf3942 (reported by run-epic-hn6/tick-ihw/attempt-10): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/a0492aaf53fa876e802205fcb1ec0c756ec3edcd980a2bc336754ff617bf3942.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-ihw/attempt-10",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T18:52:52Z",
+  "updated_at": "2026-10-04T18:52:52Z"
+}
