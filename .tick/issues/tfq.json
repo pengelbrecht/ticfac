@@ -2,6 +2,7 @@
   "id": "tfq",
   "title": "Unreadable foreign findings/marker records still abort runs (d9d's class)",
   "description": "d9d fixed the checkpoint reads, but the same class remains on the sweep's other foreign reads: adoptRunFindings reads an ended sibling's findings via store.ForeignFindings and every other run's drafts under a key via ForeignFindingsByKey, foreignClaims reads every run's dispatch markers via ForeignAttempts (other epics' runs ride the same branch), and EpicPromotions/ForeignAbsorption decode foreign records too. One corrupt or newer-binary findings/attempt record — written by the same newer factory binary the absorbed finding describes — still aborts the boot or planning exactly the way the checkpoint did. The store already has the precedent for the fix (CheckpointHistory skips a version that does not decode rather than failing the read).\nevidence: internal/reconcile/takeover.go:265 (ForeignFindings error aborts), internal/reconcile/claim.go:158 (ForeignAttempts error aborts), internal/runstate/foreign_findings.go:38 (s.load error aborts the whole list)\n\nticfac run epic-hn6 filed this backlog tick from the finding d9e14a71ac9991830038e2bb4404f7bc1b4aa7cdcad53c76f5387cdf52485e1e (reported by run-epic-hn6/tick-d9d/attempt-6): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/d9e14a71ac9991830038e2bb4404f7bc1b4aa7cdcad53c76f5387cdf52485e1e.json on the run branch.",
+  "notes": "2026-10-04 20:28 - ticfac run epic-hn6: created by absorbing finding d9e14a71ac9991830038e2bb4404f7bc1b4aa7cdcad53c76f5387cdf52485e1e — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-hn6/absorptions/d9e14a71ac9991830038e2bb4404f7bc1b4aa7cdcad53c76f5387cdf52485e1e.json on epic/hn6, and it says: the classifier put 0.21 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-hn6/tick-d9d/attempt-6",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-04T18:28:42Z",
-  "updated_at": "2026-10-04T18:28:42Z"
+  "updated_at": "2026-10-04T18:28:49.395055Z"
 }
