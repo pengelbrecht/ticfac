@@ -1022,7 +1022,7 @@ func TestTheFrameTailIsTheFeedOwnWords(t *testing.T) {
 			who = *e.TickID
 			if try, ok := modelTry(e); ok {
 				who = fmt.Sprintf("%s#%d", who, try)
-				}
+			}
 		}
 		line := fmt.Sprintf("%s %-12s %s: %s", clockOf(e.At), who, e.Stage, e.Detail)
 		if !strings.Contains(joined, line) {
