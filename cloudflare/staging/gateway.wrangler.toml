@@ -1,0 +1,33 @@
+# The STAGING GATEWAY Worker (epic 43y, tick oq4): the factory's model path
+# alone — the run token table, proxyModelRequest, the kill switch — so the
+# harness's Workers AI gateway provider can be proved against the real route
+# without the production factory. Routes and the one staging-only difference
+# (the last hop through the AI binding): src/staging-gateway.ts. Deployed by
+# hand, only for a proof: `harness/proof/README.md` says how, and how to tear
+# it down again.
+name = "ticfac-staging-gateway"
+main = "../src/staging-gateway.ts"
+compatibility_date = "2026-08-11"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+
+# The last hop, and the reader of each request's AI Gateway log.
+[ai]
+binding = "AI"
+
+# The run index and the run token table, with the factory's own migrations.
+# No database_id: wrangler provisions the database on the first deploy, so no
+# operator-specific id is committed (CONTRACTS: nothing operator-specific).
+[[d1_databases]]
+binding = "DB"
+database_name = "ticfac-staging-gateway"
+migrations_dir = "../migrations"
+
+[vars]
+# Through the AI binding's passthrough to an AI Gateway named "default"; the
+# path shape is the HTTPS gateway's minus the account id.
+AI_GATEWAY_BASE_URL = "https://workers-binding.ai/ai-gateway/gateways/default"
+PROOF_AI_GATEWAY_ID = "default"
+# proxyModelRequest refuses a provider with no key behind it. The binding
+# carries the account's identity, so this is a placeholder the last hop drops.
+CLOUDFLARE_API_TOKEN = "binding-carries-identity"

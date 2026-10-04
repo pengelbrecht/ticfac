@@ -11,7 +11,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["src/**", "test/**", "vitest.config.ts"]
+    "includes": ["src/**", "test/**", "proof/**", "vitest.config.ts"]
   },
   "formatter": {
     "enabled": true,

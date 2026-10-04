@@ -311,6 +311,43 @@ describe("the Workers AI gateway provider", () => {
     }
     expect(() => workersAIGatewayProvider({ gateway: GATEWAY, token: "" })).toThrow(/token/);
   });
+
+  // Epic 43y's note (6): "--thinking medium recorded thinkingLevel high" on the
+  // pi CLI. This is why, pinned: pi-ai's catalog marks GLM 5.3's `medium` (and
+  // `minimal`, `off`, `xhigh`) unsupported, so pi-ai clamps medium UP to high
+  // before the request is built. Workers AI itself accepts reasoning_effort
+  // low/medium/high/max (staging, 2026-10-04: harness/proof/README.md).
+  it("sends GLM 5.3 the effort pi-ai's catalog maps each thinking level to", async () => {
+    const levels = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+    const gateway = fakeGateway(levels.map((level) => ({ text: level })));
+    const models = createModels();
+    models.setProvider(
+      workersAIGatewayProvider({ gateway: GATEWAY, token: RUN_TOKEN, fetch: gateway.fetch }),
+    );
+    const model = models.getModel(GATEWAY_PROVIDER_ID, GLM);
+    if (model === undefined) throw new Error(`${GLM} is not in the provider's catalog`);
+    const sent: Record<string, unknown> = {};
+    for (const level of levels) {
+      await models.completeSimple(
+        model,
+        { messages: [{ role: "user", content: "hi", timestamp: 0 }] },
+        level === "off" ? {} : { reasoning: level },
+      );
+      const body = gateway.seen.at(-1)?.body ?? {};
+      sent[level] = { thinking: body.thinking, reasoning_effort: body.reasoning_effort };
+    }
+    expect(sent).toEqual({
+      // Off sends no thinking field at all: the catalog marks off unsupported,
+      // so GLM 5.3 thinks at its own default.
+      off: { thinking: undefined, reasoning_effort: undefined },
+      minimal: { thinking: { type: "enabled" }, reasoning_effort: "low" },
+      low: { thinking: { type: "enabled" }, reasoning_effort: "low" },
+      medium: { thinking: { type: "enabled" }, reasoning_effort: "high" },
+      high: { thinking: { type: "enabled" }, reasoning_effort: "high" },
+      xhigh: { thinking: { type: "enabled" }, reasoning_effort: "max" },
+      max: { thinking: { type: "enabled" }, reasoning_effort: "max" },
+    });
+  });
 });
 
 describe("gatewayModelRef", () => {
