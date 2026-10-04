@@ -3,7 +3,7 @@
   "title": "Workspace checkpoints: wip commit after every tool round; restore on a lost container",
   "gloss": "wip checkpoints + restore",
   "description": "Step 4: an afterTools wip commit pushed to the attempt branch; on a lost container, clone the branch, check out the wip commit, run setup, continue — reusing the carried-work code.",
-  "notes": "2026-10-04 17:36 - ticfac run epic-43y: dwn try 1 (run dispatch #6) reported a finding the run itself decided — proposed-tick \"A container lost BETWEEN tool rounds needs a host-side ready check\" (key 7438ff08c3b3a96e7bbe29f58d0abdeb7730499d159813b98ff69fc0481e0331, severity medium, for this repository) is absorbed into the running epic as tick 4fs, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/7438ff08c3b3a96e7bbe29f58d0abdeb7730499d159813b98ff69fc0481e0331.json, and the draft is triaged as promoted.",
+  "notes": "2026-10-04 17:36 - ticfac run epic-43y: dwn try 1 (run dispatch #6) reported a finding the run itself decided — proposed-tick \"A container lost BETWEEN tool rounds needs a host-side ready check\" (key 7438ff08c3b3a96e7bbe29f58d0abdeb7730499d159813b98ff69fc0481e0331, severity medium, for this repository) is absorbed into the running epic as tick 4fs, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/7438ff08c3b3a96e7bbe29f58d0abdeb7730499d159813b98ff69fc0481e0331.json, and the draft is triaged as promoted.\n2026-10-04 17:36 - ticfac run epic-43y: dwn try 1 (run dispatch #6) reported a finding the run itself decided — proposed-tick \"Pin the git credential helper text to the image's, like the tk shim\" (key a9786e1af63898ea76e4edab09b996e51f931fa6760154578545b3f69bceec9c, severity low, for this repository) is promoted to a backlog tick with an owner, 2vp; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/a9786e1af63898ea76e4edab09b996e51f931fa6760154578545b3f69bceec9c.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -15,6 +15,6 @@
   "acceptance_criteria": "test: destroy the container mid-turn; the next turn sees both edits",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.327402Z",
-  "updated_at": "2026-10-04T15:36:05.144922Z",
+  "updated_at": "2026-10-04T15:36:24.192651Z",
   "started_at": "2026-10-04T14:47:55.928132Z"
 }
