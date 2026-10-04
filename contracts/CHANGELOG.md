@@ -53,6 +53,27 @@ loud.
 
 ---
 
+## 1.2.0
+
+MINOR: six fields added. `worker-boot-contract.json` gains `boot_arg`,
+`boot_command`, `boot_marker`, `boot_prompt_begin`, `boot_prompt_end`,
+`finish_arg` and `finish_command` — the pi-durable worker host's half of the
+per-tick worker contract (epic 43y, tick pom; docs/spikes/
+n0b-round2-pi-durable.md, "The worker contract on pi-durable"). The host
+runs `--boot` as its environment's first command, submits the prompt it
+prints between the prompt markers to a durable conversation, and runs
+`--finish` with the conversation's outcome once it settles; the boot's faults
+keep the all-in-one's exit classes (2-8, 13-15) and the finish decides the
+same 9/10/11 from the same git facts. An unchanged consumer is still
+correct: the all-in-one default runs exactly as before, and the new args
+are additive. All three readers follow in the same change — `image/worker.sh`
+answers the args and prints the markers, `internal/sandboximage`
+(`WorkerBootArg`, `WorkerFinishArg` and the markers) and
+`cloudflare/src/worker-boot.ts` (`WORKER_BOOT_ARG`, `WORKER_FINISH_ARG` and
+the markers) assert them.
+
+---
+
 ## 1.1.0
 
 MINOR: one environment variable added. `worker-boot-contract.json` gains

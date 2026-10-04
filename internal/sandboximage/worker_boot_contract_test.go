@@ -41,7 +41,7 @@ type workerContract struct {
 	CancelReportMarker  string `json:"cancel_report_marker"`
 	BootArg             string `json:"boot_arg"`
 	BootCommand         string `json:"boot_command"`
-	BootMarker           string `json:"boot_marker"`
+	BootMarker          string `json:"boot_marker"`
 	BootPromptBegin     string `json:"boot_prompt_begin"`
 	BootPromptEnd       string `json:"boot_prompt_end"`
 	FinishArg           string `json:"finish_arg"`
