@@ -242,7 +242,7 @@ describe("a cloud worker attempt on its WorkerAgent", () => {
     await waitFor("the state and the snapshot", () => frames.length >= 2, 10_000);
     expect(frames[0]).toMatchObject({ type: "state", state: { phase: "conversing" } });
     expect(frames[1]).toMatchObject({ type: "events" });
-    expect((frames[1]?.events as { type: string }[])[0]?.type).toBe("snapshot");
+    expect((frames[1]?.events as { type: string }[] | undefined)?.[0]?.type).toBe("snapshot");
 
     socket.send(JSON.stringify({ type: "steer", text: "also add a docstring" }));
     await waitFor("the steer's answer", () => frames.some((f) => f.type === "steered"), 10_000);

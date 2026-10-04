@@ -150,7 +150,7 @@ const BASE_SHA = "b1c2d3e4f5a6b1c2d3e4f5a6b1c2d3e4f5a6b1c2";
 const TICK = "xd3";
 const MODEL = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash";
 const PROMPT = "# implement-tick\n\nImplement the tick — end with a STATUS line.";
-const PINNED = "registry.example.com/factory@sha256:" + "c".repeat(64);
+const PINNED = `registry.example.com/factory@sha256:${"c".repeat(64)}`;
 
 const protocolDefs = parseDefs((jobProtocol as { $defs: unknown }).$defs);
 const jobHandleSchema = parseSchema(
