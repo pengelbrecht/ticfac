@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 52,
-  "state": "running",
-  "reason": "pom is closed",
-  "updated_at": "2026-10-04T16:01:20Z",
+  "sequence": 53,
+  "state": "dispatching",
+  "reason": "dispatching hpk as attempt 9",
+  "updated_at": "2026-10-04T16:01:32Z",
   "ticks": [
     {
       "tick_id": "92k",
