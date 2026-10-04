@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 9,
-  "state": "publishing",
-  "reason": "closing qxj behind the integrated gate on 1ca29c8a4eb0",
-  "updated_at": "2026-10-04T09:13:38Z",
+  "sequence": 10,
+  "state": "running",
+  "reason": "qxj is closed",
+  "updated_at": "2026-10-04T09:13:46Z",
   "ticks": [
     {
       "tick_id": "q8m",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "qxj",
-      "state": "reported",
+      "state": "closed",
       "attempt": 2
     },
     {
