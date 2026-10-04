@@ -1,10 +1,6 @@
 {
   "$comment": "How the factory's vitest suite gets `contracts/`. Since tick 4i8 the bundle at the repository root is TICFAC's own: contracts/bundle.json carries ticfac's version and contracts/CHANGELOG.md is ticfac's. The suite reads it in place — it is authored in this repository, one level up — so the mode stays \"workspace\". Two files inside it (tk-json-manifest.json, tracker-layout.json) are not ticfac's to edit: they are ticks' own formats, vendored from a pinned ticks release and verified Go-side by the root contracts.pin.json. `bundleVersion` is the exact ticfac bundle version this package is built against, checked on every `pnpm test` and `pnpm typecheck`; `files` is the set of contracts the vitest suite imports and must equal it exactly.",
-<<<<<<< HEAD
-  "bundleVersion": "1.5.0",
-=======
-  "bundleVersion": "1.4.1",
->>>>>>> b9e85c8f6e13fe062652a71c54abe90669e44d93
+  "bundleVersion": "1.5.1",
   "mode": "workspace",
   "files": [
     "collect-vocabulary.json",
