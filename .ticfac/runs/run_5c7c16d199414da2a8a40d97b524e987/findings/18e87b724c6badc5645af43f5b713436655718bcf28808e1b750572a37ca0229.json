@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "ulw",
   "attempt": 13,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T04:30:46Z",
+  "triaged_at": "2026-10-04T04:30:57Z",
+  "triaged_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987 absorbing qxj",
+  "promoted_as": "qxj",
   "provenance": {
     "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
     "tick_id": "ulw",
