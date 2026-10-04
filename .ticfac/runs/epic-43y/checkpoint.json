@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 10,
-  "state": "gating",
-  "reason": "running the integrated gate for 92k on 266f8c5d28f9",
-  "updated_at": "2026-10-04T13:12:44Z",
+  "sequence": 11,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-10-04T13:13:38Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -50,6 +50,10 @@
     },
     {
       "tick_id": "j2k",
+      "state": "ready"
+    },
+    {
+      "tick_id": "lid",
       "state": "ready"
     }
   ],
