@@ -2,7 +2,7 @@
   "id": "s71",
   "title": "Tail's tick#try prefix counted from 5 recent events disagrees with the model",
   "description": "dashboardTail observes runfeed.Tries over m.Recent only (5 events), contrary to runfeed's own doc; a tick on its 3rd try whose recent events are all one attempt prints #1 while the model and the [e] feed say 3.\nevidence: internal/cli/watch_view.go:1000-1010; internal/runfeed/tries.go:20-22\n\nticfac run epic-hn6 created this tick by absorbing the finding 5cd94af427a8b198cf6d3d814dbbdf44dd6dc6b3cae42417e3016053cbb1a8e2 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/5cd94af427a8b198cf6d3d814dbbdf44dd6dc6b3cae42417e3016053cbb1a8e2.json on the run branch.",
-  "notes": "2026-10-04 18:18 - ticfac run epic-hn6: created by absorbing finding 5cd94af427a8b198cf6d3d814dbbdf44dd6dc6b3cae42417e3016053cbb1a8e2 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-hn6/absorptions/5cd94af427a8b198cf6d3d814dbbdf44dd6dc6b3cae42417e3016053cbb1a8e2.json on epic/hn6, and it says: the classifier put 0.41 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A3: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
+  "notes": "2026-10-04 18:18 - ticfac run epic-hn6: created by absorbing finding 5cd94af427a8b198cf6d3d814dbbdf44dd6dc6b3cae42417e3016053cbb1a8e2 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-hn6/absorptions/5cd94af427a8b198cf6d3d814dbbdf44dd6dc6b3cae42417e3016053cbb1a8e2.json on epic/hn6, and it says: the classifier put 0.41 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A3: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side\n2026-10-04 21:39 - ticfac run epic-hn6: s71 try 1 (run dispatch #15) merged into epic/hn6 as 0163f6d7f8b0; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +11,6 @@
   "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-04T16:18:24Z",
-  "updated_at": "2026-10-04T19:12:51.453009Z",
+  "updated_at": "2026-10-04T19:39:36.607851Z",
   "started_at": "2026-10-04T19:12:51.453008Z"
 }
