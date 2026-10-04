@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 97,
-  "state": "dispatching",
-  "reason": "dispatching c65 as attempt 17",
-  "updated_at": "2026-10-04T19:34:35Z",
+  "sequence": 98,
+  "state": "running",
+  "reason": "c65 is running as attempt 17",
+  "updated_at": "2026-10-04T19:34:49Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -97,7 +97,8 @@
     },
     {
       "tick_id": "c65",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 17
     },
     {
       "tick_id": "onv",
