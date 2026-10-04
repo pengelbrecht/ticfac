@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -93,6 +95,127 @@ func TestWatchHoldAlertNamesTheEpicNotAPlaceholder(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), "<epic-id>") {
 		t.Errorf("the alert still prints a placeholder instead of the epic id: %q", stderr.String())
+	}
+}
+
+// writeRunCheckpoint writes one run's durable checkpoint record into a
+// checkout's working tree — the directory `statusRecords` reads when the
+// run id spells no epic hint — carrying an epic id the run id itself does
+// not spell. It is how a run started as `ticfac run <epic> --run-id <other>`
+// keeps its epic findable: the checkpoint names it, not the id.
+func writeRunCheckpoint(t *testing.T, repo, runID, epicID string) {
+	t.Helper()
+	dir := filepath.Join(repo, runstate.Root, "runs", runID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.MarshalIndent(runstate.Checkpoint{
+		SchemaVersion: runstate.SchemaVersion,
+		RunID:         runID,
+		EpicID:        epicID,
+		Sequence:      1,
+		State:         runstate.StateRunning,
+		Reason:        "t1 is dispatched",
+		UpdatedAt:     time.Date(2026, 10, 4, 11, 0, 0, 0, time.UTC).UTC().Format(time.RFC3339),
+	}, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal the checkpoint: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "checkpoint.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The stream path's hold alert reads the run's CHECKPOINT for the epic a
+// non-epic-shaped local run id hides (tick fub): a run started as
+// `ticfac run <epic> --run-id run-p` spells its epic nowhere in its id, and
+// an alert that guesses the id spells `ticfac settle run-p …` — a command
+// that refuses (no branch, no epic run-p) while the model path, reading the
+// same checkpoint, spells the real epic. Two renderers naming two epics is
+// exactly what the one-model rule (hn6 rule 8) forbids.
+func TestWatchHoldAlertReadsTheCheckpointForANonEpicRunID(t *testing.T) {
+	repo := t.TempDir()
+	writeRunCheckpoint(t, repo, "run-p", "pip")
+	at := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	attempt := 2
+	writeFeedEvent(t, repo, "run-p", runfeed.NewEvent(
+		at, "run-p", "t1", &attempt, "dispatched", "t1 try 1 dispatched"))
+	writeFeedEvent(t, repo, "run-p", runfeed.NewEvent(
+		at.Add(time.Second), "run-p", "t1", &attempt, reconcile.StageRunHeld,
+		"attempt_unaddressed: nobody can say whether the attempt is running"))
+	writeFeedEvent(t, repo, "run-p", runfeed.NewEvent(
+		at.Add(2*time.Second), "run-p", "", nil, reconcile.StageRunFinished,
+		"failed: t1 did not pass"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "run-p"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	// The release command is addressed by the CHECKPOINT's epic — the one
+	// the model path spells — with the run's own store beside it.
+	want := statusmodel.SettleCommandForCurrentRun("pip", "t1", 2, "run-p")
+	if !strings.Contains(stderr.String(), want) {
+		t.Errorf("the alert does not name the checkpoint's epic %q: %q", want, stderr.String())
+	}
+	guessed := statusmodel.SettleCommandForCurrentRun("run-p", "t1", 2, "run-p")
+	if strings.Contains(stderr.String(), guessed) {
+		t.Errorf("the alert still guesses the epic from the run id, spelling the command that refuses: %q",
+			stderr.String())
+	}
+}
+
+// The same read serves the whole stream path's clearing commands: the
+// untriaged-findings hold's triage and a failed end's resume are addressed
+// by the checkpoint's epic too, or the one fix leaves two of its three
+// commands guessing (tick fub).
+func TestWatchStreamReadsTheCheckpointForEveryCommandANonEpicRunIDNeeds(t *testing.T) {
+	for _, why := range []struct {
+		hold   bool
+		detail string
+	}{
+		{true, "finding_untriaged: 1 finding(s) this run drafted are still waiting for a person"},
+		{false, "failed: t1 did not pass: the integrated gate refused the work"},
+	} {
+		repo := t.TempDir()
+		writeRunCheckpoint(t, repo, "run-p", "pip")
+		at := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+		if why.hold {
+			writeFeedEvent(t, repo, "run-p", runfeed.NewEvent(
+				at, "run-p", "rrl", nil, reconcile.StageRunHeld, why.detail))
+		}
+		writeFeedEvent(t, repo, "run-p", runfeed.NewEvent(
+			at.Add(time.Second), "run-p", "", nil, reconcile.StageRunFinished, why.detail))
+
+		var stdout, stderr syncBuffer
+		code := Run([]string{"watch", "--repo", repo, "run-p"}, &stdout, &stderr)
+		want := ExitHeld
+		if !why.hold {
+			want = exitGeneric
+		}
+		if code != want {
+			t.Fatalf("%s: exit code %d, want %d; stderr %q", why.detail, code, want, stderr.String())
+		}
+		var command string
+		if why.hold {
+			command = statusmodel.TriageCommandForCurrentRun("pip", "run-p")
+		} else {
+			command = statusmodel.ResumeCommand(statusmodel.HostLocal, "pip")
+		}
+		if !strings.Contains(stderr.String(), command) {
+			t.Errorf("%s: the command is not addressed by the checkpoint's epic %q: %q",
+				why.detail, command, stderr.String())
+		}
+		guessed := "run-p"
+		if why.hold {
+			guessed = statusmodel.TriageCommandForCurrentRun("run-p", "run-p")
+		} else {
+			guessed = statusmodel.ResumeCommand(statusmodel.HostLocal, "run-p")
+		}
+		if strings.Contains(stderr.String(), guessed) {
+			t.Errorf("%s: the command is still addressed by the guessed id %q: %q",
+				why.detail, guessed, stderr.String())
+		}
 	}
 }
 
