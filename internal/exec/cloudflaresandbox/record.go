@@ -23,6 +23,18 @@ import (
 // the names internal/runstate's closed `$defs.executor` list already admits.
 const ExecutorName = "cloudflare-sandbox"
 
+// WorkerAgentHarness is the harness a HOSTED attempt runs on: the factory's
+// WorkerAgent Durable Object (cloudflare/src/worker-agent.ts,
+// WORKER_AGENT_HARNESS) drives the attempt — its boot, its conversation, its
+// finish — on pi-durable, whatever harness the dispatch's profile named for
+// the container its tools run in (tick 4uj). A hosted start names it in the
+// handle, and Start accepts exactly that one harness mismatch for the same
+// reason it refuses every other: the record a caller keeps must name the
+// harness that ran. No container boot can produce the name — the
+// container's `TICKS_HARNESS` is the request's own — so a handle carrying it
+// is a hosted answer, never a door that fell back to a standing choice.
+const WorkerAgentHarness = "pi-durable"
+
 // PollInterval is the cadence at which a live job on this executor should be
 // addressed. It is the CLOUD number — the same five minutes reconcile's own
 // DefaultPollInterval states — because this substrate is one that can take
