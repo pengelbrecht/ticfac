@@ -1,0 +1,14 @@
+{
+  "id": "jkb",
+  "title": "Ended runs get a false verdict, phase and needs-you (stopped reads done/healthy)",
+  "description": "Rule 3/A2. runCompleted (build.go:735-744) treats any run_finished not prefixed 'failed:' as completed, so an operator-stopped run with open ticks reads phase done, merge done, verdict healthy, attention [] and still shows an ETA (live: `ticfac status epic-hn6 --json` for run_08f5…, stopped 15:59 with 2/35 ticks open). A completed local run waiting on its PR (phase merge, not alive) reads red 'stopped' (verdict.go:90 exempts only done/cancelled). A failed run gets no dead-run wait (build.go:785 runTerminal), so the frame says 'needs you: nothing' beside '● stopped' though a person must resume it. nextStepOf (pipeline.go:620) promises 'the run will retry' on a dead/failed run. Fix the lifecycle/verdict/needs-you for stopped, failed and completed-awaiting-merge runs, hide ETA on ended runs, and add tests for each.\nevidence: internal/statusmodel/build.go:735-744, :785; internal/statusmodel/verdict.go:90; internal/statusmodel/pipeline.go:620; `ticfac status epic-hn6 --json` → phase done, verdict healthy, attention [] for a hard-stopped run\n\nticfac run epic-hn6 created this tick by absorbing the finding 40bd8d783792c4853f7dfb9e927fe3e44f6e63e7e9e06e5d8e6ba3e90b5c318d (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/40bd8d783792c4853f7dfb9e927fe3e44f6e63e7e9e06e5d8e6ba3e90b5c318d.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T16:15:44Z",
+  "updated_at": "2026-10-04T16:15:44Z"
+}
