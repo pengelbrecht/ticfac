@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 21,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "While make gate ran concurrently on this host, two existing node-suite tests in harness/test/node/workspace-checkpoints.test.ts failed once (one took 33.5 s, past its timeout) and passed on the next run. They drive real git and real processes through the local door, and their time grows with host load; per the repo's flaky-means-bug rule it wants a deterministic bound or a longer per-test timeout.\nevidence: pnpm exec vitest run -c vitest.node.config.ts test/node/workspace-checkpoints.test.ts during make gate: 'destroys the container BETWEEN tool rounds' 33500ms, failed\n\nticfac run epic-43y created this tick by absorbing the finding 99f72c958b49ff4f51a16f2615a3baff7f53853f78bf16242f9f6a9a700ff88e (reported by run-epic-43y/tick-xd3/attempt-11): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/99f72c958b49ff4f51a16f2615a3baff7f53853f78bf16242f9f6a9a700ff88e.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "kjs",
+    "title": "Node workspace-checkpoint tests time out under heavy host load"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.55,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.03,
+      "design": 0.22,
+      "diagnosis": 0.64,
+      "mechanical": 0.03,
+      "translation": 0.08
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1347,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T21:11:57Z",
+  "answered_at": "2026-10-04T21:11:57Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "kjs",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "493245a9cde9549c4c21c784ec878b566434e236",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
