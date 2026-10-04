@@ -14,6 +14,6 @@
   "acceptance_criteria": "[1] P1-P4 (rows never reorder, needs-you never empty while a hold exists, never $0.00 for unmetered, frame fits the pane) hold over 500 seeded models per width/height; each property fails against its seeded broken renderer. [2] `go test -short -timeout 20m -run 'TestDashboardProperties' ./internal/cli/` passes in under 5s. [3] Real bugs found are named in the report; `make gate` passes.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-28T18:41:10.797921Z",
-  "updated_at": "2026-10-01T08:54:30.306951Z",
+  "updated_at": "2026-10-04T00:35:48.74779471Z",
   "started_at": "2026-10-01T08:54:30.306951Z"
 }
