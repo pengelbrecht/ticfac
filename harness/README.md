@@ -27,8 +27,19 @@ What is in it today:
   scripted two-turn conversation with a tool call — driven against pi-ai's
   faux provider, no network, no credentials. It asserts what the harness
   REPLAYED to the provider, not just what it returned.
+- **The Workers AI gateway provider** (`src/gateway/workers-ai.ts`, tick
+  oq4): `workersAIGatewayProvider` overrides pi's built-in
+  `cloudflare-workers-ai` provider so every catalog model is addressed at the
+  factory's `<gateway>/workers-ai/v1` on the run's gateway token (resolved at
+  every request), with GLM 5.3's `maxTokens: 65536` and
+  `thinkingFormat: "deepseek"` corrections; `gatewayModelRef` turns a routed
+  model id into the harness's `ModelRef` and refuses anything that is not
+  Workers AI (never claude in the cloud). Unit-tested against a recording
+  stand-in for the gateway route (`test/gateway-provider.test.ts`), and proved
+  on staging against the real route: attribution in the AI Gateway's own logs,
+  and a revoked token stopping the next request (`proof/README.md`).
 
-Both suites run in CI (the `typescript` job of `.github/workflows/ci.yml`),
+The suites run in CI (the `typescript` job of `.github/workflows/ci.yml`),
 not in the per-tick gate: same split as the factory suite — the gate covers
 contracts and types, CI covers behaviour.
 
@@ -45,7 +56,6 @@ never deployed.
 
 ## What comes next (the epic's steps)
 
-2. A gateway provider over `/api/gateway/workers-ai` with the run token.
 3. Execution environments (`FactorySandboxEnv`, the replay-safe tracked
    `bash`, `NodeExecutionEnv`).
 4. Workspace checkpoints (`afterTools` wip commits).

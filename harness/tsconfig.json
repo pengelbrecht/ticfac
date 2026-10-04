@@ -11,10 +11,11 @@
     ],
     "strict": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*", "test/**/*", "vitest.config.ts"]
+  "include": ["src/**/*", "test/**/*", "proof/**/*", "vitest.config.ts"]
 }
