@@ -21,13 +21,18 @@
  * as shell text (the env's own quoting discipline) — so the same code drives
  * a FactorySandbox container (a `FactorySandboxEnv`) and a local worktree.
  *
- * Known boundary, deliberate for this step: the loss is detected where the
- * env can SEE it — the tracked bash's poll, and a replay's fresh start
- * (`FactorySandboxEnv.ensureWorkspaceRestored`). A container that dies
- * BETWEEN rounds, under a file operation, boots empty and the operation
- * fails plainly (ENOENT) rather than restoring: the short-command door has no
- * loss signal to hook, and the WorkerAgent host (epic step 6) owns the
- * container's lifetime and can call `restoreLostWorkspace` itself.
+ * The pre-round ready check (tick 4fs): a container destroyed BETWEEN tool
+ * rounds — under no harness call, so no loss signal ever reaches the env,
+ * and the run-door RPC has none to hook — boots empty, and the next round's
+ * first file operation would fail plainly (ENOENT) instead of restoring.
+ * The `beforeRequest` hook of {@link workspaceCheckpointExtension} is the
+ * host-side seam: it verifies the ready marker before every round's request
+ * goes out and restores the workspace when the marker is gone (wired to
+ * `FactorySandboxEnv.ensureWorkspaceReady`, which reuses
+ * `restoreLostWorkspace`), so the round runs on the rebuilt tree and nothing
+ * is lost — the last round's wip already landed. A loss DURING a round, under
+ * a file operation, still fails plainly: the remaining boundary belongs to
+ * the WorkerAgent host (epic step 6), which owns the container's lifetime.
  */
 
 import { defineExtension, type Extension, GenerationTask, hook } from "@earendil-works/pi-durable";
@@ -120,6 +125,13 @@ export type WipOutcome =
 export type RestoreOutcome =
   | { readonly kind: "restored"; readonly sha: string; readonly subject: string }
   | { readonly kind: "failed"; readonly error: string };
+
+/**
+ * The pre-round ready check's answer (tick 4fs): the workspace's ready marker
+ * was there (`ready`), or it was gone and the workspace was rebuilt from the
+ * attempt branch (`restored`), or the rebuild failed (`failed`).
+ */
+export type WorkspaceReadyOutcome = { readonly kind: "ready" } | RestoreOutcome;
 
 /** The commit line's sentinel: nothing staged, nothing to commit. */
 const EMPTY = 3;
@@ -258,6 +270,15 @@ export type WorkspaceCheckpointOptions = {
   readonly workspace: WorkspaceGit;
   /** Every round's outcome, for the host's log and the tests. */
   readonly onCheckpoint?: (outcome: WipOutcome) => void;
+  /**
+   * The host-side ready check run before EVERY round's request (tick 4fs): a
+   * container destroyed between rounds boots empty and no other path sees it.
+   * Wire it to `FactorySandboxEnv.ensureWorkspaceReady()`; without it the
+   * extension checks nothing and the between-rounds loss stays a boundary.
+   */
+  readonly ensureReady?: () => Promise<WorkspaceReadyOutcome>;
+  /** Every restore the ready check performed, for the host's log and the tests. */
+  readonly onRestore?: (outcome: RestoreOutcome) => void;
 };
 
 /**
@@ -277,6 +298,25 @@ export function workspaceCheckpointExtension(options: WorkspaceCheckpointOptions
     name: "ticfac-workspace-checkpoints",
     hooks: [
       hook(GenerationTask, {
+        /**
+         * The pre-round ready check (tick 4fs): a container destroyed
+         * BETWEEN rounds boots empty, and only the host can see it — no
+         * harness call is in flight to fail. Restore BEFORE the round's
+         * request goes out; nothing is lost, because the last round's wip
+         * already landed, so the round continues without a word to the
+         * model. A failed restore THROWS, like a failed push below: the
+         * host must see a workspace it could not rebuild, not a round
+         * running on an empty box.
+         */
+        async beforeRequest(_request, _api, _context) {
+          if (options.ensureReady === undefined) return undefined;
+          const ready = await options.ensureReady();
+          if (ready.kind !== "ready") options.onRestore?.(ready);
+          if (ready.kind === "failed") {
+            throw new Error(`the pre-round ready check failed: ${ready.error}`);
+          }
+          return undefined;
+        },
         async afterTools(_assistant, _results, _api, _context) {
           const outcome = await pushWipCheckpoint(options.shell, options.workspace);
           options.onCheckpoint?.(outcome);

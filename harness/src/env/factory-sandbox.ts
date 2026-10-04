@@ -25,7 +25,12 @@
  * the fresh box boots empty, the env clears, clones, checks out the last
  * wip commit, runs setup, and hands the model a "restored to …; re-check
  * and re-run" result so the turn continues. A replay whose process is
- * gone checks the workspace is there before re-starting on it.
+ * gone checks the workspace is there before re-starting on it. And a
+ * container lost BETWEEN tool rounds — no harness call in flight, no loss
+ * signal anywhere in the door's RPCs — is caught by the host-side ready
+ * check before the next round (tick 4fs): `ensureWorkspaceReady`, wired
+ * into the checkpoint extension's `beforeRequest` hook, verifies the
+ * ready marker and restores before the round's request goes out.
  *
  * Runtime-neutral on purpose: the door is structural (./sandbox-door.ts), so
  * the same env code runs in the cloud (a DO stub) and in tests (a local
@@ -51,6 +56,7 @@ import {
   type RestoreOutcome,
   restoreWorkspace,
   type WorkspaceGit,
+  type WorkspaceReadyOutcome,
 } from "../workspace/checkpoints.js";
 import {
   defaultGuardDir,
@@ -746,13 +752,29 @@ export class FactorySandboxEnv implements ExecutionEnv {
    * not start on a box it could not rebuild.
    */
   private async ensureWorkspaceRestored(): Promise<void> {
-    if (this.workspace === null) return;
-    const check = await this.short('test -e "$CWD/.git"', { CWD: this.cwd });
-    if (check.exitCode === 0) return;
-    const restore = await this.restoreLostWorkspace();
-    if (restore.kind === "failed") {
-      throw new Error(`the workspace could not be restored: ${restore.error}`);
+    const ready = await this.ensureWorkspaceReady();
+    if (ready.kind === "failed") {
+      throw new Error(`the workspace could not be restored: ${ready.error}`);
     }
+  }
+
+  /**
+   * The host-side ready check before a round (epic 43y, tick 4fs): a
+   * container destroyed BETWEEN tool rounds — no harness call in flight, so
+   * none of the env's loss signals can fire — boots empty, and the next
+   * round's first file operation would fail plainly (ENOENT) instead of
+   * restoring. One short command verifies the ready marker; a missing one
+   * restores the workspace from the attempt branch
+   * ({@link restoreLostWorkspace}). Public: the host wires it into the
+   * checkpoint extension's `ensureReady`, before every round's request, and
+   * the WorkerAgent host (epic step 6) may call it ahead of a round it knows
+   * the box under.
+   */
+  async ensureWorkspaceReady(): Promise<WorkspaceReadyOutcome> {
+    if (this.workspace === null) return { kind: "ready" };
+    const check = await this.short('test -e "$CWD/.git"', { CWD: this.cwd });
+    if (check.exitCode === 0) return { kind: "ready" };
+    return this.restoreLostWorkspace();
   }
 
   /**
@@ -776,9 +798,13 @@ export class FactorySandboxEnv implements ExecutionEnv {
     // The guard directory died with the container; the next command into the
     // fresh box reinstalls it.
     this.guardInstalling = undefined;
+    // The memo collapses only CONCURRENT callers — a mid-command loss racing
+    // a pre-round check on the same fresh box. Once it settles the memo
+    // clears, so the NEXT loss restores again rather than answering the
+    // last one's outcome.
     this.restoring ??= restoreWorkspace(this.hostShell(), git).then(
       (outcome) => {
-        if (outcome.kind === "failed") this.restoring = undefined; // the next loss retries
+        this.restoring = undefined;
         return outcome;
       },
       (error: unknown) => {

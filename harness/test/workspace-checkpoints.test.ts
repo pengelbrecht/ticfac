@@ -11,11 +11,12 @@ import {
   Harness,
   MemoryStorage,
 } from "@earendil-works/pi-durable";
-import { createWriteTool } from "@earendil-works/pi-durable/tools";
+import { createReadTool, createWriteTool } from "@earendil-works/pi-durable/tools";
 import { describe, expect, it } from "vitest";
 import { BASH_NONCE_VAR, FactorySandboxEnv } from "../src/env/factory-sandbox.js";
 import { createTrackedBashTool } from "../src/tools/tracked-bash.js";
 import {
+  type RestoreOutcome,
   WIP_COMMIT_SUBJECT,
   type WipOutcome,
   type WorkspaceGit,
@@ -249,5 +250,119 @@ describe("a container lost mid-turn", () => {
     expect(replay.ok).toBe(true);
     expect(door.runs.some((r) => r.command.includes('test -e "$CWD/.git"'))).toBe(true);
     expect(door.starts.length).toBe(2);
+  });
+});
+
+describe("a container lost BETWEEN tool rounds", () => {
+  /**
+   * The pre-round ready check (epic 43y, tick 4fs): a container destroyed
+   * while NO harness call is in flight — after one round's wip push, before
+   * the next round's first request — boots empty, and the run-door RPC has
+   * no loss signal to hook, so only a HOST-side check before the round can
+   * see it. The extension's `beforeRequest` verifies the ready marker and
+   * restores before the model's next request goes out; the node suite
+   * (test/node/workspace-checkpoints.test.ts) carries the real-git half.
+   */
+  it("is restored by the ready check before the next round's request, on the real hook wiring", async () => {
+    const context = BACKGROUND_CONTEXT;
+    // The destroyed box's replacement boots EMPTY: the ready marker is
+    // gone, so `test -e` fails — armed the moment round 1's wip lands, so
+    // the loss sits exactly BETWEEN the rounds.
+    let emptied = false;
+    let pushedRounds = 0;
+    const door = fakeSandboxDoor({
+      // The wip push's rev-parse answers the round's commit sha; the
+      // restore's read-back answers the attempt branch's tip.
+      runOutput: (command) =>
+        command.includes("git rev-parse HEAD && git log -1 --format=%s")
+          ? "cafef00d\nwip: tool round\n"
+          : command.includes("git rev-parse HEAD")
+            ? "f00dcafef00d\n"
+            : "",
+      runExit: (command) => (emptied && command.includes('test -e "$CWD/.git"') ? 1 : 0),
+    });
+    const env = new FactorySandboxEnv({
+      sandbox: door.sandbox,
+      guardDir: null,
+      pollMs: 10,
+      workspace: { ...GIT, setup: "printf restored-setup-ok > .setup-marker" },
+    });
+
+    const faux = fauxProvider();
+    faux.setResponses([
+      () =>
+        fauxAssistantMessage([fauxToolCall("write", { path: "a.txt", content: "the edit" })], {
+          stopReason: "toolUse",
+        }),
+      () =>
+        fauxAssistantMessage([fauxToolCall("read", { path: "a.txt" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("the round after the loss completed on the restored workspace"),
+    ]);
+    const models = createModels();
+    models.setProvider(faux.provider);
+
+    const restores: RestoreOutcome[] = [];
+    const registry = createRegistry();
+    registry.install(
+      defineExtension({
+        name: "tools",
+        tools: [createReadTool(), createWriteTool(), createTrackedBashTool()],
+      }),
+    );
+    registry.install(
+      workspaceCheckpointExtension({
+        shell: env.hostShell(),
+        workspace: GIT,
+        // The host's wiring, as the WorkerAgent and local hosts do it: the
+        // env's ready check, before every round.
+        ensureReady: () => env.ensureWorkspaceReady(),
+        // Round 1's wip landed: the box under it is destroyed — the loss
+        // this tick is about, invisible to every other path.
+        onCheckpoint: () => {
+          pushedRounds += 1;
+          if (pushedRounds === 1) emptied = true;
+        },
+        onRestore: (outcome) => {
+          restores.push(outcome);
+          emptied = false;
+        },
+      }),
+    );
+
+    const storage = new MemoryStorage();
+    const harness = await Harness.open(storage, { models, registry, env: () => env }, context);
+    const root = await harness.root(context, {
+      agent: { model: { provider: "faux", modelId: "faux-1" } },
+    });
+    const submission = await root.submit(
+      { type: "input", content: "make an edit, then read it back" },
+      context,
+    );
+    const settled = await submission.wait(context);
+    expect(settled.status).toBe("done");
+    await harness.close(context);
+
+    // The check restored the box from the attempt branch's tip before the
+    // next round's request went out, and the host saw the outcome.
+    expect(restores).toEqual([{ kind: "restored", sha: "cafef00d", subject: "wip: tool round" }]);
+
+    // The ready check ran before EVERY request — three of them — and only
+    // the one on the empty box restored.
+    const lines = door.runs.map((r) => r.command);
+    const checkAt = lines
+      .map((line, index) => (line.includes('test -e "$CWD/.git"') ? index : -1))
+      .filter((index) => index >= 0);
+    expect(checkAt.length).toBe(3);
+    const at = (needle: string) => lines.findIndex((line) => line.includes(needle));
+    const firstPush = at("git push -q");
+    const prepare = at("find . -mindepth 1 -maxdepth 1");
+    const read = at('base64 < "$P"');
+    expect(firstPush).toBeGreaterThanOrEqual(0);
+    expect(checkAt[0]).toBeLessThan(firstPush); // round 1 checked ready
+    expect(checkAt[1]).toBeGreaterThan(firstPush); // round 2 checked the EMPTY box
+    expect(prepare).toBeGreaterThan(checkAt[1]); // and restored before its tools
+    expect(read).toBeGreaterThan(prepare); // the round read on the restored tree
   });
 });

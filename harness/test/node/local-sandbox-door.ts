@@ -32,6 +32,8 @@ export function localSandboxDoor(
   };
   const processes = new Map<string, LocalProcess>();
   const startCommands: string[] = [];
+  /** Every short command the run door executed, in order. */
+  const runCommands: string[] = [];
   let nextId = 0;
 
   const childEnv = (vars: Record<string, string>) => ({
@@ -50,6 +52,7 @@ export function localSandboxDoor(
 
   const door: SandboxDoor = {
     async run(command, env, runOptions) {
+      runCommands.push(command);
       const max = runOptions?.maxBytes ?? 256 * 1024;
       // The same bounding line the real door builds: the `;` before `}` —
       // without it `{ cmd }` is a bash syntax error (the node suite caught the
@@ -161,6 +164,8 @@ export function localSandboxDoor(
   return {
     sandbox: door,
     startCommands,
+    /** Every short command the run door executed, in order. */
+    runCommands,
     /** How many processes were actually spawned — the "no re-run" witness. */
     get spawnCount() {
       return processes.size;

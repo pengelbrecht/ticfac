@@ -57,5 +57,6 @@ export {
   type WipOutcome,
   type WorkspaceCheckpointOptions,
   type WorkspaceGit,
+  type WorkspaceReadyOutcome,
   workspaceCheckpointExtension,
 } from "./workspace/checkpoints.js";
