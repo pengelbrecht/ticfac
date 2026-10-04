@@ -3391,7 +3391,12 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	// about it. The one exception is a `no-commits` attempt whose worker
 	// stopped to ask (`blocked-first`): since tick tyd that is a question, and
 	// the verdict check above hands it to the same ladder this branch does.
-	if answer := collected.Result.RoleResult; answer != nil && needsHuman(answer.Status) {
+	// A tracker-edit delivery (trackerEditDelivery) is the one BLOCKED answer
+	// that never reaches it: the run answered the question itself by applying
+	// the fix the report named (tick l89), and a delivery the run has taken is
+	// not re-litigated into the ladder.
+	if answer := collected.Result.RoleResult; answer != nil && needsHuman(answer.Status) &&
+		!trackerEditDelivery(collected) {
 		if err := r.rejectDurably(marker, collected.Verdict, answer.Status+": "+answer.Summary); err != nil {
 			return nil, err
 		}

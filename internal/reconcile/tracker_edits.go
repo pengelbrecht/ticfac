@@ -130,19 +130,42 @@ func (r *Reconciler) trackerEditRefusal(ctx context.Context, marker attemptHandl
 
 // acceptTrackerEdits is the collect's half. An implement-tick attempt whose
 // report proposes tracker edits has every proposal held to the tracker now;
-// one the run refuses makes the report one it cannot act on (missing-result,
-// retried), and a DONE answer whose only deliverable is the proposal is a
-// delivery — ready-to-merge with no head — rather than an empty branch.
+// a DONE answer whose only deliverable is the proposal is a delivery —
+// ready-to-merge with no head — rather than an empty branch, and a proposal
+// the run refuses behind a DONE answer makes the report one it cannot act on
+// (missing-result, retried).
+//
+// Since tick l89 a BLOCKED answer whose fix is the tracker write itself is
+// that same delivery. A worker cannot write the tracker, so a blocked answer
+// over a fix that is a record write is the boundary wall named — yjq's three
+// attempts each said exactly that with the edit in hand, and the ladder
+// answered every one by redispatching into the same wall. When the blocked
+// answer carries the fix in the typed block, the run applies it through its
+// own writer and closes the tick, instead of entering the ladder. The
+// disposition keeps two edges: a BLOCKED answer that also committed work keeps
+// the ladder (its question rides on work a person may still have to settle,
+// not on an empty branch), and a question the standing orders reserve for a
+// person is never answered by applying what the report happened to carry.
 func (r *Reconciler) acceptTrackerEdits(ctx context.Context, marker attemptHandle, collected *subprocess.Collection) *subprocess.Collection {
 	if collected == nil || collected.Result == nil || marker.Role != "implement-tick" ||
 		len(collected.Report.TrackerEdits) == 0 {
 		return collected
 	}
-	// A worker that stops to ask delivered nothing, whatever it proposed:
-	// its question is answered by the ladder, and a proposal is applied only
-	// behind an answer that says the work is done.
-	switch collected.Report.Status {
-	case subprocess.StatusDone, subprocess.StatusDoneWithConcerns:
+	// What the proposal IS depends on the status: the delivery of a DONE
+	// answer or its companion; a BLOCKED answer's named fix, applied by the
+	// run itself when the answer committed nothing; never the companion of a
+	// NEEDS_CONTEXT question, which the ladder answers.
+	blocked := collected.Report.Status == subprocess.StatusBlocked
+	switch {
+	case collected.Report.Status == subprocess.StatusDone, collected.Report.Status == subprocess.StatusDoneWithConcerns:
+	case blocked && collected.Verdict == subprocess.VerdictNoCommits:
+		if class := r.standingOrders().alwaysAskClass(collected.Report.Detail); class != "" {
+			r.record(marker.TickID, StageTrackerEditRefused, "%s answered %s naming %s, but the question is in the "+
+				"always-ask class %q of the standing orders: the run does not apply it, and the question holds for a person",
+				r.attemptName(marker.TickID, marker.Attempt), collected.Report.Status,
+				trackerEditList(collected.Report.TrackerEdits), class)
+			return collected
+		}
 	default:
 		return collected
 	}
@@ -154,6 +177,12 @@ func (r *Reconciler) acceptTrackerEdits(ctx context.Context, marker attemptHandl
 		if why := r.trackerEditRefusal(ctx, marker, edit); why != "" {
 			r.record(marker.TickID, StageTrackerEditRefused, "%s proposed an edit of the %s, which the run refuses "+
 				"and does not apply: %s", name, edit, why)
+			if blocked {
+				// The blocked answer stands: its question is real and its
+				// named fix is not one the tracker admits, so the ladder —
+				// not a missing report — answers it.
+				return collected
+			}
 			return trackerEditsRefused(collected, edit, why)
 		}
 	}
@@ -185,9 +214,16 @@ func (r *Reconciler) acceptTrackerEdits(ctx context.Context, marker attemptHandl
 	delivered.Result = &result
 	delivered.Verdict = subprocess.VerdictReadyToMerge
 	delivered.Message = ""
-	r.record(marker.TickID, StageCollected, "%s committed no work and proposed %d tracker edit(s) (%s): that is its "+
-		"delivery, not an empty branch — the run applies the edits through its own tracker writer, then gates and "+
-		"closes the tick over them", name, len(collected.Report.TrackerEdits), trackerEditList(collected.Report.TrackerEdits))
+	if blocked {
+		r.record(marker.TickID, StageCollected, "%s answered %s over a fix that is itself a tracker-record write and "+
+			"committed no work: the run applies the %d proposed edit(s) (%s) itself, through its own tracker writer, "+
+			"instead of dispatching the question up the blocked ladder, then gates and closes the tick over them",
+			name, collected.Report.Status, len(collected.Report.TrackerEdits), trackerEditList(collected.Report.TrackerEdits))
+	} else {
+		r.record(marker.TickID, StageCollected, "%s committed no work and proposed %d tracker edit(s) (%s): that is its "+
+			"delivery, not an empty branch — the run applies the edits through its own tracker writer, then gates and "+
+			"closes the tick over them", name, len(collected.Report.TrackerEdits), trackerEditList(collected.Report.TrackerEdits))
+	}
 	return &delivered
 }
 
@@ -212,6 +248,22 @@ func trackerEditList(edits []subprocess.TrackerEdit) string {
 		names = append(names, edit.String())
 	}
 	return strings.Join(names, "; ")
+}
+
+// trackerEditDelivery says the run has taken this attempt's proposed tracker
+// edits as its delivery (acceptTrackerEdits): the collect reads ready-to-merge
+// over a branch with no head of its own, and the proposals are on the report.
+// That state is reachable only through the conversion — deliverCarriedWork
+// names a head, and the executor's own no-commits never reads ready-to-merge —
+// so it is the delivery's signature. A BLOCKED or NEEDS_CONTEXT answer beside
+// such a delivery was answered by applying it: the collect's "what the worker
+// SAID" check must not re-litigate it into the ladder the delivery exists to
+// skip (tick l89).
+func trackerEditDelivery(collected *subprocess.Collection) bool {
+	return collected != nil && collected.Result != nil &&
+		collected.Verdict == subprocess.VerdictReadyToMerge &&
+		collected.Result.Source.HeadSHA == nil &&
+		len(collected.Report.TrackerEdits) > 0
 }
 
 // integrateTrackerEdits is the integrate's half: the proposed edits applied
