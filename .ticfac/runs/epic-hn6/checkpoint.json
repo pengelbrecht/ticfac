@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 83,
-  "state": "dispatching",
-  "reason": "dispatching s71 as attempt 15",
-  "updated_at": "2026-10-04T19:12:47Z",
+  "sequence": 84,
+  "state": "running",
+  "reason": "s71 is running as attempt 15",
+  "updated_at": "2026-10-04T19:12:58Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -83,7 +83,8 @@
     },
     {
       "tick_id": "s71",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 15
     },
     {
       "tick_id": "435",
