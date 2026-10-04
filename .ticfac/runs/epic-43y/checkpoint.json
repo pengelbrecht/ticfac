@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 4,
-  "state": "collecting",
-  "reason": "collecting 92k attempt 1",
-  "updated_at": "2026-10-04T12:46:15Z",
+  "sequence": 5,
+  "state": "integrating",
+  "reason": "integrating 92k attempt 1 into epic/43y",
+  "updated_at": "2026-10-04T12:47:08Z",
   "ticks": [
     {
       "tick_id": "92k",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
