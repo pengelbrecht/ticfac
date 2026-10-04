@@ -35,3 +35,26 @@ func ResumeCommand(host, epicID string) string {
 func TriageCommand(epicID string) string {
 	return fmt.Sprintf("ticfac triage %s", epicID)
 }
+
+// TriageCommandForRun is the triage command addressed to ONE run's findings:
+// the drafts live in the run's own records, so a hold an earlier run left is
+// cleared by triaging THAT run's store — the run id the bare command's
+// default (epic-<epic-id>) spells is only right when the holding run wrote
+// under that spelling.
+func TriageCommandForRun(epicID, runID string) string {
+	return fmt.Sprintf("ticfac triage %s --run-id %s", epicID, runID)
+}
+
+// SettleCommand is the one command that releases a held attempt: the epic,
+// tick and run-wide attempt number it is addressed by — and, when the
+// holding run is NOT the run the model answers for, the --run-id that names
+// it, because attempt numbers are per run and the default a settle without
+// the flag uses (epic-<epic-id>) cannot name another run's dispatch. The
+// empty runID is the holding run's own word, spelled as every renderer has
+// spelled it so far.
+func SettleCommand(epicID, tickID string, attempt int, runID string) string {
+	if runID == "" {
+		return fmt.Sprintf("ticfac settle %s %s %d --release \"<who>\"", epicID, tickID, attempt)
+	}
+	return fmt.Sprintf("ticfac settle %s %s %d --run-id %s --release \"<who>\"", epicID, tickID, attempt, runID)
+}

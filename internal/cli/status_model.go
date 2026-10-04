@@ -409,6 +409,51 @@ func epicIDOf(runID string, records statusmodel.Records) string {
 	return ""
 }
 
+// priorFeedsLocal is every prior run's own event feed, keyed by the run id its
+// records were read under — the facts about a hold that only the feed states
+// (the records say a tick was rejected; only the line says it was held FOR
+// A PERSON). Local runs are read from the logs this checkout keeps,
+// `.ticfac/logs/<run-id>/events.jsonl`; a cloud run's from the factory's
+// events route per run id. Best-effort per run: a prior feed that cannot be
+// read is a missing hint, not a degraded source — the run's records carry
+// the rest of its history, and an unreadable feed must never cost the model
+// its answer.
+func priorFeedsLocal(repo string, prior []statusmodel.Records) map[string][]runfeed.Event {
+	feeds := map[string][]runfeed.Event{}
+	for _, records := range prior {
+		if records.Checkpoint == nil || records.Checkpoint.RunID == "" {
+			continue
+		}
+		if events, err := runfeed.Read(runfeed.Path(repo, records.Checkpoint.RunID)); err == nil {
+			feeds[records.Checkpoint.RunID] = events
+		}
+	}
+	return feeds
+}
+
+// priorFeedsCloud is the same read for a cloud run's earlier runs, through
+// the factory's events route per run id — the same route the run's own feed
+// comes from, and the only place its prior runs' feeds exist.
+func priorFeedsCloud(ctx context.Context, client *cloudClient, warn io.Writer, prior []statusmodel.Records) map[string][]runfeed.Event {
+	feeds := map[string][]runfeed.Event{}
+	for _, records := range prior {
+		if records.Checkpoint == nil || records.Checkpoint.RunID == "" {
+			continue
+		}
+		source := &cloudFeedSource{client: client, runID: records.Checkpoint.RunID, warn: warn}
+		located, absent, err := feedStanding(ctx, source)
+		if err != nil || absent {
+			continue
+		}
+		events := make([]runfeed.Event, 0, len(located))
+		for _, line := range located {
+			events = append(events, line.Event)
+		}
+		feeds[records.Checkpoint.RunID] = events
+	}
+	return feeds
+}
+
 // localStatusModel gathers everything a LOCAL run's model reads and builds
 // it. The liveness answer is the probe's own, carried as data; every age the
 // model states is measured against the one `now` the gathering stamps.
@@ -448,6 +493,8 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 		degraded = append(degraded, "forge")
 	}
 
+	priorFeeds := priorFeedsLocal(repo, prior)
+
 	home, _ := os.UserHomeDir()
 	session := func(worktree string) *statusmodel.Turn {
 		return statusmodel.SessionLog(home, worktree)
@@ -462,6 +509,7 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 		Graph:        graph,
 		Records:      &records,
 		PriorRecords: prior,
+		PriorFeeds:   priorFeeds,
 		Feed:         feed,
 		Standing:     standing,
 		StandingRead: standingErr == nil,
@@ -578,6 +626,11 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		degraded = append(degraded, "feed")
 	}
 
+	var priorFeeds map[string][]runfeed.Event
+	if ours {
+		priorFeeds = priorFeedsCloud(ctx, client, warn, prior)
+	}
+
 	var ci *statusmodel.CIInput
 	if ours {
 		input, ciErr := gather.ci(ctx, repo, epicID)
@@ -604,6 +657,7 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		Graph:        graph,
 		Records:      &records,
 		PriorRecords: prior,
+		PriorFeeds:   priorFeeds,
 		Feed:         feed,
 		StandingRead: false, // a cloud run's worktrees are not on this machine
 		Liveness: statusmodel.LivenessInput{
