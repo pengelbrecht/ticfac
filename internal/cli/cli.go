@@ -1040,6 +1040,7 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 		GateConfig:        *fl.gate,
 		ProfileDir:        *fl.profiles,
 		Tier:              *fl.tier,
+		FactoryAttempt:    factoryAttemptAnswer,
 		ReleaseOnly:       true,
 	})
 	if err != nil {

@@ -13,9 +13,13 @@ import "fmt"
 // under the factory's run_<hex>, so the command without the flag addresses a
 // store that carries no such attempt and refuses — a hold the header points
 // at that its own command cannot clear (tick ulw fixed the model surface;
-// tick qxj the prose and the alert). The empty run id says the caller does
-// not know it; either way the flag is left off and the spelling every local
-// run's prose has always carried stands.
+// tick qxj the prose and the alert). The command the flag spells is one a
+// person types on a host that never ran the attempt, so its release is
+// answered by the FACTORY that did — the store the flag opens carries the
+// marker, and the factory's record of the worker is what the release rules
+// on when this host holds none of its state (tick bd5). The empty run id
+// says the caller does not know it; either way the flag is left off and the
+// spelling every local run's prose has always carried stands.
 func SettleReleaseCommand(epicID, tickID string, attempt int, runID string) string {
 	if runID == "" || runID == "epic-"+epicID {
 		return fmt.Sprintf("ticfac settle %s %s %d --release \"<who>\"", epicID, tickID, attempt)

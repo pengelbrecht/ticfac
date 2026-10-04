@@ -230,6 +230,42 @@ type SettledState struct {
 	Evidence  string
 }
 
+// FactoryAttemptAnswer is what a factory that ran the attempt's worker can
+// still say about that attempt, asked by a host that holds none of its
+// state (Options.FactoryAttempt, settle.go). The factory booted the worker,
+// keeps its settlement record and answers for it by identity, so its answer
+// is what a release from elsewhere rules on — the same three things the
+// executor's own Inspect would have said on the host that ran it.
+//
+// The zero value is "not asked": no factory is configured, the run is not
+// one of its, or it could not be reached. Nothing is released on it — the
+// caller keeps its own refusal, and Evidence says why the question stood
+// unanswered.
+type FactoryAttemptAnswer struct {
+	// Asked says the factory was reached and answered; every field below is
+	// meaningful only when it is set.
+	Asked bool
+	// Terminal says the factory recorded the attempt's worker settled, and
+	// State is its own last word about it (succeeded, failed) — what a
+	// release from elsewhere records as the state it ruled on.
+	Terminal bool
+	State    string
+	// Live says the factory still answers for the run itself, so the attempt
+	// is addressable by the run that owns it: its orchestrator can cancel
+	// and collect the worker, and a live attempt is never released behind
+	// its back — Appendix A #6 is not an operator's to waive.
+	Live bool
+	// Lost says the factory cannot say what became of the worker: the run
+	// has ended and the worker's container left no settlement behind. That
+	// is `lost` — the one state a person may release — with the factory as
+	// the party that cannot say.
+	Lost bool
+	// Evidence is why the answer says what it does: recorded into the
+	// refusal when a release is refused on it, so a person holding a run
+	// reads what the factory actually said.
+	Evidence string
+}
+
 // Substrate is the versioned substrate a dispatch's executor observed at the
 // build that will run the job: its protocol version (herdr's API protocol,
 // the number between the client's hard floor and its warn line) and the
@@ -576,6 +612,20 @@ type Options struct {
 	// this host through the executor, without this. Nil, or an answer that
 	// is not Known, carries the work into a fresh worker as before.
 	SettledAttempt func(ctx context.Context, runID, tickID string, attempt int) SettledState
+
+	// FactoryAttempt answers what a factory that ran one of ITS OWN runs'
+	// attempts can still say about that attempt, asked by a settle running
+	// on a host that holds none of the attempt's state (settle.go, tick bd5):
+	// the operator's machine the hold's printed `ticfac settle --run-id
+	// run_…` command runs on, which never ran the worker and cannot build its
+	// executor. The factory booted the worker, keeps its settlement record
+	// and answers for it by identity, so it — not this host's directories —
+	// is the witness the release rules on. Asked only of THIS run's attempt,
+	// and only when this host holds no state for it; a local run's id is
+	// not one of the factory's, so the answer a factory gives cannot reach a
+	// local attempt's release. Nil keeps the refusal that was: nothing here
+	// was started, so there is nothing to release.
+	FactoryAttempt func(ctx context.Context, runID, tickID string, attempt int) FactoryAttemptAnswer
 
 	// ReleaseOnly builds a reconciler that only releases attempts (`ticfac
 	// settle`): it never reaches the close-out, so the close-out rule's
