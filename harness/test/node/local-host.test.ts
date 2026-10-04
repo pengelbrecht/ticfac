@@ -237,8 +237,13 @@ describe("the local worker host", () => {
     expect(readFileSync(join(config.worktree, "work.txt"), "utf8")).toBe("the harness wrote this");
     expect(readFileSync(config.report, "utf8")).toContain("STATUS: DONE");
 
-    // Every tool round pushed a wip commit to the attempt branch — the
+    // Every tool round pushed its wip snapshot to the attempt branch — the
     // carried-work mechanism at tool-round granularity, on a real origin.
+    // Since tick xd3 a snapshot is a commit ON TOP of the agent's own HEAD,
+    // force-pushed over the previous round's (src/workspace/checkpoints.ts:
+    // "a checkpoint must be invisible to the work it checkpoints"), so the
+    // branch carries ONE snapshot — the last round's — holding both rounds'
+    // files, and the base beneath it.
     const subjects = execFileSync(
       "git",
       ["--git-dir", f.origin, "log", "--format=%s", config.branch],
@@ -248,8 +253,15 @@ describe("the local worker host", () => {
     )
       .trim()
       .split("\n");
-    expect(subjects.filter((s) => s === "wip: tool round").length).toBe(2);
-    expect(subjects.at(-1)).toBe("the base commit");
+    expect(subjects).toEqual(["wip: tool round", "the base commit"]);
+    const files = execFileSync(
+      "git",
+      ["--git-dir", f.origin, "ls-tree", "--name-only", config.branch],
+      { encoding: "utf8" },
+    )
+      .trim()
+      .split("\n");
+    expect(files).toEqual(expect.arrayContaining(["work.txt", "RESULT-hpk.md", "README.md"]));
 
     // The conversation in storage ends with the faux answer.
     const messages = await messagesOf(config.storage);
