@@ -1,0 +1,74 @@
+{
+  "schema_version": 3,
+  "run_id": "epic-43y",
+  "epic_id": "43y",
+  "sequence": 1,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-10-04T12:01:13Z",
+  "ticks": [
+    {
+      "tick_id": "92k",
+      "state": "ready"
+    },
+    {
+      "tick_id": "kgk",
+      "state": "ready"
+    },
+    {
+      "tick_id": "oq4",
+      "state": "ready"
+    },
+    {
+      "tick_id": "dwn",
+      "state": "ready"
+    },
+    {
+      "tick_id": "pom",
+      "state": "ready"
+    },
+    {
+      "tick_id": "hpk",
+      "state": "ready"
+    },
+    {
+      "tick_id": "xd3",
+      "state": "ready"
+    },
+    {
+      "tick_id": "y03",
+      "state": "ready"
+    },
+    {
+      "tick_id": "jhp",
+      "state": "ready"
+    },
+    {
+      "tick_id": "66a",
+      "state": "ready"
+    },
+    {
+      "tick_id": "j2k",
+      "state": "ready"
+    }
+  ],
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "9b8c97d40511c55a997cb79dc4d3fa7b0f5219fc",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
