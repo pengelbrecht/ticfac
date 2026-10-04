@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 51,
-  "state": "publishing",
-  "reason": "closing pom behind the integrated gate on 70f499ace448",
-  "updated_at": "2026-10-04T16:01:12Z",
+  "sequence": 52,
+  "state": "running",
+  "reason": "pom is closed",
+  "updated_at": "2026-10-04T16:01:20Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "pom",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 7
     },
     {
