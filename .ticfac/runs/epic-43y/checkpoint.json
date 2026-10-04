@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 106,
-  "state": "running",
-  "reason": "hxd is closed",
-  "updated_at": "2026-10-04T21:11:47Z",
+  "sequence": 107,
+  "state": "dispatching",
+  "reason": "dispatching kjs as attempt 19",
+  "updated_at": "2026-10-04T21:12:01Z",
   "ticks": [
     {
       "tick_id": "92k",
