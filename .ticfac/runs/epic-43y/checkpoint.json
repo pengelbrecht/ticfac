@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 56,
-  "state": "running",
-  "reason": "xd3 is running as attempt 10",
-  "updated_at": "2026-10-04T16:02:04Z",
+  "sequence": 57,
+  "state": "collecting",
+  "reason": "collecting 4fs attempt 8",
+  "updated_at": "2026-10-04T16:03:16Z",
   "ticks": [
     {
       "tick_id": "92k",
