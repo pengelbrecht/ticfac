@@ -4,7 +4,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import contract from "../../contracts/status-model.json";
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
 import { insertRun } from "../src/db";
+import { issueRunToken } from "../src/gateway";
 import { MAX_SNAPSHOT_BYTES } from "../src/status";
+import { STATUS_RELAY_PATH } from "../src/status-relay";
 
 /**
  * The phone page's auth and listing (tick i1r): `/status` is the page an
@@ -48,6 +50,7 @@ afterEach(async () => {
   await env.DB.prepare("DELETE FROM status_snapshots").run();
   await env.DB.prepare("DELETE FROM status_alerts").run();
   await env.DB.prepare("DELETE FROM runs").run();
+  await env.DB.prepare("DELETE FROM run_gateway_token").run();
 });
 
 const auth = (): Record<string, string> => ({ Authorization: `Bearer ${token}` });
@@ -570,5 +573,157 @@ describe("the phone page renders the dashboard model (hn6, tick 0rx)", () => {
     // the room it needs. "Well under", asserted rather than assumed.
     const bytes = new TextEncoder().encode(envelope).length;
     expect(bytes).toBeLessThan(MAX_SNAPSHOT_BYTES / 4);
+  });
+});
+
+describe("a cloud run renders the model its own orchestrator pushed (hn6 h7w)", () => {
+  // The pushed cloud model: the contract's dashboard golden in cloud
+  // clothing — the run the factory hosts, named by its own run id, with the
+  // host the clearing commands read.
+  const goldens = (contract as { golden: Record<string, Record<string, unknown>> }).golden;
+  const pushedModel = (runID: string): Record<string, unknown> => ({
+    ...goldens.dashboard,
+    run_id: runID,
+    epic_id: "h7w",
+    host: "cloud",
+    // The cloud census: the orchestrator container cannot count the workers
+    // its run dispatched into their own containers.
+    workers: null,
+  });
+
+  /** One cloud run, its row in the runs table and its orchestrator credential. */
+  async function cloudRun(state: "running" | "failed"): Promise<{ runID: string; token: string }> {
+    const runID = "run_pushed_h7w";
+    await insertRun(env.DB, {
+      run_id: runID,
+      project: "ticks-test/phone-page",
+      epic: "h7w",
+      base_sha: "b".repeat(40),
+      requested_by: "operator@example.com",
+      state,
+      started_at: new Date().toISOString(),
+      ended_at: state === "running" ? null : new Date().toISOString(),
+      cost_usd: 0,
+      cost_source: null,
+      trace_id: null,
+      credential_grade: "write",
+    });
+    const { token } = await issueRunToken(env, { run_id: runID, tick_id: "h7w", attempt: 1 });
+    return { runID, token };
+  }
+
+  async function relayPush(token: string, runID: string, model: Record<string, unknown>) {
+    const res = await SELF.fetch(`${BASE}${STATUS_RELAY_PATH}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({
+        schema_version: 1,
+        run_id: runID,
+        host: "cloud",
+        pushed_at: new Date().toISOString(),
+        model,
+      }),
+    });
+    expect(res.status).toBe(201);
+  }
+
+  /** The whole page for one pushed LOCAL model, signed in — the door the
+   *  goldens (host "local", the dashboard golden's own run) come through. */
+  async function renderedLocalPage(doc: Record<string, unknown>): Promise<string> {
+    await pushSnapshot("epic-6in", doc);
+    return await (await page(await login())).text();
+  }
+
+  it("renders the pushed model's whole dashboard — the verdict, the tick table, the per-source cost — never a bare state chip", async () => {
+    const { runID, token } = await cloudRun("running");
+    await relayPush(token, runID, {
+      ...pushedModel(runID),
+      health: {
+        remote_retries: 9,
+        interventions: 0,
+        stall_warnings: 0,
+        wall_clocks_fired: 0,
+        verdict: {
+          state: "degraded",
+          summary: "degraded: the remote exhausted its retries",
+          recovered: [],
+        },
+      },
+    });
+
+    const body = await (await page(await login())).text();
+    expect(body).toContain("run_pushed_h7w");
+    expect(body).toContain("cloud run · epic h7w");
+    // The model's own health verdict — the field the composed doc cannot
+    // state — rendered in the one vocabulary, prefixed exactly once.
+    expect(body).toContain("degraded: the remote exhausted its retries");
+    expect(body).not.toContain("degraded: degraded:");
+    // The model's own tick table, from its own waves.
+    expect(body).toContain('<td class="c-tick">060</td>');
+    expect(body).toContain("ticks (4)");
+    // The model's own per-source cost lines.
+    expect(body).toContain("Workers AI $0.41");
+    // The cloud census said honestly, in the terminal's own words.
+    expect(body).toContain("workers run in the cloud — not visible from here");
+    // The age of the last push, named without the local row's PAUSED/STALE
+    // claim: a cloud run lives on the factory's container, and its run row —
+    // not the snapshot's age — says whether it is still going.
+    expect(body).toContain("last pushed model");
+  });
+
+  it("does not believe a pushed model that still claims the run alive after its own run row says it ended", async () => {
+    // The container pushed while its run was going; then it died without its
+    // terminal push, and the Workflow marked the run failed. The runs table is
+    // the liveness authority for a cloud run, so the row is composed from the
+    // factory's own records instead — a stopped clock, never a live one.
+    const { runID, token } = await cloudRun("running");
+    await relayPush(token, runID, pushedModel(runID));
+    await env.DB.prepare("UPDATE runs SET state = 'failed', ended_at = ? WHERE run_id = ?")
+      .bind(new Date().toISOString(), runID)
+      .run();
+
+    const body = await (await page(await login())).text();
+    expect(body).toContain("run_pushed_h7w");
+    expect(body).toContain("failed");
+    expect(body).toContain("clear with: ticfac run h7w --cloud");
+    // The stale alive model's dashboard is not rendered: no verdict, no tick
+    // table — the composed row's honest bareness stands.
+    expect(body).not.toContain('<span class="verdict');
+    expect(body).not.toContain('<td class="c-tick">');
+    expect(body).not.toContain("needs you");
+  });
+
+  it("spells the degraded and stopped verdicts in the terminal's own words — the cross-renderer test", async () => {
+    // The same two goldens internal/cli renders through dashVerdict
+    // (TestTheWatchAndThePhoneSpellOneVerdictWord): the summary the Go
+    // builder already prefixes, and the stopped run whose probe said
+    // nothing. Two renderers, one model, one vocabulary.
+    const degradedBody = await renderedLocalPage(goldens.dashboard_degraded);
+    expect(degradedBody).toContain("degraded: the remote exhausted its retries");
+    expect(degradedBody).not.toContain("degraded: degraded:");
+    expect(degradedBody).toContain(
+      "degraded: the remote exhausted its retries (recovered: net ×14)",
+    );
+
+    const stoppedBody = await renderedLocalPage(goldens.dashboard_stopped);
+    // The bare word — never a dangling "stopped: " with nothing behind it.
+    expect(stoppedBody).toContain('<span class="dot"></span>stopped</span>');
+    expect(stoppedBody).not.toContain("stopped: ");
+  });
+
+  it("renders the golden's elapsed, live workers and CI — the sections the same model gives the terminal", async () => {
+    const body = await renderedLocalPage(goldens.dashboard);
+    // The run's elapsed, from the earliest dispatch the tries state to the
+    // model's own clock — the same 2h9m the terminal's headline renders.
+    expect(body).toContain('<span class="heta">2h9m</span>');
+    // The live worker, in the terminal's own words: its tick, its model,
+    // its executor, the handle a person finds it by, the measured activity
+    // sparkline, its last action with its age, and the nudge.
+    expect(body).toContain(
+      "46x · glm-5.3 · herdr · herdr pane tick-46x-a6 · ▁▃▅█▇▅▃▁▂▅ · " +
+        "ran go test ./internal/reconcile (1m ago)  nudged ×1",
+    );
+    // The CI line, per check on the PR head, with the running check's age.
+    expect(body).toContain("CI #98 go ◐ 6m · ts ✓");
   });
 });

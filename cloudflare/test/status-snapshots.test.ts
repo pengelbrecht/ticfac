@@ -5,15 +5,18 @@ import { deriveTokenHash, mintFactoryToken } from "../src/auth";
 import { listStatusSnapshots } from "../src/status";
 
 /**
- * The snapshot door (tick i1r): `POST /api/status-snapshots`, the one seam
- * between the Go half of "follow ticfac from a phone" (the pusher inside
- * `ticfac run-epic`) and the TS half (the store, the page, the alerts).
+ * The snapshot door (tick i1r, and hn6 h7w): `POST /api/status-snapshots`,
+ * the OPERATOR's half of the seam between the Go pusher inside `ticfac
+ * run-epic` and the TS half (the store, the page, the alerts) — a LOCAL
+ * run's pusher on the operator's own machine. (A CLOUD run's orchestrator
+ * container pushes through the run-credential relay instead, pinned in
+ * test/status-relay.test.ts.)
  *
  * The contract pinned here is the one the Go pusher builds to: the envelope
- * version, the model's own `ticfac.status.v1` version, a local host, and the
- * run identity the envelope names matching the one its model carries. These
- * run against real workerd with the real D1 tables, so what is proven is the
- * door the binary talks to, not a mock of it.
+ * version, the model's own `ticfac.status.v1` version, a local host, and
+ * the run identity the envelope names matching the one its model carries.
+ * These run against real workerd with the real D1 tables, so what is proven
+ * is the door the binary talks to, not a mock of it.
  */
 
 const BASE = "https://factory.example.com";
@@ -175,12 +178,29 @@ describe("the envelope contract the Go pusher builds to", () => {
     expect(body.error).toBe("unsupported_version");
   });
 
-  it("refuses a cloud host: a cloud run needs no push, the factory composes it", async () => {
+  it("refuses a cloud envelope: a cloud run's own door is the relay, never the operator's", async () => {
+    // The operator's door is the LOCAL run's: its caller is the pusher on the
+    // operator's own machine. A cloud run's orchestrator container holds no
+    // operator token — its own model goes through the run-credential relay
+    // (STATUS_RELAY_PATH, hn6 h7w), and this door says so rather than store a
+    // model standing in for a run's own answer.
+    const res = await post("/api/status-snapshots", {
+      ...envelope("run_ab12", { ...localDoc("run_ab12", "2jn"), host: "cloud" }),
+      host: "cloud",
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { detail: string };
+    expect(body.detail).toContain("/api/status-relay");
+  });
+
+  it("refuses an envelope whose model names a different host than it does", async () => {
     const res = await post("/api/status-snapshots", {
       ...envelope("run_ab12", localDoc("run_ab12", "2jn")),
       host: "cloud",
     });
     expect(res.status).toBe(400);
+    const body = (await res.json()) as { detail: string };
+    expect(body.detail).toContain("agree with its envelope");
   });
 
   it("refuses an envelope whose model names another run", async () => {

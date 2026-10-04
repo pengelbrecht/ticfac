@@ -13,6 +13,7 @@ import {
   mintFactoryToken,
   PLATFORM_MAX_ITERATIONS,
   parseTokenHash,
+  STATUS_RELAY_PATH,
   TELEGRAM_WEBHOOK_PATH,
   TOKEN_PREFIX,
   timingSafeEqual,
@@ -22,6 +23,8 @@ import {
 // declared once: two copies of the same literal are equal at runtime, so a
 // runtime check could never have caught the duplication this pins.
 import authSource from "../src/auth.ts?raw";
+import { STATUS_RELAY_PATH as STATUS_RELAY_PATH_FROM_RELAY } from "../src/status-relay";
+import relaySource from "../src/status-relay.ts?raw";
 import { TELEGRAM_WEBHOOK_PATH as TELEGRAM_WEBHOOK_PATH_FROM_TELEGRAM } from "../src/telegram";
 import telegramSource from "../src/telegram.ts?raw";
 
@@ -256,6 +259,18 @@ describe("exempt paths", () => {
     // other's binding, and this is the path the exemption is actually about.
     expect(TELEGRAM_WEBHOOK_PATH_FROM_TELEGRAM).toBe(TELEGRAM_WEBHOOK_PATH);
     expect(isAuthExempt(TELEGRAM_WEBHOOK_PATH_FROM_TELEGRAM)).toBe(true);
+  });
+
+  it("exempts the status-relay door exactly, on the one spelling declared once", () => {
+    // The cloud run's status push: a container holding its run's own token,
+    // never the operator's (hn6 h7w). The path lives in auth.ts's registry
+    // and is re-exported by src/status-relay.ts, so the door that routes it
+    // and the exemption that admits it cannot be two spellings.
+    expect(isAuthExempt(STATUS_RELAY_PATH)).toBe(true);
+    expect(isAuthExempt(`${STATUS_RELAY_PATH}/extra`)).toBe(false);
+    expect(STATUS_RELAY_PATH_FROM_RELAY).toBe(STATUS_RELAY_PATH);
+    expect((authSource.match(/"\/api\/status-relay"/g) ?? []).length).toBe(1);
+    expect((relaySource.match(/"\/api\/status-relay"/g) ?? []).length).toBe(0);
   });
 
   it("treats everything else as authenticated", () => {

@@ -6,10 +6,20 @@
  * Two ways a run reaches this factory, and they are deliberately not the same
  * mechanism:
  *
- *  - A CLOUD run is reported NATIVELY. The factory already holds its index
- *    row (`runs`), its progress verdict (`run_progress`) and its room's
- *    pending gates, so [cloudStatusDoc] composes a model at read time from
- *    records other code wrote. No push, no new source of truth.
+ * Two ways a run reaches this factory, and they are deliberately not the same
+ * mechanism:
+ *
+ *  - A CLOUD run is reported NATIVELY two ways, both the run's own model:
+ *    the orchestrator container pushes the status document its own `ticfac
+ *    run-epic` gathers IN SITU — the same model `ticfac watch run_<hex>`
+ *    builds — through the run-credential door ([STATUS_RELAY_PATH],
+ *    src/status-relay.ts; hn6 h7w), because the factory's own records alone
+ *    cannot state the model's richer half: no health verdict, no tick table,
+ *    no per-source cost. [cloudStatusDoc] remains the FALLBACK composition for
+ *    a run that has pushed nothing yet — the first seconds of a run, or one
+ *    whose boot predates the push — and it is still what `/api/runs`'s own
+ *    listing reads, so no push, no new source of truth: the pushed document
+ *    is the run's own answer, the composition the factory's honest fallback.
  *
  *  - A LOCAL run is not on this machine: nothing here can read its tracker,
  *    its `.ticfac/` records or its event feed. So the run itself pushes small
@@ -95,6 +105,27 @@ export type StatusTry = {
  * state — stays; the hn6 fields (gloss, the pipeline cell, the parent row,
  * the duration, the tries) are optional because older snapshots lack them.
  */
+/**
+ * One live worker of the census (hn6 rule 5): the attempt it stands for,
+ * the executor's own handle, its measured activity window and its elapsed —
+ * the fields the phone's workers line renders. Null and empty are the
+ * model's own words: a census this machine cannot take is null, never a
+ * claim that none stand.
+ */
+export type StatusWorker = {
+  tick_id: string;
+  attempt?: number;
+  handle?: string | null;
+  elapsed_seconds?: number | null;
+  activity?: {
+    window_seconds?: number | null;
+    buckets?: number[];
+    last_action?: string | null;
+    last_action_at?: string | null;
+    nudges?: number;
+  } | null;
+};
+
 export type StatusTick = {
   tick_id: string;
   title?: string;
@@ -108,6 +139,13 @@ export type StatusTick = {
    *  promotion of the same finding — the work is the named tick's. Null on
    *  every tick that is its own work (hn6, tick gmo). */
   duplicate_of?: string | null;
+  /** The attempt this row's own state is (the current try's), where the
+   *  model states one — the identity a worker entry matches by. */
+  attempt?: number;
+  /** The current attempt's provenance (hn6): the model and the executor it
+   *  dispatched through — the words the workers panel names a worker by. */
+  model?: string | null;
+  executor?: string | null;
 };
 
 /**
@@ -177,6 +215,30 @@ export type StatusDoc = {
         ticks: StatusTick[];
       }[]
     | null;
+  /**
+   * The live workers census (hn6 rule 5): one entry per standing attempt,
+   * with the handle and the measured activity the workers line renders.
+   * Null is the model's own word for "cannot be counted here" — a cloud
+   * run's workers are not on the machine that gathered the doc — and
+   * different from empty, which says the census read and nothing stands.
+   */
+  workers?: StatusWorker[] | null;
+  /**
+   * The forge's answer on the epic PR's head, per check — the line the CI
+   * section renders. Null when there is no PR or the forge could not be
+   * asked.
+   */
+  ci?: {
+    state?: string;
+    pr?: {
+      number: number;
+      url?: string;
+      head_ref?: string;
+      head_sha?: string;
+      base_ref?: string;
+    } | null;
+    checks?: { name: string; status: string; conclusion: string; started_at: string }[];
+  } | null;
   /** The epic's children and waves counted; null when the tracker was unreadable. */
   progress?: {
     ticks?: { total: number; closed: number; open?: number } | null;
@@ -274,13 +336,14 @@ export function parseSnapshotEnvelope(body: unknown, byteLength: number): Envelo
       `snapshot envelope schema_version must be ${SNAPSHOT_ENVELOPE_VERSION}; got ${String(body.schema_version)}`,
     );
   }
-  if (body.host !== "local") {
+  if (body.host !== "local" && body.host !== "cloud") {
     return refuse(
       400,
       "invalid_request",
-      `this door stores LOCAL runs' snapshots (host "local"); a cloud run needs none — the factory composes its status natively`,
+      `snapshot host must be "local" or "cloud"; got ${String(body.host)}`,
     );
   }
+  const host = body.host as string;
   const runID = body.run_id;
   if (typeof runID !== "string" || runID.trim() === "" || runID.length > 64) {
     return refuse(400, "invalid_request", "run_id must be a non-empty string of at most 64 chars");
@@ -305,11 +368,11 @@ export function parseSnapshotEnvelope(body: unknown, byteLength: number): Envelo
       `the envelope names run ${runID} but its model names ${String(model.run_id)}`,
     );
   }
-  if (model.host !== "local") {
+  if (model.host !== host) {
     return refuse(
       400,
       "invalid_request",
-      `the model says host ${String(model.host)}; only a local run pushes snapshots`,
+      `the model says host ${String(model.host)}; a ${host} run's model must agree with its envelope`,
     );
   }
   const labels = body.tick_labels;
@@ -337,7 +400,7 @@ export function parseSnapshotEnvelope(body: unknown, byteLength: number): Envelo
     envelope: {
       schema_version: SNAPSHOT_ENVELOPE_VERSION,
       run_id: runID,
-      host: "local",
+      host: host,
       pushed_at: pushedAt,
       model: model as unknown as StatusDoc,
       ...(labels === undefined || labels === null
@@ -350,9 +413,10 @@ export function parseSnapshotEnvelope(body: unknown, byteLength: number): Envelo
 // ------------------------------------------------------------ the store ---
 
 /**
- * Stores one local run's last snapshot. An UPSERT, not an append: the page
- * answers "where is the run now", and the run's own feed (which the factory
- * also streams for cloud runs, tick k7p) is the history.
+ * Stores one run's last snapshot — local or cloud, the door decides which
+ * callers it takes. An UPSERT, not an append: the page answers "where is the
+ * run now", and the run's own feed (which the factory also streams for cloud
+ * runs, tick k7p) is the history.
  */
 export async function saveStatusSnapshot(db: D1Database, snapshot: StoredSnapshot): Promise<void> {
   await db
@@ -511,6 +575,42 @@ export function cloudStatusDoc(
 
 /** The closed classification vocabulary: the same four answers `ticfac` (bare, tick 2qz) renders. */
 export type RunClass = "held" | "failed" | "running" | "done" | "cancelled";
+
+/**
+ * The health verdict as ONE vocabulary every renderer spells — the Go
+ * terminal's `dashVerdict` and the phone page's headline are two renderers
+ * of one model, and the words are the model's own (hn6 A5, rule 8 — two
+ * renderers, they cannot disagree; tick h7w):
+ *
+ *  - `degraded` — the summary the Go builder spells (degradedCause) already
+ *    carries its own `degraded: ` prefix, so it is rendered as it stands;
+ *    a summary without the prefix gains it; an empty summary is the bare
+ *    word. A renderer that prefixed the state again read "degraded:
+ *    degraded: …" — the defect this function ends.
+ *  - `stopped` — the summary rides behind the state's own colon; a probe
+ *    that said nothing (empty summary) is the bare word, never a dangling
+ *    "stopped: ".
+ *  - `healthy` — the word itself, whatever the summary says.
+ *
+ * The degraded and stopped goldens of the contract bundle are the fixtures
+ * that pin this wording on both renderers: internal/cli renders them
+ * through dashVerdict, and cloudflare/test/phone-page.test.ts renders the
+ * same goldens through this function — the cross-renderer test.
+ */
+export function verdictWord(state: string, summary: string | null | undefined): string {
+  const text = summary ?? "";
+  switch (state) {
+    case "healthy":
+      return "healthy";
+    case "degraded":
+      if (text === "") return "degraded";
+      return text.startsWith("degraded:") ? text : `degraded: ${text}`;
+    case "stopped":
+      return text === "" ? "stopped" : `stopped: ${text}`;
+    default:
+      return text === "" ? state : `${state}: ${text}`;
+  }
+}
 
 /**
  * The one command that resumes a stopped run, named by the host the run lives
