@@ -29,7 +29,9 @@ import (
 //
 //   - its harness's own session transcript: when the last event was written,
 //     and what it was (model output, thinking, a tool call started, a tool
-//     result);
+//     result). The durable `pi` runner writes no session transcript — its
+//     conversation is the attempt's own SQLite storage, and the storage
+//     file's mtime is its last-event signal (tick bgx);
 //   - the CPU time of the tool processes under the harness, so a 25-minute
 //     test suite that is busy is not "quiet";
 //   - its worktree and branch: a file written or a commit made.
@@ -251,6 +253,15 @@ func TreeCPU(procs []Proc, root, minDepth int) (time.Duration, int) {
 // under — the tests' fake transcripts, and nothing else.
 const EnvTranscriptHome = "TICFAC_TRANSCRIPT_HOME"
 
+// Where a runner's last-event signal is read from, so the evidence sentence
+// says the truth about where a live worker's progress lives (tick bgx): a
+// CLI harness's own session files, or — for the durable `pi` runner, which
+// writes no session transcript — the attempt's conversation storage.
+const (
+	sourceTranscript = "session transcript"
+	sourceStorage    = "conversation storage"
+)
+
 // TranscriptEvent is the last event a harness wrote to its session
 // transcript.
 type TranscriptEvent struct {
@@ -308,6 +319,35 @@ func TranscriptDir(kind, cwd string) string {
 		return filepath.Join(configDir, "projects", claudeSlug.ReplaceAllString(cwd, "-"))
 	}
 	return ""
+}
+
+// LastStorageEvent answers the durable runner's last-event signal: when the
+// conversation's SQLite storage was last written. The `pi` runner is the
+// pi-durable Node host (tick hpk), not the pi CLI: it writes no session
+// transcript, its conversation lives in worker.sqlite beside the attempt
+// record (workerconfig.go), and the storage file's mtime is the honest
+// evidence — the file an operator can go read, written on every model and
+// tool round while the worker streams (the wip commits are the heartbeat).
+// False when there is no storage to read.
+func LastStorageEvent(stateDir string) (TranscriptEvent, bool) {
+	path := filepath.Join(stateDir, fileWorkerStorage)
+	info, err := os.Stat(path)
+	if err != nil {
+		return TranscriptEvent{}, false
+	}
+	return TranscriptEvent{At: info.ModTime(), Kind: "storage written", Path: path}, true
+}
+
+// lastRunnerEvent is the watch's last-event look for ONE runner: the durable
+// `pi` runner's conversation is the attempt's own storage (its mtime is the
+// signal), and every other runner — the CLI harnesses, and an overridden
+// `pi`, the pi CLI escape hatch, which is the only pi that still writes
+// session files — keeps its harness's session transcript.
+func lastRunnerEvent(record *attemptRecord) (TranscriptEvent, bool) {
+	if durableResume(record.Runner, record.RunnerArgv) {
+		return LastStorageEvent(record.State)
+	}
+	return LastTranscriptEvent(record.Runner, record.Worktree)
 }
 
 // LastTranscriptEvent reads the newest session transcript a harness kept for
@@ -455,6 +495,12 @@ type ActivityState struct {
 type Activity struct {
 	Transcript    TranscriptEvent
 	HasTranscript bool
+	// TranscriptSource names where this runner's last-event signal is read
+	// from — sourceTranscript for a CLI harness's session files (the
+	// default, empty), sourceStorage for the durable runner's conversation
+	// storage — so the evidence sentence stays honest even when the thing
+	// cannot be read.
+	TranscriptSource string
 	// ToolCPU is the CPU time of the processes under the harness; ToolProcs
 	// how many there are; CPUMeasured whether the table could be read.
 	ToolCPU     time.Duration
@@ -512,13 +558,19 @@ func (a Activity) Evidence(now time.Time) string {
 		return now.Sub(t).Round(time.Second).String() + " ago"
 	}
 	var parts []string
-	if a.HasTranscript {
+	switch {
+	case a.HasTranscript && a.TranscriptSource == sourceStorage:
+		parts = append(parts, fmt.Sprintf("its conversation storage was last written %s (%s)",
+			ago(a.Transcript.At), filepath.Base(a.Transcript.Path)))
+	case a.HasTranscript:
 		what := a.Transcript.Kind
 		if a.Transcript.ToolInFlight {
 			what += ", with no result yet"
 		}
 		parts = append(parts, fmt.Sprintf("its transcript's last event was %s (%s)", ago(a.Transcript.At), what))
-	} else {
+	case a.TranscriptSource == sourceStorage:
+		parts = append(parts, "its conversation storage could not be read")
+	default:
 		parts = append(parts, "no session transcript could be read")
 	}
 	if a.CPUMeasured {
@@ -629,7 +681,16 @@ type activityWatch struct {
 func (w *activityWatch) look(record *attemptRecord, runnerPID int, after time.Duration) (StuckStep, string) {
 	now := time.Now()
 	a := Activity{FirstSeenAt: w.state.FirstSeenAt}
-	if ev, ok := LastTranscriptEvent(record.Runner, record.Worktree); ok {
+	// The durable `pi` runner writes no session transcript (tick bgx): its
+	// conversation is the attempt's own storage, and the storage file's
+	// mtime is the honest last-event signal — never the pi CLI's session
+	// files, which would be some other pi's progress.
+	if durableResume(record.Runner, record.RunnerArgv) {
+		a.TranscriptSource = sourceStorage
+	} else {
+		a.TranscriptSource = sourceTranscript
+	}
+	if ev, ok := lastRunnerEvent(record); ok {
 		a.Transcript, a.HasTranscript = ev, true
 	}
 	if procs, err := SystemProcs(); err == nil {

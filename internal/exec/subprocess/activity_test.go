@@ -105,6 +105,94 @@ func TestTranscriptsOfPiAndClaudeAreReadWhereTheHarnessWritesThem(t *testing.T) 
 	}
 }
 
+// The `pi` runner is the durable Node host (tick hpk), not the pi CLI: it
+// writes no session transcript, its conversation is the attempt's own
+// SQLite storage (workerconfig.go), and the watch's last-event signal for
+// it is the storage file's mtime — never the CLI's session files, which a
+// pi transcript on the host must not be mistaken for (tick bgx).
+func TestTheDurableRunnersTranscriptSignalIsItsStorageNotTheCliSessions(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(EnvTranscriptHome, home)
+	worktree := t.TempDir()
+	state := t.TempDir()
+	// A pi CLI session transcript exists for the worktree — the old, wrong
+	// signal, still on disk where the CLI keeps it.
+	writeTranscript(t, "pi", worktree,
+		map[string]any{"type": "message", "timestamp": "2026-09-28T07:01:04.886Z",
+			"message": map[string]any{"role": "assistant"}})
+
+	record := &attemptRecord{Runner: "pi", Worktree: worktree, State: state}
+
+	// No storage yet: nothing can be read — and the CLI transcript is not
+	// read in its place, or the evidence would point an operator at a file
+	// the runner never writes.
+	if _, ok := lastRunnerEvent(record); ok {
+		t.Error("the durable runner answered a transcript event with no storage to read")
+	}
+
+	// The storage appears: its mtime is the event, its path names the file.
+	storage := filepath.Join(state, fileWorkerStorage)
+	if err := os.WriteFile(storage, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ev, ok := lastRunnerEvent(record)
+	if !ok {
+		t.Fatal("no event with the storage present")
+	}
+	if ev.Path != storage {
+		t.Errorf("event path = %s, want the storage %s", ev.Path, storage)
+	}
+	if d := time.Since(ev.At); d < 0 || d > time.Minute {
+		t.Errorf("event at %s, want the storage's mtime (now, ±1m)", ev.At)
+	}
+
+	// An overridden `pi` runner is the CLI escape hatch (TICFAC_RUNNER_ARGV,
+	// the tests' fake runner): it keeps the CLI's session transcript, the
+	// only pi that still writes one.
+	record.RunnerArgv = []string{"pi", "-p"}
+	ev, ok = lastRunnerEvent(record)
+	if !ok || ev.Path != filepath.Join(TranscriptDir("pi", worktree), "s.jsonl") {
+		t.Errorf("overridden runner event = %+v (%t), want the pi CLI session transcript", ev, ok)
+	}
+}
+
+// The evidence sentence names where a live worker's progress lives: the
+// durable runner's storage when it can be read, the storage honestly when
+// it cannot, and the CLI transcript for every other runner as before.
+func TestEvidenceNamesWhereTheDurableRunnersProgressLives(t *testing.T) {
+	now := time.Date(2026, 10, 4, 20, 0, 0, 0, time.UTC)
+	at := now.Add(-2 * time.Minute)
+	storage := filepath.Join("state", string(filepath.Separator), fileWorkerStorage)
+
+	durable := Activity{
+		FirstSeenAt:      now.Add(-time.Hour),
+		TranscriptSource: sourceStorage,
+		Transcript:       TranscriptEvent{At: at, Kind: "storage written", Path: storage},
+		HasTranscript:    true,
+	}
+	if s := durable.Evidence(now); !strings.Contains(s, "its conversation storage was last written 2m0s ago") ||
+		!strings.Contains(s, "("+fileWorkerStorage+")") {
+		t.Errorf("durable evidence = %s, want the storage and its file named", s)
+	}
+
+	durable.HasTranscript = false
+	if s := durable.Evidence(now); !strings.Contains(s, "its conversation storage could not be read") {
+		t.Errorf("durable evidence without a storage = %s, want the storage named as unreadable", s)
+	}
+
+	cli := Activity{
+		FirstSeenAt:   now.Add(-time.Hour),
+		Transcript:    TranscriptEvent{At: at, Kind: "model output"},
+		HasTranscript: true,
+	}
+	if s := cli.Evidence(now); !strings.Contains(s, "its transcript's last event was 2m0s ago (model output)") {
+		t.Errorf("cli evidence = %s, want the session transcript sentence as before", s)
+	}
+	if s := (Activity{FirstSeenAt: now.Add(-time.Hour)}).Evidence(now); !strings.Contains(s, "no session transcript could be read") {
+		t.Errorf("cli evidence without a transcript = %s, want the missing-transcript sentence as before", s)
+	}
+}
+
 // The decision, on a hand clock: quiet for the window → nudge; quiet a window
 // past the nudge → stop; activity after the nudge clears it.
 func TestDecideStuck(t *testing.T) {
