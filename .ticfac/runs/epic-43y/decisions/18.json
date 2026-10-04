@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 18,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "WorkerAgent hosting (xd3) applies only to runs on the do_v1 substrate: FactorySandboxEnv needs FactorySandbox's run door, which the Sandbox SDK 0.x class does not have. Every run submitted without substrate do_v1 still runs the pi-CLI all-in-one worker, so [A1] holds only once do_v1 is the default (umq) or the 0.x path gains a run door.\nevidence: cloudflare/src/worker-agent.ts workerAgentsFromEnv (record.substrate !== DO_V1 returns null)\n\nticfac run epic-43y created this tick by absorbing the finding 5fc1e1302f1a792143b807d074d6076d66f8208877ae0e7dfa3bbd889f38aec6 (reported by run-epic-43y/tick-xd3/attempt-11): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/5fc1e1302f1a792143b807d074d6076d66f8208877ae0e7dfa3bbd889f38aec6.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "hxd",
+    "title": "Cloud workers on the default sdk0 substrate are not WorkerAgents"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.7,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.01,
+      "design": 0.14,
+      "diagnosis": 0.76,
+      "mechanical": 0.06,
+      "translation": 0.03
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1326,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T19:02:07Z",
+  "answered_at": "2026-10-04T19:02:07Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "hxd",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "d9b0d8367b77d567ccc02f70da1bf23f18344c9c",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
