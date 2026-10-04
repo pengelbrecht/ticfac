@@ -2321,3 +2321,4 @@
 {"ts":"2026-10-04T16:22:27.568544Z","tick":"bd5","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"A cloud attempt hold's printed settle command still cannot release it"}}
 {"ts":"2026-10-04T16:31:16.859454Z","tick":"15b","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-04 18:31 - ticfac run epic-hn6: 15b try 1 (run dispatch #3) merged into epic/hn6 as e6e812db0d49; the integrated gate (go, ts) passed.","title":"Feed view attaches the last try's next step to older refusal lines"}}
 {"ts":"2026-10-04T16:31:19.498836Z","tick":"15b","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"Feed view attaches the last try's next step to older refusal lines"}}
+{"ts":"2026-10-04T16:31:36.383349Z","tick":"d9d","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"One unreadable sibling checkpoint fails every boot of the epic (d23)"}}
