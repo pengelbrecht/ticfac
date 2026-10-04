@@ -603,9 +603,15 @@ func overviewEntryOf(model statusmodel.Model, ours bool) overviewRun {
 	// Except an orphaned cloud record whose only stop is that its process is
 	// gone: the dead-run wait IS the orphan, and the row says what it is —
 	// failed, orphaned, with the cloud resume — below, so it ages into
-	// history like any failure instead of holding the screen forever.
+	// history like any failure instead of holding the screen forever. The
+	// same for a run whose own word says it failed and whose one wait is the
+	// resume the model now states (tick jkb): the failed row IS that wait,
+	// rendered in the failed class's own colour with the same resume — the
+	// listing's held band is for stops a person must clear before anything
+	// else, and a resume is exactly the move the failed row already names.
 	primary := primaryAttention(model.Attention)
-	if primary != nil && primary.Kind == statusmodel.WaitDeadRun && model.Liveness.State == cloudLivenessOrphaned {
+	if primary != nil && primary.Kind == statusmodel.WaitDeadRun &&
+		(model.Liveness.State == cloudLivenessOrphaned || model.Lifecycle.Phase == statusmodel.PhaseFailed) {
 		primary = nil
 	}
 	if primary != nil {

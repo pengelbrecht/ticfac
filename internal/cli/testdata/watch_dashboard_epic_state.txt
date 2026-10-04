@@ -4,6 +4,7 @@ hpd the epic the runs worked                                                    
 needs you: run run_bbb held at3 for a person: rejected_attempt_carries_work: attempt 12 of at3 was rejected with commits
   nothing merged
   ticfac settle hpd at3 12 --run-id run_bbb --release "<who>"
+needs you: run run_ccc failed: the orchestrator could not claim the epic's width — ticfac run hpd --cloud
 
  TICK  WHAT             TIER     PIPELINE                       TIME  ATTEMPTS
  at1   first            strong   claim ▸ work ▸ gate ▸ merged ✓ 1h55m 1

@@ -657,7 +657,17 @@ export function classifyStatusDoc(doc: StatusDoc): {
   reason: string;
   clear_with: string | null;
 } {
-  const primary = primaryAttention(doc.attention);
+  let primary = primaryAttention(doc.attention);
+  if (primary !== null && primary.kind === "dead-run" && doc.lifecycle.phase === "failed") {
+    // The failed row IS that wait (tick jkb): a run whose own word says it
+    // failed now carries its resume in attention, and the row says what it
+    // is — failed, with the same resume — in the failed class's own
+    // colour, the same carve-out the bare `ticfac` overview holds for the
+    // orphaned cloud record. A held band is for stops a person must clear
+    // before anything else; the resume is exactly the move the failed row
+    // already names.
+    primary = null;
+  }
   if (primary !== null) {
     return {
       state: "held",
