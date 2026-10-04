@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 5,
-  "state": "integrating",
-  "reason": "integrating 92k attempt 1 into epic/43y",
-  "updated_at": "2026-10-04T12:47:08Z",
+  "sequence": 6,
+  "state": "gating",
+  "reason": "running the integrated gate for 92k on 529fb1e16012",
+  "updated_at": "2026-10-04T12:47:21Z",
   "ticks": [
     {
       "tick_id": "92k",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 1
     },
     {
