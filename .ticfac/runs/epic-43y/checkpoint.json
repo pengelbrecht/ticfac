@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 9,
-  "state": "running",
-  "reason": "92k is closed",
-  "updated_at": "2026-10-04T12:56:23Z",
+  "sequence": 10,
+  "state": "gating",
+  "reason": "running the integrated gate for 92k on 266f8c5d28f9",
+  "updated_at": "2026-10-04T13:12:44Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -58,7 +58,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/43y",
-    "source_sha": "9b8c97d40511c55a997cb79dc4d3fa7b0f5219fc",
+    "source_sha": "266f8c5d28f907cbd741bddd1b9339a5177c5dce",
     "integration_ref": "refs/heads/epic/43y",
     "phase": "worker",
     "executor": null,
