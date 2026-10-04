@@ -805,12 +805,14 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 		// cleared by triage — settle releases an attempt, and this hold
 		// holds a person's decision about findings, not an attempt. Every
 		// other hold is the settle command the run-wide dispatch number
-		// addresses — the same sentence `ticfac watch` prints.
+		// addresses — the same sentence `ticfac watch` prints — addressed to
+		// the run whose store carries the attempt when that run's id is not
+		// the spelling settle defaults to (tick ulw).
 		if strings.HasPrefix(held.Detail, reconcile.RefusedFindingUntriaged+":") {
 			unblock := TriageCommand(m.EpicID)
 			w.UnblockCommand = &unblock
 		} else if held.TickID != nil && held.Attempt != nil {
-			unblock := SettleCommand(m.EpicID, *held.TickID, *held.Attempt, "")
+			unblock := SettleCommandForCurrentRun(m.EpicID, *held.TickID, *held.Attempt, m.RunID)
 			w.UnblockCommand = &unblock
 		}
 		claim(w)

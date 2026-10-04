@@ -58,3 +58,19 @@ func SettleCommand(epicID, tickID string, attempt int, runID string) string {
 	}
 	return fmt.Sprintf("ticfac settle %s %s %d --run-id %s --release \"<who>\"", epicID, tickID, attempt, runID)
 }
+
+// SettleCommandForCurrentRun is the settle command for a hold the run the
+// model answers for left. It names the run whenever that run's id is NOT
+// the epic spelling (epic-<epic-id>): settle without --run-id defaults to
+// that spelling, which is the right address for a run under it — and a
+// refused address for a run whose records live under another id, today's
+// cloud runs, whose orchestrator container execs `run-epic --run-id` the
+// factory's run_<hex> (tick ulw). The empty run id says the caller does
+// not know it; either way the flag is left off and the spelling every
+// local run's needs-you has always carried stands.
+func SettleCommandForCurrentRun(epicID, tickID string, attempt int, runID string) string {
+	if runID == "" || runID == "epic-"+epicID {
+		return SettleCommand(epicID, tickID, attempt, "")
+	}
+	return SettleCommand(epicID, tickID, attempt, runID)
+}
