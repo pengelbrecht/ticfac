@@ -12,8 +12,11 @@
   "attempt": 11,
   "done_item": "A2",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T05:58:30Z",
+  "triaged_at": "2026-10-04T05:58:41Z",
+  "triaged_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987 absorbing q8m",
+  "promoted_as": "q8m",
   "provenance": {
     "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
     "tick_id": "d23",
