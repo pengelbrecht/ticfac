@@ -3,6 +3,7 @@
   "title": "watch dashboard renders as a staircase in a real terminal: raw mode needs CRLF",
   "gloss": "dashboard staircase in raw tty",
   "description": "Operator screenshot 2026-10-01 (ticfac watch hn6 in iTerm/herdr, stdin+stdout a terminal): every line after the first starts where the previous ended — rows, headers, the feed tail and the end message all drift right and wrap. Cause (verify): the key-reading mode puts the terminal in raw mode, where \\n no longer returns the carriage, so every newline the dashboard (and the final summary) writes must be \\r\\n while raw mode is on — or render through a frame writer that positions each line absolutely. Also the closing message printed after the watch ends must restore the terminal first. Header columns (TICK WHAT TIER PIPELINE TIME ATTEMPTS) were also laid out across the full pane width with huge gaps — size columns to content.",
+  "notes": "2026-10-04 01:42 - ticfac run run_5c7c16d199414da2a8a40d97b524e987: r3x try 1 (run dispatch #7) reported a finding the run itself decided — defect \"Tick drill-in view (enter) renders lines wider than the pane\" (key 47b6e6284fae1a71872c116acb40af2aa82666cb0e739f93adf3ce8eda9ba964, severity medium, for this repository) is absorbed into the running epic as tick aro, with nobody triaging; the decision record is on the run branch at .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/47b6e6284fae1a71872c116acb40af2aa82666cb0e739f93adf3ce8eda9ba964.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +12,6 @@
   "acceptance_criteria": "A pty-driven test (github.com/creack/pty or equivalent) renders the dashboard with keys on at 120x40 and 80x24 and asserts every frame line starts at column 0 (no staircase) and fits the width; the same test covers the end-of-watch message. make gate passes.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-01T11:01:25.071301Z",
-  "updated_at": "2026-10-04T01:06:53.652585973Z",
+  "updated_at": "2026-10-04T01:42:03.166650878Z",
   "started_at": "2026-10-04T01:06:53.652585303Z"
 }
