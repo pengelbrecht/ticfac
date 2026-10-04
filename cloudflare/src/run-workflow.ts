@@ -1891,26 +1891,15 @@ async function supervisePass(
               ? orchestratorContainerGone(boot)
               : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})`;
           bootEnded = lastDetail;
-          if (isTerminalExit(code)) {
-            bootEnded = `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)})`;
-            // A configuration verdict from the boot: the SHA still will not check
-            // out, the pre-flight still fails, the epic the run was submitted
-            // for is still missing from the submitted tree. Another container
-            // reaches the identical answer and only costs money — so the reason
-            // the run STOPS with names the class, not just the code
-            // (terminalExitReason, ticfac tick rf3).
-            return {
-              kind: "failed",
-              detail: `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)}), so no sandbox was rebooted`,
-              boots: counter.next - 1,
-            };
-          }
           // An orchestrator that EXITED after its supervisor halted is a
           // decision, not a death (epic hn6's cloud run: boots 1 and 2 both
           // exited 1 right after a supervision_halted line, and each was
           // rebooted and spent a boot). The halt's own line is on the run
           // feed, relayed before the process exited; a replacement would only
-          // re-derive the stop the halt already made.
+          // re-derive the stop the halt already made. Asked BEFORE the exit
+          // code is classified: a halt exits 3 when the reconciler held (hn6's
+          // run_be66ff09, claim_width), and 3 is also a configuration verdict's
+          // code — the halt line on the feed is what says which it was.
           if (seen.process !== "gone") {
             const halted = await step.do(
               `${options.label}:halted:${attempt}`,
@@ -1926,6 +1915,20 @@ async function supervisePass(
               bootEnded = detail;
               return { kind: "failed", detail, boots: counter.next - 1 };
             }
+          }
+          if (isTerminalExit(code)) {
+            bootEnded = `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)})`;
+            // A configuration verdict from the boot: the SHA still will not check
+            // out, the pre-flight still fails, the epic the run was submitted
+            // for is still missing from the submitted tree. Another container
+            // reaches the identical answer and only costs money — so the reason
+            // the run STOPS with names the class, not just the code
+            // (terminalExitReason, ticfac tick rf3).
+            return {
+              kind: "failed",
+              detail: `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)}), so no sandbox was rebooted`,
+              boots: counter.next - 1,
+            };
           }
           lastSeen = { state: seen.process, exit_code: code };
           ending = "dead";
