@@ -669,6 +669,181 @@ func TestTheUntriagedFindingWaitIsClearedByTriage(t *testing.T) {
 	t.Errorf("the untriaged finding is not attention: %+v", model.Attention)
 }
 
+// priorCheckpoint is an earlier run's checkpoint as the records read it:
+// one run of this epic, in the state it ended (or stands) in.
+func priorCheckpoint(runID, state string) *runstate.Checkpoint {
+	return &runstate.Checkpoint{
+		SchemaVersion: runstate.SchemaVersion,
+		RunID:         runID,
+		EpicID:        "2jn",
+		Sequence:      4,
+		State:         runstate.State(state),
+		Reason:        "the run died before its close-out",
+		UpdatedAt:     testNow.Add(-2 * time.Hour).Format(time.RFC3339),
+	}
+}
+
+// priorFinding is one earlier run's draft as the records read it: the
+// attempt that discovered it names the run it belongs to.
+func priorFinding(key, runID, tickID, at string) runstate.Finding {
+	return runstate.Finding{
+		SchemaVersion:  runstate.SchemaVersion,
+		Key:            key,
+		Source:         "ticfac-worker",
+		DiscoveredFrom: "run-" + runID + "/tick-" + tickID + "/attempt-1",
+		Kind:           "defect",
+		Title:          "A finding only an earlier run found",
+		Body:           "Discovered beside the work, reported mechanically.",
+		Severity:       "medium",
+		TickID:         tickID,
+		Attempt:        1,
+		Status:         runstate.FindingProposed,
+		ProposedAt:     at,
+		Provenance: runstate.Provenance{
+			RunID: runID, SourceRef: "refs/heads/epic/2jn",
+			SourceSHA: "0fc09212e0e8f96fc3fdc87c2f681519bb0d191a", Phase: runstate.PhaseWorker,
+		},
+	}
+}
+
+// TestPriorRunUntriagedFindingsReachNeedsYou (tick d23): a run that died
+// before its close-out raised no run_held line — the hold the close-out's
+// findings gate would have raised never happened — so its untriaged drafts
+// are invisible to a WaitFinding block that reads only the newest run's
+// records, although a person's decision about them is standing. Every
+// run's drafts reach needs-you, each with the triage command addressed to
+// the run whose own records hold them; a prior run whose records name no
+// run id is skipped — there is no command to spell for a run nobody can
+// address, and it answers for no other run's copy either.
+func TestPriorRunUntriagedFindingsReachNeedsYou(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.PriorRecords = []Records{
+		{
+			Checkpoint: priorCheckpoint("run_prior", "failed"),
+			Findings: []runstate.Finding{priorFinding(
+				"c0ffee0000000000000000000000000000000000000000000000000000000001",
+				"run_prior", "89m", "2026-09-27T02:00:00Z")},
+		},
+		{
+			// A run the records cannot name: no triage command exists for it.
+			Findings: []runstate.Finding{priorFinding(
+				"c0ffee0000000000000000000000000000000000000000000000000000000002",
+				"run_nameless", "152", "2026-09-26T02:00:00Z")},
+		},
+	}
+	model := Build(src)
+
+	finding := 0
+	var attention *Attention
+	for i := range model.Attention {
+		if model.Attention[i].Kind != WaitFinding {
+			continue
+		}
+		finding++
+		if strings.Contains(model.Attention[i].What, "run_prior") {
+			attention = &model.Attention[i]
+		}
+	}
+	if attention == nil {
+		t.Fatalf("the dead run's untriaged draft is not attention: %+v", model.Attention)
+	}
+	if finding != 1 {
+		t.Errorf("the finding attention appears %d times, want once: a run the records cannot name must not "+
+			"raise one beside it: %+v", finding, model.Attention)
+	}
+	if !attention.NeedsPerson {
+		t.Error("a prior run's untriaged draft does not need a person")
+	}
+	if attention.UnblockCommand == nil ||
+		*attention.UnblockCommand != "ticfac triage 2jn --run-id run_prior" {
+		t.Errorf("the prior run's triage command is %+v, want the one addressed to its own store",
+			attention.UnblockCommand)
+	}
+	if attention.Since == nil || *attention.Since != "2026-09-27T02:00:00Z" {
+		t.Errorf("the prior run's findings attention reads since %+v, want the draft's own proposal",
+			attention.Since)
+	}
+}
+
+// TestANewerRunsFindingCopyAnswersForTheOlderRuns: a finding is one record
+// across runs, keyed by content — the funnel's own identity — so the copies
+// dedupe NEWEST-FIRST through needs-you. The newest run's own copy, whatever
+// its status, answers for every older run's copy (adopted into the live run's
+// store, or decided, its decision standing), and among prior runs the newest
+// proposed copy is the one a person is asked to triage: triaging an older
+// run's copy settles nothing the newer word still owns.
+func TestANewerRunsFindingCopyAnswersForTheOlderRuns(t *testing.T) {
+	t.Parallel()
+	// The running fixture's own draft key: the newest run carries it
+	// proposed in its own records.
+	const newestKey = "46b634a4f894acc04534dd6e9b70b677d68c39f3b66b98e820613ac7dd8c6ce2"
+
+	t.Run("the newest run's own copy owns the finding", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.PriorRecords = []Records{{
+			Checkpoint: priorCheckpoint("run_prior", "failed"),
+			Findings:   []runstate.Finding{priorFinding(newestKey, "run_prior", "89m", "2026-09-26T02:00:00Z")},
+		}}
+		model := Build(src)
+		for _, a := range model.Attention {
+			if a.Kind == WaitFinding {
+				t.Errorf("an older run's copy of a finding the newest run owns raised attention: %+v", a)
+			}
+		}
+	})
+
+	t.Run("a newer prior run's decision stands", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Records.Findings = nil // the newest run carries no copy of the key
+		decided := priorFinding(newestKey, "run_decider", "89m", "2026-09-26T02:00:00Z")
+		decided.Status = runstate.FindingDiscarded
+		decided.TriagedAt = "2026-09-26T06:00:00Z"
+		decided.TriagedBy = "an operator"
+		src.PriorRecords = []Records{
+			{ // oldest first: its proposed copy is the older word
+				Checkpoint: priorCheckpoint("run_older", "failed"),
+				Findings:   []runstate.Finding{priorFinding(newestKey, "run_older", "89m", "2026-09-26T01:00:00Z")},
+			},
+			{Checkpoint: priorCheckpoint("run_decider", "failed"), Findings: []runstate.Finding{decided}},
+		}
+		model := Build(src)
+		for _, a := range model.Attention {
+			if a.Kind == WaitFinding {
+				t.Errorf("a decided finding raised attention from an older run's copy: %+v", a)
+			}
+		}
+	})
+
+	t.Run("the newest prior run's proposed copy is the one to triage", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Records.Findings = nil
+		src.PriorRecords = []Records{
+			{Checkpoint: priorCheckpoint("run_older", "failed"),
+				Findings: []runstate.Finding{priorFinding(newestKey, "run_older", "89m", "2026-09-26T01:00:00Z")}},
+			{Checkpoint: priorCheckpoint("run_newer", "failed"),
+				Findings: []runstate.Finding{priorFinding(newestKey, "run_newer", "152", "2026-09-27T01:00:00Z")}},
+		}
+		model := Build(src)
+		var attentions []Attention
+		for _, a := range model.Attention {
+			if a.Kind == WaitFinding {
+				attentions = append(attentions, a)
+			}
+		}
+		if len(attentions) != 1 || !strings.Contains(attentions[0].What, "run_newer") {
+			t.Fatalf("the finding's attention is %+v, want one addressed to the newest prior run", attentions)
+		}
+		if attentions[0].UnblockCommand == nil ||
+			*attentions[0].UnblockCommand != "ticfac triage 2jn --run-id run_newer" {
+			t.Errorf("the command is %+v, want the newer prior run's own triage", attentions[0].UnblockCommand)
+		}
+	})
+}
+
 // TestADeadCloudRunResumesThroughTheFactory: the dead-run resume is named
 // by the host the run lives on. A cloud run's resume is a new submission to
 // its factory — `ticfac run <epic> --cloud` — because `run-epic` here would

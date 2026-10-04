@@ -218,13 +218,13 @@ func (r *Reconciler) onlyReportBeyondIntegration(head, tick string) bool {
 const StageFindingAdopted = "finding_adopted"
 
 // adoptFindings takes a dead run's untriaged findings into this run's own
-// drafts (the hn6 follow-up). A run that died never reaches its close-out, so
-// the drafts it left PROPOSED would sit under a run nothing will ever finish
-// — neither decided by the run's absorption rules nor held before a person.
-// Adopted, they are this run's: decided before its close-out
-// (decideUndecidedFindings) — absorbed, backlogged, routed — by exactly the
-// rules a finding of its own is, and held for a person by its close-out when
-// those leave one standing.
+// drafts (the hn6 follow-up), with the claim this run took over from it. A
+// run that died never reaches its close-out, so the drafts it left PROPOSED
+// would sit under a run nothing will ever finish — neither decided by the
+// run's absorption rules nor held before a person. Adopted, they are this
+// run's: decided before its close-out (decideUndecidedFindings) — absorbed,
+// backlogged, routed — by exactly the rules a finding of its own is, and
+// held for a person by its close-out when those leave one standing.
 //
 // Each draft keeps its discovery (the job that found it, the tick and
 // attempt, when it was proposed); only the provenance's run becomes this
@@ -237,6 +237,27 @@ const StageFindingAdopted = "finding_adopted"
 // stands over a copy. Decided drafts are not adopted: their decision already
 // lives in the tracker.
 func (r *Reconciler) adoptFindings(tick, holder, evidence string) error {
+	return r.adoptRunFindings(holder, evidence,
+		fmt.Sprintf("with the claim on %s this run took over", tick))
+}
+
+// adoptRunFindings is the shared core of the two adoption paths — the claim
+// takeover's (adoptFindings) and the boot sweep's (inherit.go,
+// adoptInheritedFindings). The how clause names the path in the feed line,
+// so a person reading the run's records sees WHY this run owns the draft.
+// The guards the funnel keeps on every path:
+//
+//   - only PROPOSED drafts are adopted: a decided one's decision already
+//     lives in the tracker, and a dead run's decided copy settles nothing
+//     more by being copied;
+//   - a draft ANOTHER run already decided — the same content key, promoted
+//     or discarded — is not adopted at all (decidedElsewhere): a key is the
+//     finding's identity across runs, so the decision stands where it was
+//     made, and adopting the draft would decide it again, minting the same
+//     finding as a second tick (hn6's oro and log);
+//   - a key this run already drafted is left to whatever this run knows of
+//     it, a triage included.
+func (r *Reconciler) adoptRunFindings(holder, evidence, how string) error {
 	if r.adoptedFindingsOf == nil {
 		r.adoptedFindingsOf = map[string]bool{}
 	}
@@ -245,7 +266,7 @@ func (r *Reconciler) adoptFindings(tick, holder, evidence string) error {
 	}
 	theirs, err := r.store.ForeignFindings(holder)
 	if err != nil {
-		return fmt.Errorf("reconcile: read the findings of run %s, whose claim on %s is taken over: %w", holder, tick, err)
+		return fmt.Errorf("reconcile: read the findings of run %s, whose untriaged drafts this run takes over: %w", holder, err)
 	}
 	for _, finding := range theirs {
 		if finding.Status != runstate.FindingProposed {
@@ -254,6 +275,15 @@ func (r *Reconciler) adoptFindings(tick, holder, evidence string) error {
 		if _, ok, err := r.store.Finding(finding.Key); err != nil {
 			return fmt.Errorf("reconcile: read this run's draft of finding %s: %w", finding.Key, err)
 		} else if ok {
+			continue
+		}
+		if decidedBy, err := r.decidedElsewhere(finding.Key); err != nil {
+			return err
+		} else if decidedBy != "" {
+			r.record(finding.TickID, StageFindingDuplicate,
+				"finding %s (%q), left untriaged by run %s which ended (%s), was already decided by run %s: "+
+					"the decision stands where it was made and nothing is adopted",
+				finding.Key, finding.Title, holder, evidence, decidedBy)
 			continue
 		}
 		if decision, ok, err := r.store.ForeignAbsorption(holder, finding.Key); err != nil {
@@ -270,12 +300,37 @@ func (r *Reconciler) adoptFindings(tick, holder, evidence string) error {
 			return fmt.Errorf("reconcile: adopt finding %s of run %s: %w", finding.Key, holder, err)
 		}
 		r.record(finding.TickID, StageFindingAdopted,
-			"finding %s (%q, discovered by %s) was left untriaged by run %s, which ended (%s); it is adopted with "+
-				"the claim on %s this run took over, and this run's close-out decides it as its own",
-			finding.Key, finding.Title, finding.DiscoveredFrom, holder, evidence, tick)
+			"finding %s (%q, discovered by %s) was left untriaged by run %s, which ended (%s); it is adopted "+
+				"%s, and this run's close-out decides it as its own",
+			finding.Key, finding.Title, finding.DiscoveredFrom, holder, evidence, how)
 	}
 	r.adoptedFindingsOf[holder] = true
 	return nil
+}
+
+// decidedElsewhere names the run that already decided the finding the given
+// holder left untriaged, "" when none did: the newest decision among every
+// other run's drafts under the same key — a key is the finding's identity
+// across runs, so a decision anywhere is the decision (the same rule
+// linkDecidedElsewhere keeps for a report, findings.go). FIXED is not a
+// decision here, as it is not one there: a repeat after a fixed verdict is
+// the proof the fix did not hold (tick her), and an adopted draft is a
+// repeat.
+func (r *Reconciler) decidedElsewhere(key string) (string, error) {
+	others, err := r.store.ForeignFindingsByKey(key)
+	if err != nil {
+		return "", fmt.Errorf("reconcile: read the other runs' drafts of finding %s: %w", key, err)
+	}
+	decidedBy, decidedAt := "", ""
+	for _, one := range others {
+		if one.Status != runstate.FindingPromoted && one.Status != runstate.FindingDiscarded {
+			continue
+		}
+		if decidedBy == "" || one.TriagedAt > decidedAt {
+			decidedBy, decidedAt = one.Provenance.RunID, one.TriagedAt
+		}
+	}
+	return decidedBy, nil
 }
 
 // foreignAttemptWork is where another run's attempt left its committed work:
