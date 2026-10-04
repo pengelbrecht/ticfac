@@ -10,8 +10,11 @@
   "target": "pengelbrecht/ticks",
   "tick_id": "gmo",
   "attempt": 6,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T02:18:23Z",
+  "triaged_at": "2026-10-04T02:18:48Z",
+  "triaged_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987 absorbing 8aa",
+  "promoted_as": "8aa",
   "provenance": {
     "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
     "tick_id": "gmo",
