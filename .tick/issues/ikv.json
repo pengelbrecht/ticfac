@@ -1,0 +1,13 @@
+{
+  "id": "ikv",
+  "title": "Doc comments the dashboard rewrite falsified",
+  "description": "watch.go:57-64 and Long help promise exit 5 for an interrupted watch (never returned); run_test.go:448 says Ctrl-C cancels the context (raw mode makes it a key); status_model.go:381-385 and 523-527 say the dashboard readers 'answer nil' / are 'nil-safe stubs'; build.go:196-198 'the one dashboards datum this tick computes for real'; statusmodel.go:29-34 'pinned by contract.json in this package … only Go reads it today'; watch_block_test.go:107 'events worth remembering kept above the block'.\nevidence: internal/cli/watch.go:57-64; internal/statusmodel/statusmodel.go:29-34; internal/statusmodel/build.go:196-198; internal/cli/status_model.go:381-385\n\nticfac run epic-hn6 filed this backlog tick from the finding d8977ac650576302ba8e32c84765151d0385b9a2858bb1203d189acfddcfc06d (reported by run-epic-hn6/tick-v16/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/d8977ac650576302ba8e32c84765151d0385b9a2858bb1203d189acfddcfc06d.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T16:19:36Z",
+  "updated_at": "2026-10-04T16:19:36Z"
+}
