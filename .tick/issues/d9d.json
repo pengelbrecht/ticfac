@@ -1,0 +1,14 @@
+{
+  "id": "d9d",
+  "title": "One unreadable sibling checkpoint fails every boot of the epic (d23)",
+  "description": "adoptInheritedFindings reads every run's checkpoint on the integration branch (other epics' included) before filtering by epic; decodeRecord disallows unknown fields and any error aborts Run. A factory-written checkpoint newer than the local binary, or one corrupt record, stops every run of the epic at boot. Each boot also asks ClaimHolder serially per non-terminal sibling.\nevidence: internal/reconcile/inherit.go:50-75; internal/reconcile/reconcile.go:1976\n\nticfac run epic-hn6 created this tick by absorbing the finding 4e1bf54a67f7b0f3babffc1296c7438329a7f23cf62ed1a16270c8d37a258477 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/4e1bf54a67f7b0f3babffc1296c7438329a7f23cf62ed1a16270c8d37a258477.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T16:17:48Z",
+  "updated_at": "2026-10-04T16:17:48Z"
+}
