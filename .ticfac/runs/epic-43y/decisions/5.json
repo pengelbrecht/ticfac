@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 5,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "staging proof recorded; unit tests for the provider",
+    "description": "Step 2: a pi-ai provider over /api/gateway/workers-ai with the run token, carrying GLM maxTokens/thinkingFormat overrides; prove on staging that attribution holds and a revoked token stops the next request. Never claude in the cloud.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "oq4",
+    "title": "pi-ai gateway provider: Workers AI via the factory gateway with the run token"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.97,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.98,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1061,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T13:14:22Z",
+  "answered_at": "2026-10-04T13:14:22Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "oq4",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "091bc1a82c46e49da7e154cabd35744d9e1090ab",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
