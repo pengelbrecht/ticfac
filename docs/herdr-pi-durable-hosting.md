@@ -148,6 +148,33 @@ image side, the `TICFAC_RUNNER_ARGV` escape hatch that still makes the pi
 CLI reachable on the subprocess executor, and the real local + cloud runs
 that prove the whole posture.
 
+## What happens to attempts recorded before the re-cut
+
+The rebuild path — a dispatch reconstructed from a marker: adopt, settle,
+resolve, gate repair — resolves the profile from the set naming the
+**recorded** executor (`profileForRecordedExecutor`, from tick `emk`'s epic-6in
+fix 823), walking the run's set and every embedded set under every substrate.
+A marker recorded by a pre-re-cut binary with the deleted pairing — executor
+`herdr`, role `implement-tick`, which is every implement attempt of every
+herdr run before this tick, including this epic's own — matches no set any
+more. It **refuses**, loudly, naming the recorded executor and the executors
+the sets do resolve, and the attempt is held for a person rather than
+redispatched. That refusal is A1's enforcement on the rebuild path, and it is
+emk's invariant kept, not broken: the failure 823 fixed was a herdr handle
+handed to the local executor, and a fall-through to the run's own set would
+recreate it in a new doorway. `TestADispatchRebuiltFromAMarkerRoutesThroughTheMarkersExecutor`
+pins both halves: the still-live pairing (review-epic on herdr) rebuilds
+through the marker's own executor; the deleted one refuses.
+
+In-flight attempts are not stranded by a mid-run merge, because the
+orchestrator serving a run resolves its embedded sets from its **own bytes**:
+the `--profiles herdr` the run passes names the set compiled into the running
+binary, so the run that dispatched a herdr implement attempt can still settle
+it for its whole lifetime. The refusal is reached by a **later** binary — the
+next install or deploy — for attempts old enough to predate it, which is the
+same posture every executor change here has always had, stated where the
+refusal names it.
+
 ## The guards
 
 The design is pinned by tests, not just written down (the rule
@@ -167,6 +194,11 @@ The design is pinned by tests, not just written down (the rule
   roles over, demonstrating the finding.
 - `internal/profile/repair_test.go` — `TestTheHerdrProfileSetShipsTheRepairJob`
   pins the on-demand repair job to the frontier rung on the herdr set.
+- `internal/reconcile/settle_executor_test.go` —
+  `TestADispatchRebuiltFromAMarkerRoutesThroughTheMarkersExecutor` pins the
+  rebuild path through both eras: a live pairing routes through the marker's
+  recorded executor, and the deleted herdr/implement pairing refuses by name
+  instead of falling through to the run's own set.
 
 A future packaging change (an embedded harness bundle, a herdr kind for
 the durable host that actually exists) changes this document with the
