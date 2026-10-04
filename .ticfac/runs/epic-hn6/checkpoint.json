@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 6,
-  "state": "running",
-  "reason": "v16 is closed",
-  "updated_at": "2026-10-04T16:20:32Z",
+  "sequence": 7,
+  "state": "dispatching",
+  "reason": "dispatching 06t as attempt 2",
+  "updated_at": "2026-10-04T16:21:23Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -14,6 +14,66 @@
     },
     {
       "tick_id": "qjl",
+      "state": "ready"
+    },
+    {
+      "tick_id": "06t",
+      "state": "ready"
+    },
+    {
+      "tick_id": "15b",
+      "state": "ready"
+    },
+    {
+      "tick_id": "1tm",
+      "state": "ready"
+    },
+    {
+      "tick_id": "bd5",
+      "state": "ready"
+    },
+    {
+      "tick_id": "d9d",
+      "state": "ready"
+    },
+    {
+      "tick_id": "e6g",
+      "state": "ready"
+    },
+    {
+      "tick_id": "ghh",
+      "state": "ready"
+    },
+    {
+      "tick_id": "h7w",
+      "state": "ready"
+    },
+    {
+      "tick_id": "ihw",
+      "state": "ready"
+    },
+    {
+      "tick_id": "iph",
+      "state": "ready"
+    },
+    {
+      "tick_id": "jkb",
+      "state": "ready"
+    },
+    {
+      "tick_id": "kce",
+      "state": "ready"
+    },
+    {
+      "tick_id": "qwb",
+      "state": "ready"
+    },
+    {
+      "tick_id": "s71",
+      "state": "ready"
+    },
+    {
+      "tick_id": "435",
       "state": "ready"
     }
   ],
