@@ -78,6 +78,38 @@ never deployed.
   against the contract), same read pass-list, same ledger beside the shim —
   installed by both envs and on the PATH of every command they run.
 
+## Workspace checkpoints (epic 43y step 4, tick dwn)
+
+- **`workspaceCheckpointExtension`** (`src/workspace/checkpoints.ts`): an
+  `afterTools` hook on pi-durable's generation task that commits the
+  workspace after every tool round — `wip: tool round` — and pushes it to
+  the ATTEMPT branch, the run's write ref. That is the same ref
+  `ticfac settle --carry-work` reads (internal/reconcile): the carried-work
+  mechanism at tool-round granularity, so a stopped attempt's carried work
+  now carries its in-flight edits too. A round that changed nothing commits
+  and pushes nothing; a failed push is reported to `HarnessOptions.onReport`
+  — never silent, because the run's durability rests on it.
+- **The lost-container restore** (same module, wired into
+  `FactorySandboxEnv`): a container lost mid-command — its process gone
+  (`missing`), or ended with no exit code (`lost`) — is restored from the
+  attempt branch: clear the fresh (empty) box, clone the branch, check out
+  its tip (the last wip commit, or the base before the first one), run the
+  setup command, then hand the model a `restored to <sha> …; re-check and
+  re-run` result, so the turn continues minus edits since the last round.
+  A tracked-bash replay whose process is gone checks the workspace is there
+  before re-starting on it, so a container that died while no harness
+  watched is restored too. `restoreLostWorkspace()` is public for the host
+  that owns the container's lifetime (epic step 6).
+- The tests carry the tick's acceptance criterion — destroy the container
+  mid-turn; the next turn sees both edits — twice, in the two halves this
+  package splits every claim into: **workerd** (`test/workspace-checkpoints.
+  test.ts`) proves the door's RPC shapes, the hook wiring and the restore's
+  command sequence on the scripted door; **node** (`test/node/
+  workspace-checkpoints.test.ts`) proves the git itself on a real origin —
+  the wips really land on the branch, and the model's next reads really see
+  both edits from the restored tree — through the full Harness, real
+  processes and real git.
+
 The tests are split by what they can prove where:
 
 - **workerd** (`vitest run`): the RPC shapes — one run per file operation,
@@ -95,10 +127,11 @@ The tests are split by what they can prove where:
 
 ## What comes next (the epic's steps)
 
-4. Workspace checkpoints (`afterTools` wip commits, restore on a lost
-   container).
 5. The worker contract as hooks and phases.
 6. The `WorkerAgent` DO host — this package's `HarnessStorage` DO is its
    seed, and it is what wires `FactorySandboxEnv` to the SANDBOXES_V1 stub
    the `run` door was built for.
 7. The local Node host, on `createGuardedNodeExecutionEnv`.
+8. Watch surfaces, and the proof runs (kill the host mid-tool, destroy the
+   container mid-turn, deploy mid-run) — the wip checkpoints and the
+   restore here are the machinery those runs will exercise.

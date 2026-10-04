@@ -14,7 +14,14 @@ import type { SandboxDoor } from "../src/env/sandbox-door.js";
  * the property that makes the crash deterministic in-process (the dead
  * harness can never wake up and race the resumed one).
  */
-export function fakeSandboxDoor(options: { commandMs?: number; commandOutput?: string } = {}) {
+export function fakeSandboxDoor(
+  options: {
+    commandMs?: number;
+    commandOutput?: string;
+    /** Scripts `run` answers by command: what a git line would print. */
+    runOutput?: (command: string, env: Record<string, string>) => string;
+  } = {},
+) {
   type FakeProcess = {
     id: string;
     command: string;
@@ -56,7 +63,7 @@ export function fakeSandboxDoor(options: { commandMs?: number; commandOutput?: s
       return Promise.resolve({
         ready: true,
         exitCode: 0,
-        output: "",
+        output: options.runOutput?.(command, env) ?? "",
         truncated: false,
       });
     },
@@ -129,6 +136,10 @@ export function fakeSandboxDoor(options: { commandMs?: number; commandOutput?: s
           p.exit = null;
         }
       }
+    },
+    /** The container died and came back EMPTY: it knows none of its processes. */
+    forget() {
+      processes.clear();
     },
     /** From here on, calls never answer — a process dying mid-call. */
     die() {

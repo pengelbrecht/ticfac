@@ -168,5 +168,26 @@ export function localSandboxDoor(
     get processes() {
       return [...processes.values()];
     },
+    /**
+     * The container is destroyed: its processes die with it and it knows
+     * none of them any more (the runner's `missing` — a fresh box boots
+     * with an empty process list). The filesystem half of a destroyed
+     * container — the workspace — is the test's to clear.
+     */
+    destroyContainer() {
+      for (const p of processes.values()) {
+        if (!p.settled) {
+          const pid = p.child.pid;
+          if (pid !== undefined) {
+            try {
+              process.kill(-pid, "SIGKILL");
+            } catch {
+              /* already gone */
+            }
+          }
+        }
+      }
+      processes.clear();
+    },
   };
 }
