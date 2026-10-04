@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 66,
-  "state": "collecting",
-  "reason": "collecting hpk attempt 9",
-  "updated_at": "2026-10-04T18:34:40Z",
+  "sequence": 67,
+  "state": "integrating",
+  "reason": "integrating hpk attempt 9 into epic/43y",
+  "updated_at": "2026-10-04T18:35:58Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "hpk",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 9
     },
     {
