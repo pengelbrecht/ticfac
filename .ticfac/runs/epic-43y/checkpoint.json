@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 62,
-  "state": "collecting",
-  "reason": "collecting xd3 attempt 10",
-  "updated_at": "2026-10-04T16:56:50Z",
+  "sequence": 63,
+  "state": "running",
+  "reason": "xd3 try 1 (run dispatch #10) is rejected (missing-result): it was stopped as stuck: it showed no activity — no transcript event, no tool-process CPU, no worktree or branch change — for the stuck window, was nudged, and showed none for as long again; there is no report at /Users/peterengelbrecht/.herdr/worktrees/ticfac/ticfac-run-epic-43y-tick-xd3-attempt-10/runs/epic-43y/xd3/RESULT-xd3.md. Its work was not lost: the work it had not committed is preserved at refs/ticfac/wip/run-epic-43y/tick-xd3/attempt-10 (commit 1cb952475df0): a work-in-progress snapshot of an interrupted worktree — not evidence of completion, never merged — and `git diff refs/ticfac/wip/run-epic-43y/tick-xd3/attempt-10^ refs/ticfac/wip/run-epic-43y/tick-xd3/attempt-10` is everything the stop interrupted. A re-dispatch of this tick is still cut from the integration branch, not from this snapshot; what the next attempt gets is its prompt pointed at this ref",
+  "updated_at": "2026-10-04T16:56:52Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "xd3",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 10
     },
     {
