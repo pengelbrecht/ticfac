@@ -1,0 +1,13 @@
+{
+  "id": "miv",
+  "title": "Watch rebuilds report/handle/activity readers per frame; caches never hit",
+  "description": "localStatusModel constructs AttemptReports/WorkerHandles/TranscriptActivity on every call and watchLive calls it every interval, so each 2s frame spawns git per settled tick and walks the executor state dir. TestReportCachesPerAttempt holds one reader across calls, so it passes without testing the production wiring.\nevidence: internal/cli/status_model.go:528-530; internal/cli/watch.go:827\n\nticfac run epic-hn6 filed this backlog tick from the finding 3783420572af76efee5047c41706ec73929756a0dc1ca4d8ba78adebfb28bf67 (reported by run-epic-hn6/tick-v16/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/3783420572af76efee5047c41706ec73929756a0dc1ca4d8ba78adebfb28bf67.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T16:19:00Z",
+  "updated_at": "2026-10-04T16:19:00Z"
+}
