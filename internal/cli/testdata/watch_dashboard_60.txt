@@ -3,11 +3,11 @@
 ✓ plan ◐ waves 2/3 ✓ review ◐ close-out ◐ ci ○ merge
                                           needs you: nothing
 
- TICK  WHAT                             PIPELINE     TIME
- 060   cloud worker early-exit nudge    ✓ ✓ ✓ ✓      49m
-  └ +823  re-run holds the stopped claim   ✓ ✓ ✓ ✓      34m
- 46x   port sandbox verbs to ticfac     ✓ ✓ ● ○      1h
- v7z   close out phase 7                ✓ ✓ ✗ ○      40m
+ TICK  WHAT                           PIPELINE TIME
+ 060   cloud worker early-exit nudge  ✓ ✓ ✓ ✓  49m
+  └ +823  re-run holds the stopped claim ✓ ✓ ✓ ✓  34m
+ 46x   port sandbox verbs to ticfac   ✓ ✓ ● ○  1h
+ v7z   close out phase 7              ✓ ✓ ✗ ○  40m
 
 WORKERS                                       ACTIVITY (10m)
 46x  herdr pane tick-46x-a6                   ▁▃▅█▇▅▃▁▂▅

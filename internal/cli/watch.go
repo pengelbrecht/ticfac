@@ -8,8 +8,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 
@@ -701,9 +703,25 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	// channel the loop drains. A keyboard that is not a terminal (or will
 	// not go raw) leaves the watch keyless, exactly as it always was.
 	keys, restoreKeys, keyed := watchAttachKeys(ctx)
+	// Raw mode takes the newline's carriage return away from the WHOLE
+	// terminal — stdout and stderr write to the same device the keyboard was
+	// set raw on — so while the keys are attached, every line the live view
+	// writes ends \r\n; after the restore, a plain \n is right again, the
+	// line discipline's ONLCR returning the carriage it always has. The
+	// restore is idempotent and called BEFORE the watch's last words: the
+	// frames and the end-of-watch message ride the same device, and the
+	// closing message printed in raw mode would staircase just like the
+	// frames did (tick r3x).
+	eol := "\n"
 	if keyed {
-		defer restoreKeys()
+		eol = "\r\n"
 	}
+	restore := sync.OnceFunc(func() {
+		if keyed {
+			restoreKeys()
+		}
+	})
+	defer restore()
 
 	// The per-watch source caches: a frame every two seconds must not spawn
 	// a tracker subprocess or ask a forge every two seconds (the rule
@@ -764,8 +782,10 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	// The interrupted end: the one end a watch that is still subscribed to a
 	// live run can reach without the run's own word — the caller's context,
 	// or, since the keys, the person's own q or Ctrl-C on the dashboard.
-	// Same words, same codes, whatever interrupted it.
+	// Same words, same codes, whatever interrupted it. The terminal is
+	// restored first: the words it says are ordinary cooked output.
 	interrupted := func(model statusmodel.Model) int {
+		restore()
 		fmt.Fprintf(stderr, "ticfac watch: the watch was interrupted before run %s said it ended; "+
 			"`ticfac status %s` asks whether it is still alive\n", runID, runID)
 		if watchHoldAttention(model) != nil {
@@ -793,7 +813,7 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 			fmt.Fprintf(stdout, "\x1b[%dA\r\x1b[J", previous)
 		}
 		for _, line := range frame {
-			fmt.Fprintf(stdout, "%s\n", line)
+			fmt.Fprintf(stdout, "%s%s", line, eol)
 		}
 		previous = len(frame)
 	}
@@ -838,13 +858,16 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 		model, err := build()
 		switch {
 		case err != nil && lastGood == nil:
+			// The watch ends here, and the words it says end it with: the
+			// terminal is restored first, cooked output is cooked.
+			restore()
 			fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
 			return 1
 		case err != nil:
 			// Keep the warning where the person reading the block reads the
 			// block's own history: above it, in the scrollback.
-			insertAboveBlock(stdout, previous, []string{
-				styles.red(fmt.Sprintf("the run's host could not be read: %v", err))})
+			keepAboveBlock(stdout, previous, width, eol, styles.red,
+				fmt.Sprintf("the run's host could not be read: %v", err))
 			model = *lastGood
 		default:
 			modelCopy := model
@@ -855,9 +878,9 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 		// frame leads with it while it stands, and the scrollback keeps a
 		// durable copy for the person who comes back late. It clears with
 		// the episode, so a second hold in one run is a second alert.
-		if line := watchAttentionAlertLine(model, styles); line != "" {
+		if text := watchAttentionAlertText(model); text != "" {
 			if !attentionRaised {
-				insertAboveBlock(stdout, previous, []string{line})
+				keepAboveBlock(stdout, previous, width, eol, styles.amber, text)
 				attentionRaised = true
 			}
 		} else {
@@ -868,7 +891,11 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 
 		if watchRunEnded(model) {
 			// The run's own last word, in the scrollback below the final
-			// frame: a person who comes back late reads how it ended.
+			// frame: a person who comes back late reads how it ended. The
+			// terminal is restored FIRST — the last word and the summary after
+			// it are ordinary cooked output, and a line written in raw mode
+			// would staircase just like the frames did (tick r3x).
+			restore()
 			if last := watchLastWord(model); last != "" {
 				fmt.Fprintf(stdout, "%s\n", last)
 			}
@@ -993,36 +1020,108 @@ func watchEventWho(event runfeed.Event, tries *runfeed.Tries) string {
 // insertAboveBlock writes lines ABOVE the live block, so the block keeps its
 // place and the lines keep theirs in the scrollback: up to the top of the
 // block, one inserted blank line per kept line (the terminal pushes the
-// block down), the line written on it, and back down below the block. When
-// no block stands yet the lines simply print — they become the top of the
-// scrollback the block then draws under.
-func insertAboveBlock(w io.Writer, previous int, lines []string) {
+// block down), the line written on it, and back down below the block. The
+// lines are cut to the pane's width first: a kept line that wraps pushes the
+// block down rows the cursor arithmetic above does not know about, and the
+// next frame would draw over the block's own rows (tick r3x). When no block
+// stands yet the lines simply print — they become the top of the scrollback
+// the block then draws under. `eol` is the line ending the block itself is
+// drawn with — \r\n while the keyboard's raw mode is on (tick r3x).
+func insertAboveBlock(w io.Writer, previous, width int, eol string, lines []string) {
+	if width > 0 {
+		for i, line := range lines {
+			lines[i] = ansi.Truncate(line, width, "")
+		}
+	}
 	if previous <= 0 {
 		for _, line := range lines {
-			fmt.Fprintf(w, "%s\n", line)
+			fmt.Fprintf(w, "%s%s", line, eol)
 		}
 		return
 	}
 	fmt.Fprintf(w, "\x1b[%dA\r", previous)
 	for _, line := range lines {
-		fmt.Fprintf(w, "\x1b[L%s\n", line)
+		fmt.Fprintf(w, "\x1b[L%s%s", line, eol)
 	}
 	fmt.Fprintf(w, "\x1b[%dB", previous)
 }
 
-// watchAttentionAlertLine is the durable copy of the frame's attention line,
+// keepAboveBlock wraps plain text to the pane's width, styles each line and
+// hands it to insertAboveBlock. The lines kept above the block must each fit
+// the pane — a kept line that wrapped itself would push the block down rows
+// the redraw's cursor arithmetic does not know about, and the next frame
+// would draw over the block's own rows (tick r3x) — but the text is kept
+// whole, word-wrapped, because the copy's point is that a person coming back
+// late can still read the command that moves the hold on.
+func keepAboveBlock(w io.Writer, previous, width int, eol string, style func(string) string, text string) {
+	lines := wrapWords(text, width)
+	for i, line := range lines {
+		lines[i] = style(line)
+	}
+	insertAboveBlock(w, previous, width, eol, lines)
+}
+
+// wrapWords wraps one line of plain text to at most `width` cells, breaking
+// at spaces where one fits inside the limit, and hard-breaking a single word
+// longer than the width. The texts it wraps are the watch's own plain
+// sentences — no escape sequences, no double-width runes — so a rune is a
+// cell here.
+func wrapWords(text string, width int) []string {
+	if width <= 0 {
+		return []string{text}
+	}
+	lines := []string{}
+	line := ""
+	for _, word := range strings.Split(text, " ") {
+		candidate := word
+		if line != "" {
+			candidate = line + " " + word
+		}
+		switch {
+		case len([]rune(candidate)) <= width:
+			line = candidate
+		case line != "":
+			lines = append(lines, line)
+			line = hardWrapWord(word, width, &lines)
+		default:
+			line = hardWrapWord(word, width, &lines)
+		}
+	}
+	if line != "" {
+		lines = append(lines, line)
+	}
+	if len(lines) == 0 {
+		lines = append(lines, "")
+	}
+	return lines
+}
+
+// hardWrapWord lays one word longer than the width into lines of its own,
+// hard-broken every `width` cells, and returns the word's last line — the
+// one the wrap's next word continues on.
+func hardWrapWord(word string, width int, lines *[]string) string {
+	runes := []rune(word)
+	for len(runes) > width {
+		*lines = append(*lines, string(runes[:width]))
+		runes = runes[width:]
+	}
+	return string(runes)
+}
+
+// watchAttentionAlertText is the durable copy of the frame's attention line,
 // kept above the block once per episode: the run is holding for a person,
-// what it holds, and the command that moves it on.
-func watchAttentionAlertLine(m statusmodel.Model, st watchStyles) string {
+// what it holds, and the command that moves it on. The words are plain —
+// keepAboveBlock wraps and styles them — so the text is testable on its own.
+func watchAttentionAlertText(m statusmodel.Model) string {
 	for _, a := range m.Attention {
 		if !a.NeedsPerson {
 			continue
 		}
-		line := fmt.Sprintf("! ticfac watch: run %s is holding for a person: %s", m.RunID, a.What)
+		text := fmt.Sprintf("! ticfac watch: run %s is holding for a person: %s", m.RunID, a.What)
 		if a.UnblockCommand != nil && *a.UnblockCommand != "" {
-			line += " — move it on: " + *a.UnblockCommand
+			text += " — move it on: " + *a.UnblockCommand
 		}
-		return st.amber(line)
+		return text
 	}
 	return ""
 }

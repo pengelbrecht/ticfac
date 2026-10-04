@@ -380,6 +380,74 @@ func TestDashboardGolden(t *testing.T) {
 	}
 }
 
+// TestDashboardColumnsSizeToContent (tick r3x): the table's columns are as
+// wide as the widest content they carry — the header label included — never
+// laid out across the pane with gaps no cell fills. Two short ticks size
+// WHAT to five cells, leave TIER at its four-cell label and PIPELINE at the
+// widest cell it carries, and the header's labels sit exactly over their
+// columns.
+func TestDashboardColumnsSizeToContent(t *testing.T) {
+	t.Parallel()
+	m := statusmodel.Model{
+		RunID:       "epic-rmod",
+		EpicID:      "rmod",
+		Host:        statusmodel.HostLocal,
+		GeneratedAt: "2026-09-28T19:20:00Z",
+		Liveness: statusmodel.Liveness{
+			Alive: true, State: "alive", Reason: "pid 4242", Source: "run.pid",
+		},
+		Health: statusmodel.Health{Verdict: statusmodel.HealthVerdict{
+			State: statusmodel.VerdictHealthy,
+		}},
+		Waves: &[]statusmodel.Wave{{
+			Wave: 1, State: statusmodel.WaveActive, Ticks: []statusmodel.Tick{
+				{
+					TickID: "t1", Title: "alpha", State: "closed",
+					Pipeline: []statusmodel.PipelineStage{
+						{Stage: statusmodel.StageClaim, State: statusmodel.StageStateDone},
+					},
+				},
+				{
+					TickID: "t2", Title: "beta", State: "dispatched",
+					Pipeline: []statusmodel.PipelineStage{
+						{Stage: statusmodel.StageClaim, State: statusmodel.StageStateDone},
+						{Stage: statusmodel.StageWork, State: statusmodel.StageStateActive},
+						{Stage: statusmodel.StageGate, State: statusmodel.StageStatePending},
+						{Stage: statusmodel.StageMerged, State: statusmodel.StageStatePending},
+					},
+				},
+			},
+		}},
+	}
+	frame := renderWatchFrame(m, plainStyles(), 0, 0, "")
+	var head, t1, t2 string
+	for _, line := range frame {
+		switch {
+		case strings.HasPrefix(line, " TICK"):
+			head = line
+		case strings.HasPrefix(line, " t1 "):
+			t1 = line
+		case strings.HasPrefix(line, " t2 "):
+			t2 = line
+		}
+	}
+	for _, tc := range []struct {
+		name, got, want string
+	}{
+		{"the header", head, " TICK  WHAT  TIER PIPELINE          TIME ATTEMPTS"},
+		{"t1's row", t1, " t1    alpha      claim ✓                0"},
+		{"t2's row", t2, " t2    beta       claim ▸ ●work ▸ …      0"},
+	} {
+		if tc.got == "" {
+			t.Errorf("%s never rendered:\n%s", tc.name, strings.Join(frame, "\n"))
+			continue
+		}
+		if tc.got != tc.want {
+			t.Errorf("%s is not sized to its content:\ngot  %q\nwant %q", tc.name, tc.got, tc.want)
+		}
+	}
+}
+
 // TestDashboardRowsKeepTheirOrder: one row per tick, in plan order — and the
 // order is a property of the PLAN, not of the states. A successor with every
 // state advanced renders the tick ids in the same sequence, on the same
