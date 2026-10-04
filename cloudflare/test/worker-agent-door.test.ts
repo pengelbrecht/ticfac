@@ -590,7 +590,10 @@ describe("the operator's worker routes (tick y03)", () => {
 
     expect((await operator(`${TICK}/1/dance`)).status).toBe(404);
 
-    await liveRun("sdk0");
+    // Every run's workers are WorkerAgents on a deployment that binds them,
+    // on either substrate (tick hxd): unhosted is the binding's absence.
+    set("WORKER_AGENTS", undefined);
+    await liveRun();
     const unhosted = await operator(`${TICK}/1`);
     expect(unhosted.status).toBe(409);
     expect(((await unhosted.json()) as { error: string }).error).toBe("not_hosted");

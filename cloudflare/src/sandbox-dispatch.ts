@@ -816,14 +816,9 @@ async function agentFor(
       refusal: refuse(
         409,
         NOT_HOSTED,
-<<<<<<< HEAD
-        `run ${runID}'s workers are not WorkerAgents (only a run on the do_v1 substrate, on a ` +
-          "deployment that binds WORKER_AGENTS, has a live conversation to watch or steer)",
-=======
-        `run ${run.run_id}'s workers are not WorkerAgents (no WORKER_AGENTS binding on this ` +
+        `run ${runID}'s workers are not WorkerAgents (no WORKER_AGENTS binding on this ` +
           "deployment, or no D1 to read the run's substrate with — a hosted attempt has no live " +
           "conversation to watch or steer)",
->>>>>>> 5d5f78e9229c4ea8c899b3a6f63852c8742a5799
       ),
     };
   }
