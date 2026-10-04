@@ -823,9 +823,15 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 		// these holds hold a person's decision, not one; the holds about the
 		// world — the width, a foreign claim — by the run again, addressed by
 		// the host (tick gtk), because they fire before the tick's first
-		// dispatch, end when the world does, and no release clears them;
-		// every other hold is the settle command the run-wide dispatch number
-		// addresses — the same sentence `ticfac watch` prints.
+		// dispatch, end when the world does, and no release clears them; the
+		// final-review hold by the same run again (tick quz), because although
+		// it fires after the close-out's dispatch and its line carries that
+		// attempt, releasing it clears nothing — the hold is the review's
+		// NOT READY verdict on the PR, which a resume re-reads, and the
+		// refusal's own moves (fix and run again, merge the PR by hand, close
+		// it) end at a resume or never need the run again; every other hold is
+		// the settle command the run-wide dispatch number addresses — the same
+		// sentence `ticfac watch` prints.
 		if command := HoldClearingCommand(m.EpicID, m.Host, ownRunID, m.RunID, held); command != nil {
 			w.UnblockCommand = command
 		}

@@ -465,6 +465,58 @@ func TestWatchHoldAlertForAnAbsorptionBoundHoldNamesTheFindingsDecision(t *testi
 	}
 }
 
+// The final-review hold (tick quz) is the one hold that fires AFTER an
+// attempt was dispatched — the close-out's — so its line CARRIES an attempt
+// and the alert's default branch used to name the settle that attempt
+// addresses. Releasing it clears nothing: the hold is the review's NOT READY
+// verdict recorded on the PR, which the next resume re-reads and holds on
+// again. The moves are the refusal's own — fix what the review names and run
+// the epic again, merge the PR by hand to accept it (a re-run then finds it
+// merged), or close it — so the alert names the run again, never a settle.
+func TestWatchHoldAlertForAFinalReviewHoldNamesTheRunAgainCommand(t *testing.T) {
+	repo := t.TempDir()
+	// The hold's own shape: the close-out tick, its attempt carried on the
+	// line — the number a settle would happily take and the release of which
+	// answers nothing.
+	attempt := 2
+	writeFeedEvent(t, repo, "epic-qeu", runfeed.NewEvent(
+		time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC), "epic-qeu", "co7", &attempt, reconcile.StageRunHeld,
+		"land_review_not_ready: the run does not merge the epic qeu: its final review (decision 3) still judges it "+
+			"NOT READY after 2 review round(s), the bound being 2. What the review says would make it ready: the Phase 4 "+
+			"gate still never ran. The verdict is on the epic PR, and accepting work the run's own review rejected is a "+
+			"person's judgement: fix what it names and run the epic again, merge the PR by hand to accept it (a re-run "+
+			"then finds it merged), or close it"))
+	writeFeedEvent(t, repo, "epic-qeu", runfeed.NewEvent(
+		time.Date(2026, 10, 4, 12, 0, 1, 0, time.UTC), "epic-qeu", "", nil, reconcile.StageRunFinished,
+		"failed: the epic PR is not ready"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-qeu"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	// The run again is the one command the alert names: a resume is the move
+	// after every one of the refusal's own roads — the fix, the hand-merge
+	// (a re-run then finds it merged) and the close all end at running the
+	// epic again or never needing to.
+	if !strings.Contains(stderr.String(), "ticfac run-epic qeu") {
+		t.Errorf("the final-review hold's alert does not name the run-again command: %q", stderr.String())
+	}
+	// And never a settle: the attempt the line carries is the close-out's,
+	// and releasing it clears nothing — the next resume re-reads the verdict
+	// off the PR and holds again on it.
+	if strings.Contains(stderr.String(), "ticfac settle") {
+		t.Errorf("the final-review hold's alert names a settle for an attempt whose release clears nothing: %q",
+			stderr.String())
+	}
+	// The hold's own reason and the attempt it happens to carry are read off
+	// the line's fields.
+	if !strings.Contains(stderr.String(), "land_review_not_ready") ||
+		!strings.Contains(stderr.String(), "co7") {
+		t.Errorf("the alert does not name the hold's reason and tick: %q", stderr.String())
+	}
+}
+
 // A hold the closed set does not know — no reason it recognises, no attempt
 // behind it — answers with no command rather than a wrong one: the dash
 // settle the inline fallback used to spell is exactly a command a person

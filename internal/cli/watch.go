@@ -339,8 +339,13 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 			// the absorption bound — carry a NULL attempt: no settle command
 			// can address them ("-" is not an attempt number), and a release
 			// would not clear them anyway, so each names the command that
-			// actually moves it on; a hold the closed set does not know names
-			// no command at all, never a wrong one a person copies.
+			// actually moves it on. The final-review hold (tick quz) is the
+			// opposite shape and the same answer: it CARRIES an attempt — the
+			// close-out's — but releasing it clears nothing, because the hold
+			// is the review's verdict on the PR, which a resume re-reads; the
+			// moves are the refusal's own, and they end at the run again. A
+			// hold the closed set does not know names no command at all, never
+			// a wrong one a person copies.
 			held = true
 			tick, what := "-", "-"
 			if event.TickID != nil {
@@ -391,6 +396,15 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 					"finding with `%s` — or take the escape the line itself names, raising the bound "+
 					"with --absorption-depth and running the epic again. The evidence is on the "+
 					"integration branch, not in this line.\n\n", head, *clearing)
+			case reconcile.RefusedLandReviewNotReady:
+				fmt.Fprintf(stderr, "%s"+
+					"Nothing proceeds until a person accepts or rejects the work the run's own review "+
+					"refused — and the release the attempt above might suggest clears nothing: the "+
+					"hold is the review's verdict recorded on the PR, which a resume re-reads. The "+
+					"moves are the line's own: fix what the review says would make it ready and run "+
+					"the epic again with `%s`, merge the PR by hand to accept it (a re-run then "+
+					"finds it merged), or close it. The evidence is on the integration branch, not "+
+					"in this line.\n\n", head, *clearing)
 			default:
 				if clearing != nil {
 					fmt.Fprintf(stderr, "%s"+
