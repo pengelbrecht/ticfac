@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 19,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "classifyStatusDoc (cloudflare/src/status.ts, ported from the bare `ticfac` overview, tick 2qz) classifies a not-alive run by its lifecycle phase alone: attention, liveness, then failed/cancelled/default→done. A run that dies mid-waves (phase still 'waves', like the new dashboard_stopped golden) reads state 'done' on the phone's chip, while `ticfac watch` classes the same ending as failed/interrupted by its own terminal line. Noticed while rendering the stopped golden: its card chip says done while its headline verdict says stopped. Predates this tick; filed rather than widened.\nevidence: cloudflare/src/status.ts classifyStatusDoc's default branch (phase 'waves' + liveness.alive false → RunClass done)\n\nticfac run epic-hn6 created this tick by absorbing the finding 1a1ce285c57b715bbd29832b571c24878d9efcbce6928cd6060c2413bc1c83f3 (reported by run-epic-hn6/tick-h7w/attempt-9): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/1a1ce285c57b715bbd29832b571c24878d9efcbce6928cd6060c2413bc1c83f3.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "c65",
+    "title": "The listing's classifier reads a mid-run dead run as done"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.73,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.02,
+      "design": 0.04,
+      "diagnosis": 0.79,
+      "mechanical": 0.13,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1376,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T19:34:29Z",
+  "answered_at": "2026-10-04T19:34:29Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "c65",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "85a3f99e47101f1e021b7d69d3414488da7c1e4c",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
