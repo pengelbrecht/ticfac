@@ -12,7 +12,7 @@ import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { piAuthStore } from "../../src/local/pi-auth-store.js";
-import { steerOnce } from "../../src/local/steer-socket.js";
+import { steerOnce, type WatchFrame, watchOnce } from "../../src/local/steer-socket.js";
 import {
   inputRequestId,
   type LocalWorkerConfig,
@@ -309,6 +309,142 @@ describe("the local worker host", () => {
     expect(steerAt).toBeGreaterThan(-1);
     expect(steerAt).toBeGreaterThan(toolResultAt);
     expect(textOf(messages.at(-1) as Message)).toBe("the steer joined the run");
+  });
+
+  it("serves the live conversation to a watcher, and a steer round-trips through what it watches", async () => {
+    // Tick y03: `ticfac watch <run> <tick>` reads a local worker through
+    // the same door the stuck nudge steers through. The watcher sees the
+    // snapshot, then every commit — thinking, tool calls, live tool output,
+    // tool results — and the steer it sends lands in the stream it reads.
+    const transcript = f.transcript([
+      {
+        thinking: "The tick wants a step file; a bash round writes it.",
+        toolCalls: [
+          { name: "bash", args: { command: "echo working; sleep 2; echo stepped > step.txt" } },
+        ],
+      },
+      {
+        thinking: "The steer asked for a report; write it.",
+        toolCalls: [
+          {
+            name: "write",
+            args: { path: "RESULT-hpk.md", content: "# hpk\n\nwatched\n\nSTATUS: DONE\n" },
+          },
+        ],
+      },
+      { thinking: "Both rounds landed.", text: "watched and steered" },
+    ]);
+    const config = f.config({ fauxTranscript: transcript });
+    const child = f.run({ fauxTranscript: transcript });
+    await waitFor("the steer socket to listen", () => existsSync(config.steerSock));
+
+    const frames: WatchFrame[] = [];
+    const lines = (): unknown[] =>
+      frames.flatMap((frame) => (frame.type === "events" ? frame.events : []));
+    const watch = watchOnce(config.steerSock, (frame) => frames.push(frame));
+    const typed = (type: string) =>
+      lines().filter((event) => (event as { type?: string }).type === type) as Record<
+        string,
+        unknown
+      >[];
+    // A watcher that attaches mid-tool meets the running bash in the
+    // snapshot's tool slots; one that attaches earlier sees its start event.
+    const bashRunning = (): boolean =>
+      typed("tool_execution_start").some((e) => e.toolName === "bash") ||
+      typed("snapshot").some((e) =>
+        (e.tools as { name: string; status: string }[]).some(
+          (slot) => slot.name === "bash" && slot.status === "running",
+        ),
+      );
+    await waitFor("the bash tool to run, seen through the watch", bashRunning);
+
+    // The operator's steer — what `ticfac steer` sends — while the tool runs.
+    const reply = await steerOnce(config.steerSock, "Write the report next.", "operator-steer-1");
+    expect(reply).toEqual({ ok: true, requestId: "operator-steer-1" });
+
+    expect(await exitOf(child)).toBe(0);
+    const end = await watch.ended;
+    expect(end).toEqual({ type: "end", reason: "the worker process is exiting" });
+
+    // The first frame is the snapshot; every frame after it is one commit.
+    const first = frames[0] as WatchFrame & { type: "events" };
+    expect((first.events[0] as { type: string }).type).toBe("snapshot");
+
+    // Thinking and tool calls arrived as settled assistant entries — in the
+    // snapshot for what settled before the watcher attached, as message_end
+    // events for everything after: together, the whole conversation.
+    type Entry = { id: number; model?: Message[] };
+    const seen = new Set<number>();
+    const settled: Message[] = [];
+    for (const entry of [
+      ...typed("snapshot").flatMap((e) => e.entries as Entry[]),
+      ...typed("message_end").map((e) => e.entry as Entry),
+    ]) {
+      const message = entry.model?.[0];
+      if (seen.has(entry.id) || message === undefined || message.role === "system") continue;
+      seen.add(entry.id);
+      settled.push(message);
+    }
+    const assistant = settled.filter((m) => m.role === "assistant");
+    const blocks = assistant.flatMap((m) => (Array.isArray(m.content) ? m.content : []));
+    expect(blocks.some((b) => b.type === "thinking" && b.thinking.includes("step file"))).toBe(
+      true,
+    );
+    expect(blocks.some((b) => b.type === "toolCall" && b.name === "bash")).toBe(true);
+    // …the tool's live output, in the snapshot's slot and the updates after it…
+    const output = [
+      ...typed("snapshot").flatMap((e) => (e.tools as { output?: string }[]).map((t) => t.output)),
+      ...typed("tool_execution_update").map((e) => JSON.stringify(e.output ?? {})),
+    ].join("");
+    expect(output).toContain("working");
+    // …and the steer came back through the watch as the conversation's
+    // input, AFTER the bash result: the round trip, observed from outside.
+    const steerAt = settled.findIndex(
+      (m) => m.role === "user" && textOf(m).includes("Write the report next."),
+    );
+    const bashResultAt = settled.findIndex((m) => m.role === "toolResult" && m.toolName === "bash");
+    expect(steerAt).toBeGreaterThan(-1);
+    expect(steerAt).toBeGreaterThan(bashResultAt);
+    expect(textOf(settled.at(-1) as Message)).toBe("watched and steered");
+
+    // The Go reader's fixture (internal/workerview/testdata) is this stream:
+    // TICFAC_CAPTURE_WATCH=<file> writes it out, one frame per line.
+    const capture = process.env.TICFAC_CAPTURE_WATCH;
+    if (capture !== undefined && capture !== "") {
+      writeFileSync(capture, `${frames.map((frame) => JSON.stringify(frame)).join("\n")}\n`);
+    }
+  });
+
+  it("refuses a request that is neither a steer nor a watch, by name", async () => {
+    const transcript = f.transcript([
+      {
+        toolCalls: [
+          { name: "bash", args: { command: "sleep 1" } },
+          {
+            name: "write",
+            args: { path: "RESULT-hpk.md", content: "# hpk\n\nrefused\n\nSTATUS: DONE\n" },
+          },
+        ],
+      },
+      { text: "done" },
+    ]);
+    const config = f.config({ fauxTranscript: transcript });
+    const child = f.run({ fauxTranscript: transcript });
+    await waitFor("the steer socket to listen", () => existsSync(config.steerSock));
+    const { createConnection } = await import("node:net");
+    const answer = await new Promise<string>((resolve, reject) => {
+      const socket = createConnection(config.steerSock);
+      let said = "";
+      socket.on("connect", () => socket.write(`${JSON.stringify({ type: "dance" })}\n`));
+      socket.on("data", (c: Buffer) => (said += c.toString("utf8")));
+      socket.on("close", () => resolve(said));
+      socket.on("error", reject);
+    });
+    expect(JSON.parse(answer)).toEqual({
+      ok: false,
+      error: 'a request is a steer ({"text":…}) or {"type":"watch"}',
+    });
+    expect(await exitOf(child)).toBe(0);
   });
 
   it("resumes from the storage after the harness is killed mid-tool, without re-running the tool", async () => {

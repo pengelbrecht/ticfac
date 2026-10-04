@@ -57,6 +57,8 @@ import {
   type FauxResponseStep,
   fauxAssistantMessage,
   fauxProvider,
+  fauxText,
+  fauxThinking,
   fauxToolCall,
   type Provider,
 } from "@earendil-works/pi-ai";
@@ -68,6 +70,7 @@ import {
   Harness,
   hook,
   type ModelRef,
+  watchEvents,
 } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
@@ -199,6 +202,8 @@ export function localModelRef(routed: string): ModelRef {
 
 /** One scripted faux turn, as the transcript file spells it. */
 type FauxStep = {
+  /** The turn's reasoning, streamed ahead of its text or tool calls (the watch tests). */
+  readonly thinking?: string;
   readonly text?: string;
   readonly toolCalls?: readonly { readonly name: string; readonly args?: unknown }[];
 };
@@ -222,8 +227,9 @@ export function loadFauxResponses(file: string): FauxResponseStep[] {
     if (calls.length === 0 && typeof step.text !== "string") {
       throw new Error(`${at} carries neither text nor toolCalls`);
     }
+    const thinking = typeof step.thinking === "string" ? [fauxThinking(step.thinking)] : [];
     return fauxAssistantMessage(
-      calls.length === 0 ? (step.text as string) : calls,
+      calls.length === 0 ? [...thinking, fauxText(step.text as string)] : [...thinking, ...calls],
       calls.length === 0 ? {} : { stopReason: "toolUse" },
     );
   });
@@ -417,31 +423,38 @@ export async function runLocalWorker(options: LocalWorkerOptions): Promise<Local
 
   // The steer socket: every request line becomes a durable steer on the
   // root conversation, and the run below does not settle while a steer's
-  // own run can still run.
+  // own run can still run. The same socket serves `ticfac watch`'s reads
+  // (tick y03): the conversation's agent events, from the one process that
+  // owns the storage.
   const steerWaits: Promise<void>[] = [];
   let server: SteerServer | undefined;
   if (config.steerSock !== "") {
-    server = await openSteerServer(config.steerSock, async (request) => {
-      log(`steer admitted${request.requestId === undefined ? "" : ` (${request.requestId})`}`);
-      const submission = await root.submit(
-        {
-          type: "input",
-          content: request.text,
-          whenBusy: "steer",
-          ...(request.requestId === undefined ? {} : { requestId: request.requestId }),
-        },
-        context,
-      );
-      steerWaits.push(
-        submission.wait(context).then((settled) => {
-          log(
-            settled.status === "done"
-              ? "the steer's run settled"
-              : `the steer's run settled ${settled.status}`,
-          );
-        }),
-      );
-    });
+    const watch = () => watchEvents(harness, root.id, context);
+    server = await openSteerServer(
+      config.steerSock,
+      async (request) => {
+        log(`steer admitted${request.requestId === undefined ? "" : ` (${request.requestId})`}`);
+        const submission = await root.submit(
+          {
+            type: "input",
+            content: request.text,
+            whenBusy: "steer",
+            ...(request.requestId === undefined ? {} : { requestId: request.requestId }),
+          },
+          context,
+        );
+        steerWaits.push(
+          submission.wait(context).then((settled) => {
+            log(
+              settled.status === "done"
+                ? "the steer's run settled"
+                : `the steer's run settled ${settled.status}`,
+            );
+          }),
+        );
+      },
+      { watch },
+    );
     log(`steer socket listening on ${server.path}`);
   }
 
