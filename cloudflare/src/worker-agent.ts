@@ -68,7 +68,7 @@ import {
   watchAttemptEvents,
 } from "ticfac-harness";
 import type { FactoryBootOptions, FactorySandboxNamespace } from "./factory-sandbox";
-import { proxyModelRequest } from "./gateway";
+import { type ProxyOptions, proxyModelRequest } from "./gateway";
 import type { Env } from "./index";
 import {
   DO_V1,
@@ -522,9 +522,19 @@ export class WorkerAgent extends DurableObject<Env> {
       const request = new Request(input, init);
       const path = new URL(request.url).pathname.split("/").filter((part) => part !== "");
       const at = path.indexOf("gateway");
-      return proxyModelRequest(env, request, path.slice(at + 1));
+      return proxyModelRequest(env, request, path.slice(at + 1), this.gatewayProxyOptions());
     }) as typeof fetch;
     return gatewayModelAccess({ gateway, token, fetch: inProcess });
+  }
+
+  /**
+   * The gateway route's options for this object's in-process model calls:
+   * production's last hop is the global fetch to the operator's AI Gateway.
+   * A staging subclass (src/staging-agent.ts) reaches it through an AI
+   * binding instead — the one difference the staging gateway already makes.
+   */
+  protected gatewayProxyOptions(): ProxyOptions {
+    return {};
   }
 
   /** The attempt's FactorySandbox, or null on a deployment that binds none. */

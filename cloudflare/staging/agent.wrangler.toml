@@ -1,0 +1,49 @@
+# The STAGING AGENT Worker (epic 43y, tick xd3): the WorkerAgent Durable
+# Object with its FactorySandbox containers and the factory's model path, so a
+# cloud attempt can be run end to end on staging. Routes and the two
+# stand-ins (the last model hop, the container's ticks-worker):
+# src/staging-agent.ts. Deployed by hand, only for a proof: harness/proof/
+# README.md says how, and how to tear it down again.
+name = "ticfac-staging-agent"
+main = "../src/staging-agent.ts"
+compatibility_date = "2026-08-11"
+compatibility_flags = ["nodejs_compat", "durable_object_io_tasks_prevent_eviction"]
+workers_dev = true
+
+[[durable_objects.bindings]]
+name = "WORKER_AGENTS"
+class_name = "StagingWorkerAgent"
+
+[[durable_objects.bindings]]
+name = "SANDBOXES_V1"
+class_name = "FactorySandbox"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["StagingWorkerAgent", "FactorySandbox"]
+
+[[containers]]
+class_name = "FactorySandbox"
+name = "ticfac-staging-agent-sandbox"
+scheduling_policy = "durable_object"
+
+[containers.images.factory]
+dockerfile = "./agent.Dockerfile"
+build_context = "../../image"
+
+# The last hop, as the staging gateway takes it.
+[ai]
+binding = "AI"
+
+# The run index and the run token table, with the factory's own migrations.
+# No database_id: wrangler provisions the database on the first deploy, so no
+# operator-specific id is committed.
+[[d1_databases]]
+binding = "DB"
+database_name = "ticfac-staging-agent"
+migrations_dir = "../migrations"
+
+[vars]
+AI_GATEWAY_BASE_URL = "https://workers-binding.ai/ai-gateway/gateways/default"
+PROOF_AI_GATEWAY_ID = "default"
+CLOUDFLARE_API_TOKEN = "binding-carries-identity"
