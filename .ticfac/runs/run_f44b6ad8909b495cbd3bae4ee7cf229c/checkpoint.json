@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 41,
-  "state": "gating",
-  "reason": "running the integrated gate for gf0 on ffc9d2814769",
-  "updated_at": "2026-10-04T12:41:09Z",
+  "sequence": 42,
+  "state": "publishing",
+  "reason": "closing gf0 behind the integrated gate on ffc9d2814769",
+  "updated_at": "2026-10-04T12:51:21Z",
   "ticks": [
     {
       "tick_id": "q8m",
