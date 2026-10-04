@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "oq4",
   "attempt": 5,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T14:12:18Z",
+  "triaged_at": "2026-10-04T14:12:28Z",
+  "triaged_by": "ticfac run epic-43y absorbing 5y7",
+  "promoted_as": "5y7",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "oq4",
