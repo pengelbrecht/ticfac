@@ -2128,3 +2128,4 @@
 {"ts":"2026-10-04T20:52:42.849982Z","tick":"i3h","action":"start","actor":"ticfac","epic":"43y","data":{"title":"A restored cloud workspace re-runs the repository's setup"}}
 {"ts":"2026-10-04T21:11:41.460838Z","tick":"hxd","action":"note","actor":"ticfac","epic":"43y","data":{"note":"\n2026-10-04 23:11 - ticfac run epic-43y: hxd try 1 (run dispatch #16) merged into epic/43y as 6566d3a66362; the integrated gate (go, ts) passed.","title":"Cloud workers on the default sdk0 substrate are not WorkerAgents"}}
 {"ts":"2026-10-04T21:11:44.913671Z","tick":"hxd","action":"close","actor":"ticfac","epic":"43y","data":{"title":"Cloud workers on the default sdk0 substrate are not WorkerAgents"}}
+{"ts":"2026-10-04T21:12:06.94411Z","tick":"kjs","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Node workspace-checkpoint tests time out under heavy host load"}}
