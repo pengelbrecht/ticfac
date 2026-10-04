@@ -1,0 +1,56 @@
+{
+  "schema_version": 3,
+  "attempt": 4,
+  "tick_id": "yjq",
+  "dispatched_at": "2026-10-04T00:36:13Z",
+  "job_handle": {
+    "attempt": 4,
+    "base_sha": "767306f5aaf37bac934b3a79705421bad43cfc0f",
+    "collected_from": null,
+    "executor": "cloudflare-sandbox",
+    "job_id": "run-run_5c7c16d199414da2a8a40d97b524e987/tick-yjq/attempt-4",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "prompt_digest": "sha256:b03030550262450b8274ed8ed36354cd4e7a976f49e5f4973f3564e060036007",
+    "remote": "origin",
+    "resumed_from": {
+      "tick_id": "yjq",
+      "attempt": 12,
+      "write_ref": "refs/heads/tick/hn6/attempt-12/yjq",
+      "sha": "767306f5aaf37bac934b3a79705421bad43cfc0f",
+      "released_by": "ticfac (took over the claim of run run_d51a747f10ed41429f925ba4b83053d8, which ended: the factory's record says stopped and its Workflow instance is complete)",
+      "run_id": "run_d51a747f10ed41429f925ba4b83053d8"
+    },
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "taken_over": {
+      "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
+      "evidence": "the factory's record says stopped and its Workflow instance is complete"
+    },
+    "tick_id": "yjq",
+    "tier": "economy",
+    "touch": null,
+    "try": 1,
+    "wall_seconds": 28800,
+    "write_ref": "refs/heads/ticfac/run-run_5c7c16d199414da2a8a40d97b524e987/tick-yjq/attempt-4"
+  },
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "yjq",
+    "attempt": 4,
+    "source_ref": "refs/heads/tick/hn6/attempt-12/yjq",
+    "source_sha": "767306f5aaf37bac934b3a79705421bad43cfc0f",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:7d83b0eadf2ccf3beaba73364d307bc167e813a34455560329e4c34a35f23941",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
