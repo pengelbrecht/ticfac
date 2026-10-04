@@ -9,6 +9,8 @@ package cli
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -18,7 +20,9 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/statusmodel"
+	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
 // TestTickViewShowsTriesReasonsAndEvidence: enter on a tick opens its own
@@ -80,6 +84,139 @@ func TestTickViewShowsTriesReasonsAndEvidence(t *testing.T) {
 	view = strings.Join(renderTickView(m, "zzz", plainStyles(), 100, 0), "\n")
 	if !strings.Contains(view, "zzz is not in the epic's plan any more") {
 		t.Errorf("a tick gone from the plan renders as something else:\n%s", view)
+	}
+}
+
+// TestTickViewDrillsIntoAClosedPriorRunTick (tick ihw): enter on a tick the
+// NEWEST run never touched — its row comes from the prior run that closed
+// it — still tells the whole story: the report summary read from that run's
+// own archived report (the reader is keyed by run, tick and attempt), the
+// diff read from the merge commit (the close swept the attempt branch),
+// and the gate rows that run's own evidence recorded. This is the drill-in
+// of a closed prior-run tick through the production reader — the case the
+// report reader bound to the current run id answered "report not read"
+// for, or another dispatch's report when the numbers collided.
+func TestTickViewDrillsIntoAClosedPriorRunTick(t *testing.T) {
+	// The repository a closed tick leaves behind: the attempt branch was
+	// merged into the integration branch and swept on close, and the run's
+	// own tag runstate places at terminal state is what still carries the
+	// merge commit for a reader keyed by the prior run's id.
+	repo := t.TempDir()
+	gitIn(t, repo, "init", "-q", "-b", "main")
+	gitIn(t, repo, "config", "user.email", "fixture@example.com")
+	gitIn(t, repo, "config", "user.name", "the fixture")
+	if err := os.WriteFile(filepath.Join(repo, "base.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "add", "-A")
+	gitIn(t, repo, "commit", "-q", "-m", "the base the run branched from")
+	gitIn(t, repo, "branch", "epic/hpd")
+	branch := "ticfac/run-run_aaa/tick-at1/attempt-1"
+	gitIn(t, repo, "checkout", "-q", "-b", branch)
+	for _, file := range []string{"a.txt", "b.txt"} {
+		if err := os.WriteFile(filepath.Join(repo, file), []byte("one\ntwo\nthree\nfour\nfive\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitIn(t, repo, "add", "-A")
+	gitIn(t, repo, "commit", "-q", "-m", "the attempt's work")
+	gitIn(t, repo, "checkout", "-q", "epic/hpd")
+	gitIn(t, repo, "merge", "--no-ff", "-q", "--no-edit", "-m",
+		"Merge branch '"+branch+"' into epic/hpd\n\nticfac run run_aaa: tick at1 attempt 1", branch)
+	gitIn(t, repo, "branch", "-q", "-D", branch)
+	gitIn(t, repo, "tag", "ticfac/run-run_aaa")
+
+	// The archived report under the PRIOR run's id — the only run it is
+	// ever filed under.
+	stateRoot := t.TempDir()
+	t.Setenv("TICFAC_EXEC_STATE_DIR", stateRoot)
+	dir := filepath.Join(stateRoot, "runs", "run_aaa", "at1", "1")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "attempt.json"), []byte(`{"tick_id": "at1"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "report.md"),
+		[]byte("# RESULT-at1\n\nThe prior run wired the seam and closed the tick.\n\nSTATUS: DONE\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The prior run's durable records: the closed row, the dispatch marker
+	// and the gate evidence its own close ran on.
+	tick, attempt, executor, tier := "at1", 1, "local-subprocess", "strong"
+	prior := statusmodel.Records{
+		Checkpoint: &runstate.Checkpoint{
+			SchemaVersion: runstate.SchemaVersion,
+			RunID:         "run_aaa",
+			EpicID:        "hpd",
+			Sequence:      4,
+			State:         "completed",
+			Reason:        "at1 closed",
+			UpdatedAt:     "2026-09-26T12:10:00Z",
+			Ticks:         []runstate.TickState{{TickID: "at1", State: "closed", Attempt: 1}},
+		},
+		Attempts: []runstate.Attempt{{
+			SchemaVersion: runstate.SchemaVersion,
+			Attempt:       1,
+			TickID:        "at1",
+			DispatchedAt:  "2026-09-26T10:00:00Z",
+			JobHandle:     map[string]any{"executor": executor},
+			Provenance: runstate.Provenance{
+				RunID: "run_aaa", TickID: &tick, Attempt: &attempt,
+				SourceSHA: "0fc09212e0e8f96fc3fdc87c2f681519bb0d191a",
+				Phase:     runstate.PhaseWorker, Executor: &executor, Tier: &tier,
+			},
+		}},
+		Evidence: []runstate.Evidence{{
+			SchemaVersion: runstate.SchemaVersion,
+			Key:           "gate-at1-1-integrated-go",
+			Provenance: runstate.Provenance{
+				RunID: "run_aaa", TickID: &tick, Attempt: &attempt,
+				SourceRef: "refs/heads/epic/hpd",
+				SourceSHA: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
+				Phase:     runstate.PhaseIntegrated, Executor: &executor, Tier: &tier,
+			},
+			Check:      runstate.Check{ID: "go", Kind: "command"},
+			StartedAt:  "2026-09-26T11:30:00Z",
+			FinishedAt: "2026-09-26T11:55:00Z",
+			Result:     "pass",
+			Acceptance: "required",
+			Output: runstate.Output{Inline: &runstate.InlineOutput{
+				Mode: "inline", Stdout: "ok\n", Truncated: false, Redacted: true, MaxBytes: 1024,
+			}},
+		}},
+	}
+
+	model := statusmodel.Build(statusmodel.Sources{
+		Now:  time.Date(2026, 9, 27, 5, 30, 0, 0, time.UTC),
+		RunID: "run_ccc", Host: statusmodel.HostLocal,
+		Graph: &tk.Graph{
+			Epic: tk.GraphEpic{ID: "hpd", Title: "the epic the runs worked"},
+			Waves: []tk.GraphWave{{Wave: 1, Tasks: []tk.GraphTask{
+				{ID: "at1", Title: "the prior run's tick", Gloss: "prior", Status: "closed"},
+			}}},
+		},
+		Records:      &statusmodel.Records{},
+		PriorRecords: []statusmodel.Records{prior},
+		StandingRead: true,
+		Report:       statusmodel.AttemptReports(repo),
+	})
+
+	view := strings.Join(renderTickView(model, "at1", plainStyles(), 100, 0), "\n")
+	for _, want := range []string{
+		"at1  the prior run's tick",
+		"try 1", "closed",
+		"The prior run wired the seam and closed the tick.",
+		"diff: 2 files +10 −0",
+		"go  pass  1a2b3c4d",
+	} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the closed prior-run tick's drill-in does not carry %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "report not read") {
+		t.Errorf("the closed prior-run tick's report was not read:\n%s", view)
 	}
 }
 

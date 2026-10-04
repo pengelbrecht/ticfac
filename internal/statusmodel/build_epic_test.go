@@ -344,6 +344,26 @@ func TestBuildDerivesTheEpicAcrossRuns(t *testing.T) {
 	}
 }
 
+// TestGatesCarryEveryRunThatWorkedTheTick (tick ihw): the gates array is
+// the EPIC's evidence, not the newest run's own — a closed tick's gate rows
+// belong to the run that closed it, and the drill-in reads them per tick.
+// The newest run here failed at boot and recorded no evidence of its own,
+// so every row in the array is an earlier run's, and the drill-in on any
+// closed tick would show nothing at all if the array were the newest
+// run's alone.
+func TestGatesCarryEveryRunThatWorkedTheTick(t *testing.T) {
+	t.Parallel()
+	model := Build(failedNewestSources())
+	got := []string{}
+	for _, gate := range model.Gates {
+		got = append(got, gate.Key)
+	}
+	if want := "gate-t1-1-go,gate-t2-2-go,gate-t5-3-go"; strings.Join(got, ",") != want {
+		t.Errorf("the gates array is %v, want every run's evidence for the ticks they worked: %s",
+			got, want)
+	}
+}
+
 // TestBuildETAAcrossRuns: the estimate is built from every closed tick the
 // epic has measured, earlier runs included — with the duplicate excluded.
 func TestBuildETAAcrossRuns(t *testing.T) {

@@ -131,7 +131,7 @@ func TestReportReadsSummaryAndDiff(t *testing.T) {
 			t.Setenv("TICFAC_EXEC_STATE_DIR", stateRoot)
 			archiveReport(t, stateRoot, "epic-2jn", "nwj", 1, reportBody)
 
-			input := AttemptReports(repo, "epic-2jn")("nwj", 1)
+			input := AttemptReports(repo)("epic-2jn", "nwj", 1)
 			if input == nil {
 				t.Fatal("the report is archived and the branch stands, and the reader answered nothing")
 			}
@@ -160,13 +160,279 @@ func TestReportIsAlsoFoundUnderTheDefaultStateRoots(t *testing.T) {
 	t.Setenv("TICFAC_EXEC_STATE_DIR", "")
 	archiveReport(t, filepath.Join(home, ".ticfac", "exec", "herdr"), "epic-2jn", "nwj", 1, reportBody)
 
-	input := AttemptReports(repo, "epic-2jn")("nwj", 1)
+	input := AttemptReports(repo)("epic-2jn", "nwj", 1)
 	if input == nil {
 		t.Fatal("the report is archived under an executor's default state root and the reader answered nothing")
 	}
 	if input.Summary == "" || !input.DiffRead {
 		t.Errorf("the report read back as %+v, want its summary and its diff", *input)
 	}
+}
+
+// TestReportIsKeyedByRun (tick ihw): the same (tick, attempt) in two runs
+// names two dispatches, and a tick's row under `watch epic-<id>` may come
+// from a run that is not the one the surface was opened on — so the reader
+// is keyed by (run, tick, attempt): each run's attempt answers its own
+// archived report and its own branch's diff, never the other run's
+// same-numbered one.
+func TestReportIsKeyedByRun(t *testing.T) {
+	repo := reportRepoRuns(t)
+	stateRoot := t.TempDir()
+	t.Setenv("TICFAC_EXEC_STATE_DIR", stateRoot)
+	archiveReport(t, stateRoot, "epic-aaa", "nwj", 1, "# RESULT-nwj\n\nrun aaa's report\n\nSTATUS: DONE\n")
+	archiveReport(t, stateRoot, "epic-bbb", "nwj", 1, "# RESULT-nwj\n\nrun bbb's report\n\nSTATUS: DONE\n")
+
+	reader := AttemptReports(repo)
+	for _, tc := range []struct {
+		run        string
+		summary    string
+		files      int
+		insertions int
+		deletions  int
+	}{
+		{run: "epic-aaa", summary: "run aaa's report", files: 1, insertions: 5, deletions: 0},
+		{run: "epic-bbb", summary: "run bbb's report", files: 2, insertions: 10, deletions: 0},
+	} {
+		input := reader(tc.run, "nwj", 1)
+		if input == nil {
+			t.Fatalf("run %s's attempt is archived and its branch stands, and the reader answered nothing", tc.run)
+		}
+		if input.Summary != tc.summary {
+			t.Errorf("run %s's summary is %q, want its own report's %q: the same attempt number in two runs names two dispatches",
+				tc.run, input.Summary, tc.summary)
+		}
+		if !input.DiffRead || input.Files != tc.files || input.Insertions != tc.insertions || input.Deletions != tc.deletions {
+			t.Errorf("run %s's diff is {%d files, +%d, −%d} (read %t), want its own branch's {%d, +%d, −%d}",
+				tc.run, input.Files, input.Insertions, input.Deletions, input.DiffRead,
+				tc.files, tc.insertions, tc.deletions)
+		}
+	}
+
+	// A run that was never dispatched answers nothing — the reader says so
+	// rather than borrowing another run's same-numbered attempt.
+	if input := reader("epic-ccc", "nwj", 1); input != nil {
+		t.Errorf("a run with no attempt of the tick answered %+v, want nil", *input)
+	}
+}
+
+// reportRepoRuns is the shape two runs of one epic leave behind: each cut
+// its own attempt branch of the same tick under its own run id, from its
+// own integration branch spelling. Run aaa's attempt adds one file of five
+// lines (+1/+5), run bbb's adds two (+2/+10).
+func reportRepoRuns(t *testing.T) string {
+	t.Helper()
+	repo := t.TempDir()
+	gitIn(t, repo, "init", "-q", "-b", "main")
+	gitIn(t, repo, "config", "user.email", "fixture@example.com")
+	gitIn(t, repo, "config", "user.name", "the fixture")
+	if err := os.WriteFile(filepath.Join(repo, "base.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "add", "-A")
+	gitIn(t, repo, "commit", "-q", "-m", "the base both runs branched from")
+	for _, run := range []struct {
+		id    string
+		epics string
+		files int
+	}{{"epic-aaa", "aaa", 1}, {"epic-bbb", "bbb", 2}} {
+		gitIn(t, repo, "branch", "epic/"+run.epics)
+		gitIn(t, repo, "checkout", "-q", "-b",
+			fmt.Sprintf("ticfac/run-%s/tick-nwj/attempt-1", run.id))
+		for i := 1; i <= run.files; i++ {
+			if err := os.WriteFile(filepath.Join(repo, fmt.Sprintf("%s-%d.txt", run.epics, i)),
+				[]byte("one\ntwo\nthree\nfour\nfive\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		gitIn(t, repo, "add", "-A")
+		gitIn(t, repo, "commit", "-q", "-m", run.id+"'s attempt")
+		gitIn(t, repo, "checkout", "-q", "main")
+	}
+	return repo
+}
+
+// TestReportDiffSurvivesTheSweep (tick ihw): the close sweeps the attempt
+// branch the moment its work is merged (dispatch.go cleanUp → sweepTick),
+// so a closed tick's drill-in would go quiet on the diff the moment it
+// closes. The work is still readable from the merge commit that carried it
+// in — in every message the reconciler mints: the plain merge, the
+// resolve-conflict job's resolution, and the fold of a resolution onto a
+// moved branch — and the counts are the same number the live branch read.
+func TestReportDiffSurvivesTheSweep(t *testing.T) {
+	const runID, tickID = "epic-2jn", "nwj"
+	for _, tc := range []struct {
+		name    string
+		message string
+	}{
+		{name: "the plain merge",
+			message: "Merge branch 'ticfac/run-epic-2jn/tick-nwj/attempt-1' into epic/2jn\n\n" +
+				"ticfac run epic-2jn: tick nwj attempt 1"},
+		{name: "the resolve-conflict job's minted merge",
+			message: "Merge the resolve-conflict job's resolution of nwj into epic/2jn\n\n" +
+				"ticfac run epic-2jn: tick nwj attempt 1 conflicted and was resolved by the resolve-conflict job"},
+		{name: "a resolution folded onto a moved branch",
+			message: "Merge the resolve-conflict job's resolution of nwj into epic/2jn\n\n" +
+				"ticfac run epic-2jn: tick nwj attempt 1 was resolved against 1a2b3c4d; epic/2jn has moved to 5e6f7a8b since, and the resolution is merged onto it"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := sweptRepo(t, runID, tickID, 1, tc.message)
+			input := AttemptReports(repo)(runID, tickID, 1)
+			if input == nil {
+				t.Fatal("the attempt was merged and the reader answered nothing")
+			}
+			if !input.DiffRead {
+				t.Fatal("the merged attempt's diff was not read from the merge commit that carries its work")
+			}
+			if input.Files != 2 || input.Insertions != 10 || input.Deletions != 0 {
+				t.Errorf("the merged attempt's diff is {%d files, +%d, −%d}, want the live branch's {2, +10, −0}",
+					input.Files, input.Insertions, input.Deletions)
+			}
+		})
+	}
+}
+
+// sweptRepo is the repository a closed tick leaves behind: one attempt
+// branch of two files of five lines, merged into the integration branch
+// with the message the reconciler mints, then swept — the close deletes
+// merged branches, so the merge commit is the only thing that still names
+// the attempt's work.
+func sweptRepo(t *testing.T, runID, tickID string, attempt int, message string) string {
+	t.Helper()
+	repo := t.TempDir()
+	gitIn(t, repo, "init", "-q", "-b", "main")
+	gitIn(t, repo, "config", "user.email", "fixture@example.com")
+	gitIn(t, repo, "config", "user.name", "the fixture")
+	if err := os.WriteFile(filepath.Join(repo, "base.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "add", "-A")
+	gitIn(t, repo, "commit", "-q", "-m", "the base the run branched from")
+	epicID := strings.TrimPrefix(runID, "epic-")
+	gitIn(t, repo, "branch", "epic/"+epicID)
+	branch := fmt.Sprintf("ticfac/run-%s/tick-%s/attempt-%d", runID, tickID, attempt)
+	gitIn(t, repo, "checkout", "-q", "-b", branch)
+	for _, file := range []string{"a.txt", "b.txt"} {
+		if err := os.WriteFile(filepath.Join(repo, file), []byte("one\ntwo\nthree\nfour\nfive\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitIn(t, repo, "add", "-A")
+	gitIn(t, repo, "commit", "-q", "-m", "the attempt's work")
+	gitIn(t, repo, "checkout", "-q", "epic/"+epicID)
+	gitIn(t, repo, "merge", "--no-ff", "-q", "--no-edit", "-m", message, branch)
+	gitIn(t, repo, "branch", "-q", "-D", branch)
+	return repo
+}
+
+// TestMergedDiffIsTheAttemptOwnNumber (tick ihw): the merge commit is found
+// by the message line that names the attempt — never a substring, which
+// would read attempt 1's number off attempt 10's merge and answer a closed
+// tick with a later dispatch's work.
+func TestMergedDiffIsTheAttemptOwnNumber(t *testing.T) {
+	const runID, tickID = "epic-2jn", "nwj"
+	repo := t.TempDir()
+	gitIn(t, repo, "init", "-q", "-b", "main")
+	gitIn(t, repo, "config", "user.email", "fixture@example.com")
+	gitIn(t, repo, "config", "user.name", "the fixture")
+	if err := os.WriteFile(filepath.Join(repo, "base.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gitIn(t, repo, "add", "-A")
+	gitIn(t, repo, "commit", "-q", "-m", "the base the run branched from")
+	gitIn(t, repo, "branch", "epic/2jn")
+	// Attempt 1 closed the tick early: two files. Attempt 10 is a later
+	// dispatch of the same tick another run merged: one file.
+	for _, attempt := range []struct {
+		n     int
+		files []string
+	}{{1, []string{"a.txt", "b.txt"}}, {10, []string{"c.txt"}}} {
+		branch := fmt.Sprintf("ticfac/run-%s/tick-%s/attempt-%d", runID, tickID, attempt.n)
+		gitIn(t, repo, "checkout", "-q", "-b", branch)
+		for _, file := range attempt.files {
+			if err := os.WriteFile(filepath.Join(repo, file), []byte("one\ntwo\nthree\nfour\nfive\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		gitIn(t, repo, "add", "-A")
+		gitIn(t, repo, "commit", "-q", "-m", "attempt's work")
+		gitIn(t, repo, "checkout", "-q", "epic/2jn")
+		gitIn(t, repo, "merge", "--no-ff", "-q", "--no-edit", "-m",
+			fmt.Sprintf("Merge branch '%s' into epic/2jn\n\nticfac run %s: tick %s attempt %d", branch, runID, tickID, attempt.n),
+			branch)
+		gitIn(t, repo, "branch", "-q", "-D", branch)
+	}
+
+	reader := AttemptReports(repo)
+	if input := reader(runID, tickID, 1); input == nil || !input.DiffRead ||
+		input.Files != 2 || input.Insertions != 10 {
+			got := ReportInput{}
+			if input != nil {
+				got = *input
+		}
+		t.Errorf("attempt 1's merged diff is %+v, want its own {2 files, +10}: the number was read off attempt 10's merge",
+				got)
+	}
+	if input := reader(runID, tickID, 10); input == nil || !input.DiffRead ||
+		input.Files != 1 || input.Insertions != 5 {
+		t.Errorf("attempt 10's merged diff is %+v, want its own {1 file, +5}", input)
+	}
+}
+
+// TestReportIsAskedOfTheRunThatOwnsTheTick (tick ihw): a tick's row under
+// `watch epic-<id>` may come from a run that is not the one the surface was
+// opened on — the run that closed it — and its attempt number is that run's
+// own per-run number. The reader is asked for (that run, that tick, that
+// attempt), never for the current run's id with a prior run's number: the
+// same number in two runs names two dispatches, and the wrong pairing reads
+// another dispatch's report or none.
+func TestReportIsAskedOfTheRunThatOwnsTheTick(t *testing.T) {
+	src := failedNewestSources()
+	asked := map[string]bool{}
+	src.Report = func(runID, tickID string, attempt int) *ReportInput {
+		asked[fmt.Sprintf("%s/%s#%d", runID, tickID, attempt)] = true
+		if runID == "run_aaa" && tickID == "at1" && attempt == 1 {
+			return &ReportInput{Summary: "the run that closed it"}
+		}
+		return nil
+	}
+	model := Build(src)
+
+	// The rows the prior runs own, each with the owning run's own attempt
+	// number — the exact triples the reader must be asked for.
+	for _, want := range []string{
+		"run_aaa/at1#1",
+		"run_bbb/at2#2",
+		"run_bbb/at3#12",
+		"run_bbb/at5#3",
+	} {
+		if !asked[want] {
+			t.Errorf("the reader was never asked for %s: the row's run and number were not paired", want)
+		}
+	}
+	for key := range asked {
+		if strings.HasPrefix(key, "run_ccc/") {
+			t.Errorf("the reader was asked for the CURRENT run's %s: the row belongs to a prior run, and the current run's same-numbered dispatch is another worker's", key)
+		}
+	}
+	if tick := tickOfModel(model, "at1"); tick == nil || tick.Report == nil ||
+		tick.Report.Summary == nil || *tick.Report.Summary != "the run that closed it" {
+		t.Errorf("the closed prior-run tick's drill-in did not carry its run's report: %+v", tick)
+	}
+}
+
+// tickOfModel is one tick's row out of the built model, by id.
+func tickOfModel(m Model, tickID string) *Tick {
+	if m.Waves == nil {
+		return nil
+	}
+	for wi := range *m.Waves {
+		for ti := range (*m.Waves)[wi].Ticks {
+			if (*m.Waves)[wi].Ticks[ti].TickID == tickID {
+				return &(*m.Waves)[wi].Ticks[ti]
+			}
+	}
+	}
+	return nil
 }
 
 // TestReportIsNullWhenNothingIsArchived: nothing to read is the honest nil —
@@ -178,10 +444,10 @@ func TestReportIsNullWhenNothingIsArchived(t *testing.T) {
 	stateRoot := t.TempDir()
 	t.Setenv("TICFAC_EXEC_STATE_DIR", stateRoot)
 	repo := reportRepo(t, "branch", "epic/2jn")
-	reader := AttemptReports(repo, "epic-2jn")
+	reader := AttemptReports(repo)
 
 	// Nothing anywhere: the attempt was never dispatched.
-	if input := reader("89m", 4); input != nil {
+	if input := reader("epic-2jn", "89m", 4); input != nil {
 		t.Errorf("an attempt with nothing archived and no branch answered %+v, want nil", *input)
 	}
 
@@ -190,7 +456,7 @@ func TestReportIsNullWhenNothingIsArchived(t *testing.T) {
 	// different claims, and the model owes the reader the second.
 	gitIn(t, repo, "branch", "-q", "-D", "ticfac/run-epic-2jn/tick-nwj/attempt-1")
 	archiveReport(t, stateRoot, "epic-2jn", "nwj", 1, reportBody)
-	input := reader("nwj", 1)
+	input := reader("epic-2jn", "nwj", 1)
 	if input == nil {
 		t.Fatal("the report is archived and the reader answered nothing")
 	}
@@ -213,7 +479,7 @@ func TestReportIsNullWhenNothingIsArchived(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "report.md"), []byte(reportBody), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if input := reader("xbp", 2); input != nil {
+	if input := reader("epic-2jn", "xbp", 2); input != nil {
 		t.Errorf("another tick's same-named attempt directory answered %+v, want nil", *input)
 	}
 }
@@ -232,9 +498,9 @@ func TestReportCachesPerAttempt(t *testing.T) {
 		atomic.AddInt32(&calls, 1)
 		return runGit(dir, args...)
 	}
-	reader := attemptReports(repo, "epic-2jn", counting)
+	reader := attemptReports(repo, counting)
 
-	first := reader("nwj", 1)
+	first := reader("epic-2jn", "nwj", 1)
 	if first == nil {
 		t.Fatal("the report is archived and the reader answered nothing")
 	}
@@ -242,7 +508,7 @@ func TestReportCachesPerAttempt(t *testing.T) {
 	if afterFirst == 0 {
 		t.Fatal("the first read spawned no git: the fixture measures the reader, not the cache")
 	}
-	second := reader("nwj", 1)
+	second := reader("epic-2jn", "nwj", 1)
 	if second != first {
 		t.Errorf("the second read of one attempt answered a different result: %+v then %+v", first, second)
 	}
@@ -254,14 +520,14 @@ func TestReportCachesPerAttempt(t *testing.T) {
 	// Another attempt is another read, whatever it answers — and an attempt
 	// that answered nothing is cached as nothing, so the empty redraws cost
 	// nothing either.
-	if reader("nwj", 2) != nil {
+	if reader("epic-2jn", "nwj", 2) != nil {
 		t.Error("an attempt with nothing archived answered a report")
 	}
 	afterSecond := atomic.LoadInt32(&calls)
 	if afterSecond == afterFirst {
 		t.Fatal("a different attempt did not read: the cache keyed the tick alone")
 	}
-	_ = reader("nwj", 2)
+	_ = reader("epic-2jn", "nwj", 2)
 	if got := atomic.LoadInt32(&calls); got != afterSecond {
 		t.Errorf("a second read of the same EMPTY answer ran git again (%d calls, were %d)", got, afterSecond)
 	}
@@ -283,7 +549,7 @@ func TestReportSummaryIsBoundedToOneLineOfRunes(t *testing.T) {
 	long := strings.Repeat("a", 299) + strings.Repeat("\u25b8", 8)
 	archiveReport(t, stateRoot, "epic-2jn", "nwj", 1,
 		"# RESULT-nwj\n\n"+long+"\n\n## What changed\n\n- a file\n\nSTATUS: DONE\n")
-	input := AttemptReports(repo, "epic-2jn")("nwj", 1)
+	input := AttemptReports(repo)("epic-2jn", "nwj", 1)
 	if input == nil {
 		t.Fatal("the report is archived and the branch stands, and the reader answered nothing")
 	}
@@ -304,7 +570,7 @@ func TestReportSummaryIsBoundedToOneLineOfRunes(t *testing.T) {
 		"ticfac/run-epic-2jn/tick-nwj/attempt-1")
 	archiveReport(t, stateRoot, "epic-2jn", "nwj", 2,
 		"# RESULT-nwj\n\n## What changed\n\n- a file\n\nSTATUS: DONE\n")
-	input = AttemptReports(repo, "epic-2jn")("nwj", 2)
+	input = AttemptReports(repo)("epic-2jn", "nwj", 2)
 	if input == nil {
 		t.Fatal("the branch stands and its diff was readable, and the reader answered nothing")
 	}
@@ -330,8 +596,8 @@ func TestReportsDecorateTheSettledTicks(t *testing.T) {
 		attemptMarker(7, "152", "2026-09-27T04:30:00Z", "strong", "m", "local-subprocess"))
 
 	asked := map[string]bool{}
-	src.Report = func(tickID string, attempt int) *ReportInput {
-		asked[tickID] = true
+	src.Report = func(runID, tickID string, attempt int) *ReportInput {
+		asked[fmt.Sprintf("%s/%s#%d", runID, tickID, attempt)] = true
 		switch tickID {
 		case "nwj":
 			return &ReportInput{Summary: "the nwj report", Files: 1, Insertions: 2, Deletions: 3, DiffRead: true}
