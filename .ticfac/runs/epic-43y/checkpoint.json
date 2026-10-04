@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 105,
-  "state": "publishing",
-  "reason": "closing hxd behind the integrated gate on 6566d3a66362",
-  "updated_at": "2026-10-04T21:11:37Z",
+  "sequence": 106,
+  "state": "running",
+  "reason": "hxd is closed",
+  "updated_at": "2026-10-04T21:11:47Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -86,7 +86,7 @@
     },
     {
       "tick_id": "hxd",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 16
     },
     {
