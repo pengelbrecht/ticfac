@@ -1,0 +1,14 @@
+{
+  "id": "hxd",
+  "title": "Cloud workers on the default sdk0 substrate are not WorkerAgents",
+  "description": "WorkerAgent hosting (xd3) applies only to runs on the do_v1 substrate: FactorySandboxEnv needs FactorySandbox's run door, which the Sandbox SDK 0.x class does not have. Every run submitted without substrate do_v1 still runs the pi-CLI all-in-one worker, so [A1] holds only once do_v1 is the default (umq) or the 0.x path gains a run door.\nevidence: cloudflare/src/worker-agent.ts workerAgentsFromEnv (record.substrate !== DO_V1 returns null)\n\nticfac run epic-43y created this tick by absorbing the finding 5fc1e1302f1a792143b807d074d6076d66f8208877ae0e7dfa3bbd889f38aec6 (reported by run-epic-43y/tick-xd3/attempt-11): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/5fc1e1302f1a792143b807d074d6076d66f8208877ae0e7dfa3bbd889f38aec6.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-xd3/attempt-11",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-04T18:45:30Z",
+  "updated_at": "2026-10-04T18:45:30Z"
+}
