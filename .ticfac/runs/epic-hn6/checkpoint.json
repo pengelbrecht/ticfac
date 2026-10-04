@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 3,
-  "state": "running",
-  "reason": "v16 is running as attempt 1",
-  "updated_at": "2026-10-04T16:01:08Z",
+  "sequence": 4,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for v16",
+  "updated_at": "2026-10-04T16:15:15Z",
   "ticks": [
     {
       "tick_id": "v16",
