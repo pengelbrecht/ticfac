@@ -1,0 +1,13 @@
+{
+  "id": "yic",
+  "title": "Publish each durable worker's heartbeat line to the run feed (f6o, n0r)",
+  "description": "y03 gives the per-worker heartbeat (workerview.HeartbeatLine: commits and delta, model calls, the last tool and its age) to ticfac watch \u003crun\u003e \u003ctick\u003e. f6o's own acceptance asks for an activity line in the RUN FEED every 5 minutes or less, so that ticfac watch \u003crun\u003e / events / status look quiet only when a worker truly is. The supervisor (local) or the WorkerAgent (cloud) could fold its own worker's commit stream with internal/workerview (or its TS equivalent) and emit a feed stage on that cadence; optionally also settled events (n0r).\n\nticfac run epic-43y filed this backlog tick from the finding 25a910c0af500c9ed1f0197d2e4a549860dbcf69f02b2c05b5e2c7f870f93ed0 (reported by run-epic-43y/tick-y03/attempt-17): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/25a910c0af500c9ed1f0197d2e4a549860dbcf69f02b2c05b5e2c7f870f93ed0.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-y03/attempt-17",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-04T20:47:30Z",
+  "updated_at": "2026-10-04T20:47:30Z"
+}
