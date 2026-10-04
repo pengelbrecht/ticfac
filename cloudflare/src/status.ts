@@ -424,8 +424,13 @@ export async function listStatusSnapshots(db: D1Database): Promise<StoredSnapsho
  *
  * `cost` is the one hn6 dashboard field the factory's own records can state
  * for a cloud run: the measured Workers AI spend the run row carries, as one
- * metered line named for where the number came from. The rest of the
- * dashboard fields stay absent — the composed doc claims nothing the
+ * metered line named for where the number came from — and METERED ONLY WHEN
+ * the row says its cost_source is the gateway (tick 1tm): the runs row's
+ * cost_usd is NOT NULL DEFAULT 0, so a run before its first cost sync, or
+ * one whose telemetry could not be read, carries a default rather than a
+ * measurement, and its line says "not metered" and states no number, the
+ * same basis the Go model's cloud line names. The rest of the dashboard
+ * fields stay absent — the composed doc claims nothing the
  * factory's records do not state — and `waves` stays null.
  */
 export function cloudStatusDoc(
@@ -479,17 +484,25 @@ export function cloudStatusDoc(
         : null,
     waves: null,
     cost: {
-      lines:
-        typeof run.cost_usd === "number"
-          ? [
-              {
-                source: "workers-ai",
-                metered: true,
-                usd: run.cost_usd,
-                basis: "AI Gateway logs",
-              },
-            ]
-          : [],
+      lines: [
+        run.cost_source === "gateway"
+          ? {
+              source: "workers-ai",
+              metered: true,
+              usd: run.cost_usd,
+              basis: "AI Gateway logs",
+            }
+          : {
+              // The unsynced record: the row's number is the schema's
+              // default, not a measurement, so the line states no number and
+              // names the telemetry — the same basis the Go model's cloud
+              // line carries, so the two renderers cannot disagree.
+              source: "workers-ai",
+              metered: false,
+              usd: null,
+              basis: "not metered: the gateway's cost telemetry has not answered for this run",
+            },
+      ],
     },
   };
 }

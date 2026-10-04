@@ -110,6 +110,7 @@ async function cloudRunRow(
   runID: string,
   state: "running" | "failed" | "completed",
   costUsd = 0,
+  costSource: string | null = null,
 ): Promise<void> {
   await insertRun(env.DB, {
     run_id: runID,
@@ -121,6 +122,7 @@ async function cloudRunRow(
     started_at: new Date().toISOString(),
     ended_at: state === "running" ? null : new Date().toISOString(),
     cost_usd: costUsd,
+    cost_source: costSource,
     trace_id: null,
     credential_grade: "write",
   });
@@ -503,14 +505,27 @@ describe("the phone page renders the dashboard model (hn6, tick 0rx)", () => {
     expect(body).not.toContain("needs you: nothing");
   });
 
-  it("renders a cloud run's Workers AI cost from its own run row", async () => {
-    await cloudRunRow("run_cost", "running", 0.41);
+  it("renders a cloud run's Workers AI cost from its own run row, only when the gateway measured it", async () => {
+    // The runs row's cost_usd is NOT NULL DEFAULT 0: the number alone is not
+    // a measurement (tick 1tm), so the row's cost_source is what meters the
+    // line — and a synced run keeps its measured number.
+    await cloudRunRow("run_cost", "running", 0.41, "gateway");
     const body = await (await page(await login())).text();
     expect(body).toContain("Workers AI $0.41");
     // The composed cloud doc carries no health or waves — no other dashboard
     // section is invented for it.
     expect(body).not.toContain("needs you");
     expect(body).not.toContain("ETA ~");
+  });
+
+  it("renders an unsynced cloud run's cost as not metered, never a $0.00", async () => {
+    // Before the first cost sync, or with telemetry the gateway could not
+    // read: the row's zero is the schema's default, and the line says so
+    // rather than wearing it as a measured number.
+    await cloudRunRow("run_unsynced", "running", 0);
+    const body = await (await page(await login())).text();
+    expect(body).toContain("Workers AI not metered");
+    expect(body).not.toContain("$0.00");
   });
 
   it("renders a pre-hn6 doc exactly as it did before hn6, without throwing", async () => {

@@ -60,6 +60,15 @@ export interface Run {
    * which is the truth about them: they really did hold a write credential.
    */
   credential_grade: string;
+  /**
+   * Where `cost_usd` came from (migrations/0024, tick 1tm): 'gateway' when AI
+   * Gateway telemetry answered, null until then — including a run recorded
+   * before the column existed. The row's cost number is NOT NULL DEFAULT 0,
+   * so this is the only fact that separates a measured spend from a default:
+   * the status paths meter the cloud cost line only on 'gateway'. Written by
+   * the same UPDATE that moves cost_usd, never by anything else.
+   */
+  cost_source?: string | null;
 }
 
 /**
@@ -114,8 +123,8 @@ export async function insertRun(db: D1Database, run: Run): Promise<void> {
     .prepare(
       `INSERT INTO runs
         (run_id, project, epic, base_sha, requested_by, state, started_at, ended_at, cost_usd,
-         trace_id, credential_grade)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         cost_source, trace_id, credential_grade)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       run.run_id,
@@ -127,6 +136,7 @@ export async function insertRun(db: D1Database, run: Run): Promise<void> {
       run.started_at,
       run.ended_at,
       run.cost_usd,
+      run.cost_source ?? null,
       run.trace_id,
       run.credential_grade,
     )
@@ -230,7 +240,7 @@ export async function getRun(db: D1Database, runId: string): Promise<Run | null>
   return db
     .prepare(
       `SELECT run_id, project, epic, base_sha, requested_by, state,
-              started_at, ended_at, cost_usd, trace_id, credential_grade
+              started_at, ended_at, cost_usd, cost_source, trace_id, credential_grade
        FROM runs
        WHERE run_id = ?`,
     )
@@ -243,7 +253,11 @@ export async function getRun(db: D1Database, runId: string): Promise<Run | null>
  *
  * The number comes from AI Gateway telemetry (src/gateway.ts), never from the
  * agent: an agent can misreport its spend, an invoice cannot, and this row is
- * what the Run Workflow's cost budget acts on (D14, D17).
+ * what the Run Workflow's cost budget acts on (D14, D17). The same UPDATE
+ * stamps `cost_source = 'gateway'` — the fact that separates this measured
+ * number from the row's default zero for every status path that reads the
+ * row (tick 1tm): without it, a run before its first sync would wear the
+ * default as a measurement.
  */
 export async function updateRunCost(
   db: D1Database,
@@ -253,10 +267,10 @@ export async function updateRunCost(
   return db
     .prepare(
       `UPDATE runs
-       SET cost_usd = ?
+       SET cost_usd = ?, cost_source = 'gateway'
        WHERE run_id = ?
        RETURNING run_id, project, epic, base_sha, requested_by, state,
-                 started_at, ended_at, cost_usd, trace_id, credential_grade`,
+                 started_at, ended_at, cost_usd, cost_source, trace_id, credential_grade`,
     )
     .bind(costUsd, runId)
     .first<Run>();
@@ -474,7 +488,7 @@ export async function listRuns(
   const result = await db
     .prepare(
       `SELECT run_id, project, epic, base_sha, requested_by, state,
-              started_at, ended_at, cost_usd, trace_id, credential_grade
+              started_at, ended_at, cost_usd, cost_source, trace_id, credential_grade
        FROM runs${where}
        ORDER BY started_at DESC, run_id DESC
        LIMIT ?`,
@@ -504,7 +518,7 @@ export async function updateRunState(
        SET state = ?, ended_at = COALESCE(?, ended_at)
        WHERE run_id = ?
        RETURNING run_id, project, epic, base_sha, requested_by, state,
-                 started_at, ended_at, cost_usd, trace_id, credential_grade`,
+                 started_at, ended_at, cost_usd, cost_source, trace_id, credential_grade`,
     )
     .bind(state, endedAt, runId)
     .first<Run>();
