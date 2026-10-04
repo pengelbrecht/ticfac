@@ -2066,3 +2066,4 @@
 {"ts":"2026-10-04T13:13:48.726807Z","tick":"kgk","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Execution environments: FactorySandboxEnv (replay-safe bash) and a guarded local env"}}
 {"ts":"2026-10-04T13:14:09.534997Z","tick":"lid","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Host pi CLI crash reddens the local gate at base (ReadPiCatalog)"}}
 {"ts":"2026-10-04T13:14:29.958718Z","tick":"oq4","action":"start","actor":"ticfac","epic":"43y","data":{"title":"pi-ai gateway provider: Workers AI via the factory gateway with the run token"}}
+{"ts":"2026-10-04T13:27:32.094027Z","tick":"lid","action":"note","actor":"ticfac","epic":"43y","data":{"note":"\n2026-10-04 15:27 - ticfac run epic-43y: lid try 1 (run dispatch #3) merged into epic/43y as eccfb773947f; the integrated gate (go, ts) passed.","title":"Host pi CLI crash reddens the local gate at base (ReadPiCatalog)"}}
