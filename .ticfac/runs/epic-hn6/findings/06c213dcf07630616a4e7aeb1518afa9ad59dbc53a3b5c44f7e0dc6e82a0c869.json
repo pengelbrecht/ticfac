@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "1tm",
   "attempt": 4,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T17:18:51Z",
+  "triaged_at": "2026-10-04T17:19:04Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing yst",
+  "promoted_as": "yst",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "1tm",
