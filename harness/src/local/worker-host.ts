@@ -79,6 +79,7 @@ import {
   type WorkspaceGit,
   workspaceCheckpointExtension,
 } from "../workspace/checkpoints.js";
+import { piAuthStore } from "./pi-auth-store.js";
 import { openSteerServer, type SteerServer } from "./steer-socket.js";
 
 /**
@@ -311,7 +312,12 @@ export async function runLocalWorker(options: LocalWorkerOptions): Promise<Local
   const env = createGuardedNodeExecutionEnv({ cwd: config.worktree });
 
   // The models: the local rung's Workers AI, or the tests' faux.
-  const models = createModels();
+  // The Workers AI credentials resolve the way the pi CLI resolves them: the
+  // stored credential in pi's own auth.json first, the ambient environment
+  // as pi-ai's own fallback (pi-auth-store.ts) — the cloud rung's gateway
+  // token is the cloud host's, and this one holds no credential the host did
+  // not already have.
+  const models = createModels({ credentials: piAuthStore() });
   let modelRef: ModelRef;
   if (config.fauxTranscript !== undefined && config.fauxTranscript !== "") {
     const faux = fauxProvider();

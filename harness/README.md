@@ -160,9 +160,12 @@ The tests are split by what they can prove where:
   built — `workerOnYield` and `armWallDeadline` (tick pom),
   `workspaceCheckpointExtension` (tick dwn) — plus the local rung's model
   access: pi-ai's own `cloudflare-workers-ai` provider with the GLM
-  catalog corrections, credentials resolved from the host environment the
-  same way the pi CLI resolved them (there is no factory gateway locally;
-  the cloud host's run token is the cloud host's).
+  catalog corrections, credentials resolved exactly the way the pi CLI
+  resolves them — the stored credential in pi's own
+  `~/.pi/agent/auth.json` first, the ambient environment as pi-ai's own
+  fallback (`src/local/pi-auth-store.ts`). There is no factory gateway
+  locally: no run token, no exchange, and the harness holds no credential
+  the host did not already have.
 - **The steer socket** (`src/local/steer-socket.ts`): a Unix domain socket
   beside the storage, and the one door the Go supervisor has into a RUNNING
   conversation. One JSON line in (`{"requestId","text"}`), one JSON line out

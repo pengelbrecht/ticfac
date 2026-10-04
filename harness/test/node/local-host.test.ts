@@ -11,12 +11,14 @@ import { createModels } from "@earendil-works/pi-ai";
 import { createRegistry, Harness } from "@earendil-works/pi-durable";
 import { openNodeSqliteStorage } from "@earendil-works/pi-durable/storage/sqlite/node";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { piAuthStore } from "../../src/local/pi-auth-store.js";
 import { steerOnce } from "../../src/local/steer-socket.js";
 import {
   inputRequestId,
   type LocalWorkerConfig,
   loadFauxResponses,
   localModelRef,
+  localWorkersAIProvider,
 } from "../../src/local/worker-host.js";
 
 /**
@@ -386,6 +388,63 @@ describe("the local worker host", () => {
     expect(firstAnswerAt).toBeGreaterThan(-1);
     expect(nudgeAt).toBeGreaterThan(firstAnswerAt);
     expect(textOf(messages.at(-1) as Message)).toBe("finished after the nudge");
+  });
+});
+
+describe("the local host's credential resolution", () => {
+  it("resolves the stored pi credential the way the pi CLI does: stored key first, env fallback", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ticfac-pi-auth-"));
+    try {
+      const file = join(dir, "auth.json");
+      writeFileSync(
+        file,
+        JSON.stringify({
+          "cloudflare-workers-ai": {
+            type: "api_key",
+            key: "stored-key",
+            env: { CLOUDFLARE_ACCOUNT_ID: "stored-account" },
+          },
+        }),
+      );
+      const models = createModels({ credentials: piAuthStore(file) });
+      models.setProvider(localWorkersAIProvider());
+      const auth = await models.getAuth("cloudflare-workers-ai");
+      if (auth === undefined) {
+        throw new Error("the stored credential did not configure the provider");
+      }
+      expect(auth.source).toBe("stored credential");
+      expect((auth.auth as { apiKey?: string }).apiKey).toBe("stored-key");
+
+      // A store that holds nothing leaves the ambient environment to answer,
+      // and an unconfigured provider stays unconfigured rather than guessed.
+      const empty = join(dir, "empty-auth.json");
+      const models2 = createModels({ credentials: piAuthStore(empty) });
+      models2.setProvider(localWorkersAIProvider());
+      expect(await models2.getAuth("cloudflare-workers-ai")).toBeUndefined();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("lists credential metadata only, and a write goes back to the same file", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "ticfac-pi-auth-"));
+    try {
+      const file = join(dir, "auth.json");
+      const store = piAuthStore(file);
+      const written = await store.modify("cloudflare-workers-ai", async () => ({
+        type: "api_key" as const,
+        key: "first-key",
+      }));
+      expect(written?.type).toBe("api_key");
+      expect(JSON.parse(readFileSync(file, "utf8"))["cloudflare-workers-ai"].key).toBe("first-key");
+      const listed = await store.list();
+      expect(listed).toEqual([{ providerId: "cloudflare-workers-ai", type: "api_key" }]);
+      await store.delete("cloudflare-workers-ai");
+      expect(await store.read("cloudflare-workers-ai")).toBeUndefined();
+      expect(JSON.parse(readFileSync(file, "utf8"))).toEqual({});
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 
