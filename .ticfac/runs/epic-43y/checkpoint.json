@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 43,
-  "state": "gating",
-  "reason": "running the integrated gate for dwn on 76fd2b823815",
-  "updated_at": "2026-10-04T15:36:45Z",
+  "sequence": 44,
+  "state": "publishing",
+  "reason": "closing dwn behind the integrated gate on 76fd2b823815",
+  "updated_at": "2026-10-04T15:37:42Z",
   "ticks": [
     {
       "tick_id": "92k",
