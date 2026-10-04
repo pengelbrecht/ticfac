@@ -1,0 +1,14 @@
+{
+  "id": "c65",
+  "title": "The listing's classifier reads a mid-run dead run as done",
+  "description": "classifyStatusDoc (cloudflare/src/status.ts, ported from the bare `ticfac` overview, tick 2qz) classifies a not-alive run by its lifecycle phase alone: attention, liveness, then failed/cancelled/default→done. A run that dies mid-waves (phase still 'waves', like the new dashboard_stopped golden) reads state 'done' on the phone's chip, while `ticfac watch` classes the same ending as failed/interrupted by its own terminal line. Noticed while rendering the stopped golden: its card chip says done while its headline verdict says stopped. Predates this tick; filed rather than widened.\nevidence: cloudflare/src/status.ts classifyStatusDoc's default branch (phase 'waves' + liveness.alive false → RunClass done)\n\nticfac run epic-hn6 created this tick by absorbing the finding 1a1ce285c57b715bbd29832b571c24878d9efcbce6928cd6060c2413bc1c83f3 (reported by run-epic-hn6/tick-h7w/attempt-9): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/1a1ce285c57b715bbd29832b571c24878d9efcbce6928cd6060c2413bc1c83f3.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-h7w/attempt-9",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T18:56:53Z",
+  "updated_at": "2026-10-04T18:56:53Z"
+}
