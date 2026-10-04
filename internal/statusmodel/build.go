@@ -945,6 +945,10 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 		ownRunID = recs.Checkpoint.RunID
 	}
 
+	// The run's own ending word, computed once for every wait below to
+	// read: one derivation, never two that could disagree (tick jkb).
+	ending := runEnding(src, recs)
+
 	// A run whose process is gone without its own terminal record: nothing
 	// advances it, and only a person can say whether it resumes. The
 	// liveness answer itself may carry the run's own durable word that it
@@ -953,8 +957,11 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 	// checkout that cannot read that record fails to hold. Without this, the
 	// factory's finished runs — the ones this checkout holds no run state
 	// for at all, because they belong to other projects — were every one of
-	// them "dead" on the surface that aggregates every run (tick 2qz).
-	if !src.Liveness.Alive && !runTerminal(recs) && !livenessNamesAnEnd(src.Liveness.State) {
+	// them "dead" on the surface that aggregates every run (tick 2qz). A
+	// run whose own ending IS stated — failed, stopped — is not this
+	// wait's either: the ended-run wait below words the same stop from the
+	// ending's own sentence, never twice over one ending.
+	if !src.Liveness.Alive && ending == "" && !livenessNamesAnEnd(src.Liveness.State) {
 		w := Wait{
 			Kind:        WaitDeadRun,
 			What:        fmt.Sprintf("run %s is %s: %s", m.RunID, src.Liveness.State, src.Liveness.Reason),
@@ -1051,8 +1058,7 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 	// to resume — the ending is still stated (the phase, the verdict), but
 	// no wait of this repo's commands may claim a person for it.
 	if !src.Liveness.Alive {
-		if ending := runEnding(src, recs); recs.Checkpoint != nil &&
-			(ending == endFailed || ending == endStopped) {
+		if recs.Checkpoint != nil && (ending == endFailed || ending == endStopped) {
 			reason, since := endedRunReason(src, recs, ending)
 			w := Wait{Kind: WaitDeadRun, NeedsPerson: true}
 			switch {
@@ -1421,15 +1427,6 @@ func mergedStateOf(m Model, tickID string) string {
 		}
 	}
 	return ""
-}
-
-// runTerminal says whether the run's own records say it ended by its own
-// word — the states a run only reaches by writing them.
-func runTerminal(recs Records) bool {
-	if recs.Checkpoint == nil {
-		return false
-	}
-	return recs.Checkpoint.State.Terminal()
 }
 
 // livenessNamesAnEnd says whether the liveness state IS the run's own
