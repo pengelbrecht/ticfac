@@ -100,8 +100,20 @@ never deployed.
   before re-starting on it, so a container that died while no harness
   watched is restored too. `restoreLostWorkspace()` is public for the host
   that owns the container's lifetime (epic step 6).
-- The tests carry the tick's acceptance criterion — destroy the container
-  mid-turn; the next turn sees both edits — twice, in the two halves this
+- **The pre-round ready check** (tick 4fs, same extension): a container
+  destroyed BETWEEN tool rounds — no harness call in flight, so none of the
+  restore triggers above can fire — boots empty, and the next round's first
+  file operation would fail ENOENT instead of restoring. The extension's
+  `beforeRequest` hook runs `ensureReady` before EVERY round's request:
+  wire it to `FactorySandboxEnv.ensureWorkspaceReady()`, which verifies the
+  ready marker (one short command) and restores from the attempt branch
+  when it is gone — nothing is lost, the last round's wip already landed.
+  `onRestore` reports every restore the check performed. A loss DURING a
+  round, under a file operation, is the remaining boundary, for the host
+  that owns the container's lifetime (epic step 6).
+- The tests carry the acceptance criteria — destroy the container mid-turn;
+  the next turn sees both edits; destroy it between rounds and the ready
+  check restores before the next round — twice, in the two halves this
   package splits every claim into: **workerd** (`test/workspace-checkpoints.
   test.ts`) proves the door's RPC shapes, the hook wiring and the restore's
   command sequence on the scripted door; **node** (`test/node/
