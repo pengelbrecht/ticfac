@@ -74,6 +74,11 @@ func FindWorkerDoor(root, runID, tickID string, attempt int) (WorkerDoor, error)
 	if !ok {
 		return WorkerDoor{}, fmt.Errorf("no attempt record for tick %s attempt %d of run %s under %s", tickID, attempt, runID, attemptDir)
 	}
+	return ReadWorkerDoor(stateDir)
+}
+
+// ReadWorkerDoor reads the door out of one attempt's state directory.
+func ReadWorkerDoor(stateDir string) (WorkerDoor, error) {
 	raw, err := os.ReadFile(filepath.Join(stateDir, fileAttempt))
 	if err != nil {
 		return WorkerDoor{}, err
@@ -94,7 +99,7 @@ func FindWorkerDoor(root, runID, tickID string, attempt int) (WorkerDoor, error)
 	}
 	if door.SteerSock == "" {
 		return door, fmt.Errorf("tick %s attempt %d runs the %q runner: %w — only a pi-durable worker has a live conversation to watch or steer",
-			tickID, attempt, record.Runner, ErrNoDurableWorker)
+			door.TickID, door.Attempt, record.Runner, ErrNoDurableWorker)
 	}
 	return door, nil
 }
