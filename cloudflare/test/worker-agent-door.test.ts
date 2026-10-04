@@ -289,8 +289,10 @@ describe("the start route on a run whose workers are WorkerAgents", () => {
     expect(validate(jobHandleSchema, protocolDefs, body.handle)).toEqual([]);
     expect(body.handle.handle.process_id).toBeNull();
     expect(body.handle.handle.model).toBe(MODEL);
-    // The handle names the harness the dispatch resolved, as every start does.
-    expect(body.handle.handle.harness).toBe("pi");
+    // The handle names the harness the attempt RUNS on (tick 4uj): the
+    // agent's own, not the container harness the dispatch resolved — the
+    // attempt is the agent's, and provenance names what ran.
+    expect(body.handle.handle.harness).toBe(WORKER_AGENT_HARNESS);
 
     const agent = agentOf();
     expect(agent.started.length).toBe(1);

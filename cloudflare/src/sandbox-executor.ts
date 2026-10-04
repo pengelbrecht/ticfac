@@ -82,6 +82,7 @@ import {
   sandboxBinding,
 } from "./sandbox";
 import {
+  WORKER_AGENT_HARNESS,
   type WorkerAgentHosting,
   type WorkerAgentResolver,
   type WorkerAgentStub,
@@ -307,10 +308,15 @@ export type SandboxHandlePayload = {
    */
   model: string;
   /**
-   * The harness the container was booted with — its `TICKS_HARNESS`, read
-   * off the boot environment rather than restated (tick 9iz), so the record
-   * a caller keeps names the harness that actually ran, never the
-   * deployment's own agreeing with it by luck.
+   * The harness the attempt RUNS on. A container attempt's is its
+   * `TICKS_HARNESS`, read off the boot environment rather than restated
+   * (tick 9iz), so the record a caller keeps names the harness that
+   * actually ran, never the deployment's own agreeing with it by luck. A
+   * HOSTED attempt's is its WorkerAgent's (tick 4uj): the agent drives the
+   * attempt — its boot, its conversation, its finish — on
+   * WORKER_AGENT_HARNESS whatever harness the dispatch's profile named for
+   * the container its tools run in, so the handle names the agent's, and
+   * the door's client accepts exactly that one mismatch.
    */
   harness: string;
 };
@@ -813,6 +819,8 @@ export const WORKER_AGENT_LOG_ID = "worker-agent";
  * reason a live work process is one: a door retry must never start a second
  * worker over a running one. Its handle names the model of the recorded boot
  * (tick dyo), and the agent's own record when the boot record is missing.
+ * Its harness is the agent's own (tick 4uj), never the container boot env's:
+ * the attempt runs on the agent, and the handle names what ran.
  */
 async function startHostedAttempt(
   deps: SandboxExecutorDeps,
@@ -836,7 +844,16 @@ async function startHostedAttempt(
       ...ids.payload,
       base_sha: boot.base_sha,
       model,
-      harness: bootedHarness(boot),
+      // The harness the ATTEMPT runs on (tick 4uj): the agent's own, never
+      // the container boot env's `TICKS_HARNESS`. The agent drives the
+      // boot, the conversation and the finish whatever harness the
+      // dispatch's profile named for the container its tools run in, so a
+      // handle echoing that name would say the container's harness ran the
+      // attempt — the same lie the cross-check on the client exists to
+      // keep out of a record every trace reads. The container env keeps
+      // carrying the dispatch's harness until jhp deletes the CLI path;
+      // the client accepts exactly this one mismatch (workerAgentHarness).
+      harness: WORKER_AGENT_HARNESS,
       // No one container process is the attempt: its boot, its tools and its
       // finish are each their own, and the agent drives them.
       process_id: null,

@@ -86,7 +86,10 @@ type Options struct {
 	// Start refuses a handle that names another — for the model's reason
 	// verbatim: a start with no harness would boot on the factory's own
 	// standing choice, and the caller's record would name a harness that
-	// never ran. Required: the door refuses a start without one.
+	// never ran. The one exception is a hosted attempt (tick 4uj): its
+	// WorkerAgent runs it on [WorkerAgentHarness], the handle names that, and
+	// the record states it — provenance names what ran. Required: the door
+	// refuses a start without one.
 	Harness string
 
 	// Prompt is the RENDERED role prompt the dispatch's profile resolved (tick
@@ -424,11 +427,17 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 			"a record naming the requested model over a worker running another is a provenance that lies",
 			attempt, spec.JobID, payload.Model, req.Model)
 	}
-	// The door names the harness it bound the worker to, for the model's
-	// reason (tick 9iz): anything but the one asked for — an adoption of a
-	// container some other start booted, a door that fell back to its own
-	// standing choice — is refused before a record is written.
-	if payload.Harness != req.Harness {
+	// The door names the harness the attempt RUNS on. For a container attempt
+	// that is the harness it bound the worker to, for the model's reason
+	// (tick 9iz): anything but the one asked for — an adoption of a container
+	// some other start booted, a door that fell back to its own standing
+	// choice — is refused before a record is written. For a hosted attempt it
+	// is the WorkerAgent's (tick 4uj): the agent drives the attempt on
+	// [WorkerAgentHarness] whatever harness the dispatch's profile named for
+	// the container its tools run in, so the answer names it, the record
+	// below states it, and provenance names what ran — the same rule the
+	// refusal enforces, answered on the other side.
+	if payload.Harness != req.Harness && payload.Harness != WorkerAgentHarness {
 		return nil, fmt.Errorf("the door booted attempt %d of %s on harness %q, not the %q its dispatch resolved: "+
 			"a record naming the requested harness over a worker bound to another is a provenance that lies",
 			attempt, spec.JobID, payload.Harness, req.Harness)
