@@ -2,8 +2,10 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
@@ -66,11 +68,34 @@ func (r *Reconciler) adoptInheritedFindings() error {
 	if err != nil {
 		return err
 	}
+	// The checkpoints first, in run-id order: this epic's siblings kept, every
+	// other epic's left alone, and the ones this binary cannot read skipped
+	// with a line said about each.
+	type sibling struct {
+		id         string
+		checkpoint *runstate.Checkpoint
+	}
+	ours := []sibling{}
 	for _, runID := range runs {
 		checkpoint, ok, err := r.store.ForeignCheckpoint(runID)
 		if err != nil {
-			return fmt.Errorf("reconcile: read run %s's checkpoint to take over its untriaged findings: %w",
+			// A checkpoint this binary cannot read — one written by a NEWER
+			// binary, or corrupt — says nothing: not which epic the run is,
+			// not that it ended. The sweep's own rule answers: a sibling whose
+			// records cannot say is a sibling not ended, so its drafts stay
+			// where they stand. What this must never be is a boot failure: the
+			// sweep reads every run on the branch, other epics' included, over
+			// a record no run of this epic can fix — one unreadable checkpoint
+			// used to abort EVERY boot of the epic, forever (tick d9d).
+			if !errors.Is(err, runstate.ErrUnreadable) {
+				return fmt.Errorf("reconcile: read run %s's checkpoint to take over its untriaged findings: %w",
+					runID, err)
+			}
+			r.record("", StageInheritUnreadable,
+				"run %s's checkpoint cannot be read by this binary (%v); the run boots anyway, and the "+
+					"run's untriaged findings are left where they stand",
 				runID, err)
+			continue
 		}
 		// A sibling with no checkpoint never drafted a finding: findings are
 		// drafted at collect, and collect happens after the admitted
@@ -83,11 +108,47 @@ func (r *Reconciler) adoptInheritedFindings() error {
 		if checkpoint.EpicID != r.opts.EpicID {
 			continue
 		}
-		evidence, ended := r.endedRun(runID, checkpoint)
+		ours = append(ours, sibling{id: runID, checkpoint: checkpoint})
+	}
+	// The host question — is this non-terminal sibling still going? — is
+	// asked CONCURRENTLY, once per sibling: each ask is a round trip to
+	// another host (the factory, the process table) bounded by that host's
+	// own client timeout, and a serial sweep would pay every sibling's
+	// latency before the run plans anything (tick d9d). The answers are
+	// folded back in the sweep's own run-id order, so what the run does with
+	// them is as deterministic as it ever was.
+	answers := map[string]HolderState{}
+	if holder := r.opts.ClaimHolder; holder != nil {
+		asking := make([]string, 0, len(ours))
+		for _, s := range ours {
+			if !s.checkpoint.State.Terminal() {
+				asking = append(asking, s.id)
+			}
+		}
+		states := make([]HolderState, len(asking))
+		var wg sync.WaitGroup
+		for i, runID := range asking {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				// Bounded by that host's own client timeout and never by
+				// this run's context — the same rule claim.go keeps, so a
+				// cancellation of the run is not a cancellation of the
+				// question.
+				states[i] = holder(context.Background(), runID)
+			}()
+		}
+		wg.Wait()
+		for i, runID := range asking {
+			answers[runID] = states[i]
+		}
+	}
+	for _, s := range ours {
+		evidence, ended := r.endedRun(s.checkpoint, answers[s.id])
 		if !ended {
 			continue
 		}
-		if err := r.adoptRunFindings(runID, evidence,
+		if err := r.adoptRunFindings(s.id, evidence,
 			"at this run's start, before anything is planned"); err != nil {
 			return err
 		}
@@ -117,22 +178,15 @@ func (r *Reconciler) inheritedRuns() ([]string, error) {
 // evidence. The sibling's own checkpoint is asked first — terminal is the
 // one record a run that ended by its own account writes — and a checkpoint
 // that cannot say (a run that DIED never writes it: the hn6 cloud-run stall)
-// is asked of the same host the claim staleness asks, Options.ClaimHolder:
-// the process table for a local run, the factory for a cloud one. Alive and
-// unknown are both NOT ended, for the reason the file header keeps: a live
-// sibling's drafts are its own to decide, and a question nobody can answer
-// holds nothing here.
-func (r *Reconciler) endedRun(runID string, checkpoint *runstate.Checkpoint) (string, bool) {
+// is answered by the host the claim staleness asks (Options.ClaimHolder),
+// the answer the sweep has already asked for alongside every other
+// non-terminal sibling's. Alive and unknown are both NOT ended, for the
+// reason the file header keeps: a live sibling's drafts are its own to
+// decide, and a question nobody can answer holds nothing here.
+func (r *Reconciler) endedRun(checkpoint *runstate.Checkpoint, answer HolderState) (string, bool) {
 	if checkpoint.State.Terminal() {
 		return fmt.Sprintf("its checkpoint on the integration branch reads %s", checkpoint.State), true
 	}
-	if r.opts.ClaimHolder == nil {
-		return "", false
-	}
-	// The host question is bounded by that host's own client timeout and
-	// never by this run's context — the same rule claim.go keeps, so a
-	// cancellation of the run is not a cancellation of the question.
-	answer := r.opts.ClaimHolder(context.Background(), runID)
 	if answer.Verdict != HolderDead {
 		return "", false
 	}
