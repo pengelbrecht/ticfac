@@ -336,9 +336,12 @@ func genModel(r *rand.Rand) statusmodel.Model {
 	// cloud run before its first cost sync, or one whose telemetry reads
 	// "unavailable: …" — beside the gateway's measured number and the local
 	// unjoined line; the unsynced shape makes its model a cloud one, the
-	// host that record belongs on. A metered zero is drawn only for a
-	// decision whose records measured one; everywhere else a visible $0.00
-	// is still a fabrication, which is what P3 refuses.
+	// host that record belongs on. The decisions river's measured zero is
+	// the shape a decision whose usage states a price of zero asks the
+	// RENDERER to print — pinned by TestDashboardNeverPrintsZeroForUnmetered
+	// — and P3 must tolerate it beside unmetered lines while refusing a
+	// number on any unmetered label: the old whole-frame "$0.00" scan
+	// could not tell the two apart (tick 1tm).
 	rivers := []string{
 		statusmodel.CostSourceDecisions, statusmodel.CostSourceWorkersAI,
 		statusmodel.CostSourceClaude, statusmodel.CostSourcePiLocal,
