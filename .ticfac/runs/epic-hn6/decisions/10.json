@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 10,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "A3. attemptDiff (report.go:286) reads only while the attempt branch exists, and sweepTick deletes it on close (dispatch.go:3667), so every merged tick's drill-in says 'diff not read'. Under `watch epic-<id>` a tick's row comes from the prior run that closed it, but the report reader is bound to the CURRENT run id (status_model.go:529) and is handed the prior run's per-run attempt number, which yields 'report not read' or another dispatch's report when the numbers collide. Gate evidence is the newest run's only (build.go:217). Record diff stats durably at collect (or diff the merged commit), key reports by (run, tick, attempt), merge gate evidence per tick across runs, and test a drill-in on a closed prior-run tick.\nevidence: internal/statusmodel/report.go:286, :48-64; internal/reconcile/dispatch.go:3667; internal/cli/status_model.go:529; internal/statusmodel/build.go:217; internal/statusmodel/epic.go header\n\nticfac run epic-hn6 created this tick by absorbing the finding f0884668c14f4065b7207881f9f6439746c9f4f6942e95e4c8b0dfa097f11c58 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/f0884668c14f4065b7207881f9f6439746c9f4f6942e95e4c8b0dfa097f11c58.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "ihw",
+    "title": "Drill-in shows no diff, report or gate evidence for settled and prior-run ticks"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.2,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.32,
+      "design": 0.16,
+      "diagnosis": 0.15,
+      "mechanical": 0.36,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1457,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T17:42:50Z",
+  "answered_at": "2026-10-04T17:42:50Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "ihw",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "04b6387579157be35688af4933ec606ce578463d",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
