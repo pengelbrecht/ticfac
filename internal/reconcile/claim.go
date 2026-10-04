@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -168,7 +169,17 @@ func (r *Reconciler) foreignClaims(ticks []string) (map[string]claimWitness, err
 			w.holder = attempt.Provenance.RunID
 			checkpoint, exists, err := r.store.ForeignCheckpoint(w.holder)
 			if err != nil {
-				return nil, fmt.Errorf("reconcile: read run %s's checkpoint: %w", w.holder, err)
+				// A checkpoint this binary cannot read — one written by a NEWER
+				// binary, or corrupt — says nothing, and nothing is the live
+				// answer: the holder is asked of its host below, exactly as a
+				// run that wrote no checkpoint at all is. It is never a
+				// run-ending read — one unreadable record of a run that holds
+				// a claim must not stop the run that waits on the claim (tick
+				// d9d).
+				if !errors.Is(err, runstate.ErrUnreadable) {
+					return nil, fmt.Errorf("reconcile: read run %s's checkpoint: %w", w.holder, err)
+				}
+				exists = false
 			}
 			switch {
 			case exists && closedRow(checkpoint, tick):
