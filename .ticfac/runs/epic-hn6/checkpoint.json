@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 14,
-  "state": "running",
-  "reason": "bd5 is running as attempt 5",
-  "updated_at": "2026-10-04T16:22:34Z",
+  "sequence": 15,
+  "state": "collecting",
+  "reason": "collecting 15b attempt 3",
+  "updated_at": "2026-10-04T16:28:27Z",
   "ticks": [
     {
       "tick_id": "v16",
