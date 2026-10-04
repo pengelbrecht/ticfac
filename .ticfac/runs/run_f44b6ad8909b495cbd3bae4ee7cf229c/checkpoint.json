@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 12,
-  "state": "integrating",
-  "reason": "integrating q8m attempt 1 into epic/hn6",
-  "updated_at": "2026-10-04T09:50:05Z",
+  "sequence": 13,
+  "state": "gating",
+  "reason": "running the integrated gate for q8m on a82695400f56",
+  "updated_at": "2026-10-04T09:55:11Z",
   "ticks": [
     {
       "tick_id": "q8m",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 1
     },
     {
