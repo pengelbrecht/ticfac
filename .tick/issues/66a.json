@@ -6,7 +6,8 @@
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "blocked_by": [
-    "jhp"
+    "jhp",
+    "lid"
   ],
   "parent": "43y",
   "role": "review",
