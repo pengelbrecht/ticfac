@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "lkq",
   "attempt": 2,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T00:59:40Z",
+  "triaged_at": "2026-10-04T00:59:47Z",
+  "triaged_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987 absorbing tic",
+  "promoted_as": "tic",
   "provenance": {
     "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
     "tick_id": "lkq",
