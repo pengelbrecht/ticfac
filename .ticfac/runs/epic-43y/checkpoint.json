@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 68,
-  "state": "gating",
-  "reason": "running the integrated gate for hpk on 1a99e03f2f06",
-  "updated_at": "2026-10-04T18:36:14Z",
+  "sequence": 69,
+  "state": "publishing",
+  "reason": "closing hpk behind the integrated gate on 1a99e03f2f06",
+  "updated_at": "2026-10-04T18:39:38Z",
   "ticks": [
     {
       "tick_id": "92k",
