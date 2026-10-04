@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 31,
-  "state": "running",
-  "reason": "oq4 is closed",
-  "updated_at": "2026-10-04T14:14:36Z",
+  "sequence": 32,
+  "state": "collecting",
+  "reason": "collecting kgk attempt 2",
+  "updated_at": "2026-10-04T14:42:19Z",
   "ticks": [
     {
       "tick_id": "92k",
