@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/hn6/attempt-15/qxj`, base `f6a7ee2badcc0436e2264a338f4ffe987af4f3b2`, harness `pi` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+
 # Result — tick qxj: release commands in run prose and the watch alert still omit `--run-id`
 
 ## What changed
