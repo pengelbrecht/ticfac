@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 11,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "a local epic run's workers run on the harness; the stuck nudge is a steer",
+    "description": "Step 7, no flag: the local executors spawn the Node harness per worker (local SQLite, tools in the worktree); implement the local frontier rung per the operator's decision recorded on the epic (today the claude CLI on the Max subscription, which pi-durable cannot host).",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "hpk",
+    "title": "Local host: the Go executor runs a Node pi-durable harness per worker on local SQLite"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.89,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.91,
+      "design": 0.04,
+      "diagnosis": 0,
+      "mechanical": 0.01,
+      "translation": 0.04
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1077,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T16:01:29Z",
+  "answered_at": "2026-10-04T16:01:29Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "hpk",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "41051b5a717ad9954daf516032e88ebe70a81786",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
