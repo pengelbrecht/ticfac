@@ -51,7 +51,9 @@ describe("the wip checkpoint after every tool round", () => {
     // The door answers a scripted sha for the commit line; everything else
     // succeeds. The door runs nothing — the node suite proves the lines.
     const door = fakeSandboxDoor({
-      runOutput: (command) => (command.includes("git rev-parse HEAD") ? "f00dcafef00d\n" : ""),
+      // The snapshot line answers the snapshot's sha and its record key.
+      runOutput: (command) =>
+        command.includes("git commit-tree") ? "f00dcafef00d\nf00d cafe\n" : "",
     });
     const env = new FactorySandboxEnv({ sandbox: door.sandbox, guardDir: null, pollMs: 10 });
 
@@ -106,15 +108,20 @@ describe("the wip checkpoint after every tool round", () => {
     ]);
 
     const runs = door.runs;
-    const commits = runs.filter((r) => r.command.includes("git commit -q -m"));
+    // A snapshot (plumbing in a throwaway index, parent the agent's HEAD),
+    // never a commit on the agent's branch (tick xd3).
+    const commits = runs.filter((r) => r.command.includes("git commit-tree"));
     expect(commits.length).toBe(2);
+    expect(commits[0]?.command).toContain("GIT_INDEX_FILE");
+    expect(runs.some((r) => r.command.includes("git commit -q"))).toBe(false);
     expect(commits[0]?.env.MSG).toBe(WIP_COMMIT_SUBJECT);
     expect(commits[0]?.env.NAME).toBe(GIT.identity.name);
     expect(commits[0]?.env.EMAIL).toBe(GIT.identity.email);
 
     const pushes = runs.filter((r) => r.command.includes("git push -q"));
     expect(pushes.length).toBe(2);
-    expect(pushes[0]?.command).toContain('HEAD:"refs/heads/$BRANCH"');
+    expect(pushes[0]?.command).toContain('git push -q -f "$REMOTE" "$SHA:refs/heads/$BRANCH"');
+    expect(pushes[0]?.env.SHA).toBe("f00dcafef00d");
     expect(pushes[0]?.env.REMOTE).toBe(GIT.remote);
     expect(pushes[0]?.env.BRANCH).toBe(GIT.branch);
   });
@@ -169,7 +176,7 @@ describe("a container lost mid-turn", () => {
     expect(prepareLine).toContain("git init -q .");
     expect(prepareLine).toContain('git remote add origin "$REMOTE"');
     const fetch = at('git fetch -q origin "$BRANCH"');
-    const checkout = at("git checkout -q --detach FETCH_HEAD");
+    const checkout = at('git checkout -q -B "$BRANCH" FETCH_HEAD');
     const setup = at(".setup-marker");
     expect(fetch).toBeGreaterThan(prepare);
     expect(checkout).toBeGreaterThan(fetch);
@@ -276,8 +283,8 @@ describe("a container lost BETWEEN tool rounds", () => {
       runOutput: (command) =>
         command.includes("git rev-parse HEAD && git log -1 --format=%s")
           ? "cafef00d\nwip: tool round\n"
-          : command.includes("git rev-parse HEAD")
-            ? "f00dcafef00d\n"
+          : command.includes("git commit-tree")
+            ? "f00dcafef00d\nf00d cafe\n"
             : "",
       runExit: (command) => (emptied && command.includes('test -e "$CWD/.git"') ? 1 : 0),
     });

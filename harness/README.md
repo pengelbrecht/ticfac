@@ -105,9 +105,17 @@ never deployed.
 ## Workspace checkpoints (epic 43y step 4, tick dwn)
 
 - **`workspaceCheckpointExtension`** (`src/workspace/checkpoints.ts`): an
-  `afterTools` hook on pi-durable's generation task that commits the
-  workspace after every tool round — `wip: tool round` — and pushes it to
-  the ATTEMPT branch, the run's write ref. That is the same ref
+  `afterTools` hook on pi-durable's generation task that snapshots the
+  workspace after every tool round — `wip: tool round`, built in a throwaway
+  index on top of the agent's own HEAD and force-pushed over the previous
+  round's snapshot, never committed on the agent's branch (tick xd3: a wip on
+  the branch made the agent's own commit answer "nothing to commit", the
+  model rewrote the history it could not explain, and the finish phase's
+  fast-forward push was refused) — to the ATTEMPT branch, the run's write ref.
+  A clean round pushes the agent's own HEAD when its commits moved, and
+  `retireWipSnapshot` puts the branch back on that HEAD before the finish
+  phase; a restore unwraps the snapshot (HEAD the agent's commit, the
+  snapshot's tree uncommitted). That is the same ref
   `ticfac settle --carry-work` reads (internal/reconcile): the carried-work
   mechanism at tool-round granularity, so a stopped attempt's carried work
   now carries its in-flight edits too. A round that changed nothing commits
@@ -201,12 +209,43 @@ The tests are split by what they can prove where:
   from the storage without re-running the tool, and a follow-up relaunch
   continuing the SAME conversation.
 
+## The attempt host (epic 43y step 6, tick xd3)
+
+- **`WorkerAttemptHost`** (`src/host/worker-attempt.ts`): one worker attempt
+  driven end to end from a durable record — the container's
+  `ticks-worker --boot` (its process id recorded before it is polled, so a
+  host that dies mid-boot reattaches), the conversation on the prompt the boot
+  printed between its markers (submitted under a fixed `requestId`, resumed
+  by `harness.resume()` in a later life), and `ticks-worker --finish
+  <status>` (0 done, 124 the wall fired, 1 otherwise) once it settles. The
+  finish phase's exit code is the attempt's — what the all-in-one
+  entrypoint's always was. The wall is ABSOLUTE (fixed at start), steer
+  places input after the running tool round, and reclaim stops the attempt
+  where it stands without a finish. Before the finish the host restores a
+  workspace lost after the last round and rewrites the boot's branch record
+  for the finish phase's own process.
+- **The cloud host** is the factory's `WorkerAgent` Durable Object
+  (`cloudflare/src/worker-agent.ts`), which links this package as
+  `ticfac-harness` and reaches pi-durable only through `src/host/cloud.ts`:
+  `openDurableObjectStorage` (pi-durable's `SqliteStorage` over its own DO
+  SQLite), `gatewayModelAccess` (the gateway provider, the only provider) and
+  `watchAttemptEvents` (the conversation's agent events for its watch
+  sockets). `ticfac-harness/testing` (`src/host/testing.ts`) is a faux model
+  under the gateway provider's id, for the factory's own suites only.
+- Tested here (`test/worker-attempt-host.test.ts`, workerd, the real Harness
+  over the scripted door and a faux model): the whole attempt, a boot that
+  stops, a boot with no handoff, a container lost mid-boot, a host killed
+  mid-tool and resumed in a new life (the prompt once, the tool once), a
+  steer, the wall, a reclaim. The factory's suites drive the real
+  `WorkerAgent` through the dispatch door (`cloudflare/test/
+  worker-agent.test.ts`) and the door's hosted routes against a fake agent
+  (`cloudflare/test/worker-agent-door.test.ts`).
+
 ## What comes next (the epic's steps)
 
-6. The `WorkerAgent` DO host — this package's `HarnessStorage` DO is its
-   seed, and it is what wires `FactorySandboxEnv` to the SANDBOXES_V1 stub
-   the `run` door was built for.
 8. Watch surfaces (`ticfac watch` from the commit stream), and the proof
    runs (kill the host mid-tool, destroy the container mid-turn, deploy
    mid-run) — the wip checkpoints, the restore and the local host's resume
-   here are the machinery those runs will exercise.
+   here are the machinery those runs will exercise; the WorkerAgent's watch
+   socket and steer route are what `ticfac watch` and the stuck nudge reach
+   in the cloud, as the local host's steer socket is what they reach locally.

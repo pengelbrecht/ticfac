@@ -175,6 +175,7 @@ import {
   unregisterTelegramWebhook,
 } from "./telegram";
 import { WEBHOOK_SOURCE_PREFIX, webhookSourceRoute } from "./webhook-sources";
+import { WorkerAgent, workerAgentsFromEnv } from "./worker-agent";
 
 /** Bindings from wrangler.toml; declared in src/env.d.ts. */
 export type Env = Cloudflare.Env;
@@ -1699,6 +1700,8 @@ export default {
       segments[2] === "attempts"
     ) {
       const result = await sandboxAttemptRoute(request, env, segments.slice(3));
+      // The watch route's WebSocket upgrade, handed back whole (tick xd3).
+      if (result.ok && "response" in result) return result.response;
       if (!result.ok) {
         return Response.json(
           { error: result.error, detail: result.detail },
@@ -1855,7 +1858,12 @@ export default {
         // account's slots. Its own try, like the digest's: a reclaim that
         // cannot run must not stop the sweeps, nor they it.
         try {
-          const reclaimed = await reclaimOrphanedWorkers(env.DB, sandboxBinding(env));
+          const agents = workerAgentsFromEnv(env);
+          const reclaimed = await reclaimOrphanedWorkers(
+            env.DB,
+            sandboxBinding(env),
+            agents === undefined ? {} : { agents },
+          );
           if (reclaimed.length > 0) {
             console.log(
               `factory reclaim: the ${controller.cron} sweep reclaimed ${reclaimed.length} worker container(s) ` +
@@ -1894,7 +1902,8 @@ export { Sandbox } from "@cloudflare/sandbox";
 // The factory's own container class on the durable_object scheduling policy
 // (epic umq), bound as SANDBOXES_V1 beside the SDK's class above.
 export { FactorySandbox } from "./factory-sandbox";
+// The WorkerAgent (epic 43y, tick xd3): one cloud worker attempt on pi-durable.
 // workerd accepts a Durable Object class and a Workflow entrypoint as named
 // exports of the entry module; anything else named here fails at boot, not at
 // deploy (see SERVICE above).
-export { RepoRoom, RunRoom, RunWorkflow, SignalInbox };
+export { RepoRoom, RunRoom, RunWorkflow, SignalInbox, WorkerAgent };

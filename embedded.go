@@ -131,6 +131,28 @@ func FactoryFS() embed.FS {
 	return factoryFS
 }
 
+// harnessFS is harness/: the pi-durable worker harness package (epic 43y,
+// tick xd3) the factory bundle imports (`"ticfac-harness": "link:../harness"`
+// in cloudflare/package.json) for its WorkerAgent Durable Object. It ships in
+// the binary for the bundle's own reason — the deployed Worker is bundled
+// from this exact commit — and is staged beside the bundle at ../harness,
+// the repository's own layout, so the committed link resolves there too.
+//
+// Enumerated like the bundle: what the install and the bundler read — the
+// manifest, its lockfile and workspace file (the pinned pi-durable versions
+// are the point of the package), the tsconfig and the sources. Its test suites
+// stay out.
+//
+//go:embed harness/package.json harness/pnpm-lock.yaml harness/pnpm-workspace.yaml
+//go:embed harness/tsconfig.json harness/src
+var harnessFS embed.FS
+
+// HarnessFS returns the embedded harness package. Paths inside it are rooted
+// at "harness", e.g. "harness/package.json".
+func HarnessFS() embed.FS {
+	return harnessFS
+}
+
 // sandboxFS holds the sandbox image's build context (image/, moved there
 // from cloud/sandbox by SPEC §12 Phase 4 item 4) — the container a cloud run
 // boots, in either of its two roles: the orchestrator entrypoint, the per-tick

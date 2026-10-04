@@ -85,3 +85,82 @@ Two more things the same deployment showed:
   trace id therefore matches nothing. Reported as a finding of tick oq4.
 
 The staging Worker and its D1 database were deleted after the proof.
+
+# Staging proof: a cloud worker attempt on its WorkerAgent (tick xd3)
+
+`agent-staging.ts` runs ONE worker attempt end to end on the real platform:
+the `WorkerAgent` Durable Object (`cloudflare/src/worker-agent.ts`) on its own
+DO SQLite, its tools in a real FactorySandbox container on the
+`durable_object` policy, its model Workers AI GLM 5.3 through the factory's
+own gateway route (`proxyModelRequest`, the run token, the kill switch). It is
+not part of CI: it spends (cents of Workers AI and container time) and needs a
+deployed Worker.
+
+Two stand-ins, both named in `cloudflare/src/staging-agent.ts`: the last model
+hop goes through the Worker's AI binding (the staging gateway's one difference,
+above), and the container's `ticks-worker` is a stand-in
+(`cloudflare/staging/agent.Dockerfile`) that honours the pinned
+`--boot`/`--finish` contract — markers, prompt handoff, branch record, the
+fast-forward-only push, exit codes — on a throwaway repository inside the
+container, because the factory image needs the deploy pipeline, a GitHub
+repository and tk, which staging does not carry.
+
+## Running it
+
+From `cloudflare/` (wrangler logged in; the deploy provisions the D1 database by
+name, so no id is committed):
+
+```bash
+pnpm exec wrangler deploy -c staging/agent.wrangler.toml
+pnpm exec wrangler d1 migrations apply ticfac-staging-agent --remote -c staging/agent.wrangler.toml
+openssl rand -hex 24 | pnpm exec wrangler secret put PROOF_TOKEN -c staging/agent.wrangler.toml
+```
+
+From `harness/`:
+
+```bash
+PROOF_URL=https://ticfac-staging-agent.<subdomain>.workers.dev PROOF_TOKEN=<the token> \
+  node proof/agent-staging.ts evidence.json
+```
+
+Tear down afterwards:
+
+```bash
+pnpm exec wrangler delete -c staging/agent.wrangler.toml
+pnpm exec wrangler d1 delete ticfac-staging-agent
+```
+
+## Recorded result, 2026-10-04 (pi-ai / pi-durable 1.0.2)
+
+`PROOF HOLDS`, every claim, in 39 s (attempt `proof-muu5bo90`): boot 9.9 s,
+conversation 26 s (6 tool calls), finish 3 s.
+
+| Claim | Evidence |
+|---|---|
+| The attempt settled with the finish phase's exit 0 | the agent's state: `settled`, `exit_code: 0`, "the finish phase exited 0"; the stand-in's fast-forward push `pushed tick/proof/xd3 at 446590c` |
+| The boot ran in the container and handed off | `ticks-worker-boot-ok branch=tick/proof/xd3 result=RESULT-xd3.md`, then the prompt between the markers, submitted as the conversation's input |
+| The model ran its tools in the container | `bash`, `edit`, `read`, `write` calls in the agent's log; `./greet.sh` in the container prints `Hello, world` |
+| The work is on the pushed branch | `main..tick/proof/xd3`: the agent's two commits and the finish's report commit; the fix and `RESULT-xd3.md` (`STATUS: DONE`) read back from the bare origin |
+| Wip checkpoints were pushed after tool rounds, invisibly | four pushes (three snapshots, one clean round pushing the agent's own commit `9785c02`); the agent's own `git commit`s succeeded and the final branch carries no wip |
+| A watcher saw the conversation live | 126 frames on the agent's WebSocket: a `snapshot`, then `message_*`, `tool_execution_*`, `turn_*`, `submission`, `inbox_update`, `run_end` events and the log |
+| A steer was placed while it worked | sent on the socket at the first `tool_execution_start` (0.2 s after it), answered `steered`; the model appended the steered line to `README.md` and committed it |
+
+What the staging runs FOUND, both fixed in this tick with a regression test
+each (`test/node/workspace-checkpoints.test.ts`):
+
+- **The host shell's git ran in the container's `/workspace`, not the
+  checkout** (`/work/repo`): every wip checkpoint failed "not in a git
+  directory", and a restore would have cleared and cloned the wrong
+  directory. The node suite's door had started in the checkout, which hid it.
+- **A wip COMMITTED on the agent's branch broke the agent's own git**: its
+  `git commit` answered "nothing to commit", the model rewrote the history it
+  could not explain (`git reset --soft HEAD^`), and every push after — the
+  finish phase's fast-forward-only one included — was refused (exit 9). The
+  checkpoint is now a snapshot built in a throwaway index on top of the
+  agent's HEAD, never a commit on its branch.
+
+Not proven here, and not claimed: a deploy mid-run (one was made 10 s into the
+conversation of a further attempt, which settled 0 two seconds after the
+deploy finished, with no restart observable in its log), a harness killed
+mid-tool, a container destroyed mid-turn — epic 43y's [A2], tick jhp's proof
+runs.

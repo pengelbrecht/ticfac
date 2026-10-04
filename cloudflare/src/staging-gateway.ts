@@ -36,7 +36,7 @@ type AiWithFetch = Ai & {
   fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 };
 
-type StagingGatewayEnv = Env & {
+export type StagingGatewayEnv = Env & {
   AI: AiWithFetch;
   /** The bearer the /proof/* controls answer to. No token configured is a closed door. */
   PROOF_TOKEN?: string;
@@ -71,7 +71,7 @@ const SEEN_TABLE = `CREATE TABLE IF NOT EXISTS proof_seen (
  * Everything the route stamped — `cf-aig-metadata`, the session affinity — goes
  * through unchanged, which is what the proof is about.
  */
-function bindingUpstream(env: StagingGatewayEnv): typeof fetch {
+export function bindingUpstream(env: StagingGatewayEnv): typeof fetch {
   return async (input, init) => {
     const request = new Request(input, init);
     const headers = new Headers(request.headers);

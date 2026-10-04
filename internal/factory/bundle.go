@@ -141,6 +141,7 @@ func resetPayloadCaches() {
 	sandboxPathsErr = nil
 	shaOnce = sync.Once{}
 	shaValue = ""
+	resetHarnessCaches()
 }
 
 // BundlePaths returns every file in the embedded bundle, as slash-separated
@@ -301,6 +302,16 @@ func BundleSHA() string {
 				continue
 			}
 			fmt.Fprintf(h, "%s/%s\n%d\n", sandboxHashDir, p, len(data))
+			h.Write(data)
+		}
+		// The harness package (tick xd3) is bundled into the Worker, so it
+		// is part of what a deploy installs exactly as the bundle is.
+		for _, p := range HarnessPaths() {
+			data, err := ReadHarnessFile(p)
+			if err != nil {
+				continue
+			}
+			fmt.Fprintf(h, "%s/%s\n%d\n", harnessRoot, p, len(data))
 			h.Write(data)
 		}
 		shaValue = hex.EncodeToString(h.Sum(nil))

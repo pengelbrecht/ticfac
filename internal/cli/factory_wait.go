@@ -46,6 +46,9 @@ import (
 var factoryShippedPaths = []string{
 	".github/workflows/deploy-factory.yml",
 	"cloudflare", "image",
+	// The harness package the Worker bundle links (epic 43y, tick xd3).
+	"harness/src", "harness/package.json", "harness/pnpm-lock.yaml",
+	"harness/pnpm-workspace.yaml", "harness/tsconfig.json",
 	"embedded.go", "go.mod", "go.sum", "factory.pin.json", "contracts.pin.json", "contracts",
 	"profiles", "profiles-cloudflare-sandbox", "profiles-herdr",
 	"cmd/ticfac", "cmd/ticfac-exec-subprocess", "internal",
