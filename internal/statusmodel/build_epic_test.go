@@ -423,29 +423,95 @@ func TestDuplicateOfReadsTheTrackerRecord(t *testing.T) {
 
 func strPtr(s string) *string { return &s }
 
-// TestNextStepOfAParkedTickNamesTheResume: a refusal the newest run did not
-// leave belongs to a run that is over, and the run will retry nothing — the
-// try's next step is the resume command the run header names, not the
-// ladder's own retry-or-escalate word.
-func TestNextStepOfAParkedTickNamesTheResume(t *testing.T) {
+// TestAParkedTrysNextStepAgreesWithTheNeedsYouHeader: the try's next step and
+// the needs-you header are two wordings of one answer, and they cannot
+// disagree (tick eli). A tick a prior run held for a person is parked work —
+// and while that hold stands, the row's word is the same release command the
+// header carries, never the generic resume: a run-epic resume alone does not
+// clear the hold (the new run holds again on the unreleased attempt), so the
+// resume sends the person to a first move that answers nothing. A parked tick
+// with NO standing hold is still the resume's to name — that branch stands.
+func TestAParkedTrysNextStepAgreesWithTheNeedsYouHeader(t *testing.T) {
 	t.Parallel()
-	src := failedNewestSources()
-	model := Build(src)
-	var held Tick
-	for _, w := range *model.Waves {
+
+	t.Run("a standing prior hold names the header's release command", func(t *testing.T) {
+		t.Parallel()
+		model := Build(failedNewestSources())
+		held := epicTick(t, model, "at3")
+		if len(held.Tries) != 1 || held.Tries[0].NextStep == nil {
+			t.Fatalf("the held tick's try reads %+v, want a next step", held.Tries)
+		}
+		if model.WaitsOn == nil || model.WaitsOn.UnblockCommand == nil {
+			t.Fatalf("the header carries no release command: %+v", model.WaitsOn)
+		}
+		if *held.Tries[0].NextStep != *model.WaitsOn.UnblockCommand {
+			t.Errorf("the held tick's next step reads %q, want the header's own command %q: two wordings of one answer cannot disagree",
+				*held.Tries[0].NextStep, *model.WaitsOn.UnblockCommand)
+		}
+	})
+
+	t.Run("a parked tick with no standing hold still names the resume", func(t *testing.T) {
+		t.Parallel()
+		model := Build(priorHoldSources(func(src *Sources) {
+			prior := src.PriorRecords[0]
+			prior.Checkpoint.Ticks = []runstate.TickState{{TickID: "at1", State: "rejected", Attempt: 7}}
+			prior.Attempts = []runstate.Attempt{attemptMarker(7, "at1",
+				testNow.Add(-47*time.Hour).UTC().Format(time.RFC3339), "strong", "claude-opus-5", "local-subprocess")}
+			src.PriorRecords[0] = prior
+			src.PriorFeeds["run_old"] = append(src.PriorFeeds["run_old"], runfeed.Event{
+				SchemaVersion: 1, At: testNow.Add(-40 * time.Hour).UTC().Format(time.RFC3339), RunID: "run_old",
+				Stage: reconcile.StageResumed, Detail: "resumed after the person released the attempt",
+			})
+		}))
+		parked := epicTick(t, model, "at1")
+		if len(parked.Tries) != 1 || parked.Tries[0].NextStep == nil {
+			t.Fatalf("the parked tick's try reads %+v, want a next step", parked.Tries)
+		}
+		if !strings.Contains(*parked.Tries[0].NextStep, "nothing of that run is working") {
+			t.Errorf("the parked tick's next step reads %q, want the resume the run's own machinery cannot give",
+				*parked.Tries[0].NextStep)
+		}
+	})
+
+	t.Run("a standing prior hold's triage wording names the triage command", func(t *testing.T) {
+		t.Parallel()
+		model := Build(priorHoldSources(func(src *Sources) {
+			prior := src.PriorRecords[0]
+			prior.Checkpoint.Ticks = []runstate.TickState{{TickID: "at1", State: "rejected", Attempt: 7}}
+			prior.Attempts = []runstate.Attempt{attemptMarker(7, "at1",
+				testNow.Add(-47*time.Hour).UTC().Format(time.RFC3339), "strong", "claude-opus-5", "local-subprocess")}
+			src.PriorRecords[0] = prior
+			src.PriorFeeds["run_old"] = []runfeed.Event{{
+				SchemaVersion: 1, At: testNow.Add(-47 * time.Hour).UTC().Format(time.RFC3339), RunID: "run_old",
+				TickID: tickPtr("at1"), Stage: reconcile.StageRunHeld,
+				Detail: reconcile.RefusedFindingUntriaged + ": 2 findings are untriaged",
+			}}
+		}))
+		held := epicTick(t, model, "at1")
+		if len(held.Tries) != 1 || held.Tries[0].NextStep == nil {
+			t.Fatalf("the held tick's try reads %+v, want a next step", held.Tries)
+		}
+		want := "ticfac triage hpd --run-id run_old"
+		if *held.Tries[0].NextStep != want {
+			t.Errorf("the held tick's next step reads %q, want %q: the triage addressed to the holding run",
+				*held.Tries[0].NextStep, want)
+		}
+	})
+}
+
+// epicTick finds one tick's row in a built model — the same lookup the
+// across-runs assertions make.
+func epicTick(t *testing.T, model Model, tickID string) Tick {
+	t.Helper()
+	for _, w := range deref(model.Waves) {
 		for _, tick := range w.Ticks {
-			if tick.TickID == "at3" {
-				held = tick
+			if tick.TickID == tickID {
+				return tick
 			}
 		}
 	}
-	if len(held.Tries) != 1 || held.Tries[0].NextStep == nil {
-		t.Fatalf("the parked tick's try reads %+v, want a next step", held.Tries)
-	}
-	if !strings.Contains(*held.Tries[0].NextStep, "nothing of that run is working") {
-		t.Errorf("the parked tick's next step reads %q, want the resume the run's own machinery cannot give",
-			*held.Tries[0].NextStep)
-	}
+	t.Fatalf("the model's waves carry no tick %s", tickID)
+	return Tick{}
 }
 
 // priorHoldSources is the smallest epic a prior run's hold can stand in: one

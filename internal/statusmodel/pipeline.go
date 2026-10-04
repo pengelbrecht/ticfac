@@ -39,9 +39,11 @@ const tickIntegrated = "integrated"
 // it decides nothing a record did not state. Where nothing states a fact the
 // tick says null or pending, never a guess. The per-tick records are the
 // merged view's (epic.go): each tick's own from the last run that touched
-// it.
-func decorateTicks(src Sources, merged *mergedRuns, m *Model) {
-	index := newPipelineIndex(src, merged, m.EpicID)
+// it. priorHolds is the standing prior-run hold answer the model computed
+// once for both of its readers — the header's needs-you and the rows'
+// next steps.
+func decorateTicks(src Sources, merged *mergedRuns, priorHolds []PriorHold, m *Model) {
+	index := newPipelineIndex(src, merged, priorHolds, m.EpicID)
 	for wi := range deref(m.Waves) {
 		wave := &(*m.Waves)[wi]
 		for ti := range wave.Ticks {
@@ -53,8 +55,10 @@ func decorateTicks(src Sources, merged *mergedRuns, m *Model) {
 // pipelineIndex is every per-tick fact the derivation asks for, grouped the
 // ways it asks: the graph's own tasks (the parent row reads their Parent),
 // the dispatch markers and gate evidence of the tick's OWNER run, the
-// absorptions and findings every run recorded, and the live census. Built
-// once per model; read per tick.
+// absorptions and findings every run recorded, the live census — and the
+// standing prior-run holds, the same answer buildWaits words the header
+// from, so a row's next step and the header's command cannot disagree (tick
+// eli). Built once per model; read per tick.
 type pipelineIndex struct {
 	epicID         string
 	host           string
@@ -67,12 +71,13 @@ type pipelineIndex struct {
 	absorbedByFind map[string]runstate.Absorption
 	findingsByTick map[string][]runstate.Finding
 	standing       map[string]bool
+	priorHold      map[string]PriorHold
 	feed           []runfeed.Event
 }
 
 // newPipelineIndex groups the sources' per-tick facts once, so decorating a
 // hundred ticks costs one pass over each record kind rather than a hundred.
-func newPipelineIndex(src Sources, merged *mergedRuns, epicID string) *pipelineIndex {
+func newPipelineIndex(src Sources, merged *mergedRuns, priorHolds []PriorHold, epicID string) *pipelineIndex {
 	newest := merged.newestRun()
 	p := &pipelineIndex{
 		epicID:         epicID,
@@ -86,7 +91,19 @@ func newPipelineIndex(src Sources, merged *mergedRuns, epicID string) *pipelineI
 		absorbedByFind: map[string]runstate.Absorption{},
 		findingsByTick: map[string][]runstate.Finding{},
 		standing:       map[string]bool{},
+		priorHold:      map[string]PriorHold{},
 		feed:           src.Feed,
+	}
+	// The standing prior-run holds, keyed per tick: the same answer
+	// buildWaits words the header from, shared with the derivation so a
+	// row's next step and the header's command are two wordings of one
+	// answer (tick eli). A hold the run left on itself names no tick, and
+	// no row can carry one.
+	for _, held := range priorHolds {
+		if held.TickID == "" {
+			continue
+		}
+		p.priorHold[held.TickID] = held
 	}
 	if src.Graph != nil {
 		for _, wave := range src.Graph.Waves {
@@ -536,19 +553,35 @@ func (p *pipelineIndex) reasonLine(tickID string, attempt int) *runfeed.Event {
 }
 
 // nextStepOf states what the run does next about a refused last try, in the
-// order the run's own facts answer it: a redispatch that already happened;
+// order the run's own facts answer it: a redispatch that already happened; a
+// prior run's hold that still stands — the header's own release command,
+// shared from the same answer buildWaits words the needs-you from (tick eli);
 // the attention entry that names this tick (the same unblock command the
-// header shows, mirrored from the same line buildWaits reads); a hold only
-// a person releases; and otherwise the ladder's own answer — the run retries
+// header shows, mirrored from the same line buildWaits reads); a hold only a
+// person releases; and otherwise the ladder's own answer — the run retries
 // or escalates, which is what the tier policy exists to decide.
 func (p *pipelineIndex) nextStepOf(tick *Tick, last Try) *string {
 	if p.hasLaterDispatch(tick.TickID, last.Attempt) {
 		step := fmt.Sprintf("retrying (try %d)", last.Try+1)
 		return &step
 	}
-	// A refusal the NEWEST run did not leave: its run is over, and nothing
-	// of it will retry anything — the honest next step is the resume, the
-	// same command the run header names (hn6, tick gmo).
+	// A hold a prior run left for a person stands until somebody answers it
+	// (tick z3p), and it outranks the generic non-newest-owner line below:
+	// the honest first move is the command that releases THAT run's hold —
+	// a run-epic resume alone does not clear it, the new run holding again
+	// on the unreleased attempt — and it is the very command the header's
+	// needs-you entry carries, from the same shared answer (tick eli).
+	if hold, ok := p.priorHold[tick.TickID]; ok {
+		if command := priorHoldCommand(p.epicID, hold); command != nil {
+			return command
+		}
+		step := "held — see needs-you"
+		return &step
+	}
+	// A refusal the NEWEST run did not leave — and no hold standing over it:
+	// its run is over, and nothing of it will retry anything — the honest
+	// next step is the resume, the same command the run header names
+	// (hn6, tick gmo).
 	if p.nonNewestOwner[tick.TickID] {
 		step := "nothing of that run is working — " + ResumeCommand(p.host, p.epicID) + " takes it up"
 		return &step
