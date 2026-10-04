@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
   "epic_id": "hn6",
-  "sequence": 3,
-  "state": "running",
-  "reason": "l89 is running as attempt 1",
-  "updated_at": "2026-10-04T00:35:13Z",
+  "sequence": 4,
+  "state": "dispatching",
+  "reason": "dispatching lkq as attempt 2",
+  "updated_at": "2026-10-04T00:35:21Z",
   "ticks": [
     {
       "tick_id": "gmo",
