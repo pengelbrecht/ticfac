@@ -5,8 +5,10 @@
  * lost container's workspace from it.
  *
  * The spike's experiment 4, productised. The `afterTools` hook
- * ({@link workspaceCheckpointExtension}) commits the workspace as one `wip:
- * tool round` and pushes it to the attempt branch — the run's write ref —
+ * ({@link workspaceCheckpointExtension}) snapshots the workspace as one `wip:
+ * tool round` commit — built in a throwaway index on top of the agent's own
+ * HEAD, never committed on the agent's branch (tick xd3, see
+ * {@link pushWipCheckpoint}) — and pushes it to the attempt branch — the run's write ref —
  * which is the SAME ref `ticfac settle --carry-work` reads
  * (internal/reconcile/settle.go): the carried-work mechanism, now at
  * tool-round granularity. When a container is lost mid-turn
@@ -152,43 +154,96 @@ function varsOf(git: WorkspaceGit, vars: Record<string, string>): Record<string,
 }
 
 /**
- * The round's wip checkpoint: identity, stage and commit in ONE line (a
- * round's checkpoint is one RPC when it commits, and a container whose boot
- * never ran still commits), then the push. `git diff --cached --quiet` after
- * the add decides the empty case — an empty wip would be noise on the
- * attempt branch. The push IS the durability: the branch on origin is what
- * survives the container.
+ * The round's wip checkpoint: a SNAPSHOT of the workspace, pushed to the
+ * attempt branch — and nothing in the checkout touched. The snapshot is
+ * built with plumbing in a throwaway index (the way worker.sh's boot-stopped
+ * marker is): the working tree's every file, a commit whose parent is the
+ * agent's own HEAD, pushed with force over the previous round's snapshot. The
+ * agent's branch, index and history stay exactly what the agent made them.
+ *
+ * Why not a commit on the agent's branch (the first cut, tick dwn): the xd3
+ * staging run's model ran `git add && git commit` after a round whose wip had
+ * already committed its edits, was told "nothing to commit", decided the
+ * harness had swallowed its work and `git reset --soft HEAD^` to rewrite it —
+ * and every push after that, the finish phase's fast-forward-only one
+ * included, was refused as non-fast-forward (exit 9). A checkpoint must be
+ * invisible to the work it checkpoints.
+ *
+ * A clean round (the working tree is HEAD's tree) pushes the agent's own
+ * HEAD when its commits moved since the last push, so the branch carries
+ * them; the first clean round only records what it saw (the boot's HEAD is
+ * on origin already: the base, or the branch it adopted). A round that
+ * changed nothing since the last push pushes nothing — the record (the
+ * pushed HEAD and tree) is kept in the checkout's git dir. The push IS the
+ * durability: the branch on origin is what survives the container.
  *
  * Never throws: a failure (the door unavailable, a refused push) is the
  * outcome, for the caller to report.
  */
 export async function pushWipCheckpoint(shell: HostShell, git: WorkspaceGit): Promise<WipOutcome> {
   try {
-    const commit = await shell.execLine(
+    const snapshot = await shell.execLine(
       'git config user.name "$NAME" && git config user.email "$EMAIL" && ' +
-        "git add -A && if git diff --cached --quiet; then exit 3; fi && " +
-        'git commit -q -m "$MSG" && git rev-parse HEAD',
+        'idx="$(git rev-parse --git-path ticfac-wip-index)" && rec="$(git rev-parse --git-path ticfac-wip-pushed)" && ' +
+        'rm -f "$idx" && GIT_INDEX_FILE="$idx" git read-tree HEAD && GIT_INDEX_FILE="$idx" git add -A && ' +
+        'tree="$(GIT_INDEX_FILE="$idx" git write-tree)" && rm -f "$idx" && head="$(git rev-parse HEAD)" && ' +
+        'key="$head $tree" && ' +
+        'if [ -f "$rec" ] && [ "$(cat "$rec")" = "$key" ]; then exit 3; fi && ' +
+        'if [ "$tree" = "$(git rev-parse "HEAD^{tree}")" ]; then ' +
+        'if [ ! -f "$rec" ]; then printf %s "$key" > "$rec"; exit 3; fi; ' +
+        'printf "%s\n%s\n" "$head" "$key"; exit 0; fi && ' +
+        'c="$(git commit-tree "$tree" -p "$head" -m "$MSG")" && printf "%s\n%s\n" "$c" "$key"',
       varsOf(git, {
         MSG: WIP_COMMIT_SUBJECT,
         NAME: git.identity.name,
         EMAIL: git.identity.email,
       }),
     );
-    if (commit.exitCode === EMPTY) return { kind: "empty" };
-    if (commit.exitCode !== 0) return { kind: "failed", error: said("git add/commit", commit) };
-    const sha = commit.output.trim();
-    if (sha === "" || sha.includes("\n")) {
+    if (snapshot.exitCode === EMPTY) return { kind: "empty" };
+    if (snapshot.exitCode !== 0) {
+      return { kind: "failed", error: said("the wip snapshot", snapshot) };
+    }
+    const [sha = "", key = ""] = snapshot.output.trim().split("\n");
+    if (!/^[0-9a-f]{7,64}$/.test(sha.trim()) || key.trim() === "") {
       return {
         kind: "failed",
-        error: `git rev-parse HEAD answered oddly: ${brief(commit.output)}`,
+        error: `the wip snapshot answered oddly: ${brief(snapshot.output)}`,
       };
     }
     const push = await shell.execLine(
-      'git push -q "$REMOTE" HEAD:"refs/heads/$BRANCH"',
-      varsOf(git, { REMOTE: git.remote, BRANCH: git.branch }),
+      'git push -q -f "$REMOTE" "$SHA:refs/heads/$BRANCH" && ' +
+        'printf %s "$KEY" > "$(git rev-parse --git-path ticfac-wip-pushed)"',
+      varsOf(git, { REMOTE: git.remote, BRANCH: git.branch, SHA: sha.trim(), KEY: key.trim() }),
     );
     if (push.exitCode !== 0) return { kind: "failed", error: said("git push", push) };
-    return { kind: "pushed", sha };
+    return { kind: "pushed", sha: sha.trim() };
+  } catch (error) {
+    return { kind: "failed", error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * Before the finish phase (epic 43y step 6, tick xd3): the attempt branch
+ * goes back to the agent's own HEAD. The last round's snapshot sits on it,
+ * and the finish phase's push is fast-forward only (image/worker.sh
+ * `push_branch`) — from a HEAD the snapshot is a child of, never an
+ * ancestor. The working tree is untouched: what was uncommitted is still
+ * there for the finish phase's salvage to commit.
+ *
+ * Never throws.
+ */
+export async function retireWipSnapshot(
+  shell: HostShell,
+  git: WorkspaceGit,
+): Promise<{ readonly kind: "retired" } | { readonly kind: "failed"; readonly error: string }> {
+  try {
+    const push = await shell.execLine(
+      'git push -q -f "$REMOTE" "HEAD:refs/heads/$BRANCH" && rm -f "$(git rev-parse --git-path ticfac-wip-pushed)"',
+      varsOf(git, { REMOTE: git.remote, BRANCH: git.branch }),
+    );
+    return push.exitCode === 0
+      ? { kind: "retired" }
+      : { kind: "failed", error: said("git push of HEAD", push) };
   } catch (error) {
     return { kind: "failed", error: error instanceof Error ? error.message : String(error) };
   }
@@ -243,9 +298,17 @@ export async function restoreWorkspace(
     }
     if (out.exitCode !== 0) return failed(said(`git fetch (${from})`, out));
 
+    // On the attempt branch, as the boot left the agent: the tip is the last
+    // round's snapshot (or the agent's own HEAD, when a clean round pushed
+    // it). A snapshot is unwrapped — HEAD back to the agent's own commit, the
+    // snapshot's tree left in the index and the working tree — so the agent
+    // finds its history as it made it and its uncommitted edits uncommitted.
+    // The sha and subject reported are the tip's: what was restored FROM.
     const checkout = await shell.execLine(
-      "git checkout -q --detach FETCH_HEAD && git rev-parse HEAD && git log -1 --format=%s",
-      varsOf(git, {}),
+      'git checkout -q -B "$BRANCH" FETCH_HEAD && git rev-parse HEAD && git log -1 --format=%s && ' +
+        'if [ "$(git log -1 --format=%s)" = "$MSG" ] && git rev-parse -q --verify "HEAD~1" >/dev/null; ' +
+        "then git reset -q --soft HEAD~1; fi",
+      varsOf(git, { BRANCH: git.branch, MSG: WIP_COMMIT_SUBJECT }),
     );
     if (checkout.exitCode !== 0) return failed(said("git checkout", checkout));
     const lines = checkout.output.trim().split("\n");

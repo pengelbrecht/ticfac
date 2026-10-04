@@ -105,9 +105,17 @@ never deployed.
 ## Workspace checkpoints (epic 43y step 4, tick dwn)
 
 - **`workspaceCheckpointExtension`** (`src/workspace/checkpoints.ts`): an
-  `afterTools` hook on pi-durable's generation task that commits the
-  workspace after every tool round — `wip: tool round` — and pushes it to
-  the ATTEMPT branch, the run's write ref. That is the same ref
+  `afterTools` hook on pi-durable's generation task that snapshots the
+  workspace after every tool round — `wip: tool round`, built in a throwaway
+  index on top of the agent's own HEAD and force-pushed over the previous
+  round's snapshot, never committed on the agent's branch (tick xd3: a wip on
+  the branch made the agent's own commit answer "nothing to commit", the
+  model rewrote the history it could not explain, and the finish phase's
+  fast-forward push was refused) — to the ATTEMPT branch, the run's write ref.
+  A clean round pushes the agent's own HEAD when its commits moved, and
+  `retireWipSnapshot` puts the branch back on that HEAD before the finish
+  phase; a restore unwraps the snapshot (HEAD the agent's commit, the
+  snapshot's tree uncommitted). That is the same ref
   `ticfac settle --carry-work` reads (internal/reconcile): the carried-work
   mechanism at tool-round granularity, so a stopped attempt's carried work
   now carries its in-flight edits too. A round that changed nothing commits

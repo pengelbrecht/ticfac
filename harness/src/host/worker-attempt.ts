@@ -69,7 +69,11 @@ import type { SandboxBootOptions, SandboxDoor } from "../env/sandbox-door.js";
 import { gatewayModelRef } from "../gateway/workers-ai.js";
 import { createTrackedBashTool } from "../tools/tracked-bash.js";
 import { armWallDeadline, WORKER_HEADLESS_LINE, workerOnYield } from "../worker-contract.js";
-import { type WorkspaceGit, workspaceCheckpointExtension } from "../workspace/checkpoints.js";
+import {
+  retireWipSnapshot,
+  type WorkspaceGit,
+  workspaceCheckpointExtension,
+} from "../workspace/checkpoints.js";
 
 // ------------------------------------------------------------ constants ---
 
@@ -606,6 +610,12 @@ export class WorkerAttemptHost {
     }
     const branch = record.boot?.branch;
     if (branch === undefined) return;
+    // The attempt branch back to the agent's own HEAD: the last round's wip
+    // snapshot sits on it, and the finish phase's push is fast-forward only.
+    const retired = await retireWipSnapshot(env.hostShell(), this.workspaceGit(record));
+    if (retired.kind === "failed") {
+      await this.say(`could not put the attempt branch back on the agent's HEAD: ${retired.error}`);
+    }
     const stateDir = record.spec.env.TICKS_WORKER_STATE_DIR ?? DEFAULT_STATE_DIR;
     const out = await this.deps.door.run(
       'mkdir -p "$S" && { [ -s "$S/branch" ] || printf \'%s\\n\' "$B" > "$S/branch"; }',
@@ -656,13 +666,7 @@ export class WorkerAttemptHost {
     if (this.env !== undefined) return this.env;
     const spec = record.spec;
     const workdir = spec.env.TICKS_WORKDIR ?? DEFAULT_WORKDIR;
-    const git: WorkspaceGit = {
-      remote: spec.repoUrl,
-      branch: record.boot?.branch ?? "",
-      identity: WORKER_GIT_IDENTITY,
-      base: spec.baseSha,
-      env: credentialEnv(spec.env),
-    };
+    const git = this.workspaceGit(record);
     this.env = new FactorySandboxEnv({
       sandbox: pinnedDoor(this.deps.door, spec.boot),
       name: spec.name,
@@ -726,13 +730,7 @@ export class WorkerAttemptHost {
       registry.install(
         workspaceCheckpointExtension({
           shell: env.hostShell(),
-          workspace: {
-            remote: spec.repoUrl,
-            branch: record.boot.branch,
-            identity: WORKER_GIT_IDENTITY,
-            base: spec.baseSha,
-            env: credentialEnv(spec.env),
-          },
+          workspace: this.workspaceGit(record),
           // The between-rounds ready check (tick 4fs): a container lost while
           // no tool was in flight boots empty, and only the host sees it.
           ensureReady: () => env.ensureWorkspaceReady(),
@@ -754,6 +752,18 @@ export class WorkerAttemptHost {
   }
 
   // ------------------------------------------------------------- helpers ---
+
+  /** The attempt's workspace git: its branch (the boot's), its remote, its credentials. */
+  private workspaceGit(record: WorkerAttemptRecord): WorkspaceGit {
+    const spec = record.spec;
+    return {
+      remote: spec.repoUrl,
+      branch: record.boot?.branch ?? "",
+      identity: WORKER_GIT_IDENTITY,
+      base: spec.baseSha,
+      env: credentialEnv(spec.env),
+    };
+  }
 
   /** Polls a container phase process to its end, logging its output as it comes. */
   private async waitPhase(processId: string): Promise<PhaseEnd> {

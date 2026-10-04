@@ -53,6 +53,7 @@ export {
   type HostShell,
   type RestoreOutcome,
   restoreWorkspace,
+  retireWipSnapshot,
   WIP_COMMIT_SUBJECT,
   type WipOutcome,
   type WorkspaceCheckpointOptions,

@@ -203,8 +203,10 @@ describe("a worker attempt driven by the host", () => {
     expect(faux.state.callCount).toBe(2);
     // The finish phase found the boot's branch record written for it.
     expect(door.runs.some((r) => r.env.B === BRANCH && r.command.includes("/branch"))).toBe(true);
-    // The wip checkpoint ran after the tool round.
-    expect(door.runs.some((r) => r.command.includes("git commit"))).toBe(true);
+    // The wip checkpoint ran after the tool round, as a snapshot; and before
+    // the finish the attempt branch went back to the agent's own HEAD.
+    expect(door.runs.some((r) => r.command.includes("git commit-tree"))).toBe(true);
+    expect(door.runs.some((r) => r.command.includes('"HEAD:refs/heads/$BRANCH"'))).toBe(true);
     expect(log.join("")).toContain("ticks-worker: pushed");
     expect(log.join("")).toContain("tool bash");
   });

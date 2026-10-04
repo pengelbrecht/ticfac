@@ -23,6 +23,7 @@ import { createTrackedBashTool } from "../../src/tools/tracked-bash.js";
 import {
   pushWipCheckpoint,
   type RestoreOutcome,
+  retireWipSnapshot,
   WIP_COMMIT_SUBJECT,
   type WipOutcome,
   type WorkspaceGit,
@@ -210,12 +211,10 @@ describe("workspace checkpoints over real git", () => {
     })
       .trim()
       .split("\n");
-    expect(subjects.slice(0, 3)).toEqual([
-      WIP_COMMIT_SUBJECT,
-      WIP_COMMIT_SUBJECT,
-      WIP_COMMIT_SUBJECT,
-    ]);
-    expect(subjects.at(-1)).toBe("the base commit");
+    // A snapshot replaces the last (tick xd3): the branch is the newest
+    // round's snapshot on top of the agent's own HEAD — here the base, as
+    // the faux agent commits nothing.
+    expect(subjects).toEqual([WIP_COMMIT_SUBJECT, "the base commit"]);
 
     const view = await conversation.context(context);
     const messages = view.messages;
@@ -421,5 +420,72 @@ describe("workspace checkpoints over real git", () => {
     expect(restored.kind).toBe("restored");
     expect(readFileSync(join(checkout, "a.txt"), "utf8")).toBe("a change\n");
     expect(readdirSync(root)).not.toContain(".git");
+  });
+
+  // The xd3 staging run: a wip that COMMITTED on the agent's branch made the
+  // agent's own `git commit` answer "nothing to commit"; the model rewrote
+  // the history it could not explain, and every push after that — the finish
+  // phase's fast-forward-only one included — was refused. A checkpoint must
+  // be invisible to the work it checkpoints.
+  it("snapshots without touching the agent's branch: its commits land, and the finish's fast-forward push holds", async () => {
+    const run = (...args: string[]) =>
+      execFileSync(
+        "git",
+        ["-C", checkout, "-c", "user.name=agent", "-c", "user.email=agent@example.com", ...args],
+        {
+          encoding: "utf8",
+        },
+      ).trim();
+    const onOrigin = (rev: string) =>
+      execFileSync("git", ["--git-dir", origin, "rev-parse", rev], { encoding: "utf8" }).trim();
+    const base = run("rev-parse", "HEAD");
+
+    // Round 1: an edit, snapshotted — HEAD, index and status untouched.
+    writeFileSync(join(checkout, "a.txt"), "the agent's edit\n");
+    const first = await pushWipCheckpoint(env.hostShell(), git);
+    expect(first.kind).toBe("pushed");
+    expect(run("rev-parse", "HEAD")).toBe(base);
+    expect(run("status", "--porcelain")).toBe("?? a.txt");
+    const snapshot = onOrigin(git.branch);
+    expect(
+      execFileSync("git", ["--git-dir", origin, "log", "-1", "--format=%s%n%P", snapshot], {
+        encoding: "utf8",
+      }).trim(),
+    ).toBe(`${WIP_COMMIT_SUBJECT}\n${base}`);
+
+    // The agent commits its own work: it is there to commit.
+    run("add", "a.txt");
+    run("commit", "-q", "-m", "the agent's commit");
+    const agentCommit = run("rev-parse", "HEAD");
+
+    // Round 2, clean: the agent's commit is what the branch carries now.
+    expect((await pushWipCheckpoint(env.hostShell(), git)).kind).toBe("pushed");
+    expect(onOrigin(git.branch)).toBe(agentCommit);
+    // Round 3, unchanged: nothing to push.
+    expect((await pushWipCheckpoint(env.hostShell(), git)).kind).toBe("empty");
+
+    // Round 4: an uncommitted edit on top, snapshotted over the agent's commit.
+    writeFileSync(join(checkout, "b.txt"), "uncommitted\n");
+    expect((await pushWipCheckpoint(env.hostShell(), git)).kind).toBe("pushed");
+    expect(onOrigin(`${git.branch}~1`)).toBe(agentCommit);
+
+    // A container lost now restores the agent's state exactly: HEAD its own
+    // commit, the uncommitted edit still uncommitted.
+    for (const entry of readdirSync(checkout))
+      rmSync(join(checkout, entry), { recursive: true, force: true });
+    const restored = await env.restoreLostWorkspace();
+    expect(restored.kind).toBe("restored");
+    expect(run("rev-parse", "HEAD")).toBe(agentCommit);
+    expect(run("rev-parse", "--abbrev-ref", "HEAD")).toBe(git.branch);
+    expect(readFileSync(join(checkout, "b.txt"), "utf8")).toBe("uncommitted\n");
+    expect(run("status", "--porcelain").split("\n")).toContain("A  b.txt");
+
+    // Before the finish: the branch back on the agent's HEAD, and the
+    // finish phase's fast-forward-only push of its salvage commit holds.
+    expect((await retireWipSnapshot(env.hostShell(), git)).kind).toBe("retired");
+    expect(onOrigin(git.branch)).toBe(agentCommit);
+    run("commit", "-q", "-m", "the finish phase's salvage");
+    run("push", "-q", "origin", `HEAD:refs/heads/${git.branch}`);
+    expect(onOrigin(git.branch)).toBe(run("rev-parse", "HEAD"));
   });
 });
