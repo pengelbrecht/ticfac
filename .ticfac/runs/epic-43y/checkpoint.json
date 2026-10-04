@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 84,
-  "state": "collecting",
-  "reason": "collecting bgx attempt 13",
-  "updated_at": "2026-10-04T18:59:02Z",
+  "sequence": 85,
+  "state": "integrating",
+  "reason": "integrating bgx attempt 13 into epic/43y",
+  "updated_at": "2026-10-04T18:59:12Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -76,7 +76,7 @@
     },
     {
       "tick_id": "bgx",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 13
     },
     {
