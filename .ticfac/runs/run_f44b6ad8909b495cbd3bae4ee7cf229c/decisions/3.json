@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "stopsFromStatusDoc hardcodes clear_with `ticfac run-epic <epic>` for the failed-phase stop, and notifyRunEnded feeds it a doc with host \"cloud\" straight from the Run Workflow's finalize. So the page a person receives for a failed cloud run names the LOCAL foreground resume — exactly the move ResumeCommand (tick gtk) exists to prevent: run-epic on the reader's machine restarts the epic locally instead of resubmitting to the factory (`ticfac run <epic> --cloud`). The Go model spells the resume by host; the TS stop builder ignores doc.host.\nevidence: cloudflare/src/notify.ts:87 (clear_with) fed by the cloud doc at cloudflare/src/notify.ts:299-313; compare internal/statusmodel/commands.go ResumeCommand's cloud branch\n\nticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c created this tick by absorbing the finding b4effa80fbc7f99e5113e4f70c6ce5804f3399134f9c0e9db7f2eecf1c2d07f8 (reported by run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-q8m/attempt-1): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/b4effa80fbc7f99e5113e4f70c6ce5804f3399134f9c0e9db7f2eecf1c2d07f8.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "tt6",
+    "title": "A failed cloud run's page tells the person to resume it locally"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.39,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.03,
+      "design": 0.01,
+      "diagnosis": 0.51,
+      "mechanical": 0.42,
+      "translation": 0.03
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1450,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T10:05:41Z",
+  "answered_at": "2026-10-04T10:05:41Z",
+  "provenance": {
+    "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
+    "tick_id": "tt6",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "03a7e5ca288d3dda69a68199b0fa496ae5a58ee8",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
