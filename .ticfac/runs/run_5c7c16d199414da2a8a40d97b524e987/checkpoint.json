@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
   "epic_id": "hn6",
-  "sequence": 51,
-  "state": "collecting",
-  "reason": "collecting gmo attempt 6",
-  "updated_at": "2026-10-04T02:18:00Z",
+  "sequence": 52,
+  "state": "integrating",
+  "reason": "integrating gmo attempt 6 into epic/hn6",
+  "updated_at": "2026-10-04T02:18:55Z",
   "ticks": [
     {
       "tick_id": "gmo",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 6
     },
     {
