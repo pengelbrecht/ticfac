@@ -1,0 +1,13 @@
+{
+  "id": "kup",
+  "title": "l89 closes any blocked tick that carries any acceptable tracker edit",
+  "description": "acceptTrackerEdits treats every BLOCKED/no-commits report with an acceptable tracker edit as the delivery and closes the tick, without checking the edit answers the blocking question; only the standing orders' always-ask class guards it. A 'BLOCKED — acceptance ambiguous' report proposing a clarifying edit to its own tick closes with no code. Tests cover only the yjq shape.\nevidence: internal/reconcile/tracker_edits.go:157-200\n\nticfac run epic-hn6 filed this backlog tick from the finding de4fb8074c0f2b788e2232749aafad57ca960255d045a589262a6171e3e21b18 (reported by run-epic-hn6/tick-v16/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/de4fb8074c0f2b788e2232749aafad57ca960255d045a589262a6171e3e21b18.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T16:17:31Z",
+  "updated_at": "2026-10-04T16:17:31Z"
+}
