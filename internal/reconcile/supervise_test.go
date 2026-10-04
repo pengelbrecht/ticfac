@@ -447,6 +447,35 @@ func TestACIWaitResumesOverAnUnchangedTreeUntilTheCap(t *testing.T) {
 // transientDoorError is an operational error that says of itself it is a
 // transient remote failure — the shape cloudflaresandbox's unreachable door
 // takes — carrying text no git marker recognises.
+type takenLeaseDoorError struct{}
+
+func (takenLeaseDoorError) Error() string {
+	return "the sandbox dispatch door refused (409 lease_held_by): the dispatch lease for p is held by run_b, not run_a"
+}
+
+func (takenLeaseDoorError) LeaseTaken() bool { return true }
+
+// hn6's restarted cloud run halted over "a stop this run has no
+// classification for" when the door refused its dispatch over the project's
+// lease. Another run holding the project is a named stop that needs a person
+// (two arbiters may never write one .tick/), and its halt says so in words.
+// short: the supervisor's rules over synthesised stops
+func TestALeaseAnotherRunHoldsIsANamedStopThatNeedsAPerson(t *testing.T) {
+	t.Parallel()
+	err := fmt.Errorf("start v16: %w", takenLeaseDoorError{})
+	if got := errorStopReason(err); got != StoppedLeaseTaken {
+		t.Fatalf("a taken lease is stop %q, want %q", got, StoppedLeaseTaken)
+	}
+	stop := supervisedStop{Reason: StoppedLeaseTaken, TickID: "v16", Tree: "tree-1"}
+	halt := haltReason(stop, supervisedStop{}, 0, 3)
+	if !strings.Contains(halt, "another run holds this project's dispatch lease") {
+		t.Errorf("the halt does not say another run holds the lease: %q", halt)
+	}
+	if strings.Contains(reasonOf(stop), "no classification") {
+		t.Errorf("a taken lease is still unclassified: %q", reasonOf(stop))
+	}
+}
+
 type transientDoorError struct{}
 
 func (transientDoorError) Error() string {

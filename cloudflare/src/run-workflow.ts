@@ -127,7 +127,7 @@ import {
   START_FEED_SEQ,
   UNANSWERABLE_FEED_SEQ,
 } from "./run-feed";
-import { DEFAULT_LEASE_TTL_MS, type LeaseLostReason, MAX_LEASE_TTL_MS } from "./run-room";
+import { type LeaseLostReason, MAX_LEASE_TTL_MS } from "./run-room";
 import { logDispatch, type RunWorkflowParams, roomFor } from "./runs";
 import {
   deploymentImage,
@@ -685,10 +685,21 @@ export function worstCaseRunSteps(config: RunConfig): number {
  * It has to outlive the gap to the *next* observation, or the run would expire
  * its own lease between two looks and hand the project to a queued submission
  * while it is still working.
+ *
+ * And it has to outlive a Workflow that STALLS between steps, which the poll
+ * cadence knows nothing about (hn6, run_3ca22fbd): renewed for 60s at
+ * 14:55:41, the instance took no step until 14:58:41, the lease lapsed under
+ * a healthy orchestrator and its first dispatch was refused. The floor is
+ * {@link RENEWAL_TTL_FLOOR_MS}, the ten minutes a run's first acquire already
+ * gets; what it costs is how long a run whose supervisor died without
+ * finalizing can wedge its project, which is the bound that acquire accepted.
  */
 export function renewalTtl(pollMs: number): number {
-  return Math.min(Math.max(pollMs * 3, DEFAULT_LEASE_TTL_MS), MAX_LEASE_TTL_MS);
+  return Math.min(Math.max(pollMs * 3, RENEWAL_TTL_FLOOR_MS), MAX_LEASE_TTL_MS);
 }
+
+/** The shortest lease a renewal asks for: BOOT_LEASE_TTL_MS's ten minutes (hn6). */
+export const RENEWAL_TTL_FLOOR_MS = 600_000;
 
 /**
  * What one renewal returned, kept as the RunRoom answered it (tick 7n7).

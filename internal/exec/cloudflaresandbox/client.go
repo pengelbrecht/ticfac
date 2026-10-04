@@ -83,9 +83,31 @@ func (e *doorError) Error() string {
 // container platform failing a start mid-rollout — epic hn6's cloud run):
 // the door decided nothing, and a start under the same identity is adopted
 // rather than rivalled, so asking again is the same as for a gateway page.
+//
+// `lease_lost` is transient too (hn6's restarted cloud run, run_3ca22fbd):
+// the door now takes back a lease that lapsed under its own run when nobody
+// else holds it, so it only answers `lease_lost` when it had no lapse of this
+// run's to reclaim — and then nobody holds the project, and the supervisor's
+// next renewal reclaims it under the run's token. Asking again is the answer.
 func (e *doorError) TransientRemote() bool {
+	if e.Class == LeaseLostClass {
+		return true
+	}
 	return e.Status >= 500 && (e.Class == "unreadable_refusal" || e.Class == DoorFaultClass)
 }
+
+// LeaseLostClass and LeaseHeldByClass are the door's two lease answers
+// (sandbox-dispatch.ts): the first an unheld lease (transient), the second
+// another run holding the project (a stop).
+const (
+	LeaseLostClass   = "lease_lost"
+	LeaseHeldByClass = "lease_held_by"
+)
+
+// LeaseTaken says another run holds the project's dispatch lease: one arbiter
+// per project, so this run must stop rather than write beside it. The
+// reconciler's supervisor recognises it by this method and names the stop.
+func (e *doorError) LeaseTaken() bool { return e.Class == LeaseHeldByClass }
 
 // DoorFaultClass is the door's answer for a throw inside it
 // (sandbox-dispatch.ts DOOR_FAULT): typed, with the throw's reason in the

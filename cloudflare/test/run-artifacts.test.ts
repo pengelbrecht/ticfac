@@ -18,6 +18,7 @@ import {
   MAX_SANDBOX_BOOTS,
   MIN_POLL_MS,
   pollDelay,
+  RENEWAL_TTL_FLOOR_MS,
   type RunConfig,
   renewalTtl,
   runConfig,
@@ -245,6 +246,16 @@ describe("observation cadence", () => {
     for (const poll of [1, MIN_POLL_MS, MAX_POLL_MS]) {
       expect(renewalTtl(poll)).toBeGreaterThan(poll);
     }
+  });
+
+  it("renews for long enough to ride out a supervisor that stalls between steps (hn6)", () => {
+    // run_3ca22fbd: renewed for 60s at 14:55:41, then the Workflow took no
+    // step until 14:58:41 — the lease lapsed under a healthy orchestrator.
+    // Every renewal now outlives a stall of that size several times over.
+    for (const poll of [1, MIN_POLL_MS, MAX_POLL_MS]) {
+      expect(renewalTtl(poll)).toBeGreaterThanOrEqual(RENEWAL_TTL_FLOOR_MS);
+    }
+    expect(RENEWAL_TTL_FLOOR_MS).toBeGreaterThanOrEqual(10 * 60_000);
   });
 });
 
