@@ -82,10 +82,10 @@ import {
   sandboxBinding,
 } from "./sandbox";
 import {
+  WORKER_AGENT_HARNESS,
   type WorkerAgentHosting,
   type WorkerAgentResolver,
   type WorkerAgentStub,
-  WORKER_AGENT_HARNESS,
   workerAgentsFromEnv,
 } from "./worker-agent";
 import {
