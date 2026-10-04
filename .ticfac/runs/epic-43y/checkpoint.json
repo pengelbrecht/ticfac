@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 8,
-  "state": "publishing",
-  "reason": "closing 92k behind the integrated gate on 59c193d1f5e9",
-  "updated_at": "2026-10-04T12:56:14Z",
+  "sequence": 9,
+  "state": "running",
+  "reason": "92k is closed",
+  "updated_at": "2026-10-04T12:56:23Z",
   "ticks": [
     {
       "tick_id": "92k",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
