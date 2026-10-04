@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "qxj",
   "attempt": 2,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T08:53:00Z",
+  "triaged_at": "2026-10-04T08:53:08Z",
+  "triaged_by": "ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c absorbing hai",
+  "promoted_as": "hai",
   "provenance": {
     "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
     "tick_id": "qxj",
