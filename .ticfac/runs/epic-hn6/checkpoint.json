@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 50,
-  "state": "collecting",
-  "reason": "collecting d9d attempt 6",
-  "updated_at": "2026-10-04T18:28:28Z",
+  "sequence": 51,
+  "state": "integrating",
+  "reason": "integrating d9d attempt 6 into epic/hn6",
+  "updated_at": "2026-10-04T18:29:28Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -38,7 +38,7 @@
     },
     {
       "tick_id": "d9d",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 6
     },
     {
