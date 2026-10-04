@@ -2,6 +2,7 @@
   "id": "bxi",
   "title": "findings/triage cannot be addressed by a run id argument, only --run-id",
   "description": "`ticfac findings run_abc` parses the run id as an epic id (epicIDOfArg strips only the epic- prefix), deriving branch epic/run_abc and store id epic-run_abc — an address that exists nowhere, so the fetch fails naming a branch nobody created. Every other run-addressing surface (watch, events, status) resolves both spellings via runSpellings. Low because every command this tick corrected spells --run-id, so the named flow works; the gap only bites someone who guesses the direct address.\nevidence: internal/cli/findings.go:114-127 (resolveFindingsRun) vs internal/cli/runid.go runSpellings\n\nticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c filed this backlog tick from the finding 18584305c8c816bda474618545c4ecd73a4592859ea526d5044bf3b6b9793693 (reported by run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-q8m/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/18584305c8c816bda474618545c4ecd73a4592859ea526d5044bf3b6b9793693.json on the run branch.",
+  "notes": "2026-10-04 09:49 - ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c: created by absorbing finding 18584305c8c816bda474618545c4ecd73a4592859ea526d5044bf3b6b9793693 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/18584305c8c816bda474618545c4ecd73a4592859ea526d5044bf3b6b9793693.json on epic/hn6, and it says: the classifier put 0.01 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-q8m/attempt-1",
   "created_by": "ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "created_at": "2026-10-04T09:49:54Z",
-  "updated_at": "2026-10-04T09:49:54Z"
+  "updated_at": "2026-10-04T09:49:59.898859909Z"
 }
