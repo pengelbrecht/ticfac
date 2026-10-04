@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 27,
-  "state": "gating",
-  "reason": "running the integrated gate for v2f on 998007cd89cc",
-  "updated_at": "2026-10-04T10:43:08Z",
+  "sequence": 28,
+  "state": "publishing",
+  "reason": "closing v2f behind the integrated gate on 998007cd89cc",
+  "updated_at": "2026-10-04T10:58:20Z",
   "ticks": [
     {
       "tick_id": "q8m",
