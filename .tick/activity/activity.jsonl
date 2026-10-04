@@ -2116,3 +2116,4 @@
 {"ts":"2026-10-04T18:52:01.562084Z","tick":"y03","action":"start","actor":"ticfac","epic":"43y","data":{"title":"ticfac watch shows a worker's thinking and tool calls live; operator steer; heartbeat from commits"}}
 {"ts":"2026-10-04T18:52:41.136709Z","tick":"4uj","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Name pi-durable in a hosted attempt's handle and the cloud profiles"}}
 {"ts":"2026-10-04T19:01:54.336036Z","tick":"bgx","action":"note","actor":"ticfac","epic":"43y","data":{"note":"\n2026-10-04 21:01 - ticfac run epic-43y: bgx try 1 (run dispatch #13) merged into epic/43y as 63e9809f4d12; the integrated gate (go, ts) passed.","title":"The stuck watch reads pi-CLI session transcripts for a runner that has none"}}
+{"ts":"2026-10-04T19:01:57.342313Z","tick":"bgx","action":"close","actor":"ticfac","epic":"43y","data":{"title":"The stuck watch reads pi-CLI session transcripts for a runner that has none"}}
