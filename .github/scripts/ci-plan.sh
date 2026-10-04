@@ -54,7 +54,7 @@ if [ "$event" = "pull_request" ]; then
 
 	for f in "${files[@]}"; do
 		case "$f" in
-		cloudflare/* | contracts/* | contracts.pin.json) ts=true ;;
+		cloudflare/* | contracts/* | contracts.pin.json | harness/*) ts=true ;;
 		esac
 		case "$f" in
 		go.mod | go.sum | Makefile | internal/shorttest/* | .github/* | .tick/runners.toml)
@@ -84,6 +84,9 @@ if [ "$event" = "pull_request" ]; then
 		# The worker's own sources and tests: typescript's, not Go's (what Go
 		# embeds of cloudflare/ was matched above).
 		cloudflare/*) ;;
+		# The pi-durable harness package: its conformance and replay suites run
+		# in the typescript job; no Go verdict rests on it.
+		harness/*) ;;
 		# Run records, the tracker, documentation: no Go verdict rests on them.
 		*.md | .ticfac/* | .tick/* | .gitignore | .gitattributes | benchmarks/*) ;;
 		*)
