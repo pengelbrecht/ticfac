@@ -1,0 +1,13 @@
+{
+  "id": "km5",
+  "title": "Untriaged-hold prose points at triage without --run-id for cloud runs",
+  "description": "The same broken-address shape this tick fixes for the release command is live on the triage verb: the close-out's untriaged-findings hold tells the person to run `ticfac triage \u003cepic\u003e` with no --run-id (triagePointer), the watch's triage alert branch spells the same bare command, and the model's current-run needs-you does too (TriageCommand, not TriageCommandForRun). triage's default resolves to epic-\u003cepic-id\u003e (runIDOfEpic), but a cloud run's drafts live under .ticfac/runs/run_\u003chex\u003e/findings/ — the hold's own prose even prints the correct path while pointing at the default that finds nothing, so the hold the surface points at cannot be cleared by the command the surface gives.\nevidence: internal/reconcile/findings.go:371 (triagePointer); internal/cli/watch.go:349; internal/statusmodel/commands.go TriageCommand used at build.go:812 and pipeline.go:643; internal/cli/runid.go:29 runIDOfEpic\n\nticfac triage: Peter Engelbrecht settled the finding 2e79a86ee01967fb37a9381918a2bca1662d2456ae3caa15fd460f282555c6bd (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-qxj/attempt-15) by filing it as a backlog tick: the done is reachable with the finding standing, so it is not the epic's to absorb. The tick waits for Peter Engelbrecht.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "Peter Engelbrecht",
+  "discovered_from": "run-run_5c7c16d199414da2a8a40d97b524e987/tick-qxj/attempt-15",
+  "created_by": "Peter Engelbrecht",
+  "created_at": "2026-10-04T08:48:02Z",
+  "updated_at": "2026-10-04T08:48:02Z"
+}
