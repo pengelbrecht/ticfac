@@ -1,0 +1,14 @@
+{
+  "id": "onv",
+  "title": "A stopped run's ETA displaces the progress bar at width 120",
+  "description": "Rendered from Build's output, the epic-state golden at width 120 loses the progress bar: the model states Remaining for the failed newest run (pinned by TestBuildETAAcrossRuns on the same fixture), the renderer adds 'ETA ~3h50m' to the progress line, and dashProgressLine drops the bar when the whole line exceeds the pane. A dead run also reads as promising a finish it cannot keep. Either the model should state no remaining time for a run whose records say it ended, or the renderer should seat the bar over the ETA.\nevidence: internal/cli/testdata/watch_dashboard_epic_state.txt line 2 (no bar, ETA present); internal/cli/watch_view.go:198-215; internal/statusmodel/build_epic_test.go:392-405\n\nticfac run epic-hn6 created this tick by absorbing the finding cdb7fa03f2e9bea101458d937dfb8a0dc9feb5c9011f096d1cb6ae67db4c99f2 (reported by run-epic-hn6/tick-qwb/attempt-14): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/cdb7fa03f2e9bea101458d937dfb8a0dc9feb5c9011f096d1cb6ae67db4c99f2.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-qwb/attempt-14",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T19:25:34Z",
+  "updated_at": "2026-10-04T19:25:34Z"
+}
