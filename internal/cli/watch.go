@@ -856,14 +856,22 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	// The interrupted end: the one end a watch that is still subscribed to a
 	// live run can reach without the run's own word — the caller's context,
 	// or, since the keys, the person's own q or Ctrl-C on the dashboard.
-	// Same words, same codes, whatever interrupted it. The terminal is
-	// restored first: the words it says are ordinary cooked output.
+	// Same words, same codes, whatever interrupted it. The code is the
+	// stream path's contract (tick 8v3, restored to the keys' live path by
+	// tick iph): a hold stands above everything, a run that is still alive
+	// is the running class — 5, so `ticfac run`'s attach reads a key the way
+	// it reads a cancelled context, as a DETACH — and only a run that is
+	// neither holding nor alive ends 1. The terminal is restored first:
+	// the words it says are ordinary cooked output.
 	interrupted := func(model statusmodel.Model) int {
 		restore()
 		fmt.Fprintf(stderr, "ticfac watch: the watch was interrupted before run %s said it ended; "+
 			"`ticfac status %s` asks whether it is still alive\n", runID, runID)
 		if watchHoldAttention(model) != nil {
 			return ExitHeld
+		}
+		if watchRunStillAlive(source, kind, repo, runID) {
+			return exitRunning
 		}
 		return 1
 	}

@@ -573,7 +573,10 @@ func TestWatchOnATerminalTakesKeys(t *testing.T) {
 
 	// esc comes back once more, and q on the dashboard ends the watch the
 	// way SIGINT does: the run is still going here, so the interrupted
-	// answer — exit 1, the words that say so — is the contract.
+	// answer is the running class — exit 5, the same words — the answer the
+	// stream path already gives and the live path's keys regressed away from
+	// (tick iph). Never exit 1: an attach caller reads 1 as a failure while
+	// the run keeps going.
 	keys <- "esc"
 	watchWaitsFor(t, "back on the dashboard again", func() bool {
 		out := stdout.String()
@@ -586,8 +589,8 @@ func TestWatchOnATerminalTakesKeys(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatalf("q on the dashboard never ended the watch;\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
 	}
-	if got != 1 {
-		t.Errorf("exit code %d, want 1 for a watch ended by q on a live run; stderr:\n%s", got, stderr.String())
+	if got != exitRunning {
+		t.Errorf("exit code %d, want %d for a watch ended by q on a live run — the running class, the same answer the stream path gives (tick 8v3); stderr:\n%s", got, exitRunning, stderr.String())
 	}
 	if !strings.Contains(stderr.String(), "the watch was interrupted") {
 		t.Errorf("q did not end the watch the way SIGINT words it:\n%s", stderr.String())

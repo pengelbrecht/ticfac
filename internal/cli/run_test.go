@@ -503,6 +503,63 @@ func TestRunTreatsAnInterruptedAttachAsADetach(t *testing.T) {
 	}
 }
 
+// The run command is the attach's real caller, and the raw mode its own
+// live view turns on takes the terminal's Ctrl-C away from the line
+// discipline: the key — not the cancelled context a real SIGINT leaves
+// behind — is how a person actually leaves an attached run. The REAL attach
+// (no seam swap: runAttach runs watch's own command body against a live
+// fixture run, on a faked terminal with keys) must answer that key exactly
+// as it answers the cancelled context (tick iph): exit 5, the line that
+// says the run keeps going — never exit 1 and "the watch was interrupted"
+// read as a failure while the run works on.
+func TestRunAttachAnswersAKeyboardInterruptWithTheRunningClass(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+	fakeTerminal(t)
+	keys, restored := fakeKeys(t)
+
+	life, err := runlife.Claim(repo, "epic-rmod")
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	var stdout, stderr syncBuffer
+	code := make(chan int, 1)
+	go func() {
+		code <- runBody(context.Background(), t, []string{"--repo", repo, "rmod"}, &stdout, &stderr)
+	}()
+	watchWaitsFor(t, "the attached dashboard", func() bool {
+		return strings.Contains(stdout.String(), "attaching") && strings.Contains(stdout.String(), "◐ waves 2/3")
+	}, &stdout, &stderr)
+
+	// Ctrl-C, the key the raw mode hands the watch instead of a signal.
+	keys <- watchKeyCtrlC
+	var got int
+	select {
+	case got = <-code:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("Ctrl-C on the attach never returned;\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	}
+	if got != exitRunning {
+		t.Errorf("exit code %d, want %d — a keyboard interrupt on an attached live run is a detach, the exit table's running class, never a failure;\nstdout:\n%s\nstderr:\n%s",
+			got, exitRunning, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "detached from run epic-rmod") ||
+		!strings.Contains(stdout.String(), "keeps going in the background") {
+		t.Errorf("the detach does not say the run keeps going: %q", stdout.String())
+	}
+	// The run was never stopped: the claim the test holds still stands.
+	if probe := runlife.Probe(repo, "epic-rmod", time.Now()); probe.State != runlife.Alive {
+		t.Errorf("the run is %s after a detach, want alive: %s", probe.State, probe.Reason)
+	}
+	if !*restored {
+		t.Error("the terminal's raw mode was never restored on the way out")
+	}
+}
+
 // A child that exits without claiming the run is relayed, not left as a
 // mystery: its own words from start.log, and its own exit code. This is the
 // path `ticfac run` answers a fail-closed run-epic refusal through — the
