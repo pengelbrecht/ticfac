@@ -2,6 +2,7 @@
   "id": "jrn",
   "title": "AI Gateway keeps 5 metadata entries; the gateway stamps 6, so trace_id is lost",
   "description": "proxyModelRequest stamps cf-aig-metadata with six keys (run_id, tick_id, project, epic, attempt, trace_id; GATEWAY_METADATA_KEYS). The staging proof read three AI Gateway logs back through the binding, and every one carried the first five and no trace_id. The AI Gateway keeps at most five custom metadata entries. So a gateway-log query filtered by trace_id matches nothing, and the D20 chain link 'trace id to what the model was asked and spent' (tick hyi) cannot work from gateway logs. Fix options: drop or merge a key (for example project+epic) so that trace_id survives, then add a test that GATEWAY_METADATA_KEYS has at most 5 entries.\nevidence: cloudflare/src/gateway.ts:564 (GATEWAY_METADATA_KEYS, six keys); harness/proof/README.md recorded result: getLog metadata has run_id,tick_id,project,epic,attempt only\n\nticfac run epic-43y filed this backlog tick from the finding 56559a0536361728383b505233c42627e4e470967c23265e9dad2f263b5822dc (reported by run-epic-43y/tick-oq4/attempt-5): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/56559a0536361728383b505233c42627e4e470967c23265e9dad2f263b5822dc.json on the run branch.",
+  "notes": "2026-10-04 16:12 - ticfac run epic-43y: created by absorbing finding 56559a0536361728383b505233c42627e4e470967c23265e9dad2f263b5822dc — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-43y/absorptions/56559a0536361728383b505233c42627e4e470967c23265e9dad2f263b5822dc.json on epic/43y, and it says: the classifier put 0.16 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-43y/tick-oq4/attempt-5",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-04T14:12:07Z",
-  "updated_at": "2026-10-04T14:12:07Z"
+  "updated_at": "2026-10-04T14:12:13.207137Z"
 }
