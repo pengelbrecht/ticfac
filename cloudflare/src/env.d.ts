@@ -70,11 +70,12 @@ declare namespace Cloudflare {
       | import("./sandbox").SandboxBinding
       | import("./factory-sandbox").FactorySandboxNamespace;
     /**
-     * One WorkerAgent per cloud worker attempt (epic 43y, tick xd3,
+     * One WorkerAgent per cloud worker attempt (epic 43y, ticks xd3 and hxd,
      * src/worker-agent.ts): the attempt's pi-durable conversation on its own
-     * DO SQLite, its tools in the attempt's FactorySandbox, its watch/steer
-     * sockets. Hosts every worker of a run on the `do_v1` substrate. A seam,
-     * like the sandbox bindings, so a test can substitute a fake
+     * DO SQLite, its tools in the attempt's container — FactorySandbox on the
+     * `do_v1` substrate, the 0.x Sandbox behind the harness door on `sdk0` —
+     * and its watch/steer WebSockets. Hosts every worker of every run. A
+     * seam, like the sandbox bindings, so a test can substitute a fake
      * (`{ agent(name) }`).
      */
     WORKER_AGENTS?:

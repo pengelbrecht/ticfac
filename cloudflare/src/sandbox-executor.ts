@@ -1553,7 +1553,8 @@ export function sandboxExecutorDepsFromEnv(
             jobLogs: d1JobLogs(env.DB as D1Database, env.ARTIFACTS, input.project),
           }),
       boots: d1BootRecord(env.DB),
-      // Every worker of a do_v1 run is a WorkerAgent (epic 43y, tick xd3).
+      // Every worker is a WorkerAgent (epic 43y, ticks xd3 and hxd), on
+      // whichever substrate the run was submitted on.
       ...(agents === undefined ? {} : { agents }),
       boot: async (spec) => {
         const slot = attemptJobSlot(spec.run_id, spec.tick_id, spec.attempt, spec.job_id);

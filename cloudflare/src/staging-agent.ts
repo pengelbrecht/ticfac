@@ -33,6 +33,7 @@ import { getRun, insertRun } from "./db";
 import { FactorySandbox, type FactorySandboxNamespace } from "./factory-sandbox";
 import type { ProxyOptions } from "./gateway";
 import { issueWorkerRunToken } from "./gateway";
+import { DO_V1, recordRunSubstrate } from "./run-substrate";
 import { bindingUpstream, type StagingGatewayEnv } from "./staging-gateway";
 import { WorkerAgent as BaseWorkerAgent, type WorkerAgentNamespace } from "./worker-agent";
 
@@ -106,6 +107,12 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
           trace_id: `trace_${runId}`,
           credential_grade: "read_only",
         });
+        // The proof's containers ARE FactorySandbox ones (SANDBOXES_V1,
+        // the durable_object policy): the run is on `do_v1`, and the
+        // attempt's door routes there (tick hxd — before it, every run was
+        // hosted whose record said do_v1, so a row nobody read was free to
+        // be missing; now the row is what the door is keyed on).
+        await recordRunSubstrate(env.DB, runId, DO_V1);
       }
       const issued = await issueWorkerRunToken(env, { run_id: runId, tick_id: "xd3", attempt: 1 });
       const state = await agent.start({

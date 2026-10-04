@@ -49,13 +49,18 @@
  * container, where the untrusted code runs, never needs the model credential
  * for the conversation.
  *
- * Only a run on the `do_v1` substrate is hosted here: the env the tools run
- * through needs FactorySandbox's `run` door, which the 0.x Sandbox class does
- * not have. {@link workerAgentsFromEnv} is that decision, and the one place
- * the door, the status route and the reclaim ask it.
+ * Only a run on the `do_v1` substrate was hosted here at first, because the
+ * env the tools run through needed FactorySandbox's `run` door, which the
+ * 0.x Sandbox class did not have. Tick hxd closed that gap from the other
+ * side: the 0.x class's own `exec` became the run door
+ * (src/sandbox.ts `sdkSandboxDoor`), so every run's workers are WorkerAgents
+ * now, on whichever substrate its containers live — and
+ * {@link workerAgentsFromEnv} answers for every run, never null for a
+ * substrate.
  */
 
 import { DurableObject } from "cloudflare:workers";
+import { getSandbox } from "@cloudflare/sandbox";
 import {
   type AgentEventStream,
   gatewayModelAccess,
@@ -67,16 +72,23 @@ import {
   type WorkerAttemptSpec,
   watchAttemptEvents,
 } from "ticfac-harness";
-import type { FactoryBootOptions, FactorySandboxNamespace } from "./factory-sandbox";
+import type {
+  FactoryBootOptions,
+  FactorySandboxNamespace,
+  FactorySandboxStub,
+} from "./factory-sandbox";
 import { type ProxyOptions, proxyModelRequest } from "./gateway";
 import type { Env } from "./index";
 import {
   DO_V1,
   INSTANCE_BY_JOB_KIND,
   jobKindOfSandboxName,
+  type RunSubstrate,
   readRunSubstrate,
+  runIDOfSandboxName,
 } from "./run-substrate";
 import type { SandboxOutput } from "./sandbox";
+import { isSandboxNamespace, type SdkSandboxDoor, sdkBootOptions, sdkSandboxDoor } from "./sandbox";
 import {
   WORKER_BOOT_COMMAND,
   WORKER_BOOT_MARKER,
@@ -152,6 +164,14 @@ export type WorkerAgentHosting = {
 export type WorkerAgentResolver = (runID: string) => Promise<WorkerAgentHosting | null>;
 
 /**
+ * The door a hosted attempt's tools run through: FactorySandbox's stub on
+ * the `do_v1` substrate, the 0.x SDK behind the harness door on `sdk0`. Both
+ * spell the harness package's `SandboxDoor`, plus the `destroy` a settled
+ * attempt's release asks (tick hxd).
+ */
+export type AgentDoor = FactorySandboxStub | SdkSandboxDoor;
+
+/**
  * Seams a test hands the object before it starts an attempt: the container
  * door and the model access. Production builds both from its bindings.
  */
@@ -165,19 +185,36 @@ export type WorkerAgentSeams = {
 
 // ------------------------------------------------------------- resolver ---
 
-/** The boot every container of a hosted attempt starts on. */
-export function hostedBoot(name: string, image: string | null): FactoryBootOptions {
+/**
+ * The boot every container of a hosted attempt starts on. The substrate
+ * decides what the boot can honestly ask: a do_v1 container starts on the
+ * run's pinned image at its job's own instance size, while the 0.x
+ * application has ONE image and ONE size for every boot (the app's, fixed
+ * at deploy time), so a run pin or a per-job size there would be a promise
+ * nothing honors — `keepAlive` is the whole of it, and the attempt's agent
+ * destroys the container itself when it settles or the run reclaims it
+ * (tick hxd).
+ */
+export function hostedBoot(
+  name: string,
+  image: string | null,
+  substrate: RunSubstrate,
+): FactoryBootOptions {
   return {
     keepAlive: true,
-    instance: INSTANCE_BY_JOB_KIND[jobKindOfSandboxName(name)],
+    ...(substrate === DO_V1 ? { instance: INSTANCE_BY_JOB_KIND[jobKindOfSandboxName(name)] } : {}),
     ...(image === null ? {} : { pinnedImage: image }),
   };
 }
 
 /**
- * Which runs' workers are WorkerAgents: every run on the `do_v1` substrate,
- * on a deployment that binds WORKER_AGENTS. Undefined for a deployment with
- * no binding — every run then keeps the container's own all-in-one worker.
+ * Which runs' workers are WorkerAgents: every one, on a deployment that binds
+ * WORKER_AGENTS. A run's substrate decides only where its attempt's TOOLS
+ * run (the DO's own `attemptDoor`): FactorySandbox on `do_v1`, the 0.x SDK
+ * behind the harness door (`sdkSandboxDoor`) on `sdk0` — the default, the
+ * substrate every run that asks for none is on (tick hxd). Undefined for a
+ * deployment with no binding — every run then keeps the container's own
+ * all-in-one worker.
  *
  * A test may bind WORKER_AGENTS to a seam-shaped `{ agent(name) }` instead of
  * a namespace; it is told apart by `idFromName`, as the sandbox bindings are.
@@ -195,8 +232,7 @@ export function workerAgentsFromEnv(env: Env): WorkerAgentResolver | undefined {
   const db = env.DB;
   return async (runID) => {
     const record = await readRunSubstrate(db, runID);
-    if (record.substrate !== DO_V1) return null;
-    return { agent, boot: (name) => hostedBoot(name, record.image) };
+    return { agent, boot: (name) => hostedBoot(name, record.image, record.substrate) };
   };
 }
 
@@ -271,7 +307,7 @@ export class WorkerAgent extends DurableObject<Env> {
     // object held — the conversation, the record, the log — goes, and the
     // attempt starts from nothing. An unsettled one is the adoption below.
     if ((await this.load())?.phase === "settled") await this.forget();
-    const host = this.hostFor(spec);
+    const host = await this.hostFor(spec);
     const { fresh } = await host.start(spec);
     if (fresh) await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_MS);
     const record = await host.record();
@@ -327,7 +363,7 @@ export class WorkerAgent extends DurableObject<Env> {
   async reclaim(reason: string): Promise<WorkerAgentState> {
     const record = await this.load();
     if (record === undefined) return stateOf(undefined);
-    const host = this.hostFor(record.spec);
+    const host = await this.hostFor(record.spec);
     await host.reclaim(reason);
     await this.ctx.storage.deleteAlarm();
     await this.release();
@@ -357,7 +393,7 @@ export class WorkerAgent extends DurableObject<Env> {
       await this.seams.destroy?.(record.spec.name);
       return;
     }
-    const door = this.sandboxStub(record.spec.name);
+    const door = await this.attemptDoor(record.spec.name);
     if (door !== null) await door.destroy();
   }
 
@@ -367,7 +403,7 @@ export class WorkerAgent extends DurableObject<Env> {
     const record = await this.load();
     if (record === undefined || record.phase === "settled") return;
     await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_MS);
-    this.kick(this.hostFor(record.spec));
+    this.kick(await this.hostFor(record.spec));
   }
 
   /** Starts the drive unless one is already running in this life. */
@@ -498,13 +534,38 @@ export class WorkerAgent extends DurableObject<Env> {
     return this.ctx.storage.get<WorkerAttemptRecord>(RECORD_KEY);
   }
 
-  private hostFor(spec: WorkerAttemptSpec): WorkerAttemptHost {
+  /**
+   * The attempt's container door, on whichever substrate its run was
+   * submitted on (tick hxd): FactorySandbox's stub on `do_v1`, the 0.x SDK
+   * behind the harness door on `sdk0`. A test's seam, when one is set, is
+   * preferred to both — `WorkerAgentSeams.door`.
+   */
+  private async attemptDoor(name: string): Promise<AgentDoor | null> {
+    const record = await readRunSubstrate(this.env.DB, runIDOfSandboxName(name));
+    if (record.substrate === DO_V1) return this.sandboxStub(name);
+    return this.sdkDoor(name);
+  }
+
+  /** The 0.x Sandbox namespace behind the harness door, or null without one. */
+  private sdkDoor(name: string): SdkSandboxDoor | null {
+    const binding = this.env.SANDBOXES;
+    if (binding === undefined || binding === null) return null;
+    if (!isSandboxNamespace(binding)) return null;
+    // keepAlive, not sleepAfter: the conversation's gaps between tool rounds
+    // are model calls that address no container, and an attempt's container
+    // is destroyed the moment it settles (release) or its run ends
+    // (reclaim) — the two endings that keepAlive was said to require.
+    return sdkSandboxDoor(getSandbox(binding, name, sdkBootOptions({ keepAlive: true })));
+  }
+
+  private async hostFor(spec: WorkerAttemptSpec): Promise<WorkerAttemptHost> {
     if (this.host !== undefined) return this.host;
     const seams = this.seams;
-    const door = seams?.door?.(spec.name) ?? this.sandboxStub(spec.name);
+    const door = seams?.door?.(spec.name) ?? (await this.attemptDoor(spec.name));
     if (door === null || door === undefined) {
       throw new Error(
-        "this deployment binds no SANDBOXES_V1: a WorkerAgent's tools run in a FactorySandbox",
+        "this deployment binds no container namespace for a WorkerAgent's tools: " +
+          "SANDBOXES_V1 (a run on the do_v1 substrate) or SANDBOXES (one on sdk0)",
       );
     }
     this.host = new WorkerAttemptHost({
@@ -566,7 +627,10 @@ export class WorkerAgent extends DurableObject<Env> {
     return {};
   }
 
-  /** The attempt's FactorySandbox, or null on a deployment that binds none. */
+  /**
+   * The attempt's FactorySandbox stub (`do_v1`), or null on a deployment
+   * that binds none. The `sdk0` door is {@link sdkDoor}.
+   */
   private sandboxStub(name: string) {
     const namespace = this.env.SANDBOXES_V1 as FactorySandboxNamespace | undefined;
     if (namespace === undefined || typeof namespace.idFromName !== "function") return null;
