@@ -1,0 +1,14 @@
+{
+  "id": "lid",
+  "title": "Host pi CLI crash reddens the local gate at base (ReadPiCatalog)",
+  "description": "internal/runconfig.TestReadPiCatalogParsesTheRealListing shells the operator's host-installed pi and pi crashes inside @earendil-works/pi-coding-agent's formatTokenCount (a models.json entry with an undefined token count: `Cannot read properties of undefined (reading 'toString')`). It fails identically at base e17c2965, so every tick on this host merges on a red local gate — the bar AGENTS.md names. CI on ubuntu is unaffected (main is green). The fix could be tolerance in the test/reader, or fixing the model listing upstream.\nevidence: go test -run TestReadPiCatalogParsesTheRealListing ./internal/runconfig/ — fails at e17c2965369a with `TypeError: Cannot read properties of undefined (reading 'toString') at formatTokenCount`\n\nticfac run epic-43y created this tick by absorbing the finding 504a1b1b4fc2b823a05c66f3446f3de0e9b59b9c3437991025bba13f8f08ec57 (reported by run-epic-43y/tick-92k/attempt-1): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/504a1b1b4fc2b823a05c66f3446f3de0e9b59b9c3437991025bba13f8f08ec57.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-92k/attempt-1",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-04T12:46:28Z",
+  "updated_at": "2026-10-04T12:46:28Z"
+}
