@@ -1,0 +1,13 @@
+{
+  "id": "5i0",
+  "title": "The alert evaluator keys its terminal stops on the phase alone",
+  "description": "stopsFromStatusDoc (cloudflare/src/notify.ts) reads doc.lifecycle.phase alone for its terminal stops: phase 'done' pages done, phase 'failed' pages failed. It cannot produce c65's false done (done requires the phase explicitly), but a run whose liveness answer carries the durable end word (completed/stopped/failed) while its phase is stale pages nothing, where the chip — after c65 — classes the same doc failed/done with a resume. Whether the alert evaluator should read the same durable word (and what, if anything, a deliberately stopped run should page) is a decision worth its own tick; the two halves of the terminal classification can otherwise drift.\nevidence: cloudflare/src/notify.ts:88-110 (stopsFromStatusDoc's liveness-alive branch switches on doc.lifecycle.phase only); the dashboard_stopped golden produces zero stops while classifyStatusDoc now reads cancelled\n\nticfac run epic-hn6 filed this backlog tick from the finding 0eebf18836975d92a378cf0c2eb1da7b5a1cf44b73dbcf6bf031799e587912d0 (reported by run-epic-hn6/tick-c65/attempt-17): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/0eebf18836975d92a378cf0c2eb1da7b5a1cf44b73dbcf6bf031799e587912d0.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-c65/attempt-17",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T20:08:46Z",
+  "updated_at": "2026-10-04T20:08:46Z"
+}
