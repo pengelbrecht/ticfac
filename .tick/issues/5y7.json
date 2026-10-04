@@ -1,0 +1,13 @@
+{
+  "id": "5y7",
+  "title": "Decide GLM 5.3 thinking-level map: pi-ai clamps medium to high",
+  "description": "pi-ai 1.0.2's catalog maps GLM 5.3 medium/minimal/off/xhigh to null (unsupported), so a dispatch asking for medium effort sends reasoning_effort high, and off sends no thinking field. Workers AI accepted low/medium/high/max/none on staging. If tiers are meant to differ by effort, add a thinkingLevelMap override to GATEWAY_MODEL_OVERRIDES (medium: 'medium', off: 'none'), after an A/B on real ticks shows that effort actually changes GLM's behaviour.\nevidence: harness/test/gateway-provider.test.ts 'sends GLM 5.3 the effort pi-ai's catalog maps each thinking level to'\n\nticfac run epic-43y filed this backlog tick from the finding c6542e5e7157338ce799aa689de201d771d46abc9b77136c00799a555d422f4f (reported by run-epic-43y/tick-oq4/attempt-5): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/c6542e5e7157338ce799aa689de201d771d46abc9b77136c00799a555d422f4f.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-oq4/attempt-5",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-04T14:12:25Z",
+  "updated_at": "2026-10-04T14:12:25Z"
+}
