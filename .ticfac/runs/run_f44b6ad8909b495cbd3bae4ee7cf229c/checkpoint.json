@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 7,
-  "state": "integrating",
-  "reason": "integrating qxj attempt 2 into epic/hn6",
-  "updated_at": "2026-10-04T08:58:16Z",
+  "sequence": 8,
+  "state": "gating",
+  "reason": "running the integrated gate for qxj on 1ca29c8a4eb0",
+  "updated_at": "2026-10-04T08:58:24Z",
   "ticks": [
     {
       "tick_id": "q8m",
