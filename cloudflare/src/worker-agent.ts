@@ -481,6 +481,11 @@ export class WorkerAgent extends DurableObject<Env> {
     this.stream = undefined;
     await previous?.stop();
     const stream = await watchAttemptEvents(live);
+    // A watcher already connected — one that attached while the attempt
+    // booted, or whose hibernated socket outlived the previous life (a
+    // deploy) — is handed this life's snapshot first, so what follows is
+    // read against the conversation it continues (tick y03).
+    this.broadcast({ type: "events", events: [stream.snapshot] });
     stream.start(async (events) => {
       this.broadcast({ type: "events", events });
     });

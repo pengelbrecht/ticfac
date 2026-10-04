@@ -158,6 +158,10 @@ func followWorker(ctx context.Context, src workerSource, out workerOutput, now f
 	for {
 		frames, err := src.attach(ctx)
 		if err != nil {
+			if isWorkerRefusal(err) {
+				fmt.Fprintf(stderr, "ticfac watch: %s cannot be watched: %v\n", src.title(), err)
+				return exitGeneric
+			}
 			if src.settled(model) {
 				out.note(fmt.Sprintf("■ %s settled — its conversation is over", src.title()))
 				return exitSuccess

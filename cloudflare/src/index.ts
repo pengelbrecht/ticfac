@@ -153,7 +153,7 @@ import {
   submitRun,
 } from "./runs";
 import { sandboxBinding } from "./sandbox";
-import { sandboxAttemptRoute } from "./sandbox-dispatch";
+import { operatorWorkerRoute, sandboxAttemptRoute } from "./sandbox-dispatch";
 import { SignalInbox } from "./signal-inbox";
 import { parseSnapshotEnvelope, saveStatusSnapshot } from "./status";
 import { runDueSweeps } from "./sweep-dispatch";
@@ -1798,6 +1798,21 @@ export default {
       if (segments.length === 4 && segments[3] === "logs") {
         if (request.method !== "GET") return methodNotAllowed(["GET"]);
         return await logsRoute(url, segments[2]!, env);
+      }
+      // /api/runs/:id/workers/:tick/:attempt[/watch|/steer] — the
+      // operator's window into one hosted worker's live conversation, and
+      // its voice in it (tick y03). The contract is documented where the
+      // door's own WorkerAgent routes are: src/sandbox-dispatch.ts.
+      if (segments.length >= 6 && segments[3] === "workers") {
+        const result = await operatorWorkerRoute(request, env, segments[2]!, segments.slice(4));
+        if (result.ok && "response" in result) return result.response;
+        if (!result.ok) {
+          return Response.json(
+            { error: result.error, detail: result.detail },
+            { status: result.status },
+          );
+        }
+        return Response.json(result.body, { status: result.status });
       }
       // /api/runs/:id/events — the run's versioned event feed, readable
       // from anywhere the factory is (tick k7p). Read-only like logs: a
