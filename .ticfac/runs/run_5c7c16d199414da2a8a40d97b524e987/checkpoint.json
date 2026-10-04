@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
   "epic_id": "hn6",
-  "sequence": 52,
-  "state": "integrating",
-  "reason": "integrating gmo attempt 6 into epic/hn6",
-  "updated_at": "2026-10-04T02:18:55Z",
+  "sequence": 53,
+  "state": "gating",
+  "reason": "running the integrated gate for gmo on d55c7f76be3b",
+  "updated_at": "2026-10-04T02:44:21Z",
   "ticks": [
     {
       "tick_id": "gmo",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 6
     },
     {
