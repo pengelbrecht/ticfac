@@ -27,6 +27,17 @@ export function fakeSandboxDoor(
      * through a door that runs nothing.
      */
     runExit?: (command: string, env: Record<string, string>) => number | undefined;
+    /**
+     * Scripts a started PROCESS by command: what it prints, how it ends
+     * (`exit: null` is a process lost with no exit code) and how long it
+     * takes; undefined falls back to `commandOutput`/`commandMs`. What a
+     * boot phase printing its handoff, or a finish phase exiting 10, looks
+     * like through a door that runs nothing.
+     */
+    processScript?: (
+      command: string,
+      env: Record<string, string>,
+    ) => { output?: string; exit?: number | null; ms?: number } | undefined;
   } = {},
 ) {
   type FakeProcess = {
@@ -80,13 +91,15 @@ export function fakeSandboxDoor(
       processes.set(id, p);
       starts.push({ command, env });
       // The container command's behaviour, timed: it prints, then finishes.
+      const scripted = options.processScript?.(command, env);
+      const exit = scripted?.exit === undefined ? 0 : scripted.exit;
       setTimeout(() => {
         if (p.state === "running") {
-          p.output += commandOutput;
-          p.state = "completed";
-          p.exit = 0;
+          p.output += scripted?.output ?? commandOutput;
+          p.state = exit === 0 ? "completed" : "failed";
+          p.exit = exit;
         }
-      }, commandMs);
+      }, scripted?.ms ?? commandMs);
       return view(p);
     },
     getProcess(id) {

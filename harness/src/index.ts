@@ -81,3 +81,29 @@ export {
   workerOnYield,
   workerReportCheckCommand,
 } from "./worker-contract.js";
+
+// ------------------------------------------------------- the attempt host ---
+// Epic 43y step 6 (tick xd3): one worker attempt driven end to end — the
+// container's boot phase, the conversation, the finish phase — the core the
+// cloud WorkerAgent Durable Object hosts.
+
+export {
+  type BootHandoff,
+  HARNESS_STATUS_DONE,
+  HARNESS_STATUS_UNANSWERED,
+  HARNESS_STATUS_WALL,
+  PHASE_RETRIES,
+  parseBootHandoff,
+  pinnedDoor,
+  WORKER_BOOT_PROTOCOL,
+  WORKER_GIT_IDENTITY,
+  WORKER_PROMPT_REQUEST_ID,
+  type WorkerAttemptDeps,
+  WorkerAttemptHost,
+  type WorkerAttemptPhase,
+  type WorkerAttemptRecord,
+  type WorkerAttemptRecordStore,
+  type WorkerAttemptSettlement,
+  type WorkerAttemptSpec,
+  type WorkerBootProtocol,
+} from "./host/worker-attempt.js";
