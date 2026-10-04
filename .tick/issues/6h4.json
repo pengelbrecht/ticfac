@@ -1,0 +1,13 @@
+{
+  "id": "6h4",
+  "title": "TestATicksTerminalRefusalHoldsOnlyThatTick flakes under full-suite load",
+  "description": "During d9d's full local ./internal/reconcile/ run this test failed once under load: the run's terminal refusal read as a2 'wiped' instead of a1's boundary_violation, and a2 stayed in_progress — a teardown-ordering race in the linger/signal machinery. It passed 4/4 alone on the d9d branch and 2/2 alone at the base commit; a base full-suite comparison could not complete within 45m on the same shared host, so the flake is not tied to any diff. Nothing in .tick/issues/ names it. Worth a look before it costs another worker a verdict.\nevidence: internal/reconcile/hold_test.go:93, observed under `go test -timeout 45m ./internal/reconcile/` on a loaded host; passes alone at base a2b4f8e and at 780d6be5\n\nticfac run epic-hn6 filed this backlog tick from the finding 3449b629b13b5603ddef8277d2622539c0d78d0ba342cdd5b57a73520ebb7bcf (reported by run-epic-hn6/tick-d9d/attempt-6): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/3449b629b13b5603ddef8277d2622539c0d78d0ba342cdd5b57a73520ebb7bcf.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-d9d/attempt-6",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T18:29:07Z",
+  "updated_at": "2026-10-04T18:29:07Z"
+}
