@@ -49,3 +49,24 @@ export {
   type SandboxRunOutcome,
 } from "./env/sandbox-door.js";
 export { createTrackedBashTool } from "./tools/tracked-bash.js";
+
+// ------------------------------------------------- worker contract hooks ---
+// Epic 43y step 5 (tick pom): the report linter pushback (#183) and the
+// early-exit nudge (060) as onYield follow-ups, and the wall deadline as
+// abort().
+
+export {
+  armWallDeadline,
+  type WallDeadline,
+  type WallDeadlineTarget,
+  runWorkerReportCheck,
+  shellQuote,
+  WORKER_HEADLESS_LINE,
+  workerNudgeMessage,
+  workerOnYield,
+  workerReportCheckCommand,
+  type WorkerContractOptions,
+  WORKER_MAX_NUDGES,
+  WORKER_MAX_PUSHBACKS,
+  WORKER_REPORT_CHECKER,
+} from "./worker-contract.js";

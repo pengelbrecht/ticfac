@@ -90,6 +90,51 @@ readonly WORKER_PROBE_MARKER="ticks-worker-probe-ok"
 readonly WORKER_CANCEL_MARKER="ticks-worker-cancel-requested"
 readonly WORKER_CANCEL_REPORT_MARKER="CANCELLED BY THE SUPERVISOR"
 
+# ---------------------------------------------------------------------------
+# The boot and finish phases (epic 43y, tick pom)
+#
+# This script's all-in-one default is one process: boot, harness, finish. The
+# pi-durable worker host runs the same halves as two commands around a
+# conversation it owns (docs/spikes/n0b-round2-pi-durable.md, "The worker
+# contract on pi-durable"):
+#
+#   `ticks-worker --boot`    is the env's first command. Everything the
+#                            conversation cannot do for itself — inputs, the
+#                            gateway, the model route, the clone, the branch,
+#                            the probes, the toolchain, the repository's own
+#                            setup, the pre-flight, the boundary guard, the
+#                            prompt — and its faults are the SAME faults with
+#                            the SAME exit codes (2-8, 13-15) as the
+#                            all-in-one's, because the boot-stopped classes
+#                            (#171/#178) and the classes themselves are what
+#                            collect keys on. On success it prints the
+#                            handoff: the boot marker line carrying the branch
+#                            and the report path, then the rendered prompt
+#                            between the two prompt markers, for the host to
+#                            submit as the conversation's input. It records
+#                            the resolved branch in the state dir, where the
+#                            finish phase's own process finds it.
+#
+#   `ticks-worker --finish`  is run by the host once the conversation settles.
+#                            The harness status arrives as its argument — 0
+#                            for a settled-done conversation, non-zero for an
+#                            aborted one (the wall deadline's `abort()` is the
+#                            host's to call, not this script's). Everything
+#                            this script exists for after the agent stops runs
+#                            here unchanged: the boundary ledger, the sweep,
+#                            the salvage, the fallback report, the container
+#                            facts, the commit, the push, and the same exit
+#                            codes 9/10/11 from the same git facts.
+#
+# The markers are pinned in contracts/worker-boot-contract.json beside the
+# probe and cancel markers, for the same reason: a word one half prints and
+# another half greps for is a contract, and a drift between them fails CI
+# rather than a wave of containers.
+# ---------------------------------------------------------------------------
+readonly WORKER_BOOT_MARKER="ticks-worker-boot-ok"
+readonly WORKER_BOOT_PROMPT_BEGIN="ticks-worker-boot-prompt-begin"
+readonly WORKER_BOOT_PROMPT_END="ticks-worker-boot-prompt-end"
+
 # The status a harness the supervisor stopped is reported as. 128+SIGTERM, the
 # same number the shell reports for a process TERMed by anything else — a
 # cancelled container must not invent a status class the rest of the script
@@ -625,6 +670,21 @@ state_ready() {
 record_harness_pid() {
 	state_ready || return 0
 	printf '%s\n' "$1" >"$state_dir/harness.pid" 2>/dev/null || true
+}
+
+# The branch the boot resolved, for the finish phase's own process (the same
+# state-dir rule the harness pid and the cancellation flag follow: the one
+# place a SECOND process inside this container can find what the first left).
+# The branch is not derivable: adopt_worker_branch can rename it, so a finish
+# that re-derived the name could push a branch the boot never created.
+record_worker_branch() {
+	state_ready || return 0
+	printf '%s\n' "$1" >"$state_dir/branch" 2>/dev/null || true
+}
+
+read_recorded_worker_branch() {
+	[[ -r $state_dir/branch ]] || return 1
+	sed -n 1p "$state_dir/branch"
 }
 
 clear_harness_pid() {
@@ -1373,21 +1433,17 @@ boot_stopped() {
 	exit "$code"
 }
 
-main() {
-	if [[ ${1:-} == "--probe" ]]; then
-		harness="${TICKS_HARNESS:-pi}"
-		run_probe
-		exit $?
-	fi
-	# Answered before `require_inputs` and before anything is resolved: a
-	# container being cancelled may be at any point in its boot, including
-	# before it has a checkout, and a cancellation that refused because
-	# TICKS_TICK was unset would be a stop that did not stop anything.
-	if [[ ${1:-} == "--cancel" ]]; then
-		run_cancel "${2:-cancelled}"
-		exit $?
-	fi
-
+# ---------------------------------------------------------------------------
+# The boot phase — everything up to, but never including, the agent
+#
+# One function so three doors share it: the all-in-one default runs it and
+# then runs the harness itself; `--boot` runs it and hands the conversation
+# to the pi-durable host; a cancellation lodged mid-boot is checked by the
+# harness door for the all-in-one and by the host for `--boot`. Its faults
+# die with the classes the all-in-one always used (2-8, 13-15), so the
+# boot-fault codes (#171/#178) are the SAME faults through every door.
+# ---------------------------------------------------------------------------
+boot_phase() {
 	say "worker ${run_id}: tick ${tick_id:-<unset>} of epic ${epic} at ${base_sha} (harness ${harness})$(trace_note)"
 	require_inputs
 	result_path="RESULT-${tick_id}.md"
@@ -1396,6 +1452,9 @@ main() {
 	configure_caches
 	clone_at_sha
 	adopt_worker_branch
+	# The finish phase is its own process on the --boot/--finish split, and
+	# this is the fact it cannot re-derive: adoption can rename the branch.
+	record_worker_branch "$worker_branch"
 	# From here to the harness, a stop leaves its reason on origin
 	# (boot_stopped); disarmed before the harness runs, whose exit is the
 	# agent's and is reported on the worker branch as it always was.
@@ -1418,6 +1477,65 @@ main() {
 	install_boundary_guard
 
 	build_worker_prompt
+}
+
+# What `--finish` restores that its process never saw the boot resolve: the
+# branch (adoption can rename it — see record_worker_branch) and the guard
+# the boot installed (the ledger is the boot's own best-effort file, kept
+# beside the checkout so a second process can read it).
+restore_finish_state() {
+	worker_branch="$(read_recorded_worker_branch)" ||
+		die $EXIT_CONFIG "no boot record for this container's branch in ${state_dir} — the finish phase runs after a boot in the same container, and this one booted elsewhere or not at all"
+	guard_dir="${workdir}.guard"
+	boundary_ledger="$guard_dir/attempts"
+}
+
+main() {
+	if [[ ${1:-} == "--probe" ]]; then
+		harness="${TICKS_HARNESS:-pi}"
+		run_probe
+		exit $?
+	fi
+	# Answered before `require_inputs` and before anything is resolved: a
+	# container being cancelled may be at any point in its boot, including
+	# before it has a checkout, and a cancellation that refused because
+	# TICKS_TICK was unset would be a stop that did not stop anything.
+	if [[ ${1:-} == "--cancel" ]]; then
+		run_cancel "${2:-cancelled}"
+		exit $?
+	fi
+
+	# The pi-durable host's half of the contract (epic 43y, tick pom): the
+	# boot phase as the env's first command, the finish phase as the host's
+	# last. The all-in-one default below stays the default — the CLI harness
+	# path runs unchanged until jhp deletes it.
+	if [[ ${1:-} == "--boot" ]]; then
+		boot_phase
+		# Booted: the conversation owns the rest, and a boot-stopped marker
+		# from here on would describe a boot that did not stop.
+		trap - EXIT
+		# The handoff, marker last-but-for-the-prompt so a host that dies
+		# reading it never mistakes a half-booted container for a booted one:
+		# the marker line carries the two names the host cannot derive
+		# (adoption can rename the branch), and the prompt follows between the
+		# two prompt markers, whole and verbatim, for the host to submit as the
+		# conversation's input.
+		say "$WORKER_BOOT_MARKER branch=${worker_branch} result=${result_path}"
+		printf '%s\n' "$WORKER_BOOT_PROMPT_BEGIN"
+		printf '%s\n' "$prompt_text"
+		printf '%s\n' "$WORKER_BOOT_PROMPT_END"
+		exit 0
+	fi
+	if [[ ${1:-} == "--finish" ]]; then
+		local status="${2:-0}"
+		require_inputs
+		result_path="RESULT-${tick_id}.md"
+		[[ -d $workdir ]] || die $EXIT_CLONE "no checkout at ${workdir} — the finish phase runs after a boot in the same container"
+		restore_finish_state
+		finish_phase "$status"
+	fi
+
+	boot_phase
 	# A session for the harness to run in, so an early exit can be re-prompted
 	# IN its own context rather than from scratch. omp has none this script can
 	# name; for it the nudge is a fresh run with a section saying a run before
@@ -1477,6 +1595,24 @@ main() {
 		harness_status=$?
 	done
 
+	finish_phase "$harness_status"
+}
+
+# ---------------------------------------------------------------------------
+# The finish phase — everything after the conversation settles
+#
+# One function so two doors share it: the all-in-one default runs it in its
+# own process after its harness loop, and `--finish` runs it as a process of
+# its own once the pi-durable host's conversation settles, with the
+# conversation's outcome as its argument. The durable layer is the only
+# channel, so NOTHING in here may stop early: whatever happened, the branch
+# and the report reach origin, and the exit code is decided from git facts —
+# 9/10/11 exactly as the all-in-one always decided them.
+# ---------------------------------------------------------------------------
+finish_phase() {
+	local harness_status="${1:-0}"
+	[[ $harness_status =~ ^[0-9]+$ ]] ||
+		die $EXIT_CONFIG "--finish takes the harness's exit status as a number; this one was handed '$harness_status'"
 	# From here on nothing may stop this script early: whatever happened, the
 	# durable layer gets the branch and the report.
 	#

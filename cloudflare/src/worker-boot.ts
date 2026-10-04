@@ -85,6 +85,43 @@ export const WORKER_CANCEL_MARKER = "ticks-worker-cancel-requested";
  */
 export const WORKER_CANCEL_REPORT_MARKER = "CANCELLED BY THE SUPERVISOR";
 
+// ------------------------------------------------ the boot/finish phases ---
+
+/** The argument that runs the BOOT half of the worker contract (epic 43y). */
+export const WORKER_BOOT_ARG = "--boot";
+
+/** The boot phase, as the pi-durable host runs it as its env's first command. */
+export const WORKER_BOOT_COMMAND = `${WORKER_COMMAND} ${WORKER_BOOT_ARG}`;
+
+/**
+ * What a booted container prints once its essentials answer and its prompt is
+ * rendered, carrying the two names the host cannot derive (adoption can
+ * rename the branch). The rendered prompt follows between the two prompt
+ * markers, for the host to submit as the conversation's input.
+ *
+ * The boot's faults are the all-in-one's own exit codes (2-8, 13-15) — the
+ * boot-fault classes #171/#178 keep their meanings through this door too.
+ */
+export const WORKER_BOOT_MARKER = "ticks-worker-boot-ok";
+
+/** Opens the rendered prompt the boot hands the host. */
+export const WORKER_BOOT_PROMPT_BEGIN = "ticks-worker-boot-prompt-begin";
+
+/** Closes the rendered prompt the boot hands the host. */
+export const WORKER_BOOT_PROMPT_END = "ticks-worker-boot-prompt-end";
+
+/** The argument that runs the FINISH half of the worker contract (epic 43y). */
+export const WORKER_FINISH_ARG = "--finish";
+
+/**
+ * The finish phase, as the pi-durable host runs it once the conversation
+ * settles: everything the container owes the durable layer — the boundary
+ * ledger, the sweep, the salvage, the report, the commit, the push — with the
+ * conversation's outcome as the command's one argument. The exit codes
+ * 9/10/11 come from git facts exactly as the all-in-one decides them.
+ */
+export const WORKER_FINISH_COMMAND = `${WORKER_COMMAND} ${WORKER_FINISH_ARG}`;
+
 /** Where the container keeps the harness pid the door needs to find. */
 export const WORKER_STATE_DIR_ENV = "TICKS_WORKER_STATE_DIR";
 
