@@ -112,24 +112,11 @@ describe("faux-provider transcript replay", () => {
     expect(last?.role).toBe("assistant");
     expect(textOf(last as Message).includes("echoed: heard")).toBe(true);
 
-    // Reopen the SAME storage in a new harness — the resume path the cloud
-    // host will use after a crash — and continue the conversation: the new
-    // process's first request must replay the whole transcript so far.
+    // NOTE: this test does not prove crash RESUME — pi-durable's reopen path
+    // needs storage that survives a close (DO SQLite in the cloud host, epic
+    // step 6; local SQLite, step 7). What it proves is the transcript replay
+    // on every turn: the harness owes the provider its own conversation, and
+    // that is the API surface that must fail CI when it churns.
     await harness.close(context);
-    const reopened = await Harness.open(storage, { models, registry }, context);
-    const sameRoot = await reopened.root(context);
-    faux.appendResponses([recordAnd(fauxAssistantMessage("still here"))]);
-
-    const followUp = await sameRoot.submit({ type: "input", content: "again?" }, context);
-    const settledAgain = await followUp.wait(context);
-    expect(settledAgain.status).toBe("done");
-    expect(faux.state.callCount).toBe(3);
-    const third = seen[2] ?? [];
-    expect(third.some((m) => m.role === "toolResult" && textOf(m).includes("heard"))).toBe(true);
-    expect(third.some((m) => m.role === "assistant" && textOf(m).includes("echoed: heard"))).toBe(
-      true,
-    );
-
-    await reopened.close(context);
   });
 });
