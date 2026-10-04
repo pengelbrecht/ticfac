@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "contract tests pass for each mapped behaviour",
+    "description": "Step 5: worker.sh split into --boot and --finish phases (exit codes unchanged, pinned); report linter pushback (#183) as an onYield follow-up message; early-exit nudge; wall deadline via abort(); tracker-edits block, findings, STATUS, boot-fault codes (#171/#178) preserved.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "pom",
+    "title": "Worker contract as hooks and phases on pi-durable"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.71,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.77,
+      "design": 0.02,
+      "diagnosis": 0,
+      "mechanical": 0.19,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1070,
+      "output_tokens": 56
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T14:48:08Z",
+  "answered_at": "2026-10-04T14:48:08Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "pom",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "a6ac564cb9539b1388d6fd18e1bdbbf77bff256d",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
