@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 63,
-  "state": "running",
-  "reason": "jkb is running as attempt 12",
-  "updated_at": "2026-10-04T18:52:28Z",
+  "sequence": 64,
+  "state": "collecting",
+  "reason": "collecting ihw attempt 10",
+  "updated_at": "2026-10-04T18:52:39Z",
   "ticks": [
     {
       "tick_id": "v16",
