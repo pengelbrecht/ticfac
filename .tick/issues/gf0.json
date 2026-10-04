@@ -3,7 +3,7 @@
   "title": "Watch's settle alert spells a dash attempt for a never-dispatched tick",
   "description": "A run_held line for a tick the run never dispatched (the claim_width and foreign_claim holds, and absorption_depth, all holdsForAPerson members that fire before the tick's first dispatch) carries a null attempt, so the stream path's settle branch falls to its inline format and names `ticfac settle \u003cepic\u003e \u003ctick\u003e - --release \"\u003cwho\u003e\"`, a command the settle CLI refuses (\"-\" is not an attempt number). Settle is also arguably the wrong verb for those holds — a foreign claim clears when the other holder's tick closes, not by a release — so the fix is a per-hold-kind decision, not the --run-id spelling this branch already carries.\nevidence: internal/cli/watch.go:371-374 (inline fallback when strconv.Atoi(attempt) fails); reproducible with a run_held line carrying tick w9b and null attempt\n\nticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c created this tick by absorbing the finding fb1910c869405e16420ba949b18a6c17544e1ce5dace271f9326a4b40bd9b175 (reported by run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-v2f/attempt-4): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/fb1910c869405e16420ba949b18a6c17544e1ce5dace271f9326a4b40bd9b175.json on the run branch.",
   "notes": "2026-10-04 10:37 - ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c: created by absorbing finding fb1910c869405e16420ba949b18a6c17544e1ce5dace271f9326a4b40bd9b175 — placed before the final review, which is blocked-by gf0. The decision record is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/fb1910c869405e16420ba949b18a6c17544e1ce5dace271f9326a4b40bd9b175.json on epic/hn6, and it says: the classifier put 0.87 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A2: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side\n2026-10-04 12:05 - ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c: gf0 try 1 (run dispatch #6) reported a finding the run itself decided — defect \"land_review_not_ready hold names a release that does not clear it\" (key 5300f9f6b90c4c765b4c33d8907a158d7d16ee757056dfd98dea1c9f46235d0b, severity low, for pengelbrecht/ticfac) is absorbed into the running epic as tick quz, with nobody triaging; the decision record is on the run branch at .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/5300f9f6b90c4c765b4c33d8907a158d7d16ee757056dfd98dea1c9f46235d0b.json, and the draft is triaged as promoted.\n2026-10-04 12:51 - ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c: gf0 try 1 (run dispatch #6) merged into epic/hn6 as ffc9d2814769; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "discovered_from": "run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-v2f/attempt-4",
   "created_by": "ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "created_at": "2026-10-04T10:37:26Z",
-  "updated_at": "2026-10-04T12:51:24.548399873Z",
-  "started_at": "2026-10-04T10:59:06.840410207Z"
+  "updated_at": "2026-10-04T12:51:27.474152437Z",
+  "closed_at": "2026-10-04T12:51:27.474152437Z"
 }
