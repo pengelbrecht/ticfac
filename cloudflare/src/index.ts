@@ -42,6 +42,13 @@
  * - POST /api/status-snapshots - a LOCAL run pushing its status model so the
  *                             factory serves it on the phone page (tick i1r);
  *                             the same push evaluates the Telegram alerts
+ * - POST /api/status-relay  - the orchestrator CONTAINER pushing the status
+ *                             model its own run-epic gathered in situ, on
+ *                             its run's token, so the phone page renders a
+ *                             CLOUD run from the run's own model rather than
+ *                             the composition the factory's records alone
+ *                             state (hn6 h7w); the same push evaluates the
+ *                             Telegram alerts
  * - GET  /status[/...]      - the phone page: every run, attention first,
  *                             authenticated by a token cookie, never a token
  *                             in a URL (tick i1r)
@@ -156,6 +163,7 @@ import { sandboxBinding } from "./sandbox";
 import { sandboxAttemptRoute } from "./sandbox-dispatch";
 import { SignalInbox } from "./signal-inbox";
 import { parseSnapshotEnvelope, saveStatusSnapshot } from "./status";
+import { STATUS_RELAY_PATH, statusRelayRoute } from "./status-relay";
 import { runDueSweeps } from "./sweep-dispatch";
 import {
   answerTelegramCallback,
@@ -1292,6 +1300,20 @@ async function statusSnapshotRoute(request: Request, env: Env): Promise<Response
     return Response.json({ error: parsed.error, detail: parsed.detail }, { status: parsed.status });
   }
   const envelope = parsed.envelope;
+  // This door is the LOCAL run's: its caller is the operator's own machine's
+  // pusher. A cloud run's orchestrator container holds no operator token — its
+  // own door is the run-credential relay (STATUS_RELAY_PATH, hn6 h7w), and a
+  // cloud envelope here would let an operator's machine stand in for a run's
+  // own answer without being the run.
+  if (envelope.host !== "local") {
+    return Response.json(
+      {
+        error: "invalid_request",
+        detail: `the operator's door stores LOCAL runs' snapshots (host "local"); a cloud run's orchestrator pushes through ${STATUS_RELAY_PATH}`,
+      },
+      { status: 400 },
+    );
+  }
   await saveStatusSnapshot(env.DB, {
     run_id: envelope.run_id,
     host: envelope.host,
@@ -1533,6 +1555,16 @@ export default {
       );
     }
 
+    // The status relay: the orchestrator CONTAINER pushing its run's own
+    // status model, on its run's own token (src/status-relay.ts) — the door
+    // that makes a CLOUD run's phone row the same model the terminal's watch
+    // renders (hn6 h7w, A5/rule 8). Beside the other run-credential doors,
+    // for the same reason as each of them: a container must never hold the
+    // operator's token.
+    if (url.pathname === STATUS_RELAY_PATH) {
+      return await statusRelayRoute(request, env);
+    }
+
     // The feed relay: the orchestrator container relaying the reconciler's
     // event feed and its own lifecycle lines into the run's feed, on its own
     // run's gateway token (src/feed-relay.ts). Beside the other
@@ -1761,7 +1793,9 @@ export default {
     // serves it on the phone page and evaluates its Telegram alerts. It is
     // authenticated by the operator's factory token like every other /api
     // route: the pusher is `ticfac run-epic` on the operator's own machine,
-    // which holds exactly this credential.
+    // which holds exactly this credential. A CLOUD run's orchestrator
+    // container holds no such credential — its own door is the run-credential
+    // relay above (hn6 h7w).
     if (segments[0] === "api" && segments[1] === "status-snapshots" && segments.length === 2) {
       if (request.method !== "POST") return methodNotAllowed(["POST"]);
       return await statusSnapshotRoute(request, env);
