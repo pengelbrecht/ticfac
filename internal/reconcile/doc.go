@@ -187,8 +187,9 @@
 // recursion's depth bound (tick wz0, absorb_bound.go): the first decision
 // that needs it records it, a cold restart without the flag applies the
 // recorded bound rather than dropping back to the default over git state it
-// had already absorbed past, and only a person's explicit raise — the
-// escape hatch the depth refusal itself names — overrides it. What the run
+// had already absorbed past, and only a person's explicit raise
+// (--absorption-depth) overrides it. Past the bound a finding is deferred to
+// a backlog tick named on the epic PR, and the run carries on. What the run
 // cannot decide is still a person's, triaged with `ticfac triage` (the old
 // `ticfac finding` kept for what it alone can do: promoting a tick that
 // already exists, into another repository): an epic whose acceptance is

@@ -15,28 +15,31 @@ import (
 // THE CASES, one per acceptance clause:
 //
 //   - the recursion is BOUNDED: a chain that already carries the bound's
-//     worth of absorptions refuses to grow one more, and the refusal is a
-//     STOP for a person — the run ends held, not looping;
-//   - the stop carries the FULL ABSORPTION CHAIN that produced it — which
-//     tick reported which finding, what decided each absorption, which tick
-//     each became — never only the count;
+//     worth of absorptions refuses to grow one more;
+//   - and the bound NEVER HALTS FOR A PERSON (run_5c7c16d1, epic hn6,
+//     2026-10-04: the 4th link of one chain stopped the run, and the
+//     operator filed it to the backlog by hand — the manual step that is a
+//     defect here). Past the bound the run files the finding as a BACKLOG
+//     TICK with an owner, exactly what `ticfac triage … =file` does, records
+//     it (the feed's finding_backlogged_past_bound), names it in the epic PR
+//     body as deferred past the absorption bound, and carries on — even when
+//     the finding claims to gate a done item: the bound wins, and the
+//     close-out and the final review see the deferral and judge it;
+//   - the deferral carries the FULL ABSORPTION CHAIN that produced it —
+//     which tick reported which finding, what decided each absorption, which
+//     tick each became — never only the count;
 //   - the bound is checked only where the recursion actually extends: a
 //     non-gating finding goes to the backlog and a chain at depth zero
-//     absorbs, so the stop is rare and meaningful rather than the human
-//     gate this epic exists to remove, rebuilt under a different name;
-//   - the finding that tripped the bound is left a person's, drafted and
-//     untriaged, so the stop is a decision point rather than a discovery
-//     that vanished.
+//     absorbs.
 
-// Exceeding the bound, end to end: every tick's work discovers a NEW gating
+// Past the bound, end to end: every tick's work discovers a NEW gating
 // finding (the fake runner's finding_chain mode — an absorbed tick's own
-// attempt reports the next link), the done's command answers broken while any
-// finding stands (the observed gate), and the bound is set to ONE absorption
-// per chain. The plan's own findings absorb with nobody triaging — depth
-// zero, within the bound — and the absorbed tick's finding would be the
-// SECOND link of one chain, past the bound: the run stops for a person, and
-// the stop carries the chain that produced it.
-func TestExceedingTheAbsorptionDepthBoundStopsTheRunForAPersonWithTheChain(t *testing.T) {
+// attempt reports the next link), the done's command answers broken (the
+// observed gate), and the bound is ONE absorption per chain. The plan's own
+// findings absorb with nobody triaging — depth zero, within the bound — and
+// the absorbed tick's finding would be the SECOND link of one chain, past the
+// bound: the run files it to the backlog and carries on to the end.
+func TestPastTheAbsorptionDepthBoundTheFindingIsBackloggedAndTheRunCarriesOn(t *testing.T) {
 	shorttest.EndToEnd(t)
 	t.Parallel()
 
@@ -48,109 +51,109 @@ func TestExceedingTheAbsorptionDepthBoundStopsTheRunForAPersonWithTheChain(t *te
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if result.State != runstate.StateFailed {
-		t.Fatalf("the run ended %s, want failed holding for a person: an unbounded recursion is "+
-			"an epic that never closes, and exceeding the bound is the stop: %+v", result.State, result.Failure)
-	}
-	if result.Failure == nil || result.Failure.Reason != RefusedAbsorptionDepth {
-		t.Fatalf("the failure is %+v, want the absorption depth bound's hold: exceeding the bound is "+
-			"THE thing that stops for a person", result.Failure)
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%+v), want completed: the bound defers a finding, it never stops the run",
+			result.State, result.Failure)
 	}
 
-	// THE STOP CARRIES THE CHAIN, not only the count: the tick the refusal
-	// names is an absorbed tick (a link of a chain, never plan work), and the
-	// record of the absorption that created it names the finding and the
-	// discovering plan tick — both of which the message must say, because a
-	// person judging whether the run was right to keep going reads WHICH
-	// finding led to which, not a number.
-	tripped := result.Failure.TickID
-	// The stop's escape hatch names the everyday triage (tick 8yn): a person
-	// settling the tripped finding is sent to `ticfac triage` — absorb or
-	// discard, by short key prefix — never back to the old 64-hex command.
-	if !strings.Contains(result.Failure.Message, "ticfac triage qeu") {
-		t.Errorf("the depth stop does not teach the everyday triage: %s", result.Failure.Message)
-	}
-	if strings.Contains(result.Failure.Message, "ticfac finding qeu") {
-		t.Errorf("the depth stop still teaches the old 64-hex triage: %s", result.Failure.Message)
-	}
 	store := openRunStore(t, f.Repo.Dir, r.IntegrationBranch(), r.RunID())
 	records, err := store.Absorptions()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var link *runstate.Absorption
-	for i := range records {
-		if records[i].TickID == tripped {
-			link = &records[i]
+	byTick := map[string]runstate.Absorption{}
+	var deferred []runstate.Absorption
+	for _, record := range records {
+		byTick[record.TickID] = record
+		if record.Placement == runstate.AbsorptionPastBound {
+			deferred = append(deferred, record)
 		}
 	}
-	if link == nil {
-		t.Fatalf("the refused tick %s was not created by an absorption: the bound governs the "+
-			"recursion, and a stop over a tick no chain produced is the wrong stop (records: %+v)", tripped, records)
+	if len(deferred) == 0 {
+		t.Fatalf("no finding was deferred past the bound (records: %+v): the chain fixture grows past any bound", records)
 	}
-	finding, ok, err := store.Finding(link.Key)
-	if err != nil || !ok {
-		t.Fatalf("read the finding the absorbed tick %s came from: %v %v", tripped, ok, err)
-	}
-	for _, named := range []string{
-		"the bound is 1",
-		finding.TickID, // the plan tick that reported the first link
-		link.Key,       // the finding that became the refused tick
-		link.TickID,    // the tick the first absorption created
-	} {
-		if !strings.Contains(result.Failure.Message, named) {
-			t.Errorf("the stop's message does not carry %q, a link of the chain that produced it: %s",
-				named, result.Failure.Message)
-		}
-	}
-	if !strings.Contains(result.Failure.Message, tripped) {
-		t.Errorf("the stop's message does not name the tick whose finding tripped the bound: %s",
-			result.Failure.Message)
-	}
-
-	// THE CHAIN IS ABSORPTIONS THAT HAPPENED, not a summary of them: the
-	// bound's worth of links absorbed with nobody triaging before the stop —
-	// the refusal is the run's own arithmetic, not a person's intervention.
-	if len(records) < 1 {
-		t.Fatalf("the run recorded %d absorption(s) before the stop, want at least the plan's own "+
-			"finding absorbed: a bound that stops the FIRST absorption is the human gate rebuilt",
-			len(records))
-	}
-
-	// The finding that tripped the bound is left a PERSON'S: drafted, still
-	// proposed, with no absorption record deciding it — the stop is a
-	// decision point, and a discovery that vanished is the 604 shape.
-	findings, err := store.Findings()
+	state, err := f.Tracker.load()
 	if err != nil {
 		t.Fatal(err)
 	}
-	var trippedDraft *runstate.Finding
-	for i := range findings {
-		if findings[i].TickID == tripped && findings[i].Status == runstate.FindingProposed {
-			trippedDraft = &findings[i]
+	children := epicChildren(t, f)
+	for _, record := range deferred {
+		// THE RECORD: decided by the bound's rule, gating nothing, and saying
+		// why — the bound, the chain, and the verdict it overrode.
+		if record.Gating || record.Basis != runstate.AbsorptionRule || record.ItemID != "" {
+			t.Errorf("the past-bound decision is %+v, want the rule's non-gating backlog", record)
+		}
+		finding, ok, err := store.Finding(record.Key)
+		if err != nil || !ok {
+			t.Fatalf("read the deferred finding %s: %v %v", record.Key, ok, err)
+		}
+		// The finding was reported by an ABSORBED tick — a link of a chain,
+		// never plan work: the bound governs the recursion only.
+		link, ok := byTick[finding.TickID]
+		if !ok || link.Placement == runstate.AbsorptionPastBound {
+			t.Errorf("the deferred finding %s was reported by %s, which no absorption created: the bound "+
+				"governs the recursion, and a deferral over a tick no chain produced is the wrong one",
+				record.Key, finding.TickID)
+			continue
+		}
+		for _, named := range []string{
+			"the bound is 1",
+			"absorption bound",
+			"gates done item A1", // the verdict the bound overrode
+			link.Key,             // the finding that became the reporting tick
+			link.TickID,          // the tick the first absorption created
+		} {
+			if !strings.Contains(record.Reason, named) {
+				t.Errorf("the deferral's reason does not carry %q: %s", named, record.Reason)
+			}
+		}
+		if linkFinding, ok, _ := store.Finding(link.Key); ok && !strings.Contains(record.Reason, linkFinding.TickID) {
+			t.Errorf("the deferral's reason does not name the plan tick %s the chain started from: %s",
+				linkFinding.TickID, record.Reason)
+		}
+		// THE FINDING IS TRIAGED, by the run, as `=file` would have: promoted
+		// to the backlog tick, never left proposed for a person.
+		if finding.Status != runstate.FindingPromoted || finding.PromotedAs != record.TickID {
+			t.Errorf("the deferred finding %s is %s (promoted as %q), want promoted to its backlog tick %s",
+				record.Key, finding.Status, finding.PromotedAs, record.TickID)
+		}
+		// THE BACKLOG TICK: open, with an owner, outside the epic, never
+		// dispatched — the recursion stops here, and the run goes on.
+		tick, ok := state.Ticks[record.TickID]
+		if !ok {
+			t.Fatalf("the backlog tick %s does not exist", record.TickID)
+		}
+		if tick.Parent != "" || tick.Status != "open" || tick.Owner == "" {
+			t.Errorf("the deferred tick is parent %q, status %s, owner %q: want an open backlog tick with an "+
+				"owner, outside the epic", tick.Parent, tick.Status, tick.Owner)
+		}
+		if !strings.Contains(tick.Description, "absorption bound") {
+			t.Errorf("the deferred tick does not say it was deferred past the absorption bound: %s", tick.Description)
+		}
+		if children[record.TickID] != "" {
+			t.Errorf("the deferred tick %s is a child of the epic", record.TickID)
+		}
+		if d := f.dispatch(record.TickID); d.TickID != "" {
+			t.Errorf("a worker was dispatched at the deferred tick %s: %+v", record.TickID, d)
 		}
 	}
-	if trippedDraft == nil {
-		t.Fatalf("no finding of the refused tick %s is still proposed: the stop must hand the "+
-			"discovery to a person rather than absorb it or drop it (findings: %+v)", tripped, findings)
-	}
-	if _, decided, err := store.Absorption(trippedDraft.Key); err != nil {
-		t.Fatal(err)
-	} else if decided {
-		t.Fatalf("the tripped finding %s carries an absorption record: the run recorded the very "+
-			"decision the bound forbids", trippedDraft.Key)
-	}
 
-	// AND THE FEED SAID SO, at the moment it happened: the bound's own stage
-	// on the tick that reported, and the run's hold naming the refusal — a
-	// stop nobody can see is indistinguishable from a run that died.
+	// THE FEED SAYS SO, at the moment it happened, on its own stage — and the
+	// run never held.
 	events := feedStages(t, f.Repo.Dir, "r-fixture")
-	if line := detailOfStage(events, StageAbsorptionBoundExceeded); line == "" {
-		t.Errorf("no %s line in the feed: exceeding the bound is the thing that stops, and it must be "+
-			"announced where the tick's own story is (stages: %v)", StageAbsorptionBoundExceeded, feedStagesOf(events))
+	line := detailOfStage(events, StageBackloggedPastBound)
+	if line == "" {
+		t.Fatalf("no %s line in the feed (stages: %v)", StageBackloggedPastBound, feedStagesOf(events))
 	}
-	if line := detailOfStage(events, StageRunHeld); !strings.Contains(line, RefusedAbsorptionDepth) {
-		t.Errorf("the feed's %s line does not name the bound's hold: %q", StageRunHeld, line)
+	namesADeferral := false
+	for _, record := range deferred {
+		namesADeferral = namesADeferral || strings.Contains(line, "backlog tick "+record.TickID)
+	}
+	if !strings.Contains(line, "the bound is 1") || !namesADeferral {
+		t.Errorf("the feed's deferral line does not name the bound and the backlog tick: %q", line)
+	}
+	if countStage(events, StageRunHeld) != 0 {
+		t.Errorf("the run held (%q): the bound never halts for a person", detailOfStage(events, StageRunHeld))
 	}
 }
 
@@ -158,8 +161,8 @@ func TestExceedingTheAbsorptionDepthBoundStopsTheRunForAPersonWithTheChain(t *te
 // is started with a RAISED bound and killed the moment its first absorption
 // is durable, and the cold restart — invoked without the flag, carrying
 // nothing but what is on origin — must apply the bound the warm run ran
-// with: the chain that stops the run carries FOUR links and the stop names
-// the RECORDED bound, where a restart applying the bare default of 3 stops
+// with: the chain that is deferred carries FOUR links and the deferral names
+// the RECORDED bound, where a restart applying the bare default of 3 defers
 // a chain at three links it would never have let reach four.
 func TestAColdRestartHonoursTheRecordedAbsorptionDepthBound(t *testing.T) {
 	shorttest.EndToEnd(t)
@@ -193,36 +196,45 @@ func TestAColdRestartHonoursTheRecordedAbsorptionDepthBound(t *testing.T) {
 	}
 
 	// The cold restart, WITHOUT the flag: adopts the recorded bound, and the
-	// chain grows past the depth a bare default would have stopped it at.
+	// chain grows past the depth a bare default would have deferred it at.
 	clone := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "restarted"))
 	cold, result, err := f.run(clone, fixtureOptions{gate: observedGate, mode: "finding_chain"})
 	if err != nil {
 		t.Fatalf("the cold run did not finish: %v", err)
 	}
-	if result.State != runstate.StateFailed {
-		t.Fatalf("the run ended %s, want failed on the depth bound's hold: the chain fixture grows past any bound: %+v",
-			result.State, result.Failure)
-	}
-	if result.Failure == nil || result.Failure.Reason != RefusedAbsorptionDepth {
-		t.Fatalf("the failure is %+v, want the absorption depth bound's hold", result.Failure)
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%+v), want completed: past the bound the finding is deferred and the "+
+			"run carries on", result.State, result.Failure)
 	}
 
-	// THE STOP NAMES THE RECORDED BOUND AND A CHAIN THE DEFAULT COULD NEVER
-	// HAVE — the one observable that separates "the restart honoured the
-	// record" from "the restart silently dropped back to 3": a run applying
-	// the default stops a chain at THREE links, and no chain of it ever
-	// reaches four.
+	// THE DEFERRAL NAMES THE RECORDED BOUND AND A CHAIN THE DEFAULT COULD
+	// NEVER HAVE — the one observable that separates "the restart honoured
+	// the record" from "the restart silently dropped back to 3".
+	store := openRunStore(t, clone.Dir, cold.IntegrationBranch(), cold.RunID())
+	records, err := store.Absorptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var deferred *runstate.Absorption
+	for i := range records {
+		if records[i].Placement == runstate.AbsorptionPastBound {
+			deferred = &records[i]
+			break
+		}
+	}
+	if deferred == nil {
+		t.Fatalf("no finding was deferred past the bound: the chain fixture grows past any bound (%+v)", records)
+	}
 	for _, named := range []string{"the bound is 4", "already carries 4"} {
-		if !strings.Contains(result.Failure.Message, named) {
-			t.Errorf("the stop's message does not say %q, the recorded bound the restart was bound by: %s",
-				named, result.Failure.Message)
+		if !strings.Contains(deferred.Reason, named) {
+			t.Errorf("the deferral does not say %q, the recorded bound the restart was bound by: %s",
+				named, deferred.Reason)
 		}
 	}
 
 	// And the record says the same thing the decision applied: untouched by
 	// the restart, because a cold restart adopts the record, it does not
 	// rewrite it.
-	store := openRunStore(t, clone.Dir, cold.IntegrationBranch(), cold.RunID())
 	standing, ok, err := store.AbsorptionBound()
 	if err != nil || !ok {
 		t.Fatalf("read the recorded bound after the restart: %v %v", ok, err)
@@ -230,6 +242,27 @@ func TestAColdRestartHonoursTheRecordedAbsorptionDepthBound(t *testing.T) {
 	if standing.Bound != 4 {
 		t.Errorf("the recorded bound is %d after the restart, want the 4 untouched: a cold restart adopts the "+
 			"record, it does not rewrite it", standing.Bound)
+	}
+}
+
+// The deferral as the epic PR's reviewer reads it: the "where to look first"
+// list names every tick deferred past the absorption bound, and the record's
+// own lines say what it is — never the prose rule's "the acceptance is prose".
+//
+// short: formatting over records already in memory
+func TestAFindingDeferredPastTheBoundIsNamedForTheReviewer(t *testing.T) {
+	t.Parallel()
+	record := runstate.Absorption{Key: "k4", TickID: "b04", Basis: runstate.AbsorptionRule,
+		Placement: runstate.AbsorptionPastBound, Reason: "past the absorption bound"}
+	look := (&Reconciler{}).lookFirst(nil, -1, nil, []runstate.Absorption{record})
+	if !strings.Contains(look, "deferred past the absorption bound") || !strings.Contains(look, "b04") {
+		t.Errorf("the reviewer's first list does not name the deferral: %s", look)
+	}
+	if got := verdictLine(record); !strings.Contains(got, "absorption bound") || strings.Contains(got, "prose") {
+		t.Errorf("the deferral's verdict line reads %q", got)
+	}
+	if got := placementLine(record); !strings.Contains(got, "deferred past the absorption bound") {
+		t.Errorf("the deferral's placement line reads %q", got)
 	}
 }
 

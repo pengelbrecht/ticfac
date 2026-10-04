@@ -1,6 +1,7 @@
 package reconcile
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -22,16 +23,26 @@ import (
 // already bounded by the wall clock every attempt carries. Depth is what a
 // person must judge, so depth is what the stop counts.
 //
-// THE PROPERTY THAT MATTERS MORE THAN THE NUMBER: the stop must be RARE and
-// MEANINGFUL. A bound tuned so it trips routinely rebuilds the human gate
-// this epic exists to remove, wearing a different name — so the bound governs
-// only the recursion (only GATING findings extend a chain, and only a chain
-// already at the bound stops), and exceeding it is a refusal that HOLDS the
-// run for a person carrying the FULL ABSORPTION CHAIN that produced it, never
-// only the count, so an operator can see which finding led to which and judge
-// whether the run was right to keep going. If the bound trips often in
-// practice, the criterion is wrong and the bound is hiding it — the chain is
-// the evidence a person needs to say so.
+// PAST THE BOUND THE RUN DEFERS, IT NEVER HALTS (run_5c7c16d1, epic hn6,
+// 2026-10-04). The bound used to be a refusal that held the run for a person:
+// hn6's chain gmo → z3p → ulw → qxj reached its 4th link at 06:14 and the run
+// stopped, and the operator's whole answer was to file the finding to the
+// backlog by hand (km5) — a step whose only actor is a person, which in an
+// unattended factory is a defect. So the run takes that step itself: past the
+// bound the finding becomes a BACKLOG TICK with an owner, outside the epic —
+// what `ticfac triage … =file` does — recorded (placement past-bound, basis
+// rule), announced on the feed (finding_backlogged_past_bound) and named in
+// the epic PR body as "deferred past the absorption bound", and the run
+// carries on. Even a finding that claims to gate a done item is deferred:
+// the bound wins, and the close-out and the final review see the deferral
+// and can judge it — a NOT READY review that names it blocking still adopts
+// it into the epic (review_rounds.go), which is a review's judgement, not a
+// recursion.
+//
+// The deferral carries the FULL ABSORPTION CHAIN that produced it, never only
+// the count, so a reviewer can see which finding led to which. If the bound
+// trips often in practice, the criterion is wrong and the bound is hiding it —
+// the chain is the evidence a person needs to say so.
 
 // chainLink is one link of an absorption chain: a finding an earlier
 // absorption decided on one side, the tick that decision created on the other.
@@ -114,16 +125,74 @@ func absorptionDepthExceeded(links []chainLink, bound int) bool {
 	return bound > 0 && len(links) >= bound
 }
 
+// isPastBound reports whether a decision record is the bound's deferral.
+func isPastBound(record runstate.Absorption) bool {
+	return record.Placement == runstate.AbsorptionPastBound
+}
+
+// pastBoundReason is the reasoning the deferral's record carries: the bound,
+// the chain that reached it, and the verdict the bound overrode.
+func pastBoundReason(links []chainLink, bound int, overridden string) string {
+	return fmt.Sprintf("absorbing it would be the %s absorption of ONE chain that already carries %d and the "+
+		"bound is %d (tick qjj), so it is deferred past the absorption bound: a backlog tick with an owner, "+
+		"outside the epic, and the run carries on rather than recurse past the bound or halt for a person. "+
+		"Its verdict was that it %s — the bound wins, and the close-out and the final review see the deferral "+
+		"and can judge it. The chain: %s",
+		ordinal(len(links)+1), len(links), bound, overridden, chainNarrative(links))
+}
+
+// boundedChain is the recursion's check for a GATING verdict about to make a
+// finding the next link of a chain: the chain that produced the reporting
+// tick, the bound this decision applies, and whether the chain is already at
+// it.
+func (r *Reconciler) boundedChain(standing runstate.Finding, dispatch Dispatch) ([]chainLink, int, bool, error) {
+	links, err := r.absorptionChain(standing.TickID)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	// The bound THIS decision applies, resolved against the run branch and
+	// recorded there (tick wz0, finding 95f5ee1a): a cold restart applies the
+	// same bound the warm run did, and only a person's explicit raise changes
+	// it.
+	bound, err := r.absorptionDepthBound(dispatch)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	return links, bound, absorptionDepthExceeded(links, bound), nil
+}
+
+// deferPastBound records the bound's deferral and finishes behind it: a
+// backlog tick with an owner, promoted from the finding with nobody
+// triaging — the same create-if-absent record and finish every rule decision
+// uses, so a decision is made once and a concurrent incarnation's stands.
+func (r *Reconciler) deferPastBound(ctx context.Context, marker attemptHandle, standing runstate.Finding,
+	dispatch Dispatch, links []chainLink, bound int, overridden string) (findingDecision, error) {
+	tickID, err := r.mintTickID()
+	if err != nil {
+		return findingDecision{}, err
+	}
+	record := runstate.Absorption{
+		Key:        standing.Key,
+		TickID:     tickID,
+		Gating:     false,
+		Basis:      runstate.AbsorptionRule,
+		Placement:  runstate.AbsorptionPastBound,
+		Reason:     pastBoundReason(links, bound, overridden),
+		DecidedAt:  r.now().UTC().Format(time.RFC3339),
+		Provenance: r.attemptProvenance(dispatch),
+	}
+	return r.recordRoutedDecision(ctx, marker, standing, record)
+}
+
 // ------------------------------------------------- the recorded bound ---
 
 // resolvedAbsorptionDepth is the precedence of the four facts that name the
 // bound a decision applies (tick wz0, finding 95f5ee1a), pure so the order is
 // pinned without a fixture:
 //
-//  1. an EXPLICIT flag is the person's raise — the escape hatch the depth
-//     refusal itself names ("raise the bound with --absorption-depth and run
-//     the epic again") — and it WINS over the record, because a record that
-//     out-ranked the person would turn that hatch into a no-op;
+//  1. an EXPLICIT flag is the person's raise (--absorption-depth) and it
+//     WINS over the record, because a record that out-ranked the person
+//     would turn the flag into a no-op;
 //  2. otherwise the RECORDED bound is the run's: the first incarnation's
 //     bound outlives it, and a cold restart without the flag applies the same
 //     bound the warm run did rather than silently dropping back to the

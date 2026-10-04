@@ -89,11 +89,21 @@ const (
 	// files it as a backlog tick outside the epic, labelled for the next epic
 	// run to satisfy, and it gates nothing here.
 	AbsorptionNextRun = "next-run"
+	// AbsorptionPastBound: the finding would have extended an absorption
+	// chain that already carries the bound's worth of links (tick qjj), so
+	// the run's rule DEFERRED it — a backlog tick with an owner, outside the
+	// epic, exactly what `ticfac triage … =file` does — and carried on. It
+	// gates nothing here whatever the verdict said: the bound wins, and the
+	// epic PR names it as deferred past the absorption bound so the close-out
+	// and the final review see it and can judge it (run_5c7c16d1, epic hn6:
+	// the bound used to halt the run for a person, who filed it by hand).
+	AbsorptionPastBound = "past-bound"
 )
 
 // AbsorptionPlacements is the closed placement vocabulary.
 var AbsorptionPlacements = []string{
 	AbsorptionBeforeReview, AbsorptionAfterReview, AbsorptionBacklog, AbsorptionRouted, AbsorptionNextRun,
+	AbsorptionPastBound,
 }
 
 // Absorption is one decision, at `.ticfac/runs/<run-id>/absorptions/<key>.json`,
@@ -192,12 +202,22 @@ func (a Absorption) Validate() error {
 			return fmt.Errorf("absorption of %s is not gating and names item %s: a verdict that says the done is "+
 				"reachable names no item it breaks", a.Key, a.ItemID)
 		}
-		if a.Placement != AbsorptionBacklog && a.Placement != AbsorptionRouted && a.Placement != AbsorptionNextRun {
+		if a.Placement != AbsorptionBacklog && a.Placement != AbsorptionRouted && a.Placement != AbsorptionNextRun &&
+			a.Placement != AbsorptionPastBound {
 			return fmt.Errorf("absorption of %s is not gating and placed %q: a finding the done is reachable "+
 				"without becomes a backlog tick, not a child of the running epic", a.Key, a.Placement)
 		}
 	}
-	if a.Placement == AbsorptionNextRun {
+	if a.Placement == AbsorptionPastBound {
+		// The bound's rule agreeing with itself: decided by rule, about this
+		// repository, a local backlog tick gating nothing.
+		if a.Target != "" || a.Basis != AbsorptionRule || a.Gating || a.ItemID != "" || a.Confidence != 0 ||
+			a.Model != "" || strings.Contains(a.TickID, ":") {
+			return fmt.Errorf("absorption of %s is deferred past the absorption bound and is not the bound's "+
+				"decision (target %q, basis %q, gating %v, item %q, tick %q): a deferral is decided by rule, "+
+				"here, as a local backlog tick gating nothing", a.Key, a.Target, a.Basis, a.Gating, a.ItemID, a.TickID)
+		}
+	} else if a.Placement == AbsorptionNextRun {
 		// The live-run rule's own agreement with itself: decided by rule,
 		// about this repository, gating nothing.
 		if a.Target != "" || a.Basis != AbsorptionRule || a.Gating || a.Confidence != 0 || a.Model != "" {
