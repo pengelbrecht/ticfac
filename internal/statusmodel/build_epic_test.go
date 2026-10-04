@@ -391,51 +391,13 @@ func TestGatesCarryEveryRunThatWorkedTheTick(t *testing.T) {
 }
 
 // epicStillWorkingSources is the same story as failedNewestSources with
-// the newest run still going: the checkpoint never reached a terminal
-// word and the probe says running. The epic's measured past is the
-// earlier runs' either way — only whether anyone is working towards the
-// open ticks differs, which is exactly what the remaining-time estimate
-// is allowed to promise.
+// the newest run going again: the failed incarnation's ending is answered
+// by a resume standing after it in the feed, at4 is dispatched again, the
+// checkpoint is back to work and the probe says running. The epic's
+// measured past is the earlier runs' either way — only whether anyone is
+// working towards the open ticks differs, which is exactly what the
+// remaining-time estimate is allowed to promise.
 func epicStillWorkingSources() Sources {
-	src := failedNewestSources()
-	src.Records.Checkpoint.State = "running"
-	src.Records.Checkpoint.Reason = "the run is working the waves"
-	src.Liveness = LivenessInput{
-		Alive:  true,
-		State:  "running",
-		Reason: "the Workflow's own record says running",
-		Source: "workflow-record",
-	}
-	return src
-}
-
-// TestBuildETAAcrossRuns: the estimate is built from every closed tick the
-<<<<<<< HEAD
-// epic has measured, earlier runs included — with the duplicate excluded —
-// but only for a run that is still going. The fixture's own newest run
-// failed, so the estimate is pinned on the same sources with the run back
-// to work; the failed run's half is TestBuildRemainingPromisesNoFinish below.
-func TestBuildETAAcrossRuns(t *testing.T) {
-	t.Parallel()
-	model := Build(epicStillWorkingSources())
-=======
-// epic has measured, earlier runs included — with the duplicate excluded.
-// A run that ended by its own word states NONE (tick jkb): the estimate is
-// the going run's answer to "how long is left", and a failed or stopped run
-// will finish nothing in the time it would state — so the same fixture is
-// turned going (the failed ending answered by a resume, the run alive
-// again) to pin the across-runs estimate where it belongs.
-func TestBuildETAAcrossRuns(t *testing.T) {
-	t.Parallel()
-	ended := Build(failedNewestSources())
-	if ended.Remaining != nil {
-		t.Errorf("a run whose own word says it failed states an ETA of %+v, want none: nothing is going to finish in that time",
-			ended.Remaining)
-	}
-
-	// The same epic, going again: the failed incarnation's ending is
-	// history — the resume stands after it — and the estimate returns,
-	// measured across runs as before.
 	src := failedNewestSources()
 	src.Records.Checkpoint.State = "running"
 	src.Records.Checkpoint.Reason = "at4 is dispatched again"
@@ -453,8 +415,27 @@ func TestBuildETAAcrossRuns(t *testing.T) {
 		Reason: "the Workflow's supervisor says the orchestrator container is running",
 		Source: "workflow-supervisor",
 	}
-	model := Build(src)
->>>>>>> 6f000a0fc682979ea739d30c89fd4b4651c42c6c
+	return src
+}
+
+// TestBuildETAAcrossRuns: the estimate is built from every closed tick the
+// epic has measured, earlier runs included — with the duplicate excluded.
+// A run that ended by its own word states NONE (ticks jkb, onv): the
+// estimate is the going run's answer to "how long is left", and a failed or
+// stopped run will finish nothing in the time it would state — so the same
+// fixture is turned going (epicStillWorkingSources: the failed ending
+// answered by a resume, the run alive again) to pin the across-runs
+// estimate where it belongs. The ended half is also pinned on its own by
+// TestBuildRemainingPromisesNoFinishForAnEndedRun below.
+func TestBuildETAAcrossRuns(t *testing.T) {
+	t.Parallel()
+	ended := Build(failedNewestSources())
+	if ended.Remaining != nil {
+		t.Errorf("a run whose own word says it failed states an ETA of %+v, want none: nothing is going to finish in that time",
+			ended.Remaining)
+	}
+
+	model := Build(epicStillWorkingSources())
 	if model.Remaining == nil {
 		t.Fatal("three measured closes support an estimate and the going fixture has them: the model must state one")
 	}

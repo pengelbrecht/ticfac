@@ -1452,38 +1452,26 @@ func livenessNamesAnEnd(state string) bool {
 }
 
 // buildRemaining estimates the time left ONLY where measured tick durations
-<<<<<<< HEAD
-// support it AND the run is still going: the median of what the epic's closed
-// ticks measurably took — each row's own duration, the last run that touched
-// it, dispatch to gate — times the ticks still open. Fewer than three
+// support it AND the run is still going: the median of what the epic's
+// closed ticks measurably took — each row's own duration, the last run that
+// touched it, dispatch to gate — times the ticks still open. Fewer than three
 // measured closes support nothing, and the estimate names its basis. A run
-// whose own records say it ended — the checkpoint's terminal states, or the
-// probe's end-word vocabulary when the checkpoint lags the end — states no
-// remaining time at all (tick onv): nobody is working towards the open
-// ticks, and an ETA beside "● stopped" is a promise the run cannot keep.
-=======
-// support it: the median of what the epic's closed ticks measurably took —
-// each row's own duration, the last run that touched it, dispatch to gate —
-// times the ticks still open. Fewer than three measured closes support
-// nothing, and the estimate names its basis. A run that ended by its own
-// word supports nothing either (tick jkb): the estimate is the GOING run's
-// answer to "how long is left", and a run that failed or was stopped will
-// finish nothing in the time it states — an ETA beside "● stopped" is the
-// same lie a phase of done was, read forward.
->>>>>>> 6f000a0fc682979ea739d30c89fd4b4651c42c6c
+// that ended by its own word supports nothing either (ticks jkb, onv): the
+// estimate is the GOING run's answer to "how long is left", and a run that
+// failed or was stopped will finish nothing in the time it states — an ETA
+// beside "● stopped" is the same lie a phase of done was, read forward. The
+// ending is the one derivation every wait reads ([runEnding]), and the
+// probe's end-word vocabulary ends the promise on its own when the
+// checkpoint lags the end.
 func buildRemaining(src Sources, m Model) *Remaining {
 	if m.Progress.Ticks == nil || m.Progress.Ticks.Open == 0 {
 		return nil
 	}
-<<<<<<< HEAD
-	if (src.Records != nil && runTerminal(*src.Records)) || livenessNamesAnEnd(src.Liveness.State) {
-=======
 	recs := Records{}
 	if src.Records != nil {
 		recs = *src.Records
 	}
-	if runEnding(src, recs) != "" {
->>>>>>> 6f000a0fc682979ea739d30c89fd4b4651c42c6c
+	if runEnding(src, recs) != "" || livenessNamesAnEnd(src.Liveness.State) {
 		return nil
 	}
 	durations := []time.Duration{}
