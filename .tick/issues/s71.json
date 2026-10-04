@@ -1,0 +1,14 @@
+{
+  "id": "s71",
+  "title": "Tail's tick#try prefix counted from 5 recent events disagrees with the model",
+  "description": "dashboardTail observes runfeed.Tries over m.Recent only (5 events), contrary to runfeed's own doc; a tick on its 3rd try whose recent events are all one attempt prints #1 while the model and the [e] feed say 3.\nevidence: internal/cli/watch_view.go:1000-1010; internal/runfeed/tries.go:20-22\n\nticfac run epic-hn6 created this tick by absorbing the finding 5cd94af427a8b198cf6d3d814dbbdf44dd6dc6b3cae42417e3016053cbb1a8e2 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/5cd94af427a8b198cf6d3d814dbbdf44dd6dc6b3cae42417e3016053cbb1a8e2.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T16:18:24Z",
+  "updated_at": "2026-10-04T16:18:24Z"
+}
