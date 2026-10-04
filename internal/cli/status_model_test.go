@@ -775,3 +775,101 @@ func TestStatusCIRefusesAnotherForge(t *testing.T) {
 		t.Errorf("the refusal does not name the host it found: %v", err)
 	}
 }
+
+// TestStatusRecordsCarriesEveryRunsRecords (hn6, tick gmo): the gathering
+// reads the epic's records across EVERY run on the integration branch, not
+// only the addressed run's — oldest first — and reads a run with no records
+// under the id it was named by from the epic spelling an older container
+// wrote. The dashboard's rows and progress bar are the consumer.
+func TestStatusRecordsCarriesEveryRunsRecords(t *testing.T) {
+	repo := newFindingsRepo(t)
+
+	head := func() string {
+		t.Helper()
+		out, err := exec.Command("git", "-C", repo, "rev-parse", "refs/remotes/origin/epic/qeu").Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	putCheckpoint := func(store *runstate.Store, runID string, state runstate.State, at string) {
+		t.Helper()
+		if _, err := store.PutCheckpoint(runstate.Checkpoint{
+			SchemaVersion: runstate.SchemaVersion,
+			RunID:         runID,
+			EpicID:        "qeu",
+			Sequence:      1,
+			State:         state,
+			Reason:        "the fixture says so",
+			UpdatedAt:     at,
+			Provenance: runstate.Provenance{RunID: runID, SourceRef: "refs/heads/epic/qeu",
+				SourceSHA: head(), IntegrationRef: runstate.Ptr("refs/heads/epic/qeu"),
+				Phase: runstate.PhaseWorker},
+		}); err != nil {
+			t.Fatalf("checkpoint for %s: %v", runID, err)
+		}
+	}
+
+	oldStore, err := runstate.Open(runstate.Options{Repo: repo, Remote: "origin", Branch: "epic/qeu", RunID: "run_old"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	putCheckpoint(oldStore, "run_old", runstate.StateCompleted, "2026-09-26T10:00:00Z")
+	midStore, err := runstate.Open(runstate.Options{Repo: repo, Remote: "origin", Branch: "epic/qeu", RunID: "run_mid"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	putCheckpoint(midStore, "run_mid", runstate.StateFailed, "2026-09-27T10:00:00Z")
+	// A run of ANOTHER epic stands beside them: never this epic's history.
+	otherStore, err := runstate.Open(runstate.Options{Repo: repo, Remote: "origin", Branch: "epic/qeu", RunID: "run_other_epic"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := otherStore.PutCheckpoint(runstate.Checkpoint{
+		SchemaVersion: runstate.SchemaVersion,
+		RunID:         "run_other_epic",
+		EpicID:        "zzz",
+		Sequence:      1,
+		State:         runstate.StateCompleted,
+		Reason:        "a different epic's run",
+		UpdatedAt:     "2026-09-25T10:00:00Z",
+		Provenance: runstate.Provenance{RunID: "run_other_epic", SourceRef: "refs/heads/epic/qeu",
+			SourceSHA: head(), IntegrationRef: runstate.Ptr("refs/heads/epic/qeu"),
+			Phase: runstate.PhaseWorker},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ownStore, err := runstate.Open(runstate.Options{Repo: repo, Remote: "origin", Branch: "epic/qeu", RunID: "epic-qeu"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	putCheckpoint(ownStore, "epic-qeu", runstate.StateRunning, "2026-09-28T10:00:00Z")
+
+	// The addressed run is epic-qeu: its own records first, then every prior
+	// run of the same epic, oldest first.
+	records, prior, err := statusRecords(repo, "epic-qeu", "qeu")
+	if err != nil {
+		t.Fatalf("statusRecords: %v", err)
+	}
+	if records.Checkpoint == nil || records.Checkpoint.RunID != "epic-qeu" {
+		t.Fatalf("the addressed run's records are %+v, want epic-qeu's own", records.Checkpoint)
+	}
+	if len(prior) != 2 || prior[0].Checkpoint == nil || prior[1].Checkpoint == nil ||
+		prior[0].Checkpoint.RunID != "run_old" || prior[1].Checkpoint.RunID != "run_mid" {
+		t.Fatalf("the prior runs read %+v, want [run_old run_mid] oldest first, the other epic's run excluded", prior)
+	}
+
+	// A run named by an id that carries no records of its own — a cloud
+	// run's factory id beside an older layout — is read from the epic
+	// spelling, and still gets every prior run beside it.
+	records, prior, err = statusRecords(repo, "run_named", "qeu")
+	if err != nil {
+		t.Fatalf("statusRecords for the unnamed spelling: %v", err)
+	}
+	if records.Checkpoint == nil || records.Checkpoint.RunID != "epic-qeu" {
+		t.Fatalf("the fallback spelling read %+v, want epic-qeu's records", records.Checkpoint)
+	}
+	if len(prior) != 2 {
+		t.Fatalf("the fallback spelling's priors read %d records, want the same two", len(prior))
+	}
+}

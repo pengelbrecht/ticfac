@@ -145,6 +145,12 @@ func dashboardHeadline(m statusmodel.Model, st watchStyles, width int) []string 
 	life := "not alive"
 	if m.Liveness.Alive {
 		life = "alive"
+	} else if m.Lifecycle.Phase == statusmodel.PhaseFailed || m.Lifecycle.Phase == statusmodel.PhaseCancelled {
+		// The run's own terminal word, when its lifecycle carried one: a
+		// failed run is not merely "not alive" — the header says what the
+		// run said it ended as, because that is the question the reader is
+		// actually asking (hn6, tick gmo).
+		life = m.Lifecycle.Phase
 	}
 	head := []string{
 		dashSeat(identity, m.Host+" · "+life, width),
@@ -451,15 +457,16 @@ type dashRow struct {
 // come from the widest content the table actually carries — the header
 // label included — and the render pads to the widths that sizing produced.
 type dashCells struct {
-	lead     string // the mark column: the cursor, a child's indent under it
-	id       string
-	what     string
-	tier     string
-	pipe     string
-	time     string
-	attempts string
-	tickID   string
-	closed   bool
+	lead      string // the mark column: the cursor, a child's indent under it
+	id        string
+	what      string
+	tier      string
+	pipe      string
+	time      string
+	attempts  string
+	tickID    string
+	closed    bool
+	duplicate bool // the tick is a duplicate: its row renders dimmed whole
 }
 
 // render lays the cells out under the sized columns: one space between
@@ -534,8 +541,14 @@ func dashboardTable(m statusmodel.Model, st watchStyles, width int, selected str
 	}
 	rows := make([]dashRow, 0, len(cells))
 	for _, c := range cells {
+		line := c.render(showWhat, showTier, idW, whatW, tierW, pipeW, timeW, attemptsW)
+		if c.duplicate {
+			// Dimmed whole: the row keeps its place (rows never move) and its
+			// history, but nothing about it is the frontier's business.
+			line = st.dim(line)
+		}
 		rows = append(rows, dashRow{
-			line:   c.render(showWhat, showTier, idW, whatW, tierW, pipeW, timeW, attemptsW),
+			line:   line,
 			tickID: c.tickID,
 			closed: c.closed,
 		})
@@ -581,8 +594,10 @@ func dashColumnWidths(cells []dashCells, showWhat, showTier bool, pipeCap int) (
 // dashTickCells is one row of the table's raw cells: the tick's identity (a
 // "▸" when the drill-in cursor is on it, a "+" when the run absorbed it, a
 // " └ " when it is another tick's child), its work's name, its current tier,
-// its pipeline cell, its duration and its attempts. The row's POSITION never
-// depends on any of these — only its cells change.
+// its pipeline cell, its duration and its attempts. A duplicate is not work
+// the epic owes: its WHAT says the tick it is a copy of and its row renders
+// dimmed whole. The row's POSITION never depends on any of these — only its
+// cells change.
 func dashTickCells(tick statusmodel.Tick, st watchStyles, showWhat, showTier, words bool, pipeCap int, selected string) dashCells {
 	id := tick.TickID
 	if tick.Absorbed {
@@ -604,6 +619,12 @@ func dashTickCells(tick statusmodel.Tick, st watchStyles, showWhat, showTier, wo
 		if what == "" {
 			what = tick.Title
 		}
+		// A duplicate is not work the epic owes — the row is its own tick's
+		// history, but the WHAT column says what it is a copy of, so a
+		// person scanning the table reads the fact without drilling in.
+		if tick.DuplicateOf != nil && *tick.DuplicateOf != "" {
+			what = "duplicate of " + *tick.DuplicateOf
+		}
 		what = dashCell(what, dashWhatCols)
 	}
 	tier := ""
@@ -622,7 +643,8 @@ func dashTickCells(tick statusmodel.Tick, st watchStyles, showWhat, showTier, wo
 	return dashCells{
 		lead: lead, id: id, what: what, tier: tier, pipe: pipe,
 		time: timeCell, attempts: attempts, tickID: tick.TickID,
-		closed: tick.State == "closed",
+		closed:    tick.State == "closed",
+		duplicate: tick.DuplicateOf != nil,
 	}
 }
 

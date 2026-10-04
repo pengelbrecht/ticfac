@@ -1,0 +1,250 @@
+package statusmodel
+
+// The epic's records across runs (hn6, tick gmo): the dashboard answers for
+// the EPIC, and an epic is worked by many runs. Each run of one epic keeps
+// its own durable records under its own run id on the integration branch,
+// with its own per-run attempt numbering — so the same (tick, attempt) key
+// names different dispatches in different runs, and the records cannot be
+// merged into one flat list. This file is the merge: which run's record a
+// row reads, and what the newest run's fresh "ready" rows must never erase.
+//
+// The rules, stated once:
+//
+//   - A tick's STATE is the newest non-"ready" row any run checkpointed for
+//     it. A fresh run seeds its plan "ready" before it settles the tracker's
+//     answer, so a "ready" row is not evidence of openness — the tracker's
+//     own status is what a "ready" row falls back to. A tick no run ever
+//     touched is the tracker's closed status, else ready.
+//   - A tick's ROW (its dispatch markers, gate evidence, provenance, tries)
+//     is the LAST run that has records for it: the newest run with dispatch
+//     markers for the tick, else the run whose row the state came from.
+//     "Closed ticks show done with their last run's pipeline/time/attempts."
+//   - Absorptions and findings accumulate: they are the epic's own history,
+//     keyed by content, and no run's copy is newer than another's.
+//   - Everything else — the run section — stays the newest run's alone; the
+//     merge is never read for workers, cost, waits, gates or the feed.
+
+import (
+	"sort"
+	"strings"
+
+	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/tk"
+)
+
+// mergedRuns is every run's records for one epic, oldest first, with the
+// per-tick views the model reads built once. Index len-1 is the newest run;
+// the run section reads that one alone.
+type mergedRuns struct {
+	// runs is oldest first; runs[len-1] is the newest.
+	runs []Records
+
+	// rows is each tick's newest non-ready row and the run that wrote it.
+	rows map[string]rowState
+	// owner is, per tick, the last run that has records for it: the newest
+	// run with dispatch markers for the tick, else the newest with a
+	// non-ready row, else none (-1).
+	owner map[string]int
+	// markers and evidence are the OWNER run's records for that tick —
+	// never a cross-run union, because attempt numbers are per run and the
+	// same key names different dispatches in different runs.
+	markers  map[string][]runstate.Attempt
+	evidence map[string][]runstate.Evidence
+	// absorbed is the union of every run's gated absorptions, by tick id.
+	absorbed map[string]bool
+	// absorptions and findings accumulate across runs, deduplicated by
+	// their content key with the earliest record kept — a finding is one
+	// record, and a later run's re-promotion of it is a duplicate, not a
+	// newer truth.
+	absorptionByKey map[string]runstate.Absorption
+	findingByKey    map[string]runstate.Finding
+}
+
+// rowState is one tick's merged row: the state, the attempt it names, and
+// the run (index into runs) whose row it is.
+type rowState struct {
+	state   string
+	attempt *int
+	run     int
+}
+
+// newMergedRuns builds the merged view. prior is oldest first; current is
+// the newest run's records and is always last.
+func newMergedRuns(current Records, prior []Records) *mergedRuns {
+	m := &mergedRuns{
+		runs:            append(append([]Records{}, prior...), current),
+		rows:            map[string]rowState{},
+		owner:           map[string]int{},
+		markers:         map[string][]runstate.Attempt{},
+		evidence:        map[string][]runstate.Evidence{},
+		absorbed:        map[string]bool{},
+		absorptionByKey: map[string]runstate.Absorption{},
+		findingByKey:    map[string]runstate.Finding{},
+	}
+	// Rows, oldest to newest: a newer run's non-ready row replaces an
+	// older one's, and a newer "ready" row never does.
+	for i, r := range m.runs {
+		if r.Checkpoint == nil {
+			continue
+		}
+		for _, ts := range r.Checkpoint.Ticks {
+			if ts.State == tickReady {
+				continue
+			}
+			row := rowState{state: ts.State, run: i}
+			if ts.Attempt > 0 {
+				attempt := ts.Attempt
+				row.attempt = &attempt
+			}
+			m.rows[ts.TickID] = row
+		}
+	}
+	// Owners and per-tick records, per run, newest run's answer surviving.
+	for i, r := range m.runs {
+		perTick := map[string][]runstate.Attempt{}
+		for _, a := range r.Attempts {
+			perTick[a.TickID] = append(perTick[a.TickID], a)
+		}
+		for tickID, marks := range perTick {
+			m.markers[tickID] = marks
+			m.owner[tickID] = i
+		}
+		for _, e := range r.Evidence {
+			if e.Provenance.TickID == nil || *e.Provenance.TickID == "" {
+				continue
+			}
+			tickID := *e.Provenance.TickID
+			m.evidence[tickID] = append(m.evidence[tickID], e)
+			if _, ok := m.owner[tickID]; !ok {
+				m.owner[tickID] = i
+			}
+		}
+		for _, a := range r.Absorptions {
+			if a.TickID == "" {
+				continue
+			}
+			if a.Gating {
+				m.absorbed[a.TickID] = true
+			}
+			if prior, ok := m.absorptionByKey[a.Key]; !ok || a.DecidedAt < prior.DecidedAt {
+				m.absorptionByKey[a.Key] = a
+			}
+		}
+		for _, f := range r.Findings {
+			if prior, ok := m.findingByKey[f.Key]; !ok || f.ProposedAt < prior.ProposedAt {
+				m.findingByKey[f.Key] = f
+			}
+		}
+	}
+	// A tick whose only record is a row (no markers, no evidence) is owned
+	// by the run whose row it reads.
+	for tickID, row := range m.rows {
+		if _, ok := m.owner[tickID]; !ok {
+			m.owner[tickID] = row.run
+		}
+	}
+	// Markers sort by attempt number within their run, the same order the
+	// try history reads them in.
+	for _, marks := range m.markers {
+		sort.Slice(marks, func(i, j int) bool { return marks[i].Attempt < marks[j].Attempt })
+	}
+	return m
+}
+
+// stateOf is a tick's merged state: the newest non-ready row any run wrote,
+// else the tracker's own closed status, else ready. The second return is the
+// run whose row won (-1 when no run did, i.e. the answer came from the
+// tracker or from nothing).
+func (m *mergedRuns) stateOf(task tk.GraphTask) (string, *int, int) {
+	if row, ok := m.rows[task.ID]; ok {
+		return row.state, row.attempt, row.run
+	}
+	if task.Status == "closed" {
+		return tickClosed, nil, -1
+	}
+	return tickReady, nil, -1
+}
+
+// newestRun is the index of the newest run's records — the run section's
+// only source.
+func (m *mergedRuns) newestRun() int { return len(m.runs) - 1 }
+
+// ownerIndex is every tick's owning run, by id.
+func (m *mergedRuns) ownerIndex() map[string]int { return m.owner }
+
+// markersOf is the owner run's dispatch markers for one tick.
+func (m *mergedRuns) markersOf(tickID string) []runstate.Attempt { return m.markers[tickID] }
+
+// duplicateOf reads a tick's own tracker record for a closure as a
+// duplicate: the dedup writer's note ("closed as a duplicate of <id>") or a
+// closed_reason that names the word with the duplicated tick. Nil when the
+// tick is not a closed duplicate — including every open tick, since a
+// duplicate that is still open is work the epic has not deduped yet.
+func duplicateOf(task tk.GraphTask) *string {
+	if task.Status != "closed" {
+		return nil
+	}
+	// The dedup writer's own wording, in the note it leaves when it closes a
+	// later promotion: "closed as a duplicate of <id>. Both were promoted…".
+	if id, ok := cutDuplicateOf(task.Notes); ok {
+		return &id
+	}
+	// A hand-closed duplicate, where the person named the reason:
+	// "duplicate of ky5, fixed in #46" / "duplicate: tracked in …".
+	if id, ok := cutDuplicateOf(task.ClosedReason); ok {
+		return &id
+	}
+	if containsDuplicateWord(task.ClosedReason) {
+		unknown := ""
+		return &unknown
+	}
+	return nil
+}
+
+// cutDuplicateOf finds "duplicate of <id>" in a record's free text and
+// returns the id. The id is the next word, bounded to the tracker's own
+// alphabet (lowercase alphanumerics); anything else is prose, not a pointer.
+func cutDuplicateOf(text string) (string, bool) {
+	for _, marker := range []string{"duplicate of ", "duplicate: "} {
+		at := strings.Index(text, marker)
+		if at < 0 {
+			continue
+		}
+		rest := text[at+len(marker):]
+		id := rest
+		if end := strings.IndexAny(rest, " \t\n.,;:)"); end >= 0 {
+			id = rest[:end]
+		}
+		id = strings.Trim(id, "*`_")
+		if isTickID(id) {
+			return id, true
+		}
+		// "duplicate: tracked in pengelbrecht/ticks:jlm" names a repo, not
+		// a tick here — the word alone is the fact.
+		return "", false
+	}
+	return "", false
+}
+
+// containsDuplicateWord says whether a closed reason names a duplicate
+// without naming the tick it duplicates — the fact alone, with no pointer.
+func containsDuplicateWord(text string) bool {
+	return strings.Contains(strings.ToLower(text), "duplicate")
+}
+
+// isTickID is the tracker's own id, as contracts/tracker-layout.json pins
+// it: lowercase alphanumerics, three or four characters. A word outside the
+// alphabet or the length is prose ("tracked in pengelbrecht/ticks:jlm"),
+// not a pointer — the fact of a duplicate is still stated by the word, and
+// duplicateOf answers it without a pointer.
+func isTickID(id string) bool {
+	if len(id) < 3 || len(id) > 4 {
+		return false
+	}
+	for _, r := range id {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
+			return false
+		}
+	}
+	return true
+}

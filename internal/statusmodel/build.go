@@ -43,12 +43,22 @@ type Sources struct {
 	EpicID   string
 	Degraded []string
 
-	// Graph is the epic's own graph — the same layering `tk graph` computes.
-	// Nil when the tracker could not be read.
+	// Graph is the epic's own graph — the same layering `tk graph` computes,
+	// with the tracker's closed tasks included where the read can serve
+	// them. Nil when the tracker could not be read.
 	Graph *tk.Graph
-	// Records is the run's durable state, as gathered. Nil when the run's
-	// records could not be read at all.
+	// Records is the NEWEST run's durable state, as gathered. Nil when the
+	// run's records could not be read at all.
 	Records *Records
+	// PriorRecords is every EARLIER run's records for the same epic, oldest
+	// first — the runs whose work the tracker already carries. The dashboard
+	// answers for the epic, not for the newest run's own checkpoint: a fresh
+	// run seeds its plan "ready" before it settles the tracker's answer, so
+	// a run that failed at boot must not erase the ticks earlier runs
+	// closed. Each tick's row is read from the last run that touched it (its
+	// dispatch markers, gate evidence and provenance); the run SECTION —
+	// alive, workers, cost, feed, waits — is still the newest run's alone.
+	PriorRecords []Records
 	// Feed is the run's own event feed, whole. The feed is exhaust and
 	// hints: nothing in the model takes a VERDICT from a line, but the
 	// waits, the health counts and the wall clock firings are facts the
@@ -178,9 +188,10 @@ func Build(src Sources) Model {
 		m.EpicTitle = &title
 	}
 	m.Recent = append([]runfeed.Event{}, src.Feed[max(0, len(src.Feed)-5):]...)
-	absorbed := absorbedTicks(recs.Absorptions)
-	m.Waves, m.Progress = buildWaves(src, recs, absorbed)
-	decorateTicks(src, recs, &m)
+	merged := newMergedRuns(recs, src.PriorRecords)
+	absorbed := merged.absorbed
+	m.Waves, m.Progress = buildWaves(src, merged, absorbed)
+	decorateTicks(src, merged, &m)
 	m.Workers = buildWorkers(src, recs)
 	decorateWorkers(src, recs, &m)
 	decorateReports(src, &m)
@@ -191,7 +202,7 @@ func Build(src Sources) Model {
 	m.Lifecycle = buildLifecycle(src, recs, m)
 	m.WaitsOn, m.Attention = buildWaits(src, recs, m)
 	m.Health.Verdict = buildVerdict(src, m)
-	m.Remaining = buildRemaining(src, recs, m)
+	m.Remaining = buildRemaining(src, m)
 	return m
 }
 
@@ -216,51 +227,35 @@ func buildLiveness(src Sources) Liveness {
 	return l
 }
 
-// absorbedTicks is the set of tick ids the run itself created by absorbing a
-// finding into the epic it was running — the mid-run shape change the
-// absorption records exist to make reconstructible.
-func absorbedTicks(absorptions []runstate.Absorption) map[string]bool {
-	out := map[string]bool{}
-	for _, a := range absorptions {
-		if a.TickID != "" && a.Gating {
-			out[a.TickID] = true
-		}
-	}
-	return out
-}
-
 // buildWaves lays the epic out as the tracker itself layers it, with every
-// tick's state from the durable records. The wave states are derived, not
-// stored: a wave is done when every tick in it is closed, and the first
-// wave that is not done is the frontier the run works on.
-func buildWaves(src Sources, recs Records, absorbed map[string]bool) (*[]Wave, Progress) {
+// tick's state from the durable records of every run that worked the epic:
+// the newest run's own where it has one, the last run that touched the tick
+// where it does not, the tracker's closed status behind them both. The wave
+// states are derived, not stored: a wave is done when every tick in it is
+// closed, and the first wave that is not done is the frontier the run works
+// on. Duplicates — ticks closed as the duplicate of another — get rows like
+// any tick, but no place in the progress counts: they are not work the epic
+// still owes.
+func buildWaves(src Sources, merged *mergedRuns, absorbed map[string]bool) (*[]Wave, Progress) {
 	progress := Progress{}
 	if src.Graph == nil || len(src.Graph.Waves) == 0 {
 		return nil, progress
 	}
 
-	// The checkpoint's own tick states, by id.
-	states := map[string]runstate.TickState{}
-	if recs.Checkpoint != nil {
-		for _, ts := range recs.Checkpoint.Ticks {
-			states[ts.TickID] = ts
-		}
-	}
-	// The attempt markers grouped per tick: the dispatches that happened.
-	attemptsByTick := map[string][]runstate.Attempt{}
-	for _, a := range recs.Attempts {
-		attemptsByTick[a.TickID] = append(attemptsByTick[a.TickID], a)
-	}
 	// The gate evidence grouped per (tick, attempt): what each try produced.
+	// The owner run's evidence only — attempt numbers are per run.
 	evidenceByTry := map[string][]runstate.Evidence{}
-	for _, e := range recs.Evidence {
-		if e.Provenance.TickID == nil || e.Provenance.Attempt == nil {
-			continue
+	for _, evidence := range merged.evidence {
+		for _, e := range evidence {
+			if e.Provenance.TickID == nil || e.Provenance.Attempt == nil {
+				continue
+			}
+			key := fmt.Sprintf("%s#%d", *e.Provenance.TickID, *e.Provenance.Attempt)
+			evidenceByTry[key] = append(evidenceByTry[key], e)
 		}
-		key := fmt.Sprintf("%s#%d", *e.Provenance.TickID, *e.Provenance.Attempt)
-		evidenceByTry[key] = append(evidenceByTry[key], e)
 	}
-	// Which (tick, attempt) pairs still stand: the census's own answer.
+	// Which (tick, attempt) pairs still stand: the census's own answer. The
+	// census is the newest run's; another run's attempts never stand here.
 	standing := map[string]bool{}
 	for _, a := range src.Standing {
 		standing[fmt.Sprintf("%s#%d", a.TickID, a.Attempt)] = true
@@ -273,15 +268,20 @@ func buildWaves(src Sources, recs Records, absorbed map[string]bool) (*[]Wave, P
 		wave := Wave{Wave: w.Wave, Ticks: []Tick{}}
 		waveDone := true
 		for _, task := range w.Tasks {
-			state, attempt := tickStateOf(task, states)
-			t := buildTick(src, task, state, attempt, attemptsByTick[task.ID],
-				evidenceByTry, standing, absorbed[task.ID])
+			state, attempt, owner := merged.stateOf(task)
+			t := buildTick(src, merged, task, state, attempt, owner, absorbed[task.ID],
+				evidenceByTry, standing)
+			t.DuplicateOf = duplicateOf(task)
 			if t.State != tickClosed {
+				// A duplicate that is not closed is a dedup the epic has not
+				// done yet: it is still work, and it holds the wave open.
 				waveDone = false
 			}
-			tickProgress.Total++
-			if t.State == tickClosed {
-				tickProgress.Closed++
+			if t.DuplicateOf == nil {
+				tickProgress.Total++
+				if t.State == tickClosed {
+					tickProgress.Closed++
+				}
 			}
 			wave.Ticks = append(wave.Ticks, t)
 		}
@@ -303,28 +303,12 @@ func buildWaves(src Sources, recs Records, absorbed map[string]bool) (*[]Wave, P
 	return &waves, progress
 }
 
-// tickStateOf reads one tick's state and current attempt from the durable
-// records: the checkpoint's own row where it has one, the tracker's closed
-// status where it does not. A tick the checkpoint never mentioned is ready —
-// the run has not touched it.
-func tickStateOf(task tk.GraphTask, states map[string]runstate.TickState) (string, *int) {
-	if ts, ok := states[task.ID]; ok {
-		if ts.Attempt > 0 {
-			attempt := ts.Attempt
-			return ts.State, &attempt
-		}
-		return ts.State, nil
-	}
-	if task.Status == "closed" {
-		return tickClosed, nil
-	}
-	return tickReady, nil
-}
-
 // buildTick assembles one tick's whole entry: state, try history, the
-// current attempt's provenance and its elapsed time.
-func buildTick(src Sources, task tk.GraphTask, state string, attempt *int, attempts []runstate.Attempt,
-	evidenceByTry map[string][]runstate.Evidence, standing map[string]bool, absorbed bool) Tick {
+// current attempt's provenance and its elapsed time — read from the LAST
+// run that has records for the tick, never across runs (attempt numbers are
+// per run, so the same number in two runs names two dispatches).
+func buildTick(src Sources, merged *mergedRuns, task tk.GraphTask, state string, attempt *int, owner int,
+	absorbed bool, evidenceByTry map[string][]runstate.Evidence, standing map[string]bool) Tick {
 
 	t := Tick{
 		TickID:   task.ID,
@@ -337,7 +321,7 @@ func buildTick(src Sources, task tk.GraphTask, state string, attempt *int, attem
 	}
 
 	// The dispatches that happened, in order — the try history's spine.
-	sort.Slice(attempts, func(i, j int) bool { return attempts[i].Attempt < attempts[j].Attempt })
+	attempts := merged.markersOf(task.ID)
 	numbers := make([]int, 0, len(attempts))
 	byNumber := map[int]runstate.Attempt{}
 	for _, a := range attempts {
@@ -345,8 +329,8 @@ func buildTick(src Sources, task tk.GraphTask, state string, attempt *int, attem
 		byNumber[a.Attempt] = a
 	}
 
-	// The current attempt: the checkpoint's own row names it; a tick the
-	// checkpoint no longer mentions keeps its highest recorded dispatch.
+	// The current attempt: the owning run's own row names it; a tick the
+	// owning run no longer mentions keeps its highest recorded dispatch.
 	current := 0
 	if attempt != nil {
 		current = *attempt
@@ -357,7 +341,7 @@ func buildTick(src Sources, task tk.GraphTask, state string, attempt *int, attem
 	for rank, n := range numbers {
 		outcome := tryOutcome(state, current, n,
 			evidenceByTry[fmt.Sprintf("%s#%d", task.ID, n)],
-			standing[fmt.Sprintf("%s#%d", task.ID, n)] && n == current)
+			standing[fmt.Sprintf("%s#%d", task.ID, n)])
 		t.Tries = append(t.Tries, Try{
 			Try:          rank + 1,
 			Attempt:      n,
@@ -372,14 +356,34 @@ func buildTick(src Sources, task tk.GraphTask, state string, attempt *int, attem
 		t.Attempt = &current
 		if a, ok := byNumber[current]; ok {
 			t.Tier, t.Model, t.Executor = a.Provenance.Tier, a.Provenance.Model, a.Provenance.Executor
-			if at, err := time.Parse(time.RFC3339, a.DispatchedAt); err == nil &&
-				isLive(state, standing[fmt.Sprintf("%s#%d", task.ID, current)]) {
+			// Elapsed measures a LIVE attempt only: the newest run's own
+			// in-flight work, or an attempt the census says stands. An
+			// earlier run's last dispatch — its run has ended, whatever its
+			// row still says — is history, and a duration from its stamp to
+			// now would be a countdown nobody asked for.
+			if at, err := time.Parse(time.RFC3339, a.DispatchedAt); err == nil && isLiveAttempt(src, state, owner, standing[fmt.Sprintf("%s#%d", task.ID, current)]) {
 				elapsed := int64(src.Now.Sub(at).Round(time.Second).Seconds())
 				t.ElapsedSeconds = &elapsed
 			}
 		}
 	}
 	return t
+}
+
+// isLiveAttempt says whether the tick's current attempt is one the epic is
+// still working: an attempt the newest run's census says stands, or one the
+// NEWEST run dispatched or reported while it is not over. A state the
+// newest run wrote is the newest run's own present tense; the same state in
+// an earlier run's records is history — that run's attempt is not live
+// here, whatever its own census would have said when it ran.
+func isLiveAttempt(src Sources, state string, owner int, stands bool) bool {
+	if stands {
+		return true
+	}
+	if owner != len(src.PriorRecords) {
+		return false
+	}
+	return state == tickDispatched || state == tickReported
 }
 
 // rankOf is a dispatch number's try rank among the numbers the records show
@@ -393,13 +397,6 @@ func rankOf(n int, numbers []int) int {
 		}
 	}
 	return len(numbers) + 1
-}
-
-// isLive says whether the tick's current attempt is one the run is still
-// working: the checkpoint's state says dispatched or reported, or a standing
-// worktree answers for it.
-func isLive(state string, stands bool) bool {
-	return stands || state == tickDispatched || state == tickReported
 }
 
 // tryOutcome resolves one dispatch's outcome from the durable records
@@ -912,44 +909,21 @@ func livenessNamesAnEnd(state string) bool {
 }
 
 // buildRemaining estimates the time left ONLY where measured tick durations
-// support it: the median of what closed ticks measurably took (dispatch
-// marker to last gate evidence), times the ticks still open. Fewer than
-// three measured closes support nothing, and the estimate names its basis.
-func buildRemaining(src Sources, recs Records, m Model) *Remaining {
+// support it: the median of what the epic's closed ticks measurably took —
+// each row's own duration, the last run that touched it, dispatch to gate —
+// times the ticks still open. Fewer than three measured closes support
+// nothing, and the estimate names its basis.
+func buildRemaining(src Sources, m Model) *Remaining {
 	if m.Progress.Ticks == nil || m.Progress.Ticks.Open == 0 {
 		return nil
-	}
-	attemptsByKey := map[string]time.Time{}
-	for _, a := range recs.Attempts {
-		if at, err := time.Parse(time.RFC3339, a.DispatchedAt); err == nil {
-			attemptsByKey[fmt.Sprintf("%s#%d", a.TickID, a.Attempt)] = at
-		}
-	}
-	finishedByKey := map[string]time.Time{}
-	for _, e := range recs.Evidence {
-		if e.Provenance.TickID == nil || e.Provenance.Attempt == nil || e.FinishedAt == "" {
-			continue
-		}
-		finished, err := time.Parse(time.RFC3339, e.FinishedAt)
-		if err != nil {
-			continue
-		}
-		key := fmt.Sprintf("%s#%d", *e.Provenance.TickID, *e.Provenance.Attempt)
-		if prior, ok := finishedByKey[key]; !ok || finished.After(prior) {
-			finishedByKey[key] = finished
-		}
 	}
 	durations := []time.Duration{}
 	for _, w := range deref(m.Waves) {
 		for _, t := range w.Ticks {
-			if t.State != tickClosed || t.Attempt == nil {
+			if t.State != tickClosed || t.DurationSeconds == nil || t.DuplicateOf != nil {
 				continue
 			}
-			started, ok := attemptsByKey[fmt.Sprintf("%s#%d", t.TickID, *t.Attempt)]
-			finished, ok2 := finishedByKey[fmt.Sprintf("%s#%d", t.TickID, *t.Attempt)]
-			if ok && ok2 && finished.After(started) {
-				durations = append(durations, finished.Sub(started))
-			}
+			durations = append(durations, time.Duration(*t.DurationSeconds)*time.Second)
 		}
 	}
 	if len(durations) < 3 {

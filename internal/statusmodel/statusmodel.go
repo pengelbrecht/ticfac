@@ -370,6 +370,14 @@ type Tick struct {
 	// mid-run, and a renderer shows that as a marked row, not a surprise.
 	Absorbed bool `json:"absorbed"`
 
+	// DuplicateOf is the tick this one duplicates — the dedup writer's own
+	// record, read off the tracker's note and closed_reason that a later
+	// promotion of the same finding was closed with. Null for every tick
+	// that is its own work. A duplicate is not work the epic still owes:
+	// the progress counts leave it out, and a renderer dims the row and
+	// names the tick the work belongs to.
+	DuplicateOf *string `json:"duplicate_of"`
+
 	// Try is the tick's own try number of its current or last attempt (the
 	// h58 language: "w9b#3" is the third try, not dispatch #3), and Attempt
 	// is that attempt's run-wide dispatch number — its identity. Null when

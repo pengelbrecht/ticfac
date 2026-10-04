@@ -59,7 +59,8 @@
     "a reader that meets a schema_version it does not know refuses the document rather than guessing at it",
     "null and empty are different claims wherever the schema allows a null: waves null means the tracker could not be read, waves [] means it read and layered nothing; workers null means the census could not be taken (a cloud run), workers [] means no attempt stands",
     "recent holds at most the last five feed lines, oldest first — the schema cannot count or order; the builder's test does",
-    "a cost line with metered false carries usd null — the anyOf pins it, the negative refuses it, and no renderer may print $0.00 for spend nobody measured"
+    "a cost line with metered false carries usd null — the anyOf pins it, the negative refuses it, and no renderer may print $0.00 for spend nobody measured",
+    "the progress counts count the epic's real ticks: a tick whose duplicate_of is non-null is excluded from total and closed — a duplicate closed as one is not work the epic owes, though its row still stands (dimmed, naming the tick the work belongs to)"
   ],
 
   "records": {
@@ -246,7 +247,7 @@
     },
     "tick": {
       "type": "object",
-      "required": ["tick_id", "state", "absorbed", "pipeline", "parent_tick_id", "duration_seconds", "findings", "report", "try", "attempt", "tries", "tier", "model", "executor", "elapsed_seconds"],
+      "required": ["tick_id", "state", "absorbed", "duplicate_of", "pipeline", "parent_tick_id", "duration_seconds", "findings", "report", "try", "attempt", "tries", "tier", "model", "executor", "elapsed_seconds"],
       "additionalProperties": false,
       "properties": {
         "tick_id": { "type": "string" },
@@ -259,6 +260,7 @@
           "description": "The checkpoint's own closed vocabulary, from the durable records only — never a worker's own claim. The tracker's closed status backs it where the checkpoint has no row."
         },
         "absorbed": { "type": "boolean", "description": "The run itself created this tick by absorbing a finding into the epic it was running — the mid-run shape change a renderer shows as a marked row." },
+        "duplicate_of": { "type": ["string", "null"], "description": "The tick this one duplicates, when the tracker closed it as a later promotion of the same finding — the dedup writer's own record, read off the note and closed_reason. Null for every tick that is its own work." },
         "pipeline": {
           "$ref": "#/$defs/pipeline",
           "description": "The tick's own pipeline cell — the stages this role's tick passes through, each with its own state, the thing a dashboard fills left to right. The stage list is the role's: implement [claim, work, gate, merged], review [claim, review, closed], closeout [claim, work, ci, closed] — the same lists the Go builder spells as PipelineImplement, PipelineReview and PipelineCloseout."
@@ -681,6 +683,7 @@
               "findings": [],
               "report": null,
               "absorbed": false,
+              "duplicate_of": null,
               "try": 1,
               "attempt": 1,
               "tries": [
@@ -706,6 +709,7 @@
               "findings": [],
               "report": null,
               "absorbed": false,
+              "duplicate_of": null,
               "try": 1,
               "attempt": 2,
               "tries": [
@@ -737,6 +741,7 @@
               "findings": [],
               "report": null,
               "absorbed": false,
+              "duplicate_of": null,
               "try": null,
               "attempt": null,
               "tries": [],
@@ -766,6 +771,7 @@
               "findings": [],
               "report": null,
               "absorbed": false,
+              "duplicate_of": null,
               "try": null,
               "attempt": null,
               "tries": [],
@@ -1081,6 +1087,7 @@
                 "diff": { "files": 11, "insertions": 214, "deletions": 60 }
               },
               "absorbed": false,
+              "duplicate_of": null,
               "try": 1,
               "attempt": 1,
               "tries": [
@@ -1112,6 +1119,7 @@
                 "diff": { "files": 6, "insertions": 148, "deletions": 32 }
               },
               "absorbed": true,
+              "duplicate_of": null,
               "try": 2,
               "attempt": 3,
               "tries": [
@@ -1145,6 +1153,7 @@
               "findings": [],
               "report": null,
               "absorbed": false,
+              "duplicate_of": null,
               "try": 2,
               "attempt": 6,
               "tries": [
@@ -1182,6 +1191,7 @@
                 "diff": { "files": 2, "insertions": 84, "deletions": 12 }
               },
               "absorbed": false,
+              "duplicate_of": null,
               "try": 1,
               "attempt": 5,
               "tries": [
@@ -1415,6 +1425,7 @@
                 "diff": { "files": 4, "insertions": 61, "deletions": 18 }
               },
               "absorbed": false,
+              "duplicate_of": null,
               "try": 1,
               "attempt": 1,
               "tries": [
@@ -1440,6 +1451,7 @@
               "findings": [],
               "report": null,
               "absorbed": false,
+              "duplicate_of": null,
               "try": 2,
               "attempt": 2,
               "tries": [
@@ -1703,6 +1715,7 @@
                 "findings": [],
                 "report": null,
                 "absorbed": false,
+                "duplicate_of": null,
                 "try": 1,
                 "attempt": 2,
                 "tries": [],
@@ -1759,6 +1772,7 @@
                 "findings": [],
                 "report": null,
                 "absorbed": false,
+                "duplicate_of": null,
                 "try": 1,
                 "attempt": 2,
                 "tries": [],

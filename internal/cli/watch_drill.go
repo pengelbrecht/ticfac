@@ -72,6 +72,9 @@ func renderTickContent(m statusmodel.Model, tickID string, st watchStyles, width
 		name = tick.Title
 	}
 	lines = append(lines, tickID+"  "+name)
+	if tick.DuplicateOf != nil && *tick.DuplicateOf != "" {
+		lines = append(lines, st.dim("duplicate of "+*tick.DuplicateOf+": the same finding was promoted twice, and the earlier one stands — the work is "+*tick.DuplicateOf+"'s"))
+	}
 	words := width == 0 || width >= watchWordsFrom
 	lines = append(lines, dashPipeline(tick.Pipeline, st, words))
 
