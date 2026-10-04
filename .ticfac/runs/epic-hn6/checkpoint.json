@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 79,
-  "state": "integrating",
-  "reason": "integrating iph attempt 11 into epic/hn6",
-  "updated_at": "2026-10-04T19:10:11Z",
+  "sequence": 80,
+  "state": "gating",
+  "reason": "running the integrated gate for iph on b5c24ff65610",
+  "updated_at": "2026-10-04T19:10:22Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -63,7 +63,7 @@
     },
     {
       "tick_id": "iph",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 11
     },
     {
