@@ -489,6 +489,23 @@ export async function listStatusSnapshots(db: D1Database): Promise<StoredSnapsho
  *  - a FAILED run carries the resume as its clearing command, in the same
  *    words the operator's own tick spells: stop a run, edit the tracker, and
  *    submit it again.
+ *  - a STOPPED run tells the watch frame's story (hn6 5d4, tick jkb): the
+ *    verdict says `stopped` — the row's own word, the same headline the
+ *    terminal frame spells through the same `verdictWord` — and attention
+ *    carries the person's resume as a `dead-run` wait, because only a
+ *    person starts the epic again. The old composition answered the same
+ *    ending with a second story — a terminal `cancelled` chip, no verdict,
+ *    nothing needed — and rule 8 forbids that: one model, two renderers,
+ *    they cannot disagree, and the frame's story is the contract's own
+ *    (the dashboard_stopped golden pins the `stopped` verdict). The row
+ *    reads the held band on BOTH renderers for this attention: the bare
+ *    `ticfac` overview holds the same wait in the held band
+ *    (TestTheOverviewHoldsAStoppedRunWithItsResume), and the classifier
+ *    here is that read's port. The phase still reads `cancelled` — the
+ *    terminal class of the row's own word, the same read the overview's
+ *    liveness compensation makes — because the factory's records cannot
+ *    state where the epic stands; the attention carries the ending, so the
+ *    classifier's held read never consults the phase.
  *
  * `lastEvent` is the room's forwarded tail the observe read already draws
  * (tick bne); null means the room held nothing, and the document says no
@@ -537,6 +554,32 @@ export function cloudStatusDoc(
         : progress.detail
       : lastEvent.message;
 
+  // The stopped run's story, as far as the factory's own records state it
+  // (hn6 5d4): the verdict the frame's headline spells — stopped, with the
+  // reason riding behind its own colon exactly as `verdictWord` spells it —
+  // and the person's resume, stated in the model's own attention shape so
+  // both renderers read ONE row. The wait lands AFTER the pending gates, the
+  // same order the Go builder claims in (a standing gate is the harder
+  // stop), and its sentence is the builder's own wording: "run <id> is
+  // stopped", the reason behind its colon where the records state one. The
+  // resume is named by the host the run lives on (tick tt6): a new submission
+  // to this factory, which is the page's own move to name for every run the
+  // factory hosts. `since` is the row's own `ended_at` — the moment the
+  // Workflow's record says the run stopped.
+  const stopped = run.state === "stopped";
+  if (stopped) {
+    attention.push({
+      kind: "dead-run",
+      what:
+        reason === ""
+          ? `run ${run.run_id} is stopped`
+          : `run ${run.run_id} is stopped: ${reason}`,
+      since: run.ended_at,
+      needs_person: true,
+      unblock_command: resumeCommand("cloud", run.epic),
+    });
+  }
+
   return {
     schema_version: STATUS_SCHEMA_VERSION,
     run_id: run.run_id,
@@ -550,6 +593,15 @@ export function cloudStatusDoc(
     },
     lifecycle: { phase },
     attention,
+    // The stopped verdict — the one hn6 dashboard field the run row itself
+    // is the authority for. The frame reads the same word from the same
+    // evidence (the run's own terminal word), and the golden's cross-
+    // renderer pin (verdictWord) holds the spelling: "stopped" alone when
+    // the records state no reason, never a dangling colon. Every other
+    // health fact stays absent — the factory counted none of them.
+    health: stopped
+      ? { verdict: { state: "stopped", summary: reason, recovered: [] } }
+      : undefined,
     waits_on:
       alive && attention.length === 0
         ? { kind: "workers", what: "the orchestrator container is working" }

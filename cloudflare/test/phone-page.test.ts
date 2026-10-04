@@ -711,6 +711,70 @@ describe("a cloud run renders the model its own orchestrator pushed (hn6 h7w)", 
     expect(body).not.toContain("needs you");
   });
 
+  it("answers a factory-stopped run with the watch frame's story — the stopped verdict and the person's resume (hn6 5d4)", async () => {
+    // A cloud run the operator stopped. Its container died without its
+    // terminal push, so the page composes from the factory's own records —
+    // and the composition must tell the SAME story the watch frame tells
+    // (tick jkb): the verdict says stopped, and only a person starts the
+    // epic again, so the needs-you line carries the resume. The old
+    // composition answered the same ending with a second story — a terminal
+    // cancelled chip, no verdict, nothing needed — which rule 8 forbids:
+    // one model, two renderers, they cannot disagree. The watch frame owns
+    // the stopped run's story; the page renders it.
+    const { runID, token } = await cloudRun("running");
+    await relayPush(token, runID, pushedModel(runID));
+    await env.DB.prepare("UPDATE runs SET state = 'stopped', ended_at = ? WHERE run_id = ?")
+      .bind(new Date().toISOString(), runID)
+      .run();
+    // The durable-evidence verdict the factory's own finalize recorded, and
+    // a second stopped run whose progress stamp never landed — the bare
+    // word, never a dangling "stopped: ".
+    await env.DB.prepare(
+      "INSERT INTO run_progress (run_id, progress, detail, recorded_at) VALUES (?, ?, ?, ?)",
+    )
+      .bind(
+        runID,
+        "none",
+        "the operator stopped the run: 2 of 35 ticks still open",
+        new Date().toISOString(),
+      )
+      .run();
+    await cloudRunRow("run_stopped_bare", "running");
+    await env.DB.prepare(
+      "UPDATE runs SET state = 'stopped', ended_at = ? WHERE run_id = ?",
+    )
+      .bind(new Date().toISOString(), "run_stopped_bare")
+      .run();
+
+    const body = await (await page(await login())).text();
+    // The verdict the frame's headline spells, from the run's own word, in
+    // the one vocabulary both renderers share (verdictWord).
+    expect(body).toContain(
+      '<span class="dot"></span>stopped: the operator stopped the run: 2 of 35 ticks still open</span>',
+    );
+    // The bare word for the run whose records state no reason.
+    expect(body).toContain('<span class="dot"></span>stopped</span>');
+    expect(body).not.toContain("stopped: </span>");
+    expect(body).toContain("needs you: run run_stopped_bare is stopped — ticfac run ko8 --cloud");
+    // The needs-you resume, with the one command that clears it — the cloud
+    // resume, a new submission to this factory, never the local foreground
+    // restart (tick tt6).
+    expect(body).toContain(
+      `needs you: run ${runID} is stopped: the operator stopped the run: 2 of 35 ticks still open — ticfac run h7w --cloud`,
+    );
+    expect(body).toContain("clear with: ticfac run h7w --cloud");
+    // The row reads the held band — the same band the bare `ticfac` overview
+    // renders this model in — never a terminal cancelled that answers the
+    // same ending with nothing needed.
+    expect(body).toContain('<span class="state held">held for a person</span>');
+    expect(body).not.toContain('<span class="state cancelled">');
+    expect(body).not.toContain("needs you: nothing");
+    // The composition claims nothing the factory's records do not state: no
+    // CI line, because the factory never read the forge — "no PR yet" is a
+    // pushed model's claim, one that looked and found none.
+    expect(body).not.toContain("CI: no PR yet");
+  });
+
   it("spells the degraded and stopped verdicts in the terminal's own words — the cross-renderer test", async () => {
     // The same two goldens internal/cli renders through dashVerdict
     // (TestTheWatchAndThePhoneSpellOneVerdictWord): the summary the Go
