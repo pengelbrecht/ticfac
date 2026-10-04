@@ -8,12 +8,12 @@ import {
   resolveSandboxImage,
   SANDBOX_SLEEP_AFTER,
   type SandboxBinding,
-  sdkSandboxDoor,
   type SdkProcess,
   type SdkSandbox,
   sameImageReference,
   sandboxBinding,
   sdkBootOptions,
+  sdkSandboxDoor,
 } from "../src/sandbox";
 
 /**
@@ -241,7 +241,7 @@ describe("the 0.x SDK behind the harness door (tick hxd)", () => {
     expect(line).toContain('exit "$ec"');
     expect(line).not.toContain("PIPESTATUS");
     // stderr is merged into the one answer, at the container.
-    expect(line).toContain('2>&1');
+    expect(line).toContain("2>&1");
   });
 
   it("reports a cut answer as truncated, and only the first maxBytes of it", async () => {

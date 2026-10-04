@@ -13,6 +13,7 @@
  * attempt host, the harness, the tools, the hooks.
  */
 import { env, runInDurableObject, SELF } from "cloudflare:test";
+import type { SandboxDoor } from "ticfac-harness";
 import {
   type FauxResponseFactory,
   fauxAssistantMessage,
@@ -30,7 +31,6 @@ import { roomFor } from "../src/runs";
 import type { SandboxNamespace, SdkSandbox } from "../src/sandbox";
 import { attemptSandboxName } from "../src/sandbox-executor";
 import type { WorkerAgent, WorkerAgentNamespace, WorkerAgentState } from "../src/worker-agent";
-import type { SandboxDoor } from "ticfac-harness";
 
 const BASE = "https://factory.example.com";
 const EPIC = "43y";
@@ -120,7 +120,6 @@ async function seededAgent(
  * test substitutes (tick hxd). Only the model is seeded.
  */
 async function seededAgentOnSdk0(
-  container: ReturnType<typeof fakeSandboxDoor>,
   responses: FauxResponseFactory[],
 ): Promise<{ calls: () => number; stub: DurableObjectStub<WorkerAgent> }> {
   const namespace = env.WORKER_AGENTS as unknown as DurableObjectNamespace<WorkerAgent>;
@@ -319,7 +318,7 @@ describe("a cloud worker attempt on its WorkerAgent", () => {
     });
     const sdk = sdkOverDoor(container.sandbox);
     set("SANDBOXES", fakeSdkNamespace(sdk));
-    const { calls } = await seededAgentOnSdk0(container, [
+    const { calls } = await seededAgentOnSdk0([
       () =>
         fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
           stopReason: "toolUse",

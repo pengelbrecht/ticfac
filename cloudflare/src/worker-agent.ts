@@ -60,6 +60,7 @@
  */
 
 import { DurableObject } from "cloudflare:workers";
+import { getSandbox } from "@cloudflare/sandbox";
 import {
   type AgentEventStream,
   gatewayModelAccess,
@@ -71,20 +72,23 @@ import {
   type WorkerAttemptSpec,
   watchAttemptEvents,
 } from "ticfac-harness";
-import { getSandbox } from "@cloudflare/sandbox";
-import type { FactoryBootOptions, FactorySandboxNamespace, FactorySandboxStub } from "./factory-sandbox";
-import { isSandboxNamespace, sdkBootOptions, sdkSandboxDoor, type SdkSandboxDoor } from "./sandbox";
+import type {
+  FactoryBootOptions,
+  FactorySandboxNamespace,
+  FactorySandboxStub,
+} from "./factory-sandbox";
 import { type ProxyOptions, proxyModelRequest } from "./gateway";
 import type { Env } from "./index";
 import {
   DO_V1,
   INSTANCE_BY_JOB_KIND,
   jobKindOfSandboxName,
+  type RunSubstrate,
   readRunSubstrate,
   runIDOfSandboxName,
-  type RunSubstrate,
 } from "./run-substrate";
 import type { SandboxOutput } from "./sandbox";
+import { isSandboxNamespace, type SdkSandboxDoor, sdkBootOptions, sdkSandboxDoor } from "./sandbox";
 import {
   WORKER_BOOT_COMMAND,
   WORKER_BOOT_MARKER,
@@ -198,9 +202,7 @@ export function hostedBoot(
 ): FactoryBootOptions {
   return {
     keepAlive: true,
-    ...(substrate === DO_V1
-      ? { instance: INSTANCE_BY_JOB_KIND[jobKindOfSandboxName(name)] }
-      : {}),
+    ...(substrate === DO_V1 ? { instance: INSTANCE_BY_JOB_KIND[jobKindOfSandboxName(name)] } : {}),
     ...(image === null ? {} : { pinnedImage: image }),
   };
 }
