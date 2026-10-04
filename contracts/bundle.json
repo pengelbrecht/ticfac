@@ -1,6 +1,10 @@
 {
   "$comment": "The versioned cross-language contract bundle, authored by TICFAC since tick 4i8. Read contracts/README.md for what the fixtures are and contracts/CHANGELOG.md for the rule that governs this file. `version` is pinned by exact value by every consumer — cloudflare/contracts.pin.json here, and any repository that vendors this bundle. Regenerate `files` and `digests` when a fixture changes; never re-cut them without bumping `version`. `version_digests` is the append-only ledger that makes that rule executable: each version records a sha256 over its own `version` + `digests`, written the first time it is cut and never rewritten, so a re-cut at an unchanged version contradicts it and both verifiers refuse. The ledger begins at 1.0.0, ticfac's first cut: 2.1.1-6.3.0 were ticks' bundle and their history lives in the ticks repository; 1.0.0 carries the 6.3.0 bytes across unchanged except where its own changelog entry says. Two files in this bundle are not ticfac's to edit: tk-json-manifest.json and tracker-layout.json are vendored from a pinned ticks release (contracts.pin.json) and change only by moving that pin.",
+<<<<<<< HEAD
   "version": "1.5.0",
+=======
+  "version": "1.4.1",
+>>>>>>> b9e85c8f6e13fe062652a71c54abe90669e44d93
   "files": [
     "collect-vocabulary.json",
     "credential-ownership.json",
@@ -29,7 +33,11 @@
     "runners-config-contract.json": "602c3b077261ed745201b8d0a49c0133f17d87bea86d32282394721b6dfc861f",
     "sandbox-image-cases.json": "47bf74104bb6a682c9876c25177cd5ff4c31ec6dc477dd5f1182cb6d54e5d470",
     "signal-source-cases.json": "1adf66c382edb9d5fd15cfc1cdf01eb35795d232a823d6060ff3f69e493ed6df",
+<<<<<<< HEAD
     "status-model.json": "8cdd0f4944c17f5be1880b842065f6b90d89eff8ebd841e7062b72afe912b456",
+=======
+    "status-model.json": "2f5e2407ff9852a9a18e0bd349bd97ab420898b94c769df281036c5cb3799ef8",
+>>>>>>> b9e85c8f6e13fe062652a71c54abe90669e44d93
     "sweep-policy-cases.json": "7006ba3391618fdaf249084acf799f4fa67e49e3e89ac0baf89ba838b5641d0e",
     "sweep-selection-contract.json": "3d2eafd42b93b7d6e0b1bf45379c3e4008f3757bea5e03d70d58d5f8625f05ef",
     "ticfac-run-state.json": "a1cf745f00b4982c4b59a3aa7a6dac3766365e4b479ece03ef5d8f0280f15ca7",
@@ -49,6 +57,10 @@
     "1.2.4": "03b3888975ca3c3c02aa3e74f11dc58e6ed620fa90565b8ea6393852fa36abe5",
     "1.3.0": "d7186399dfcb49a41be43b37873d8542cfd037c5d9f46c72e14c48a7810af956",
     "1.4.0": "ab174cfb3b03114381011f8d4d2c6d2eff420fa0697a9971f643bf71c0d7b6fe",
+<<<<<<< HEAD
     "1.5.0": "da6122ad059385ef723fb50be024643d1b744fbbbdab55eab4b32d637926fb6c"
+=======
+    "1.4.1": "91c373bfa603dfef1c500a97faade283e33d2501610971cf71e8ff03bccac831"
+>>>>>>> b9e85c8f6e13fe062652a71c54abe90669e44d93
   }
 }
