@@ -621,7 +621,10 @@ func TestPipelineCells(t *testing.T) {
 			check: func(t *testing.T, model Model) {
 				tick := pipelineTick(t, model, "mmm")
 				try := pipelineTry(t, tick, 4)
-				want := "ticfac settle pip mmm 4 --release \"<who>\""
+				// The fixture's run id (run-pip) is not the epic spelling, so
+				// the command names the run (tick ulw) — the same sentence the
+				// header's attention entry carries.
+				want := "ticfac settle pip mmm 4 --run-id run-pip --release \"<who>\""
 				if try.NextStep == nil || *try.NextStep != want {
 					t.Errorf("mmm's next step is %v, want %q: the attention entry's own unblock command",
 						derefString(try.NextStep), want)

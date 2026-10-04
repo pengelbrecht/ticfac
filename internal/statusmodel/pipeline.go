@@ -39,11 +39,17 @@ const tickIntegrated = "integrated"
 // it decides nothing a record did not state. Where nothing states a fact the
 // tick says null or pending, never a guess. The per-tick records are the
 // merged view's (epic.go): each tick's own from the last run that touched
+<<<<<<< HEAD
 // it. priorHolds is the standing prior-run hold answer the model computed
 // once for both of its readers — the header's needs-you and the rows'
 // next steps.
 func decorateTicks(src Sources, merged *mergedRuns, priorHolds []PriorHold, m *Model) {
 	index := newPipelineIndex(src, merged, priorHolds, m.EpicID)
+=======
+// it.
+func decorateTicks(src Sources, merged *mergedRuns, m *Model) {
+	index := newPipelineIndex(src, merged, m.EpicID, m.RunID)
+>>>>>>> 115cda72c93bdcc18234ad3f7bfe42d4f5514ced
 	for wi := range deref(m.Waves) {
 		wave := &(*m.Waves)[wi]
 		for ti := range wave.Ticks {
@@ -61,6 +67,7 @@ func decorateTicks(src Sources, merged *mergedRuns, priorHolds []PriorHold, m *M
 // eli). Built once per model; read per tick.
 type pipelineIndex struct {
 	epicID         string
+	runID          string
 	host           string
 	nonNewestOwner map[string]bool
 	tasks          map[string]tk.GraphTask
@@ -77,10 +84,15 @@ type pipelineIndex struct {
 
 // newPipelineIndex groups the sources' per-tick facts once, so decorating a
 // hundred ticks costs one pass over each record kind rather than a hundred.
+<<<<<<< HEAD
 func newPipelineIndex(src Sources, merged *mergedRuns, priorHolds []PriorHold, epicID string) *pipelineIndex {
+=======
+func newPipelineIndex(src Sources, merged *mergedRuns, epicID, runID string) *pipelineIndex {
+>>>>>>> 115cda72c93bdcc18234ad3f7bfe42d4f5514ced
 	newest := merged.newestRun()
 	p := &pipelineIndex{
 		epicID:         epicID,
+		runID:          runID,
 		host:           src.Host,
 		nonNewestOwner: map[string]bool{},
 		tasks:          map[string]tk.GraphTask{},
@@ -623,10 +635,12 @@ func (p *pipelineIndex) hasLaterDispatch(tickID string, attempt int) bool {
 // attentionCommand mirrors the attention entry buildWaits states for a hold
 // that names this tick: the same newest run_held line (one this incarnation
 // left — a hold a later resume settled is history, and holdSettledByAResume
-// says so), and the same unblock command that entry carries. Mirrored rather
-// than read because decorateTicks runs before buildWaits assembles the list;
-// one spelling there, one mirror here, and a disagreement between a row's
-// next step and the header's command is a drift this comment points at.
+// says so), and the same unblock command that entry carries — including the
+// run id it names when the run's own id is not the epic spelling settle
+// defaults to (tick ulw). Mirrored rather than read because decorateTicks
+// runs before buildWaits assembles the list; one spelling there, one mirror
+// here, and a disagreement between a row's next step and the header's
+// command is a drift this comment points at.
 func (p *pipelineIndex) attentionCommand(tickID string) *string {
 	held := latestStage(p.feed, "", reconcile.StageRunHeld)
 	if held == nil || held.TickID == nil || *held.TickID != tickID {
@@ -640,7 +654,7 @@ func (p *pipelineIndex) attentionCommand(tickID string) *string {
 		return &command
 	}
 	if held.Attempt != nil {
-		command := fmt.Sprintf("ticfac settle %s %s %d --release \"<who>\"", p.epicID, tickID, *held.Attempt)
+		command := SettleCommandForCurrentRun(p.epicID, tickID, *held.Attempt, p.runID)
 		return &command
 	}
 	return nil

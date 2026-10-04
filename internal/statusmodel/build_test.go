@@ -468,6 +468,38 @@ func TestAHeldRunNamesTheCommandThatReleasesIt(t *testing.T) {
 	}
 }
 
+// TestAHeldRunWhoseIDIsNotTheEpicSpellingNamesIt (tick ulw): a run whose
+// records live under a run id other than epic-<epic-id> — today's cloud
+// runs, whose orchestrator execs run-epic --run-id <factory run id> — must
+// name that id in the release command, because settle without --run-id
+// defaults to the epic spelling and the store under IT carries no such
+// attempt: the command the needs-you line gives would refuse. A run under
+// the epic spelling keeps the bare spelling — the flag would name the run
+// the command already addresses (TestAHeldRunNamesTheCommandThatReleasesIt).
+func TestAHeldRunWhoseIDIsNotTheEpicSpellingNamesIt(t *testing.T) {
+	t.Parallel()
+	cloud := "run_1a2b3c4d5e6f"
+	src := runningEpicSources()
+	src.RunID = cloud
+	src.Records.Checkpoint.RunID = cloud
+	four := 4
+	src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), cloud, "6dh", &four,
+		reconcile.StageRunHeld, "attempt 3 of 6dh struck out: the refusal the run recorded"))
+	model := Build(src)
+
+	if model.RunID != cloud {
+		t.Fatalf("the model answers for run %q, want %q", model.RunID, cloud)
+	}
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+		t.Fatalf("a run holding an attempt waits on %+v, want held-for-person", model.WaitsOn)
+	}
+	if model.WaitsOn.UnblockCommand == nil ||
+		*model.WaitsOn.UnblockCommand != `ticfac settle 2jn 6dh 4 --run-id `+cloud+` --release "<who>"` {
+		t.Errorf("the unblocking command is %+v, want the settle command addressed to the holding run",
+			model.WaitsOn.UnblockCommand)
+	}
+}
+
 // TestAHoldAResumeSettledIsHistory (tick 4mv): the feed is append-only per
 // RUN ID, so a resumed run still carries the previous incarnation's
 // run_held line — and a hold somebody already settled by resuming the run
