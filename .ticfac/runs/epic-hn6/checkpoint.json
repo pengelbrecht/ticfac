@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 55,
-  "state": "dispatching",
-  "reason": "dispatching iph as attempt 11",
-  "updated_at": "2026-10-04T18:34:54Z",
+  "sequence": 56,
+  "state": "running",
+  "reason": "iph is running as attempt 11",
+  "updated_at": "2026-10-04T18:35:10Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -63,7 +63,8 @@
     },
     {
       "tick_id": "iph",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 11
     },
     {
       "tick_id": "jkb",
