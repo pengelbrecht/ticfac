@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 73,
-  "state": "gating",
-  "reason": "running the integrated gate for h7w on 256674cd2714",
-  "updated_at": "2026-10-04T19:06:29Z",
+  "sequence": 74,
+  "state": "publishing",
+  "reason": "closing h7w behind the integrated gate on 256674cd2714",
+  "updated_at": "2026-10-04T19:09:24Z",
   "ticks": [
     {
       "tick_id": "v16",
