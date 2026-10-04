@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 84,
-  "state": "running",
-  "reason": "s71 is running as attempt 15",
-  "updated_at": "2026-10-04T19:12:58Z",
+  "sequence": 85,
+  "state": "collecting",
+  "reason": "collecting qwb attempt 14",
+  "updated_at": "2026-10-04T19:25:20Z",
   "ticks": [
     {
       "tick_id": "v16",
