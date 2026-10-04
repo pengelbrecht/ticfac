@@ -2,6 +2,7 @@ package runconfig
 
 import (
 	"errors"
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -387,6 +388,93 @@ func TestTheOracleIsResolvedExactlyOnceForAPiModel(t *testing.T) {
 	}
 }
 
+// readPiCatalogSkipReason classifies a ReadPiCatalog failure for the
+// real-listing test below: the tolerance the lid tick added, stated as a
+// decision a table can pin rather than as an inline branch that a later
+// refactor can quietly turn back into a red gate. A SKIP reason is for the
+// two host states in which there IS no listing to parse — pi absent from the
+// PATH, and pi running but failing before it prints one (the lid finding: pi
+// 0.85.1 crashed in its own formatTokenCount on a cached model with no
+// max-out, `TypeError: Cannot read properties of undefined (reading
+// 'toString')`, empty stdout, non-zero exit) — because both are exactly the
+// catalog-unavailable state the refusal above documents: a pi spawn on such a
+// host is refused at compile time, and the gate reddening on them reddened
+// every tick on the host while saying nothing about this tree. Everything
+// else stays a failure: output pi printed and exited 0 on must parse, and a
+// listing that will not parse is a parser regression that must surface.
+func readPiCatalogSkipReason(err error) (reason string, skip bool) {
+	if err == nil {
+		return "", false
+	}
+	if errors.Is(err, exec.ErrNotFound) ||
+		strings.Contains(err.Error(), "command not found") ||
+		strings.Contains(err.Error(), "executable file not found") {
+		return fmt.Sprintf("pi is not on this host's PATH: %v", err), true
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return fmt.Sprintf("pi on this host printed no listing to parse (exit %d); a pi spawn here is refused as catalog-unavailable: %.400s",
+			exit.ExitCode(), err), true
+	}
+	return "", false
+}
+
+// The tolerance above, pinned: the two no-listing host states are skips and
+// the parse failure is not. The exit-non-zero case reproduces the lid
+// finding's exact error shape — ReadPiCatalog's wrap of an *exec.ExitError
+// carrying pi's crash text on stderr — without needing a host whose pi
+// actually crashes: the crash was a host's cached model entry, not a tree
+// property, and the guard must hold on any host, failing or healthy.
+func TestReadPiCatalogFailureTolerance(t *testing.T) {
+	crashed, err := exec.Command("sh", "-c", "exit 3").Output()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) {
+		t.Fatalf("constructing the crash exit failed (sh -c 'exit 3'): %v", err)
+	}
+	if len(crashed) != 0 {
+		t.Fatalf("the stand-in crash printed output, want empty stdout")
+	}
+	crashErr := fmt.Errorf("pi --list-models: %w: %s", exit,
+		"TypeError: Cannot read properties of undefined (reading 'toString') at formatTokenCount")
+	for _, tc := range []struct {
+		name     string
+		err      error
+		wantSkip bool
+		want     string
+	}{
+		{
+			name:     "pi absent from the PATH",
+			err:      fmt.Errorf("pi --list-models: %w", &exec.Error{Name: "pi", Err: exec.ErrNotFound}),
+			wantSkip: true,
+			want:     "pi is not on this host's PATH",
+		},
+		{
+			name:     "pi crashes before printing a listing (the lid finding)",
+			err:      crashErr,
+			wantSkip: true,
+			want:     "printed no listing to parse (exit 3)",
+		},
+		{
+			name:     "pi exits 0 but the listing will not parse",
+			err:      errors.New("pi catalog line 2 has 5 columns, want at least 6 (provider, model, context, max-out, thinking, images): \"x y z\""),
+			wantSkip: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reason, skip := readPiCatalogSkipReason(tc.err)
+			if skip != tc.wantSkip {
+				t.Fatalf("skip = %v, want %v (reason %q)", skip, tc.wantSkip, reason)
+			}
+			if !tc.wantSkip {
+				return
+			}
+			if !strings.Contains(reason, tc.want) {
+				t.Errorf("skip reason = %q, want it to contain %q", reason, tc.want)
+			}
+		})
+	}
+}
+
 // ReadPiCatalog is the production resolver; the machine this was written on
 // has pi 0.85.1, and the real listing must parse. The test is skipped when pi
 // is absent, which is exactly the state the refusal above documents: this
@@ -397,12 +485,8 @@ func TestTheOracleIsResolvedExactlyOnceForAPiModel(t *testing.T) {
 // regression. Output pi printed and exited 0 on must still parse.
 func TestReadPiCatalogParsesTheRealListing(t *testing.T) {
 	if _, err := ReadPiCatalog(); err != nil {
-		if strings.Contains(err.Error(), "command not found") || strings.Contains(err.Error(), "executable file not found") {
-			t.Skipf("pi is not on this host's PATH: %v", err)
-		}
-		var exit *exec.ExitError
-		if errors.As(err, &exit) {
-			t.Skipf("pi on this host printed no listing to parse (exit %d); a pi spawn here is refused as catalog-unavailable: %.400s", exit.ExitCode(), err)
+		if reason, skip := readPiCatalogSkipReason(err); skip {
+			t.Skipf("%s", reason)
 		}
 		t.Fatalf("ReadPiCatalog: %v", err)
 	}
