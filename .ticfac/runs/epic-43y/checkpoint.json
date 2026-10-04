@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 72,
-  "state": "running",
-  "reason": "2q5 is running as attempt 12",
-  "updated_at": "2026-10-04T18:40:30Z",
+  "sequence": 73,
+  "state": "dispatching",
+  "reason": "dispatching bgx as attempt 13",
+  "updated_at": "2026-10-04T18:40:42Z",
   "ticks": [
     {
       "tick_id": "92k",
