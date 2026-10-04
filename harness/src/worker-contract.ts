@@ -25,13 +25,12 @@
  */
 
 import type { Context } from "@earendil-works/chord";
+import type { AssistantMessage } from "@earendil-works/pi-ai";
 import type {
-  AssistantMessage,
-  UserInput,
-} from "@earendil-works/pi-ai";
-import type {
+  ConversationId,
   GenerationHooks,
   HookApi,
+  UserInput,
 } from "@earendil-works/pi-durable";
 import type { ExecutionEnv } from "@earendil-works/pi-durable/env";
 
@@ -54,8 +53,7 @@ export const WORKER_HEADLESS_LINE =
 export const WORKER_REPORT_CHECKER = "ticfac-exec-subprocess";
 
 /** The memo slots the bounds are counted in, first-writer-wins per nudge/pushback. */
-const NUDGE_SLOT = "workerContract.nudge";
-const PUSHBACK_SLOT = "workerContract.pushback";
+const NUDGE_COUNTS = new WeakMap<object, Map<ConversationId, number>>();
 
 export type WorkerContractOptions = {
   /** The report's absolute path in the env — `RESULT-<tick>.md` inside the checkout. */
@@ -78,23 +76,29 @@ export type WorkerContractOptions = {
   readonly log?: (line: string) => void;
 };
 
-/** Whether one nudge/pushback was already sent; the sender records it first-writer-wins, so a replay after a crash does not double-count it. */
-async function spent(api: HookApi, slot: string, index: number, context: Context): Promise<boolean> {
-  return (await api.memo(`${slot}.${index}`, context)) !== undefined;
-}
+/**
+ * How many follow-ups one conversation has already been sent.
+ *
+ * PER CONVERSATION and in the harness process — a Map in the hook closure —
+ * not a task memo: a `continue` hands the run to a SUCCESSOR generation
+ * (pi-durable's `answer()` does exactly that), and a task's memos do not
+ * cross the handOver, so a memo-based bound would reset at every follow-up
+ * and nudge forever. The process scope is the shell's own scope too:
+ * worker.sh counted its loop per boot and a crashed container lost it, and
+ * the wall clock is the outer bound either way.
+ */
+type ConversationCount = { nudges: number; pushbacks: number };
 
-/** How many of `slot` are already spent, counted up to its bound. */
-async function spentCount(
-  api: HookApi,
-  slot: string,
-  max: number,
-  context: Context,
-): Promise<number> {
-  let n = 0;
-  while (n < max && (await spent(api, slot, n + 1, context))) {
-    n += 1;
+function conversationCount(
+  counts: Map<ConversationId, ConversationCount>,
+  conversationId: ConversationId,
+): ConversationCount {
+  let count = counts.get(conversationId);
+  if (count === undefined) {
+    count = { nudges: 0, pushbacks: 0 };
+    counts.set(conversationId, count);
   }
-  return n;
+  return count;
 }
 
 /** A shell-word single-quoted string; the checker's argv reaches `exec` as one command line. */
@@ -116,9 +120,9 @@ export function workerNudgeMessage(options: WorkerContractOptions): string {
   );
 }
 
-/** The checker's command line, as `env.shell.exec` receives it. */
+/** The checker's command line, as the env's shell receives it. */
 export function workerReportCheckCommand(options: WorkerContractOptions): string {
-  const checker = options.checkerBinary ?? WORKER_REPORT_CHECKER;
+  const checker = shellQuote(options.checkerBinary ?? WORKER_REPORT_CHECKER);
   const args = [
     checker,
     "lint-report",
@@ -151,12 +155,16 @@ export async function runWorkerReportCheck(
   | { readonly verdict: "broken"; readonly reason: string }
 > {
   let output = "";
-  const result = await env.shell.exec(workerReportCheckCommand(options), {
-    cwd: options.repoDir,
-    onOutput: (text: string) => {
-      output += text;
+  const result = await env.exec(
+    workerReportCheckCommand(options),
+    {
+      cwd: options.repoDir,
+      onOutput: (text: string) => {
+        output += text;
+      },
     },
-  }, context);
+    context,
+  );
   if (!result.ok) {
     return { verdict: "broken", reason: result.error.message ?? String(result.error) };
   }
@@ -194,6 +202,9 @@ export function workerOnYield(
   const maxNudges = options.maxNudges ?? WORKER_MAX_NUDGES;
   const maxPushbacks = options.maxPushbacks ?? WORKER_MAX_PUSHBACKS;
   const log = options.log ?? console.warn;
+  // Per conversation, in this process — see ConversationCount above for why
+  // this is a Map in the closure and not a task memo.
+  const counts = new Map<ConversationId, ConversationCount>();
   return async (
     _answer: AssistantMessage,
     api: HookApi,
@@ -204,15 +215,15 @@ export function workerOnYield(
       log(`the report check could not look for ${options.reportPath}: ${report.error}`);
       return undefined;
     }
+    const spent = conversationCount(counts, api.conversationId);
     if (!report.value) {
-      const nudged = await spentCount(api, NUDGE_SLOT, maxNudges, context);
-      if (nudged >= maxNudges) {
+      if (spent.nudges >= maxNudges) {
         log(
-          `the report at ${options.reportPath} is still missing after ${nudged} nudge(s); the yield stands and collect decides`,
+          `the report at ${options.reportPath} is still missing after ${spent.nudges} nudge(s); the yield stands and collect decides`,
         );
         return undefined;
       }
-      await api.memo(`${NUDGE_SLOT}.${nudged + 1}`, true, context);
+      spent.nudges += 1;
       return { continue: workerNudgeMessage(options) };
     }
     const check = await runWorkerReportCheck(env, options, context);
@@ -223,14 +234,13 @@ export function workerOnYield(
     if (check.verdict === "pass") {
       return undefined;
     }
-    const pushed = await spentCount(api, PUSHBACK_SLOT, maxPushbacks, context);
-    if (pushed >= maxPushbacks) {
+    if (spent.pushbacks >= maxPushbacks) {
       log(
-        `the report at ${options.reportPath} still fails the report check after ${pushed} pushback(s); it is pushed as the agent wrote it, and collect decides`,
+        `the report at ${options.reportPath} still fails the report check after ${spent.pushbacks} pushback(s); it is pushed as the agent wrote it, and collect decides`,
       );
       return undefined;
     }
-    await api.memo(`${PUSHBACK_SLOT}.${pushed + 1}`, true, context);
+    spent.pushbacks += 1;
     return { continue: check.message === "" ? workerNudgeMessage(options) : check.message };
   };
 }
