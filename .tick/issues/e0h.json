@@ -2,6 +2,7 @@
   "id": "e0h",
   "title": "Held run's verdict line overflows the terminal (105 cells at width 100)",
   "description": "dashProgressLine's fallback (watch_view.go:226, `return join(mid)`) is not bounded to the width it is given: when the progress bar cannot seat beside the answers it returns the answers bare, and a long health verdict ('● stopped: no process holds this run: the last one released it, or none has claimed it here') makes the line 103 cells at any width. The watch never shows the overflow because renderWatchFrame truncates every frame line to the pane width; the bare overview has no such pass, so the indented line prints at 105 cells and wraps in a 100-column terminal. The hold and its clearing command still show on their own wrapped lines, so nothing A2 names is hidden — it is the same wrap the kce finding was about, one line lower. Found while reproducing kce at base; kce's named fix (layout at width-2) does not and cannot fix it, and the seam is shared with the live watch, so I left it out of this tick.\nevidence: internal/cli/watch_view.go:226 — `return join(mid)` unbounded; internal/cli/overview.go renderOverview prints \"  \"+hl with no truncate: epic-hdh's line '  4/6 ticks · ● stopped: no process holds this run: the last one released it, or none has claimed it here' measures 105 cells at width 100\n\nticfac run epic-hn6 filed this backlog tick from the finding 64e44db967707676a3c8c6427b57b072d04c111e418f3c272e1877b4859e13cb (reported by run-epic-hn6/tick-kce/attempt-13): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/64e44db967707676a3c8c6427b57b072d04c111e418f3c272e1877b4859e13cb.json on the run branch.",
+  "notes": "2026-10-04 21:30 - ticfac run epic-hn6: created by absorbing finding 64e44db967707676a3c8c6427b57b072d04c111e418f3c272e1877b4859e13cb — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-hn6/absorptions/64e44db967707676a3c8c6427b57b072d04c111e418f3c272e1877b4859e13cb.json on epic/hn6, and it says: the classifier put 0.26 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-hn6/tick-kce/attempt-13",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-04T19:30:39Z",
-  "updated_at": "2026-10-04T19:30:39Z"
+  "updated_at": "2026-10-04T19:30:45.36605Z"
 }
