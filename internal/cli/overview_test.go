@@ -1171,3 +1171,47 @@ func TestTheBareOverviewHeadlineStylesAndWidth(t *testing.T) {
 		t.Errorf("a piped listing carries escape codes:\n%s", joined)
 	}
 }
+
+// TestTheOverviewClassesAStoppedRunByItsOwnDurableWord (tick c65): the
+// contract's dashboard_stopped golden is a run that died mid-waves — its
+// lifecycle phase still names no end — and the overview's terminal read is
+// the anchor the phone page's classifier (cloudflare/src/status.ts,
+// classifyStatusDoc, the port of this classification) must reproduce: the
+// liveness answer's own state IS the run's durable terminal word, so the
+// row says cancelled, never done, and the reason is the run's own last word
+// from its feed. Without the golden pinned on this side, the phone's chip
+// reading "done" for the same model had nothing here to disagree with.
+func TestTheOverviewClassesAStoppedRunByItsOwnDurableWord(t *testing.T) {
+	stopped := statusModelGoldens(t)["dashboard_stopped"]
+
+	row := overviewEntryOf(stopped, true)
+	if row.State != overviewStateCancelled {
+		t.Errorf("the stopped golden classes %q, want %q — a run that died mid-waves is never done",
+			row.State, overviewStateCancelled)
+	}
+	if row.Reason != "the close-out waits for CI green on the PR" {
+		t.Errorf("the stopped golden's reason is %q, want the run's own last word from its feed", row.Reason)
+	}
+	if row.ClearWith != nil {
+		t.Errorf("a cancelled run names no clearing command; got %q", *row.ClearWith)
+	}
+
+	// The golden with its durable word swapped for the other two: the
+	// completed word is the only one that reads done, and the failed one
+	// carries the resume named by the run's host.
+	completed := stopped
+	completed.Liveness.State = "completed"
+	if row := overviewEntryOf(completed, true); row.State != overviewStateDone {
+		t.Errorf("the completed word classes %q, want done", row.State)
+	}
+	failed := stopped
+	failed.Liveness.State = "failed"
+	failed.Host = statusmodel.HostCloud
+	failedRow := overviewEntryOf(failed, true)
+	if failedRow.State != overviewStateFailed {
+		t.Errorf("the failed word classes %q, want failed", failedRow.State)
+	}
+	if failedRow.ClearWith == nil || *failedRow.ClearWith != "ticfac run 6in --cloud" {
+		t.Errorf("a failed cloud run's resume is the cloud submission; got %v", failedRow.ClearWith)
+	}
+}

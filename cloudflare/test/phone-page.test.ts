@@ -727,6 +727,12 @@ describe("a cloud run renders the model its own orchestrator pushed (hn6 h7w)", 
     // The bare word — never a dangling "stopped: " with nothing behind it.
     expect(stoppedBody).toContain('<span class="dot"></span>stopped</span>');
     expect(stoppedBody).not.toContain("stopped: ");
+    // The chip beside it reads the same ending (tick c65): the run died
+    // mid-waves, so its phase names no end and the classifier must not read
+    // "done" off it — the liveness answer's own word stands, the same class
+    // the bare overview reads for this golden.
+    expect(stoppedBody).toContain('<span class="state cancelled">cancelled</span>');
+    expect(stoppedBody).not.toContain('<span class="state done">done</span>');
   });
 
   it("renders the golden's elapsed, live workers and CI — the sections the same model gives the terminal", async () => {
