@@ -1,0 +1,14 @@
+{
+  "id": "akc",
+  "title": "Effort tiers may not reach GLM: pi records thinkingLevel high whatever effort the profile asks",
+  "gloss": "GLM effort not applied",
+  "description": "Found during jd3 (2026-10-04): on this machine both `--model cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash:medium` and `--thinking medium` recorded thinkingLevel: high in the pi session, on pi 0.85.1 and 1.0.2. ticfac's tier cells set effort (economy medium, strong high), so the economy rung may be running at high effort (cost/latency) or the setting is ignored by the model/provider. Verify what Workers AI's GLM 5.3 / Flash accept (reasoning effort / thinking params via the gateway), whether pi maps effort to them, and fix the mapping (for pi-durable in 43y's gateway provider, oq4) or drop effort from cells that cannot honour it.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A recorded check per model (requested effort → what reached the provider → observed behaviour); the cells/provider fixed or the effort field removed where it has no effect; tests.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-04T12:04:17.071064Z",
+  "updated_at": "2026-10-04T12:04:17.071064Z"
+}
