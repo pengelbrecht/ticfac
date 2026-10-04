@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 114,
-  "state": "publishing",
-  "reason": "closing c65 behind the integrated gate on 77d2e56f19cb",
-  "updated_at": "2026-10-04T20:13:30Z",
+  "sequence": 115,
+  "state": "running",
+  "reason": "c65 is closed",
+  "updated_at": "2026-10-04T20:13:41Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -97,7 +97,7 @@
     },
     {
       "tick_id": "c65",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 17
     },
     {
