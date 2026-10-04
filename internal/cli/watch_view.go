@@ -102,13 +102,16 @@ func ansiWatchStyles() watchStyles {
 // marker — the drill-in cursor the keys move; "" for none.
 func renderWatchFrame(m statusmodel.Model, st watchStyles, width, height int, selected string) []string {
 	head := dashboardHeadline(m, st, width)
-	head = append(head, dashboardAttentionLines(m, st)...)
+	holds := dashboardAttentionBlocks(m, st, width)
+	for _, block := range holds {
+		head = append(head, block...)
+	}
 	tableHead, rows := dashboardTable(m, st, width, selected)
 	workers := dashboardWorkers(m, st, width)
 	cost := dashboardCICost(m, st, width)
 	tail := dashboardTail(m, st, width)
 
-	frame := fitDashboard(head, tableHead, rows, workers, cost, tail, height, st)
+	frame := fitDashboard(head, holds, tableHead, rows, workers, cost, tail, height, st)
 
 	// Width: the columns were dropped while building the rows (above); what
 	// is left is keeping every line inside the pane, however wide the
@@ -319,20 +322,116 @@ func dashboardNeedsSomebody(m statusmodel.Model) bool {
 // dashboardAttentionLines is the first question — does anything need me —
 // asked in the header, one amber line per hold, each naming the one command
 // that moves it on. Nothing needs a person and there is no line at all: the
-// phase bar's quiet right side is the whole answer.
-func dashboardAttentionLines(m statusmodel.Model, st watchStyles) []string {
+// phase bar's quiet right side is the whole answer. A line the pane cannot
+// seat is wrapped under its announcement, never truncated (tick 9um).
+func dashboardAttentionLines(m statusmodel.Model, st watchStyles, width int) []string {
 	lines := []string{}
 	for _, a := range m.Attention {
 		if !a.NeedsPerson {
 			continue
 		}
-		line := "needs you: " + a.What
-		if a.UnblockCommand != nil && *a.UnblockCommand != "" {
-			line += " — " + *a.UnblockCommand
-		}
-		lines = append(lines, st.amber(line))
+		lines = append(lines, dashboardHoldLines(a, st, width)...)
 	}
 	return lines
+}
+
+// dashboardAttentionBlocks is the holds' own lines one block per hold: the
+// shape the height fit needs, so a short pane drops a hold whole and never
+// the half of one (fitDashboard).
+func dashboardAttentionBlocks(m statusmodel.Model, st watchStyles, width int) [][]string {
+	blocks := [][]string{}
+	for _, a := range m.Attention {
+		if !a.NeedsPerson {
+			continue
+		}
+		blocks = append(blocks, dashboardHoldLines(a, st, width))
+	}
+	return blocks
+}
+
+// dashHoldIndent is the hanging indent the continuation lines of a wrapped
+// hold carry: small enough to leave a narrow pane room, big enough to read
+// as one thought continued.
+const dashHoldIndent = "  "
+
+// dashboardHoldLines is one hold's lines: the announcement with its clearing
+// command as the one line wherever the pane seats it — and where it does
+// not, wrapped under the announcement instead of truncated (tick 9um): the
+// what flows on with a hanging indent, and the command that clears the hold
+// keeps every one of its words on lines of its own, because a clearing
+// command a person cannot read whole is no command.
+func dashboardHoldLines(a statusmodel.Attention, st watchStyles, width int) []string {
+	line := "needs you: " + a.What
+	if a.UnblockCommand != nil && *a.UnblockCommand != "" {
+		line += " — " + *a.UnblockCommand
+	}
+	if width <= 0 || ansi.StringWidth(line) <= width {
+		return []string{st.amber(line)}
+	}
+	wrapped := dashWrapWords(a.What, "needs you: ", width)
+	if a.UnblockCommand != nil && *a.UnblockCommand != "" {
+		wrapped = append(wrapped, dashWrapWords(*a.UnblockCommand, dashHoldIndent, width)...)
+	}
+	lines := make([]string, 0, len(wrapped))
+	for _, l := range wrapped {
+		lines = append(lines, st.amber(l))
+	}
+	return lines
+}
+
+// dashWrapWords flows text into lines that fit width cells: the first line
+// carries first, every later one the hanging indent, breaking on spaces and
+// keeping every word whole — a word with no room left on a line starts the
+// next one, and a word wider than a whole line is cut where it stands
+// rather than allowed to overflow, so the pane's width holds and no
+// character is lost. Width 0 or less means unknown: one line, everything.
+func dashWrapWords(text, first string, width int) []string {
+	if width <= 0 {
+		return []string{first + text}
+	}
+	out := []string{}
+	cur := first
+	room := width - ansi.StringWidth(first)
+	started := false // the line carries at least one word of text
+	newline := func() {
+		out = append(out, cur)
+		cur = dashHoldIndent
+		room = width - len(dashHoldIndent)
+		started = false
+	}
+	for _, w := range strings.Fields(text) {
+		need := ansi.StringWidth(w)
+		if started {
+			need++ // the space between words
+		}
+		if need <= room {
+			if started {
+				cur += " "
+			}
+			cur += w
+			room -= need
+			started = true
+			continue
+		}
+		newline()
+		for ansi.StringWidth(w) > room && room >= 1 {
+			chunk := ansi.Truncate(w, room, "")
+			if chunk == "" {
+				break // a symbol wider than the room rides whole
+			}
+			out = append(out, cur+chunk)
+			w = ansi.TruncateLeft(w, room, "")
+		}
+		if w != "" {
+			cur += w
+			room -= ansi.StringWidth(w)
+			started = true
+		}
+	}
+	if !started && cur != first {
+		return out // nothing left to carry on the indented line
+	}
+	return append(out, cur)
 }
 
 // dashRow is one tick row of the table: the rendered line, the tick it
@@ -856,7 +955,7 @@ func dashTailSeat(line, right string, width int) (string, bool) {
 // CLOSED rows collapse into one dim "✓ N closed" line each, so no row moves
 // relative to another, and whatever still does not fit is counted by one
 // "+N more" at the fold. Fitting never reorders what it keeps.
-func fitDashboard(head, tableHead []string, rows []dashRow, workers, cost, tail []string, height int, st watchStyles) []string {
+func fitDashboard(head []string, holds [][]string, tableHead []string, rows []dashRow, workers, cost, tail []string, height int, st watchStyles) []string {
 	middle := func(rows []dashRow) []string {
 		lines := append([]string{}, tableHead...)
 		for _, r := range rows {
@@ -882,7 +981,7 @@ func fitDashboard(head, tableHead []string, rows []dashRow, workers, cost, tail 
 		// A pane shorter than the headline and the tail keeps the headline
 		// — attention rides in it — and lets the terminal scroll.
 		if height < len(head) {
-			return head[:height]
+			return fitHead(head, holds, height)
 		}
 		return head
 	}
@@ -897,6 +996,33 @@ func fitDashboard(head, tableHead []string, rows []dashRow, workers, cost, tail 
 	out := append(append([]string{}, head...), mid[:avail]...)
 	out = append(out, st.dim(fmt.Sprintf("+%d more", len(mid)-avail)))
 	return append(out, tail...)
+}
+
+// fitHead keeps as much of the headline as the pane's height holds, whole
+// attention blocks only: a hold whose clearing command is cut off by the
+// fold is the defect the width wrap prevents (tick 9um), so what the frame
+// shows of a hold is all of it, and a hold that does not fit is not shown
+// at all. The fixed headline lines (identity, progress, phase bar) come
+// first; only when they alone outgrow the pane does the cut slice into
+// them, as it always did when no hold is in the frame.
+func fitHead(head []string, holds [][]string, height int) []string {
+	fixed := len(head)
+	for _, block := range holds {
+		fixed -= len(block)
+	}
+	if height <= fixed {
+		return head[:height]
+	}
+	out := head[:fixed]
+	room := height - fixed
+	for _, block := range holds {
+		if room < len(block) {
+			break
+		}
+		out = append(out, block...)
+		room -= len(block)
+	}
+	return out
 }
 
 // dashCollapseClosed folds one contiguous run of closed rows into a single

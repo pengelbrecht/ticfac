@@ -851,7 +851,14 @@ func renderOverview(stdout io.Writer, doc overviewModel, cloudNote string, all b
 			for _, hl := range headline[1:] {
 				fmt.Fprintln(stdout, "  "+hl)
 			}
-			for _, al := range dashboardAttentionLines(run.Model, styles) {
+			// The holds' own lines, wrapped to the width the indent leaves
+			// them — the clearing command survives a narrow terminal by
+			// wrapping under the announcement, not by being cut (tick 9um).
+			avail := width - 2
+			if avail < 1 {
+				avail = 0
+			}
+			for _, al := range dashboardAttentionLines(run.Model, styles, avail) {
 				fmt.Fprintln(stdout, "  "+al)
 			}
 		}
