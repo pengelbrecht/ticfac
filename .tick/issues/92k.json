@@ -1,0 +1,15 @@
+{
+  "id": "92k",
+  "title": "Harness package: pinned pi-durable/pi-ai, DO-SQLite storage conformance, replay test in CI",
+  "gloss": "harness package skeleton",
+  "description": "Step 1 of docs/spikes/n0b-round2-pi-durable.md: a harness/ TypeScript package (pnpm) pinning exact pi-durable, pi-ai and chord versions (release-age exemption); CI runs pi-durable's storage conformance suite against a DurableObjectSqlite adapter (vitest pool workers) and a faux-provider transcript replay test so API churn fails CI, not a run.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "parent": "43y",
+  "acceptance_criteria": "conformance + replay tests run in CI and pass; make gate passes",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-04T11:59:00.138841Z",
+  "updated_at": "2026-10-04T11:59:00.138841Z"
+}

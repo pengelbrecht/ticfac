@@ -15,11 +15,9 @@ import (
 // later incarnation — warm or cold, flag or no flag — reads it back before
 // deciding anything under it (finding 95f5ee1a).
 //
-// The ONE exception is a person's explicit raise: the depth refusal's own
-// escape hatch is "raise the bound with --absorption-depth and run the epic
-// again", so an invocation that names the flag explicitly OVERRIDES the
-// record, updating it — a record that out-ranked the person would turn the
-// documented escape hatch into a no-op. The override is a guarded update
+// The ONE exception is a person's explicit raise: an invocation that names
+// --absorption-depth explicitly OVERRIDES the record, updating it — a record
+// that out-ranked the person would turn the flag into a no-op. The override is a guarded update
 // under the same sha rule every update here is: a racing writer that moved
 // the record first wins, and the loser reads back what stands.
 
@@ -32,7 +30,7 @@ type AbsorptionBound struct {
 	// restated beside the provenance the envelope already carries.
 	RunID string `json:"run_id"`
 	// Bound is how many absorptions ONE chain may carry before the run
-	// stops for a person. Always at least one: the effective bound, never
+	// defers the next link to the backlog. Always at least one: the effective bound, never
 	// the raw flag — zero or below was already replaced by the default
 	// before the run recorded anything.
 	Bound int `json:"bound"`

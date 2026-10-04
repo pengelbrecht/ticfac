@@ -41,24 +41,29 @@ effort = "high"
 # ladder declares (in the cloud it would resolve GLM 5.3 anyway, under a
 # name that says less).
 #
-# Jev's mass rule mirrors the local one (tick ms9): a tick whose recorded
-# classification puts more than 0.75 of probability on design + diagnosis
-# starts at strong (GLM 5.3) instead of burning an attempt on Flash;
-# everything else, and every tick Jev could not classify, starts on Flash.
+# No tick starts on the classifier (operator decision 2026-10-04). Every
+# implementation tick starts on Flash and climbs to GLM 5.3 on failure. The
+# dear-mass rule this policy used to carry (dear_work_types / dear_tier /
+# mass_threshold: start at strong when more than 0.75 of Jev's probability
+# sits on design + diagnosis) is switched off because it has no predictive
+# signal: docs/classifier-eval-2026-10-04-jev-clef.md (tick r3y, PR #206)
+# measured dear mass against real outcomes at AUC 0.37-0.42 for Jev, Clef and
+# Clef-flash alike — worse than a coin. Classification still runs and is
+# recorded on the run branch (it is cheap, and it is the data a later
+# question — size/effort, or a classifier fine-tuned on outcomes — needs).
+# Re-enable only with a rule a fresh evaluation shows predicts something.
 # Role jobs (review, closeout, repair, resolve) are never classified, and
 # their cells above resolve GLM 5.3 at every tier.
 #
 # The risk the operator accepted: Phase 2 saw Flash finish 1 of 3 real
-# ticks, and most cloud ticks now start there. The ladder's escalation is
-# the safety net. Revisit (a stronger dear rung, or strong as the start) if
-# the recorded escalation rate from economy is high.
+# ticks, and every cloud implementation tick now starts there. The ladder's
+# escalation is the safety net, and `ticfac status` reports its rate per run
+# (implement ticks started, escalations, model- vs infrastructure-caused).
+# Revisit (a stronger start, or strong as the start) if that rate is high.
 [tier_policy]
 default = "economy"
 ceiling = "strong"
 step = 2
-dear_work_types = ["design", "diagnosis"]
-dear_tier = "strong"
-mass_threshold = 0.75
 
 [roles.review]
 kind = "pi"

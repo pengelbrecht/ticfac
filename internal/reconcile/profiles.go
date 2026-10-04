@@ -407,6 +407,19 @@ func (r *Reconciler) recordTierPolicy(plan []planEntry) {
 			"a recorded classification starts a first attempt at tier %q when the probability mass on the dear work types (%s) clears %.2f — %s; the ceiling %q still bounds the result and a failed attempt still earns its rungs above whatever the classifier chose",
 			string(r.tierPolicy.DearTier), strings.Join(names, ", "), r.tierPolicy.MassThresholdOrDefault(),
 			provenance, string(r.tierPolicy.CeilingOrDefault()))
+	} else {
+		// The rule is off (no dear_work_types declared): say so, so a reader
+		// of the run does not mistake a recorded classification for a
+		// routing input. This repository switched it off on 2026-10-04 after
+		// docs/classifier-eval-2026-10-04-jev-clef.md found no model makes
+		// dear mass predictive.
+		classified := "no classifier is configured for this run"
+		if r.opts.Classifier != nil {
+			classified = "classifications are still asked and recorded on the run branch, as data only"
+		}
+		r.record("", StagePolicyStated,
+			"the start is not classifier-driven: [tier_policy] declares no dear_work_types, so every implementation tick's first attempt starts at %q (or a [[tier_policy.start]] rule's tier) and only a failed attempt climbs, up to the ceiling %q; %s",
+			string(r.tierPolicy.Default), string(r.tierPolicy.CeilingOrDefault()), classified)
 	}
 
 	// Per-wave width: derive each wave's tiers as a first attempt would (the

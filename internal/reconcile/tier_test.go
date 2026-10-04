@@ -602,6 +602,63 @@ func TestAMassRoutedDispatchSelectsItsModelFromTheRecord(t *testing.T) {
 	}
 }
 
+// THE RULE SWITCHED OFF (operator decision 2026-10-04, after r3y's
+// evaluation found dear mass unpredictive): a policy that declares no
+// dear_work_types still ASKS the classifier and records every answer — the
+// data a later question needs — but no answer moves a start. a1's mass is
+// all design and it starts at the default like the rest, and the run says
+// at admission that its start is not classifier-driven.
+func TestWithNoDearWorkTypesAClassificationIsRecordedButStartsNothing(t *testing.T) {
+	t.Parallel()
+	offGate := strings.Replace(massGate, "dear_work_types = [\"diagnosis\", \"design\"]\ndear_tier = \"balanced\"\nmass_threshold = 0.50\n", "", 1)
+	if offGate == massGate {
+		t.Fatal("the fixture gate no longer carries the dear trio this test removes")
+	}
+	f := newFixture(t, fixtureOptions{gate: offGate})
+	classifier := &countingClassifier{answer: func(tick string) jev.Result {
+		return massAnswer(tick, runconfig.WorkDesign, distributionOf(0, 0, 0, 0.10, 0.90))
+	}}
+	opts := f.options(f.Repo, fixtureOptions{})
+	opts.Classifier = classifier
+	r, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := r.RunProtected(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s", result.State, result.Reason)
+	}
+	for _, tick := range []string{"a1", "a2", "b1"} {
+		if got := markerTierOfTry(t, r, tick, 1); got != "economy" {
+			t.Errorf("%s's first attempt recorded tier %q, want the default economy: no classification starts a tick when the rule is off", tick, got)
+		}
+		if _, ok, err := r.recordedClassification(tick); err != nil || !ok {
+			t.Errorf("%s's classification is not recorded on the run branch (ok=%v, err=%v): the rule is off, the data is not", tick, ok, err)
+		}
+	}
+	asked := classifier.askedIDs()
+	sort.Strings(asked)
+	if strings.Join(asked, ",") != "a1,a2,b1" {
+		t.Errorf("the classifier was asked %v, want the three role-less ticks once each", asked)
+	}
+	var stated bool
+	for _, event := range r.Journal() {
+		if event.Stage == StagePolicyStated && strings.Contains(event.Detail, "the start is not classifier-driven") &&
+			strings.Contains(event.Detail, "recorded on the run branch") {
+			stated = true
+		}
+		if strings.Contains(event.Detail, "dear work types") {
+			t.Errorf("a run with the rule off still speaks of the dear work types: %q", event.Detail)
+		}
+	}
+	if !stated {
+		t.Error("the run never stated at admission that its start is not classifier-driven")
+	}
+}
+
 // THE LADDER UNDERNEATH, which is the reason promotion is safe at all: the
 // classification picks a START, a failed attempt still earns a rung above
 // whatever the classifier chose, and the restart reads the record rather

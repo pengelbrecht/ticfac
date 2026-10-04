@@ -717,8 +717,8 @@ finding_chain)
 	# The recursion case (tick qjj): same as finding_local, but the finding's
 	# identity is the reporting tick, so every attempt discovers a NEW defect
 	# and an absorbed tick's own work grows the chain. The run's answer is the
-	# depth bound: a chain at the bound refuses to absorb and stops the run for
-	# a person, carrying the chain that produced the stop.
+	# depth bound: a chain at the bound defers the next link to a backlog tick
+	# with an owner, carrying the chain, and the run carries on.
 	commit
 	report_with_chained_findings
 	;;

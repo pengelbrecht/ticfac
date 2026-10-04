@@ -20,6 +20,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -31,6 +32,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/pengelbrecht/ticfac/internal/escalation"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
@@ -120,6 +122,18 @@ func statusFollow(ctx context.Context, repo, runID string, interval time.Duratio
 		}
 		ended, lines, err := renderStatusFrame(ctx, source, cloudSource, kind, repo, runID, labels, cursor, first, stdout)
 		first = nil
+		if err != nil && errors.Is(err, errFeedRead) && previous > 0 {
+			// A follow that has drawn a frame keeps going through a failed
+			// read — a factory redeploying under it is one missed frame, said
+			// on stderr, and the last frame stands until the next one.
+			fmt.Fprintf(stderr, "# %v\n", err)
+			select {
+			case <-ctx.Done():
+				return 1
+			case <-time.After(interval):
+			}
+			continue
+		}
 		if err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
 			return 1
@@ -479,6 +493,9 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 		if orchestratedHere {
 			fmt.Fprintln(stdout, factoryWorkersLine(ctx, runID))
 		}
+		if line := localEscalationLine(*repo, runID); line != "" {
+			fmt.Fprintln(stdout, line)
+		}
 	}
 	if status.State == runlife.Alive {
 		return 0
@@ -565,9 +582,16 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 		Reason:         answer.Reason,
 		CurrentStep:    answer.Current,
 	}
+	// The run's last event, read from the END of its feed — a long run's
+	// feed is never walked whole for one line (run_5c7c16d1). A read that
+	// failed is said to have failed, never left out as though the run had
+	// said nothing.
+	feedProblem := ""
 	if client, err := newCloudClient(); err == nil {
 		source := &cloudFeedSource{client: client, runID: runID, warn: stderr}
-		if located, absent, err := feedStanding(ctx, source); err == nil && !absent && len(located) > 0 {
+		if located, _, err := feedTail(ctx, source, 1); err != nil {
+			feedProblem = err.Error()
+		} else if len(located) > 0 {
 			last := located[len(located)-1].Event
 			status.LastEvent = &last
 			if at, err := time.Parse(time.RFC3339, last.At); err == nil {
@@ -599,10 +623,45 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 		fmt.Fprintf(stdout, "last event %s ago: %s %s %s\n",
 			status.EventAge, status.LastEvent.Stage, tick, status.LastEvent.Detail)
 	}
+	if feedProblem != "" {
+		fmt.Fprintf(stdout, "last event: unknown — %s\n", feedProblem)
+	}
+	if client, err := newCloudClient(); err == nil {
+		fmt.Fprintln(stdout, sourceEscalationLine(ctx, &cloudFeedSource{client: client, runID: runID, warn: stderr}))
+	}
 	if answer.Alive {
 		return 0
 	}
 	return 1
+}
+
+// localEscalationLine is the run's escalation record (internal/escalation),
+// read from the feed this checkout holds for it: implementation ticks
+// started, how many climbed to a higher tier and whose failure made them,
+// and the share that succeeded on the tier they started at. A run with no
+// feed here says nothing; a feed that cannot be read says so — the feed is
+// exhaust, and its absence is never reported as "no escalations".
+func localEscalationLine(repo, runID string) string {
+	path := runfeed.Path(repo, runID)
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return sourceEscalationLine(context.Background(), runfeed.FileSource(path))
+}
+
+// sourceEscalationLine reads a whole feed from source and renders its
+// escalation line. The whole feed, deliberately: an escalation is a relation
+// between a tick's tries, which a tail cannot see.
+func sourceEscalationLine(ctx context.Context, source runfeed.Source) string {
+	located, _, err := feedStanding(ctx, source)
+	if err != nil {
+		return "escalation: unknown — the feed could not be read: " + err.Error()
+	}
+	events := make([]runfeed.Event, 0, len(located))
+	for _, l := range located {
+		events = append(events, l.Event)
+	}
+	return escalation.FromFeed(events).Line()
 }
 
 // factoryWorkersLine is the factory's half of a locally orchestrated cloud
