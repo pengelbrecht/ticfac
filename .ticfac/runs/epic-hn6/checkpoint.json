@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 76,
-  "state": "dispatching",
-  "reason": "dispatching qwb as attempt 14",
-  "updated_at": "2026-10-04T19:09:44Z",
+  "sequence": 77,
+  "state": "running",
+  "reason": "qwb is running as attempt 14",
+  "updated_at": "2026-10-04T19:09:56Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -78,7 +78,8 @@
     },
     {
       "tick_id": "qwb",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 14
     },
     {
       "tick_id": "s71",
