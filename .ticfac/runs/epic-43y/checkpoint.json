@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 90,
-  "state": "running",
-  "reason": "hxd is running as attempt 16",
-  "updated_at": "2026-10-04T19:02:22Z",
+  "sequence": 91,
+  "state": "collecting",
+  "reason": "collecting y03 attempt 14",
+  "updated_at": "2026-10-04T19:28:02Z",
   "ticks": [
     {
       "tick_id": "92k",
