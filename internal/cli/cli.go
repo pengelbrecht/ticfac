@@ -499,7 +499,26 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	stopRelay := func() { relay.Stop(relayDrainTimeout) }
 	defer stopRelay()
 
-	pusher := startStatusPusher(repoDir, liveRun, operatorStderr, *fl.statusPush)
+	// The status pusher (tick i1r, and h7w): the run's own model, pushed to
+	// the factory the phone page reads on a short cadence while the run works
+	// — plus once more at each ending, when the terminal record exists, so a
+	// finished run's last reading is its own answer. Two halves share the
+	// loop: the operator's OPT-IN local pusher, and the cloud orchestrator
+	// container's own push (startCloudStatusPusher, nil outside a container)
+	// — which is not opt-in, exactly like the feed relay above it, because a
+	// cloud run already belongs to the factory whose page reads the push. A
+	// cloud run takes precedence: the two are mutually exclusive in practice
+	// (a container holds no operator ~/.ticfacrc and a laptop holds no
+	// TICKS_RUN_ID), and the cloud door is the run-credential one the
+	// container can actually knock on. The Stop defer is registered BEFORE
+	// the pidfile release on purpose, so its ending push is written LAST —
+	// after the release — and carries the run's terminal answer (a probe
+	// that still saw the pidfile would make "done" read "running" forever
+	// on the page).
+	pusher := startCloudStatusPusher(repoDir, liveRun, operatorStderr)
+	if pusher == nil {
+		pusher = startStatusPusher(repoDir, liveRun, operatorStderr, *fl.statusPush)
+	}
 	defer func() {
 		if pusher != nil {
 			pusher.Stop()

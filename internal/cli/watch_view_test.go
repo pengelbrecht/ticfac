@@ -1125,3 +1125,83 @@ func TestWatchPluralRetries(t *testing.T) {
 		}
 	}
 }
+
+// TestTheWatchAndThePhoneSpellOneVerdictWord (hn6 h7w, A5/rule 8): the
+// contract's degraded and stopped goldens are the two states a person most
+// needs to read the same way on every surface, and their summaries are the
+// exact shapes that used to double-render — a degraded summary the model
+// builder already prefixes ("degraded: …") and a stopped run whose probe
+// said nothing (empty summary). This is the Go half of the cross-renderer
+// test: the phone page runs the same goldens through its own headline in
+// cloudflare/test/phone-page.test.ts, and the words must agree — the
+// verdict is one vocabulary, spelled once in the model, never prefixed
+// twice by a renderer.
+func TestTheWatchAndThePhoneSpellOneVerdictWord(t *testing.T) {
+	goldens := statusModelGoldens(t)
+
+	// Degraded: the summary already carries its prefix, so the renderer
+	// spells it exactly once.
+	degraded := goldens["dashboard_degraded"]
+	degradedWord := dashVerdict(degraded, plainStyles())
+	if degradedWord != "● degraded: the remote exhausted its retries (recovered: net ×14)" {
+		t.Errorf("the degraded golden's verdict reads %q", degradedWord)
+	}
+	if strings.Count(degradedWord, "degraded:") != 1 {
+		t.Error("the degraded verdict spells its prefix more than once")
+	}
+
+	// Stopped with nothing to say: the bare word, never a dangling colon.
+	stopped := goldens["dashboard_stopped"]
+	if got := dashVerdict(stopped, plainStyles()); got != "● stopped" {
+		t.Errorf("the stopped golden's verdict reads %q, want the bare word (the summary is empty)", got)
+	}
+	if strings.HasSuffix(dashVerdict(stopped, plainStyles()), "stopped: ") {
+		t.Error("the stopped verdict ends in a colon with nothing behind it")
+	}
+
+	// The sibling shapes every renderer must also agree on, so the shared
+	// vocabulary is pinned whole: a degraded summary WITHOUT the builder's
+	// prefix gains it, a stopped summary keeps its own words, and a stopped
+	// run that recovered things still says them calmly.
+	prefixed := degraded
+	prefixed.Health.Verdict.Summary = "the tracker is unreadable"
+	if got := dashVerdict(prefixed, plainStyles()); got != "● degraded: the tracker is unreadable (recovered: net ×14)" {
+		t.Errorf("an unprefixed degraded summary reads %q, want the renderer's own prefix", got)
+	}
+	withSummary := stopped
+	withSummary.Health.Verdict.Summary = "the orchestrator container was evicted"
+	if got := dashVerdict(withSummary, plainStyles()); got != "● stopped: the orchestrator container was evicted" {
+		t.Errorf("a stopped run's own reason reads %q", got)
+	}
+}
+
+// statusModelGoldens decodes every golden the status model contract carries,
+// by name — the same map the phone page's suite imports straight from the
+// bundle, so a golden added for a cross-renderer test is one fixture both
+// suites render.
+func statusModelGoldens(t *testing.T) map[string]statusmodel.Model {
+	t.Helper()
+	dir, err := contracts.Dir()
+	if err != nil {
+		t.Fatalf("locate the contract bundle: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "status-model.json"))
+	if err != nil {
+		t.Fatalf("read the status model contract: %v", err)
+	}
+	var fixture struct {
+		Golden map[string]json.RawMessage `json:"golden"`
+	}
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatalf("the status model contract does not parse: %v", err)
+	}
+	out := make(map[string]statusmodel.Model, len(fixture.Golden))
+	for name, raw := range fixture.Golden {
+		var m statusmodel.Model
+		if err := json.Unmarshal(raw, &m); err != nil {
+			t.Fatalf("golden %s does not decode into the status model: %v", name, err)
+		}
+		out[name] = m
+	}
+	return out
+}

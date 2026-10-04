@@ -464,6 +464,20 @@ func priorFeedsCloud(ctx context.Context, client *cloudClient, warn io.Writer, p
 // resolve each run's working repo through internal/runregistry first and
 // probe THERE; that package's doc comment is the convention.
 func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Status, gather modelGatherers) statusmodel.Model {
+	return localStatusModelHosted(ctx, repo, runID, probe, gather, statusmodel.HostLocal)
+}
+
+// localStatusModelHosted is the gathering the local model and the cloud
+// container's pushed model share (hn6 h7w): everything a run's own host
+// machine can read — its feed, its records on origin, the tracker, the forge,
+// the worktree census — with the HOST as the caller states it. The run-epic
+// inside an orchestrator container IS local to that container (its pidfile
+// probes, its feed reads), but the run it works is the factory's cloud run,
+// so the model it pushes names the host the reader must see: "cloud", whose
+// clearing commands are the factory's, never a local `run-epic` on the
+// machine reading the page. The one host-dependent input is the host itself
+// — every source the gathering reads is the machine's own either way.
+func localStatusModelHosted(ctx context.Context, repo, runID string, probe runlife.Status, gather modelGatherers, host string) statusmodel.Model {
 	now := time.Now()
 	degraded := []string{}
 
@@ -503,7 +517,7 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 	return statusBuild(statusmodel.Sources{
 		Now:          now,
 		RunID:        runID,
-		Host:         statusmodel.HostLocal,
+		Host:         host,
 		EpicID:       epicID,
 		Degraded:     degraded,
 		Graph:        graph,

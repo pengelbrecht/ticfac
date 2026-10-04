@@ -7,22 +7,33 @@
  *
  * A run card answers the terminal dashboard's questions from the SAME status
  * model, never a second opinion: how far along (a progress bar and `n/m
- * ticks` from progress, the ETA only where remaining states one), is it
- * healthy (the verdict with its coloured dot and its recovered facts), does
- * anything need me (needs-you, quiet when nothing does), then the per-tick
- * table (plan order, children indented, one glyph per pipeline stage and
- * per try), the honest cost line and the last two feed events. Every section
- * is conditional on the model stating its facts, so a snapshot from before
- * hn6 renders exactly as it always did.
+ * ticks` from progress, the elapsed the model states, the ETA only where
+ * remaining states one), is it healthy (the verdict with its coloured dot and
+ * its recovered facts), does anything need me (needs-you, quiet when nothing
+ * does), then the per-tick table (plan order, children indented, one glyph per
+ * pipeline stage and per try), the live workers with their activity, the CI
+ * line, the honest cost line and the last two feed events. Every section is
+ * conditional on the model stating its facts, so a snapshot from before hn6
+ * renders exactly as it always did.
  *
- * ## One model, two hosts
+ * ## One model, two hosts (hn6, tick h7w)
  *
  * Every run the page lists is answered by the 6dh status model
- * (`ticfac.status.v1`):
+ * (`ticfac.status.v1`) — the run's OWN model, whichever host it lives on:
  *
- *  - cloud runs are composed NATIVELY at read time (`status.ts`), so they are
- *    live — the factory's own records are the source;
- *  - local runs are the last snapshot their run pushed, and the page measures
+ *  - a CLOUD run's orchestrator container pushes the model its own `ticfac
+ *    run-epic` gathered in situ (`POST /api/status-relay`, on its run's own
+ *    credential), and the page renders THAT — the same model `ticfac watch
+ *    run_<hex>` renders in the terminal, verdict, table and per-source cost
+ *    alike. A cloud run that has pushed nothing yet falls back to the
+ *    composition the factory's own records state (cloudStatusDoc) — and a
+ *    pushed model that still claims the run alive while the factory's own
+ *    run row says it ended (a container that died before its terminal push)
+ *    is not believed: the run row is the liveness authority for a cloud run,
+ *    and the page composes the row from the records rather than render a
+ *    stopped clock as a live run.
+ *
+ *  - a LOCAL run is the last snapshot its run pushed, and the page measures
  *    its age — because a LOCAL run pauses when the laptop sleeps, and a page
  *    that rendered a stopped clock as a live run would look stuck when the
  *    truth is "paused, and this reading is old". The stale sentence is the
@@ -71,8 +82,10 @@ import {
   type StatusPipelineStage,
   type StatusTick,
   type StatusTry,
+  type StatusWorker,
   type StoredSnapshot,
   tickRef,
+  verdictWord,
 } from "./status";
 import { escapeHTML } from "./telegram";
 
@@ -201,6 +214,10 @@ function badRequestForm(detail: string): Response {
 type RunRowTick = StatusTick & {
   label: string;
   label_text: string;
+  /** The tick's own provenance, carried for the workers line beside the
+   *  model's worker entry — the words the terminal names a worker by. */
+  model: string | null;
+  executor: string | null;
 };
 
 type RunRow = {
@@ -232,27 +249,49 @@ async function overviewPage(request: Request, env: Env): Promise<Response> {
   const rows: RunRow[] = [];
   const degraded: string[] = [];
 
-  // The local runs: the last snapshot each one pushed. Staleness is measured
-  // HERE, at read time, because the run that pushed it may be asleep.
+  // Every stored snapshot, read once: the local runs' own pushes and the
+  // cloud runs' orchestrator pushes share one store, and the page splits
+  // them by the host the envelope named.
+  let snapshots: StoredSnapshot[] = [];
   try {
-    for (const snapshot of await listStatusSnapshots(env.DB)) {
-      rows.push(localRow(snapshot, now));
-    }
+    snapshots = await listStatusSnapshots(env.DB);
   } catch (error) {
-    console.error(`factory page: local snapshots could not be read: ${String(error)}`);
-    degraded.push("local runs are not listed: the snapshot store could not be read");
+    console.error(`factory page: status snapshots could not be read: ${String(error)}`);
+    degraded.push("runs are not listed from their snapshots: the snapshot store could not be read");
   }
 
-  // The cloud runs: composed natively from the factory's own records — the
-  // listing the `/api/runs` table teaches, with each project's pending gates
-  // read once per project (the room owns them, and they outlive runs).
+  // The local runs: the last snapshot each one pushed. Staleness is measured
+  // HERE, at read time, because the run that pushed it may be asleep.
+  for (const snapshot of snapshots) {
+    if (snapshot.host !== "local") continue;
+    rows.push(localRow(snapshot, now));
+  }
+
+  // The cloud runs, keyed by their own pushed models — the run's own answer
+  // wherever it has one (hn6 h7w), with each project's pending gates read
+  // once per project (the room owns them, and they outlive runs).
+  const pushedCloud = new Map(
+    snapshots
+      .filter((snapshot) => snapshot.host === "cloud")
+      .map((snapshot) => [snapshot.run_id, snapshot]),
+  );
   try {
     const runs = await listRuns(env.DB, { limit: PAGE_RUN_LIMIT });
     const gates = await gatesByProject(env, runs);
     for (const run of runs) {
       const progress = await getRunProgress(env.DB, run.run_id);
-      const doc = cloudStatusDoc(run, gates.get(run.project) ?? [], progress, null);
-      rows.push(cloudRow(doc));
+      // The run's own model where it has pushed one — the same one the
+      // terminal renders — but never a stopped clock: the factory's run row
+      // is the liveness authority for a cloud run, so a pushed model that
+      // still claims the run alive after the row says it ended (a container
+      // that died before its terminal push) is not believed, and the row is
+      // composed from the records the factory itself holds.
+      const pushed = pushedCloud.get(run.run_id) ?? null;
+      const believesPush = pushed !== null && !(pushed.model.liveness.alive && runEnded(run.state));
+      const doc = believesPush
+        ? pushed!.model
+        : cloudStatusDoc(run, gates.get(run.project) ?? [], progress, null);
+      rows.push(cloudRow(doc, believesPush ? pushed! : null, now));
     }
   } catch (error) {
     console.error(`factory page: cloud runs could not be composed: ${String(error)}`);
@@ -294,24 +333,7 @@ function localRow(snapshot: StoredSnapshot, now: number): RunRow {
   // the age is shown, the run is not said to be paused.
   const stale =
     (Number.isNaN(ageMs) ? true : ageMs > LOCAL_SNAPSHOT_STALE_MS) && snapshot.model.liveness.alive;
-  const ticks: RunRowTick[] = [];
-  for (const wave of snapshot.model.waves ?? []) {
-    for (const tick of wave.ticks) {
-      ticks.push({
-        tick_id: tick.tick_id,
-        label: tickRef(tick.tick_id, snapshot.tick_labels),
-        label_text: snapshot.tick_labels?.[tick.tick_id] ?? "",
-        state: tick.state,
-        gloss: tick.gloss,
-        title: tick.title,
-        pipeline: tick.pipeline,
-        parent_tick_id: tick.parent_tick_id,
-        duration_seconds: tick.duration_seconds,
-        tries: tick.tries,
-        duplicate_of: tick.duplicate_of ?? null,
-      });
-    }
-  }
+  const ticks = ticksOfWaves(snapshot.model, snapshot.tick_labels);
   const ageSentence = Number.isNaN(ageMs)
     ? "the last snapshot carries no readable time"
     : `last snapshot ${formatAge(ageMs)} ago`;
@@ -329,8 +351,33 @@ function localRow(snapshot: StoredSnapshot, now: number): RunRow {
   };
 }
 
-function cloudRow(doc: ReturnType<typeof cloudStatusDoc>): RunRow {
+// runEnded says whether the factory's own run row records the run as over.
+// The row is the liveness authority for a cloud run: the Workflow itself
+// writes it, and a pushed model that still claims the run alive after it is
+// a stopped clock, never a live one.
+function runEnded(state: string): boolean {
+  return state === "completed" || state === "failed" || state === "stopped";
+}
+
+/**
+ * A cloud run's row: the run's OWN model wherever its orchestrator pushed
+ * one — verdict, tick table, per-source cost and all, the same model the
+ * terminal's watch renders (hn6 h7w) — with the age of the last push named,
+ * without the local row's PAUSED/STALE claim: a cloud run lives on the
+ * factory's own container, and its run row — not the snapshot's age — is
+ * what says whether it is still going. A run that pushed nothing yet keeps
+ * the composed doc, and the composed doc's honest bareness.
+ */
+function cloudRow(doc: StatusDoc, pushed: StoredSnapshot | null, now: number): RunRow {
   const classified = classifyStatusDoc(doc);
+  const labels = pushed?.tick_labels ?? null;
+  const ageMs = pushed === null ? 0 : now - Date.parse(pushed.pushed_at);
+  const ageNote =
+    pushed === null
+      ? null
+      : Number.isNaN(ageMs)
+        ? "the last pushed model carries no readable time"
+        : `last pushed model ${formatAge(ageMs)} ago`;
   return {
     run_id: doc.run_id,
     epic_id: doc.epic_id,
@@ -338,11 +385,36 @@ function cloudRow(doc: ReturnType<typeof cloudStatusDoc>): RunRow {
     state: classified.state,
     reason: classified.reason,
     clear_with: classified.clear_with,
-    ticks: [],
-    snapshot_note: null,
+    ticks: ticksOfWaves(doc, labels),
+    snapshot_note: ageNote,
     stale: false,
     model: doc,
   };
+}
+
+/** The model's own wave/tick listing flattened to the fold-out's rows. */
+function ticksOfWaves(model: StatusDoc, labels: Record<string, string> | null): RunRowTick[] {
+  const ticks: RunRowTick[] = [];
+  for (const wave of model.waves ?? []) {
+    for (const tick of wave.ticks) {
+      ticks.push({
+        tick_id: tick.tick_id,
+        label: tickRef(tick.tick_id, labels),
+        label_text: labels?.[tick.tick_id] ?? "",
+        state: tick.state,
+        gloss: tick.gloss,
+        title: tick.title,
+        pipeline: tick.pipeline,
+        parent_tick_id: tick.parent_tick_id,
+        duration_seconds: tick.duration_seconds,
+        tries: tick.tries,
+        duplicate_of: tick.duplicate_of ?? null,
+        model: tick.model ?? null,
+        executor: tick.executor ?? null,
+      });
+    }
+  }
+  return ticks;
 }
 
 function formatAge(ms: number): string {
@@ -397,6 +469,9 @@ h1 { font-size: 1.1rem; margin: .4rem 0 1rem; }
 .ph-pending { color: #7c8494; }
 .needs-you { margin: .4rem 0 0; color: #ffb27a; overflow-wrap: anywhere; }
 .needs-you.quiet { color: #7c8494; }
+.workers { margin: .4rem 0 0; font-size: .85rem; color: #e6e9ef;
+          overflow-wrap: anywhere; }
+.workers.cloud, .ci { margin: .4rem 0 0; font-size: .85rem; color: #7c8494; }
 .cost { margin: .4rem 0 0; font-size: .85rem; color: #9aa3b2; }
 .recent { margin: .25rem 0 0; font-size: .8rem; color: #9aa3b2;
           overflow-wrap: anywhere; }
@@ -515,7 +590,7 @@ submitted to this factory, they are listed here.</p>`
     `<h1>ticfac factory — every run, attention first</h1>
 ${runsLine}
 ${degradedLines}
-<footer>Cloud rows are live from this factory. Local rows are the last snapshot
+<footer>Cloud rows render the model their orchestrator container pushed — the same one a terminal 'ticfac watch' builds; one that pushed nothing yet is composed from this factory's own records. Local rows are the last snapshot
 their run pushed: a local run pauses when its laptop sleeps, and a reading older
 than ${Math.round(LOCAL_SNAPSHOT_STALE_MS / 1000)}s is labelled PAUSED/STALE —
 it is paused or the reading is stale, not stuck. This page takes no actions:
@@ -535,7 +610,8 @@ function runCardHTML(row: RunRow): string {
     row.snapshot_note === null
       ? ""
       : `<p class="note${row.stale ? " stale" : ""}">${escapeHTML(row.snapshot_note)}</p>`;
-  const dashboard = dashboardHTML(row.model);
+  const dashboard = dashboardHTML(row);
+  const workers = dashboard.workers;
   const ticks =
     row.ticks.length === 0
       ? ""
@@ -545,7 +621,7 @@ ${tickListHTML(row)}</details>`;
 <div class="run-head"><span class="run-id">${escapeHTML(row.run_id)}</span>
 <span class="state ${escapeHTML(row.state)}">${escapeHTML(stateWord)}</span></div>
 <p class="note">${escapeHTML(row.host)} run · epic ${escapeHTML(row.epic_id)}</p>
-${dashboard.headline}${dashboard.phases}${dashboard.needsYou}${reason}${clear}${note}${ticks}${dashboard.cost}${dashboard.recent}
+${dashboard.headline}${dashboard.phases}${dashboard.needsYou}${reason}${clear}${note}${ticks}${workers}${dashboard.ci}${dashboard.cost}${dashboard.recent}
 </section>`;
 }
 
@@ -554,34 +630,40 @@ ${dashboard.headline}${dashboard.phases}${dashboard.needsYou}${reason}${clear}${
 /**
  * The hn6 dashboard sections of one run card, as a doc states them.
  *
- * The sections answer the same three questions the terminal dashboard asks,
- * in its order — how far along (the headline's progress and ETA), is it
- * healthy (the verdict), does anything need me (needs-you) — then the table,
- * the cost and the tail. Every section is conditional on the model stating
- * its facts, so a doc without the hn6 fields renders every one of them as
- * the empty string and the card is exactly the card it always was:
+ * The sections answer the same questions the terminal dashboard asks,
+ * in its order — how far along (the headline's progress, elapsed and ETA),
+ * is it healthy (the verdict), does anything need me (needs-you) — then the
+ * table, the live workers, the CI line, the cost and the tail. Every
+ * section is conditional on the model stating its facts, so a doc without
+ * the hn6 fields renders every one of them as the empty string and the
+ * card is exactly the card it always was:
  *
- *  - the whole dashboard block (headline, phase row, needs-you, tick
- *    table, recent tail) renders only for a doc that carries a health
- *    verdict — the field hn6 made required, so it is the marker that
- *    separates a post-hn6 snapshot from an older one, and an older one
- *    renders as it did before hn6 rather than half-painted;
+ *  - the whole dashboard block (headline, phase row, needs-you, workers,
+ *    tick table, CI, recent tail) renders only for a doc that carries a
+ *    health verdict — the field hn6 made required, so it is the marker
+ *    that separates a post-hn6 snapshot from an older one, and an older
+ *    one renders as it did before hn6 rather than half-painted;
  *  - the cost line renders whenever the doc carries cost LINES — the one
  *    hn6 field the factory's own cloud composition states — because cost is
  *    the one thing a cloud row can answer without the model's richer half.
  */
-function dashboardHTML(doc: StatusDoc): {
+function dashboardHTML(row: RunRow): {
   headline: string;
   phases: string;
   needsYou: string;
+  workers: string;
+  ci: string;
   cost: string;
   recent: string;
 } {
+  const doc = row.model;
   const isDashboardDoc = doc.health?.verdict !== undefined;
   return {
     headline: isDashboardDoc ? headlineHTML(doc) : "",
     phases: isDashboardDoc ? phasesHTML(doc) : "",
     needsYou: isDashboardDoc ? needsYouHTML(doc) : "",
+    workers: isDashboardDoc ? workersHTML(doc, row.ticks) : "",
+    ci: isDashboardDoc ? ciHTML(doc) : "",
     cost: costHTML(doc),
     recent: isDashboardDoc ? recentHTML(doc) : "",
   };
@@ -594,6 +676,12 @@ function dashboardHTML(doc: StatusDoc): {
  * them (the elapsed is the same clamped clock the terminal header renders,
  * tick e6g), and the health verdict with its coloured dot and, where it
  * recovered things on its own, that calm fact rather than an alarm.
+ *
+ * The verdict's words are the shared vocabulary ([verdictWord] — the same
+ * one the terminal's dashVerdict spells, pinned on both renderers by the
+ * degraded and stopped goldens): a degraded summary already carries its own
+ * prefix and a stopped run that said nothing reads the bare word, so no
+ * headline here can double a prefix or hang a colon off nothing.
  */
 function headlineHTML(doc: StatusDoc): string {
   const ticks = doc.progress?.ticks;
@@ -619,7 +707,7 @@ function headlineHTML(doc: StatusDoc): string {
       : `<span class="heta">ETA ~${escapeHTML(humanDuration(remaining))}</span>`;
   const verdict = doc.health?.verdict;
   const state = verdict?.state ?? "";
-  const word = state === "healthy" ? state : `${state}: ${verdict?.summary ?? ""}`;
+  const word = verdictWord(state, verdict?.summary ?? "");
   const recovered = (verdict?.recovered ?? [])
     .map((entry) =>
       entry.seconds === undefined || entry.seconds === null
@@ -669,6 +757,133 @@ function needsYouHTML(doc: StatusDoc): string {
       return `<p class="needs-you">${escapeHTML(line)}</p>`;
     })
     .join("");
+}
+
+/**
+ * The live workers, one line each — the per-agent panel the terminal
+ * renders, in the same words: who the worker is (its tick, its model, its
+ * executor, the handle a person finds it by), its measured activity as the
+ * sparkline, its last action with its age, and the amber fact when the run
+ * has nudged it as stuck. A census this machine cannot take — a cloud run's
+ * workers are not on the machine that gathered the doc — is SAID, never
+ * faked, in the terminal's own words; empty says the census read and
+ * nothing stands, and renders nothing at all.
+ */
+function workersHTML(doc: StatusDoc, ticks: RunRowTick[]): string {
+  const workers = doc.workers;
+  if (workers === undefined || workers === null) {
+    return `<p class="workers cloud">workers run in the cloud — not visible from here</p>`;
+  }
+  return workers
+    .map((worker: StatusWorker) => {
+      const tick = tickOfWorker(ticks, worker);
+      const parts: string[] = [worker.tick_id];
+      const model = shortModel(tick?.model ?? "");
+      if (model !== "") parts.push(model);
+      if (tick?.executor) parts.push(tick.executor);
+      if (worker.handle) parts.push(worker.handle);
+      let last = "";
+      const activity = worker.activity ?? null;
+      if (activity !== null) {
+        const spark = sparkline(activity.buckets ?? []);
+        if (spark !== "") parts.push(spark);
+        if (activity.last_action) {
+          last = activity.last_action;
+          const age = ageSeconds(doc, activity.last_action_at ?? "");
+          if (age !== null) last += ` (${humanDuration(age)} ago)`;
+        }
+        if ((activity.nudges ?? 0) > 0) {
+          const nudged = `nudged ×${activity.nudges}`;
+          last = last === "" ? nudged : `${last}  ${nudged}`;
+        }
+      }
+      const line = last === "" ? parts.join(" · ") : `${parts.join(" · ")} · ${last}`;
+      return `<p class="workers">${escapeHTML(line)}</p>`;
+    })
+    .join("");
+}
+
+/** The worker's own tick, matched by the attempt identity both carry —
+ *  never by order, and never guessed. */
+function tickOfWorker(ticks: RunRowTick[], worker: StatusWorker): RunRowTick | null {
+  for (const tick of ticks) {
+    if (tick.tick_id !== worker.tick_id) continue;
+    if (worker.attempt !== undefined && tick.attempt !== undefined) {
+      if (tick.attempt !== worker.attempt) continue;
+    }
+    return tick;
+  }
+  return null;
+}
+
+/** The model's own name, the way the terminal shortens it: the vendor
+ *  prefix off, then the last path segment. */
+function shortModel(model: string): string {
+  let name = model;
+  if (name.startsWith("cloudflare-workers-ai/")) {
+    name = name.slice("cloudflare-workers-ai/".length);
+  }
+  const at = name.lastIndexOf("/");
+  if (at >= 0 && at < name.length - 1) name = name.slice(at + 1);
+  return name;
+}
+
+/** The activity window as one glyph per bucket, scaled to the window's own
+ *  maximum — and a dot per bucket when nothing happened at all. The
+ *  terminal's own sparkline, drawn from the same buckets. */
+function sparkline(buckets: number[]): string {
+  if (buckets.length === 0) return "";
+  let max = 0;
+  for (const value of buckets) if (value > max) max = value;
+  if (max === 0) return "·".repeat(buckets.length);
+  const levels = "▁▂▃▄▅▆▇█";
+  let out = "";
+  for (const value of buckets) {
+    const idx = Math.min(
+      levels.length - 1,
+      Math.max(0, Math.ceil((value * levels.length) / max) - 1),
+    );
+    out += levels[idx];
+  }
+  return out;
+}
+
+/** A stamp's age against the model's own clock — never the wall's — or null
+ *  when either moment is missing or will not parse. */
+function ageSeconds(doc: StatusDoc, stamp: string): number | null {
+  const at = Date.parse(stamp);
+  const now = Date.parse(doc.generated_at);
+  if (Number.isNaN(at) || Number.isNaN(now)) return null;
+  const seconds = Math.round((now - at) / 1000);
+  return seconds >= 0 ? seconds : null;
+}
+
+/**
+ * The CI line, in the terminal's own words: the forge's checks on the epic
+ * PR's head, ✓ a green check, ✗ red, ◐ with its age one still running. No
+ * PR yet and the line says so, dimly — a run that has not opened its PR is
+ * a fact, not a silence.
+ */
+function ciHTML(doc: StatusDoc): string {
+  const ci = doc.ci;
+  if (ci === undefined || ci === null || ci.pr === undefined || ci.pr === null) {
+    return `<p class="ci">CI: no PR yet</p>`;
+  }
+  const parts = (ci.checks ?? []).map((check) => {
+    if (check.status === "completed" && check.conclusion === "success") {
+      return `${check.name} ✓`;
+    }
+    if (check.status === "completed" && check.conclusion === "failure") {
+      return `${check.name} ✗`;
+    }
+    if (check.status === "completed") {
+      return `${check.name} ${check.conclusion}`;
+    }
+    const age = ageSeconds(doc, check.started_at);
+    return age === null ? `${check.name} ◐` : `${check.name} ◐ ${humanDuration(age)}`;
+  });
+  const line = `CI #${ci.pr.number}${parts.length === 0 ? "" : " " + parts.join(" · ")}`;
+  return `<p class="ci">${escapeHTML(line)}</p>`;
 }
 
 /**

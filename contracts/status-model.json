@@ -1326,6 +1326,1009 @@
       },
       "remaining": null
     },
+    "dashboard_degraded": {
+      "schema_version": 1,
+      "run_id": "epic-6in",
+      "epic_id": "6in",
+      "host": "local",
+      "generated_at": "2026-09-28T19:20:00Z",
+      "degraded": [],
+      "liveness": {
+        "alive": true,
+        "state": "alive",
+        "reason": "pid 24018 has been running since 2026-09-28T17:00:00Z",
+        "source": "run.pid",
+        "last_event": {
+          "schema_version": 1,
+          "at": "2026-09-28T19:04:12Z",
+          "run_id": "epic-6in",
+          "tick_id": null,
+          "attempt": null,
+          "stage": "closeout_held",
+          "detail": "the close-out waits for CI green on the PR"
+        },
+        "last_event_age_seconds": 948
+      },
+      "lifecycle": {
+        "phase": "waves",
+        "phases": [
+          {
+            "phase": "plan",
+            "state": "done"
+          },
+          {
+            "phase": "waves",
+            "state": "active"
+          },
+          {
+            "phase": "review",
+            "state": "done"
+          },
+          {
+            "phase": "closeout",
+            "state": "active"
+          },
+          {
+            "phase": "ci",
+            "state": "active"
+          },
+          {
+            "phase": "merge",
+            "state": "pending"
+          }
+        ],
+        "wave": {
+          "active": 2,
+          "total": 3
+        }
+      },
+      "progress": {
+        "ticks": {
+          "total": 4,
+          "closed": 2,
+          "open": 2
+        },
+        "waves": {
+          "total": 3,
+          "done": 1,
+          "active": 2
+        },
+        "run_elapsed_seconds": 7740
+      },
+      "epic_title": "ticfac Phase 7: cut over and simplify ticks",
+      "recent": [
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T18:49:00Z",
+          "run_id": "epic-6in",
+          "tick_id": "46x",
+          "attempt": 4,
+          "stage": "gate_failed",
+          "detail": "the integrated gate refused attempt 4 of 46x (go)"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T18:50:30Z",
+          "run_id": "epic-6in",
+          "tick_id": "46x",
+          "attempt": 4,
+          "stage": "rejected",
+          "detail": "attempt 4 of 46x struck out: gofmt drifted in two files"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T18:55:04Z",
+          "run_id": "epic-6in",
+          "tick_id": "v7z",
+          "attempt": 5,
+          "stage": "published",
+          "detail": "the close-out published the run records and the tag ticfac/run-epic-6in"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T18:58:02Z",
+          "run_id": "epic-6in",
+          "tick_id": "46x",
+          "attempt": 6,
+          "stage": "dispatched",
+          "detail": "46x try 2 dispatched (run dispatch #6, branch ticfac/run-epic-6in/tick-46x/attempt-6)"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T19:04:12Z",
+          "run_id": "epic-6in",
+          "tick_id": null,
+          "attempt": null,
+          "stage": "closeout_held",
+          "detail": "the close-out waits for CI green on the PR"
+        }
+      ],
+      "waves": [
+        {
+          "wave": 1,
+          "state": "done",
+          "ticks": [
+            {
+              "tick_id": "060",
+              "title": "Cloud worker re-prompts a harness that ends its turn with no report, and runs claude with background tasks off",
+              "gloss": "cloud worker early-exit nudge",
+              "state": "closed",
+              "pipeline": [
+                {
+                  "stage": "claim",
+                  "state": "done"
+                },
+                {
+                  "stage": "work",
+                  "state": "done"
+                },
+                {
+                  "stage": "gate",
+                  "state": "done"
+                },
+                {
+                  "stage": "merged",
+                  "state": "done"
+                }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": 2940,
+              "findings": [
+                {
+                  "key": "efdc8f82c4ef465cbc27d64fbe492c061e95adca009bc9a97bac43ef327cc271",
+                  "title": "the boot strap leaves the re-prompt off for herdr panes",
+                  "gating": true
+                }
+              ],
+              "report": {
+                "summary": "re-prompt wired; claude runs with background tasks off",
+                "diff": {
+                  "files": 11,
+                  "insertions": 214,
+                  "deletions": 60
+                }
+              },
+              "absorbed": false,
+              "duplicate_of": null,
+              "try": 1,
+              "attempt": 1,
+              "tries": [
+                {
+                  "try": 1,
+                  "attempt": 1,
+                  "outcome": "closed",
+                  "dispatched_at": "2026-09-28T17:11:00Z",
+                  "tier": "strong",
+                  "reason": null,
+                  "next_step": null
+                }
+              ],
+              "tier": "strong",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "local-subprocess",
+              "elapsed_seconds": null
+            },
+            {
+              "tick_id": "823",
+              "title": "A re-run under a new run id holds forever on the claim its stopped predecessor left (dz1 regression; full suite red)",
+              "gloss": "re-run holds the stopped claim",
+              "state": "closed",
+              "pipeline": [
+                {
+                  "stage": "claim",
+                  "state": "done"
+                },
+                {
+                  "stage": "work",
+                  "state": "done"
+                },
+                {
+                  "stage": "gate",
+                  "state": "done"
+                },
+                {
+                  "stage": "merged",
+                  "state": "done"
+                }
+              ],
+              "parent_tick_id": "060",
+              "duration_seconds": 2070,
+              "findings": [
+                {
+                  "key": "c6f3f4810c646add97230d56a36d5bb069259dbb736b11667e74747a5b88353c",
+                  "title": "the full suite stays red on the resumed claim's width tests",
+                  "gating": null
+                }
+              ],
+              "report": {
+                "summary": "the resume path releases the stopped predecessor's claim",
+                "diff": {
+                  "files": 6,
+                  "insertions": 148,
+                  "deletions": 32
+                }
+              },
+              "absorbed": true,
+              "duplicate_of": null,
+              "try": 2,
+              "attempt": 3,
+              "tries": [
+                {
+                  "try": 1,
+                  "attempt": 2,
+                  "outcome": "dispatched",
+                  "dispatched_at": "2026-09-28T18:00:30Z",
+                  "tier": "frontier",
+                  "reason": null,
+                  "next_step": null
+                },
+                {
+                  "try": 2,
+                  "attempt": 3,
+                  "outcome": "closed",
+                  "dispatched_at": "2026-09-28T18:18:00Z",
+                  "tier": "frontier",
+                  "reason": null,
+                  "next_step": null
+                }
+              ],
+              "tier": "frontier",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "local-subprocess",
+              "elapsed_seconds": null
+            }
+          ]
+        },
+        {
+          "wave": 2,
+          "state": "active",
+          "ticks": [
+            {
+              "tick_id": "46x",
+              "title": "Port tk sandbox * and tk cloud branch into ticfac verbs the image calls",
+              "gloss": "port sandbox verbs to ticfac",
+              "state": "dispatched",
+              "pipeline": [
+                {
+                  "stage": "claim",
+                  "state": "done"
+                },
+                {
+                  "stage": "work",
+                  "state": "done"
+                },
+                {
+                  "stage": "gate",
+                  "state": "active"
+                },
+                {
+                  "stage": "merged",
+                  "state": "pending"
+                }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": 3600,
+              "findings": [],
+              "report": null,
+              "absorbed": false,
+              "duplicate_of": null,
+              "try": 2,
+              "attempt": 6,
+              "tries": [
+                {
+                  "try": 1,
+                  "attempt": 4,
+                  "outcome": "gate-failed",
+                  "dispatched_at": "2026-09-28T18:20:00Z",
+                  "tier": "strong",
+                  "reason": "attempt 4 of 46x struck out: gofmt drifted in two files",
+                  "next_step": null
+                },
+                {
+                  "try": 2,
+                  "attempt": 6,
+                  "outcome": "in-flight",
+                  "dispatched_at": "2026-09-28T18:58:02Z",
+                  "tier": "frontier",
+                  "reason": null,
+                  "next_step": null
+                }
+              ],
+              "tier": "frontier",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "herdr",
+              "elapsed_seconds": 1318
+            }
+          ]
+        },
+        {
+          "wave": 3,
+          "state": "upcoming",
+          "ticks": [
+            {
+              "tick_id": "v7z",
+              "title": "Close out Phase 7: retro and project checkpoint",
+              "gloss": "close out phase 7",
+              "role": "closeout",
+              "state": "reported",
+              "pipeline": [
+                {
+                  "stage": "claim",
+                  "state": "done"
+                },
+                {
+                  "stage": "work",
+                  "state": "done"
+                },
+                {
+                  "stage": "ci",
+                  "state": "failed"
+                },
+                {
+                  "stage": "closed",
+                  "state": "pending"
+                }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": 2400,
+              "findings": [],
+              "report": {
+                "summary": "the retro and the project checkpoint are in; the close-out waits for CI",
+                "diff": {
+                  "files": 2,
+                  "insertions": 84,
+                  "deletions": 12
+                }
+              },
+              "absorbed": false,
+              "duplicate_of": null,
+              "try": 1,
+              "attempt": 5,
+              "tries": [
+                {
+                  "try": 1,
+                  "attempt": 5,
+                  "outcome": "dispatched",
+                  "dispatched_at": "2026-09-28T18:40:00Z",
+                  "tier": "closeout",
+                  "reason": null,
+                  "next_step": null
+                }
+              ],
+              "tier": "closeout",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "local-subprocess",
+              "elapsed_seconds": 2400
+            }
+          ]
+        }
+      ],
+      "workers": [
+        {
+          "tick_id": "46x",
+          "attempt": 6,
+          "branch": "refs/heads/ticfac/run-epic-6in/tick-46x/attempt-6",
+          "worktree": "/worktrees/run-epic-6in/tick-46x/attempt-6",
+          "handle": "herdr pane tick-46x-a6",
+          "activity": {
+            "window_seconds": 600,
+            "buckets": [
+              1,
+              3,
+              5,
+              8,
+              7,
+              5,
+              3,
+              1,
+              2,
+              5
+            ],
+            "last_action": "ran go test ./internal/reconcile",
+            "last_action_at": "2026-09-28T19:18:31Z",
+            "nudges": 1
+          },
+          "elapsed_seconds": 1318,
+          "branch_idle_seconds": 300,
+          "worktree_idle_seconds": 120,
+          "wall_clock": null,
+          "silence_seconds": 42,
+          "last_turn_at": "2026-09-28T19:19:18Z",
+          "last_turn": "assistant: read internal/reconcile/claim.go"
+        }
+      ],
+      "waits_on": {
+        "kind": "ci",
+        "what": "the close-out waits for CI green on the PR",
+        "since": "2026-09-28T19:04:12Z",
+        "needs_person": false,
+        "unblock_command": null
+      },
+      "attention": [],
+      "health": {
+        "remote_retries": 14,
+        "interventions": 0,
+        "stall_warnings": 1,
+        "wall_clocks_fired": 0,
+        "verdict": {
+          "state": "degraded",
+          "summary": "degraded: the remote exhausted its retries",
+          "recovered": [
+            {
+              "what": "net",
+              "count": 14,
+              "seconds": null
+            }
+          ]
+        }
+      },
+      "gates": [
+        {
+          "key": "gate-060-1-go",
+          "check": "go",
+          "result": "pass",
+          "acceptance": "required",
+          "phase": "integrated",
+          "head": "1a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d",
+          "integration_ref": "refs/heads/epic/6in",
+          "tick_id": "060",
+          "attempt": 1,
+          "started_at": "2026-09-28T17:59:15Z",
+          "finished_at": "2026-09-28T18:00:00Z"
+        },
+        {
+          "key": "gate-46x-4-go",
+          "check": "go",
+          "result": "fail",
+          "acceptance": "required",
+          "phase": "integrated",
+          "head": "4d8c0e9ab31f5520cc41be0d6a22f13e905f61c0c1ba4e8fd719c0a5233d94f1b",
+          "integration_ref": "refs/heads/epic/6in",
+          "tick_id": "46x",
+          "attempt": 4,
+          "started_at": "2026-09-28T18:49:00Z",
+          "finished_at": "2026-09-28T18:49:58Z"
+        },
+        {
+          "key": "gate-823-3-go",
+          "check": "go",
+          "result": "pass",
+          "acceptance": "required",
+          "phase": "integrated",
+          "head": "9f8e7d6c5b4a39281f8e7d6c5b4a39281f8e7d6c",
+          "integration_ref": "refs/heads/epic/6in",
+          "tick_id": "823",
+          "attempt": 3,
+          "started_at": "2026-09-28T18:34:15Z",
+          "finished_at": "2026-09-28T18:35:00Z"
+        }
+      ],
+      "ci": {
+        "state": "red",
+        "pr": {
+          "number": 98,
+          "url": "https://github.com/example/ticfac/pull/98",
+          "head_ref": "epic/6in",
+          "head_sha": "9f2ab6e0e8f96fc3fdc87c2f681519bb0d191a7",
+          "base_ref": "main"
+        },
+        "checks": [
+          {
+            "name": "go",
+            "status": "in_progress",
+            "conclusion": "",
+            "started_at": "2026-09-28T19:14:00Z"
+          },
+          {
+            "name": "ts",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-09-28T18:44:00Z"
+          }
+        ]
+      },
+      "cost": {
+        "recorded_usd": 0.41,
+        "attempts": 6,
+        "basis": "usage recorded on decision records; worker jobs record no cost",
+        "lines": [
+          {
+            "source": "workers-ai",
+            "metered": true,
+            "usd": 0.41,
+            "attempts": 4,
+            "basis": "gateway usage for 4 dispatches"
+          },
+          {
+            "source": "claude",
+            "metered": false,
+            "usd": null,
+            "attempts": 2,
+            "basis": "local claude on a Max subscription — not metered"
+          }
+        ]
+      },
+      "remaining": null
+    },
+    "dashboard_stopped": {
+      "schema_version": 1,
+      "run_id": "epic-6in",
+      "epic_id": "6in",
+      "host": "local",
+      "generated_at": "2026-09-28T19:20:00Z",
+      "degraded": [],
+      "liveness": {
+        "alive": false,
+        "state": "stopped",
+        "reason": "",
+        "source": "run.pid",
+        "last_event": {
+          "schema_version": 1,
+          "at": "2026-09-28T19:04:12Z",
+          "run_id": "epic-6in",
+          "tick_id": null,
+          "attempt": null,
+          "stage": "closeout_held",
+          "detail": "the close-out waits for CI green on the PR"
+        },
+        "last_event_age_seconds": 948
+      },
+      "lifecycle": {
+        "phase": "waves",
+        "phases": [
+          {
+            "phase": "plan",
+            "state": "done"
+          },
+          {
+            "phase": "waves",
+            "state": "active"
+          },
+          {
+            "phase": "review",
+            "state": "done"
+          },
+          {
+            "phase": "closeout",
+            "state": "active"
+          },
+          {
+            "phase": "ci",
+            "state": "active"
+          },
+          {
+            "phase": "merge",
+            "state": "pending"
+          }
+        ],
+        "wave": {
+          "active": 2,
+          "total": 3
+        }
+      },
+      "progress": {
+        "ticks": {
+          "total": 4,
+          "closed": 2,
+          "open": 2
+        },
+        "waves": {
+          "total": 3,
+          "done": 1,
+          "active": 2
+        },
+        "run_elapsed_seconds": 7740
+      },
+      "epic_title": "ticfac Phase 7: cut over and simplify ticks",
+      "recent": [
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T18:49:00Z",
+          "run_id": "epic-6in",
+          "tick_id": "46x",
+          "attempt": 4,
+          "stage": "gate_failed",
+          "detail": "the integrated gate refused attempt 4 of 46x (go)"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T18:50:30Z",
+          "run_id": "epic-6in",
+          "tick_id": "46x",
+          "attempt": 4,
+          "stage": "rejected",
+          "detail": "attempt 4 of 46x struck out: gofmt drifted in two files"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T18:55:04Z",
+          "run_id": "epic-6in",
+          "tick_id": "v7z",
+          "attempt": 5,
+          "stage": "published",
+          "detail": "the close-out published the run records and the tag ticfac/run-epic-6in"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T18:58:02Z",
+          "run_id": "epic-6in",
+          "tick_id": "46x",
+          "attempt": 6,
+          "stage": "dispatched",
+          "detail": "46x try 2 dispatched (run dispatch #6, branch ticfac/run-epic-6in/tick-46x/attempt-6)"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-28T19:04:12Z",
+          "run_id": "epic-6in",
+          "tick_id": null,
+          "attempt": null,
+          "stage": "closeout_held",
+          "detail": "the close-out waits for CI green on the PR"
+        }
+      ],
+      "waves": [
+        {
+          "wave": 1,
+          "state": "done",
+          "ticks": [
+            {
+              "tick_id": "060",
+              "title": "Cloud worker re-prompts a harness that ends its turn with no report, and runs claude with background tasks off",
+              "gloss": "cloud worker early-exit nudge",
+              "state": "closed",
+              "pipeline": [
+                {
+                  "stage": "claim",
+                  "state": "done"
+                },
+                {
+                  "stage": "work",
+                  "state": "done"
+                },
+                {
+                  "stage": "gate",
+                  "state": "done"
+                },
+                {
+                  "stage": "merged",
+                  "state": "done"
+                }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": 2940,
+              "findings": [
+                {
+                  "key": "efdc8f82c4ef465cbc27d64fbe492c061e95adca009bc9a97bac43ef327cc271",
+                  "title": "the boot strap leaves the re-prompt off for herdr panes",
+                  "gating": true
+                }
+              ],
+              "report": {
+                "summary": "re-prompt wired; claude runs with background tasks off",
+                "diff": {
+                  "files": 11,
+                  "insertions": 214,
+                  "deletions": 60
+                }
+              },
+              "absorbed": false,
+              "duplicate_of": null,
+              "try": 1,
+              "attempt": 1,
+              "tries": [
+                {
+                  "try": 1,
+                  "attempt": 1,
+                  "outcome": "closed",
+                  "dispatched_at": "2026-09-28T17:11:00Z",
+                  "tier": "strong",
+                  "reason": null,
+                  "next_step": null
+                }
+              ],
+              "tier": "strong",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "local-subprocess",
+              "elapsed_seconds": null
+            },
+            {
+              "tick_id": "823",
+              "title": "A re-run under a new run id holds forever on the claim its stopped predecessor left (dz1 regression; full suite red)",
+              "gloss": "re-run holds the stopped claim",
+              "state": "closed",
+              "pipeline": [
+                {
+                  "stage": "claim",
+                  "state": "done"
+                },
+                {
+                  "stage": "work",
+                  "state": "done"
+                },
+                {
+                  "stage": "gate",
+                  "state": "done"
+                },
+                {
+                  "stage": "merged",
+                  "state": "done"
+                }
+              ],
+              "parent_tick_id": "060",
+              "duration_seconds": 2070,
+              "findings": [
+                {
+                  "key": "c6f3f4810c646add97230d56a36d5bb069259dbb736b11667e74747a5b88353c",
+                  "title": "the full suite stays red on the resumed claim's width tests",
+                  "gating": null
+                }
+              ],
+              "report": {
+                "summary": "the resume path releases the stopped predecessor's claim",
+                "diff": {
+                  "files": 6,
+                  "insertions": 148,
+                  "deletions": 32
+                }
+              },
+              "absorbed": true,
+              "duplicate_of": null,
+              "try": 2,
+              "attempt": 3,
+              "tries": [
+                {
+                  "try": 1,
+                  "attempt": 2,
+                  "outcome": "dispatched",
+                  "dispatched_at": "2026-09-28T18:00:30Z",
+                  "tier": "frontier",
+                  "reason": null,
+                  "next_step": null
+                },
+                {
+                  "try": 2,
+                  "attempt": 3,
+                  "outcome": "closed",
+                  "dispatched_at": "2026-09-28T18:18:00Z",
+                  "tier": "frontier",
+                  "reason": null,
+                  "next_step": null
+                }
+              ],
+              "tier": "frontier",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "local-subprocess",
+              "elapsed_seconds": null
+            }
+          ]
+        },
+        {
+          "wave": 2,
+          "state": "active",
+          "ticks": [
+            {
+              "tick_id": "46x",
+              "title": "Port tk sandbox * and tk cloud branch into ticfac verbs the image calls",
+              "gloss": "port sandbox verbs to ticfac",
+              "state": "dispatched",
+              "pipeline": [
+                {
+                  "stage": "claim",
+                  "state": "done"
+                },
+                {
+                  "stage": "work",
+                  "state": "done"
+                },
+                {
+                  "stage": "gate",
+                  "state": "active"
+                },
+                {
+                  "stage": "merged",
+                  "state": "pending"
+                }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": 3600,
+              "findings": [],
+              "report": null,
+              "absorbed": false,
+              "duplicate_of": null,
+              "try": 2,
+              "attempt": 6,
+              "tries": [
+                {
+                  "try": 1,
+                  "attempt": 4,
+                  "outcome": "gate-failed",
+                  "dispatched_at": "2026-09-28T18:20:00Z",
+                  "tier": "strong",
+                  "reason": "attempt 4 of 46x struck out: gofmt drifted in two files",
+                  "next_step": null
+                },
+                {
+                  "try": 2,
+                  "attempt": 6,
+                  "outcome": "dispatched",
+                  "dispatched_at": "2026-09-28T18:58:02Z",
+                  "tier": "frontier",
+                  "reason": null,
+                  "next_step": null
+                }
+              ],
+              "tier": "frontier",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "herdr",
+              "elapsed_seconds": 1318
+            }
+          ]
+        },
+        {
+          "wave": 3,
+          "state": "upcoming",
+          "ticks": [
+            {
+              "tick_id": "v7z",
+              "title": "Close out Phase 7: retro and project checkpoint",
+              "gloss": "close out phase 7",
+              "role": "closeout",
+              "state": "reported",
+              "pipeline": [
+                {
+                  "stage": "claim",
+                  "state": "done"
+                },
+                {
+                  "stage": "work",
+                  "state": "done"
+                },
+                {
+                  "stage": "ci",
+                  "state": "failed"
+                },
+                {
+                  "stage": "closed",
+                  "state": "pending"
+                }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": 2400,
+              "findings": [],
+              "report": {
+                "summary": "the retro and the project checkpoint are in; the close-out waits for CI",
+                "diff": {
+                  "files": 2,
+                  "insertions": 84,
+                  "deletions": 12
+                }
+              },
+              "absorbed": false,
+              "duplicate_of": null,
+              "try": 1,
+              "attempt": 5,
+              "tries": [
+                {
+                  "try": 1,
+                  "attempt": 5,
+                  "outcome": "dispatched",
+                  "dispatched_at": "2026-09-28T18:40:00Z",
+                  "tier": "closeout",
+                  "reason": null,
+                  "next_step": null
+                }
+              ],
+              "tier": "closeout",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "local-subprocess",
+              "elapsed_seconds": 2400
+            }
+          ]
+        }
+      ],
+      "workers": [],
+      "waits_on": null,
+      "attention": [],
+      "health": {
+        "remote_retries": 14,
+        "interventions": 0,
+        "stall_warnings": 1,
+        "wall_clocks_fired": 0,
+        "verdict": {
+          "state": "stopped",
+          "summary": "",
+          "recovered": []
+        }
+      },
+      "gates": [
+        {
+          "key": "gate-060-1-go",
+          "check": "go",
+          "result": "pass",
+          "acceptance": "required",
+          "phase": "integrated",
+          "head": "1a2b3c4d5e6f70819a2b3c4d5e6f70819a2b3c4d",
+          "integration_ref": "refs/heads/epic/6in",
+          "tick_id": "060",
+          "attempt": 1,
+          "started_at": "2026-09-28T17:59:15Z",
+          "finished_at": "2026-09-28T18:00:00Z"
+        },
+        {
+          "key": "gate-46x-4-go",
+          "check": "go",
+          "result": "fail",
+          "acceptance": "required",
+          "phase": "integrated",
+          "head": "4d8c0e9ab31f5520cc41be0d6a22f13e905f61c0c1ba4e8fd719c0a5233d94f1b",
+          "integration_ref": "refs/heads/epic/6in",
+          "tick_id": "46x",
+          "attempt": 4,
+          "started_at": "2026-09-28T18:49:00Z",
+          "finished_at": "2026-09-28T18:49:58Z"
+        },
+        {
+          "key": "gate-823-3-go",
+          "check": "go",
+          "result": "pass",
+          "acceptance": "required",
+          "phase": "integrated",
+          "head": "9f8e7d6c5b4a39281f8e7d6c5b4a39281f8e7d6c",
+          "integration_ref": "refs/heads/epic/6in",
+          "tick_id": "823",
+          "attempt": 3,
+          "started_at": "2026-09-28T18:34:15Z",
+          "finished_at": "2026-09-28T18:35:00Z"
+        }
+      ],
+      "ci": {
+        "state": "red",
+        "pr": {
+          "number": 98,
+          "url": "https://github.com/example/ticfac/pull/98",
+          "head_ref": "epic/6in",
+          "head_sha": "9f2ab6e0e8f96fc3fdc87c2f681519bb0d191a7",
+          "base_ref": "main"
+        },
+        "checks": [
+          {
+            "name": "go",
+            "status": "in_progress",
+            "conclusion": "",
+            "started_at": "2026-09-28T19:14:00Z"
+          },
+          {
+            "name": "ts",
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": "2026-09-28T18:44:00Z"
+          }
+        ]
+      },
+      "cost": {
+        "recorded_usd": 0.41,
+        "attempts": 6,
+        "basis": "usage recorded on decision records; worker jobs record no cost",
+        "lines": [
+          {
+            "source": "workers-ai",
+            "metered": true,
+            "usd": 0.41,
+            "attempts": 4,
+            "basis": "gateway usage for 4 dispatches"
+          },
+          {
+            "source": "claude",
+            "metered": false,
+            "usd": null,
+            "attempts": 2,
+            "basis": "local claude on a Max subscription — not metered"
+          }
+        ]
+      },
+      "remaining": null
+    },
     "status_model_refused_last_try": {
       "schema_version": 1,
       "run_id": "epic-yoh",
