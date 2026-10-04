@@ -357,6 +357,140 @@ func TestWatchHoldAlertForACloudAttemptNamesTheRunItsStoreLivesAt(t *testing.T) 
 	}
 }
 
+// The holds that fire before the tick's first dispatch — the width, a
+// foreign claim, the absorption bound — carry a NULL attempt, and the
+// alert's settle branch used to fall to its inline format over that dash
+// and name `ticfac settle <epic> <tick> - --release "<who>"`, a command
+// the settle CLI refuses ("-" is not an attempt number). Worse than the
+// refusal, it was the wrong verb: these holds are facts about the world and
+// the bound, not attempts a person releases — a foreign claim clears when
+// the holder's tick closes, the width when a slot frees, the bound when a
+// person judges the chain. Each names the command that actually moves it
+// on (tick gf0), spelled by the one shared decision the model's needs-you
+// reads too — never a settle addressed by a dash.
+func TestWatchHoldAlertForAWidthHoldNamesTheRunAgainCommand(t *testing.T) {
+	repo := t.TempDir()
+	// The finding's own repro: tick w9b, null attempt.
+	writeFeedEvent(t, repo, "epic-wne", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC), "epic-wne", "w9b", nil, reconcile.StageRunHeld,
+		"claim_width: the width wne declares is already full of claims this run does not hold: the graph counts 3 "+
+			"in dispatch.in_flight_ids (0ju, mrn, keh)"))
+	writeFeedEvent(t, repo, "epic-wne", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "epic-wne", "", nil, reconcile.StageRunFinished,
+		"failed: w9b did not pass"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-wne"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	// The width hold clears when a slot frees and the run again re-derives —
+	// the one command the alert names, addressed by the epic.
+	if !strings.Contains(stderr.String(), "ticfac run-epic wne") {
+		t.Errorf("the width hold's alert does not name the run-again command: %q", stderr.String())
+	}
+	// And never a settle: no attempt stands behind the hold, so the command
+	// the old inline fallback spelled would refuse — and a release would not
+	// clear the hold anyway.
+	if strings.Contains(stderr.String(), "ticfac settle") {
+		t.Errorf("the width hold's alert names a settle command for a hold no attempt stands behind: %q",
+			stderr.String())
+	}
+	// The hold's own reason and the tick are read off the line's fields.
+	if !strings.Contains(stderr.String(), "claim_width") || !strings.Contains(stderr.String(), "tick w9b") {
+		t.Errorf("the alert does not name the hold's reason and tick: %q", stderr.String())
+	}
+}
+
+// The foreign-claim hold is the width's twin with its own clearing sentence:
+// the claim ends when the HOLDER's tick closes (or the holder's run stops),
+// and the run again re-derives and proceeds the moment it does — never a
+// release, which is what makes it a hold at all.
+func TestWatchHoldAlertForAForeignClaimHoldNamesTheRunAgainCommand(t *testing.T) {
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "epic-wne", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC), "epic-wne", "w9b", nil, reconcile.StageRunHeld,
+		"foreign_claim: w9b is claimed by run run-epic-xte, whose records on the integration branch do not "+
+			"read finished, and which is alive"))
+	writeFeedEvent(t, repo, "epic-wne", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "epic-wne", "", nil, reconcile.StageRunFinished,
+		"failed: w9b did not pass"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-wne"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ticfac run-epic wne") {
+		t.Errorf("the foreign-claim hold's alert does not name the run-again command: %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "ticfac settle") {
+		t.Errorf("the foreign-claim hold's alert names a settle command for a hold no attempt stands behind: %q",
+			stderr.String())
+	}
+}
+
+// The absorption bound's hold asks a person to judge the CHAIN the line
+// carries: the finding the bound refused to absorb is still theirs to
+// decide — so the alert names the triage, the one command that decides it —
+// and says the raise the line's own message names as the other road.
+func TestWatchHoldAlertForAnAbsorptionBoundHoldNamesTheFindingsDecision(t *testing.T) {
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC), "epic-2jn", "v2f", nil, reconcile.StageRunHeld,
+		"absorption_depth_exceeded: absorbing the finding \"fb1910\" would be the 4th absorption of ONE chain "+
+			"that already carries 3 and the bound is 3 (tick qjj). Raise the bound with --absorption-depth and "+
+			"run the epic again instead"))
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "epic-2jn", "", nil, reconcile.StageRunFinished,
+		"failed: v2f did not pass"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-2jn"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ticfac triage 2jn") {
+		t.Errorf("the absorption bound's alert does not name the command that decides the finding: %q",
+			stderr.String())
+	}
+	if strings.Contains(stderr.String(), "ticfac settle") {
+		t.Errorf("the absorption bound's alert names a settle command for a hold no attempt stands behind: %q",
+			stderr.String())
+	}
+	// The raise is the other road, and the alert says it — the flag the
+	// refusal's own escape hatch names.
+	if !strings.Contains(stderr.String(), "--absorption-depth") {
+		t.Errorf("the absorption bound's alert does not name the raise the line itself offers: %q", stderr.String())
+	}
+}
+
+// A hold the closed set does not know — no reason it recognises, no attempt
+// behind it — answers with no command rather than a wrong one: the dash
+// settle the inline fallback used to spell is exactly a command a person
+// copies and the CLI refuses. The alert still says the hold and why.
+func TestWatchHoldAlertForAnUnrecognisedHoldWithNoAttemptNamesNoCommand(t *testing.T) {
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC), "epic-2jn", "t1", nil, reconcile.StageRunHeld,
+		"some_future_hold: a hold kind the alert's decision does not know"))
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "epic-2jn", "", nil, reconcile.StageRunFinished,
+		"failed: t1 did not pass"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-2jn"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "ticfac settle") || strings.Contains(stderr.String(), "ticfac triage") {
+		t.Errorf("the unrecognised hold's alert names a command the decision does not carry: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "some_future_hold") {
+		t.Errorf("the alert does not say the hold's own reason: %q", stderr.String())
+	}
+}
+
 // The '<tick>#<n>' prefix is the tick's own TRY (tick h58), not the run-wide
 // dispatch number the line's `attempt` field carries. The operator's run: 0ju
 // was dispatch 1, mrn 2, and w9b 3, 4 and 5 — so dispatch 5 is w9b#3, and a
