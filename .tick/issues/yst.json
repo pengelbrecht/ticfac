@@ -2,6 +2,7 @@
   "id": "yst",
   "title": "migration 0006's comment points cost_source at the wrong migration",
   "description": "cloudflare/migrations/0006_run_progress.sql says an unreadable cost and a zero cost are distinguished by \"(migrations/0004, run.cost_source)\" — 0004 is run_gateway_token and carries no cost_source; the column existed nowhere until this tick's 0024. A reader following the pointer finds no cost_source there.\nevidence: cloudflare/migrations/0006_run_progress.sql:12-13\n\nticfac run epic-hn6 filed this backlog tick from the finding 06c213dcf07630616a4e7aeb1518afa9ad59dbc53a3b5c44f7e0dc6e82a0c869 (reported by run-epic-hn6/tick-1tm/attempt-4): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/06c213dcf07630616a4e7aeb1518afa9ad59dbc53a3b5c44f7e0dc6e82a0c869.json on the run branch.",
+  "notes": "2026-10-04 19:19 - ticfac run epic-hn6: created by absorbing finding 06c213dcf07630616a4e7aeb1518afa9ad59dbc53a3b5c44f7e0dc6e82a0c869 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-hn6/absorptions/06c213dcf07630616a4e7aeb1518afa9ad59dbc53a3b5c44f7e0dc6e82a0c869.json on epic/hn6, and it says: the classifier put 0.26 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-hn6/tick-1tm/attempt-4",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-04T17:19:00Z",
-  "updated_at": "2026-10-04T17:19:00Z"
+  "updated_at": "2026-10-04T17:19:07.895816Z"
 }
