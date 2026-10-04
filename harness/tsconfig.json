@@ -27,6 +27,7 @@
   ],
   "exclude": [
     "test/node",
+    "src/local",
     "node_modules"
   ]
 }

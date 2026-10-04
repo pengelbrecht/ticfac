@@ -12,5 +12,5 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/env/node.ts", "test/node/**/*", "vitest.node.config.ts"]
+  "include": ["src/env/node.ts", "src/local/**/*", "test/node/**/*", "vitest.node.config.ts"]
 }
