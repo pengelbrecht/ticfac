@@ -109,8 +109,10 @@ const (
 // Wait kinds, the closed vocabulary of what a run can be blocked on:
 // `held-for-person` (a struck-out attempt only a person releases), `merge`
 // (the PR is the person's to merge), `ci` (the close-out's gate on the PR),
-// `dead-run` (a run whose process is gone without its own terminal record),
-// and `workers` (the ordinary wait: live attempts doing their work).
+// `dead-run` (a run that is not going and only a person resumes — its
+// process gone without a terminal word, or its own word that it failed or
+// was stopped, tick jkb), `workers` (the ordinary wait: live attempts doing
+// their work), and `finding` (an untriaged findings draft).
 const (
 	WaitHeldForPerson = "held-for-person"
 	WaitMerge         = "merge"

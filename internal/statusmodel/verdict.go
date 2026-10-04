@@ -74,8 +74,11 @@ func buildHealth(feed []runfeed.Event) Health {
 // other:
 //
 //   - stopped: the run is not going — not alive, and its own lifecycle has
-//     neither finished (done) nor been cancelled: a dead run or a failed
-//     one. The summary is the liveness answer's own reason, or — when the
+//     neither finished (done), been cancelled, nor reached the merge, the
+//     one phase a completed run stands in while its PR waits for a person
+//     (tick jkb): that run's work is over and the merge is the person's
+//     by design, so reading it "stopped" paged a failure nobody has to
+//     fix. The summary is the liveness answer's own reason, or — when the
 //     probe said nothing — the dead-run wait's own sentence.
 //   - degraded: the run is going and something is wrong — a source that
 //     could not be read, a worker nudged as stuck with nothing after the
@@ -87,7 +90,8 @@ func buildHealth(feed []runfeed.Event) Health {
 // worth showing beside whatever else is true of it.
 func buildVerdict(src Sources, m Model) HealthVerdict {
 	recovered := buildRecovered(src, m)
-	if !src.Liveness.Alive && m.Lifecycle.Phase != PhaseDone && m.Lifecycle.Phase != PhaseCancelled {
+	if !src.Liveness.Alive && m.Lifecycle.Phase != PhaseDone && m.Lifecycle.Phase != PhaseCancelled &&
+		m.Lifecycle.Phase != PhaseMerge {
 		return HealthVerdict{State: VerdictStopped, Summary: stoppedSummary(src, m), Recovered: recovered}
 	}
 	if src.Liveness.Alive {
