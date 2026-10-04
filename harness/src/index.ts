@@ -49,7 +49,6 @@ export {
   type SandboxRunOutcome,
 } from "./env/sandbox-door.js";
 export { createTrackedBashTool } from "./tools/tracked-bash.js";
-<<<<<<< HEAD
 export {
   type HostShell,
   type RestoreOutcome,
@@ -60,7 +59,6 @@ export {
   type WorkspaceGit,
   workspaceCheckpointExtension,
 } from "./workspace/checkpoints.js";
-=======
 
 // ------------------------------------------------- worker contract hooks ---
 // Epic 43y step 5 (tick pom): the report linter pushback (#183) and the
@@ -82,4 +80,3 @@ export {
   workerOnYield,
   workerReportCheckCommand,
 } from "./worker-contract.js";
->>>>>>> 407f9c74e198f92269e3580eefc8b533aac798e2

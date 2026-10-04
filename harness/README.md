@@ -151,7 +151,6 @@ The tests are split by what they can prove where:
 
 ## What comes next (the epic's steps)
 
-5. The worker contract as hooks and phases.
 6. The `WorkerAgent` DO host — this package's `HarnessStorage` DO is its
    seed, and it is what wires `FactorySandboxEnv` to the SANDBOXES_V1 stub
    the `run` door was built for.
