@@ -2,6 +2,7 @@
   "id": "xl0",
   "title": "watch sizes the pane once; a mid-run resize draws later frames at stale size",
   "description": "watchLive reads watchTerminalSize once at start and never re-reads it in the redraw loop, so resizing the terminal while a watch runs makes every later frame — dashboard, feed view and tick view alike — draw at the stale width and height: lines wrap, the block pushes down rows the redraw's cursor arithmetic does not know about, and the next frame draws over its own rows. The renderer seams all fit whatever size they are handed; the gap is at the size seam, so the fix shape is re-reading the size in the redraw loop (and re-clamping the feed view's scroll to the new height), not another truncation.\nevidence: internal/cli/watch.go:693-695 (size read once before the draw loop; no SIGWINCH handling and no per-frame re-read anywhere in watch.go)\n\nticfac run run_5c7c16d199414da2a8a40d97b524e987 filed this backlog tick from the finding 1b36d1780a65c79b6e9b49f7fb5a18ce3f45d7564273dcf8aa7c85758b09bf7d (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-aro/attempt-9): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/1b36d1780a65c79b6e9b49f7fb5a18ce3f45d7564273dcf8aa7c85758b09bf7d.json on the run branch.",
+  "notes": "2026-10-04 03:11 - ticfac run run_5c7c16d199414da2a8a40d97b524e987: created by absorbing finding 1b36d1780a65c79b6e9b49f7fb5a18ce3f45d7564273dcf8aa7c85758b09bf7d — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/1b36d1780a65c79b6e9b49f7fb5a18ce3f45d7564273dcf8aa7c85758b09bf7d.json on epic/hn6, and it says: the classifier put 0.07 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_5c7c16d199414da2a8a40d97b524e987/tick-aro/attempt-9",
   "created_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987",
   "created_at": "2026-10-04T03:11:13Z",
-  "updated_at": "2026-10-04T03:11:13Z"
+  "updated_at": "2026-10-04T03:11:17.725613834Z"
 }
