@@ -2,6 +2,7 @@
   "id": "fub",
   "title": "Stream-path hold alert guesses the epic id from a non-epic local run id",
   "description": "For a run started as `ticfac run \u003cepic\u003e --run-id run-p` (a non-epic-shaped local id — the pipeline fixture's own run-pip shape), watchEpicID returns the run id itself as the epic, so the settle alert spells `ticfac settle run-p \u003ctick\u003e \u003cn\u003e --run-id run-p --release \"\u003cwho\u003e\"`: the --run-id store address is right, but the epic argument names no epic and the command refuses (no branch, no epic run-p). The model path reads the checkpoint's EpicID and spells the real epic, so the two renderers disagree — the one-model rule (hn6 rule 8) exists to prevent exactly this. Fixing it means the stream path reading the run's checkpoint (as watchGatherModel already does) instead of guessing from the id shape.\nevidence: internal/cli/watch.go watchEpicID (falls through to `return runID` when the id has no epic- prefix and the source is not a cloudFeedSource); reproducible with `ticfac run \u003cepic\u003e --run-id run-p` and an attempt hold\n\nticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c created this tick by absorbing the finding 3fd771f37ed8bc6110e2f98a634789c8b4679cae01d050aec72fd66f48e5fb33 (reported by run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-v2f/attempt-4): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/3fd771f37ed8bc6110e2f98a634789c8b4679cae01d050aec72fd66f48e5fb33.json on the run branch.",
+  "notes": "2026-10-04 10:37 - ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c: created by absorbing finding 3fd771f37ed8bc6110e2f98a634789c8b4679cae01d050aec72fd66f48e5fb33 — placed before the final review, which is blocked-by fub. The decision record is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/3fd771f37ed8bc6110e2f98a634789c8b4679cae01d050aec72fd66f48e5fb33.json on epic/hn6, and it says: the classifier put 0.92 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A2: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -10,5 +11,5 @@
   "discovered_from": "run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-v2f/attempt-4",
   "created_by": "ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "created_at": "2026-10-04T10:37:46Z",
-  "updated_at": "2026-10-04T10:37:46Z"
+  "updated_at": "2026-10-04T10:37:55.092892868Z"
 }
