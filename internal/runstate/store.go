@@ -409,6 +409,22 @@ func (s *Store) Read(path string) ([]byte, bool, error) {
 	return content, true, nil
 }
 
+// List returns the fetched view's paths under one prefix, sorted — the file
+// LIST Read answers contents for. A reader that enumerates runs (the
+// dashboard's every-run records, ticfac tick gmo) needs the names of what
+// the branch carries, not one path at a time.
+func (s *Store) List(prefix string) []string {
+	prefix = strings.TrimSuffix(prefix, "/") + "/"
+	out := []string{}
+	for path := range s.view {
+		if strings.HasPrefix(path, prefix) {
+			out = append(out, path)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (s *Store) message(verb, path string) string {
 	return fmt.Sprintf("ticfac run %s: %s %s", s.runID, verb, path)
 }

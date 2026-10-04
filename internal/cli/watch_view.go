@@ -139,6 +139,12 @@ func dashboardHeadline(m statusmodel.Model, st watchStyles, width int) []string 
 	life := "not alive"
 	if m.Liveness.Alive {
 		life = "alive"
+	} else if m.Lifecycle.Phase == statusmodel.PhaseFailed || m.Lifecycle.Phase == statusmodel.PhaseCancelled {
+		// The run's own terminal word, when its lifecycle carried one: a
+		// failed run is not merely "not alive" — the header says what the
+		// run said it ended as, because that is the question the reader is
+		// actually asking (hn6, tick gmo).
+		life = m.Lifecycle.Phase
 	}
 	head := []string{
 		dashSeat(identity, m.Host+" · "+life, width),
@@ -417,6 +423,12 @@ func dashTickRow(tick statusmodel.Tick, st watchStyles, showWhat, showTier, word
 		if what == "" {
 			what = tick.Title
 		}
+		// A duplicate is not work the epic owes — the row is its own tick's
+		// history, but the WHAT column says what it is a copy of, so a
+		// person scanning the table reads the fact without drilling in.
+		if tick.DuplicateOf != nil && *tick.DuplicateOf != "" {
+			what = "duplicate of " + *tick.DuplicateOf
+		}
 		row.WriteString(" " + dashPad(dashCell(what, dashWhatCols), dashWhatCols))
 	}
 	if showTier {
@@ -435,7 +447,13 @@ func dashTickRow(tick statusmodel.Tick, st watchStyles, showWhat, showTier, word
 	if showTier {
 		row.WriteString(" " + dashAttempts(tick))
 	}
-	return row.String()
+	line := row.String()
+	if tick.DuplicateOf != nil {
+		// Dimmed whole: the row keeps its place (rows never move) and its
+		// history, but nothing about it is the frontier's business.
+		line = st.dim(line)
+	}
+	return line
 }
 
 // dashPipeline is the row's pipeline cell (hn6 rule 1): the stops one tick

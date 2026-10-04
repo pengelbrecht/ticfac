@@ -37,9 +37,11 @@ const tickIntegrated = "integrated"
 // reads only the Sources (the graph, the records, the feed) and the model
 // built so far — the waves with their ticks, states and try histories — and
 // it decides nothing a record did not state. Where nothing states a fact the
-// tick says null or pending, never a guess.
-func decorateTicks(src Sources, recs Records, m *Model) {
-	index := newPipelineIndex(src, recs, m.EpicID)
+// tick says null or pending, never a guess. The per-tick records are the
+// merged view's (epic.go): each tick's own from the last run that touched
+// it.
+func decorateTicks(src Sources, merged *mergedRuns, m *Model) {
+	index := newPipelineIndex(src, merged, m.EpicID)
 	for wi := range deref(m.Waves) {
 		wave := &(*m.Waves)[wi]
 		for ti := range wave.Ticks {
@@ -50,14 +52,17 @@ func decorateTicks(src Sources, recs Records, m *Model) {
 
 // pipelineIndex is every per-tick fact the derivation asks for, grouped the
 // ways it asks: the graph's own tasks (the parent row reads their Parent),
-// the dispatch markers, the absorptions, the findings by the tick that
-// discovered them, and the live census. Built once per model; read per tick.
+// the dispatch markers and gate evidence of the tick's OWNER run, the
+// absorptions and findings every run recorded, and the live census. Built
+// once per model; read per tick.
 type pipelineIndex struct {
 	epicID         string
+	host           string
+	nonNewestOwner map[string]bool
 	tasks          map[string]tk.GraphTask
 	markersByTick  map[string][]runstate.Attempt
 	markersByTry   map[string]runstate.Attempt
-	evidence       []runstate.Evidence
+	evidenceByTick map[string][]runstate.Evidence
 	absorbedByTick map[string]runstate.Absorption
 	absorbedByFind map[string]runstate.Absorption
 	findingsByTick map[string][]runstate.Finding
@@ -67,13 +72,16 @@ type pipelineIndex struct {
 
 // newPipelineIndex groups the sources' per-tick facts once, so decorating a
 // hundred ticks costs one pass over each record kind rather than a hundred.
-func newPipelineIndex(src Sources, recs Records, epicID string) *pipelineIndex {
+func newPipelineIndex(src Sources, merged *mergedRuns, epicID string) *pipelineIndex {
+	newest := merged.newestRun()
 	p := &pipelineIndex{
 		epicID:         epicID,
+		host:           src.Host,
+		nonNewestOwner: map[string]bool{},
 		tasks:          map[string]tk.GraphTask{},
 		markersByTick:  map[string][]runstate.Attempt{},
 		markersByTry:   map[string]runstate.Attempt{},
-		evidence:       recs.Evidence,
+		evidenceByTick: map[string][]runstate.Evidence{},
 		absorbedByTick: map[string]runstate.Absorption{},
 		absorbedByFind: map[string]runstate.Absorption{},
 		findingsByTick: map[string][]runstate.Finding{},
@@ -87,18 +95,29 @@ func newPipelineIndex(src Sources, recs Records, epicID string) *pipelineIndex {
 			}
 		}
 	}
-	for _, marker := range recs.Attempts {
-		p.markersByTick[marker.TickID] = append(p.markersByTick[marker.TickID], marker)
-		p.markersByTry[tryKey(marker.TickID, marker.Attempt)] = marker
+	for tickID, markers := range merged.markers {
+		p.markersByTick[tickID] = markers
+		for _, marker := range markers {
+			p.markersByTry[tryKey(tickID, marker.Attempt)] = marker
+		}
 	}
-	for _, tickIDs := range p.markersByTick {
-		sort.Slice(tickIDs, func(i, j int) bool { return tickIDs[i].Attempt < tickIDs[j].Attempt })
+	// A tick whose records belong to an EARLIER run is parked work the
+	// newest run's machinery cannot move: its next step is the resume, and
+	// the index carries the fact once for the derivation to read.
+	for tickID, owner := range merged.ownerIndex() {
+		if owner != newest {
+			p.nonNewestOwner[tickID] = true
+		}
 	}
-	for _, record := range recs.Absorptions {
+	p.evidenceByTick = merged.evidence
+	for key, record := range merged.absorptionByKey {
+		if record.TickID == "" {
+			continue
+		}
 		p.absorbedByTick[record.TickID] = record
-		p.absorbedByFind[record.Key] = record
+		p.absorbedByFind[key] = record
 	}
-	for _, finding := range recs.Findings {
+	for _, finding := range merged.findingByKey {
 		tickID := discoveredFromTick(finding.DiscoveredFrom)
 		if tickID == "" {
 			continue
@@ -340,10 +359,10 @@ func (p *pipelineIndex) parentOf(tick *Tick) *string {
 
 // durationOf measures the tick's span: from its earliest dispatch marker to
 // its close — the latest gate evidence's finish, or else the `closed` line's
-// own time — and to the model's now while it is open, because a tick still
-// going has no close to measure to and an earlier try's refused evidence is
-// not one. Null when no marker's stamp parses: a span nobody can start is a
-// span nobody states.
+// own time, or else the tracker's own closed_at — and to the model's now
+// while it is open, because a tick still going has no close to measure to
+// and an earlier try's refused evidence is not one. Null when no marker's
+// stamp parses: a span nobody can start is a span nobody states.
 func (p *pipelineIndex) durationOf(src Sources, tick *Tick) *int64 {
 	started, ok := p.earliestDispatch(tick.TickID)
 	if !ok {
@@ -355,6 +374,8 @@ func (p *pipelineIndex) durationOf(src Sources, tick *Tick) *int64 {
 			end = at
 		} else if at, ok := p.closedLineTime(tick.TickID); ok {
 			end = at
+		} else if at, ok := p.trackerClosedAt(tick); ok {
+			end = at
 		}
 	}
 	seconds := int64(end.Sub(started).Round(time.Second).Seconds())
@@ -364,6 +385,21 @@ func (p *pipelineIndex) durationOf(src Sources, tick *Tick) *int64 {
 		seconds = 0
 	}
 	return &seconds
+}
+
+// trackerClosedAt is the tracker's own closed_at for one tick — the close
+// a run whose gate evidence was lost, or whose feed this machine does not
+// hold (an earlier run's own), can still be measured to.
+func (p *pipelineIndex) trackerClosedAt(tick *Tick) (time.Time, bool) {
+	task, ok := p.tasks[tick.TickID]
+	if !ok || task.ClosedAt == "" {
+		return time.Time{}, false
+	}
+	at, err := time.Parse(time.RFC3339, task.ClosedAt)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return at, true
 }
 
 // earliestDispatch is the tick's earliest parseable dispatch marker stamp.
@@ -383,10 +419,10 @@ func (p *pipelineIndex) earliestDispatch(tickID string) (time.Time, bool) {
 
 // latestGateFinish is the latest parseable FinishedAt among the tick's gate
 // evidence — the moment its gate last said something, which for a closed
-// tick is the close.
+// tick is the close. The evidence is the tick's owner run's only.
 func (p *pipelineIndex) latestGateFinish(tickID string) (time.Time, bool) {
 	var latest time.Time
-	for _, evidence := range p.evidence {
+	for _, evidence := range p.evidenceByTick[tickID] {
 		if evidence.Provenance.TickID == nil || *evidence.Provenance.TickID != tickID || evidence.FinishedAt == "" {
 			continue
 		}
@@ -508,6 +544,13 @@ func (p *pipelineIndex) reasonLine(tickID string, attempt int) *runfeed.Event {
 func (p *pipelineIndex) nextStepOf(tick *Tick, last Try) *string {
 	if p.hasLaterDispatch(tick.TickID, last.Attempt) {
 		step := fmt.Sprintf("retrying (try %d)", last.Try+1)
+		return &step
+	}
+	// A refusal the NEWEST run did not leave: its run is over, and nothing
+	// of it will retry anything — the honest next step is the resume, the
+	// same command the run header names (hn6, tick gmo).
+	if p.nonNewestOwner[tick.TickID] {
+		step := "nothing of that run is working — " + ResumeCommand(p.host, p.epicID) + " takes it up"
 		return &step
 	}
 	if command := p.attentionCommand(tick.TickID); command != nil {

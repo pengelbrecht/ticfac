@@ -53,6 +53,23 @@ loud.
 
 ---
 
+## 1.4.0
+
+MINOR: `status-model.json` gains a per-tick `duplicate_of` (tick gmo, epic
+hn6). The dashboard answers for the EPIC, and an epic is worked by many runs:
+when a run promotes the same finding twice, the later promotion is closed as
+the earlier one's duplicate (internal/reconcile/dupes.go's own note), and
+that closure is a fact about the epic's shape no renderer could see — a tick
+was work, and now it is the same work twice. The new field carries the tick
+the work belongs to, read off the tracker's own note and closed_reason; null
+for every tick that is its own work. With it comes a rule the schema cannot
+pin and `checked_beyond_schema` now states: the progress counts count the
+epic's REAL ticks — a duplicate is excluded from `total` and `closed` —
+while its row still stands, dimmed, because rows never move. Every golden
+carries the field at null; the dashboard golden is otherwise untouched.
+Consumers: no existing field changed shape, so an unchanged reader is still
+correct — the cloudflare pin bumps in the same commit.
+
 ## 1.3.0
 
 MINOR: `status-model.json` gains a fourth golden, `status_model_refused_last_try`

@@ -19,6 +19,7 @@ package cli
 // check runs. No new source of truth is created and none is written.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,6 +27,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -39,21 +41,35 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
-// epicGraph is the epic's own orchestration graph, read through `tk graph`
-// the same way `tickLabels` reads `tk list` — the same layering the run
-// dispatches by. A tracker that cannot be read costs the model its waves and
-// nothing else: the map comes back nil, the model says so, and every other
-// field answers. Swappable so a test fakes the tracker without a binary.
+// epicGraph is the epic's own orchestration graph, read through `tk graph --all`
+// — the same layering `tk graph` computes, with the tracker's CLOSED tasks
+// included, because the epic's whole table is the dashboard's rows. The read
+// is from the INTEGRATION BRANCH on origin, where the epic's tracker writes
+// are durable (status_tracker.go) — an operator watching a cloud run from a
+// main checkout would otherwise see every closed tick open — and falls back
+// to the checkout's own tree, the shape every caller has always read, when
+// the branch cannot be served. A tracker that cannot be read in either
+// place costs the model its waves and nothing else: the map comes back nil,
+// the model says so, and every other field answers. Swappable so a test
+// fakes the tracker without a binary.
 var epicGraph = func(ctx context.Context, repo, epicID string) *tk.Graph {
 	if epicID == "" {
 		return nil
+	}
+	if graph := graphAtIntegrationBranch(ctx, repo, epicID); graph != nil {
+		return graph
 	}
 	client, err := tk.NewContext(ctx, tk.Options{Dir: repo})
 	if err != nil {
 		return nil
 	}
-	graph, err := client.Graph(ctx, epicID)
+	graph, err := client.GraphAll(ctx, epicID)
 	if err != nil {
+		// The manifest-pinned read, for a tracker whose binary predates the
+		// flag: the open tasks alone are still the layering tk computes.
+		if graph, err := client.Graph(ctx, epicID); err == nil {
+			return &graph
+		}
 		return nil
 	}
 	return &graph
@@ -78,12 +94,20 @@ func lockStatusRecords(key string) func() {
 	return lock.Unlock
 }
 
-// statusRecords reads the run's durable records: through the run-state store
-// (origin — durable means pushed, and the store is the authority every other
-// surface reads) and, where no remote can be fetched, from the run directory
-// the checkout holds. The fallback is a fallback for checkouts without a
-// remote, not a second opinion: what origin says, goes.
-func statusRecords(repo, runID, epicID string) (statusmodel.Records, error) {
+// statusRecords reads the run's durable records — and, beside them, every
+// EARLIER run's records for the same epic from the same fetched branch
+// (hn6, tick gmo): the epic's state is what every run left on the
+// integration branch, and the newest run's own records are only the newest
+// layer of it. The run is read under the id the surface names (a cloud run's
+// factory run_<hex> — the container execs `run-epic --run-id $TICKS_RUN_ID`,
+// so its records land there), falling back to the epic spelling an older
+// container wrote (tick tem's era) when the named id carries nothing. Through
+// the run-state store (origin — durable means pushed, and the store is the
+// authority every other surface reads) and, where no remote can be fetched,
+// from the run directories the checkout holds. The fallback is a fallback
+// for checkouts without a remote, not a second opinion: what origin says,
+// goes.
+func statusRecords(repo, runID, epicID string) (statusmodel.Records, []statusmodel.Records, error) {
 	// One store fetch at a time per run in a checkout: the store fetches into
 	// a ref private to this PROCESS and run, so two concurrent reads of the
 	// same run here (the overview gathers cloud runs concurrently, and every
@@ -94,12 +118,196 @@ func statusRecords(repo, runID, epicID string) (statusmodel.Records, error) {
 	if epicID != "" {
 		store, err := runstate.Open(runstate.Options{Repo: repo, Branch: "epic/" + epicID, RunID: runID})
 		if err == nil {
-			if _, err := store.Fetch(); err == nil {
-				return statusmodel.RecordsFromStore(store)
+			if _, fetchErr := store.Fetch(); fetchErr == nil {
+				// The run the surface names first — the id every other
+				// surface addresses the run by. A run dir with no checkpoint
+				// is no record the run wrote; the epic spelling behind it is
+				// the older container's layout, and the honest second try.
+				for _, candidate := range runRecordCandidates(runID, epicID) {
+					_, ok, err := store.Read(runstate.CheckpointPath(candidate))
+					if err != nil {
+						return statusmodel.Records{}, nil, err
+					}
+					if !ok {
+						continue
+					}
+					records, err := statusmodel.RecordsFromStoreRun(store, candidate)
+					if err != nil {
+						return statusmodel.Records{}, nil, err
+					}
+					prior, err := statusPriorRecords(store, candidate, epicID)
+					if err != nil {
+						return statusmodel.Records{}, nil, err
+					}
+					return records, prior, nil
+				}
+				// The branch carries nothing for either spelling: the run has
+				// written no durable record — the honest empty answer, and
+				// every prior run's records beside it.
+				prior, err := statusPriorRecords(store, "", epicID)
+				if err != nil {
+					return statusmodel.Records{}, nil, err
+				}
+				return statusmodel.Records{}, prior, nil
 			}
 		}
 	}
-	return statusmodel.RecordsFromDir(filepath.Join(repo, runstate.Root, "runs", runID))
+	for _, candidate := range runRecordCandidates(runID, epicID) {
+		records, err := statusmodel.RecordsFromDir(filepath.Join(repo, runstate.Root, "runs", candidate))
+		if err != nil {
+			return statusmodel.Records{}, nil, err
+		}
+		if records.Checkpoint != nil {
+			prior, err := statusPriorRecordsFromDir(repo, candidate, epicID)
+			if err != nil {
+				return statusmodel.Records{}, nil, err
+			}
+			return records, prior, nil
+		}
+	}
+	prior, err := statusPriorRecordsFromDir(repo, runID, epicID)
+	if err != nil {
+		return statusmodel.Records{}, nil, err
+	}
+	return statusmodel.Records{}, prior, nil
+}
+
+// runRecordCandidates is the run ids one run's records may sit under, in the
+// order they are tried: the id the surface names (today's writer — the
+// container execs `run-epic --run-id $TICKS_RUN_ID`), then the epic spelling
+// an older container's default run id wrote.
+func runRecordCandidates(runID, epicID string) []string {
+	candidates := []string{runID}
+	if epicID != "" {
+		if epic := "epic-" + epicID; epic != runID {
+			candidates = append(candidates, epic)
+		}
+	}
+	return candidates
+}
+
+// statusPriorRecords is every OTHER run's records for one epic, as the
+// fetched branch carries them, oldest first — the runs whose work the
+// dashboard's rows and progress count. A sibling run is one whose own
+// checkpoint names this epic and is not the run being read; a run with no
+// readable checkpoint is no run of this epic, not an error.
+func statusPriorRecords(store *runstate.Store, currentRunID, epicID string) ([]statusmodel.Records, error) {
+	ids := []string{}
+	for _, path := range store.List(runstate.Root + "/runs") {
+		// The path under `.ticfac/runs/` names the run; only checkpoint
+		// records identify a run as this epic's.
+		rest, ok := strings.CutPrefix(path, runstate.Root+"/runs/")
+		if !ok || !strings.HasSuffix(path, "/checkpoint.json") {
+			continue
+		}
+		runID := strings.TrimSuffix(rest, "/checkpoint.json")
+		if strings.ContainsAny(runID, "/") || runID == currentRunID || runID == "" {
+			continue
+		}
+		ids = append(ids, runID)
+	}
+	readCheckpoint := func(id string) (*runstate.Checkpoint, bool) {
+		raw, ok, err := store.Read(runstate.CheckpointPath(id))
+		if err != nil || !ok {
+			return nil, false
+		}
+		var checkpoint runstate.Checkpoint
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&checkpoint); err != nil {
+			// A sibling record that does not read back clean is not this
+			// read's business: the run's OWN records refuse a drifted
+			// record, and a sibling's drift is named by its own reader.
+			return nil, false
+		}
+		return &checkpoint, true
+	}
+	readAll := func(id string) (statusmodel.Records, error) {
+		records, err := statusmodel.RecordsFromStoreRun(store, id)
+		if err != nil {
+			return statusmodel.Records{}, fmt.Errorf("read run %s's records: %w", id, err)
+		}
+		return records, nil
+	}
+	return priorRunsForEpic(ids, currentRunID, epicID, readCheckpoint, readAll)
+}
+
+// statusPriorRecordsFromDir is the same every-run read where no remote can
+// be fetched: the sibling run directories this checkout holds.
+func statusPriorRecordsFromDir(repo, currentRunID, epicID string) ([]statusmodel.Records, error) {
+	if epicID == "" {
+		return nil, nil
+	}
+	runsDir := filepath.Join(repo, runstate.Root, "runs")
+	entries, err := os.ReadDir(runsDir)
+	if err != nil {
+		return nil, nil // no runs on disk at all: the honest empty answer
+	}
+	ids := []string{}
+	for _, entry := range entries {
+		if entry.IsDir() && entry.Name() != currentRunID {
+			ids = append(ids, entry.Name())
+		}
+	}
+	readCheckpoint := func(id string) (*runstate.Checkpoint, bool) {
+		raw, err := os.ReadFile(filepath.Join(runsDir, id, "checkpoint.json"))
+		if err != nil {
+			return nil, false
+		}
+		var checkpoint runstate.Checkpoint
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&checkpoint); err != nil {
+			return nil, false
+		}
+		return &checkpoint, true
+	}
+	readAll := func(id string) (statusmodel.Records, error) {
+		records, err := statusmodel.RecordsFromDir(filepath.Join(runsDir, id))
+		if err != nil {
+			return statusmodel.Records{}, fmt.Errorf("read run %s's records: %w", id, err)
+		}
+		return records, nil
+	}
+	return priorRunsForEpic(ids, currentRunID, epicID, readCheckpoint, readAll)
+}
+
+// priorRunsForEpic is the sibling selection both readers share: of the run
+// ids given, keep those whose checkpoint reads back clean and names the
+// epic, excluding the run being read, ordered oldest checkpoint first. A
+// run whose records cannot then be read whole is an error — a sibling
+// named by its own checkpoint is a run whose records exist, and half of a
+// run's history is a history that lies.
+func priorRunsForEpic(
+	ids []string, currentRunID, epicID string,
+	readCheckpoint func(id string) (*runstate.Checkpoint, bool),
+	readAll func(id string) (statusmodel.Records, error),
+) ([]statusmodel.Records, error) {
+	type priorRun struct {
+		id        string
+		updatedAt string
+	}
+	var priors []priorRun
+	for _, id := range ids {
+		if id == currentRunID || id == "" {
+			continue
+		}
+		checkpoint, ok := readCheckpoint(id)
+		if !ok || checkpoint.EpicID != epicID {
+			continue
+		}
+		priors = append(priors, priorRun{id: id, updatedAt: checkpoint.UpdatedAt})
+	}
+	sort.Slice(priors, func(i, j int) bool { return priors[i].updatedAt < priors[j].updatedAt })
+	out := []statusmodel.Records{}
+	for _, prior := range priors {
+		records, err := readAll(prior.id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, records)
+	}
+	return out, nil
 }
 
 // statusCI asks the forge about the epic PR: the state the close-out's gate
@@ -214,7 +422,7 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 	now := time.Now()
 	degraded := []string{}
 
-	records, err := statusRecords(repo, runID, epicHintOf(runID))
+	records, prior, err := statusRecords(repo, runID, epicHintOf(runID))
 	if err != nil {
 		records = statusmodel.Records{}
 		degraded = append(degraded, "run-state")
@@ -253,6 +461,7 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 		Degraded:     degraded,
 		Graph:        graph,
 		Records:      &records,
+		PriorRecords: prior,
 		Feed:         feed,
 		Standing:     standing,
 		StandingRead: standingErr == nil,
@@ -324,24 +533,20 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 
 	epicID := strings.TrimSpace(record.Epic)
 
-	// The records a cloud run reads are the CONTAINER's, not the factory's:
-	// the orchestrator container runs `ticfac run-epic <epic>` — the same
-	// command a local run is — so its durable records land on the integration
-	// branch under the run id that command constructs, epic-<epic-id> (the
-	// same derivation resolveFindingsRun spells for the triage surfaces).
-	// The factory's run_<hex> names the Workflow instance, and reading under
-	// it answers from an empty directory, degrading the model to
-	// feed-and-graph only (tick tem). The model still NAMES the factory's
-	// run id — that is the id every surface addresses the run by; only the
-	// records are read under the container's.
+	// The records a cloud run reads are on the integration branch under the
+	// id the run was written under. The container execs `ticfac run-epic
+	// --run-id $TICKS_RUN_ID` (the factory's run_<hex>, hn0), so TODAY's
+	// records land there — read under the id the surface names. tem's era
+	// spelled it epic-<epic-id>; statusRecords tries both and answers what
+	// exists. The model still NAMES the factory's run id — the id every
+	// surface addresses the run by.
 	recordsID := runID
-	if epicID != "" {
-		recordsID = "epic-" + epicID
-	}
 	var records statusmodel.Records
+	var prior []statusmodel.Records
 	if ours {
-		if read, err := statusRecords(repo, recordsID, epicID); err == nil {
+		if read, priors, err := statusRecords(repo, recordsID, epicID); err == nil {
 			records = read
+			prior = priors
 		} else {
 			degraded = append(degraded, "run-state")
 		}
@@ -398,6 +603,7 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		Degraded:     degraded,
 		Graph:        graph,
 		Records:      &records,
+		PriorRecords: prior,
 		Feed:         feed,
 		StandingRead: false, // a cloud run's worktrees are not on this machine
 		Liveness: statusmodel.LivenessInput{

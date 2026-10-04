@@ -412,6 +412,44 @@ describe("the phone page renders the dashboard model (hn6, tick 0rx)", () => {
     expect(body).not.toContain("the close-out published the run records");
   });
 
+  it("renders a duplicate promotion dimmed, naming the tick its work belongs to", async () => {
+    const goldenWaves = (golden as { waves: { wave: number; state: string; ticks: Record<string, unknown>[] }[] })
+      .waves;
+    const body = await renderedPage({
+      ...golden,
+      progress: { ticks: { total: 5, closed: 3, open: 2 }, waves: { total: 2, done: 1, active: 1 } },
+      waves: [
+        {
+          ...goldenWaves[0],
+          ticks: [
+            ...goldenWaves[0].ticks,
+            {
+              tick_id: "dup1",
+              title: "the duplicate promotion",
+              state: "closed",
+              pipeline: [
+                { stage: "claim", state: "done" },
+                { stage: "work", state: "done" },
+                { stage: "gate", state: "done" },
+                { stage: "merged", state: "done" },
+              ],
+              duplicate_of: "060",
+            },
+          ],
+        },
+        ...goldenWaves.slice(1),
+      ],
+    });
+    // The duplicate's row keeps its place, dimmed, with the tick the work
+    // belongs to in the what cell — the same words the terminal renders.
+    expect(body).toContain(
+      '<tr class="trow dup"><td class="c-tick">dup1</td>' +
+        '<td class="c-what" data-label="what">duplicate of 060</td>',
+    );
+    // The plain rows beside it are not dimmed.
+    expect(body).toContain('<tr class="trow"><td class="c-tick">060</td>');
+  });
+
   it("renders the headline's progress and the phase row, and the ETA only where the model states one", async () => {
     const body = await renderedPage(golden);
     // The progress bar is a width percentage of closed ticks, with the count

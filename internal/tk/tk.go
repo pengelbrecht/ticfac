@@ -223,6 +223,20 @@ func (c *Client) Graph(ctx context.Context, epicID string) (Graph, error) {
 	return out, err
 }
 
+// GraphAll returns the same graph with the tracker's CLOSED tasks included.
+// The manifest's own argv carries no --all, so the flag rides as an extra
+// argument the same manifest command validates the response of: the graph
+// schema pins every task's shape and status is a free string, so a closed
+// task is the same document with more entries in it. A surface that renders
+// the epic's WHOLE table — the status model's dashboard — needs the closed
+// rows, and `tk graph` defaults to the open ones alone (the same --all the
+// manifest's list and ready already pin).
+func (c *Client) GraphAll(ctx context.Context, epicID string) (Graph, error) {
+	var out Graph
+	err := c.invokeJSONArgs(ctx, "graph", map[string]string{"<epic-id>": epicID}, []string{"--all"}, &out)
+	return out, err
+}
+
 // Status returns the working-tree changes known to tk.
 func (c *Client) Status(ctx context.Context) (Status, error) {
 	var out Status
@@ -383,10 +397,20 @@ func shellQuote(word string) string {
 }
 
 func (c *Client) invokeJSON(ctx context.Context, id string, values map[string]string, into any) error {
+	return c.invokeJSONArgs(ctx, id, values, nil, into)
+}
+
+// invokeJSONArgs is invokeJSON with extra CLI arguments appended after the
+// manifest's own argv — the spelling of a manifest command's documented
+// flags the argv does not pin (--all on graph today). The response is still
+// classified and schema-validated against the manifest command, so an extra
+// flag can widen WHICH records answer but never what shape they answer in.
+func (c *Client) invokeJSONArgs(ctx context.Context, id string, values map[string]string, extra []string, into any) error {
 	command, args, err := c.command(id, values)
 	if err != nil {
 		return err
 	}
+	args = append(args, extra...)
 	result := c.runner.Run(ctx, c.request(args))
 	if err := classifyResult(command, args, result, c.manifest); err != nil {
 		return err

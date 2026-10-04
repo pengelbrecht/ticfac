@@ -351,3 +351,34 @@ func TestAMergeDriverWhoseArityChangedIsAnError(t *testing.T) {
 		t.Fatal("a three-argument merge-file was configured as a git merge driver")
 	}
 }
+
+// GraphAll appends --all to the manifest's graph argv: the same command id,
+// the same response schema, and the closed tasks the epic's whole table
+// needs. The flag is the one argument the manifest's graph argv does not
+// pin, appended after it — and the version check and the classification run
+// exactly as for any other call.
+func TestGraphAllAppendsAllAfterTheManifestArgv(t *testing.T) {
+	runner := &recordingRunner{results: []Result{
+		{Stdout: []byte(versionJSON())},
+		{Stdout: []byte(`{"epic":{"id":"e1","title":"E"},"needs_planning":false,"missing_process_ticks":[],"unjustified_gates":[],"stats":{"total_tasks":2,"wave_count":1,"max_parallel":2,"ready_for_agent":1,"awaiting_human":0,"deferred":0},"dispatch":{"max_parallel":0,"in_flight":0,"in_flight_ids":[],"free":-1,"now":[]},"waves":[{"wave":1,"parallel":2,"ready":true,"tasks":[{"id":"a1","title":"A","priority":1,"status":"closed","agent_ready":false}]}],"critical_path":1}`)},
+	}}
+	client, err := New(Options{Runner: runner, Dir: "/fixture"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	graph, err := client.GraphAll(context.Background(), "e1")
+	if err != nil {
+		t.Fatalf("GraphAll: %v", err)
+	}
+	if len(runner.requests) != 2 {
+		t.Fatalf("runner saw %d calls, want startup version plus graph", len(runner.requests))
+	}
+	if got := runner.requests[1].Args; len(got) != 4 || got[0] != "graph" || got[1] != "e1" ||
+		got[2] != "--json" || got[3] != "--all" {
+		t.Errorf("graph args = %v, want [graph e1 --json --all]", got)
+	}
+	if len(graph.Waves) != 1 || len(graph.Waves[0].Tasks) != 1 ||
+		graph.Waves[0].Tasks[0].Status != "closed" {
+		t.Errorf("the closed task did not ride: %+v", graph.Waves)
+	}
+}
