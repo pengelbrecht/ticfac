@@ -880,3 +880,75 @@ func derefString(s *string) string {
 	}
 	return *s
 }
+
+// TestANotGoingRunsRefusedTryNamesTheResume: the ladder's "the run will
+// retry or escalate the tier" was a promise nothing kept when the run
+// itself was over — dead without a terminal word, failed by its own word,
+// or stopped by the factory (tick jkb). The refused last try's next step is
+// then the resume, the same command the header's needs-you entry carries.
+func TestANotGoingRunsRefusedTryNamesTheResume(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		state  runstate.State
+		reason string
+	}{
+		{
+			name:   "a failed run",
+			state:  "failed",
+			reason: "the integrated gate refused attempt 1 of zzz",
+		},
+		{
+			name:   "a dead run that never stated an end",
+			state:  "running",
+			reason: "zzz is dispatched",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			src := pipelineCase{
+				tasks: []tk.GraphTask{{ID: "zzz", Title: "Z", Status: "open"}},
+				rows:  []runstate.TickState{{TickID: "zzz", State: "rejected", Attempt: 1}},
+				markers: []runstate.Attempt{
+					attemptMarker(1, "zzz", "2026-09-27T03:00:00Z", "strong", "@cf/zai-org/glm-5.3", "local-subprocess"),
+				},
+				feed: []runfeed.Event{
+					line(testNow.Add(-90*time.Minute), "zzz", 1, reconcile.StageCollected, "attempt 1 of zzz collected"),
+					line(testNow.Add(-80*time.Minute), "zzz", 1, reconcile.StageRejected,
+						reconcile.RefusedRejectedWork+": attempt 1 of zzz was rejected with commits nothing merged"),
+				},
+			}.sources()
+			src.Records.Checkpoint.State = tc.state
+			src.Records.Checkpoint.Reason = tc.reason
+			src.Liveness = LivenessInput{
+				Alive: false, State: "dead",
+				Reason: "pid 4242 is gone and never released the run: it died",
+				Source: "run.pid",
+			}
+			model := Build(src)
+			tick := pipelineTick(t, model, "zzz")
+			if len(tick.Tries) != 1 {
+				t.Fatalf("zzz reads tries %+v, want the one refused try", tick.Tries)
+			}
+			step := tick.Tries[0].NextStep
+			if step == nil {
+				t.Fatal("the refused last try carries no next step")
+			}
+			if want := "the run is not going — ticfac run-epic pip takes it up"; *step != want {
+				t.Errorf("the refused try's next step is %q, want %q: a run that is not going retries nothing", *step, want)
+			}
+			// The same command the header's needs-you entry names — one
+			// answer, two wordings (tick eli's rule).
+			var unblock *string
+			for i := range model.Attention {
+				if model.Attention[i].Kind == WaitDeadRun {
+					unblock = model.Attention[i].UnblockCommand
+				}
+			}
+			if unblock == nil || *unblock != "ticfac run-epic pip" {
+				t.Errorf("the header's resume command is %+v, want the same one the row names", unblock)
+			}
+			validatesAgainstContract(t, model)
+		})
+	}
+}

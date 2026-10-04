@@ -806,6 +806,132 @@ func TestAFinishedCloudRunIsNotADeadRun(t *testing.T) {
 	}
 }
 
+// TestAStoppedRunReadsWhereItStandsWithTheResumeAndNoETA: the finding's own
+// live case (tick jkb): a cloud run the operator stopped, its feed carrying
+// the factory's own "stopped: …" terminal line, an open epic behind it and
+// a stale running checkpoint. The old runCompleted read the line as a
+// completion, and every downstream answer lied — phase done, merge done, a
+// healthy verdict, needs you: nothing, and an ETA for work nothing would
+// finish. The honest frame: the phase is where the EPIC stands, the verdict
+// says stopped, the resume is the person's, and no time is stated.
+func TestAStoppedRunReadsWhereItStandsWithTheResumeAndNoETA(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Host = HostCloud
+	src.RunID = "run_08f5a3f10c9d2e4b6a7c8d9e0f1a2b3c"
+	src.Standing, src.StandingRead, src.Session = nil, false, nil
+	// Three measured closes behind the open ticks — the estimate the old
+	// model stated for this very run.
+	src.Records.Checkpoint.Ticks = append(src.Records.Checkpoint.Ticks,
+		runstate.TickState{TickID: "89m", State: "closed", Attempt: 4})
+	src.Records.Attempts = append(src.Records.Attempts,
+		attemptMarker(4, "89m", "2026-09-27T04:40:00Z", "strong", "m", "cloudflare-sandbox"))
+	src.Records.Evidence = append(src.Records.Evidence,
+		evidence("gate-6dh-3-go", "go", "6dh", 3, "pass", "integrated", "aa", "2026-09-27T04:50:00Z", "2026-09-27T05:00:00Z"),
+		evidence("gate-89m-4-go", "go", "89m", 4, "pass", "integrated", "bb", "2026-09-27T05:10:00Z", "2026-09-27T05:20:00Z"))
+	// The stale running checkpoint the factory's stop never rewrote, and
+	// the factory's own terminal line — the word its finalize writes to the
+	// same run_finished stage the local reconciler writes.
+	src.Records.Checkpoint.State = "running"
+	src.Records.Checkpoint.Reason = "6dh is dispatched"
+	src.Records.Checkpoint.Ticks[1] = runstate.TickState{TickID: "6dh", State: "closed", Attempt: 3}
+	src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-35*time.Minute), src.RunID, "", nil,
+		reconcile.StageRunFinished, "stopped: the operator stopped the run: 2 of 35 ticks still open"))
+	src.Liveness = LivenessInput{
+		Alive: false, State: "stopped",
+		Reason: "the factory's record says stopped — the operator stopped the run",
+		Source: "workflow-record",
+	}
+	model := Build(src)
+
+	if model.Lifecycle.Phase != PhaseWaves {
+		t.Errorf("the stopped run reads phase %q, want waves: the phase is where the epic stands, never a terminal answer the run did not write", model.Lifecycle.Phase)
+	}
+	for _, p := range model.Lifecycle.Phases {
+		if p.Phase == PhaseMerge && p.State != PhaseStatePending {
+			t.Errorf("the merge phase reads %q, want pending: a stopped run has no PR to merge", p.State)
+		}
+	}
+	if model.Health.Verdict.State != VerdictStopped {
+		t.Errorf("the stopped run's verdict is %q, want stopped", model.Health.Verdict.State)
+	}
+	if !strings.Contains(model.Health.Verdict.Summary, "stopped") {
+		t.Errorf("the stopped summary reads %q, want the run's own word for the stop", model.Health.Verdict.Summary)
+	}
+	var resume *Attention
+	for i := range model.Attention {
+		if model.Attention[i].Kind == WaitDeadRun {
+			resume = &model.Attention[i]
+		}
+	}
+	if resume == nil {
+		t.Fatalf("the stopped run needs no person: %+v — only a person starts the epic again", model.Attention)
+	}
+	if !strings.Contains(resume.What, "stopped") || !strings.Contains(resume.What, "the operator stopped the run") {
+		t.Errorf("the resume entry reads %q, want the run's own stop sentence", resume.What)
+	}
+	if resume.UnblockCommand == nil || *resume.UnblockCommand != "ticfac run 2jn --cloud" {
+		t.Errorf("the resume entry's command is %+v, want the cloud resume", resume.UnblockCommand)
+	}
+	if model.Remaining != nil {
+		t.Errorf("the stopped run states an ETA of %+v, want none: nothing is going to finish in that time", model.Remaining)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestAFailedRunNeedsAPersonToResumeIt: the dead-run wait once starved the
+// run whose own word says it failed — runTerminal exempted it — and the
+// frame said "needs you: nothing" beside the stopped verdict (tick jkb).
+// The failure's own reason is the wait's sentence, the resume is the
+// person's, the phase and verdict keep their words, and the ended run
+// states no ETA.
+func TestAFailedRunNeedsAPersonToResumeIt(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Standing, src.StandingRead, src.Session = nil, false, nil
+	src.Liveness = LivenessInput{
+		Alive: false, State: "dead",
+		Reason: "pid 4242 is gone and never released the run: it died",
+		Source: "run.pid",
+	}
+	src.Records.Checkpoint.State = "failed"
+	src.Records.Checkpoint.Reason = "the integrated gate refused attempt 2 of 6dh: go test failed"
+	src.Records.Checkpoint.UpdatedAt = testNow.Add(-30 * time.Minute).Format(time.RFC3339)
+	// Three measured closes, so the estimate would otherwise fire.
+	src.Records.Checkpoint.Ticks = append(src.Records.Checkpoint.Ticks,
+		runstate.TickState{TickID: "89m", State: "closed", Attempt: 4})
+	src.Records.Attempts = append(src.Records.Attempts,
+		attemptMarker(4, "89m", "2026-09-27T04:40:00Z", "strong", "m", "local-subprocess"))
+	src.Records.Checkpoint.Ticks[1] = runstate.TickState{TickID: "6dh", State: "closed", Attempt: 3}
+	src.Records.Evidence = append(src.Records.Evidence,
+		evidence("gate-6dh-3-go", "go", "6dh", 3, "pass", "integrated", "aa", "2026-09-27T04:50:00Z", "2026-09-27T05:00:00Z"),
+		evidence("gate-89m-4-go", "go", "89m", 4, "pass", "integrated", "bb", "2026-09-27T05:10:00Z", "2026-09-27T05:20:00Z"))
+	model := Build(src)
+
+	if model.Lifecycle.Phase != PhaseFailed {
+		t.Errorf("the failed run reads phase %q, want failed", model.Lifecycle.Phase)
+	}
+	if model.Health.Verdict.State != VerdictStopped {
+		t.Errorf("the failed run's verdict is %q, want stopped", model.Health.Verdict.State)
+	}
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitDeadRun {
+		t.Fatalf("the failed run waits on %+v, want its own resume", model.WaitsOn)
+	}
+	if want := "run epic-2jn failed: the integrated gate refused attempt 2 of 6dh: go test failed"; model.WaitsOn.What != want {
+		t.Errorf("the resume entry reads %q, want the checkpoint's own reason worded once:\n%q", model.WaitsOn.What, want)
+	}
+	if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run-epic 2jn" {
+		t.Errorf("the resume entry's command is %+v, want the resume", model.WaitsOn.UnblockCommand)
+	}
+	if model.WaitsOn.Since == nil || *model.WaitsOn.Since != src.Records.Checkpoint.UpdatedAt {
+		t.Errorf("the resume entry reads since %+v, want the checkpoint's own updated_at", model.WaitsOn.Since)
+	}
+	if model.Remaining != nil {
+		t.Errorf("the failed run states an ETA of %+v, want none: nothing is going to finish in that time", model.Remaining)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
 // TestACompletedRunWithAnOpenPRWaitsOnTheMerge: the merge is a person's,
 // always — the model says it as the wait, with the PR named in the what.
 func TestACompletedRunWithAnOpenPRWaitsOnTheMerge(t *testing.T) {

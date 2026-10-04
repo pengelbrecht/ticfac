@@ -335,6 +335,35 @@ func TestVerdictACompletedOrCancelledRunIsNotStopped(t *testing.T) {
 	if verdict := Build(cancelled).Health.Verdict; verdict.State == VerdictStopped {
 		t.Errorf("a cancelled run reads stopped, want the run's own terminal answer to stand")
 	}
+	// A completed run waiting on its PR — the merge phase, alive no longer —
+	// is the done class's own answer too (tick jkb): the verdict exemption
+	// once listed only done and cancelled, and a completed local run read
+	// red "stopped" while the only thing left of it was the person's merge.
+	// The merge wait is the frame's needs-you answer; the verdict is calm.
+	merge := runningEpicSources()
+	merge.Records.Checkpoint.State = "completed"
+	merge.Liveness.Alive = false
+	merge.Liveness.State = "not_running"
+	merge.Liveness.Reason = "no process holds this run: it finished its own work"
+	merge.Standing, merge.StandingRead, merge.Session = nil, false, nil
+	merge.CI = &CIInput{
+		State: "green",
+		PR: &PR{Number: 12, URL: "https://github.com/example/ticfac/pull/12",
+			HeadRef: "epic/2jn", HeadSHA: "9f2ab", BaseRef: "main"},
+		Checks: []CheckState{{Name: "go", Status: "completed", Conclusion: "success"}},
+	}
+	model = Build(merge)
+	if model.Lifecycle.Phase != PhaseMerge {
+		t.Fatalf("a completed run with its PR open reads phase %q, want merge", model.Lifecycle.Phase)
+	}
+	if model.Health.Verdict.State == VerdictStopped {
+		t.Errorf("a completed run waiting on its merge reads %+v, want not stopped: its work is over, the merge is the person's",
+			model.Health.Verdict)
+	}
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitMerge {
+		t.Errorf("a completed run waiting on its PR waits on %+v, want the merge", model.WaitsOn)
+	}
+	assertValidatesAgainstTheContract(t, model)
 }
 
 // int64Ptr is the test-side pointer the recovered list's nullable seconds
