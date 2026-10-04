@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 29,
-  "state": "gating",
-  "reason": "running the integrated gate for oq4 on 8b8469824ee3",
-  "updated_at": "2026-10-04T14:12:55Z",
+  "sequence": 30,
+  "state": "publishing",
+  "reason": "closing oq4 behind the integrated gate on 8b8469824ee3",
+  "updated_at": "2026-10-04T14:14:28Z",
   "ticks": [
     {
       "tick_id": "92k",
