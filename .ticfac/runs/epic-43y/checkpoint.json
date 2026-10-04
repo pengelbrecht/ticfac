@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 11,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-10-04T13:13:38Z",
+  "sequence": 12,
+  "state": "dispatching",
+  "reason": "dispatching kgk as attempt 2",
+  "updated_at": "2026-10-04T13:13:44Z",
   "ticks": [
     {
       "tick_id": "92k",
