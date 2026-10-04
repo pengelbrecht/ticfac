@@ -246,8 +246,10 @@ type Model struct {
 	Cost Cost `json:"cost"`
 
 	// Remaining is the approximate time left, ONLY where measured tick
-	// durations support the estimate. Null everywhere else — a number
-	// nobody measured is a number that lies.
+	// durations support the estimate AND the run is still going. Null
+	// everywhere else — for a run whose own records say it ended as much
+	// as for a number nobody measured: a number nobody is working towards
+	// is a number that lies.
 	Remaining *Remaining `json:"remaining"`
 }
 
@@ -675,8 +677,9 @@ type CostLine struct {
 }
 
 // Remaining is the approximate time left, ONLY where measured tick durations
-// support the estimate: the median of what closed ticks measurably took,
-// times the ticks still open. The basis names the estimate for what it is.
+// support the estimate AND the run is still going: the median of what closed
+// ticks measurably took, times the ticks still open. The basis names the
+// estimate for what it is.
 type Remaining struct {
 	ApproximateSeconds int64  `json:"approximate_seconds"`
 	Basis              string `json:"basis"`
