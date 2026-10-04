@@ -269,6 +269,13 @@ func TestAnAlwaysAskQuestionAtTheCeilingHoldsNamingIt(t *testing.T) {
 	if !strings.Contains(result.Failure.Message, question) || !strings.Contains(result.Failure.Message, "credentials") {
 		t.Errorf("the hold does not name the question and its class: %s", result.Failure.Message)
 	}
+	// The release command the hold names is addressed by the run whose store
+	// carries the attempt (tick qxj): r-fixture, not the epic spelling a
+	// settle without --run-id opens.
+	if !strings.Contains(result.Failure.Message, "ticfac settle qeu a1 1 --run-id r-fixture --release") {
+		t.Errorf("the hold's release command does not name the run its attempt is recorded under: %s",
+			result.Failure.Message)
+	}
 	held, ok := journalLine(r, "a1", StageBlockedHeld)
 	if !ok || !strings.Contains(held, question) {
 		t.Errorf("the %s event does not name the question: %q", StageBlockedHeld, held)
@@ -476,6 +483,12 @@ func TestANoCommitQuestionAtTheCeilingIsDecidedOrHeldByName(t *testing.T) {
 		}
 		if resumed.Failure == nil || resumed.Failure.Reason != RefusedNeedsHuman || !strings.Contains(resumed.Failure.Message, question) {
 			t.Fatalf("the resume failed as %+v, want the question held again", resumed.Failure)
+		}
+		// The resume's hold names the release command addressed by the run
+		// whose store carries the attempt (tick qxj).
+		if !strings.Contains(resumed.Failure.Message, "ticfac settle qeu a1 1 --run-id r-fixture --release") {
+			t.Errorf("the resumed hold's release command does not name the run its attempt is recorded under: %s",
+				resumed.Failure.Message)
 		}
 		if contains(r.Stages("a1"), StageDispatched) {
 			t.Errorf("the resume dispatched a held question again: %v", r.Stages("a1"))

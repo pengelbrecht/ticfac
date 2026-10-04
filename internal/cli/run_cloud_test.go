@@ -427,6 +427,67 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 	}
 }
 
+// The cloud hold's release command names the run its attempt is recorded
+// under (tick qxj): the factory's run_<hex> spells no epic, so a settle
+// without --run-id opens epic-<epic-id>, a store that carries no such
+// attempt, and refuses — the same broken release the status model stopped
+// naming (tick ulw), live here on the surface a person reads during a hold.
+func TestRunCloudHeldAttemptReleaseCommandNamesTheRun(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	finished, resumed := cloudRunIDOf("ab12"), cloudRunIDOf("cd34")
+
+	// The feed the factory serves the resumed run: it ends holding an attempt
+	// for a person — the unaddressed hold, the settle branch's own shape, not
+	// the untriaged-findings hold the triage branch answers (tick il6).
+	at := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+	attempt := 2
+	feed := feedLine(t, runfeed.NewEvent(at, resumed, "a1", &attempt, reconcile.StageRunHeld,
+		reconcile.RefusedUnaddressed+": nobody can say whether the attempt is running"))
+	feed += feedLine(t, runfeed.NewEvent(at.Add(time.Minute), resumed, "", nil, reconcile.StageRunFinished,
+		"holding: a1 cannot be addressed"))
+
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": finished, "epic": "epic1", "project": "acme/project", "state": "completed", "started_at": "2026-09-26T10:00:00Z",
+			}}}
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			return http.StatusCreated, map[string]any{
+				"run": map[string]any{"run_id": resumed, "state": "starting"},
+			}
+		case request.Path == "/api/runs/"+resumed:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": resumed, "epic": "epic1", "state": "completed",
+			}}
+		case request.Path == "/api/runs/"+resumed+"/events":
+			return 200, map[string]any{
+				"run_id": resumed, "state": "completed",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
+		}
+		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	code, stdout, stderr := runRunCloud(t, repo, "epic1")
+	if code != ExitHeld {
+		t.Fatalf("exit %d, want the held-for-person code %d:\n%s\n%s", code, ExitHeld, stderr.String(), stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "HOLDING a1 try 1 (run dispatch #2)") {
+		t.Errorf("the alert does not name the held attempt:\n%s", stderr.String())
+	}
+	// The one command that clears the hold is addressed by the run itself,
+	// spelled whole — never a placeholder a person fills in from another
+	// screen (tick gtk).
+	want := "ticfac settle epic1 a1 2 --run-id " + resumed + " --release \"<who>\""
+	if !strings.Contains(stderr.String(), want) {
+		t.Errorf("the cloud hold's release command does not name the run its attempt is recorded under:\n%s", stderr.String())
+	}
+}
+
 // TestRunCloudDetachKeepsTheRunGoing: an interrupted attach to a live cloud
 // run is a DETACH, not a failure — the same contract the local attach holds
 // — and the line that says so names the one command that comes back. The

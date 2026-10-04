@@ -353,12 +353,21 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 					"evidence is on the integration branch, not in this line.\n\n",
 					runID, what, event.Detail, epicID)
 			} else {
+				// The release command is addressed by the run the hold belongs
+				// to, whenever that run's id is NOT the spelling a settle
+				// without --run-id opens (tick ulw fixed the model surface;
+				// tick qxj this alert): a cloud run's attempt is recorded under
+				// the factory's run_<hex>, which the bare command's default
+				// (epic-<epic-id>) does not carry, and the release refuses.
+				settle := fmt.Sprintf("ticfac settle %s %s %s --release \"<who>\"", epicID, tick, attempt)
+				if n, err := strconv.Atoi(attempt); err == nil {
+					settle = statusmodel.SettleCommandForCurrentRun(epicID, tick, n, runID)
+				}
 				fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
-					"Nothing proceeds until somebody decides. Release it with `ticfac settle %s %s %s "+
-					"--release \"<who>\"` — add --carry-work to base the "+
+					"Nothing proceeds until somebody decides. Release it with `%s` — add --carry-work to base the "+
 					"next try on the commits the released one left — or answer what the tick is waiting for. The "+
 					"evidence is on the integration branch, not in this line.\n\n",
-					runID, what, event.Detail, epicID, tick, attempt)
+					runID, what, event.Detail, settle)
 			}
 		}
 		if event.Stage == reconcile.StageRunFinished || event.Stage == reconcile.StageRunDied {

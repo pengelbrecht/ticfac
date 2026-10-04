@@ -44,7 +44,11 @@ func TestWatchSurfacesARunThatEndedHoldingAnAttempt(t *testing.T) {
 	// and says what moves the hold on, carry and all. The settle command is
 	// addressed by the run's own epic id — a placeholder a person would
 	// still have to fill in is not a command.
-	for _, want := range []string{"nkf try 1 (run dispatch #3)", "settle r-1 nkf 3 ", "attempt_unaddressed", "--carry-work", "settle"} {
+	for _, want := range []string{"nkf try 1 (run dispatch #3)", "settle r-1 nkf 3 ", "attempt_unaddressed", "--carry-work", "settle",
+		// The release command names the run whose store carries the attempt
+		// (tick qxj): this run's records live under r-1, not under the epic
+		// spelling a settle without --run-id opens.
+		"--run-id r-1 --release"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Errorf("the alert does not name %q: %q", want, stderr.String())
 		}
@@ -80,6 +84,12 @@ func TestWatchHoldAlertNamesTheEpicNotAPlaceholder(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "ticfac settle 2jn t1 2 --release") {
 		t.Errorf("the alert does not name the settle command addressed by the epic id: %q", stderr.String())
+	}
+	// A run under the epic spelling is the one run the bare command already
+	// addresses: its alert spells no --run-id (tick qxj).
+	if strings.Contains(stderr.String(), "--run-id") {
+		t.Errorf("the alert adds --run-id to a command that already defaults to this run's store: %q",
+			stderr.String())
 	}
 	if strings.Contains(stderr.String(), "<epic-id>") {
 		t.Errorf("the alert still prints a placeholder instead of the epic id: %q", stderr.String())

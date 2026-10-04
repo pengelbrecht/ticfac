@@ -1,6 +1,10 @@
 package statusmodel
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/pengelbrecht/ticfac/internal/reconcile"
+)
 
 // The one command that clears a stop, spelled once here so every renderer —
 // the watch, the bare `ticfac` listing, a phone page, an agent's JSON —
@@ -68,9 +72,10 @@ func SettleCommand(epicID, tickID string, attempt int, runID string) string {
 // factory's run_<hex> (tick ulw). The empty run id says the caller does
 // not know it; either way the flag is left off and the spelling every
 // local run's needs-you has always carried stands.
+//
+// The rule is the reconciler's own (reconcile.SettleReleaseCommand, tick
+// qxj), read here rather than mirrored: the model and the run's refusals
+// spell one command, not two.
 func SettleCommandForCurrentRun(epicID, tickID string, attempt int, runID string) string {
-	if runID == "" || runID == "epic-"+epicID {
-		return SettleCommand(epicID, tickID, attempt, "")
-	}
-	return SettleCommand(epicID, tickID, attempt, runID)
+	return reconcile.SettleReleaseCommand(epicID, tickID, attempt, runID)
 }

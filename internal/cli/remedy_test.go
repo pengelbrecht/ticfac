@@ -35,6 +35,15 @@ var remedyScanned = []string{filepath.Join("..", "reconcile"), "."}
 // remedyCommand matches one backticked `ticfac …` command inside a literal.
 var remedyCommand = regexp.MustCompile("`(ticfac [^`]+)`")
 
+// releaseCommandSpelledWhole matches the release command spelled as a whole
+// literal — the shape the reconciler's helper (tick qxj) spells once and the
+// refusals interpolate, no backticks around it in its own spelling. A bare
+// mention of the command's name with nothing to instantiate (the settle
+// command's own usage refusal) does not match: the format verbs are the shape
+// of a command a person can fill in, and the match is anchored to the whole
+// literal so the command it instantiates is the complete one.
+var releaseCommandSpelledWhole = regexp.MustCompile(`^ticfac settle %s %s %d (?:--run-id %s )?--release "<[^">]*>"$`)
+
 type printedRemedy struct {
 	where   string
 	command string
@@ -51,8 +60,9 @@ func TestEveryPrintedRemedyIsACommandTheCLIAccepts(t *testing.T) {
 			settles++
 		}
 	}
-	if settles < 3 {
-		t.Fatalf("the scan found %d printed settle remedies, want the reconciler's three and more: the scan is "+
+	if settles < 2 {
+		t.Fatalf("the scan found %d printed settle remedies, want the release command's two forms — the "+
+			"reconciler's helper spells it once and the refusals interpolate it (tick qxj): the scan is "+
 			"broken, not the remedies (%v)", settles, remedies)
 	}
 
@@ -145,6 +155,13 @@ func remediesIn(t *testing.T, dir string) []printedRemedy {
 					continue
 				}
 				out = append(out, printedRemedy{where: fset.Position(expr.Pos()).String(), command: command})
+			}
+			// The release command's own spelling is a remedy like any other,
+			// though it carries no backticks of its own: the run's refusals
+			// interpolate it as `%s`, and only the whole-literal shape it is
+			// spelled in parses as the command it is.
+			if whole := releaseCommandSpelledWhole.FindString(text); whole != "" {
+				out = append(out, printedRemedy{where: fset.Position(expr.Pos()).String(), command: whole})
 			}
 			// A literal chain is read whole, once: its parts are not visited
 			// again on their own.

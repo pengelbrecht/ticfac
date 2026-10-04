@@ -310,7 +310,10 @@ func TestASecondConflictOnTheSameTryGoesToTheLadder(t *testing.T) {
 			rejected = event.Detail
 		}
 	}
-	for _, want := range []string{"shared-work.txt", "resolve-conflict job already ran", "tick-a2/resolve-2"} {
+	for _, want := range []string{"shared-work.txt", "resolve-conflict job already ran", "tick-a2/resolve-2",
+		// The release the rejection names is addressed by the run whose store
+		// carries the attempt (tick qxj).
+		"--run-id r-fixture --release"} {
 		if !strings.Contains(rejected, want) {
 			t.Errorf("the rejection does not name %q: %s", want, rejected)
 		}
