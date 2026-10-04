@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
   "epic_id": "hn6",
-  "sequence": 55,
-  "state": "publishing",
-  "reason": "closing gmo behind the integrated gate on 2b7276b3956f",
-  "updated_at": "2026-10-04T03:10:29Z",
+  "sequence": 56,
+  "state": "running",
+  "reason": "gmo is closed",
+  "updated_at": "2026-10-04T03:10:36Z",
   "ticks": [
     {
       "tick_id": "gmo",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 6
     },
     {
