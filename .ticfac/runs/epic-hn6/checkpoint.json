@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 101,
-  "state": "gating",
-  "reason": "running the integrated gate for s71 on 0163f6d7f8b0",
-  "updated_at": "2026-10-04T19:35:20Z",
+  "sequence": 102,
+  "state": "publishing",
+  "reason": "closing s71 behind the integrated gate on 0163f6d7f8b0",
+  "updated_at": "2026-10-04T19:39:32Z",
   "ticks": [
     {
       "tick_id": "v16",
