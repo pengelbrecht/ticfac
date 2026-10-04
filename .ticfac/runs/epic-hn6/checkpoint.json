@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 44,
-  "state": "integrating",
-  "reason": "integrating e6g attempt 7 into epic/hn6",
-  "updated_at": "2026-10-04T17:35:51Z",
+  "sequence": 45,
+  "state": "gating",
+  "reason": "running the integrated gate for e6g on cae7e47f6758",
+  "updated_at": "2026-10-04T17:36:05Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -43,7 +43,7 @@
     },
     {
       "tick_id": "e6g",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 7
     },
     {
