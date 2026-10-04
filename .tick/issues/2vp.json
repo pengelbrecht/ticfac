@@ -1,0 +1,13 @@
+{
+  "id": "2vp",
+  "title": "Pin the git credential helper text to the image's, like the tk shim",
+  "description": "The restore installs a copy of image/common.sh install_git_credential_helper (both the token-door and static variants, same decision condition) so a fresh container can fetch a private remote. It is the same drift problem the boundary-guard tk shim had: nothing fails when the image's helper changes. The tk shim solved it by pinning the refusal in contracts/worker-boot-contract.json and asserting both sides in tests; the helper text deserves the same treatment (a contracts pin + an assertion in internal/sandboximage and the harness node suite).\nevidence: harness/src/workspace/checkpoints.ts CREDENTIAL_HELPER_STATIC/CREDENTIAL_HELPER_TOKEN_DOOR vs image/common.sh install_git_credential_helper (lines 1046-1060)\n\nticfac run epic-43y filed this backlog tick from the finding a9786e1af63898ea76e4edab09b996e51f931fa6760154578545b3f69bceec9c (reported by run-epic-43y/tick-dwn/attempt-6): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/a9786e1af63898ea76e4edab09b996e51f931fa6760154578545b3f69bceec9c.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-dwn/attempt-6",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-04T15:36:15Z",
+  "updated_at": "2026-10-04T15:36:15Z"
+}
