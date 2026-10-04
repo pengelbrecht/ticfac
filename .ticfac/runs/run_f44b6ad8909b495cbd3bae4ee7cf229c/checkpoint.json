@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 32,
-  "state": "dispatching",
-  "reason": "dispatching gf0 as attempt 6",
-  "updated_at": "2026-10-04T10:59:02Z",
+  "sequence": 33,
+  "state": "running",
+  "reason": "gf0 is running as attempt 6",
+  "updated_at": "2026-10-04T10:59:17Z",
   "ticks": [
     {
       "tick_id": "q8m",
@@ -42,7 +42,8 @@
     },
     {
       "tick_id": "gf0",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 6
     }
   ],
   "provenance": {
