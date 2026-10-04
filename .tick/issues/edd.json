@@ -1,0 +1,13 @@
+{
+  "id": "edd",
+  "title": "One make-gate run failed once and never reproduced; package unidentified",
+  "description": "The first of five whole-repo `make gate` runs on this worktree exited 1; the failing package's line was lost to a tail pipe, and the failure never reproduced in four later full gates plus a -count=5 pass over every touched package. The learnings already record host-dependent flakes on this shared machine (live runs, other agents), so this is most likely one of those, but it could also be a latent flake nobody has named. Worth a look only if it repeats for another worker on this host.\nevidence: make gate exit 1 at 2026-10-04 ~19:20 local on branch ticfac/run-epic-hn6/tick-ghh/attempt-8; four later full gates and go test -short -count=5 on ./internal/exec/subprocess/ ./internal/statusmodel/ ./internal/contracts/... ./internal/cli/ all green; no failing test name captured\n\nticfac run epic-hn6 filed this backlog tick from the finding a5fb47f29d1a0b8d65390678339cc6ffe6467a5c92b4ed793735945c061c2f6a (reported by run-epic-hn6/tick-ghh/attempt-8): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/a5fb47f29d1a0b8d65390678339cc6ffe6467a5c92b4ed793735945c061c2f6a.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-ghh/attempt-8",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T18:36:21Z",
+  "updated_at": "2026-10-04T18:36:21Z"
+}
