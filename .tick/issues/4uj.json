@@ -1,0 +1,14 @@
+{
+  "id": "4uj",
+  "title": "Name pi-durable in a hosted attempt's handle and the cloud profiles",
+  "description": "A hosted attempt's job handle names the dispatch's requested harness ('pi', from profiles-cloudflare-sandbox) because the Go client refuses a handle whose harness differs from the request (internal/exec/cloudflaresandbox/executor.go:431). The attempt actually runs on pi-durable (WorkerAgentState.harness). The cloud profiles' runner and the boot env's TICKS_HARNESS should say pi-durable once the pi-CLI path is deleted (jhp), so provenance names what ran.\nevidence: cloudflare/src/sandbox-executor.ts startHostedAttempt (harness: bootedHarness(boot))\n\nticfac run epic-43y created this tick by absorbing the finding 270d4285800544591c8e0355a6fa723a7b0b7be030f568b1acf346e2e3d88a1f (reported by run-epic-43y/tick-xd3/attempt-11): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/270d4285800544591c8e0355a6fa723a7b0b7be030f568b1acf346e2e3d88a1f.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-xd3/attempt-11",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-04T18:45:52Z",
+  "updated_at": "2026-10-04T18:45:52Z"
+}
