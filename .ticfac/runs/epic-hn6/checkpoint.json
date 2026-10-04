@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 105,
-  "state": "running",
-  "reason": "onv is running as attempt 18",
-  "updated_at": "2026-10-04T19:40:13Z",
+  "sequence": 106,
+  "state": "collecting",
+  "reason": "collecting onv attempt 18",
+  "updated_at": "2026-10-04T20:04:39Z",
   "ticks": [
     {
       "tick_id": "v16",
