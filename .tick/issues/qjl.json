@@ -8,7 +8,8 @@
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "blocked_by": [
-    "v16"
+    "v16",
+    "435"
   ],
   "parent": "hn6",
   "role": "closeout",
