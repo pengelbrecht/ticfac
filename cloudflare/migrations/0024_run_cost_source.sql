@@ -1,0 +1,26 @@
+-- Where the run index row's cost number came from (tick 1tm).
+--
+-- `runs.cost_usd` is NOT NULL DEFAULT 0: the row always carries a number, so
+-- the number alone cannot say whether anything measured the spend. A run
+-- before its first cost sync, and a run whose gateway telemetry could not be
+-- read, both carry the default zero — and the dashboard's cost line printed
+-- that zero as a metered "Workers AI $0.00", the fabricated spend epic hn6's
+-- rule 7 exists to end.
+--
+-- `cost_source` states it instead: 'gateway' when AI Gateway telemetry
+-- answered (written by the same UPDATE that moves cost_usd), null until then.
+-- The status paths read it back and meter the cloud cost line only on
+-- 'gateway' — the same distinction the finished run record's own cost_source
+-- draws (src/artifacts.ts), carried onto the row every read surface answers
+-- from.
+--
+-- Nullable, and null is honest rather than sloppy: a run recorded before
+-- this column existed, and a live run whose telemetry has not answered yet,
+-- both state "no measurement", and backfilling 'gateway' would claim a
+-- measurement that never happened. The R2 run record keeps its own richer
+-- vocabulary ('unavailable: …' with the reason) at finalize; the row needs
+-- only the one fact the cost line branches on.
+--
+-- D1 has no `ADD COLUMN IF NOT EXISTS`, but as with 0008 the migration
+-- ledger never re-runs an applied file, so a retried deploy skips this.
+ALTER TABLE runs ADD COLUMN cost_source TEXT;

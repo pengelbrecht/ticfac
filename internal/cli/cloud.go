@@ -237,6 +237,14 @@ type cloudRunRecord struct {
 	// its row carries (set by the gateway's usage telemetry): the dashboard's
 	// cost lines read it. Nil when the record carries no number.
 	CostUSD *float64 `json:"cost_usd"`
+	// CostSource is where the factory says that number came from: "gateway"
+	// when AI Gateway telemetry answered, "unavailable: …" when it could
+	// not be read. The runs row's cost_usd is NOT NULL DEFAULT 0, so the
+	// number alone is not a measurement — a run before its first cost sync
+	// or with unavailable telemetry is an UNSYNCED record, and its cost is
+	// not metered (tick 1tm). Nil when the record carries no source at all,
+	// which is every older factory's answer.
+	CostSource *string `json:"cost_source"`
 }
 
 type cloudHolder struct {

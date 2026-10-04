@@ -51,14 +51,23 @@ var claudeModelAliases = map[string]bool{"opus": true, "sonnet": true, "haiku": 
 // buildCost splits the run's spend per river, one line per source that has
 // something on it:
 //
-//   - decisions: the model exchanges the run itself recorded usage for,
-//     metered because the records state the price. Omitted when the run
-//     recorded no decision at all.
-//   - workers-ai: the dispatches that ran through the factory's gateway. Its
-//     number is the HOST's ground truth (Sources.WorkerCost — the factory's
-//     own gateway-backed cost_usd) where the host stated one; otherwise the
-//     line is unmetered, because the calls are not joined to the gateway
-//     logs from where the model is built.
+//   - decisions: the model exchanges the run itself recorded a measured
+//     price for — metered because the records state the price, and ONLY
+//     then (tick 1tm): a record whose usage block carries no price — the
+//     marshalled zero of a field nothing ever set, or no usage block at
+//     all — is not a measurement, so the line says "not metered" and
+//     states no number instead of a fabricated $0.00. Omitted when the
+//     run recorded no decision at all.
+//   - workers-ai: the dispatches that ran through the factory's gateway.
+//     Its number is the HOST's ground truth (Sources.WorkerCost — the
+//     factory's own gateway-backed cost_usd) where the host stated one;
+//     otherwise the line is unmetered, because the calls are not joined
+//     to the gateway logs from where the model is built. A CLOUD run
+//     whose host stated no number is the unsynced record — the runs row's
+//     cost_usd is NOT NULL DEFAULT 0, so before the first cost sync or
+//     with telemetry unavailable the row's zero is a default, not a
+//     measurement — and its basis names that, not the local unjoined
+//     case.
 //   - claude: never metered — a subscription is the only way this repository
 //     runs claude, and the subscription states no per-run number.
 //   - pi-local and other: never metered — no reader this repository has
@@ -76,21 +85,35 @@ func buildCost(src Sources, recs Records) Cost {
 
 	lines := []CostLine{}
 	if len(recs.Decisions) > 0 {
-		usd, carrying := 0.0, 0
+		usd, carrying, measured := 0.0, 0, 0
 		for _, d := range recs.Decisions {
 			usage, ok := d.Response["usage"].(map[string]any)
 			if !ok {
 				continue
 			}
 			carrying++
-			if v, ok := usage["cost_usd"].(float64); ok {
+			// A measured price is one the record STATES: the marshalled zero
+			// of the jev usage's own never-set cost field is not a statement
+			// — it is the fabrication this split exists to end — so only a
+			// price above zero meters the line. A record that states a
+			// measured zero is not distinguishable from that marshalled zero
+			// and reads unmeasured here, the conservative side of rule 7.
+			if v, ok := usage["cost_usd"].(float64); ok && v > 0 {
+				measured++
 				usd += v
 			}
 		}
-		lines = append(lines, CostLine{
-			Source: CostSourceDecisions, Metered: true, USD: &usd, Attempts: carrying,
-			Basis: "usage recorded on decision records",
-		})
+		if measured > 0 {
+			lines = append(lines, CostLine{
+				Source: CostSourceDecisions, Metered: true, USD: &usd, Attempts: carrying,
+				Basis: "usage recorded on decision records",
+			})
+		} else {
+			lines = append(lines, CostLine{
+				Source: CostSourceDecisions, Metered: false, USD: nil, Attempts: carrying,
+				Basis: "not metered: the decision records carry no measured cost",
+			})
+		}
 	}
 
 	perSource := map[string]int{}
@@ -102,6 +125,11 @@ func buildCost(src Sources, recs Records) Cost {
 		if src.WorkerCost != nil {
 			usd := src.WorkerCost.USD
 			line.Metered, line.USD, line.Basis = true, &usd, "AI Gateway logs"
+		} else if src.Host == HostCloud {
+			// The unsynced cloud record: the row's number is a default until
+			// the gateway's telemetry answers (tick 1tm), so the line names
+			// the telemetry, not the local unjoined case.
+			line.Basis = "not metered: the gateway's cost telemetry has not answered for this run"
 		} else {
 			line.Basis = "not metered: this run's Workers AI calls are not joined to gateway logs"
 		}

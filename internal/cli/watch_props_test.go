@@ -19,8 +19,9 @@ package cli
 //	    hold says "needs you: nothing"; a run with no hold says exactly that
 //	    (at height 0 or ≥ 8, where the header always survives the height fit).
 //	P3  never $0.00 for unmetered spend: when the cost says "not metered"
-//	    anywhere, no fabricated zero shows, and the cost line reads whole
-//	    wherever the pane seats it.
+//	    anywhere, no unmetered river's label wears a number in the frame
+//	    (a metered line's measured number prints, zero included — tick 1tm),
+//	    and the cost line reads whole wherever the pane seats it.
 //	P4  the frame fits the pane: no line wider than the pane, no frame
 //	    taller than it.
 //
@@ -105,7 +106,10 @@ func propStamp(minutesAgo int64) string {
 // 1–8 ticks with random states, pipelines consistent with those states, some
 // ticks children of an earlier tick, 0–3 attention entries (some needing a
 // person, some with the command that clears them), 0–3 workers with activity,
-// cost lines mixing metered and unmetered, and 0–5 recent events.
+// cost lines on distinct rivers mixing metered and unmetered — the
+// decisions river in the shapes tick 1tm made honest, measured zero and
+// no-usage records among them, and the workers-ai river with the cloud's
+// unsynced record — and 0–5 recent events.
 //
 // The tick ids are one length ("t01"…"t48"), so a row's id cell is
 // unambiguous and the row extractor below can read it back exactly; the rand
@@ -322,25 +326,62 @@ func genModel(r *rand.Rand) statusmodel.Model {
 		attention = append(attention, a)
 	}
 
-	// Cost: one or two lines mixing metered and unmetered. A metered number
-	// is never drawn as zero — a measured zero is honest and prints (pinned
-	// by TestDashboardNeverPrintsZeroForUnmetered), so within these models a
-	// visible $0.00 is always a fabrication, which is what P3 refuses.
-	sources := []string{statusmodel.CostSourceWorkersAI, statusmodel.CostSourceClaude, statusmodel.CostSourcePiLocal}
+	// Cost: one to three lines on DISTINCT rivers — the split never names
+	// one river twice — mixing metered and unmetered. The decisions river
+	// draws the shapes tick 1tm made honest: a metered line whose records
+	// stated a measured price of zero — a measured zero prints, beside
+	// unmetered lines — a metered line with a stated price, and the
+	// unmetered line of decision records that carried no usage block or no
+	// price. The workers-ai river draws the cloud's UNSYNCED record too — a
+	// cloud run before its first cost sync, or one whose telemetry reads
+	// "unavailable: …" — beside the gateway's measured number and the local
+	// unjoined line; the unsynced shape makes its model a cloud one, the
+	// host that record belongs on. The decisions river's measured zero is
+	// the shape a decision whose usage states a price of zero asks the
+	// RENDERER to print — pinned by TestDashboardNeverPrintsZeroForUnmetered
+	// — and P3 must tolerate it beside unmetered lines while refusing a
+	// number on any unmetered label: the old whole-frame "$0.00" scan
+	// could not tell the two apart (tick 1tm).
+	rivers := []string{
+		statusmodel.CostSourceDecisions, statusmodel.CostSourceWorkersAI,
+		statusmodel.CostSourceClaude, statusmodel.CostSourcePiLocal,
+	}
+	r.Shuffle(len(rivers), func(i, j int) { rivers[i], rivers[j] = rivers[j], rivers[i] })
 	amounts := []float64{0.08, 0.37, 0.41, 0.99, 1.24, 3.02, 12.5}
-	lines := make([]statusmodel.CostLine, 0, 2)
+	lines := make([]statusmodel.CostLine, 0, 3)
 	recorded := 0.0
-	for i, n := 0, 1+r.IntN(2); i < n; i++ {
-		line := statusmodel.CostLine{
-			Source:   sources[r.IntN(len(sources))],
-			Metered:  r.IntN(2) == 0,
-			Attempts: 1 + r.IntN(6),
-			Basis:    "usage recorded on decision records",
-		}
-		if line.Metered {
-			usd := amounts[r.IntN(len(amounts))]
-			line.USD = ptr(usd)
-			recorded += usd
+	host := statusmodel.HostLocal
+	for i, n := 0, 1+r.IntN(3); i < n; i++ {
+		line := statusmodel.CostLine{Source: rivers[i], Attempts: 1 + r.IntN(6)}
+		switch line.Source {
+		case statusmodel.CostSourceDecisions:
+			switch roll := r.IntN(3); {
+			case roll == 0: // a measured zero: stated by the records, so it prints
+				line.Metered, line.USD = true, ptr(0.0)
+				line.Basis = "usage recorded on decision records"
+			case roll == 1: // a stated price
+				usd := amounts[r.IntN(len(amounts))]
+				line.Metered, line.USD, recorded = true, ptr(usd), recorded+usd
+				line.Basis = "usage recorded on decision records"
+			default: // decision records with no usage block, or no price on it
+				line.Basis = "not metered: the decision records carry no measured cost"
+			}
+		case statusmodel.CostSourceWorkersAI:
+			switch roll := r.IntN(3); {
+			case roll == 0: // the gateway's measured number
+				usd := amounts[r.IntN(len(amounts))]
+				line.Metered, line.USD, recorded = true, ptr(usd), recorded+usd
+				line.Basis = "AI Gateway logs"
+			case roll == 1: // the unsynced cloud record: telemetry not answered
+				line.Basis = "not metered: the gateway's cost telemetry has not answered for this run"
+				host = statusmodel.HostCloud
+			default: // locally run: the calls are not joined to any gateway log
+				line.Basis = "not metered: this run's Workers AI calls are not joined to gateway logs"
+			}
+		case statusmodel.CostSourceClaude:
+			line.Basis = "not metered (subscription)"
+		default:
+			line.Basis = "not metered"
 		}
 		lines = append(lines, line)
 	}
@@ -410,7 +451,7 @@ func genModel(r *rand.Rand) statusmodel.Model {
 		SchemaVersion: statusmodel.SchemaVersion,
 		RunID:         "run_props",
 		EpicID:        epic,
-		Host:          statusmodel.HostLocal,
+		Host:          host,
 		GeneratedAt:   propNow,
 		Degraded:      []string{},
 		Liveness: statusmodel.Liveness{
@@ -855,25 +896,32 @@ func propLineFrom(frame []string, want string, start int) int {
 	return -1
 }
 
-// propCostHonest is P3: when the cost says "not metered" anywhere, no
-// fabricated $0.00 shows (the generator never draws a metered zero — a
-// measured zero is honest and prints, pinned by
-// TestDashboardNeverPrintsZeroForUnmetered — so a visible $0.00 under this
-// trigger is fabrication), and the cost line reads whole wherever the pane
-// seats it — on both axes: width that fits the line, and a height that keeps
-// the frame whole (`unbounded` is the frame's length at height 0; the height
-// fold compresses the middle, and the cost line stands in it, so a pane that
-// drops the line cannot be asked to quote it). The oracle is the renderer's
-// own cost line for the model, so the property pins the line the model asks
-// for, not a paraphrase of it.
+// propCostHonest is P3: no unmetered river wears a number — when the cost
+// says "not metered" anywhere, every UNMETERED line's label in the frame
+// is bare of a price, while a METERED line prints its measured number,
+// zero included (tick 1tm: a decision whose records stated a measured zero
+// is honest beside unmetered lines, and the old whole-frame "$0.00" scan
+// could not tell the two apart) — and the cost line reads whole wherever
+// the pane seats it, on both axes: width that fits the line, and a height
+// that keeps the frame whole (`unbounded` is the frame's length at height
+// 0; the height fold compresses the middle, and the cost line stands in
+// it, so a pane that drops the line cannot be asked to quote it). The
+// generator draws DISTINCT rivers, so one label names one line and the
+// per-label scan is unambiguous. The oracle is the renderer's own cost
+// line for the model, so the property pins the line the model asks for,
+// not a paraphrase of it.
 func propCostHonest(frame []string, _ func() []string, m, _ statusmodel.Model, width, height, unbounded int) error {
 	oracle := dashCost(m)
 	if !strings.Contains(oracle, "not metered") {
 		return nil
 	}
-	for _, line := range frame {
-		if strings.Contains(line, "$0.00") {
-			return fmt.Errorf("an unmetered run shows a fabricated $0.00: %q", line)
+	joined := strings.Join(frame, "\n")
+	for _, line := range m.Cost.Lines {
+		if line.Metered {
+			continue // a measured number prints — zero included
+		}
+		if strings.Contains(joined, dashCostLabel(line.Source)+" $") {
+			return fmt.Errorf("the unmetered %s line wears a fabricated number:\n%s", line.Source, joined)
 		}
 	}
 	if width <= 0 || width >= ansi.StringWidth(oracle) {
