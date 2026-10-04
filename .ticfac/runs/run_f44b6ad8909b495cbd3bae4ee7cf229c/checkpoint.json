@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 40,
-  "state": "integrating",
-  "reason": "integrating gf0 attempt 6 into epic/hn6",
-  "updated_at": "2026-10-04T12:05:41Z",
+  "sequence": 41,
+  "state": "gating",
+  "reason": "running the integrated gate for gf0 on ffc9d2814769",
+  "updated_at": "2026-10-04T12:41:09Z",
   "ticks": [
     {
       "tick_id": "q8m",
@@ -42,7 +42,7 @@
     },
     {
       "tick_id": "gf0",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 6
     }
   ],
