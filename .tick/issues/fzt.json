@@ -1,0 +1,14 @@
+{
+  "id": "fzt",
+  "title": "jev usage's cost_usd still marshals an unset zero into decision records",
+  "description": "jev.Usage.CostUSD is a plain float64, so every classification decision record still carries \"cost_usd\": 0 that nothing ever measured — the root the tick's finding named. The status model now guards the reading (a price above zero is the only thing that meters), so no dashboard shows a fabricated $0.00, but a genuinely measured $0.00 from a future classifier answer is indistinguishable from the old fabricated shape and reads \"not metered\". Making the field a *float64 (null when the answering service stated no price) would stop the record fabricating a price and let a measured zero be represented honestly.\nevidence: internal/jev/jev.go:181-186; internal/statusmodel/cost.go:96-104 (the guard's own comment names the choice); .ticfac/runs/run_ee8ebb4fe13d4311b8f9be6f66db69d4/decisions/1.json carries the shape\n\nticfac run epic-hn6 created this tick by absorbing the finding 0702ae4dab96de8ace0a442fa5b58f4767444a247206865c7f3959b5efbfdaf8 (reported by run-epic-hn6/tick-1tm/attempt-4): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/0702ae4dab96de8ace0a442fa5b58f4767444a247206865c7f3959b5efbfdaf8.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-1tm/attempt-4",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T17:18:33Z",
+  "updated_at": "2026-10-04T17:18:33Z"
+}
