@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 16,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "frame/model tests for the live worker view; steer round-trip test",
+    "description": "Step 8: watch renders thinking and tool calls from the commit stream (local and cloud), a ticfac steer command, the f6o heartbeat from the commit sequence; optionally publish settled events to the run feed (n0r).",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "y03",
+    "title": "ticfac watch shows a worker's thinking and tool calls live; operator steer; heartbeat from commits"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.99,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 1,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1062,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T18:51:51Z",
+  "answered_at": "2026-10-04T18:51:51Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "y03",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "0f4cdaca2065121a272b34a42f1440d44bc97475",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
