@@ -309,8 +309,16 @@ func TestBuildDerivesTheEpicAcrossRuns(t *testing.T) {
 	if model.Cost.Attempts != 1 {
 		t.Errorf("the cost reads %d attempts, want the newest run's own 1: prior runs' spend is not this run's", model.Cost.Attempts)
 	}
-	if len(model.Gates) != 0 {
-		t.Errorf("the gates read %+v, want none: the newest run recorded no gate evidence", model.Gates)
+	// The gates array is the EPIC's evidence, not the run section's: the
+	// newest run recorded none of its own, and the closed ticks' rows still
+	// read — the drill-in's gate evidence is merged per tick across runs
+	// (tick ihw).
+	keys := []string{}
+	for _, gate := range model.Gates {
+		keys = append(keys, gate.Key)
+	}
+	if strings.Join(keys, ",") != "gate-t1-1-go,gate-t2-2-go,gate-t5-3-go" {
+		t.Errorf("the gates read %v, want every run's evidence for the ticks they worked", keys)
 	}
 
 	// But a hold an earlier run left for a person is not the run section's

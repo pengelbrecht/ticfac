@@ -189,7 +189,7 @@ func TestTickViewDrillsIntoAClosedPriorRunTick(t *testing.T) {
 	}
 
 	model := statusmodel.Build(statusmodel.Sources{
-		Now:  time.Date(2026, 9, 27, 5, 30, 0, 0, time.UTC),
+		Now:   time.Date(2026, 9, 27, 5, 30, 0, 0, time.UTC),
 		RunID: "run_ccc", Host: statusmodel.HostLocal,
 		Graph: &tk.Graph{
 			Epic: tk.GraphEpic{ID: "hpd", Title: "the epic the runs worked"},
@@ -205,7 +205,7 @@ func TestTickViewDrillsIntoAClosedPriorRunTick(t *testing.T) {
 
 	view := strings.Join(renderTickView(model, "at1", plainStyles(), 100, 0), "\n")
 	for _, want := range []string{
-		"at1  the prior run's tick",
+		"at1  prior",
 		"try 1", "closed",
 		"The prior run wired the seam and closed the tick.",
 		"diff: 2 files +10 −0",

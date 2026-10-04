@@ -14,15 +14,25 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/reconcile"
 )
 
 // The per-tick report drill-in (epic hn6, wave 2 — tick ltg): what a person
 // reads when they press enter on a tick — the attempt report's own summary
-// and the attempt branch's diff stats (hn6 rule 6). Everything is read from
+// and the attempt's diff stats (hn6 rule 6). Everything is read from
 // what exists: the summary from the archived report.md the collect phase
 // made survive teardown (tick 35h), the diff from the repository the run
-// works in. Where neither exists the report stays null — the honest "the
-// report was not read", never a guess.
+// works in — from the attempt branch while it stands, and, once the close
+// swept it (tick ihw), from the merge commit that carried its work into
+// the integration branch. Where neither exists the report stays null — the
+// honest "the report was not read", never a guess.
+//
+// The reader is keyed by (run, tick, attempt) (tick ihw): a tick's row
+// under `watch epic-<id>` may come from a run that is not the one the
+// surface was opened on, and its attempt number is that run's own per-run
+// number — the same number in two runs names two dispatches, so the run id
+// rides with the tick and the attempt, never assumed to be the current
+// run's.
 //
 // The two halves are separated from the model by the Sources seam
 // (Sources.Report), so a cloud run passes nil and its ticks state no report:
@@ -44,8 +54,11 @@ type ReportInput struct {
 // decorateReports lays the drill-in on every tick with a current attempt
 // whose state is not dispatched — the settled and the reported ones, never
 // the attempt still in flight, whose worker has written no report yet. A
-// reader that answers nothing leaves the report null.
-func decorateReports(src Sources, m *Model) {
+// reader that answers nothing leaves the report null. Each ask is keyed by
+// the run whose row the tick reads (mergedRuns.ownerRunID): the attempt
+// number a prior run's row carries is that run's own, and pairing it with
+// the current run's id would read another dispatch's report — or none.
+func decorateReports(src Sources, merged *mergedRuns, m *Model) {
 	if src.Report == nil || m.Waves == nil {
 		return
 	}
@@ -56,7 +69,7 @@ func decorateReports(src Sources, m *Model) {
 			if tick.Attempt == nil || tick.State == tickDispatched {
 				continue
 			}
-			if report := src.Report(tick.TickID, *tick.Attempt); report != nil {
+			if report := src.Report(merged.ownerRunID(tick.TickID, m.RunID), tick.TickID, *tick.Attempt); report != nil {
 				tick.Report = reportOf(report)
 			}
 		}
@@ -79,14 +92,15 @@ func reportOf(input *ReportInput) *TickReport {
 }
 
 // AttemptReports is the production report reader for a LOCAL run: it answers
-// a (tick, attempt) report from the run's own artifacts — the archived
+// a (run, tick, attempt) report from the run's own artifacts — the archived
 // report.md beside the attempt record under the executor state root, and
-// the attempt branch's diff against its merge base with the run branch, in
-// the repository the run works in. Results are immutable per (tick, attempt)
-// once the attempt settled, so they are cached: a two-second redraw must not
-// spawn git every frame.
-func AttemptReports(repo, runID string) func(tickID string, attempt int) *ReportInput {
-	return attemptReports(repo, runID, runGit)
+// the attempt's diff against its merge base with the run branch, in the
+// repository the run works in — from the attempt branch while it stands,
+// and from the merge commit once the close swept it. Results are immutable
+// per (run, tick, attempt) once the attempt settled, so they are cached: a
+// two-second redraw must not spawn git every frame.
+func AttemptReports(repo string) func(runID, tickID string, attempt int) *ReportInput {
+	return attemptReports(repo, runGit)
 }
 
 // gitCommand runs one git command in a directory and answers its stdout —
@@ -110,13 +124,13 @@ func runGit(dir string, args ...string) (string, error) {
 }
 
 // attemptReports is AttemptReports over an injectable git: the reader is a
-// closure over one cache, keyed by (tick, attempt) — an attempt's report is
-// settled when the attempt is, and nil answers cache too (the attempt that
-// has no report will not grow one).
-func attemptReports(repo, runID string, git gitCommand) func(tickID string, attempt int) *ReportInput {
+// closure over one cache, keyed by (run, tick, attempt) — an attempt's
+// report is settled when the attempt is, and nil answers cache too (the
+// attempt that has no report will not grow one).
+func attemptReports(repo string, git gitCommand) func(runID, tickID string, attempt int) *ReportInput {
 	var cache sync.Map
-	return func(tickID string, attempt int) *ReportInput {
-		key := fmt.Sprintf("%s#%d", tickID, attempt)
+	return func(runID, tickID string, attempt int) *ReportInput {
+		key := fmt.Sprintf("%s/%s#%d", runID, tickID, attempt)
 		if held, ok := cache.Load(key); ok {
 			return held.(*ReportInput)
 		}
@@ -154,8 +168,9 @@ func readAttemptReport(repo, runID, tickID string, attempt int, git gitCommand) 
 // beneath it): the tests point it at a temp dir so nothing reads the host.
 const EnvExecStateDir = "TICFAC_EXEC_STATE_DIR"
 
-// archivedSummary reads one attempt's archived report.md and answers its
-// opening paragraph. The report is located the way the reconciler's own
+// archivedSummary reads one attempt's archived report.md, under the RUN
+// the attempt belonged to, and answers its opening paragraph. The report
+// is located the way the reconciler's own
 // prior-report walk locates it (internal/reconcile/dispatch.go,
 // priorReports/findAttemptState): by walking the dispatch's state directory
 // for the attempt record rather than recomputing any executor's internal
@@ -164,6 +179,9 @@ const EnvExecStateDir = "TICFAC_EXEC_STATE_DIR"
 // not name this tick is not this attempt's, however same-named its directory
 // (the same guard the cross-run discovery holds).
 func archivedSummary(runID, tickID string, attempt int) (string, bool) {
+	if runID == "" {
+		return "", false // a run id nobody recorded is not any run's by default
+	}
 	for _, root := range reportStateRoots() {
 		state, ok := findAttemptState(filepath.Join(root, runID, tickID, strconv.Itoa(attempt)))
 		if !ok || !attemptNamesTick(state, tickID) {
@@ -272,19 +290,22 @@ func reportSummary(body string) string {
 // branch and its merge base with the run ref, as three counts. The attempt
 // branch is the write ref's own spelling,
 // ticfac/run-<run>/tick-<tick>/attempt-<n> (attemptWriteRef in
-// internal/reconcile). The run ref is resolved through reportMergeBases:
-// the merge base is the attempt's own fork point whichever spelling the
-// repository carries. Not ok when the branch is gone or no run ref shares
-// history with it: the diff was not read, and the model says so rather than
-// guessing a number against a base nobody resolved.
+// internal/reconcile), keyed by the run that dispatched the attempt. The
+// run ref is resolved through reportMergeBases: the merge base is the
+// attempt's own fork point whichever spelling the repository carries. The
+// branch is gone when its work was merged and swept (the close's own half,
+// sweepTick) or disposed: a MERGED attempt's work is still readable from
+// the merge commit, a disposed one's is not — and the diff says it was not
+// read rather than guessing a number against a base nobody resolved.
 func attemptDiff(repo, runID, tickID string, attempt int, git gitCommand) (ReportDiff, bool) {
-	if repo == "" {
+	if repo == "" || runID == "" {
 		return ReportDiff{}, false
 	}
 	branch := fmt.Sprintf("ticfac/run-%s/tick-%s/attempt-%d", runID, tickID, attempt)
 	if head, err := git(repo, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch); err != nil ||
 		strings.TrimSpace(head) == "" {
-		return ReportDiff{}, false // the branch is gone: its work was merged or disposed
+		// The branch is gone: its work was merged and swept, or disposed.
+		return mergedAttemptDiff(repo, runID, tickID, attempt, git)
 	}
 	for _, base := range reportMergeBases(runID) {
 		mergeBase, err := git(repo, "merge-base", base, branch)
@@ -302,6 +323,70 @@ func attemptDiff(repo, runID, tickID string, attempt int, git gitCommand) (Repor
 		return parseShortstat(out), true
 	}
 	return ReportDiff{}, false
+}
+
+// mergedAttemptDiff measures a MERGED attempt's work from the merge commit
+// that carried it into the integration branch — the shape every closed
+// tick's attempt is in after the close swept its branch (internal/reconcile,
+// cleanUp → sweepTick). The reconciler names the attempt in the merge
+// commit's message in every spelling it mints — the plain merge
+// ("ticfac run <run>: tick <tick> attempt <n>"), the resolve-conflict job's
+// minted resolution and the fold of a resolution onto a moved branch (the
+// same words with the resolution's story after them) — so the search is for
+// a message LINE that names the attempt, never a substring: a substring
+// would read attempt 1's number off attempt 10's merge and answer a closed
+// tick with a later dispatch's work. The diff is the merge's own two sides
+// — its first parent (the integration head at merge time) against its
+// second (the attempt's head), measured from their merge base — the same
+// number the live branch read. Not ok when no merge of THIS attempt is
+// reachable from any base the run names: the diff was not read.
+func mergedAttemptDiff(repo, runID, tickID string, attempt int, git gitCommand) (ReportDiff, bool) {
+	if tickID == "" || attempt < 1 {
+		return ReportDiff{}, false
+	}
+	needle := reconcile.AttemptMergeNeedle(runID, tickID, attempt)
+	for _, base := range reportMergeBases(runID) {
+		out, err := git(repo, "log", base, "--merges", "--fixed-strings",
+			"--grep="+needle, "--format=%H%x1f%B%x1e")
+		if err != nil {
+			continue
+		}
+		sha, ok := mergeNamingAttempt(out, needle)
+		if !ok {
+			continue
+		}
+		stats, err := git(repo, "diff", "--shortstat", sha+"^1..."+sha+"^2")
+		if err != nil {
+			continue
+		}
+		return parseShortstat(stats), true
+	}
+	return ReportDiff{}, false
+}
+
+// mergeNamingAttempt finds the newest merge commit whose message names the
+// attempt in one line: the line is the needle whole (the plain merge ends
+// its message there) or the needle followed by a space (the resolve
+// spellings carry the resolution's story after it). A line that merely
+// starts with the needle and goes on to another digit — attempt 10 beside
+// attempt 1 — names another dispatch, never this one.
+func mergeNamingAttempt(out, needle string) (string, bool) {
+	for _, record := range strings.Split(out, "\x1e") {
+		sha, body, ok := strings.Cut(record, "\x1f")
+		if !ok {
+			continue
+		}
+		sha = strings.TrimSpace(sha)
+		if sha == "" {
+			continue
+		}
+		for _, line := range strings.Split(body, "\n") {
+			if line == needle || strings.HasPrefix(line, needle+" ") {
+				return sha, true
+			}
+		}
+	}
+	return "", false
 }
 
 // reportMergeBases are the run-ref spellings an attempt's diff is based

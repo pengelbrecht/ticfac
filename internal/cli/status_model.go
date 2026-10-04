@@ -526,7 +526,7 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 		// name from the attempt record in the dispatch's state directory on
 		// this machine. All are nil-safe stubs where nothing answers.
 		Activity: statusmodel.TranscriptActivity(home),
-		Report:   statusmodel.AttemptReports(repo, runID),
+		Report:   statusmodel.AttemptReports(repo),
 		Handle:   statusmodel.WorkerHandles(runID),
 		CI:       ci,
 	})

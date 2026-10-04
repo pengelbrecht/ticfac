@@ -365,12 +365,12 @@ func TestMergedDiffIsTheAttemptOwnNumber(t *testing.T) {
 	reader := AttemptReports(repo)
 	if input := reader(runID, tickID, 1); input == nil || !input.DiffRead ||
 		input.Files != 2 || input.Insertions != 10 {
-			got := ReportInput{}
-			if input != nil {
-				got = *input
+		got := ReportInput{}
+		if input != nil {
+			got = *input
 		}
 		t.Errorf("attempt 1's merged diff is %+v, want its own {2 files, +10}: the number was read off attempt 10's merge",
-				got)
+			got)
 	}
 	if input := reader(runID, tickID, 10); input == nil || !input.DiffRead ||
 		input.Files != 1 || input.Insertions != 5 {
@@ -430,7 +430,7 @@ func tickOfModel(m Model, tickID string) *Tick {
 			if (*m.Waves)[wi].Ticks[ti].TickID == tickID {
 				return &(*m.Waves)[wi].Ticks[ti]
 			}
-	}
+		}
 	}
 	return nil
 }
