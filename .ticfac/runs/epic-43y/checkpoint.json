@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 27,
-  "state": "collecting",
-  "reason": "collecting oq4 attempt 5",
-  "updated_at": "2026-10-04T14:11:57Z",
+  "sequence": 28,
+  "state": "integrating",
+  "reason": "integrating oq4 attempt 5 into epic/43y",
+  "updated_at": "2026-10-04T14:12:43Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "oq4",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 5
     },
     {
