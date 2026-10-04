@@ -9,7 +9,7 @@ import {
 } from "../src/artifacts";
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
 import { insertRun } from "../src/db";
-import { appendFeed, FINAL_FEED_SEQ, runFinishedFeedEvent } from "../src/run-feed";
+import { appendFeed, FINAL_FEED_SEQ, feedSegmentKey, runFinishedFeedEvent } from "../src/run-feed";
 
 /**
  * `tk cloud logs <run>` — what the container printed.
@@ -218,5 +218,52 @@ describe("GET /api/runs/:id/events", () => {
     expect(utf8).toBeGreaterThan(body.text.length);
     expect(body.bytes).toBe(utf8);
     expect(body.total_bytes).toBe(utf8);
+  });
+
+  // run_5c7c16d1 (epic hn6): the route read the whole feed on every request
+  // and timed out on a long run. It serves PAGES now, addressed by byte
+  // cursor, and says where the next one starts.
+  it("serves a page from a cursor, a tail, and refuses a cursor it cannot read", async () => {
+    const runID = "run_feed_paged_route";
+    await recordedRun(runID);
+    const lines: string[] = [];
+    for (let seq = 1; seq <= 40; seq += 1) {
+      const event = runFinishedFeedEvent({ run_id: runID, detail: `line ${seq} — of forty` });
+      lines.push(`${JSON.stringify(event)}\n`);
+      await env.ARTIFACTS!.put(feedSegmentKey(PROJECT, runID, seq), lines[lines.length - 1]!);
+    }
+    const whole = lines.join("");
+    const total = new TextEncoder().encode(whole).length;
+
+    type Page = {
+      text: string;
+      from: number;
+      bytes: number;
+      next: number;
+      total_bytes: number;
+      more: boolean;
+    };
+    let walked = "";
+    let from = 0;
+    for (let guard = 0; guard < 100; guard += 1) {
+      const res = await get(`/api/runs/${runID}/events?from=${from}&limit=500`);
+      expect(res.status).toBe(200);
+      const page = (await res.json()) as Page;
+      expect(page.from).toBe(from);
+      expect(page.total_bytes).toBe(total);
+      walked += page.text;
+      if (!page.more) break;
+      expect(page.bytes).toBeLessThan(total);
+      from = page.next;
+    }
+    expect(walked).toBe(whole);
+
+    const tail = (await (await get(`/api/runs/${runID}/events?tail=1`)).json()) as Page;
+    expect(tail.text).toBe(lines[lines.length - 1]);
+    expect(tail.next).toBe(total);
+
+    expect((await get(`/api/runs/${runID}/events?from=-1`)).status).toBe(400);
+    expect((await get(`/api/runs/${runID}/events?limit=0`)).status).toBe(400);
+    expect((await get(`/api/runs/${runID}/events?from=0&tail=5`)).status).toBe(400);
   });
 });

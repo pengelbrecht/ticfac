@@ -59,17 +59,73 @@ on the integration branch; a subscriber that reads run_finished goes and looks.`
 	interval := fs.Duration("interval", defaultCloudFeedInterval, "with --follow on a CLOUD run, how often to ask the factory again "+
 		"(a local feed is read at file-follow cadence)")
 	asJSON := fs.Bool("json", false, "print the standing feed as one versioned document (ticfac.events.v1); with --follow it refuses — a live stream is JSONL lines, not one document")
+	tail := fs.Int("tail", 0, "print only the last N events — read from the END of the feed, so a long run's hours "+
+		"before them are not walked; with --follow, then keep following from there")
+	from := fs.Int64("from", 0, "start at this byte cursor of the feed (the next_cursor an earlier --json read "+
+		"stated): print only what follows it; with --follow, follow from it")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(eventsCommand(c.Context(), args, repo, follow, fromStart, interval, asJSON, stdout, stderr))
+		return codeToErr(eventsCommand(c.Context(), args, repo, follow, fromStart, interval, asJSON,
+			eventsWindow{tail: *tail, from: *from}, stdout, stderr))
 	}
 	return cmd
 }
 
-func eventsCommand(ctx context.Context, args []string, repo *string, follow, fromStart *bool, interval *time.Duration, asJSON *bool, stdout, stderr io.Writer) int {
+// eventsWindow is which part of the feed `events` reads: all of it, the last
+// N events (--tail), or what follows a byte cursor (--from).
+type eventsWindow struct {
+	tail int
+	from int64
+}
+
+// readFeedWindow reads the window of the feed asked for: located events with
+// their true byte offsets, the cursor the next read starts from, and whether
+// the feed is ABSENT (no line at all — only a whole or tail read can say so;
+// a read from a cursor that finds nothing new found nothing new). A read
+// that failed is an error, never an absent feed.
+func readFeedWindow(ctx context.Context, source runfeed.Source, window eventsWindow) ([]runfeed.Located, int64, bool, error) {
+	if window.tail > 0 {
+		located, size, err := feedTail(ctx, source, window.tail)
+		if err != nil {
+			return nil, 0, false, err
+		}
+		return located, size, size == 0 && len(located) == 0, nil
+	}
+	chunk, size, err := source.ReadAt(ctx, window.from)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	if size < window.from {
+		return nil, 0, false, fmt.Errorf("%s: the feed is %d bytes, shorter than the cursor %d", source.Where(), size, window.from)
+	}
+	located, err := runfeed.ParseLocated(chunk)
+	if err != nil {
+		return nil, 0, false, fmt.Errorf("%s: %w", source.Where(), err)
+	}
+	for i := range located {
+		located[i].Start += window.from
+		located[i].End += window.from
+	}
+	absent := window.from == 0 && len(located) == 0
+	return located, size, absent, nil
+}
+
+func eventsCommand(ctx context.Context, args []string, repo *string, follow, fromStart *bool, interval *time.Duration, asJSON *bool, window eventsWindow, stdout, stderr io.Writer) int {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac events: exactly one run id (epic-<id>) or epic id is required\n")
+		return 2
+	}
+	if window.tail < 0 || window.from < 0 {
+		fmt.Fprintf(stderr, "ticfac events: --tail and --from take a non-negative number\n")
+		return 2
+	}
+	if window.tail > 0 && (window.from > 0 || *fromStart) {
+		fmt.Fprintf(stderr, "ticfac events: --tail, --from and --from-start each say where the read starts: name one\n")
+		return 2
+	}
+	if window.from > 0 && *fromStart {
+		fmt.Fprintf(stderr, "ticfac events: --from and --from-start each say where the read starts: name one\n")
 		return 2
 	}
 	if *asJSON && *follow {
@@ -135,9 +191,11 @@ func eventsCommand(ctx context.Context, args []string, repo *string, follow, fro
 	// standing feed is not printed first, because this command without
 	// --follow is how a subscriber that wants history gets it.
 	if !*follow {
-		located, absent, err := feedStanding(ctx, source)
+		located, next, absent, err := readFeedWindow(ctx, source, window)
 		switch {
 		case err != nil:
+			// A read that FAILED is said to have failed (run_5c7c16d1): never
+			// the "has not written an event" a feed with no line earns.
 			fmt.Fprintf(stderr, "ticfac events: %v\n", err)
 			return 1
 		case absent:
@@ -161,11 +219,15 @@ func eventsCommand(ctx context.Context, args []string, repo *string, follow, fro
 				RunID  string          `json:"run_id"`
 				Host   string          `json:"host"`
 				Events []runfeed.Event `json:"events"`
+				// NextCursor is the byte cursor a later read resumes from
+				// (`ticfac events <run> --from <next_cursor>`).
+				NextCursor int64 `json:"next_cursor"`
 			}{
-				agentDoc: agentDoc{Schema: agentSchemaID("events"), State: agentStateDone},
-				RunID:    runID,
-				Host:     kind,
-				Events:   events,
+				agentDoc:   agentDoc{Schema: agentSchemaID("events"), State: agentStateDone},
+				RunID:      runID,
+				Host:       kind,
+				Events:     events,
+				NextCursor: next,
 			}
 			if err := emitAgentJSON(stdout, doc); err != nil {
 				fmt.Fprintf(stderr, "ticfac events: %v\n", err)
@@ -189,12 +251,33 @@ func eventsCommand(ctx context.Context, args []string, repo *string, follow, fro
 	// quietly kept going after the feed became unreadable would be one more
 	// watcher that reports nothing and looks alive.
 	cursor := int64(0)
-	if !*fromStart {
-		located, _, err := feedStanding(ctx, source)
+	switch {
+	case window.from > 0:
+		// Follow from the cursor named: what follows it, then what lands.
+		cursor = window.from
+	case window.tail > 0:
+		// The last N events, then what lands — read from the feed's end.
+		located, size, err := feedTail(ctx, source, window.tail)
 		if err != nil {
 			fmt.Fprintf(stderr, "ticfac events: %v\n", err)
 			return 1
 		}
+		for _, line := range located {
+			print(line.Event)
+		}
+		cursor = size
+		if len(located) > 0 {
+			cursor = located[len(located)-1].End
+		}
+	case !*fromStart:
+		// From NOW: the feed's standing end, found from its tail rather than
+		// by walking a long run's hours of lines.
+		located, size, err := feedTail(ctx, source, 1)
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac events: %v\n", err)
+			return 1
+		}
+		cursor = size
 		if len(located) > 0 {
 			cursor = located[len(located)-1].End
 		}

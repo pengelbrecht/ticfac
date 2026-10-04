@@ -33,6 +33,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -64,6 +65,11 @@ type cloudFeedSource struct {
 	epic   string // the run record's own epic id, as the route that resolved the feed served it
 	warn   io.Writer
 
+	// follow is set by followFeed: under a follow a transient failed read
+	// is warned about and retried at the next poll; everywhere else it is
+	// an error the command reports as a failed read.
+	follow bool
+
 	mu    sync.Mutex
 	state string // the run record's own claim, carried from the last read
 }
@@ -89,31 +95,148 @@ type cloudFeedResponse struct {
 	Text       string `json:"text"`
 	Bytes      int    `json:"bytes"`
 	TotalBytes int    `json:"total_bytes"`
+	// The paged route's own fields (run_5c7c16d1, epic hn6): the cursor the
+	// page starts at, the one the next starts at, and whether bytes stand
+	// past it. A factory deployed before the route paged states none of
+	// them — From is nil — and serves the whole feed from byte zero.
+	From *int64 `json:"from"`
+	Next int64  `json:"next"`
+	More bool   `json:"more"`
 }
 
-func (s *cloudFeedSource) ReadAt(ctx context.Context, cursor int64) ([]byte, int64, error) {
+// cloudFeedPageBytes is the page the client asks the factory for. A long
+// run's feed is thousands of relayed segments (run_5c7c16d1, epic hn6: ~5h,
+// relayed every two seconds), and the route that read all of them on every
+// request never answered inside the client's deadline — so the feed is read
+// a page at a time, by byte cursor, and each page is small enough that its
+// JSON stays well inside the client's 1 MiB response cap.
+const cloudFeedPageBytes = 256 * 1024
+
+// cloudFeedMaxPages bounds one ReadAt's walk: a factory answering `more`
+// forever without moving its cursor is a defect to report, not a loop.
+const cloudFeedMaxPages = 100_000
+
+// errFeedRead marks a feed read that FAILED — the factory could not be asked,
+// or answered something that is not a page — as distinct from a feed with no
+// line in it. The two were once the same answer, and `ticfac events` told an
+// operator a run five hours in "has not written an event".
+var errFeedRead = errors.New("the run's event feed could not be read")
+
+// page is one request of the paged route.
+func (s *cloudFeedSource) page(ctx context.Context, query url.Values) (cloudFeedResponse, error) {
 	path := "/api/runs/" + url.PathEscape(s.runID) + "/events"
+	if len(query) > 0 {
+		path += "?" + query.Encode()
+	}
 	data, err := s.client.request(ctx, http.MethodGet, path, nil)
 	if err != nil {
-		// A redeploy mid-read is one failed poll, not the end of the feed.
-		// The warning is printed by the source (which holds the warn
-		// writer) rather than swallowed, so a follower that silently kept
-		// going after the feed became unreadable is not what this is.
 		var apiErr cloudAPIError
 		if errors.As(err, &apiErr) {
-			return nil, 0, err
+			// The route's own answer about the feed (an unknown run, a
+			// deployment with no bucket): terminal, in its own words.
+			return cloudFeedResponse{}, err
 		}
-		fmt.Fprintf(s.warn, "# the factory could not be read: %v\n", err)
-		return nil, cursor, nil
+		return cloudFeedResponse{}, fmt.Errorf("%w from the factory: %w", errFeedRead, err)
 	}
 	var response cloudFeedResponse
 	if err := decodeCloudJSON(data, &response); err != nil {
-		return nil, 0, err
+		return cloudFeedResponse{}, fmt.Errorf("%w: the factory answered %w", errFeedRead, err)
 	}
 	s.mu.Lock()
 	s.state = strings.TrimSpace(response.State)
 	s.mu.Unlock()
+	return response, nil
+}
 
+// ReadAt reads the feed from cursor to its standing end, a page at a time.
+//
+// A read that fails is an ERROR, never "no change" — except under a follow
+// (followFeed sets s.follow), where a redeploy mid-read is one failed poll,
+// not the end of the feed: the warning is printed and the follower keeps the
+// bytes the pages before the failure carried.
+func (s *cloudFeedSource) ReadAt(ctx context.Context, cursor int64) ([]byte, int64, error) {
+	var out []byte
+	at := cursor
+	for pages := 0; ; pages++ {
+		if pages >= cloudFeedMaxPages {
+			return nil, 0, fmt.Errorf("%w: the factory kept answering more after %d pages from byte %d", errFeedRead, pages, cursor)
+		}
+		query := url.Values{}
+		query.Set("from", strconv.FormatInt(at, 10))
+		query.Set("limit", strconv.Itoa(cloudFeedPageBytes))
+		response, err := s.page(ctx, query)
+		if err != nil {
+			if s.follow && errors.Is(err, errFeedRead) {
+				fmt.Fprintf(s.warn, "# %v\n", err)
+				return out, at, nil
+			}
+			return nil, 0, err
+		}
+		if response.From == nil {
+			// A factory deployed before the route paged: the whole feed, from
+			// byte zero, in one answer.
+			if pages > 0 {
+				return nil, 0, fmt.Errorf("%w: the factory stopped paging mid-read", errFeedRead)
+			}
+			return s.wholeFeed(response, cursor)
+		}
+		if *response.From != at {
+			if int64(response.TotalBytes) < at {
+				// The feed is shorter than the cursor: the caller names the
+				// shrink (FollowSource refuses it).
+				return nil, int64(response.TotalBytes), nil
+			}
+			return nil, 0, fmt.Errorf("%w: asked for the page at byte %d, the factory served byte %d",
+				errFeedRead, at, *response.From)
+		}
+		if len(response.Text) != response.Bytes || response.Next != at+int64(response.Bytes) {
+			return nil, 0, fmt.Errorf("%w: the page at byte %d carried %d bytes against a stated %d (next %d)",
+				errFeedRead, at, len(response.Text), response.Bytes, response.Next)
+		}
+		out = append(out, response.Text...)
+		at = response.Next
+		if !response.More || response.Bytes == 0 {
+			return out, at, nil
+		}
+	}
+}
+
+// ReadTail reads the END of the feed: at least the last tailBytes bytes,
+// starting on a line boundary, without walking the feed before them. It
+// answers the bytes, the cursor they start at, and the feed's standing size.
+func (s *cloudFeedSource) ReadTail(ctx context.Context, tailBytes int64) ([]byte, int64, int64, error) {
+	query := url.Values{}
+	query.Set("tail", strconv.FormatInt(tailBytes, 10))
+	query.Set("limit", strconv.Itoa(cloudFeedPageBytes))
+	response, err := s.page(ctx, query)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	if response.From == nil {
+		chunk, size, err := s.wholeFeed(response, 0)
+		return chunk, 0, size, err
+	}
+	start := *response.From
+	if len(response.Text) != response.Bytes {
+		return nil, 0, 0, fmt.Errorf("%w: the tail page carried %d bytes against a stated %d",
+			errFeedRead, len(response.Text), response.Bytes)
+	}
+	chunk := []byte(response.Text)
+	size := response.Next
+	if response.More {
+		rest, end, err := s.ReadAt(ctx, response.Next)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		chunk = append(chunk, rest...)
+		size = end
+	}
+	return chunk, start, size, nil
+}
+
+// wholeFeed is a pre-paging factory's answer: the whole feed from byte zero,
+// sliced at the cursor.
+func (s *cloudFeedSource) wholeFeed(response cloudFeedResponse, cursor int64) ([]byte, int64, error) {
 	size := int64(response.TotalBytes)
 	if size == 0 && response.Bytes > 0 {
 		size = int64(response.Bytes)
@@ -328,6 +451,9 @@ func looksLikeCloudRunID(id string) bool {
 // more or less often; zero means the default.
 func followFeed(ctx context.Context, source runfeed.Source, kind string, interval time.Duration, cursor int64, fn func(runfeed.Event)) error {
 	cadence := runfeed.FollowTick
+	if cloud, ok := source.(*cloudFeedSource); ok {
+		cloud.follow = true
+	}
 	if kind == "cloud" {
 		cadence = defaultCloudFeedInterval
 		if interval > 0 {
@@ -343,7 +469,8 @@ func followFeed(ctx context.Context, source runfeed.Source, kind string, interva
 // ABSENT — the run-has-not-written case, which for a local feed is the
 // file's own absence and for a cloud one a stream with no line in it yet:
 // a run that has not written an event is what a run that has not started
-// looks like, on either host.
+// looks like, on either host. A read that FAILED is the error, never absent:
+// a factory that timed out has said nothing about the run (run_5c7c16d1).
 func feedStanding(ctx context.Context, source runfeed.Source) (located []runfeed.Located, absent bool, err error) {
 	chunk, size, err := source.ReadAt(ctx, 0)
 	if err != nil {
@@ -360,6 +487,61 @@ func feedStanding(ctx context.Context, source runfeed.Source) (located []runfeed
 		return nil, true, nil
 	}
 	return located, false, nil
+}
+
+// tailSource is a source that can read the END of its feed without walking
+// the rest — the factory's paged route can (`tail`); a local file is read
+// whole, which is what a local file costs anyway.
+type tailSource interface {
+	ReadTail(ctx context.Context, tailBytes int64) (chunk []byte, start, size int64, err error)
+}
+
+// feedTailGuessBytes is the first guess at how many bytes the last N events
+// take: a feed line is a few hundred bytes, so this usually reads once.
+const feedTailGuessBytes = 1024
+
+// feedTail is the last n events of the feed, located at their true byte
+// offsets, and the feed's standing size — read from the END of a cloud feed,
+// growing the read until it holds n events or reaches the feed's start. A
+// failed read is an error, never an empty feed.
+func feedTail(ctx context.Context, source runfeed.Source, n int) ([]runfeed.Located, int64, error) {
+	tailer, ok := source.(tailSource)
+	if !ok {
+		chunk, size, err := source.ReadAt(ctx, 0)
+		if err != nil {
+			return nil, 0, err
+		}
+		located, err := runfeed.ParseLocated(chunk)
+		if err != nil {
+			return nil, 0, fmt.Errorf("%s: %w", source.Where(), err)
+		}
+		if len(located) > n {
+			located = located[len(located)-n:]
+		}
+		return located, size, nil
+	}
+	want := int64(n) * feedTailGuessBytes
+	for {
+		chunk, start, size, err := tailer.ReadTail(ctx, want)
+		if err != nil {
+			return nil, 0, err
+		}
+		located, err := runfeed.ParseLocated(chunk)
+		if err != nil {
+			return nil, 0, fmt.Errorf("%s: %w", source.Where(), err)
+		}
+		if len(located) >= n || start == 0 {
+			if len(located) > n {
+				located = located[len(located)-n:]
+			}
+			for i := range located {
+				located[i].Start += start
+				located[i].End += start
+			}
+			return located, size, nil
+		}
+		want *= 4
+	}
 }
 
 // cloudRunLiveness answers "is this run alive" for a run the Workflow hosts,
