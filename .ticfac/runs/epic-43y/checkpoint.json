@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 13,
-  "state": "running",
-  "reason": "kgk is running as attempt 2",
-  "updated_at": "2026-10-04T13:13:55Z",
+  "sequence": 14,
+  "state": "dispatching",
+  "reason": "dispatching lid as attempt 3",
+  "updated_at": "2026-10-04T13:14:05Z",
   "ticks": [
     {
       "tick_id": "92k",
