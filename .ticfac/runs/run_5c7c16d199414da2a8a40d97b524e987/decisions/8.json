@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "hn6 rule 2 says a hold shows in the header with the one command that clears it, but at panes narrower than the hold line the renderer truncates that line and the command falls off (a realistic settle command alone is 40+ columns). u4l's P2 pins the full line wherever the pane seats it and the announcement everywhere, because the command cannot physically fit a 30-column pane as one line. If the narrow-pane case matters in practice, the smallest change is a renderer rule that keeps the command by wrapping it under the announcement — a person's tick, since it touches watch_view.go and two pinned goldens.\nevidence: internal/cli/watch_view.go dashboardAttentionLines + the width truncation in renderWatchFrame; rendered at width 30 the line reads 'needs you: attempt 2 of t2 str'\n\nticfac run run_5c7c16d199414da2a8a40d97b524e987 created this tick by absorbing the finding b329d17c1ee372877f4a70435118b958d674e291aafd2c6a0adeea6dd234bdd4 (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-u4l/attempt-3): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/b329d17c1ee372877f4a70435118b958d674e291aafd2c6a0adeea6dd234bdd4.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "9um",
+    "title": "Narrow panes truncate a hold's clearing command out of the dashboard"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.38,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.32,
+      "design": 0.15,
+      "diagnosis": 0.01,
+      "mechanical": 0.5,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1456,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T01:09:15Z",
+  "answered_at": "2026-10-04T01:09:15Z",
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "9um",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "6e8c6f4d4527b4a1728c7b85649ec0b300fd6ac4",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
