@@ -25,6 +25,26 @@
  * merely received — so an acknowledged steer survives the harness dying.
  * One request per connection keeps the halves simple; a client that wants
  * two steers opens two connections.
+ *
+ * THE WATCH (tick y03): the same door is how `ticfac watch <run> <tick>`
+ * reads a live local worker's conversation — the owning process is the only
+ * one that may hold the storage, so a watcher's reads go through it exactly
+ * as a steer does. A connection whose request line is
+ *
+ *     request:  {"type":"watch"}\n
+ *
+ * is answered with one frame per line, for as long as the connection or the
+ * conversation lasts, in the SAME frame shape the cloud WorkerAgent's watch
+ * WebSocket sends (cloudflare/src/worker-agent.ts), so one reader in Go
+ * (internal/workerview) renders both:
+ *
+ *     {"type":"events","events":[<the snapshot>]}\n      first, always
+ *     {"type":"events","events":[…]}\n                   one per commit
+ *     {"type":"end","reason":"…"}\n                      last: the watch ended
+ *
+ * `events` are pi-durable's own agent events (`watchEvents`, spec §9.4),
+ * passed through untouched: the commit stream IS the heartbeat. A request
+ * line with no `type`, or `"type":"steer"`, is a steer as above.
  */
 
 import { existsSync, rmSync } from "node:fs";
@@ -41,6 +61,29 @@ export type SteerReply = {
   readonly ok: boolean;
   readonly requestId?: string;
   readonly error?: string;
+};
+
+/** One watch frame — the cloud watch socket's shape, line by line. */
+export type WatchFrame =
+  | { readonly type: "events"; readonly events: readonly unknown[] }
+  | { readonly type: "end"; readonly reason: string };
+
+/**
+ * What a watch connection attaches to: the live conversation's agent event
+ * stream (pi-durable `watchEvents`) — its snapshot, then one batch per
+ * commit until `stop()` or the conversation's own end.
+ */
+export type WatchStream = {
+  readonly snapshot: unknown;
+  start(listener: (events: readonly unknown[]) => Promise<void>): void;
+  stop(): Promise<unknown>;
+  readonly closed: Promise<{ readonly reason: string }>;
+};
+
+/** The server's options beyond the steer itself. */
+export type SteerServerOptions = {
+  /** Opens a watch on the live conversation; absent, a watch request is refused. */
+  readonly watch?: () => Promise<WatchStream>;
 };
 
 /** One request line, more than which a socket never buffers. */
@@ -67,6 +110,7 @@ export type SteerServer = {
 export async function openSteerServer(
   path: string,
   submit: (request: SteerRequest) => Promise<void>,
+  options: SteerServerOptions = {},
 ): Promise<SteerServer> {
   if (existsSync(path)) {
     // A previous harness that died between listen and unlink leaves the
@@ -74,13 +118,57 @@ export async function openSteerServer(
     rmSync(path);
   }
   let sockets = new Set<Socket>();
+  // The watches this server is feeding, so close() can end each one with a
+  // last frame that SAYS so — a watcher that loses its connection silently
+  // cannot tell a worker that exited from a socket that broke.
+  const watches = new Set<(reason: string) => Promise<void>>();
+  const frame = (socket: Socket, value: WatchFrame): void => {
+    if (!socket.destroyed) socket.write(`${JSON.stringify(value)}\n`);
+  };
+  const serveWatch = async (socket: Socket): Promise<void> => {
+    if (options.watch === undefined) {
+      socket.end(`${JSON.stringify(refused({}, "this worker serves no watch"))}\n`);
+      return;
+    }
+    let stream: WatchStream;
+    try {
+      stream = await options.watch();
+    } catch (error) {
+      socket.end(
+        `${JSON.stringify(refused({}, `the watch could not attach: ${error instanceof Error ? error.message : String(error)}`))}\n`,
+      );
+      return;
+    }
+    let ended = false;
+    const end = async (reason: string): Promise<void> => {
+      if (ended) return;
+      ended = true;
+      watches.delete(end);
+      await stream.stop();
+      frame(socket, { type: "end", reason });
+      socket.end();
+    };
+    watches.add(end);
+    socket.on("close", () => {
+      void end("the watcher closed the connection");
+    });
+    frame(socket, { type: "events", events: [stream.snapshot] });
+    stream.start(async (events) => {
+      frame(socket, { type: "events", events });
+    });
+    void stream.closed.then((closed) => end(`the conversation's watch ended (${closed.reason})`));
+  };
   const server = createServer((socket) => {
     sockets.add(socket);
     socket.on("close", () => {
       sockets.delete(socket);
     });
     let buffered = "";
+    // A watch connection's one request is its last: whatever else the
+    // watcher sends is not a second request.
+    let watching = false;
     socket.on("data", (chunk: Buffer) => {
+      if (watching) return;
       buffered += chunk.toString("utf8");
       const at = buffered.indexOf("\n");
       if (at === -1) {
@@ -92,12 +180,23 @@ export async function openSteerServer(
       }
       const line = buffered.slice(0, at);
       buffered = buffered.slice(at + 1);
-      let request: Partial<SteerRequest> = {};
+      let request: Partial<SteerRequest> & { type?: unknown } = {};
       try {
         request = JSON.parse(line) as Partial<SteerRequest>;
       } catch (error) {
         socket.end(
           `${JSON.stringify(refused({}, `the request line is not JSON: ${String(error)}`))}\n`,
+        );
+        return;
+      }
+      if (request.type === "watch") {
+        watching = true;
+        void serveWatch(socket);
+        return;
+      }
+      if (request.type !== undefined && request.type !== "steer") {
+        socket.end(
+          `${JSON.stringify(refused(request, 'a request is a steer ({"text":…}) or {"type":"watch"}'))}\n`,
         );
         return;
       }
@@ -128,8 +227,10 @@ export async function openSteerServer(
   });
   return {
     path,
-    close: () =>
-      new Promise<void>((resolve) => {
+    close: async () => {
+      // Every watch first hears why it is ending: the process is going.
+      await Promise.all([...watches].map((end) => end("the worker process is exiting")));
+      await new Promise<void>((resolve) => {
         // Connections this server accepted but a client never closed would
         // keep the close callback waiting; both halves end their side after
         // one exchange, and a client that walked away is not a reason to
@@ -140,7 +241,8 @@ export async function openSteerServer(
           rmSync(path, { force: true });
           resolve();
         });
-      }),
+      });
+    },
   };
 }
 
@@ -188,4 +290,50 @@ export async function steerOnce(
       reject(error);
     });
   });
+}
+
+/**
+ * The watcher's half — the reference client for `{"type":"watch"}`: every
+ * frame the server sends is handed to `onFrame` as it lands, and the
+ * promise resolves with the `end` frame (or a synthetic one when the
+ * connection closed without it). `stop` closes the connection from this
+ * side. The Go reader (internal/workerview) speaks the same lines.
+ */
+export function watchOnce(
+  path: string,
+  onFrame: (frame: WatchFrame) => void,
+): { readonly ended: Promise<WatchFrame>; readonly stop: () => void } {
+  const socket = createConnection(path);
+  const ended = new Promise<WatchFrame>((resolve, reject) => {
+    let buffered = "";
+    let last: WatchFrame | undefined;
+    socket.on("connect", () => {
+      socket.write(`${JSON.stringify({ type: "watch" })}\n`);
+    });
+    socket.on("data", (chunk: Buffer) => {
+      buffered += chunk.toString("utf8");
+      for (;;) {
+        const at = buffered.indexOf("\n");
+        if (at === -1) break;
+        const line = buffered.slice(0, at);
+        buffered = buffered.slice(at + 1);
+        const parsed = JSON.parse(line) as WatchFrame | SteerReply;
+        if ("ok" in parsed) {
+          reject(new Error(`the watch was refused: ${parsed.error ?? "no reason given"}`));
+          return;
+        }
+        last = parsed;
+        onFrame(parsed);
+      }
+    });
+    socket.on("close", () => {
+      resolve(
+        last?.type === "end"
+          ? last
+          : { type: "end", reason: "the connection closed without an end frame" },
+      );
+    });
+    socket.on("error", reject);
+  });
+  return { ended, stop: () => socket.end() };
 }

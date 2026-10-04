@@ -14,6 +14,7 @@ import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import jobProtocol from "../../contracts/job-protocol.json";
 import { readWorkerLogTail } from "../src/artifacts";
+import { deriveTokenHash, mintFactoryToken } from "../src/auth";
 import { reclaimRunWorkers } from "../src/container-capacity";
 import { insertRun, type Run } from "../src/db";
 import { issueWorkerRunToken } from "../src/gateway";
@@ -465,6 +466,113 @@ describe("the watch route", () => {
       headers: { upgrade: "websocket" },
     });
     expect(response.status).toBe(401);
+  });
+});
+
+// ------------------------------------------------- the operator's window ---
+
+describe("the operator's worker routes (tick y03)", () => {
+  let operatorToken = "";
+  beforeEach(async () => {
+    operatorToken = mintFactoryToken();
+    set("FACTORY_TOKEN_HASH", await deriveTokenHash(operatorToken));
+  });
+
+  function operator(path: string, init: RequestInit = {}, token: string | null = operatorToken) {
+    return SELF.fetch(`${BASE}/api/runs/${RUN_ID}/workers/${path}`, {
+      ...init,
+      headers: {
+        ...(token === null ? {} : { authorization: `Bearer ${token}` }),
+        ...(init.headers as Record<string, string> | undefined),
+      },
+    });
+  }
+
+  it("answers the newest booted attempt's state for `latest`, and a numbered one as asked", async () => {
+    expect((await postStart(startBody())).status).toBe(201);
+    expect((await postStart(startBody({ attempt: 2 }))).status).toBe(201);
+    agents.agent(attemptSandboxName(RUN_ID, TICK, 2)).phase = "conversing";
+
+    const latest = await operator(`${TICK}/latest`);
+    expect(latest.status).toBe(200);
+    const body = (await latest.json()) as {
+      attempt: number;
+      name: string;
+      state: WorkerAgentState;
+    };
+    expect(body.attempt).toBe(2);
+    expect(body.name).toBe(attemptSandboxName(RUN_ID, TICK, 2));
+    expect(body.state.phase).toBe("conversing");
+
+    const first = (await (await operator(`${TICK}/1`)).json()) as {
+      attempt: number;
+      state: WorkerAgentState;
+    };
+    expect(first.attempt).toBe(1);
+    expect(first.state.phase).toBe("booting");
+  });
+
+  it("steers the attempt's conversation on the operator's token, and only on it", async () => {
+    await postStart(startBody());
+    agentOf().conversing = true;
+    const steer = (token: string | null) =>
+      operator(
+        `${TICK}/latest/steer`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: "write the report next", request_id: "operator-steer-1" }),
+        },
+        token,
+      );
+    expect((await steer(null)).status).toBe(401);
+    // The run's own credential is not the operator's: this window is the
+    // person's, never a worker's.
+    expect((await steer(runToken)).status).toBe(401);
+    const placed = await steer(operatorToken);
+    expect(placed.status).toBe(202);
+    expect(await placed.json()).toEqual({ submission: 7 });
+    expect(agentOf().steers).toEqual([
+      { text: "write the report next", requestId: "operator-steer-1" },
+    ]);
+
+    agentOf().conversing = false;
+    const idle = await steer(operatorToken);
+    expect(idle.status).toBe(409);
+    expect(((await idle.json()) as { error: string }).error).toBe("not_conversing");
+  });
+
+  it("hands the agent's watch socket through on an upgrade", async () => {
+    await postStart(startBody());
+    expect((await operator(`${TICK}/1/watch`)).status).toBe(426);
+    const upgraded = await operator(`${TICK}/1/watch`, { headers: { upgrade: "websocket" } });
+    expect(upgraded.status).toBe(101);
+    const socket = upgraded.webSocket;
+    if (socket === null) throw new Error("no socket");
+    const first = new Promise<string>((resolve) => {
+      socket.addEventListener("message", (event) => resolve(String(event.data)));
+    });
+    socket.accept();
+    expect(JSON.parse(await first)).toEqual({ type: "state", state: { phase: "booting" } });
+    socket.close();
+  });
+
+  it("refuses an unknown run, a tick with no booted worker, and a run whose workers are not hosted", async () => {
+    const unknown = await SELF.fetch(`${BASE}/api/runs/run_nope/workers/${TICK}/latest`, {
+      headers: { authorization: `Bearer ${operatorToken}` },
+    });
+    expect(unknown.status).toBe(404);
+
+    const none = await operator(`${TICK}/latest`);
+    expect(none.status).toBe(404);
+    expect(((await none.json()) as { error: string }).error).toBe("no_attempt");
+
+    expect((await operator(`${TICK}/1/dance`)).status).toBe(404);
+
+    await liveRun("sdk0");
+    const unhosted = await operator(`${TICK}/1`);
+    expect(unhosted.status).toBe(409);
+    expect(((await unhosted.json()) as { error: string }).error).toBe("not_hosted");
   });
 });
 

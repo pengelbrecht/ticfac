@@ -155,7 +155,7 @@ var watchTerminalSize = func(w io.Writer) (int, int, bool) {
 // newWatchCommand builds the cobra command for `watch`.
 func newWatchCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "watch <run-id|epic-id>",
+		Use:   "watch <run-id|epic-id> [<tick-id>]",
 		Short: "the whole epic at a glance, live in place — and it says so when a person is needed",
 		Long: `The run is named by its run id (epic-6in) or by the epic id it was started
 with (6in, as in 'ticfac run 6in'); 'ticfac' alone lists the runs there are.
@@ -184,14 +184,32 @@ With --json, the watch answers ONCE, at its end: one document holding the
 versioned status model — the same object 'ticfac status --json' gathers —
 plus the exit-table state word and, when the run ended holding something,
 the wait kind that only a person moves. The document is stdout's only
-content.`,
+content.
+
+With a tick id, the watch is of ONE worker instead (tick y03): the tick's
+newest attempt (--attempt names another), this machine's when the run keeps
+it here, else the factory's. Its pi-durable conversation live — the input
+and every steer, its thinking, each tool call with its live output and its
+result, its answers — with a heartbeat from the commit sequence: commits,
+model calls, tool calls and how long ago the last one was. On a terminal it
+is one frame redrawn in place, newest last, the streaming message and the
+running tools below the rule; on a pipe, one line per settled item and a
+heartbeat line every --heartbeat. The watch follows the worker across its
+own relaunches (a nudge, a report pushback) and ends 0 when the attempt has
+settled, 5 when interrupted while it runs, 1 when the worker cannot be
+reached or runs a CLI harness with no conversation to watch. Steer it with
+'ticfac steer <run> <tick> <text>'.`,
 	}
 	fs := flag.NewFlagSet("watch", flag.ContinueOnError)
 	repo := fs.String("repo", "", "the checkout the run works in (default: cwd)")
 	interval := fs.Duration("interval", defaultWatchInterval, "how often the live view re-renders (a pipe gets one plain line per event instead)")
 	asJSON := fs.Bool("json", false, "answer once, at the watch's end: one versioned document (ticfac.watch.v1) holding the status model, the state word and — when it ended holding — the wait kind only a person moves")
+	worker := addWorkerWatchFlags(fs)
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
+		if len(args) == 2 {
+			return codeToErr(workerWatchEntry(c.Context(), args, repo, asJSON, worker, stdout, stderr))
+		}
 		return codeToErr(watchCommand(c.Context(), args, repo, interval, asJSON, stdout, stderr))
 	}
 	return cmd
