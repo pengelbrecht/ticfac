@@ -1312,12 +1312,19 @@ func livenessNamesAnEnd(state string) bool {
 }
 
 // buildRemaining estimates the time left ONLY where measured tick durations
-// support it: the median of what the epic's closed ticks measurably took —
-// each row's own duration, the last run that touched it, dispatch to gate —
-// times the ticks still open. Fewer than three measured closes support
-// nothing, and the estimate names its basis.
+// support it AND the run is still going: the median of what the epic's closed
+// ticks measurably took — each row's own duration, the last run that touched
+// it, dispatch to gate — times the ticks still open. Fewer than three
+// measured closes support nothing, and the estimate names its basis. A run
+// whose own records say it ended — the checkpoint's terminal states, or the
+// probe's end-word vocabulary when the checkpoint lags the end — states no
+// remaining time at all (tick onv): nobody is working towards the open
+// ticks, and an ETA beside "● stopped" is a promise the run cannot keep.
 func buildRemaining(src Sources, m Model) *Remaining {
 	if m.Progress.Ticks == nil || m.Progress.Ticks.Open == 0 {
+		return nil
+	}
+	if (src.Records != nil && runTerminal(*src.Records)) || livenessNamesAnEnd(src.Liveness.State) {
 		return nil
 	}
 	durations := []time.Duration{}

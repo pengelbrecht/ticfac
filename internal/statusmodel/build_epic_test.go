@@ -372,12 +372,33 @@ func TestGatesCarryEveryRunThatWorkedTheTick(t *testing.T) {
 	}
 }
 
+// epicStillWorkingSources is the same story as failedNewestSources with
+// the newest run still going: the checkpoint never reached a terminal
+// word and the probe says running. The epic's measured past is the
+// earlier runs' either way — only whether anyone is working towards the
+// open ticks differs, which is exactly what the remaining-time estimate
+// is allowed to promise.
+func epicStillWorkingSources() Sources {
+	src := failedNewestSources()
+	src.Records.Checkpoint.State = "running"
+	src.Records.Checkpoint.Reason = "the run is working the waves"
+	src.Liveness = LivenessInput{
+		Alive:  true,
+		State:  "running",
+		Reason: "the Workflow's own record says running",
+		Source: "workflow-record",
+	}
+	return src
+}
+
 // TestBuildETAAcrossRuns: the estimate is built from every closed tick the
-// epic has measured, earlier runs included — with the duplicate excluded.
+// epic has measured, earlier runs included — with the duplicate excluded —
+// but only for a run that is still going. The fixture's own newest run
+// failed, so the estimate is pinned on the same sources with the run back
+// to work; the failed run's half is TestBuildRemainingPromisesNoFinish below.
 func TestBuildETAAcrossRuns(t *testing.T) {
 	t.Parallel()
-	src := failedNewestSources()
-	model := Build(src)
+	model := Build(epicStillWorkingSources())
 	if model.Remaining == nil {
 		t.Fatal("three measured closes support an estimate and the fixture has them: the model must state one")
 	}
@@ -386,6 +407,42 @@ func TestBuildETAAcrossRuns(t *testing.T) {
 	// (t3, t4).
 	if model.Remaining.ApproximateSeconds != 6900*2 {
 		t.Errorf("the estimate reads %d seconds, want the median duration times the two open ticks",
+			model.Remaining.ApproximateSeconds)
+	}
+}
+
+// TestBuildRemainingPromisesNoFinishForAnEndedRun (tick onv): the
+// fixture's newest run failed at boot — three measured closes stand in the
+// earlier runs and two ticks are still open, and the model still states no
+// remaining time, because nobody is working towards it. An ETA beside "●
+// stopped" is a promise the run cannot keep, and at width 120 it was also
+// the line that pushed the progress bar out of the watch header.
+func TestBuildRemainingPromisesNoFinishForAnEndedRun(t *testing.T) {
+	t.Parallel()
+	model := Build(failedNewestSources())
+	if model.Remaining != nil {
+		t.Errorf("the newest run's own records say it ended, and the model still promises ~%ds: a run that has ended states no remaining time",
+			model.Remaining.ApproximateSeconds)
+	}
+}
+
+// TestBuildRemainingPromisesNoFinishForAProbeWord (tick onv): the
+// checkpoint can lag the end — a cloud run's Workflow record says failed
+// while the run's own checkpoint still names a working state. The probe's
+// end-word vocabulary is the run's own durable word too, and it ends the
+// promise on its own.
+func TestBuildRemainingPromisesNoFinishForAProbeWord(t *testing.T) {
+	t.Parallel()
+	src := epicStillWorkingSources()
+	src.Liveness = LivenessInput{
+		Alive:  false,
+		State:  "failed",
+		Reason: "the Workflow's own record says failed, so the run has ended",
+		Source: "workflow-record",
+	}
+	model := Build(src)
+	if model.Remaining != nil {
+		t.Errorf("the probe's own record says the run ended, and the model still promises ~%ds: a run that has ended states no remaining time",
 			model.Remaining.ApproximateSeconds)
 	}
 }
