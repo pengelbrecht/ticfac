@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 70,
-  "state": "running",
-  "reason": "kce is running as attempt 13",
-  "updated_at": "2026-10-04T18:56:36Z",
+  "sequence": 71,
+  "state": "collecting",
+  "reason": "collecting h7w attempt 9",
+  "updated_at": "2026-10-04T18:56:40Z",
   "ticks": [
     {
       "tick_id": "v16",
