@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "epic_id": "hn6",
-  "sequence": 35,
-  "state": "integrating",
-  "reason": "integrating fub attempt 5 into epic/hn6",
-  "updated_at": "2026-10-04T11:19:34Z",
+  "sequence": 36,
+  "state": "gating",
+  "reason": "running the integrated gate for fub on 7934783b85da",
+  "updated_at": "2026-10-04T11:24:39Z",
   "ticks": [
     {
       "tick_id": "q8m",
@@ -37,7 +37,7 @@
     },
     {
       "tick_id": "fub",
-      "state": "dispatched",
+      "state": "integrated",
       "attempt": 5
     },
     {
