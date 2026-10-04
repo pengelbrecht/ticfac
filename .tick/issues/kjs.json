@@ -1,0 +1,14 @@
+{
+  "id": "kjs",
+  "title": "Node workspace-checkpoint tests time out under heavy host load",
+  "description": "While make gate ran concurrently on this host, two existing node-suite tests in harness/test/node/workspace-checkpoints.test.ts failed once (one took 33.5 s, past its timeout) and passed on the next run. They drive real git and real processes through the local door, and their time grows with host load; per the repo's flaky-means-bug rule it wants a deterministic bound or a longer per-test timeout.\nevidence: pnpm exec vitest run -c vitest.node.config.ts test/node/workspace-checkpoints.test.ts during make gate: 'destroys the container BETWEEN tool rounds' 33500ms, failed\n\nticfac run epic-43y created this tick by absorbing the finding 99f72c958b49ff4f51a16f2615a3baff7f53853f78bf16242f9f6a9a700ff88e (reported by run-epic-43y/tick-xd3/attempt-11): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/99f72c958b49ff4f51a16f2615a3baff7f53853f78bf16242f9f6a9a700ff88e.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-xd3/attempt-11",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-04T18:46:43Z",
+  "updated_at": "2026-10-04T18:46:43Z"
+}
