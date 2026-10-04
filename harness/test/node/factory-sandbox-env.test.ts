@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { WORKER_TK_DENIED } from "../../src/env/boundary-guard.js";
 import { FactorySandboxEnv } from "../../src/env/factory-sandbox.js";
 import { localSandboxDoor } from "./local-sandbox-door.js";
 
@@ -150,5 +151,21 @@ describe("FactorySandboxEnv's file operations over real bash", () => {
     expect(abs.ok ? abs.value : abs.error).toBe(`${checkout}/relative/x.txt`);
     const joined = await env.joinPath([checkout, "sub", "file.txt"], CONTEXT);
     expect(joined.ok ? joined.value : joined.error).toBe(`${checkout}/sub/file.txt`);
+  });
+
+  it("refuses a tracker write through the sandbox env's bash, with the pinned refusal", async () => {
+    // The guard the container installs (image/worker.sh) refuses `tk` for the
+    // pi-CLI worker; this is the same refusal through the pi-durable env's
+    // own bash — the tick's second acceptance test, on the sandbox path.
+    mkdirSync(join(checkout, ".tick/issues"), { recursive: true });
+    writeFileSync(join(checkout, ".tick/issues/kga.json"), '{\n  "id": "kga"\n}\n');
+
+    const chunks: string[] = [];
+    const result = await env.exec("tk close kga", { onOutput: (t) => chunks.push(t) }, CONTEXT);
+    expect(result.ok && result.value.exitCode).toBe(1);
+    expect(chunks.join("")).toContain(WORKER_TK_DENIED);
+    // The attempt is recorded in the guard's ledger, for the report to surface.
+    const ledger = readFileSync(join(root, "guard", "attempts"), "utf8");
+    expect(ledger).toContain("ran `tk close kga`");
   });
 });
