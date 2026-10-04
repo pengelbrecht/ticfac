@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 91,
-  "state": "running",
-  "reason": "fzt is running as attempt 16",
-  "updated_at": "2026-10-04T19:30:21Z",
+  "sequence": 92,
+  "state": "collecting",
+  "reason": "collecting kce attempt 13",
+  "updated_at": "2026-10-04T19:30:26Z",
   "ticks": [
     {
       "tick_id": "v16",
