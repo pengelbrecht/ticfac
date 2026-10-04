@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 11,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Regression from watch's raw-mode keys. term.MakeRaw (watch_keys.go:283) disables ISIG, so Ctrl-C arrives as a key; watch.go:991-997 returns interrupted() → 1 (or ExitHeld) without cancelling the context. attachRun (run.go:618) and runCloudAttach (run_cloud.go:80) map 1→5 'detached' only when ctx.Err()!=nil, so a person who presses Ctrl-C or q on `ticfac run` gets exit 1 and 'the watch was interrupted' while the run keeps going: the misread tick 8v3 fixed. Tests mask it (run_test swaps attach for a context cancel; TestWatchOnATerminalTakesKeys asserts 1 for q on a live run). Fix: make a key interrupt indistinguishable from a cancel to attach callers (cancel or return the running class), and test the real attach with a key.\nevidence: internal/cli/watch_keys.go:283; internal/cli/watch.go:991-997, :861-871; internal/cli/run.go:611-628; internal/cli/run_cloud.go:80\n\nticfac run epic-hn6 filed this backlog tick from the finding f4eb2fa44e734550e6ab79a430404933e475459be5940f9d3e3ebb5640180145 (reported by run-epic-hn6/tick-v16/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/f4eb2fa44e734550e6ab79a430404933e475459be5940f9d3e3ebb5640180145.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "iph",
+    "title": "Ctrl-C/q on a terminal under `ticfac run` exits 1, not 5 'detached'"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.22,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.18,
+      "design": 0.37,
+      "diagnosis": 0.06,
+      "mechanical": 0.38,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1468,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T18:34:47Z",
+  "answered_at": "2026-10-04T18:34:47Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "iph",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "bfa4d50d606c2fb684fca77ebab9e43e1d5c9878",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
