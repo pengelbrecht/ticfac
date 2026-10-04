@@ -628,9 +628,11 @@ func (p *pipelineIndex) hasLaterDispatch(tickID string, attempt int) bool {
 // says so), and the same unblock command that entry carries — including the
 // run id it names when the run's own id is not the epic spelling settle
 // defaults to (tick ulw). Mirrored rather than read because decorateTicks
-// runs before buildWaits assembles the list; one spelling there, one mirror
-// here, and a disagreement between a row's next step and the header's
-// command is a drift this comment points at.
+// runs before buildWaits assembles the list; the command itself is the
+// shared spelling in commands.go, the same one the header carries — one
+// sentence there, one call here (tick l1t) — and a disagreement between a
+// row's next step and the header's command is a drift this comment points
+// at.
 func (p *pipelineIndex) attentionCommand(tickID string) *string {
 	held := latestStage(p.feed, "", reconcile.StageRunHeld)
 	if held == nil || held.TickID == nil || *held.TickID != tickID {

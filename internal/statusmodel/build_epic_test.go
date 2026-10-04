@@ -450,6 +450,41 @@ func TestAParkedTrysNextStepAgreesWithTheNeedsYouHeader(t *testing.T) {
 		}
 	})
 
+	// l1t: the same agreement for a hold the CURRENT run left — the row's
+	// next step comes from attentionCommand's mirror of buildWaits, and the
+	// two spellings of the settle sentence it could hold drifted apart the
+	// first wording change touched only one of them.
+	t.Run("a standing current-run hold names the header's release command", func(t *testing.T) {
+		t.Parallel()
+		model := Build(priorHoldSources(func(src *Sources) {
+			src.Records.Checkpoint.Ticks = []runstate.TickState{{TickID: "at1", State: "rejected", Attempt: 1}}
+			src.Records.Attempts = []runstate.Attempt{attemptMarker(1, "at1",
+				src.Now.Add(-15*time.Minute).UTC().Format(time.RFC3339), "strong", "claude-opus-5", "local-subprocess")}
+			src.Feed = append(src.Feed,
+				runfeed.Event{
+					SchemaVersion: 1, At: src.Now.Add(-12 * time.Minute).UTC().Format(time.RFC3339), RunID: src.RunID,
+					TickID: tickPtr("at1"), Attempt: intPtr(1), Stage: reconcile.StageRejected,
+					Detail: reconcile.RefusedRejectedWork + ": attempt 1 of at1 was rejected with commits nothing merged",
+				},
+				runfeed.Event{
+					SchemaVersion: 1, At: src.Now.Add(-10 * time.Minute).UTC().Format(time.RFC3339), RunID: src.RunID,
+					TickID: tickPtr("at1"), Attempt: intPtr(1), Stage: reconcile.StageRunHeld,
+					Detail: "attempt 1 of at1 struck out: the refusal the run recorded",
+				})
+		}))
+		held := epicTick(t, model, "at1")
+		if len(held.Tries) != 1 || held.Tries[0].NextStep == nil {
+			t.Fatalf("the held tick's try reads %+v, want a next step", held.Tries)
+		}
+		if model.WaitsOn == nil || model.WaitsOn.UnblockCommand == nil {
+			t.Fatalf("the header carries no release command: %+v", model.WaitsOn)
+		}
+		if *held.Tries[0].NextStep != *model.WaitsOn.UnblockCommand {
+			t.Errorf("the held tick's next step reads %q, want the header's own command %q: two wordings of one answer cannot disagree",
+				*held.Tries[0].NextStep, *model.WaitsOn.UnblockCommand)
+		}
+	})
+
 	t.Run("a parked tick with no standing hold still names the resume", func(t *testing.T) {
 		t.Parallel()
 		model := Build(priorHoldSources(func(src *Sources) {
