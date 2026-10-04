@@ -1,0 +1,31 @@
+{
+  "schema_version": 3,
+  "key": "c6542e5e7157338ce799aa689de201d771d46abc9b77136c00799a555d422f4f",
+  "tick_id": "5y7",
+  "gating": false,
+  "basis": "predicted",
+  "confidence": 0.81,
+  "model": "jev-1.13.0",
+  "reason": "the classifier put 0.10 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
+  "placement": "backlog",
+  "decided_at": "2026-10-04T14:12:23Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "oq4",
+    "attempt": 5,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "996a9c148a488fb82b4a4bba0802c9b25aee0b06",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "frontier",
+    "profile_digest": "sha256:c376308ac1a3cb3f15f8abda7bcc718f2352a388daf376bc11c6b4ce3f98a044",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}
