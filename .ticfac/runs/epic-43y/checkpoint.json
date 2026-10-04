@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 70,
-  "state": "running",
-  "reason": "hpk is closed",
-  "updated_at": "2026-10-04T18:39:51Z",
+  "sequence": 71,
+  "state": "dispatching",
+  "reason": "dispatching 2q5 as attempt 12",
+  "updated_at": "2026-10-04T18:40:13Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -67,6 +67,14 @@
       "tick_id": "4fs",
       "state": "closed",
       "attempt": 8
+    },
+    {
+      "tick_id": "2q5",
+      "state": "ready"
+    },
+    {
+      "tick_id": "bgx",
+      "state": "ready"
     }
   ],
   "provenance": {
