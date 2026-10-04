@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 11,
-  "state": "dispatching",
-  "reason": "dispatching 1tm as attempt 4",
-  "updated_at": "2026-10-04T16:22:03Z",
+  "sequence": 12,
+  "state": "running",
+  "reason": "1tm is running as attempt 4",
+  "updated_at": "2026-10-04T16:22:13Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -28,7 +28,8 @@
     },
     {
       "tick_id": "1tm",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 4
     },
     {
       "tick_id": "bd5",
