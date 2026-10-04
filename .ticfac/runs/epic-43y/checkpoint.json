@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 49,
-  "state": "integrating",
-  "reason": "integrating pom attempt 7 into epic/43y",
-  "updated_at": "2026-10-04T15:55:43Z",
+  "sequence": 50,
+  "state": "gating",
+  "reason": "running the integrated gate for pom on 70f499ace448",
+  "updated_at": "2026-10-04T15:59:36Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "pom",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 7
     },
     {
