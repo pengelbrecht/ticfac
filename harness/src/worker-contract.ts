@@ -52,9 +52,6 @@ export const WORKER_HEADLESS_LINE =
 /** The report checker the image ships beside ticfac (worker.sh's REPORT_CHECKER). */
 export const WORKER_REPORT_CHECKER = "ticfac-exec-subprocess";
 
-/** The memo slots the bounds are counted in, first-writer-wins per nudge/pushback. */
-const NUDGE_COUNTS = new WeakMap<object, Map<ConversationId, number>>();
-
 export type WorkerContractOptions = {
   /** The report's absolute path in the env — `RESULT-<tick>.md` inside the checkout. */
   readonly reportPath: string;

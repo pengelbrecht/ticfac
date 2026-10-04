@@ -20,7 +20,6 @@ import {
   type Result,
   type ShellExecOptions,
   type ShellExecResult,
-  type TextLine,
   type TextLineReader,
 } from "@earendil-works/pi-durable/env";
 
