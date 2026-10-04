@@ -2338,3 +2338,4 @@
 {"ts":"2026-10-04T17:35:28.463571Z","tick":"h7w","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Phone page shows a different model for cloud runs and garbles verdicts"}}
 {"ts":"2026-10-04T17:42:30.730996Z","tick":"e6g","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-04 19:42 - ticfac run epic-hn6: e6g try 1 (run dispatch #7) merged into epic/hn6 as cae7e47f6758; the integrated gate (go, ts) passed.","title":"Run elapsed is TUI-derived, not in the model, and grows after the run ends"}}
 {"ts":"2026-10-04T17:42:35.281819Z","tick":"e6g","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"Run elapsed is TUI-derived, not in the model, and grows after the run ends"}}
+{"ts":"2026-10-04T17:43:03.320849Z","tick":"ihw","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Drill-in shows no diff, report or gate evidence for settled and prior-run ticks"}}
