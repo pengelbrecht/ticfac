@@ -13,14 +13,19 @@ import {
   BUDGET_POLL_HEADROOM,
   DEFAULT_MAX_COST_USD,
   DEFAULT_MAX_WALL_CLOCK_MS,
+  looksToCover,
   MAX_POLL_MS,
+  MAX_SANDBOX_BOOTS,
   MIN_POLL_MS,
   pollDelay,
   type RunConfig,
   renewalTtl,
   runConfig,
   type SpendSample,
+  STEPS_PER_LOOK,
   spendSample,
+  WORKFLOW_STEP_LIMIT,
+  worstCaseRunSteps,
 } from "../src/run-workflow";
 import { parseSubmission } from "../src/runs";
 import {
@@ -627,5 +632,119 @@ describe("the worker model and harness are deployment vars (tick 1cd)", () => {
   // must go on winning — a per-run choice outranks a standing one.
   it("lets the run's own model outrank the deployment's worker var", () => {
     expect(workerModel(GLM_FLASH, GLM)).toBe(GLM_FLASH);
+  });
+});
+
+/**
+ * The look budget may never be what ends a healthy run (hn6's cloud run,
+ * run_f44b6ad8). `MAX_OBSERVATIONS` was a fixed 80 looks, sized for the old
+ * six-hour wall clock: 80 looks of the backoff cadence span about six hours.
+ * When the deployment raised RUN_MAX_WALL_CLOCK_MS to 24h (#127) nothing
+ * re-derived the looks, so a healthy orchestrator six hours into a 24-hour
+ * budget was drained and killed as "the run outlived its observation budget".
+ *
+ * The look count exists because Cloudflare caps a Workflow instance's steps
+ * (10,000 by default on Workers Paid; `step.sleep` is free, `step.do` and
+ * `step.waitForEvent` are not). So the budget is now DERIVED from the wall
+ * clock and the cadence, bounded by that step cap, and the cadence is PACED so
+ * the looks that are left always reach the wall-clock deadline.
+ */
+describe("the look budget never undercuts the wall clock (hn6)", () => {
+  const HOUR = 3_600_000;
+
+  /** The supervision loop's sleep/observe alternation for a run that never spends. */
+  function watchHealthyRun(
+    config: RunConfig,
+    options: { early_wake_fraction?: number } = {},
+  ): { ended: "wall_clock" | "out_of_looks"; looks: number } {
+    const deadline = config.max_wall_clock_ms;
+    let now = 0;
+    for (let look = 0; look < config.max_observations; look++) {
+      const pollMs = pollDelay(
+        config,
+        look,
+        { now_ms: now, deadline_ms: deadline, spend: null },
+        config.max_observations - look,
+      );
+      // A wake can land early (the done door, a stop event): it only ever
+      // spends looks faster than the cadence planned. The LAST look's wait is
+      // never cut, because what ends it is the deadline itself.
+      const last = look === config.max_observations - 1;
+      const cut = last ? 0 : Math.floor(pollMs * (options.early_wake_fraction ?? 0));
+      now += Math.max(1, pollMs - cut);
+      if (now >= deadline) return { ended: "wall_clock", looks: look + 1 };
+    }
+    return { ended: "out_of_looks", looks: config.max_observations };
+  }
+
+  it("covers the deployed 24-hour wall clock with looks to spare", () => {
+    // The deployment's own number, read from wrangler.toml by the pool.
+    const config = runConfig(env as never);
+    expect(config.max_wall_clock_ms).toBe(24 * HOUR);
+
+    expect(watchHealthyRun(config).ended).toBe("wall_clock");
+    // Not by a hair: at least twice the looks the plain backoff needs.
+    expect(config.max_observations).toBeGreaterThanOrEqual(2 * looksToCover(config));
+  });
+
+  it("covers every wall clock a deployment or a submission can ask for", () => {
+    for (const wall of [45 * 60_000, 6 * HOUR, 24 * HOUR, 72 * HOUR, 30 * 24 * HOUR]) {
+      const config = runConfig({ RUN_MAX_WALL_CLOCK_MS: String(wall) } as never);
+      expect(watchHealthyRun(config).ended, `wall clock ${wall}ms`).toBe("wall_clock");
+    }
+    // A submission that LOWERS the wall clock gets a budget derived from what
+    // it will actually run under.
+    const lowered = runConfig({ RUN_MAX_WALL_CLOCK_MS: String(24 * HOUR) } as never, {
+      max_wall_clock_ms: 2 * HOUR,
+    });
+    expect(watchHealthyRun(lowered).ended).toBe("wall_clock");
+  });
+
+  it("paces the looks it has left to reach the deadline, even when wakes come early", () => {
+    // Any budget at all reaches the deadline — the 80 looks hn6 had, for a
+    // 24-hour run, with every wake but the last cut short by half its sleep.
+    const config = runConfig({
+      RUN_MAX_WALL_CLOCK_MS: String(24 * HOUR),
+      RUN_MAX_OBSERVATIONS: "80",
+    } as never);
+    expect(watchHealthyRun(config).ended).toBe("wall_clock");
+    expect(watchHealthyRun(config, { early_wake_fraction: 0.5 }).ended).toBe("wall_clock");
+
+    // The last look sleeps to the deadline exactly, and never past it.
+    expect(pollDelay(config, 79, { now_ms: 0, deadline_ms: 5 * HOUR, spend: null }, 1)).toBe(
+      5 * HOUR,
+    );
+    // Plenty of looks left: the pace asks for nothing and the backoff stands.
+    expect(pollDelay(config, 50, { now_ms: 0, deadline_ms: HOUR, spend: null }, 1000)).toBe(
+      MAX_POLL_MS,
+    );
+  });
+
+  it("paces past a spend cap that would otherwise burn the looks the run needs", () => {
+    // A cost cap shortens sleeps; with only a few looks left the pace wins,
+    // because a run stopped for running out of looks is not watched more
+    // closely — it is killed.
+    const config = runConfig({ RUN_MAX_COST_USD: "5" } as never);
+    const spend: SpendSample = { cost_usd: 4.99, at_ms: 0, rate_usd_per_ms: 1 / 60_000 };
+    expect(pollDelay(config, 99, { now_ms: 0, deadline_ms: 2 * HOUR, spend }, 4)).toBe(HOUR / 2);
+  });
+
+  it("fits the worst case inside Cloudflare's per-instance step limit", () => {
+    for (const wall of [6 * HOUR, 24 * HOUR, 30 * 24 * HOUR]) {
+      const config = runConfig({ RUN_MAX_WALL_CLOCK_MS: String(wall) } as never);
+      expect(worstCaseRunSteps(config), `wall clock ${wall}ms`).toBeLessThanOrEqual(
+        WORKFLOW_STEP_LIMIT,
+      );
+    }
+    // The platform's default on Workers Paid; this deployment does not raise it.
+    expect(WORKFLOW_STEP_LIMIT).toBeLessThanOrEqual(10_000);
+    expect(STEPS_PER_LOOK).toBeGreaterThanOrEqual(2);
+    expect(MAX_SANDBOX_BOOTS).toBeGreaterThanOrEqual(1);
+  });
+
+  it("leaves a deployment's fixed interval unpaced", () => {
+    // A fixed cadence is the operator's (and the suite's) explicit choice.
+    const config = runConfig({ RUN_POLL_INTERVAL_MS: "1000" } as never);
+    expect(pollDelay(config, 0, { now_ms: 0, deadline_ms: HOUR, spend: null }, 1)).toBe(1000);
   });
 });
