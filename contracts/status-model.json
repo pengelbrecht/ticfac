@@ -402,7 +402,7 @@
       "properties": {
         "window_seconds": { "type": "integer", "description": "The width of the window the buckets cover." },
         "buckets": { "type": "array", "items": { "type": "integer" }, "description": "One count per bucket, oldest first — the sparkline's own data." },
-        "last_action": { "$ref": "#/$defs/nullable_string", "description": "The last tool action the worker took, as its transcript states it. Null when the transcript states none." },
+        "last_action": { "$ref": "#/$defs/nullable_string", "description": "The last tool action the worker took, as its transcript states it — credential-redacted: the line is rendered on the dashboard and shipped off-host with the phone snapshot, so every credential-shaped part of it (a token-bearing assignment, header, URL or flag value, or a known token literal) is replaced with <redacted> by the transcript reader before it enters the model (tick ghh). Null when the transcript states none." },
         "last_action_at": { "$ref": "#/$defs/nullable_string", "description": "RFC3339, when the last action happened. Null on the same terms." },
         "nudges": { "type": "integer", "description": "How many times the run nudged this worker for silence — stuck nudges made visible." }
       }
