@@ -632,6 +632,36 @@ func TestPipelineCells(t *testing.T) {
 			},
 		},
 		{
+			// The close-out's untriaged-findings hold: the next step is the
+			// triage addressed to the run's own store (tick q8m) — the same
+			// command the header's attention entry carries, spelled with the
+			// --run-id the fixture's own run id needs (run-pip is not the
+			// epic spelling).
+			name: "the finding hold's next step is the triage addressed to the run's own store",
+			fact: pipelineCase{
+				tasks: []tk.GraphTask{{ID: "sss", Title: "S", Status: "open"}},
+				rows:  []runstate.TickState{{TickID: "sss", State: "rejected", Attempt: 4}},
+				markers: []runstate.Attempt{
+					attemptMarker(4, "sss", "2026-09-27T04:00:00Z", "strong", "claude-opus-5", "local-subprocess"),
+				},
+				feed: []runfeed.Event{
+					line(testNow.Add(-60*time.Minute), "sss", 4, reconcile.StageRunHeld,
+						"finding_untriaged: 1 finding(s) this run drafted are still waiting for a person"),
+				},
+			},
+			tick: "sss",
+			want: wantCell("claim:done", "work:failed", "gate:pending", "merged:pending"),
+			check: func(t *testing.T, model Model) {
+				tick := pipelineTick(t, model, "sss")
+				try := pipelineTry(t, tick, 4)
+				want := "ticfac triage pip --run-id run-pip"
+				if try.NextStep == nil || *try.NextStep != want {
+					t.Errorf("sss's next step is %v, want %q: the triage addressed to the run's own store",
+						derefString(try.NextStep), want)
+				}
+			},
+		},
+		{
 			// A struck-out tick nobody redispatched: the next step points the
 			// person at the needs-you line.
 			name: "a struck-out tick's refused try points at needs-you",

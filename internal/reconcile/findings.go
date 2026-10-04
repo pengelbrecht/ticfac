@@ -367,14 +367,36 @@ func (r *Reconciler) carriedUntriaged(tick string) int {
 // friction the triage surface (tick sg5) exists to remove. The old command
 // is named bare, and only for the one thing it alone still does: promoting
 // a tick that ALREADY exists, into the repository a finding is routed to.
-func triagePointer(epicID string) string {
-	return fmt.Sprintf("Triage with `ticfac triage %s`: every untriaged finding of the run settles there, "+
+//
+// The command is addressed to the run's OWN store (tick q8m): the drafts
+// live where the run's records were written, and the bare command's
+// default (the local spelling epic-<epic-id>) is only right when the run
+// wrote under it. A cloud run writes under the factory's run_<hex> (tick
+// ulw), so its pointer spells --run-id — a person following the pointer
+// must reach the drafts without discovering the flag on their own.
+func triagePointer(epicID, runID string) string {
+	command := fmt.Sprintf("ticfac triage %s", epicID)
+	if runID != "" && runID != "epic-"+epicID {
+		command = fmt.Sprintf("ticfac triage %s --run-id %s", epicID, runID)
+	}
+	return fmt.Sprintf("Triage with `%s`: every untriaged finding of the run settles there, "+
 		"addressed by a short key prefix — absorb (a tick under the epic, which the run then works), file "+
 		"(a backlog tick with an owner), fixed <commit>, or discard. A finding routed to another "+
 		"repository is not yours to settle and never holds the run: the run disposes of it itself — "+
 		"filed into the target's tracker when .tick/runners.toml allows it ([findings.route.\"owner/name\"] "+
 		"file = true), else a backlog tick here naming the target; `ticfac finding` remains for promoting "+
-		"one into a tick that already exists", epicID)
+		"one into a tick that already exists", command)
+}
+
+// findingsListCommand is the one sentence that names the command that
+// LISTS the run's drafts, spelled by the same addressing rule the triage
+// pointer keeps (tick q8m): the listing's default (the local spelling) is
+// only right when the run wrote under it.
+func findingsListCommand(epicID, runID string) string {
+	if runID != "" && runID != "epic-"+epicID {
+		return fmt.Sprintf("ticfac findings %s --run-id %s", epicID, runID)
+	}
+	return fmt.Sprintf("ticfac findings %s", epicID)
 }
 
 // gateCloseoutOnFindings is the gate the per-tick hold became (tick aqm): the
@@ -420,8 +442,8 @@ func (r *Reconciler) gateCloseoutOnFindings(tick string, prNumber int) (*Refusal
 			"here, and this is the one decision point. %s. Then run the epic again under this run id: the gate has already "+
 			"passed, so the close-out's close is the only step left — and the resume closes each role tick "+
 			"behind its recorded decision, it does not dispatch the job again (tick 80x). The drafts are keys %s under "+
-			".ticfac/runs/%s/findings/ on %s, listed by `ticfac findings %s`%s",
-		len(untriaged), strings.Join(titles, "; "), triagePointer(r.opts.EpicID),
+			".ticfac/runs/%s/findings/ on %s, listed by `%s`%s",
+		len(untriaged), strings.Join(titles, "; "), triagePointer(r.opts.EpicID, r.runID),
 		strings.Join(keys, ", "), r.runID,
-		r.opts.Remote, r.opts.EpicID, onThePR), nil
+		r.opts.Remote, findingsListCommand(r.opts.EpicID, r.runID), onThePR), nil
 }

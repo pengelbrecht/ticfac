@@ -346,12 +346,22 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 				what = reconcile.AttemptLabel(tick, try, *event.Attempt)
 			}
 			if strings.HasPrefix(event.Detail, reconcile.RefusedFindingUntriaged+":") {
+				// The triage is addressed to the run whose store carries the
+				// drafts — the run that wrote this line, named by the line's
+				// own run id (tick q8m): a cloud run's store lives under the
+				// factory's run_<hex>, one the bare command's default (the
+				// local spelling epic-<epic-id>) holds nothing for.
+				address := runID
+				if event.RunID != "" {
+					address = event.RunID
+				}
+				triage := statusmodel.TriageCommandForCurrentRun(epicID, address)
 				fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
-					"Nothing proceeds until somebody decides. Triage the finding(s) with `ticfac triage %s` — "+
+					"Nothing proceeds until somebody decides. Triage the finding(s) with `%s` — "+
 					"every untriaged finding of the run settles there, by short key prefix — "+
 					"or answer what the tick is waiting for. The "+
 					"evidence is on the integration branch, not in this line.\n\n",
-					runID, what, event.Detail, epicID)
+					runID, what, event.Detail, triage)
 			} else {
 				// The release command is addressed by the run the hold belongs
 				// to, whenever that run's id is NOT the spelling a settle

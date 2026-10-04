@@ -15,6 +15,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -302,8 +303,12 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 	defer promo.close()
 	results := make([]triageResult, 0, len(decisions))
 	failed := false
+	// The listing command the prefix refusals name, addressed to the store
+	// the decisions were read from (tick q8m): the local default is only
+	// right when the run wrote under it.
+	listCommand := statusmodel.TriageCommandForCurrentRun(epicID, store.RunID())
 	for _, decision := range decisions {
-		finding, err := resolveFindingPrefix(epicID, findings, decision.prefix)
+		finding, err := resolveFindingPrefix(listCommand, findings, decision.prefix)
 		if err != nil {
 			results = append(results, triageResult{
 				Key: decision.prefix, Decision: decision.verb, By: actor, Error: err.Error(),
@@ -378,8 +383,9 @@ func triageWalk(store *runstate.Store, epicID, actor string, waiting []runstate.
 	if !triageStdinIsTerminal(in) {
 		fmt.Fprintf(stderr, "ticfac triage %s: the interactive walk reads a person's verdicts from a terminal, "+
 			"and this input is not one.\n", epicID)
-		fmt.Fprintf(stderr, "settle the drafts by short key prefix — ticfac triage %s <key-prefix>=absorb|file|fixed:<commit>|discard "+
-			"— or list them with ticfac triage %s --json.\n", epicID, epicID)
+		walk := statusmodel.TriageCommandForCurrentRun(epicID, runName)
+		fmt.Fprintf(stderr, "settle the drafts by short key prefix — %s <key-prefix>=absorb|file|fixed:<commit>|discard "+
+			"— or list them with %s --json.\n", walk, walk)
 		return exitUsage
 	}
 	reader := bufio.NewReader(in)
@@ -585,9 +591,10 @@ func commitExists(repo, commit string) bool {
 
 // resolveFindingPrefix addresses one draft by the short key prefix an agent
 // passes: unambiguous is the only rule, so a prefix matching nothing is a
-// lookup failure naming the listing command, and one matching several is
+// lookup failure naming the listing command (addressed to the store the
+// decisions were read from, tick q8m), and one matching several is
 // refused naming every draft it matched.
-func resolveFindingPrefix(epicID string, findings []runstate.Finding, prefix string) (*runstate.Finding, error) {
+func resolveFindingPrefix(listCommand string, findings []runstate.Finding, prefix string) (*runstate.Finding, error) {
 	matches := []*runstate.Finding{}
 	for i := range findings {
 		if strings.HasPrefix(findings[i].Key, prefix) {
@@ -598,8 +605,8 @@ func resolveFindingPrefix(epicID string, findings []runstate.Finding, prefix str
 	case 1:
 		return matches[0], nil
 	case 0:
-		return nil, fmt.Errorf("no findings draft starts with %q: `ticfac triage %s --json` lists the drafts that exist",
-			prefix, epicID)
+		return nil, fmt.Errorf("no findings draft starts with %q: `%s --json` lists the drafts that exist",
+			prefix, listCommand)
 	default:
 		keys := make([]string, 0, len(matches))
 		for _, finding := range matches {

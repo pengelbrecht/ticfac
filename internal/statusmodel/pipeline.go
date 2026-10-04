@@ -60,6 +60,13 @@ func decorateTicks(src Sources, merged *mergedRuns, priorHolds []PriorHold, m *M
 // from, so a row's next step and the header's command cannot disagree (tick
 // eli). Built once per model; read per tick.
 type pipelineIndex struct {
+	// ownRunID is the id the current run's own store lives at: the id its
+	// durable records were written under, falling back to the id the
+	// surface names. The triage command a row names for the current run's
+	// finding hold addresses THIS store — the same derivation buildWaits
+	// words the header's command from, so a row and the header cannot
+	// disagree about where the drafts are (tick q8m).
+	ownRunID       string
 	epicID         string
 	runID          string
 	host           string
@@ -80,9 +87,17 @@ type pipelineIndex struct {
 // hundred ticks costs one pass over each record kind rather than a hundred.
 func newPipelineIndex(src Sources, merged *mergedRuns, priorHolds []PriorHold, epicID, runID string) *pipelineIndex {
 	newest := merged.newestRun()
+	// The id the current run's own store lives at (tick q8m) — the same
+	// derivation buildWaits words the header's triage command from, so the
+	// row's next step and the header's command name the same store.
+	ownRunID := runID
+	if src.Records != nil && src.Records.Checkpoint != nil && src.Records.Checkpoint.RunID != "" {
+		ownRunID = src.Records.Checkpoint.RunID
+	}
 	p := &pipelineIndex{
 		epicID:         epicID,
 		runID:          runID,
+		ownRunID:       ownRunID,
 		host:           src.Host,
 		nonNewestOwner: map[string]bool{},
 		tasks:          map[string]tk.GraphTask{},
@@ -642,7 +657,10 @@ func (p *pipelineIndex) attentionCommand(tickID string) *string {
 		return nil
 	}
 	if strings.HasPrefix(held.Detail, reconcile.RefusedFindingUntriaged+":") {
-		command := TriageCommand(p.epicID)
+		// The triage addressed to the run's own store (tick q8m) — the same
+		// command the header's attention entry carries, from the same
+		// derivation, so a row and the header cannot name two stores.
+		command := TriageCommandForCurrentRun(p.epicID, p.ownRunID)
 		return &command
 	}
 	if held.Attempt != nil {
