@@ -221,9 +221,9 @@ func renderFeedView(events []runfeed.Event, tries *runfeed.Tries, model *statusm
 
 // watchEventLineWith is the one-line form for the surfaces that hold the
 // model: a refusal's line names its reason — the run's own detail, cut to
-// its first clause — and, when the tick's last try carries a next step, the
-// run's own answer to "and then what". The old watchEventLine stays the
-// stream's full-detail line, byte for byte.
+// its first clause — and, when the event's own try carries a next step, the
+// run's answer to "and then what" for THAT attempt, never a later try's.
+// The old watchEventLine stays the stream's full-detail line, byte for byte.
 func watchEventLineWith(event runfeed.Event, tries *runfeed.Tries, model *statusmodel.Model) string {
 	t := nilTries(tries)
 	detail := event.Detail
@@ -237,13 +237,31 @@ func watchEventLineWith(event runfeed.Event, tries *runfeed.Tries, model *status
 	}
 	line := fmt.Sprintf("%s %-12s %s: %s", clockOf(event.At), watchEventWho(event, t), event.Stage, detail)
 	if isRefusal && model != nil && event.TickID != nil && *event.TickID != "" {
-		if tick := watchTickOf(*model, *event.TickID); tick != nil && len(tick.Tries) > 0 {
-			if step := tick.Tries[len(tick.Tries)-1].NextStep; step != nil && *step != "" {
-				line += " — next: " + *step
+		if tick := watchTickOf(*model, *event.TickID); tick != nil {
+			if try := watchTryOfAttempt(tick, event.Attempt); try != nil && try.NextStep != nil && *try.NextStep != "" {
+				line += " — next: " + *try.NextStep
 			}
 		}
 	}
 	return line
+}
+
+// watchTryOfAttempt is the tick's own try for one run-wide attempt number:
+// the try a refusal line's next step comes from, so an older attempt's line
+// never carries a later try's "and then what" (tick 15b — try 1's rejection
+// used to show try 3's next step). Nil when the event names no attempt or
+// the tick's tries carry no such one — a next step nobody's try states is
+// not invented, least of all borrowed from the newest try.
+func watchTryOfAttempt(tick *statusmodel.Tick, attempt *int) *statusmodel.Try {
+	if attempt == nil {
+		return nil
+	}
+	for i := range tick.Tries {
+		if tick.Tries[i].Attempt == *attempt {
+			return &tick.Tries[i]
+		}
+	}
+	return nil
 }
 
 // nilTries keeps the line form safe against a caller with no count yet: a
