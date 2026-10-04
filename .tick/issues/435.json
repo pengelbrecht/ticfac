@@ -6,6 +6,9 @@
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
+  "blocked_by": [
+    "1tm"
+  ],
   "parent": "hn6",
   "role": "review",
   "created_by": "ticfac run epic-hn6",
