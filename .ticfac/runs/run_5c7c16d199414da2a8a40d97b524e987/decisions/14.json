@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 14,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "pipeline.go's attentionCommand mirrors only the current feed's hold, so a tick a prior run held for a person now gets its release command in the needs-you header while its try's next step still says \"nothing of that run is working — <resume> takes it up\" — the exact drift that mirror's comment exists to prevent. A run-epic resume alone does not clear the hold (the new run holds again on the unreleased attempt), so the panel's word sends the person to the wrong first move. Fix shape: share the prior-hold answer (the same rules buildWaits now applies) with the pipeline index, and let a standing prior hold outrank the generic non-newest-owner resume line in nextStepOf.\nevidence: internal/statusmodel/pipeline.go:597 attentionCommand reads only p.feed; nextStepOf's nonNewestOwner branch fires before it; the epic-across-runs fixture's at3 shows both words after this tick\n\nticfac run run_5c7c16d199414da2a8a40d97b524e987 created this tick by absorbing the finding 972c40f0293bda7f7580e4b4aa9b7105cf44122d4fbe23cbb0fad96127359186 (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-z3p/attempt-10): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/972c40f0293bda7f7580e4b4aa9b7105cf44122d4fbe23cbb0fad96127359186.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "eli",
+    "title": "Try panel's next step disagrees with needs-you for a prior-held tick"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.56,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.17,
+      "design": 0.1,
+      "diagnosis": 0.02,
+      "mechanical": 0.65,
+      "translation": 0.06
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1492,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T03:58:42Z",
+  "answered_at": "2026-10-04T03:58:42Z",
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "eli",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "866f70199fc799e9d98177c1c6b7b09c3a2dcedf",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
