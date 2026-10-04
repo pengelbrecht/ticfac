@@ -165,13 +165,15 @@ func TestCostDecisionsCarryTheirOwnMeteredUsage(t *testing.T) {
 }
 
 // TestCostDecisionsWithoutAMeasuredCostAreNeverMeteredZero (tick 1tm): the
-// decisions line is metered ONLY when a record carries a measured cost. The
-// shape every classification record wrote before this tick is a usage block
-// whose cost_usd is the marshalled zero of a field nothing ever set, and a
-// role decision carries no usage block at all — neither is a measurement, so
-// the line says "not metered" with no number and recorded_usd stays a true
-// zero, the decisions still counted. A record that states a price still
-// meters the line, and the number is the stated price alone.
+// decisions line is metered ONLY when a record carries a measured cost. Two
+// shapes nothing measured: the explicit null a post-fzt usage states for a
+// price the answering service never gave (tick fzt — the field is a
+// pointer), and the marshalled zero every classification record wrote before
+// fzt, when the never-set plain float64 fabricated a price; a role decision
+// carries no usage block at all — none is a measurement, so the line says
+// "not metered" with no number and recorded_usd stays a true zero, the
+// decisions still counted. A record that states a price still meters the
+// line, and the number is the stated price alone.
 func TestCostDecisionsWithoutAMeasuredCostAreNeverMeteredZero(t *testing.T) {
 	t.Parallel()
 
@@ -188,6 +190,12 @@ func TestCostDecisionsWithoutAMeasuredCostAreNeverMeteredZero(t *testing.T) {
 			"usage": map[string]any{"cost_usd": 0.0, "input_tokens": 1549, "output_tokens": 60},
 		}),
 		decisionWithResponse(2, map[string]any{
+			"model": "classifier@example.com",
+			// the post-fzt no-price shape (tick fzt): the service stated none,
+			// and the pointer marshals the explicit null
+			"usage": map[string]any{"cost_usd": nil, "input_tokens": 1549, "output_tokens": 60},
+		}),
+		decisionWithResponse(3, map[string]any{
 			"model": "opus",
 			// a role decision: no usage block at all
 		}),
@@ -237,7 +245,7 @@ func TestCostDecisionsWithoutAMeasuredCostAreNeverMeteredZero(t *testing.T) {
 	priced.Records.Absorptions = nil
 	priced.Records.Findings = nil
 	priced.Records.Decisions = append([]runstate.Decision{
-		decisionWithResponse(3, map[string]any{
+		decisionWithResponse(4, map[string]any{
 			"model": "classifier@example.com",
 			"usage": map[string]any{"cost_usd": 0.02, "input_tokens": 900, "output_tokens": 40},
 		}),

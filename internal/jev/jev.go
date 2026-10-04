@@ -180,9 +180,15 @@ type Classification struct {
 
 // Usage is what the call cost, for the decision record.
 type Usage struct {
-	InputTokens  int     `json:"input_tokens"`
-	OutputTokens int     `json:"output_tokens"`
-	CostUSD      float64 `json:"cost_usd"`
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+	// CostUSD is the price the ANSWERING SERVICE stated for the call, not a
+	// default (tick fzt): nil when it stated none — the decision record then
+	// carries cost_usd null, the distinguishable no-price, never the
+	// marshalled zero a plain float64 forced onto every record — and a
+	// pointer to the stated number otherwise, so a service that honestly
+	// answers $0.00 is a statement rather than a fabrication.
+	CostUSD *float64 `json:"cost_usd"`
 }
 
 // Result is what one batch's work-type classification round trip produced.
