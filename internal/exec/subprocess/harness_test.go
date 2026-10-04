@@ -171,6 +171,10 @@ type fixtureOptions struct {
 	stuckAfter time.Duration
 	// env is extra NAME=value pairs for the fake runner.
 	env []string
+	// fauxTranscript is the scripted model transcript the durable runner's
+	// end-to-end test drives the REAL harness with (tick hpk) — the one
+	// Options.HarnessFauxTranscript seam.
+	fauxTranscript string
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -220,6 +224,8 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		guardsOff:      opts.guardsOff,
 		writeFile:      opts.writeFile,
 		StuckAfter:     opts.stuckAfter,
+
+		HarnessFauxTranscript: opts.fauxTranscript,
 	})
 	if err != nil {
 		t.Fatal(err)

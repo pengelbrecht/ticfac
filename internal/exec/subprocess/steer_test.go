@@ -193,7 +193,23 @@ func TestTheStuckNudgeOnADurableRunnerIsASteer(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(local.State, fileWorkerConfig)); err != nil {
 		t.Fatalf("the durable runner's worker.json was not written beside the record: %v", err)
 	}
-	standIn := startSteerStandIn(t, local.State, true)
+	// The record names the socket the supervisor will dial; the stand-in
+	// listens on exactly that path, and the dial is what proves the two
+	// halves name it the same way.
+	var record struct {
+		SteerSock string `json:"steer_sock"`
+	}
+	raw, err := os.ReadFile(filepath.Join(local.State, "attempt.json"))
+	if err != nil {
+		t.Fatalf("read the attempt record: %v", err)
+	}
+	if err := json.Unmarshal(raw, &record); err != nil {
+		t.Fatalf("decode the attempt record: %v", err)
+	}
+	if record.SteerSock == "" {
+		t.Fatal("the durable runner's attempt record names no steer socket")
+	}
+	standIn := startSteerStandIn(t, record.SteerSock, true)
 
 	f.waitSettled(handle)
 	status := f.inspect(handle)

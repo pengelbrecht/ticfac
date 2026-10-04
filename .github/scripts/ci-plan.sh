@@ -148,7 +148,11 @@ if [ "$has_reconcile" = true ]; then
 fi
 if [ "${#rest[@]}" -gt 0 ]; then
 	node=false
-	case " ${rest[*]} " in *" ./internal/exec/cloudflaresandbox "*) node=true ;; esac
+	# The pi-durable local host (tick hpk) runs on node and the pinned
+	# @earendil-works packages: internal/exec/subprocess's end-to-end test
+	# spawns the real harness, so it skips itself wherever harness/node_modules
+	# is not installed — the same reason cloudflaresandbox sets node.
+	case " ${rest[*]} " in *" ./internal/exec/cloudflaresandbox "*|*" ./internal/exec/subprocess "*) node=true ;; esac
 	matrix="$(jq -c --arg p "${rest[*]}" --argjson node "$node" \
 		'. + [{name: "packages", pkgs: $p, shard: 0, of: 0, node: $node}]' <<<"$matrix")"
 fi

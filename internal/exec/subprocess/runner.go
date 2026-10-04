@@ -322,8 +322,25 @@ func withModel(name string, def runnerDef, model string) ([]string, error) {
 	}
 	out := make([]string, 0, len(def.Argv)+2)
 	inserted := false
-	for _, arg := range def.Argv {
-		if arg == promptPlaceholder && !inserted {
+	// The model flag goes in FRONT of the prompt's place. For a CLI the
+	// prompt is a positional argument, so "in front of it" is directly
+	// before it; for a runner that takes the prompt as a FLAG'S VALUE —
+	// `--message {{prompt}}` — "directly before it" would land BETWEEN the
+	// flag and its value, so the insertion point moves back to the flag
+	// instead. Either shape puts the model before the prompt, and no
+	// runner's argv is special-cased.
+	before := len(def.Argv)
+	for i, arg := range def.Argv {
+		if arg == promptPlaceholder {
+			before = i
+			if i > 0 && strings.HasPrefix(def.Argv[i-1], "-") {
+				before = i - 1
+			}
+			break
+		}
+	}
+	for i, arg := range def.Argv {
+		if i == before && !inserted {
 			out = append(out, def.ModelFlag, model)
 			inserted = true
 		}

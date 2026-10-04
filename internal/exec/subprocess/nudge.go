@@ -23,8 +23,10 @@ import (
 //
 // So the supervisor does not settle on that exit. It prompts the SAME session
 // again, at most MaxNudges times, saying what is missing and where it goes —
-// through the runner's own resume when it has one (claude --resume, pi
-// --session-id) and as a fresh run on the same worktree when it has none.
+// through the runner's own resume when it has one (claude --resume), as a
+// relaunch of the conversation the attempt's storage already holds on the
+// durable runner (tick hpk), and as a fresh run on the same worktree when it
+// has neither.
 // Only after that is it missing-result. A non-zero exit is not nudged: that
 // runner failed, and its own words are what collect classifies.
 
