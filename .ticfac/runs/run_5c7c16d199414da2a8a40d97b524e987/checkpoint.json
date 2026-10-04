@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
   "epic_id": "hn6",
-  "sequence": 36,
-  "state": "gating",
-  "reason": "running the integrated gate for l89 on 25040be77ed8",
-  "updated_at": "2026-10-04T01:10:50Z",
+  "sequence": 37,
+  "state": "publishing",
+  "reason": "closing l89 behind the integrated gate on 25040be77ed8",
+  "updated_at": "2026-10-04T01:12:26Z",
   "ticks": [
     {
       "tick_id": "gmo",
