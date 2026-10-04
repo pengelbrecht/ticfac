@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "kce",
   "attempt": 13,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T19:30:31Z",
+  "triaged_at": "2026-10-04T19:30:42Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing e0h",
+  "promoted_as": "e0h",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "kce",
