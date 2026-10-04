@@ -133,7 +133,7 @@ pnpm exec wrangler d1 delete ticfac-staging-agent
 ## Recorded result, 2026-10-04 (pi-ai / pi-durable 1.0.2)
 
 `PROOF HOLDS`, every claim, in 39 s (attempt `proof-muu5bo90`): boot 9.9 s,
-conversation 26 s (7 model turns, 6 tool calls), finish 3 s.
+conversation 26 s (6 tool calls), finish 3 s.
 
 | Claim | Evidence |
 |---|---|
