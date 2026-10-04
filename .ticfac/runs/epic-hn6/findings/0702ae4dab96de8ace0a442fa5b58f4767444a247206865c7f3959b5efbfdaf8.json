@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "1tm",
   "attempt": 4,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T17:18:25Z",
+  "triaged_at": "2026-10-04T17:18:41Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing fzt",
+  "promoted_as": "fzt",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "1tm",
