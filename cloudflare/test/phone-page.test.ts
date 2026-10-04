@@ -740,9 +740,7 @@ describe("a cloud run renders the model its own orchestrator pushed (hn6 h7w)", 
       )
       .run();
     await cloudRunRow("run_stopped_bare", "running");
-    await env.DB.prepare(
-      "UPDATE runs SET state = 'stopped', ended_at = ? WHERE run_id = ?",
-    )
+    await env.DB.prepare("UPDATE runs SET state = 'stopped', ended_at = ? WHERE run_id = ?")
       .bind(new Date().toISOString(), "run_stopped_bare")
       .run();
 

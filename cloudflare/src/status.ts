@@ -571,9 +571,7 @@ export function cloudStatusDoc(
     attention.push({
       kind: "dead-run",
       what:
-        reason === ""
-          ? `run ${run.run_id} is stopped`
-          : `run ${run.run_id} is stopped: ${reason}`,
+        reason === "" ? `run ${run.run_id} is stopped` : `run ${run.run_id} is stopped: ${reason}`,
       since: run.ended_at,
       needs_person: true,
       unblock_command: resumeCommand("cloud", run.epic),
@@ -599,9 +597,7 @@ export function cloudStatusDoc(
     // renderer pin (verdictWord) holds the spelling: "stopped" alone when
     // the records state no reason, never a dangling colon. Every other
     // health fact stays absent — the factory counted none of them.
-    health: stopped
-      ? { verdict: { state: "stopped", summary: reason, recovered: [] } }
-      : undefined,
+    health: stopped ? { verdict: { state: "stopped", summary: reason, recovered: [] } } : undefined,
     waits_on:
       alive && attention.length === 0
         ? { kind: "workers", what: "the orchestrator container is working" }
