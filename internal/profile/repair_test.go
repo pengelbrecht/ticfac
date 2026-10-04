@@ -175,8 +175,12 @@ func TestTheCompiledInSetShipsTheRepairJobProfile(t *testing.T) {
 	}
 }
 
-// The herdr set ships the role as well: a herdr-run repair is a Workers AI
-// model on the herdr executor, not a silent fall back to the local set.
+// The herdr set ships the role as well: a herdr-run repair is the frontier
+// rung — the claude CLI on opus, in a pane — exactly the pairing the roles
+// table routes it to anyway (its candidates end at the review cell, whose
+// ceiling is the frontier tier). The shipped profile must not name runner
+// pi on the herdr executor: that pairing is the pi-CLI pane worker epic 43y
+// deletes (tick 2q5's design, docs/herdr-pi-durable-hosting.md).
 func TestTheHerdrProfileSetShipsTheRepairJob(t *testing.T) {
 	t.Parallel()
 	root, err := contracts.RepoRoot()
@@ -187,8 +191,8 @@ func TestTheHerdrProfileSetShipsTheRepairJob(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the herdr profile set does not resolve the plan-repair role: %v", err)
 	}
-	if resolved.Executor != "herdr" || resolved.Runner != "pi" || resolved.Model != glm53 {
-		t.Errorf("the herdr plan-repair profile is %s/%s on %s, want pi/%s on herdr",
-			resolved.Runner, resolved.Model, resolved.Executor, glm53)
+	if resolved.Executor != "herdr" || resolved.Runner != "claude" || resolved.Model != "opus" {
+		t.Errorf("the herdr plan-repair profile is %s/%s on %s, want claude/opus on herdr — the frontier rung",
+			resolved.Runner, resolved.Model, resolved.Executor)
 	}
 }
