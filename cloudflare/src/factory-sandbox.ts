@@ -125,6 +125,13 @@ export const HEARTBEAT_MS = 60 * 1000;
 export const READ_CHUNK_BYTES = 512 * 1024;
 
 /**
+ * The most output the `run` door returns (see {@link FactorySandboxCore.run}).
+ * Sized under {@link READ_CHUNK_BYTES}: a short command's whole answer must
+ * always fit one bounded read.
+ */
+export const RUN_MAX_BYTES = 256 * 1024;
+
+/**
  * How long a fresh container may take to answer its first command.
  *
  * `start()` returns before the container is ready, and an `exec` that arrives
@@ -230,6 +237,35 @@ type DoStorage = Pick<
 >;
 
 type PendingProcess = { command: string; env: Record<string, string> };
+
+/**
+ * The answer of the `run` door: one short command's exit code and output, or
+ * that the container was not ready to answer a command at all.
+ *
+ * `ready: false` is a REFUSAL to guess, not an error: a container that is
+ * still booting (a cold image pull can take minutes) has no exit code to
+ * report. The caller — the harness package's `FactorySandboxEnv`, epic 43y
+ * step 3 — decides how long to keep asking, and a boot's lifetime is settled
+ * by `startProcess`, the door that owns the pending-process machinery.
+ */
+export type SandboxRunOutcome =
+  | { ready: false }
+  | { ready: true; exitCode: number; output: string; truncated: boolean };
+
+/** What a `run` door caller may ask of the boot, when it must start one. */
+export type SandboxRunOptions = {
+  /** The most bytes of output to return; more is truncated, not buffered. */
+  maxBytes?: number;
+  /**
+   * How long a container that has not answered yet may keep being asked
+   * before the door returns `ready: false`. Default: no wait — a caller that
+   * wants to wait for readiness owns that loop (the alternative is an RPC
+   * parked for a cold image pull's five minutes, which no caller wants).
+   */
+  readyWaitMs?: number;
+  /** The boot the run starts the container on, when it must. */
+  boot?: FactoryBootOptions;
+};
 
 /** What the runner says about one process directory. */
 export type RunnerState =
@@ -444,6 +480,65 @@ export class FactorySandboxCore {
     await this.ctx.storage.put(STORAGE.pending(id), { command, env } satisfies PendingProcess);
     await this.scheduleAlarm(this.now() + READY_POLL_MS);
     return { id, state: "running", exit_code: null, command };
+  }
+
+  /**
+   * The `run` door: one SHORT command, started, waited for and read in one
+   * RPC (epic 43y step 3, the `FactorySandboxEnv` of the harness package).
+   *
+   * Why a door: the env's file operations — `cat`, `mkdir`, `mv`, the guard
+   * shim's own install — are short commands whose result is needed before the
+   * next one. Over `startProcess` each costs three RPCs (start, poll until
+   * exit, read); here the whole exchange is one call to this Durable Object,
+   * and the output it can buffer is bounded by `head -c` so a runaway answer
+   * can never hold more than {@link RUN_MAX_BYTES} of the Durable Object's
+   * memory. Model commands (the bash tool) do NOT go through here: they are
+   * killable, resumable things and belong to `startProcess`.
+   *
+   * The wait for the container to answer is bounded by `readyWaitMs` and
+   * returns `{ ready: false }` when it elapses — the caller owns the retry
+   * loop, and no RPC is parked for a cold image pull.
+   */
+  async run(
+    command: string,
+    env: Record<string, string>,
+    options: SandboxRunOptions = {},
+  ): Promise<SandboxRunOutcome> {
+    const container = await this.ensureRunning(options.boot ?? {});
+    if (!this.ready) {
+      const deadline = this.now() + (options.readyWaitMs ?? 0);
+      while (!(await this.answers(container))) {
+        if (this.now() >= deadline) {
+          return { ready: false };
+        }
+        await sleep(READY_POLL_MS);
+      }
+      this.ready = true;
+    }
+    const max = options.maxBytes ?? RUN_MAX_BYTES;
+    // PIPESTATUS[0] keeps the command's own exit code, which head would
+    // otherwise swallow (a truncated command may report 141, SIGPIPE — a
+    // caller that reads `truncated` has already stopped caring). Its `${` is
+    // the container's bash, escaped out of this file's own interpolation.
+    const line = `exec 2>&1; { ${command}; } | head -c ${max + 1}; exit "\${PIPESTATUS[0]}"`;
+    const argv = ["sh", "-c", START_WRAPPER, IMAGE_ENV_FILE, "bash", "-c", line];
+    const started = await container.exec(argv, {
+      cwd: PROCESS_CWD,
+      env,
+      stdout: "pipe",
+      stderr: "combined",
+    });
+    const out = await started.output();
+    const bytes = new Uint8Array(out.stdout);
+    // The bound is taken on the first maxBytes, so a character straddling the
+    // bound is not split: the next read (none here) would carry it whole.
+    const whole = utf8Boundary(bytes.subarray(0, max));
+    return {
+      ready: true,
+      exitCode: out.exitCode,
+      output: decoder.decode(bytes.subarray(0, whole)),
+      truncated: bytes.length > max,
+    };
   }
 
   /** Starts one process through the runner in a container that answers. */
@@ -828,6 +923,13 @@ export class FactorySandbox extends DurableObject<Env> {
   ): Promise<SandboxProcessView> {
     return this.core.startProcess(command, env, options);
   }
+  run(
+    command: string,
+    env: Record<string, string>,
+    options: SandboxRunOptions = {},
+  ): Promise<SandboxRunOutcome> {
+    return this.core.run(command, env, options);
+  }
   getProcess(id: string): Promise<SandboxProcessView | null> {
     return this.core.getProcess(id);
   }
@@ -870,11 +972,17 @@ async function run(
   return { exitCode: out.exitCode, stdout: decoder.decode(out.stdout) };
 }
 
+/** Resolves after `ms`. The run door's readiness loop pokes at this scale. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ------------------------------------------------------- the seam adapter ---
 
 /** The RPC surface the adapter calls — the class above, structurally. */
 export type FactorySandboxStub = Pick<
   FactorySandboxCore,
+  | "run"
   | "startProcess"
   | "getProcess"
   | "listProcesses"
