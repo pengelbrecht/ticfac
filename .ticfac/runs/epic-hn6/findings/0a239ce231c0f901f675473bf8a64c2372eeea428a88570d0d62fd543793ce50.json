@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "v16",
   "attempt": 1,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T16:19:11Z",
+  "triaged_at": "2026-10-04T16:19:21Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing qwb",
+  "promoted_as": "qwb",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "v16",
