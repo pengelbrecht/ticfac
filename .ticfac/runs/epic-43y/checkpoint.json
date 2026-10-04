@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 97,
-  "state": "gating",
-  "reason": "running the integrated gate for y03 on 8121d928a48f",
-  "updated_at": "2026-10-04T20:48:27Z",
+  "sequence": 98,
+  "state": "publishing",
+  "reason": "closing y03 behind the integrated gate on 8121d928a48f",
+  "updated_at": "2026-10-04T20:52:09Z",
   "ticks": [
     {
       "tick_id": "92k",
