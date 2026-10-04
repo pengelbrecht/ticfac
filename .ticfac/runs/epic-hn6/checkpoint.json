@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 62,
-  "state": "dispatching",
-  "reason": "dispatching jkb as attempt 12",
-  "updated_at": "2026-10-04T18:51:52Z",
+  "sequence": 63,
+  "state": "running",
+  "reason": "jkb is running as attempt 12",
+  "updated_at": "2026-10-04T18:52:28Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -68,7 +68,8 @@
     },
     {
       "tick_id": "jkb",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 12
     },
     {
       "tick_id": "kce",
