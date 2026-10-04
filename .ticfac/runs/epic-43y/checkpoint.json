@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 100,
-  "state": "dispatching",
-  "reason": "dispatching i3h as attempt 18",
-  "updated_at": "2026-10-04T20:52:36Z",
+  "sequence": 101,
+  "state": "running",
+  "reason": "i3h is running as attempt 18",
+  "updated_at": "2026-10-04T20:52:51Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -91,7 +91,8 @@
     },
     {
       "tick_id": "i3h",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 18
     },
     {
       "tick_id": "kjs",
