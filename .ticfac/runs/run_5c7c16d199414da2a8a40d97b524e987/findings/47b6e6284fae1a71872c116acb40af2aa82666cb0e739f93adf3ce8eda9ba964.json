@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "r3x",
   "attempt": 7,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-04T01:41:48Z",
+  "triaged_at": "2026-10-04T01:41:59Z",
+  "triaged_by": "ticfac run run_5c7c16d199414da2a8a40d97b524e987 absorbing aro",
+  "promoted_as": "aro",
   "provenance": {
     "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
     "tick_id": "r3x",
