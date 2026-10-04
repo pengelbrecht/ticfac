@@ -335,13 +335,31 @@ describe("the start route on a run whose workers are WorkerAgents", () => {
     expect(((await (await getState()).json()) as { state: string }).state).toBe("running");
   });
 
-  it("leaves a run on the 0.x substrate to its container, agents bound or not", async () => {
+  it("hosts a run on the 0.x substrate too: the attempt is the agent's, and the boot asks only what that substrate can honor", async () => {
     await liveRun("sdk0");
-    // The fake container never confirms a work process; the start's own
-    // outcome is not this test's — only where the door went.
-    await postStart(startBody());
-    expect(agents.byName.size).toBe(0);
-    expect(sandboxes.addressed.length).toBeGreaterThan(0);
+    const response = await postStart(startBody());
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { handle: SandboxJobHandle; adopted: boolean };
+    expect(body.adopted).toBe(false);
+
+    const agent = agentOf();
+    expect(agent.started.length).toBe(1);
+    const spec = agent.started[0]!;
+    // The 0.x application has one image and one instance size for every
+    // boot: keepAlive is the whole of the boot, no pin and no per-job size.
+    expect(spec.boot).toEqual({ keepAlive: true });
+
+    // The attempt's container is the agent's to boot; the door asked none —
+    // and not the 0.x binding either, which is where its tools will run.
+    expect(sandboxes.addressed).toEqual([]);
+    expect(sandboxesV1.addressed).toEqual([]);
+
+    // And the state route answers from the agent, not the container — the
+    // 0.x path's own cold-boot-on-a-read hazard gone with the container's
+    // all-in-one worker.
+    const state = await getState();
+    expect(state.status).toBe(200);
+    expect(((await state.json()) as { state: string }).state).toBe("running");
   });
 });
 
@@ -431,7 +449,10 @@ describe("the steer route", () => {
     expect((await postSteer({ text: "hello" }, null)).status).toBe(401);
     expect((await postSteer({ text: "" })).status).toBe(400);
 
-    await liveRun("sdk0");
+    // A deployment that binds no WORKER_AGENTS hosts nothing on either
+    // substrate (tick hxd): the refusal is the binding's, never the run's.
+    set("WORKER_AGENTS", undefined);
+    await liveRun();
     const unhosted = await postSteer({ text: "hello" });
     expect(unhosted.status).toBe(409);
     expect(((await unhosted.json()) as { error: string }).error).toBe("not_hosted");

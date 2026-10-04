@@ -70,7 +70,8 @@ function scriptedContainer(bashMs: number, finishExit: number) {
   });
 }
 
-async function liveRun(): Promise<void> {
+/** A live run holding its project's lease, on the do_v1 substrate unless told otherwise. */
+async function liveRun(substrate: "do_v1" | "sdk0" = "do_v1"): Promise<void> {
   counter += 1;
   RUN_ID = `run_xd3_agent_${counter}`;
   const run: Run = {
@@ -87,7 +88,7 @@ async function liveRun(): Promise<void> {
     credential_grade: "write",
   };
   await insertRun(env.DB, run);
-  await recordRunSubstrate(env.DB, RUN_ID, "do_v1", null);
+  if (substrate === "do_v1") await recordRunSubstrate(env.DB, RUN_ID, "do_v1", null);
   const lease = await roomFor(env, run.project).acquireDispatchLease({
     run_id: RUN_ID,
     epic: EPIC,
@@ -109,6 +110,93 @@ async function seededAgent(
     instance.seams = { door: () => container.sandbox, models: () => faux.models, pollMs: 5 };
   });
   return { calls: faux.calls, stub };
+}
+
+/**
+ * The attempt's real WorkerAgent on the 0.x substrate: NO door seam — the
+ * object builds its own door from `env.SANDBOXES`, the SDK namespace a
+ * test substitutes (tick hxd). Only the model is seeded.
+ */
+async function seededAgentOnSdk0(
+  container: ReturnType<typeof fakeSandboxDoor>,
+  responses: FauxResponseFactory[],
+): Promise<{ calls: () => number; stub: DurableObjectStub<WorkerAgent> }> {
+  const namespace = env.WORKER_AGENTS as unknown as DurableObjectNamespace<WorkerAgent>;
+  const stub = namespace.get(namespace.idFromName(attemptSandboxName(RUN_ID, TICK, 1)));
+  const faux = fauxGatewayModels(responses);
+  await runInDurableObject(stub, (instance: WorkerAgent) => {
+    instance.seams = { models: () => faux.models, pollMs: 5 };
+  });
+  return { calls: faux.calls, stub };
+}
+
+/**
+ * A 0.x SANDBOXES namespace for the sdk0 e2e: the structural fake the door's
+ * `isSandboxNamespace` recognises, handing every name the same scripted
+ * SDK sandbox.
+ */
+function fakeSdkNamespace(sandbox: SdkSandbox): SandboxNamespace {
+  return {
+    idFromName: (name: string) => name as unknown as DurableObjectId,
+    get: () => sandbox as unknown as Sandbox,
+  };
+}
+
+/** One scripted FactorySandbox door, behind the SDK's own shapes. */
+function sdkOverDoor(door: SandboxDoor): SdkSandbox & { destroyedCount: () => number } {
+  let destroyed = 0;
+  const statusOf = (state: string): string =>
+    state === "running" || state === "completed" || state === "failed" ? state : "error";
+  return {
+    async exec(command, options) {
+      const out = await door.run(command, options?.env ?? {}, {});
+      return out.ready
+        ? { exitCode: out.exitCode, stdout: out.output, stderr: "" }
+        : { exitCode: 1, stdout: "", stderr: "" };
+    },
+    async startProcess(command, options) {
+      const started = await door.startProcess(command, options?.env ?? {});
+      return {
+        id: started.id,
+        status: statusOf(started.state),
+        exitCode: started.exit_code,
+        ...(started.command === undefined ? {} : { command: started.command }),
+      };
+    },
+    async getProcess(id) {
+      const view = await door.getProcess(id);
+      if (view === null) return null;
+      return {
+        id: view.id,
+        status: statusOf(view.state),
+        exitCode: view.exit_code,
+        ...(view.command === undefined ? {} : { command: view.command }),
+      };
+    },
+    async listProcesses() {
+      const listed = await door.listProcesses();
+      return listed.map((view) => ({
+        id: view.id,
+        status: statusOf(view.state),
+        exitCode: view.exit_code,
+        ...(view.command === undefined ? {} : { command: view.command }),
+      }));
+    },
+    async getProcessLogs(id) {
+      const whole = await door.readOutput(id, 0);
+      return { stdout: whole.text, stderr: "" };
+    },
+    async killProcess(id) {
+      await door.killProcess(id);
+    },
+    async destroy() {
+      destroyed += 1;
+    },
+    async getState() {
+      return { status: "running" };
+    },
+    destroyedCount: () => destroyed,
+  };
 }
 
 function postStart(): Promise<Response> {

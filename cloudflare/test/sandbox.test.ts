@@ -8,6 +8,7 @@ import {
   resolveSandboxImage,
   SANDBOX_SLEEP_AFTER,
   type SandboxBinding,
+  sdkSandboxDoor,
   type SdkProcess,
   type SdkSandbox,
   sameImageReference,
@@ -26,10 +27,12 @@ import {
  */
 function fakeSdkSandbox(overrides: Partial<SdkSandbox> = {}) {
   const started: { command: string; options: unknown }[] = [];
+  const executed: { command: string; options: unknown }[] = [];
   const killed: string[] = [];
   let destroyed = 0;
   let stdout = "";
   let stderr = "";
+  let execResult = { exitCode: 0, stdout: "", stderr: "" };
   let record: SdkProcess | null = { id: "p1", status: "running" };
 
   const sandbox: SdkSandbox = {
@@ -52,12 +55,17 @@ function fakeSdkSandbox(overrides: Partial<SdkSandbox> = {}) {
     async destroy() {
       destroyed += 1;
     },
+    async exec(command, options) {
+      executed.push({ command, options });
+      return execResult;
+    },
     ...overrides,
   };
 
   return {
     sandbox,
     started,
+    executed,
     killed,
     destroyedCount: () => destroyed,
     write(text: string) {
@@ -71,6 +79,13 @@ function fakeSdkSandbox(overrides: Partial<SdkSandbox> = {}) {
     },
     setRecord(next: SdkProcess | null) {
       record = next;
+    },
+    setExec(next: { exitCode?: number; stdout?: string; stderr?: string }) {
+      execResult = {
+        exitCode: next.exitCode ?? 0,
+        stdout: next.stdout ?? "",
+        stderr: next.stderr ?? "",
+      };
     },
   };
 }
@@ -195,6 +210,105 @@ describe("the Sandbox SDK adapter", () => {
 
     expect(fake.killed).toEqual(["p1"]);
     expect(fake.destroyedCount()).toBe(1);
+  });
+});
+
+describe("the 0.x SDK behind the harness door (tick hxd)", () => {
+  it("answers one short command's whole exchange in one exec", async () => {
+    const fake = fakeSdkSandbox();
+    fake.setExec({ exitCode: 0, stdout: "cafef00d\n" });
+
+    const out = await sdkSandboxDoor(fake.sandbox).run("git rev-parse HEAD", { X: "1" }, {});
+
+    expect(out).toEqual({ ready: true, exitCode: 0, output: "cafef00d\n", truncated: false });
+    expect(fake.executed.length).toBe(1);
+    expect(fake.executed[0]?.options).toEqual({ env: { X: "1" } });
+  });
+
+  it("runs the command under a POSIX line: output bounded in the container, exit code kept", async () => {
+    const fake = fakeSdkSandbox();
+    fake.setExec({ exitCode: 0, stdout: "" });
+
+    await sdkSandboxDoor(fake.sandbox).run("cat big", {}, { maxBytes: 1000 });
+
+    const line = fake.executed[0]?.command ?? "";
+    // The command itself, unquoted, inside the braces.
+    expect(line).toContain("{ cat big; }");
+    // The bound is taken in the container (head), and the exit code carried
+    // back is the command's own — not head's, and not PIPESTATUS, which is
+    // bash-only and the 0.x control server's shell is /bin/sh.
+    expect(line).toContain(`head -c ${1000 + 1} `);
+    expect(line).toContain('exit "$ec"');
+    expect(line).not.toContain("PIPESTATUS");
+    // stderr is merged into the one answer, at the container.
+    expect(line).toContain('2>&1');
+  });
+
+  it("reports a cut answer as truncated, and only the first maxBytes of it", async () => {
+    const fake = fakeSdkSandbox();
+    fake.setExec({ exitCode: 3, stdout: "x".repeat(2048) });
+
+    const out = await sdkSandboxDoor(fake.sandbox).run("yes", {}, { maxBytes: 100 });
+
+    if (!out.ready) throw new Error("expected ready");
+    expect(out.exitCode).toBe(3);
+    expect(out.output.length).toBe(100);
+    expect(out.truncated).toBe(true);
+  });
+
+  it("does not split a character that straddles the byte bound", async () => {
+    const fake = fakeSdkSandbox();
+    // 'å' is two bytes in UTF-8: a bound after the first cuts it in half.
+    const text = "å".repeat(64); // 128 bytes
+    fake.setExec({ stdout: text });
+
+    const out = await sdkSandboxDoor(fake.sandbox).run("printf", {}, { maxBytes: 127 });
+
+    if (!out.ready) throw new Error("expected ready");
+    expect(out.output).toBe("å".repeat(63));
+    expect(out.truncated).toBe(true);
+  });
+
+  it("answers ready whatever the caller's own wait bound — the SDK waits itself", async () => {
+    const fake = fakeSdkSandbox();
+    fake.setExec({ stdout: "" });
+
+    const out = await sdkSandboxDoor(fake.sandbox).run("true", {}, { readyWaitMs: 0 });
+
+    expect(out).toEqual({ ready: true, exitCode: 0, output: "", truncated: false });
+  });
+
+  it("maps the door's startProcess onto the SDK's: stderr merged, record kept", async () => {
+    const fake = fakeSdkSandbox();
+
+    await sdkSandboxDoor(fake.sandbox).startProcess("ticks-worker --boot", { TICKS_TICK: "hxd" });
+
+    expect(fake.started.length).toBe(1);
+    expect(fake.started[0]?.command).toBe("ticks-worker --boot 2>&1");
+    const options = fake.started[0]?.options as { env: unknown; autoCleanup: unknown };
+    expect(options.env).toEqual({ TICKS_TICK: "hxd" });
+    expect(options.autoCleanup).toBe(false);
+  });
+
+  it("serves the process doors and the teardown through the shared seam", async () => {
+    const fake = fakeSdkSandbox();
+    fake.write("out");
+    fake.setRecord({ id: "p1", status: "running", command: "cmd" });
+    const door = sdkSandboxDoor(fake.sandbox);
+
+    expect(await door.getProcess("p1")).toEqual({
+      id: "p1",
+      state: "running",
+      exit_code: null,
+      command: "cmd",
+    });
+    expect(await door.listProcesses()).toHaveLength(1);
+    await expect(door.readOutput("p1", 1)).resolves.toEqual({ text: "ut", offset: 3 });
+    await door.killProcess("p1");
+    expect(fake.killed).toEqual(["p1"]);
+    await door.destroy();
+    expect(fake.destroyedCount()).toBe(1);
+    await expect(door.isRunning?.()).resolves.toBe(true);
   });
 });
 
