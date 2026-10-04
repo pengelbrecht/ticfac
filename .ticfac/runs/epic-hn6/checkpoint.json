@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 75,
-  "state": "running",
-  "reason": "h7w is closed",
-  "updated_at": "2026-10-04T19:09:33Z",
+  "sequence": 76,
+  "state": "dispatching",
+  "reason": "dispatching qwb as attempt 14",
+  "updated_at": "2026-10-04T19:09:44Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -90,6 +90,10 @@
     },
     {
       "tick_id": "fzt",
+      "state": "ready"
+    },
+    {
+      "tick_id": "c65",
       "state": "ready"
     }
   ],
