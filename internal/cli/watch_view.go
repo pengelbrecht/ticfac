@@ -999,29 +999,54 @@ func dashCostLabel(source string) string {
 	return source
 }
 
+// modelTries counts each tick's tries from the MODEL's own try histories
+// (tick s71) — the whole durable record the waves carry — and never from the
+// recent tail alone: the tail is a five-line window, and a tick on its
+// third try whose window carried only its third attempt counted #1 there,
+// disagreeing with the model's own rows and with the [e] feed, which count
+// the whole run. The window is still observed beside the histories — a
+// line whose tick the waves do not state still names its own try — and
+// observing both is harmless: a number seen twice counts once.
+func modelTries(m statusmodel.Model) *runfeed.Tries {
+	tries := &runfeed.Tries{}
+	if m.Waves != nil {
+		for wi := range *m.Waves {
+			for ti := range (*m.Waves)[wi].Ticks {
+				tick := &(*m.Waves)[wi].Ticks[ti]
+				for _, try := range tick.Tries {
+					id, attempt := tick.TickID, try.Attempt
+					tries.Observe(runfeed.Event{TickID: &id, Attempt: &attempt})
+				}
+			}
+		}
+	}
+	for _, e := range m.Recent {
+		tries.Observe(e)
+	}
+	return tries
+}
+
 // dashboardTail is the feed shrunk to the two-line tail the spec names (hn6
 // rule 6), under a "─ recent" rule, with the key hint at the pane's right:
 // [e] opens the full feed, [enter] the tick under the cursor. The lines are
 // the feed's own words — the same one-line form the stream path prints — and
-// the try a line's "<tick>#<n>" prefix names is counted from the same lines
-// the model carries.
+// the try a line's "<tick>#<n>" prefix names is counted from the model's own
+// whole try histories (modelTries, tick s71), the same number the rows and
+// the [e] feed say — never from the five-line window the tail itself is.
 func dashboardTail(m statusmodel.Model, st watchStyles, width int) []string {
 	ruleWidth := width
 	if ruleWidth <= 0 {
 		ruleWidth = dashRecentRule
 	}
 	hint := "[e] events  [enter] tick"
-	var tries runfeed.Tries
-	for _, e := range m.Recent {
-		tries.Observe(e)
-	}
+	tries := modelTries(m)
 	start := len(m.Recent) - dashRecentEvents
 	if start < 0 {
 		start = 0
 	}
 	events := make([]string, 0, dashRecentEvents)
 	for _, e := range m.Recent[start:] {
-		events = append(events, watchEventLine(e, &tries))
+		events = append(events, watchEventLine(e, tries))
 	}
 	if len(events) == 0 {
 		return []string{dashRule(ruleWidth, hint)}
