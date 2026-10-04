@@ -1304,6 +1304,205 @@
         ]
       },
       "remaining": null
+    },
+    "status_model_refused_last_try": {
+      "schema_version": 1,
+      "run_id": "epic-yoh",
+      "epic_id": "yoh",
+      "host": "local",
+      "generated_at": "2026-09-24T10:20:00Z",
+      "degraded": [],
+      "liveness": {
+        "alive": true,
+        "state": "alive",
+        "reason": "pid 3117 has been running since 2026-09-24T09:40:00Z",
+        "source": "run.pid",
+        "last_event": {
+          "schema_version": 1,
+          "at": "2026-09-24T10:17:13Z",
+          "run_id": "epic-yoh",
+          "tick_id": "78v",
+          "attempt": 2,
+          "stage": "tick_held",
+          "detail": "78v is held on rejected_attempt_carries_work and the run goes on without it: nothing of it reached refs/heads/epic/yoh, so every tick that does not wait behind it is worked to the end, and the run ends naming it once nothing else can progress"
+        },
+        "last_event_age_seconds": 167
+      },
+      "lifecycle": {
+        "phase": "waves",
+        "phases": [
+          { "phase": "plan", "state": "done" },
+          { "phase": "waves", "state": "active" },
+          { "phase": "review", "state": "pending" },
+          { "phase": "closeout", "state": "pending" },
+          { "phase": "ci", "state": "pending" },
+          { "phase": "merge", "state": "pending" }
+        ],
+        "wave": { "active": 1, "total": 1 }
+      },
+      "progress": {
+        "ticks": { "total": 2, "closed": 1, "open": 1 },
+        "waves": { "total": 1, "done": 0, "active": 1 }
+      },
+      "epic_title": "The orchestrator runs where git is: ticfac in the container, the Workflow supervising",
+      "recent": [
+        {
+          "schema_version": 1,
+          "at": "2026-09-24T10:08:00Z",
+          "run_id": "epic-yoh",
+          "tick_id": "78v",
+          "attempt": 2,
+          "stage": "dispatched",
+          "detail": "78v try 2 dispatched (run dispatch #5, branch ticfac/run-epic-yoh/tick-78v/attempt-2)"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-24T10:16:45Z",
+          "run_id": "epic-yoh",
+          "tick_id": "78v",
+          "attempt": 2,
+          "stage": "rejected",
+          "detail": "rejected: the rule still keys on the substrate — a cloudflare-sandbox dispatch under the local executor passes without the Workers-AI model"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-24T10:17:10Z",
+          "run_id": "epic-yoh",
+          "tick_id": "78v",
+          "attempt": 2,
+          "stage": "cleaned_up",
+          "detail": "78v try 2 (run dispatch #5) was rejected and holds commits nothing merged; the worktree is gone and the branch is kept — its commits are only on the local branch ticfac/run-epic-yoh/tick-78v/attempt-2 in this checkout, NOT on origin"
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-24T10:17:12Z",
+          "run_id": "epic-yoh",
+          "tick_id": "78v",
+          "attempt": 2,
+          "stage": "run_held",
+          "detail": "rejected_attempt_carries_work: 78v try 2 (run dispatch #5) was rejected and the work it committed is still there — the local branch ticfac/run-epic-yoh/tick-78v/attempt-2 — and nothing merged it. Read the branch; then take the work, or release the attempt with `ticfac settle yoh 78v 2 --release \"<who>\"` and run the epic again for a fresh attempt."
+        },
+        {
+          "schema_version": 1,
+          "at": "2026-09-24T10:17:13Z",
+          "run_id": "epic-yoh",
+          "tick_id": "78v",
+          "attempt": 2,
+          "stage": "tick_held",
+          "detail": "78v is held on rejected_attempt_carries_work and the run goes on without it: nothing of it reached refs/heads/epic/yoh, so every tick that does not wait behind it is worked to the end, and the run ends naming it once nothing else can progress"
+        }
+      ],
+      "waves": [
+        {
+          "wave": 1,
+          "state": "active",
+          "ticks": [
+            {
+              "tick_id": "7eq",
+              "title": "The orchestrator signals completion; the branch remains the truth",
+              "state": "closed",
+              "pipeline": [
+                { "stage": "claim", "state": "done" },
+                { "stage": "work", "state": "done" },
+                { "stage": "gate", "state": "done" },
+                { "stage": "merged", "state": "done" }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": 720,
+              "findings": [],
+              "report": {
+                "summary": "the container's exit code is the branch's word now, not the worker's",
+                "diff": { "files": 4, "insertions": 61, "deletions": 18 }
+              },
+              "absorbed": false,
+              "try": 1,
+              "attempt": 1,
+              "tries": [
+                { "try": 1, "attempt": 1, "outcome": "closed", "dispatched_at": "2026-09-24T09:41:00Z", "tier": "strong", "reason": null, "next_step": null }
+              ],
+              "tier": "strong",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "local-subprocess",
+              "elapsed_seconds": null
+            },
+            {
+              "tick_id": "78v",
+              "title": "The Workers-AI-only rule applies wherever the cloudflare-sandbox executor runs, on any substrate",
+              "state": "rejected",
+              "pipeline": [
+                { "stage": "claim", "state": "done" },
+                { "stage": "work", "state": "failed" },
+                { "stage": "gate", "state": "pending" },
+                { "stage": "merged", "state": "pending" }
+              ],
+              "parent_tick_id": null,
+              "duration_seconds": 1500,
+              "findings": [],
+              "report": null,
+              "absorbed": false,
+              "try": 2,
+              "attempt": 2,
+              "tries": [
+                { "try": 1, "attempt": 1, "outcome": "dispatched", "dispatched_at": "2026-09-24T09:55:00Z", "tier": "strong", "reason": null, "next_step": null },
+                { "try": 2, "attempt": 2, "outcome": "rejected", "dispatched_at": "2026-09-24T10:08:00Z", "tier": "strong", "reason": "rejected: the rule still keys on the substrate — a cloudflare-sandbox dispatch under the local executor passes without the Workers-AI model", "next_step": "ticfac settle yoh 78v 2 --release \"<who>\"" }
+              ],
+              "tier": "strong",
+              "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+              "executor": "local-subprocess",
+              "elapsed_seconds": null
+            }
+          ]
+        }
+      ],
+      "workers": [],
+      "waits_on": {
+        "kind": "held-for-person",
+        "what": "rejected_attempt_carries_work: 78v try 2 (run dispatch #5) was rejected and the work it committed is still there — the local branch ticfac/run-epic-yoh/tick-78v/attempt-2 — and nothing merged it. Read the branch; then take the work, or release the attempt with `ticfac settle yoh 78v 2 --release \"<who>\"` and run the epic again for a fresh attempt.",
+        "since": "2026-09-24T10:17:12Z",
+        "needs_person": true,
+        "unblock_command": "ticfac settle yoh 78v 2 --release \"<who>\""
+      },
+      "attention": [
+        {
+          "kind": "held-for-person",
+          "what": "rejected_attempt_carries_work: 78v try 2 (run dispatch #5) was rejected and the work it committed is still there — the local branch ticfac/run-epic-yoh/tick-78v/attempt-2 — and nothing merged it. Read the branch; then take the work, or release the attempt with `ticfac settle yoh 78v 2 --release \"<who>\"` and run the epic again for a fresh attempt.",
+          "since": "2026-09-24T10:17:12Z",
+          "needs_person": true,
+          "unblock_command": "ticfac settle yoh 78v 2 --release \"<who>\""
+        }
+      ],
+      "health": {
+        "remote_retries": 0,
+        "interventions": 0,
+        "stall_warnings": 0,
+        "wall_clocks_fired": 0,
+        "verdict": { "state": "healthy", "summary": "healthy", "recovered": [] }
+      },
+      "gates": [
+        {
+          "key": "gate-7eq-1-go",
+          "check": "go",
+          "result": "pass",
+          "acceptance": "required",
+          "phase": "integrated",
+          "head": "3f1c9a07b42d5e68a1c0d94f72be5a3d68c10427",
+          "integration_ref": "refs/heads/epic/yoh",
+          "tick_id": "7eq",
+          "attempt": 1,
+          "started_at": "2026-09-24T09:52:10Z",
+          "finished_at": "2026-09-24T09:53:00Z"
+        }
+      ],
+      "ci": null,
+      "cost": {
+        "recorded_usd": 0.23,
+        "attempts": 3,
+        "basis": "usage recorded on decision records; worker jobs record no cost",
+        "lines": [
+          { "source": "workers-ai", "metered": true, "usd": 0.23, "attempts": 3, "basis": "gateway usage for 3 dispatches" }
+        ]
+      },
+      "remaining": null
     }
   },
 

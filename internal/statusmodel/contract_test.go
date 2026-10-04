@@ -104,6 +104,16 @@ func TestTheContractBindsTheBuilder(t *testing.T) {
 // lives here, in the package whose acceptance command runs it.
 const dashboardGoldenName = "dashboard"
 
+// refusedLastTryGoldenName is the golden tick lkq cut so the bundle carries
+// a fixture for the one field no other golden states: a next step on a
+// refused LAST try. The dashboard golden's own refusal was superseded by a
+// live try, so it states none anywhere — c2u had to shape one in test code
+// to pin the tick view's "— next:" line, and every renderer downstream of
+// the model (the phone page, z7w's properties, a future golden test) had no
+// fixture that shows the field at all. This package binds it, so a rename
+// or a decay to null fails here first.
+const refusedLastTryGoldenName = "status_model_refused_last_try"
+
 // TestTheContractBindsTheDashboardGolden: the dashboard golden (epic hn6,
 // wave 1 — tick r5i), held to what the tick says it is, in the package the
 // tick's own acceptance command runs. Four claims, none of them held
@@ -263,6 +273,103 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 		VerdictHealthy, VerdictDegraded, VerdictStopped)
 	enumAgrees(t, "$defs.cost_line.properties.source", defs["cost_line"].Properties["source"].Enum,
 		CostSourceDecisions, CostSourceWorkersAI, CostSourceClaude, CostSourcePiLocal, CostSourceOther)
+}
+
+// TestTheContractBindsTheRefusedLastTryGolden: the fixture the bundle owes
+// every renderer downstream of the model for the field c2u had to shape in
+// test code (tick lkq), held to what the tick says it is. Five claims:
+//
+//   - the golden exists under the name (above);
+//   - the schema admits it — the same no-partial-admission rule the
+//     dashboard binding holds;
+//   - the Go Model round-trips it, field for field;
+//   - it stays POPULATED at the anchor the tick cut it for: a tick whose
+//     LAST try is refused carries a non-null reason and a non-null next
+//     step — a fixture that quietly decayed into valid-but-null, the exact
+//     state this tick found the bundle in, reads as a missing anchor here
+//     rather than passing;
+//   - and the next step is DERIVABLE, not decorative: it is the same
+//     sentence the document's own attention entry carries as the unblock
+//     command, because nextStepOf mirrors that entry for a tick the run
+//     holds for a person. A next step nobody's fact states is the invented
+//     value the model's honesty rule refuses.
+func TestTheContractBindsTheRefusedLastTryGolden(t *testing.T) {
+	t.Parallel()
+	record, defs, goldens := bundleFixture(t)
+	raw, ok := goldens[refusedLastTryGoldenName]
+	if !ok {
+		t.Fatalf("the contract carries no golden named %q — the refused-last-try fixture tick lkq cut is gone", refusedLastTryGoldenName)
+	}
+
+	// Admitted: no violation at all.
+	var document any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatalf("the refused-last-try golden does not parse: %v", err)
+	}
+	if problems := schema.Validate(record, defs, document); len(problems) > 0 {
+		t.Fatalf("the refused-last-try golden is refused by the schema it is the golden of:\n%s", strings.Join(problems, "\n"))
+	}
+
+	// Round-tripped: what the golden states and what the Go Model marshals
+	// are the same document.
+	var model Model
+	if err := json.Unmarshal(raw, &model); err != nil {
+		t.Fatalf("the refused-last-try golden does not decode into the Go Model: %v", err)
+	}
+	if model.SchemaVersion != SchemaVersion {
+		t.Fatalf("the refused-last-try golden carries schema_version %d, want %d", model.SchemaVersion, SchemaVersion)
+	}
+	marshaled, err := json.Marshal(model)
+	if err != nil {
+		t.Fatalf("the decoded golden does not re-marshal: %v", err)
+	}
+	var remarshaled any
+	if err := json.Unmarshal(marshaled, &remarshaled); err != nil {
+		t.Fatalf("the re-marshaled golden does not parse: %v", err)
+	}
+	if !reflect.DeepEqual(document, remarshaled) {
+		t.Errorf("the Go Model does not round-trip the refused-last-try golden:\n got %s", marshaled)
+	}
+
+	// Populated and derivable: a refused last try carries its reason and the
+	// run's next step, and the next step is the attention entry's own unblock
+	// command — the fact the document itself states.
+	commands := map[string]bool{}
+	for _, entry := range model.Attention {
+		if entry.UnblockCommand != nil {
+			commands[*entry.UnblockCommand] = true
+		}
+	}
+	refused, populated, derivable := 0, 0, 0
+	for _, wave := range deref(model.Waves) {
+		for _, tick := range wave.Ticks {
+			if len(tick.Tries) == 0 {
+				continue
+			}
+			last := tick.Tries[len(tick.Tries)-1]
+			if last.Outcome != TryRejected && last.Outcome != TryGateFailed {
+				continue
+			}
+			refused++
+			if last.Reason != nil && last.NextStep != nil {
+				populated++
+				if commands[*last.NextStep] {
+					derivable++
+				}
+			}
+		}
+	}
+	if refused == 0 {
+		t.Fatal("the golden carries no refused last try: the fixture tick lkq cut is here in name only")
+	}
+	if populated != refused {
+		t.Errorf("%d of %d refused last tries carry a reason and a next step: the fixture the renderers read the field from must show it on every one",
+			populated, refused)
+	}
+	if derivable != populated {
+		t.Errorf("%d of %d populated next steps state a fact the document itself carries: the next step is derivable — the attention entry's own unblock command — never an invented one",
+			derivable, populated)
+	}
 }
 
 // TestEveryGoldenAgreesWithThePipelineDerivation: the goldens are rendering
