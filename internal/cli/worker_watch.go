@@ -305,7 +305,7 @@ func workerWatchEntry(ctx context.Context, args []string, repo *string, asJSON *
 	}
 	if *asJSON {
 		fmt.Fprintln(stderr, "ticfac watch: a worker's watch is a live stream, not one document — --json answers for a run's watch "+
-			"(`ticfac watch <run>`); pipe the worker's watch for plain lines")
+			"(the run id alone); pipe the worker's watch for plain lines")
 		return exitUsage
 	}
 	dir := *repo

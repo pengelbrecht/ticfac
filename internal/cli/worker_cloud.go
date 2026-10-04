@@ -168,7 +168,9 @@ var workerWSClient = func() *http.Client {
 	transport := httpnet.NewTransport(httpnet.NewDialer())
 	transport.ForceAttemptHTTP2 = false
 	transport.TLSNextProto = map[string]func(string, *tls.Conn) http.RoundTripper{}
-	return &http.Client{Transport: transport}
+	client := httpnet.Client(0)
+	client.Transport = transport
+	return client
 }()
 
 // wsConn is the client side of one WebSocket.
