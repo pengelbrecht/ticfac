@@ -564,6 +564,49 @@ const (
 // about to destroy, to ask it to stop and push what it has.
 func WorkerCancelCommand() string { return WorkerCommand + " " + WorkerCancelArg }
 
+// The boot and finish phases (epic 43y, tick pom — the pi-durable worker
+// host's half of this script's own contract; docs/spikes/n0b-round2-
+// pi-durable.md, "The worker contract on pi-durable").
+//
+// The all-in-one default stays the default: the CLI-harness path runs it
+// unchanged. A pi-durable host runs the same halves as two commands around a
+// conversation it owns — `--boot` as the env's first command (its faults the
+// same classes, 2-8 and 13-15, so the boot-fault codes #171/#178 keep their
+// meanings), `--finish` once the conversation settles, with the outcome as
+// its argument. The exit codes 9/10/11 are decided by `--finish` from git
+// facts exactly as the all-in-one decides them.
+const (
+	// WorkerBootArg turns [WorkerCommand] into the boot phase: everything
+	// the conversation cannot do for itself, up to the rendered prompt.
+	WorkerBootArg = "--boot"
+
+	// WorkerFinishArg turns [WorkerCommand] into the finish phase: everything
+	// the container owes the durable layer once the conversation settles. It
+	// takes one argument, the conversation's outcome as an exit status.
+	WorkerFinishArg = "--finish"
+
+	// WorkerBootMarker is what the boot phase prints once the container is
+	// booted, carrying the two names the host cannot derive for itself — the
+	// branch (adoption can rename it) and the report path. The prompt follows
+	// between WorkerBootPromptBegin and WorkerBootPromptEnd. Content, not an
+	// exit code — the same rule the probe's marker exists for.
+	WorkerBootMarker = "ticks-worker-boot-ok"
+
+	// WorkerBootPromptBegin opens the rendered prompt the boot hands the host.
+	WorkerBootPromptBegin = "ticks-worker-boot-prompt-begin"
+
+	// WorkerBootPromptEnd closes the rendered prompt the boot hands the host.
+	WorkerBootPromptEnd = "ticks-worker-boot-prompt-end"
+)
+
+// WorkerBootCommand is what the pi-durable host runs as its environment's
+// first command: the boot phase of one attempt's worker contract.
+func WorkerBootCommand() string { return WorkerCommand + " " + WorkerBootArg }
+
+// WorkerFinishCommand is what the pi-durable host runs once the conversation
+// settles. The outcome rides as the command's one argument.
+func WorkerFinishCommand() string { return WorkerCommand + " " + WorkerFinishArg }
+
 // The boundary guard (tick dxk).
 //
 // A worker agent may not run `tk` and may not write under `.tick/`: the
