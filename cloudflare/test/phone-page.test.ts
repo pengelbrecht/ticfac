@@ -413,11 +413,15 @@ describe("the phone page renders the dashboard model (hn6, tick 0rx)", () => {
   });
 
   it("renders a duplicate promotion dimmed, naming the tick its work belongs to", async () => {
-    const goldenWaves = (golden as { waves: { wave: number; state: string; ticks: Record<string, unknown>[] }[] })
-      .waves;
+    const goldenWaves = (
+      golden as { waves: { wave: number; state: string; ticks: Record<string, unknown>[] }[] }
+    ).waves;
     const body = await renderedPage({
       ...golden,
-      progress: { ticks: { total: 5, closed: 3, open: 2 }, waves: { total: 2, done: 1, active: 1 } },
+      progress: {
+        ticks: { total: 5, closed: 3, open: 2 },
+        waves: { total: 2, done: 1, active: 1 },
+      },
       waves: [
         {
           ...goldenWaves[0],
