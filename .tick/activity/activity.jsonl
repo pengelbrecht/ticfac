@@ -2064,3 +2064,4 @@
 {"ts":"2026-10-04T12:56:18.011718Z","tick":"92k","action":"note","actor":"ticfac","epic":"43y","data":{"note":"\n2026-10-04 14:56 - ticfac run epic-43y: 92k try 1 (run dispatch #1) merged into epic/43y as 59c193d1f5e9; the integrated gate (go, ts) passed.","title":"Harness package: pinned pi-durable/pi-ai, DO-SQLite storage conformance, replay test in CI"}}
 {"ts":"2026-10-04T12:56:21.390995Z","tick":"92k","action":"close","actor":"ticfac","epic":"43y","data":{"title":"Harness package: pinned pi-durable/pi-ai, DO-SQLite storage conformance, replay test in CI"}}
 {"ts":"2026-10-04T13:13:48.726807Z","tick":"kgk","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Execution environments: FactorySandboxEnv (replay-safe bash) and a guarded local env"}}
+{"ts":"2026-10-04T13:14:09.534997Z","tick":"lid","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Host pi CLI crash reddens the local gate at base (ReadPiCatalog)"}}
