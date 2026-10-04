@@ -53,6 +53,34 @@ loud.
 
 ---
 
+## 1.3.0
+
+MINOR: `status-model.json` gains a fourth golden, `status_model_refused_last_try`
+(tick lkq). Every golden carried `next_step` null on every try — tick 378's
+anchor stops at the reason on purpose (the dashboard golden's one refusal was
+superseded by a live try, and no next step is derivable from it), so the field
+the first-use bugs are about had zero fixture coverage: the phone page (A5),
+z7w's properties and any future golden test had no document that shows the
+field rendering, and c2u had to shape a next step in test code to pin the tick
+view's "— next:" line. The new golden is a snapshot of epic yoh mid-waves where
+tick 78v's last try was rejected by its worker, the work it committed was never
+merged, and the run parked the tick for a person: its reason is the rejection
+line's own detail, and its next step is the settle command the document's own
+`run_held` line produces — the same sentence the model's attention entry carries
+as the unblock command, so the field is derivable from the golden's own bytes
+and not decorative. It also carries the shapes around it a renderer meets: the
+superseded first try the records state and no evidence answers, a closed
+neighbour whose gate backs its duration, the workers panel empty because the
+attempt was torn down, the held-for-person wait and attention entry, and the
+verdict still healthy because a hold that needs a person is attention, not
+degradation. The dashboard golden and its anchor are untouched. Two bindings
+join the fixture: `TestEveryGoldenAgreesWithThePipelineDerivation` runs its
+rules over the new golden (placement included — a next step only on the last
+try of a refusal), and a new anchor in `internal/statusmodel` pins the golden
+exists, is admitted, round-trips, and keeps its refused last try populated and
+derivable. No consumer has anything to do: the schema is unchanged, and a
+reader that never heard of the golden stays correct.
+
 ## 1.2.4
 
 PATCH: four values in `status-model.json`'s `dashboard` golden, corrected to
