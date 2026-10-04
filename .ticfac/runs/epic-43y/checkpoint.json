@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 79,
-  "state": "running",
-  "reason": "xd3 is closed",
-  "updated_at": "2026-10-04T18:51:42Z",
+  "sequence": 80,
+  "state": "dispatching",
+  "reason": "dispatching y03 as attempt 14",
+  "updated_at": "2026-10-04T18:51:55Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -77,6 +77,22 @@
       "tick_id": "bgx",
       "state": "dispatched",
       "attempt": 13
+    },
+    {
+      "tick_id": "4uj",
+      "state": "ready"
+    },
+    {
+      "tick_id": "hxd",
+      "state": "ready"
+    },
+    {
+      "tick_id": "i3h",
+      "state": "ready"
+    },
+    {
+      "tick_id": "kjs",
+      "state": "ready"
     }
   ],
   "provenance": {
