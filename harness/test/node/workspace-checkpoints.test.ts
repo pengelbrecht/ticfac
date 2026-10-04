@@ -390,4 +390,36 @@ describe("workspace checkpoints over real git", () => {
     }).trim();
     expect(onOrigin).toBe(`${WIP_COMMIT_SUBJECT}\nthe base commit`);
   });
+
+  // The factory's container runs every door command in /workspace (the
+  // FactorySandbox's process cwd), while the worker's checkout is
+  // TICKS_WORKDIR — /work/repo by default. The host shell's git lines must
+  // run AT the checkout, never at whatever directory the door starts in:
+  // the xd3 staging run's every wip checkpoint failed "not in a git
+  // directory" until they did.
+  it("runs the host shell's git at the env's checkout, whatever the door's own directory", async () => {
+    door = localSandboxDoor({ cwd: root });
+    env = new FactorySandboxEnv({
+      sandbox: door.sandbox,
+      cwd: checkout,
+      guardDir: join(root, "guard"),
+      pollMs: 10,
+      workspace: git,
+    });
+    writeFileSync(join(checkout, "a.txt"), "a change\n");
+    const pushed = await pushWipCheckpoint(env.hostShell(), git);
+    expect(pushed).toEqual({ kind: "pushed", sha: expect.stringMatching(/^[0-9a-f]{40}$/) });
+    const onOrigin = execFileSync("git", ["--git-dir", origin, "log", "--format=%s", git.branch], {
+      encoding: "utf8",
+    }).trim();
+    expect(onOrigin).toBe(`${WIP_COMMIT_SUBJECT}\nthe base commit`);
+
+    // And the restore of a fresh container — whose checkout directory does
+    // not exist at all — rebuilds it AT the checkout, not in the door's cwd.
+    rmSync(checkout, { recursive: true, force: true });
+    const restored = await env.restoreLostWorkspace();
+    expect(restored.kind).toBe("restored");
+    expect(readFileSync(join(checkout, "a.txt"), "utf8")).toBe("a change\n");
+    expect(readdirSync(root)).not.toContain(".git");
+  });
 });
