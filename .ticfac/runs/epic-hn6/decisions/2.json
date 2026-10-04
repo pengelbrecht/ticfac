@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "RESULT-{378,3gk,7uv,hn6,ltg,oro,r5i,v16}.md sit at the repository root on the integration branch; the epic's PR would land them on main, which #172 cleaned of exactly this ('a worker's report is a run's transport, not a file of the project'). report_merge.go says existing reports 'stay until somebody removes them'. And #169's guard does not cover the base-fold-through-resolve path: ab0cdab4 (2026-10-04, after #169 was on the branch) rewrote RESULT-hn6.md. Remove the eight files from epic/hn6 and route the base-fold resolve merge through keepReportsOut.\nevidence: git ls-tree HEAD --name-only | grep RESULT; git diff ab0cdab4^1 ab0cdab4 --stat -- RESULT-hn6.md; internal/reconcile/report_merge.go:1-30\n\nticfac run epic-hn6 filed this backlog tick from the finding 0f60cb7e645be8550868116f17d1ff70a97e09726e80d29f2f899f685ec3acd0 (reported by run-epic-hn6/tick-v16/attempt-1): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/0f60cb7e645be8550868116f17d1ff70a97e09726e80d29f2f899f685ec3acd0.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "06t",
+    "title": "Epic branch carries 8 worker RESULT-*.md reports to main's root"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.74,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.12,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.8,
+      "translation": 0.08
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1412,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T16:21:20Z",
+  "answered_at": "2026-10-04T16:21:20Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "06t",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "9cbb78ffeb8290457569b9bdcb99a14b54fa1783",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
