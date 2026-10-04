@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 82,
-  "state": "running",
-  "reason": "iph is closed",
-  "updated_at": "2026-10-04T19:12:36Z",
+  "sequence": 83,
+  "state": "dispatching",
+  "reason": "dispatching s71 as attempt 15",
+  "updated_at": "2026-10-04T19:12:47Z",
   "ticks": [
     {
       "tick_id": "v16",
