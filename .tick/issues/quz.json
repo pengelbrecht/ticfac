@@ -3,7 +3,7 @@
   "title": "land_review_not_ready hold names a release that does not clear it",
   "description": "The final-review hold fires after the review attempt was dispatched, so it carries an attempt and the per-kind decision names the settle release for it — but releasing the review attempt clears nothing: the next resume re-reads the NOT READY verdict from the PR and holds again. The refusal's own message names the real moves (fix and run again, merge the PR by hand, or close it), so the hold's clearing command is arguably the resume, the same shape the world holds got here.\nevidence: internal/reconcile/land.go:501 (the refusal prose) — the command named is the settle for the review attempt, which no run_held line's release disposes\n\nticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c created this tick by absorbing the finding 5300f9f6b90c4c765b4c33d8907a158d7d16ee757056dfd98dea1c9f46235d0b (reported by run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-gf0/attempt-6): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/5300f9f6b90c4c765b4c33d8907a158d7d16ee757056dfd98dea1c9f46235d0b.json on the run branch.",
   "notes": "2026-10-04 12:05 - ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c: created by absorbing finding 5300f9f6b90c4c765b4c33d8907a158d7d16ee757056dfd98dea1c9f46235d0b — placed before the final review, which is blocked-by quz. The decision record is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/5300f9f6b90c4c765b4c33d8907a158d7d16ee757056dfd98dea1c9f46235d0b.json on epic/hn6, and it says: the classifier put 0.75 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A2: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,5 +11,6 @@
   "discovered_from": "run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-gf0/attempt-6",
   "created_by": "ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "created_at": "2026-10-04T12:05:27Z",
-  "updated_at": "2026-10-04T12:05:36.541863952Z"
+  "updated_at": "2026-10-04T12:51:45.570594451Z",
+  "started_at": "2026-10-04T12:51:45.570593182Z"
 }
