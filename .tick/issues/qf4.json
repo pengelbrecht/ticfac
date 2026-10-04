@@ -1,0 +1,14 @@
+{
+  "id": "qf4",
+  "title": "After jhp lands, name pi-durable in the cloud profiles and CloudRule.Harnesses",
+  "description": "Tick 4uj's description says the cloud profiles' runner and the boot env's TICKS_HARNESS should say pi-durable once the pi-CLI path is deleted (jhp), but jhp's own description names only 'the herdr/subprocess pi-CLI profiles' — no open tick's text owns flipping profiles-cloudflare-sandbox's runner from \"pi\" to \"pi-durable\", and that flip must also admit the name in profile.CloudRule.Harnesses (internal/profile/cloudworker.go, today [\"pi\"]) or every cloud role is refused at start as not reaching Workers AI. Worth a tick (or a line in jhp) so the end state 4uj's description names is not left to whoever notices next.\nevidence: profiles-cloudflare-sandbox/implement-tick.json:6 (runner \"pi\"); internal/profile/cloudworker.go:58 (Harnesses [\"pi\"]); image/common.sh:210 (unknown harness kind dies — why it cannot flip before jhp); .tick/issues/jhp.json description names herdr/subprocess profiles only\n\nticfac run epic-43y created this tick by absorbing the finding 1184d081f9b64334edc6ab6adc486f3d8456c69c3a9910574d3c7257be7a968c (reported by run-epic-43y/tick-4uj/attempt-15): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/1184d081f9b64334edc6ab6adc486f3d8456c69c3a9910574d3c7257be7a968c.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-4uj/attempt-15",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-04T21:12:34Z",
+  "updated_at": "2026-10-04T21:12:34Z"
+}
