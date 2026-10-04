@@ -1,0 +1,14 @@
+{
+  "id": "15b",
+  "title": "Feed view attaches the last try's next step to older refusal lines",
+  "description": "renderFeedView appends '— next:' from the tick's last try to every rejected/gate-failed line without checking the event's attempt, so try 1's rejection shows try 3's next step.\nevidence: internal/cli/watch_drill.go:239-244\n\nticfac run epic-hn6 created this tick by absorbing the finding 2098ee15415c130542f24b4bc393d74804b484caff8141a2bd139599c4c5d6f9 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/2098ee15415c130542f24b4bc393d74804b484caff8141a2bd139599c4c5d6f9.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-04T16:19:54Z",
+  "updated_at": "2026-10-04T16:19:54Z"
+}
