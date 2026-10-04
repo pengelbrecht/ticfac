@@ -3,7 +3,7 @@
   "title": "A cloud attempt hold's printed settle command still cannot release it",
   "description": "ulw/qxj add --run-id run_\u003chex\u003e so the store opens, but settle then calls addressForSettlement, which requires the attempt's executor state on the machine running settle; a cloud attempt's state lives in the factory container, so the command the header prints refuses with 'this host holds no state … nothing to release'. Tests compare strings only. Needs a factory-side release or a different named command for cloud holds.\nevidence: internal/reconcile/settle.go:494-499; internal/reconcile/settle_command.go:18\n\nticfac run epic-hn6 created this tick by absorbing the finding d05163618e902c8f14a05d6f98301a773e866e7055779be8dc504b092d8115a4 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/d05163618e902c8f14a05d6f98301a773e866e7055779be8dc504b092d8115a4.json on the run branch.",
   "notes": "2026-10-04 18:17 - ticfac run epic-hn6: created by absorbing finding d05163618e902c8f14a05d6f98301a773e866e7055779be8dc504b092d8115a4 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-hn6/absorptions/d05163618e902c8f14a05d6f98301a773e866e7055779be8dc504b092d8115a4.json on epic/hn6, and it says: the classifier put 0.70 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A2: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side\n2026-10-04 19:35 - ticfac run epic-hn6: bd5 try 1 (run dispatch #5) merged into epic/hn6 as b4ed66a6572f; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "discovered_from": "run-epic-hn6/tick-v16/attempt-1",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-04T16:17:14Z",
-  "updated_at": "2026-10-04T17:35:07.772153Z",
-  "started_at": "2026-10-04T16:22:27.567998Z"
+  "updated_at": "2026-10-04T17:35:10.810162Z",
+  "closed_at": "2026-10-04T17:35:10.810162Z"
 }

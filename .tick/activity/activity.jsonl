@@ -2334,3 +2334,4 @@
 {"ts":"2026-10-04T17:24:05.631282Z","tick":"1tm","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"Cost still prints a fabricated $0.00: decisions line and cloud default 0"}}
 {"ts":"2026-10-04T17:24:28.662222Z","tick":"ghh","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Dashboard LAST column shows raw tool arguments; redact secrets"}}
 {"ts":"2026-10-04T17:35:07.772516Z","tick":"bd5","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-04 19:35 - ticfac run epic-hn6: bd5 try 1 (run dispatch #5) merged into epic/hn6 as b4ed66a6572f; the integrated gate (go, ts) passed.","title":"A cloud attempt hold's printed settle command still cannot release it"}}
+{"ts":"2026-10-04T17:35:10.810673Z","tick":"bd5","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"A cloud attempt hold's printed settle command still cannot release it"}}
