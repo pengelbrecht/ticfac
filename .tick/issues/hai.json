@@ -2,6 +2,7 @@
   "id": "hai",
   "title": "Reconcile suite red at base: two closeout red-CI tests fail (e1k)",
   "description": "TestACloseoutBlockedOnRedCIIsRepairedAndRedispatchedWithoutAPerson and TestACloseoutBlockedOnRedCICarriesItsWorkOntoTheRepairedTree fail on this tick's base with the closeout_dispatched_over_red_ci refusal — the supervised run ends failed instead of the next incarnation repairing the red CI. Reproduced three consecutive times in a clean worktree at this branch's base, so it predates this change; open backlog tick e1k already owns it (filed from tick-l89's finding). Reported so the close-out's suite evidence is read with e1k in hand, not as a surprise regression.\nevidence: internal/reconcile/closeout_test.go:682, closeout_carry_test.go:42; fails identically at base f6a7ee2 with -count=3\n\nticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c filed this backlog tick from the finding 909165a6b56b26aa88c53bb837789acd79fe8f7bc92986f1c1543b6f364aa191 (reported by run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-qxj/attempt-2): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/909165a6b56b26aa88c53bb837789acd79fe8f7bc92986f1c1543b6f364aa191.json on the run branch.",
+  "notes": "2026-10-04 08:53 - ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c: created by absorbing finding 909165a6b56b26aa88c53bb837789acd79fe8f7bc92986f1c1543b6f364aa191 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/909165a6b56b26aa88c53bb837789acd79fe8f7bc92986f1c1543b6f364aa191.json on epic/hn6, and it says: the classifier put 0.06 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-qxj/attempt-2",
   "created_by": "ticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c",
   "created_at": "2026-10-04T08:53:06Z",
-  "updated_at": "2026-10-04T08:53:06Z"
+  "updated_at": "2026-10-04T08:53:11.10723275Z"
 }
