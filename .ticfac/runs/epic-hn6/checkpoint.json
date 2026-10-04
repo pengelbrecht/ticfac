@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 15,
-  "state": "collecting",
-  "reason": "collecting 15b attempt 3",
-  "updated_at": "2026-10-04T16:28:27Z",
+  "sequence": 16,
+  "state": "integrating",
+  "reason": "integrating 15b attempt 3 into epic/hn6",
+  "updated_at": "2026-10-04T16:28:38Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -23,7 +23,7 @@
     },
     {
       "tick_id": "15b",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 3
     },
     {
