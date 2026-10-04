@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 115,
-  "state": "running",
-  "reason": "c65 is closed",
-  "updated_at": "2026-10-04T20:13:41Z",
+  "sequence": 116,
+  "state": "collecting",
+  "reason": "collecting jkb attempt 12",
+  "updated_at": "2026-10-04T20:13:49Z",
   "ticks": [
     {
       "tick_id": "v16",
