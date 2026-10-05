@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 290,
-  "state": "running",
-  "reason": "m4t is closed",
-  "updated_at": "2026-10-05T20:56:31Z",
+  "sequence": 291,
+  "state": "collecting",
+  "reason": "collecting gzv attempt 38",
+  "updated_at": "2026-10-05T21:51:37Z",
   "ticks": [
     {
       "tick_id": "v16",
