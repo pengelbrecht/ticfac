@@ -12,8 +12,11 @@
   "attempt": 29,
   "done_item": "A1",
   "demonstrating_check": "ticfac status epic-hn6 --json",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T15:42:50Z",
+  "triaged_at": "2026-10-05T15:43:02Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing 7l6",
+  "promoted_as": "7l6",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "qjl",
