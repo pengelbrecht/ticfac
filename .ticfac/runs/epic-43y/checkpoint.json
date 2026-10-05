@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 196,
-  "state": "running",
-  "reason": "cni is closed",
-  "updated_at": "2026-10-05T14:36:17Z",
+  "sequence": 197,
+  "state": "dispatching",
+  "reason": "dispatching j6o as attempt 32",
+  "updated_at": "2026-10-05T14:36:30Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -156,6 +156,14 @@
     },
     {
       "tick_id": "kkt",
+      "state": "ready"
+    },
+    {
+      "tick_id": "a2l",
+      "state": "ready"
+    },
+    {
+      "tick_id": "dbi",
       "state": "ready"
     }
   ],
