@@ -1869,6 +1869,9 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	}
 	r.trackerTree = tree
 	r.tracker = &durableTracker{inner: relocated, tree: tree, r: r}
+	// A held step's tracker records stay in the worktree until the step's
+	// push lands them (step.go, tick f61).
+	tree.keepLocal = func() bool { return r.store != nil && r.store.Pending() > 0 }
 
 	store, err := runstate.Open(runstate.Options{
 		Repo: r.opts.Repo, Remote: r.opts.Remote, Branch: r.branch, RunID: r.runID, Now: r.now,
