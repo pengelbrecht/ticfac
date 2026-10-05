@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 26,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": ".tick/runners.toml's [roles.implement.tiers.balanced] names kind = \"codex\" in the common file, so a local run (herdr or harness substrate) that explicitly pins --tier balanced dispatches an implement worker on the codex CLI — a worker harness that is neither pi-durable nor the claude-CLI frontier exception A1 allows. The local ladder never derives it (strong -> frontier only, runners.local.toml) and the cloud excludes it (runners.cloud.toml: 'balanced is not a rung'), so it is reachable only by explicit pin, but it survives jhp's deletion and a reviewer scoring A1 strictly will find it. Its fate belongs with jhp or an operator routing change; the file is the operator's, not this tick's to edit.\nevidence: .tick/runners.toml, [roles.implement.tiers.balanced] (kind = \"codex\", model = \"gpt-5.6-luna\")\n\nticfac run epic-43y created this tick by absorbing the finding 2f83f272ba247be6e5b3240e9e43acece96bb18906f7b26b5008688549bd6b18 (reported by run-epic-43y/tick-2q5/attempt-12): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/2f83f272ba247be6e5b3240e9e43acece96bb18906f7b26b5008688549bd6b18.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "7ml",
+    "title": "Local implement 'balanced' tier still routes to the codex CLI, off pi-durable"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.66,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0,
+      "design": 0.73,
+      "diagnosis": 0.23,
+      "mechanical": 0.04,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1421,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T10:37:06Z",
+  "answered_at": "2026-10-05T10:37:06Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "7ml",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "cab330758e8cc262bce045544cc8cf791bb452f2",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
