@@ -11,8 +11,11 @@
   "tick_id": "pv7",
   "attempt": 42,
   "done_item": "A4",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T23:20:35Z",
+  "triaged_at": "2026-10-05T23:21:02Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing kf4",
+  "promoted_as": "kf4",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "pv7",
