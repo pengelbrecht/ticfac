@@ -12,8 +12,11 @@
   "attempt": 12,
   "done_item": "A1",
   "demonstrating_check": "go test -run TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate ./internal/reconcile",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T10:27:15Z",
+  "triaged_at": "2026-10-05T10:27:27Z",
+  "triaged_by": "ticfac run epic-43y absorbing 7ml",
+  "promoted_as": "7ml",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "2q5",
