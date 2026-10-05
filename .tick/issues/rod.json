@@ -2,6 +2,7 @@
   "id": "rod",
   "title": "staging proof attempts inherit earlier passes' branches: clear origins",
   "description": "agent-faults-staging.ts keys each attempt's /proof/git origin by attempt name in Durable Object storage, which outlives a pass; its reclaim destroys the container but not the origin, and /proof/start's init() keeps existing storage. A second run of the proof against the same deployment therefore boots each attempt on the previous pass's pushed branch. Observed this attempt: an intermediate second run failed 'the tool did not run twice' because the first run's tool-runs.txt (one line) rode the second run's boot and the model's own append made two — the host's reattach itself was sound. The recorded pass ran on a fresh deployment, and the README now warns to run once per deployment, but that is prose. Worth a tick: make each proof pass self-cleaning — reclaim clears the attempt's origin, or start resets it — so the proof cannot silently inherit.\nevidence: harness/proof/agent-faults-staging.ts (reclaim, after the evidence read); cloudflare/src/staging-agent.ts (/proof/start -\u003e origins.get(...).init(token), keeping prior storage); this attempt's intermediate run: evidence tool_runs_file read 'tool-ran-once\\ntool-ran-once\\n' while the log shows the sleep command issued exactly once\n\nticfac run epic-43y filed this backlog tick from the finding 3eba1ca6c2d2ded49c09df98bc1406926d46d7fd5b763b666bea8b96d00a611b (reported by run-epic-43y/tick-jpy/attempt-49): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/3eba1ca6c2d2ded49c09df98bc1406926d46d7fd5b763b666bea8b96d00a611b.json on the run branch.",
+  "notes": "2026-10-05 22:47 - ticfac run epic-43y: created by absorbing finding 3eba1ca6c2d2ded49c09df98bc1406926d46d7fd5b763b666bea8b96d00a611b — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-43y/absorptions/3eba1ca6c2d2ded49c09df98bc1406926d46d7fd5b763b666bea8b96d00a611b.json on epic/43y, and it says: the classifier put 0.20 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-43y/tick-jpy/attempt-49",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T20:47:30Z",
-  "updated_at": "2026-10-05T20:47:30Z"
+  "updated_at": "2026-10-05T20:47:38.084049Z"
 }
