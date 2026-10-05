@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 356,
-  "state": "dispatching",
-  "reason": "dispatching 7oy as attempt 57",
-  "updated_at": "2026-10-05T20:07:06Z",
+  "sequence": 357,
+  "state": "running",
+  "reason": "7oy is running as attempt 57",
+  "updated_at": "2026-10-05T20:07:19Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -257,7 +257,8 @@
     },
     {
       "tick_id": "7oy",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 57
     },
     {
       "tick_id": "4ao",
