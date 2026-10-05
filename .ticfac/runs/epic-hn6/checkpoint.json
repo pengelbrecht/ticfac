@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 219,
-  "state": "dispatching",
-  "reason": "dispatching dm2 as attempt 32",
-  "updated_at": "2026-10-05T16:43:27Z",
+  "sequence": 220,
+  "state": "running",
+  "reason": "dm2 is running as attempt 32",
+  "updated_at": "2026-10-05T16:43:37Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -164,7 +164,8 @@
     },
     {
       "tick_id": "dm2",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 32
     },
     {
       "tick_id": "jmf",
