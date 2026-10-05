@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 62,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "sandboxExecutor passes no StuckAfter, and internal/exec/cloudflaresandbox has no stuck logic. The WorkerAgent's steer is reached only by the operator routes, although worker-attempt.ts and sandbox-dispatch.ts both say 'the stuck nudge is one of these'. A cloud attempt stuck on a hung bash (pi-durable's bash has no default timeout) runs to its wall deadline. This is not a regression, since main had no cloud nudge, but A3's 'the stuck nudge is a steer' holds only locally.\nevidence: internal/cli/executor.go:185-209; harness/src/host/worker-attempt.ts:349; cloudflare/src/sandbox-dispatch.ts:882\n\nticfac run epic-43y created this tick by absorbing the finding 04d0e62cefeec970df1d9d7f8a1ffd074ce42856d57039e0a956e2989138d91b (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/04d0e62cefeec970df1d9d7f8a1ffd074ce42856d57039e0a956e2989138d91b.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "xba",
+    "title": "No stuck nudge for cloud pi-durable workers; A3's nudge clause is local-only"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.87,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.01,
+      "design": 0.07,
+      "diagnosis": 0.89,
+      "mechanical": 0.02,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1380,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T19:48:12Z",
+  "answered_at": "2026-10-05T19:48:12Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "xba",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "d0b74ea377c3c4a033a8962d31d79ecab847c5f4",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
