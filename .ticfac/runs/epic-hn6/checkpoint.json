@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 182,
-  "state": "publishing",
-  "reason": "closing cg4 behind the integrated gate on 2e24558d89d6",
-  "updated_at": "2026-10-05T14:28:28Z",
+  "sequence": 183,
+  "state": "running",
+  "reason": "cg4 is closed",
+  "updated_at": "2026-10-05T14:28:37Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -133,7 +133,7 @@
     },
     {
       "tick_id": "cg4",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 25
     },
     {
