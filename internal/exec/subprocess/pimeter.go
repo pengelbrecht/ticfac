@@ -73,6 +73,12 @@ const workersAIRoute = "workers-ai/v1"
 // directory: one attempt, one file, named for what it is.
 const extensionFile = "gateway-metering.mjs"
 
+// extensionFlag is pi's own CLI flag that loads a generated extension: the
+// one word of the join that crosses into an argv, named once here so the
+// flag the subprocess executor's runner table spells and the flag
+// ExtensionArgs renders cannot drift.
+const extensionFlag = "--extension"
+
 // metadataHeader is the header the AI Gateway turns into the metadata its
 // logs can be filtered by — the same name the factory's proxy stamps
 // (cloudflare/src/gateway.ts) and the same key gatewaytrace filters on.
@@ -211,5 +217,5 @@ func (m *GatewayMetering) ExtensionArgs(path string) []string {
 	if m == nil || path == "" {
 		return nil
 	}
-	return []string{"--extension", path}
+	return []string{extensionFlag, path}
 }

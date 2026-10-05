@@ -162,15 +162,20 @@ type fixtureOptions struct {
 	status         string
 	sleep          string
 	runnerArgv     []string
-	pushInterval   time.Duration
-	attempt        int
-	guardsOff      map[string]bool
-	noRemote       bool
-	name           string
-	stateDir       string
-	model          string
-	rolePrompt     string
-	writeFile      func(path string, data []byte, perm fs.FileMode) error
+	// runner names the runner table row to launch instead of the fake: the
+	// table's own pi row, for the gateway metering tests, with a stub pi on
+	// PATH. Empty keeps claude behind the fake runner's argv.
+	runner       string
+	metering     *GatewayMetering
+	pushInterval time.Duration
+	attempt      int
+	guardsOff    map[string]bool
+	noRemote     bool
+	name         string
+	stateDir     string
+	model        string
+	rolePrompt   string
+	writeFile    func(path string, data []byte, perm fs.FileMode) error
 	// stuckAfter is the stuck watch's window; zero keeps the default.
 	stuckAfter time.Duration
 	// env is extra NAME=value pairs for the fake runner.
@@ -191,7 +196,13 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	}
 
 	argv := opts.runnerArgv
-	if len(argv) == 0 {
+	runner := "claude"
+	if opts.runner != "" {
+		runner = opts.runner
+	}
+	// The fake runner IS an argv override, so it exists only where the table
+	// is not being exercised; a named runner row launches from the table.
+	if len(argv) == 0 && runner == "claude" {
 		argv = fakeRunnerArgv(t, opts)
 	}
 	remote := "origin"
@@ -209,10 +220,11 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	executor, err := New(Options{
 		Repo:           repo.Dir,
 		StateDir:       state,
-		Runner:         "claude",
+		Runner:         runner,
 		RunnerArgv:     argv,
 		Model:          opts.model,
 		RolePrompt:     opts.rolePrompt,
+		Metering:       opts.metering,
 		SupervisorArgv: supervisorArgv,
 		Remote:         remote,
 		Attempt:        opts.attempt,

@@ -46,6 +46,17 @@ type Options struct {
 	// are closed and a field invented here would be one the reconciler ignores.
 	Model string
 
+	// Metering is the local gateway metering join (tick dm2, wired into this
+	// executor by tick gzv): a pi launch on a Workers AI model loads a
+	// generated provider override — written into THIS attempt's state
+	// directory at dispatch — that routes the provider's calls through the
+	// operator's AI Gateway and tags them with the run id, so the status
+	// model can meter the local spend from the gateway's own logs exactly as
+	// it meters a herdr dispatch's. Nil means the host states no join, and a
+	// worker launched with nil Metering runs exactly as it did before this
+	// tick — its calls unattributed, the cost line honestly unmetered.
+	Metering *GatewayMetering
+
 	// RolePrompt is the profile's prompt for this job's role: the instruction
 	// that says what the role IS, which the rendered worker prompt opens with.
 	// The executor owns the mechanics around it — the report path, the
@@ -227,6 +238,11 @@ func DefaultStateDir() string {
 
 // Repo is the checkout this executor was pointed at.
 func (e *Executor) Repo() string { return e.repo }
+
+// Metering is the gateway metering join this executor was built with — the
+// join the dispatch resolved, for the factory that wires it and the test
+// that asserts the wiring. Nil on a host that joins nothing.
+func (e *Executor) Metering() *GatewayMetering { return e.opts.Metering }
 
 // RepoKey identifies the repository — half of a handle's identity, and the
 // half that keeps one tick id in two checkouts from colliding.
@@ -422,7 +438,16 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("name the runner's session: %w", err)
 	}
-	at := launch{Prompt: prompt, GitCommonDir: common, Model: e.opts.Model, Session: session}
+	// The gateway metering join (tick gzv, the same per-attempt extension the
+	// herdr executor loads — tick dm2): written into THIS attempt's state
+	// directory, and carried by every argv that launches pi for the attempt —
+	// the launch, the nudge, the report pushback and the stuck re-prompt —
+	// because a re-prompted session spends through the same provider too.
+	extension, err := e.meteringExtension(st)
+	if err != nil {
+		return nil, err
+	}
+	at := launch{Prompt: prompt, GitCommonDir: common, Model: e.opts.Model, Session: session, Extension: extension}
 	argv, err := resolveRunner(e.opts.Runner, e.opts.RunnerArgv, at)
 	if err != nil {
 		return nil, err
@@ -593,6 +618,27 @@ func (e *Executor) makeWorktree(record *attemptRecord, start string) error {
 		return fmt.Errorf("exclude the artifact prefix from git in the attempt worktree: %w", err)
 	}
 	return nil
+}
+
+// meteringExtension writes this attempt's gateway metering override, when
+// this launch is one the join covers, and returns its path — or "" when it
+// is not. The gate mirrors the herdr executor's (tick dm2): only a PI
+// launch — the flag is the pi CLI's own — on a WORKERS AI model — the
+// override re-points the cloudflare-workers-ai provider, and tagging another
+// provider's calls would route a provider that is not its own — with
+// metering configured. An argv override joins nothing for the same reason
+// the model does not reach one: the override is the whole invocation, and
+// the caller who set it owns its own flags. Nothing is written when the
+// join does not apply: per-attempt state is written only when it is real.
+func (e *Executor) meteringExtension(st *store) (string, error) {
+	if len(e.opts.RunnerArgv) > 0 || e.opts.Runner != "pi" || !e.opts.Metering.Applies(e.opts.Model) {
+		return "", nil
+	}
+	path, err := e.opts.Metering.WriteExtension(st.dir)
+	if err != nil {
+		return "", fmt.Errorf("write the gateway metering extension for attempt %d: %w", e.opts.Attempt, err)
+	}
+	return path, nil
 }
 
 func (e *Executor) spawnSupervisor(st *store, record *attemptRecord) (int, error) {
