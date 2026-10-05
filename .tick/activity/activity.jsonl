@@ -2481,3 +2481,4 @@
 {"ts":"2026-10-05T16:20:43.635445Z","tick":"qjl","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-05 18:20 - ticfac run epic-hn6: qjl try 1 (run dispatch #29) merged into epic/hn6 as aadd768b55e3; the integrated gate (go, ts) passed.","title":"Close out hn6: verify A1-A6, retro"}}
 {"ts":"2026-10-05T16:20:46.947765Z","tick":"qjl","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"Close out hn6: verify A1-A6, retro"}}
 {"ts":"2026-10-05T16:42:50.672441Z","tick":"5uq","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Status model reads an 'opus' claude worker through pi's transcript layout"}}
+{"ts":"2026-10-05T16:43:10.285845Z","tick":"7l6","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Restart after a signal death leaves the live run's phase 'cancelled', no ETA"}}
