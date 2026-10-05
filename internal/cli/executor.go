@@ -88,7 +88,7 @@ func knownExecutors() []reconcile.KnownExecutor {
 // default must read the same file the reconciler does (tick 53k). runner is
 // the operator's fallback for a dispatch whose profile resolved none.
 func executorFactory(runner, gate string) func(reconcile.Dispatch) (reconcile.Executor, reconcile.Substrate, error) {
-	local := reconcile.DefaultExecutor(runner, nil, pushInterval)
+	local := reconcile.DefaultExecutor(runner, nil, pushInterval, localMetering)
 	return func(d reconcile.Dispatch) (reconcile.Executor, reconcile.Substrate, error) {
 		if d.Profile == nil {
 			return local(d)
@@ -231,10 +231,12 @@ func herdrExecutor(gate string, d reconcile.Dispatch) (reconcile.Executor, recon
 		// The gateway metering join (tick dm2): a pi dispatch on a Workers AI
 		// model gets its calls tagged with the run id and routed through the
 		// operator's AI Gateway, so the status model can meter the local
-		// spend from the gateway's own logs. Nil on a host whose ~/.ticfacrc
-		// names no gateway or no token — the documented optional-telemetry
-		// state, and the dispatch then runs exactly as it did before.
-		Metering: herdrMetering(d),
+		// spend from the gateway's own logs — the SAME resolution the local
+		// subprocess executor joins through (tick gzv), because both substrates
+		// launch pi on this machine. Nil on a host whose ~/.ticfacrc names no
+		// gateway or no token — the documented optional-telemetry state, and
+		// the dispatch then runs exactly as it did before.
+		Metering: localMetering(d),
 		// What the tick's earlier attempts found (tick nvn), for the same
 		// section of the worker prompt the local executor renders.
 		PriorReports: d.PriorReports,
@@ -326,9 +328,10 @@ func spawnArgv(gate string, d reconcile.Dispatch) (*runconfig.Config, []string, 
 	return cfg, spawn.Argv, nil
 }
 
-// herdrMetering resolves the gateway metering join for one herdr dispatch
-// (tick dm2): the run id the spend is attributed to, and the operator's AI
-// Gateway URL — both from facts the dispatch and the host already hold. Nil,
+// localMetering resolves the gateway metering join for one LOCAL dispatch
+// — a herdr pane or a subprocess worker (ticks dm2 and gzv): the run id the
+// spend is attributed to, and the operator's AI Gateway URL — both from
+// facts the dispatch and the host already hold. Nil,
 // never an error, on a host that cannot join: cost telemetry is the
 // documented OPTIONAL state (gatewaytrace.ConfigFrom's own refusal names the
 // command that fixes it), a dispatch must never stop over it, and the cost
@@ -339,7 +342,7 @@ func spawnArgv(gate string, d reconcile.Dispatch) (*runconfig.Config, []string, 
 // dispatch it meant to meter), and the token without the gateway names a
 // route nothing reads. A half-configured factory is the same half-set state
 // the jev credential resolution names rather than guesses around.
-func herdrMetering(d reconcile.Dispatch) *subprocess.GatewayMetering {
+func localMetering(d reconcile.Dispatch) *subprocess.GatewayMetering {
 	file, err := credentials.Load()
 	if err != nil {
 		return nil

@@ -3875,7 +3875,16 @@ func isBranchUnsafe(err error) bool {
 // one the reconciler's own contract does not have. `runner` is the fallback an
 // operator names on the command line, for a dispatch whose profile resolved
 // none.
-func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Duration) func(Dispatch) (Executor, Substrate, error) {
+// `metering`, when not nil, resolves the local gateway metering join for one
+// dispatch — the per-attempt pi extension that routes a Workers AI worker's
+// calls through the operator's AI Gateway, tagged with the run id (tick gzv).
+// It is a RESOLVER, not a value, because the join names each dispatch's own
+// run id; and it is the host's, not the reconciler's, because the facts it
+// resolves from — the gateway URL and the account token — are the operator's
+// own ~/.ticfacrc, which this package must not read: the caller that can
+// build executors is the caller that holds credentials. A nil resolver joins
+// nothing, and the dispatch runs exactly as it did before the join existed.
+func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Duration, metering func(Dispatch) *subprocess.GatewayMetering) func(Dispatch) (Executor, Substrate, error) {
 	return func(d Dispatch) (Executor, Substrate, error) {
 		supervisor, err := supervisorArgv()
 		if err != nil {
@@ -3889,6 +3898,10 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 				dispatched = d.Profile.Runner
 			}
 			model, rolePrompt = d.Profile.Model, d.Profile.Prompt
+		}
+		var join *subprocess.GatewayMetering
+		if metering != nil {
+			join = metering(d)
 		}
 		executor, err := subprocess.New(subprocess.Options{
 			Repo:           d.Repo,
@@ -3906,6 +3919,7 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 			PriorSnapshots: d.PriorSnapshots,
 			Escalation:     d.Escalation,
 			StuckAfter:     d.StuckAfter,
+			Metering:       join,
 		})
 		if err != nil {
 			return nil, Substrate{}, err
