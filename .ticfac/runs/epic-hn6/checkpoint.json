@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 275,
-  "state": "integrating",
-  "reason": "integrating 648 attempt 39 into epic/hn6",
-  "updated_at": "2026-10-05T20:28:21Z",
+  "sequence": 276,
+  "state": "gating",
+  "reason": "running the integrated gate for 648 on 38f83ac8d2dd",
+  "updated_at": "2026-10-05T20:28:36Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -189,7 +189,7 @@
     },
     {
       "tick_id": "648",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 39
     },
     {
