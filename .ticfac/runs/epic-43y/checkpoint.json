@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 442,
-  "state": "running",
-  "reason": "4w7 is closed",
-  "updated_at": "2026-10-05T22:26:03Z",
+  "sequence": 443,
+  "state": "failed",
+  "reason": "no PR exists for epic/43y (→ main) and opening one failed, so the close-out's precondition is unmet and cannot be satisfied by this run: GitHub answered 422 for POST /repos/pengelbrecht/ticfac/pulls: Validation Failed. The rule the repository declares is: - Epic integration goes through a PR + CI gate: the orchestrator pushes the epic branch and opens a PR; the epic close-out may not complete until CI is green on that PR. No direct merges of epic branches to the default branch other than the run's own: **the run merges its own PR** once it is ready — the base branch folded in with tk's merge drivers, the integrated gate green on the fold, CI green on the PR head — as a merge commit, then verifies CI on the default branch. This repository opts in for development velocity (decided 2026-09-28; reversible by deleting this sentence): ticfac has no users yet and moves faster when an epic lands the moment it is ready. The product default — the rule `ticfac init` writes for every other repository — is the opposite: the run keeps the PR ready (re-folding, re-gating and re-running CI whenever the base moves) and a person, with their own agent, reviews and merges it.",
+  "updated_at": "2026-10-05T22:26:17Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -59,7 +59,7 @@
     },
     {
       "tick_id": "j2k",
-      "state": "ready"
+      "state": "rejected"
     },
     {
       "tick_id": "lid",
