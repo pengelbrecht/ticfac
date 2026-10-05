@@ -1,0 +1,14 @@
+{
+  "id": "i5e",
+  "title": "Restore falls back to base on any branch-fetch failure, then force-push wipes it",
+  "description": "restoreWorkspace treats any non-zero exit of 'git fetch origin $BRANCH' as 'the branch does not exist yet' and restores at the base. That includes a forge 5xx, a network blip or a token-door hiccup. The next round's pushWipCheckpoint does 'git push -f' to the attempt branch, overwriting every earlier wip snapshot and the agent's commits. A transient failure during a restore therefore silently loses the attempt's work. Distinguish a missing ref (git ls-remote) from a failed fetch, and fail the restore on the latter.\nevidence: harness/src/workspace/checkpoints.ts:383-388 (fallback), :237 (git push -f)\n\nticfac run epic-43y created this tick by absorbing the finding cf11b75c1682797a971fe07d33bc445ef16a7d9702fec9dac3e0d36a6a76f9b1 (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/cf11b75c1682797a971fe07d33bc445ef16a7d9702fec9dac3e0d36a6a76f9b1.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-66a/attempt-42",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T18:02:05Z",
+  "updated_at": "2026-10-05T18:02:05Z"
+}
