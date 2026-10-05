@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 304,
-  "state": "gating",
-  "reason": "running the integrated gate for qjl on 87b05b8d1fd4",
-  "updated_at": "2026-10-05T23:24:42Z",
+  "sequence": 305,
+  "state": "failed",
+  "reason": "every tick of hn6 is closed behind the integrated gate, and the epic PR is not ready: the integrated gate did not pass for qjl try 1 (run dispatch #29) twice: first go (fail), and now CI on the epic PR #219 (go, go test (reconcile 1/3)) over the tree its repair job left behind. One repair per tick is all a run dispatches: the recorded repair's outcome is \"merged\" and its work is on ticfac/run-epic-hn6/tick-qjl/repair-29 (every repair of this tick since it was last released: ticfac/run-epic-hn6/tick-qjl/repair-29 (merged)). The tick is NOT closed: read both failures, take the repair's tree or settle the tick by hand, and run the epic again under a new run id. Running the epic again resumes at keeping the PR ready",
+  "updated_at": "2026-10-05T23:37:17Z",
   "ticks": [
     {
       "tick_id": "v16",
