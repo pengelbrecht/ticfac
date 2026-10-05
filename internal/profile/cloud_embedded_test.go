@@ -18,6 +18,12 @@ func TestTheEmbeddedCloudSetResolvesEveryRoleToTheSandboxDoor(t *testing.T) {
 		if resolved.Executor != "cloudflare-sandbox" {
 			t.Errorf("%s resolved executor %q, want cloudflare-sandbox", role, resolved.Executor)
 		}
+		if resolved.Runner != "pi-durable" {
+			t.Errorf("%s resolved runner %q from the embedded cloud set, want pi-durable: the set "+
+				"names the hosted harness the factory's WorkerAgent runs the conversation on "+
+				"(epic 43y, tick qf4), and the bytes inside the binary are the ones the "+
+				"image stages", role, resolved.Runner)
+		}
 		if resolved.Runner == "claude" {
 			t.Errorf("%s resolved the claude runner from the cloud set: nothing in the cloud may run claude", role)
 		}

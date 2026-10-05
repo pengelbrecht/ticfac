@@ -22,8 +22,8 @@ import (
 //
 // THE GENERATOR: A RESOLVABLE CORE, THEN MUTATIONS.
 // Every case starts from a core that satisfies the rule by construction —
-// all three files, every role, every cell a pi harness on a Workers AI
-// model — and about half the cases then mutate it: each cell and each
+// all three files, every role, every cell a durable-harness kind (pi or
+// pi-durable) on a Workers AI model — and about half the cases then mutate it: each cell and each
 // structural choice (a file present, a role declared, a key written) is
 // independently swapped, one time in three, for an arbitrary one drawn from
 // every way out (other harnesses, other providers' models, a bare
@@ -40,14 +40,18 @@ import (
 // actually made.
 
 var (
-	// The rule-satisfying pools a core draws from.
-	pbtGoodKinds  = []string{"pi"}
+	// The rule-satisfying pools a core draws from. Both names of the one
+	// durable harness are good (epic 43y, tick qf4): `pi` is the local
+	// runner table's name for it (tick hpk), `pi-durable` the hosted kind
+	// the cloud profile set names — both reach Workers AI through the
+	// factory gateway.
+	pbtGoodKinds  = []string{"pi", "pi-durable"}
 	pbtGoodModels = []string{
 		"cloudflare-workers-ai/@cf/zai-org/glm-5.3", "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
 		"workers-ai/@cf/openai/gpt-oss-120b", "@cf/meta/llama",
 	}
 	// The pools a mutation draws from: every way out, and the good ones too.
-	pbtKinds  = []string{"pi", "claude", "codex", "opencode"}
+	pbtKinds  = []string{"pi", "pi-durable", "claude", "codex", "opencode"}
 	pbtModels = append([]string{
 		"opus", "sonnet", "gpt-5.6-luna", "openrouter/anthropic/claude", "cloudflare-workers-ai/",
 	}, pbtGoodModels...)
@@ -156,12 +160,12 @@ func TestPBTNothingInCloudflareResolvesOutsideWorkersAI(t *testing.T) {
 		if !g.mutate {
 			coreResolved++
 		}
-		if p.Runner != "pi" || !IsWorkersAIModel(p.Model) {
+		if !reachesWorkersAI(p.Runner) || !IsWorkersAIModel(p.Model) {
 			var shown strings.Builder
 			for name, body := range files {
 				fmt.Fprintf(&shown, "--- %s\n%s\n", name, body)
 			}
-			ht.Fatalf("role %s at tier %q on substrate %q resolved to %s/%s in Cloudflare:\n%s",
+			ht.Fatalf("role %s at tier %q on substrate %q resolved to %s/%s in Cloudflare, not a Workers AI model on a harness the gateway serves:\n%s",
 				role, tier, sub, p.Runner, p.Model, shown.String())
 		}
 	}, hegel.WithTestCases(500))
