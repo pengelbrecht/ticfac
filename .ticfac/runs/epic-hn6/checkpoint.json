@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 204,
-  "state": "running",
-  "reason": "qjl is running as attempt 29",
-  "updated_at": "2026-10-05T15:14:07Z",
+  "sequence": 205,
+  "state": "collecting",
+  "reason": "collecting the closeout-epic job for qjl",
+  "updated_at": "2026-10-05T15:42:45Z",
   "ticks": [
     {
       "tick_id": "v16",
