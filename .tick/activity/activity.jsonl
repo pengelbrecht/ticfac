@@ -2348,3 +2348,4 @@
 {"ts":"2026-10-05T21:03:33.741922Z","tick":"3c2","action":"close","actor":"ticfac","epic":"43y","data":{"title":"The local supervisor could relaunch a killed durable runner"}}
 {"ts":"2026-10-05T21:03:54.291457Z","tick":"ug0","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Stopping a durable runner leaves its detached tool process groups running"}}
 {"ts":"2026-10-05T21:19:29.325421Z","tick":"rpw","action":"note","actor":"ticfac","epic":"43y","data":{"note":"\n2026-10-05 23:19 - ticfac run epic-43y: rpw try 1 (run dispatch #60) merged into epic/43y as 6dc8edb66b88; the integrated gate (go, ts) passed.","title":"Stuck watch never reads durable storage activity (durableResume gets full argv)"}}
+{"ts":"2026-10-05T21:19:32.980856Z","tick":"rpw","action":"close","actor":"ticfac","epic":"43y","data":{"title":"Stuck watch never reads durable storage activity (durableResume gets full argv)"}}
