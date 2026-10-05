@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 242,
-  "state": "collecting",
-  "reason": "collecting wvn attempt 35",
-  "updated_at": "2026-10-05T18:11:33Z",
+  "sequence": 243,
+  "state": "integrating",
+  "reason": "integrating wvn attempt 35 into epic/hn6",
+  "updated_at": "2026-10-05T18:11:43Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -179,7 +179,7 @@
     },
     {
       "tick_id": "wvn",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 35
     }
   ],
