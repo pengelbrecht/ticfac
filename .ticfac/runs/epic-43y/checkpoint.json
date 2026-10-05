@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 230,
-  "state": "collecting",
-  "reason": "collecting twa attempt 37",
-  "updated_at": "2026-10-05T15:13:23Z",
+  "sequence": 231,
+  "state": "integrating",
+  "reason": "integrating twa attempt 37 into epic/43y",
+  "updated_at": "2026-10-05T15:13:42Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -147,7 +147,7 @@
     },
     {
       "tick_id": "twa",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 37
     },
     {
