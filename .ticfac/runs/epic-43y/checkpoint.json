@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 355,
-  "state": "running",
-  "reason": "umx is closed",
-  "updated_at": "2026-10-05T20:06:52Z",
+  "sequence": 356,
+  "state": "dispatching",
+  "reason": "dispatching 7oy as attempt 57",
+  "updated_at": "2026-10-05T20:07:06Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -273,6 +273,10 @@
     },
     {
       "tick_id": "ug0",
+      "state": "ready"
+    },
+    {
+      "tick_id": "omq",
       "state": "ready"
     }
   ],
