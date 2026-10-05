@@ -1,0 +1,13 @@
+{
+  "id": "pug",
+  "title": "status.ts header still claims /api/runs reads cloudStatusDoc",
+  "description": "The status.ts module comment says cloudStatusDoc \"is still what /api/runs's own listing reads\", but the composition has exactly one caller: phone.ts's overview page. /api/runs serves the raw run index and never composes a status doc, so the comment sends a maintainer hunting for a consumer that does not exist.\nevidence: cloudflare/src/status.ts:20\n\nticfac run epic-hn6 filed this backlog tick from the finding feb0863cd804f9f44ff8cd0ab97c81a8c395f563a3620bd003d395033c2c2da8 (reported by run-epic-hn6/tick-5d4/attempt-19): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/feb0863cd804f9f44ff8cd0ab97c81a8c395f563a3620bd003d395033c2c2da8.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-5d4/attempt-19",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T10:55:12Z",
+  "updated_at": "2026-10-05T10:55:12Z"
+}
