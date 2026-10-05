@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 38,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Rule 7 wants metered spend where measured, naming Workers AI via gateway logs. Every implementation tick here ran on GLM through Workers AI, yet the local run's cost line says 'Workers AI not metered: this run's Workers AI calls are not joined to gateway logs', and the cloud run's says 'the gateway's cost telemetry has not answered'. A4 holds by never lying, but the metered half has only been seen in fixtures. Join local pi calls to the AI Gateway logs (tag requests with the run id) so the dashboard can show real spend. Also consider a null recorded_usd when no line is metered: the JSON says recorded_usd 0 beside all-unmetered lines.\nevidence: `ticfac status epic-hn6 --json` .cost.lines; internal/statusmodel/cost.go\n\nticfac run epic-hn6 created this tick by absorbing the finding 652421c6ab9687f4b17c8e6c0195da7c0dc6ce9cb901e50c129ffa52ca6ebb8e (reported by run-epic-hn6/tick-qjl/attempt-29): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/652421c6ab9687f4b17c8e6c0195da7c0dc6ce9cb901e50c129ffa52ca6ebb8e.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "dm2",
+    "title": "Meter local runs' Workers AI spend via the gateway; no live run ever metered"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.73,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.78,
+      "design": 0.02,
+      "diagnosis": 0.02,
+      "mechanical": 0.15,
+      "translation": 0.03
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1364,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T16:43:23Z",
+  "answered_at": "2026-10-05T16:43:23Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "dm2",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "1018b321e951faca32502a9997ade683543327d3",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
