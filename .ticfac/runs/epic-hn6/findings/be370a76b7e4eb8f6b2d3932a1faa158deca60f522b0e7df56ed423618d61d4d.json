@@ -12,8 +12,11 @@
   "attempt": 36,
   "done_item": "A4",
   "demonstrating_check": "go test ./internal/jev",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T20:14:24Z",
+  "triaged_at": "2026-10-05T20:14:35Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing lfm",
+  "promoted_as": "lfm",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "24u",
