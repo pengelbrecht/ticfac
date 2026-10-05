@@ -1,0 +1,14 @@
+{
+  "id": "3qg",
+  "title": "composed stopped row's why reads run_progress, not the run's stopped line",
+  "description": "cloudStatusDoc has a lastEvent parameter for the run's forwarded tail, but its only caller (phone.ts:293) passes null, so a stopped cloud row's verdict summary and needs-you sentence read run_progress's durable-evidence branch verdict (\"no branch on origin changed…\"), while the watch frame's stopped summary reads the run's own last word from its feed (\"stopped: the operator stopped the run: …\"). Both are the factory's own records and honest, but the two renderers answer 'why' from different sentences. Plumbing the run's last feed line (the R2 feed tail via readRunFeedPage, or the room's recentEvents, which observe.ts already reads) into the composition would make the why agree too.\nevidence: cloudflare/src/phone.ts:293 (lastEvent null); cloudflare/src/status.ts cloudStatusDoc reason chain\n\nticfac run epic-hn6 created this tick by absorbing the finding d9d3f9e389f506e9119b78c36820ffa260278901d429d3d4d650384a09341cf2 (reported by run-epic-hn6/tick-5d4/attempt-19): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/d9d3f9e389f506e9119b78c36820ffa260278901d429d3d4d650384a09341cf2.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-5d4/attempt-19",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T10:54:50Z",
+  "updated_at": "2026-10-05T10:54:50Z"
+}
