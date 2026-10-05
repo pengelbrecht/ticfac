@@ -1,0 +1,14 @@
+{
+  "id": "ziy",
+  "title": "watch's FAILED ending says 'nothing is held' beside a red needs-you",
+  "description": "3yx fixed the cancelled ending. The FAILED endings, live and stream, still say 'Nothing is held for a person' while the frame shows a needs-you line: the same contradiction. The stream FAILED path also builds its command from epicOf(), which falls back to the run id, so an unresolved run_* id can print 'ticfac run-epic run_…'.\nevidence: internal/cli/watch.go:546-552\n\nticfac run epic-hn6 created this tick by absorbing the finding a76440fc4a0dd0f6e7680e71b7103d739f5744af1be47028751f7539ffe501c5 (reported by run-epic-hn6/tick-pv7/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/a76440fc4a0dd0f6e7680e71b7103d739f5744af1be47028751f7539ffe501c5.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-pv7/attempt-42",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T23:23:11Z",
+  "updated_at": "2026-10-05T23:23:11Z"
+}
