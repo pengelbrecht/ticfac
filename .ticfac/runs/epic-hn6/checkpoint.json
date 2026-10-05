@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 123,
+  "sequence": 124,
   "state": "gating",
-  "reason": "running the integrated gate for onv on c84af474f6bc",
-  "updated_at": "2026-10-05T10:24:24Z",
+  "reason": "running the integrated gate for onv on d125a3268483",
+  "updated_at": "2026-10-05T10:52:03Z",
   "ticks": [
     {
       "tick_id": "v16",
