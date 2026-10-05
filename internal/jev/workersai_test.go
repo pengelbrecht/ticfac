@@ -6,10 +6,13 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/pengelbrecht/ticfac/internal/contracts"
 )
 
 // JEV ON WORKERS AI (tick tum). The operator has no TypeSafe key; Jev is
@@ -37,6 +40,7 @@ type fakeWorkersAI struct {
 	server  *httptest.Server
 	paths   []string
 	bearers []string
+	metas   []string
 	bodies  [][]byte
 	// refuse, when set, is the whole response instead of an answer.
 	refuse func(w http.ResponseWriter)
@@ -50,6 +54,7 @@ func newFakeWorkersAI(t *testing.T) *fakeWorkersAI {
 		fake.mu.Lock()
 		fake.paths = append(fake.paths, r.URL.Path)
 		fake.bearers = append(fake.bearers, r.Header.Get("Authorization"))
+		fake.metas = append(fake.metas, r.Header.Get(MetadataHeader))
 		fake.bodies = append(fake.bodies, body)
 		refuse := fake.refuse
 		fake.mu.Unlock()
@@ -109,6 +114,14 @@ func (f *fakeWorkersAI) calls() ([]string, []string, [][]byte) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string{}, f.paths...), append([]string{}, f.bearers...), append([][]byte{}, f.bodies...)
+}
+
+// metadata is the cf-aig-metadata header each recorded request carried, in
+// call order: empty where the call was not tagged.
+func (f *fakeWorkersAI) metadata() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string{}, f.metas...)
 }
 
 // A LOCAL classification is one Workers AI run on the operator's account,
@@ -188,6 +201,107 @@ func TestALocalClassificationIsAWorkersAIRunOnTheOperatorsAccount(t *testing.T) 
 		if one.Choice == "" || one.Confidence != 1 || len(one.Probabilities) != 5 {
 			t.Errorf("%s classified as %+v, want a choice at confidence 1 over the five work types", id, one)
 		}
+	}
+}
+
+// A RUN'S OWN CLASSIFIER CALLS ARE TAGGED (tick 24u, absorbing run-epic-hn6's
+// finding 4c30b9f3): the local run's classification and gating calls are the
+// operator's Workers AI spend, and they were unattributable in the gateway's
+// logs — the rows existed, the run id did not — so they could never be joined
+// per run the way dm2's metering join joins the workers' calls. The join is
+// the same header everywhere else: cf-aig-metadata, the header the factory's
+// proxy stamps (cloudflare/src/gateway.ts) and dm2's provider override writes
+// (internal/exec/subprocess/pimeter.go) and gatewaytrace — the status model's
+// reader — filters its log query by. A classifier built with a run id stamps
+// exactly that header with exactly that key.
+func TestARunsClassifierCallsAreTaggedWithTheRunID(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkersAI(t)
+	source := ResolveCredential(lookupOf(map[string]string{OperatorBaseEnv: fake.server.URL}), storedCredential)
+	if !source.Configured {
+		t.Fatalf("the stored credential resolved no classifier: %s", source.Note)
+	}
+	source.Config.RunID = "epic-hn6"
+	result, err := New(source.Config, fake.server.Client()).Classify(context.Background(), ticks(1))
+	if err != nil || result.Unavailable != "" {
+		t.Fatalf("the tagged classification did not answer: %v %s", err, result.Unavailable)
+	}
+	metas := fake.metadata()
+	if len(metas) != 1 {
+		t.Fatalf("%d calls for one batch, want one run", len(metas))
+	}
+	if metas[0] != `{"run_id":"epic-hn6"}` {
+		t.Errorf("the call carried cf-aig-metadata %s, want the run id exactly as the metering join stamps it", metas[0])
+	}
+
+	// The tag is the REQUEST's statement, not the environment's honouring of
+	// it: on the gateway route the factory's runJev forwards nothing of the
+	// caller's headers, so the same client tags there too and the factory's
+	// proxy owns what reaches Workers AI — the same division the workers-ai
+	// route already has.
+	fake = newFakeWorkersAI(t)
+	source = ResolveCredential(lookupOf(map[string]string{
+		GatewayBaseEnv:  fake.server.URL + "/api/gateway",
+		GatewayTokenEnv: "tkr_run-scoped",
+	}), storedCredential)
+	source.Config.RunID = "epic-hn6"
+	if _, err := New(source.Config, fake.server.Client()).Classify(context.Background(), ticks(1)); err != nil {
+		t.Fatalf("the tagged classification on the gateway route: %v", err)
+	}
+	if metas := fake.metadata(); len(metas) != 1 || metas[0] != `{"run_id":"epic-hn6"}` {
+		t.Errorf("the gateway route's call carried cf-aig-metadata %v, want the same tag the local call carries", metas)
+	}
+}
+
+// A client that names no run — the probe `ticfac doctor` runs, the benchmark
+// harness, a one-off — sends no tag at all: an unattributed call is honest
+// about being one, and a probe must not file its cents under a run's number.
+func TestAnUntaggedCallCarriesNoMetadataHeader(t *testing.T) {
+	t.Parallel()
+	fake := newFakeWorkersAI(t)
+	client := New(Config{APIBase: fake.server.URL, AccountID: "account-placeholder", APIKey: "cf-token-placeholder"}, fake.server.Client())
+	if _, err := client.Probe(context.Background()); err != nil {
+		t.Fatalf("the untagged probe did not answer: %v", err)
+	}
+	if metas := fake.metadata(); len(metas) != 1 || metas[0] != "" {
+		t.Errorf("the untagged call carried cf-aig-metadata %q, want no header", metas)
+	}
+}
+
+// The metadata seam is a contract written on four sides that cannot import
+// each other: this header, the factory's TypeScript proxy, dm2's generated
+// provider override and gatewaytrace's log filter. A header name that drifts
+// silently is a tag the logs never record — spend that looks metered and
+// reads "not metered" — the shape a parity test reading the other sides
+// exists to catch.
+//
+// short: reads the pinned-in-repo TypeScript and Go sources, builds nothing
+func TestTheMetadataHeaderNameAgreesWithEveryOtherSideOfTheJoin(t *testing.T) {
+	t.Parallel()
+	root, err := contracts.RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	factory, err := os.ReadFile(root + "/cloudflare/src/gateway.ts")
+	if err != nil {
+		t.Fatalf("reading the factory's gateway proxy: %v", err)
+	}
+	if !strings.Contains(string(factory), `headers.set("`+MetadataHeader+`"`) {
+		t.Errorf("cloudflare/src/gateway.ts no longer stamps %q — the header this client tags its calls with has drifted", MetadataHeader)
+	}
+	pimeter, err := os.ReadFile(root + "/internal/exec/subprocess/pimeter.go")
+	if err != nil {
+		t.Fatalf("reading the metering join's extension writer: %v", err)
+	}
+	if !strings.Contains(string(pimeter), "metadataHeader = "+"\""+MetadataHeader+"\"") {
+		t.Errorf("internal/exec/subprocess/pimeter.go no longer names %q — the header this client tags its calls with has drifted", MetadataHeader)
+	}
+	trace, err := os.ReadFile(root + "/internal/gatewaytrace/trace.go")
+	if err != nil {
+		t.Fatalf("reading the trace reader: %v", err)
+	}
+	if !strings.Contains(string(trace), `metadataFilters("run_id"`) {
+		t.Errorf("internal/gatewaytrace/trace.go no longer filters the logs by run_id — the tag this client stamps has no reader")
 	}
 }
 

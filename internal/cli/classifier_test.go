@@ -2,9 +2,14 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/jev"
@@ -39,7 +44,7 @@ func TestRunEpicBuildsItsClassifierFromTheCredentialSource(t *testing.T) {
 
 	// No credential: no classifier — the run classifies nothing — and the
 	// note carries the whole degradation, not just "none".
-	classifier, note := classifierForRun()
+	classifier, note := classifierForRun("epic-hn6")
 	if classifier != nil {
 		t.Fatalf("an empty environment built a classifier: %v", classifier)
 	}
@@ -59,7 +64,7 @@ func TestRunEpicBuildsItsClassifierFromTheCredentialSource(t *testing.T) {
 			"factory_cloudflare_api_token=cf-token-placeholder\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	classifier, note = classifierForRun()
+	classifier, note = classifierForRun("epic-hn6")
 	if classifier == nil {
 		t.Fatalf("the stored Cloudflare credential built no classifier: %s", note)
 	}
@@ -74,12 +79,71 @@ func TestRunEpicBuildsItsClassifierFromTheCredentialSource(t *testing.T) {
 	// mean the process lives inside a run's model path.
 	t.Setenv(jev.GatewayBaseEnv, "https://factory.example.com/api/gateway")
 	t.Setenv(jev.GatewayTokenEnv, "tkr_run-scoped")
-	classifier, note = classifierForRun()
+	classifier, note = classifierForRun("epic-hn6")
 	if classifier == nil {
 		t.Fatalf("the sandbox's gateway route built no classifier: %s", note)
 	}
 	if !strings.Contains(note, "gateway route") || !strings.Contains(note, "run's gateway token") {
 		t.Errorf("the note does not say the classifier rides the run's gateway route: %q", note)
+	}
+}
+
+// The run's own classifier calls are TAGGED with the run id (tick 24u): the
+// classifier run-epic hands the reconciler stamps cf-aig-metadata with the
+// run id on every request, so the gateway's logs attribute the decisions
+// river's spend to the run — the same join dm2's metering makes for the
+// workers' calls — and the startup note says so beside the credential it
+// names. The proof is end to end: the real client, over a real round trip
+// against a stub of the Workers AI run endpoint, recording the header.
+//
+// short: resolves against a temp HOME; the one request goes to a loopback stub
+func TestRunEpicsClassifierTagsItsCallsWithTheRunID(t *testing.T) {
+	rc := isolateClassifierCredential(t)
+	if err := os.WriteFile(rc, []byte(
+		"factory_gateway_url=https://gateway.ai.cloudflare.com/v1/account-placeholder/gateway-placeholder\n"+
+			"factory_cloudflare_api_token=cf-token-placeholder\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var mu sync.Mutex
+	var metadata []string
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		metadata = append(metadata, r.Header.Get(jev.MetadataHeader))
+		mu.Unlock()
+		_, _ = io.Copy(io.Discard, r.Body)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"result": map[string]any{
+				"state": "Completed",
+				"result": map[string]any{
+					"model": "jev-1.13.0",
+					"answers": []any{map[string]any{
+						"id": "probe", "choice": "stated", "confidence": 1,
+						"probabilities": map[string]any{"stated": 1.0},
+					}},
+					"usage": map[string]any{"input_tokens": 10},
+				},
+			},
+			"success": true,
+		})
+	}))
+	t.Cleanup(stub.Close)
+	t.Setenv(jev.OperatorBaseEnv, stub.URL)
+
+	classifier, note := classifierForRun("epic-hn6")
+	if classifier == nil {
+		t.Fatalf("the stored Cloudflare credential built no classifier: %s", note)
+	}
+	if !strings.Contains(note, "epic-hn6") || !strings.Contains(note, "tagged") {
+		t.Errorf("the startup note does not say the run's calls are tagged: %q", note)
+	}
+	if _, err := classifier.Probe(context.Background()); err != nil {
+		t.Fatalf("the tagged probe did not answer: %v", err)
+	}
+	mu.Lock()
+	got := strings.Join(metadata, ";")
+	mu.Unlock()
+	if got != `{"run_id":"epic-hn6"}` {
+		t.Errorf("the run's classifier call carried cf-aig-metadata %q, want the run id exactly as the metering join stamps it", got)
 	}
 }
 
@@ -113,7 +177,7 @@ func TestLiveJevAnswers(t *testing.T) {
 	if os.Getenv("TICFAC_LIVE_JEV") == "" {
 		t.Skip("set TICFAC_LIVE_JEV=1 to ask the real Jev on Workers AI one tiny question")
 	}
-	classifier, note := classifierForRun()
+	classifier, note := classifierForRun("")
 	t.Logf("run-epic would say: %s", note)
 	detail, err := doctorClassifier(context.Background())
 	if err != nil {
