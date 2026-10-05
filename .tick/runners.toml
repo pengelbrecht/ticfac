@@ -49,7 +49,19 @@ effort = "high"
 # a pin can reach on every substrate, so a cell like the old one cannot come
 # back unnoticed.
 
-# The frontier-tier review at epic completion.
+# The frontier-tier review at epic completion — and, with [roles.closeout]
+# below, the deliberate LOCAL claude exception the operator blessed
+# (2026-10-04/05 decisions; tick j6o): local final reviews and close-outs
+# run on the claude CLI on purpose — the hn6 run was moved to a local run
+# for exactly that — so these cells name claude opus and
+# runners.local.toml deliberately declares no review or closeout cell to
+# overlay them away. The claude CLI is otherwise the local FRONTIER rung
+# only: implementation runs on pi-durable at base and every tier but
+# frontier, and the cloud overlays every cell here away
+# (runners.cloud.toml applies last; nothing in the cloud runs claude).
+# TestThisRepositorysLocalClaudeRoutingIsExactlyTheBlessedCells holds this
+# table: claude exactly here and on implement's frontier rung, pi or a
+# named refusal everywhere else, on every local substrate.
 [roles.review]
 kind = "claude"
 model = "opus"
@@ -72,6 +84,12 @@ kind = "claude"
 model = "opus"
 effort = "high"
 
+# Closeout shares the review cell's blessing (see [roles.review] above):
+# the operator wants local close-outs on claude opus too — the same
+# 2026-10-05 decision, recorded on tick j6o — and the cloud overlays this
+# cell away exactly as it overlays review's. A local override that moves
+# either cell off the claude CLI is a change to an operator decision, not
+# a config edit: take it to the operator.
 [roles.closeout]
 kind = "claude"
 model = "opus"
