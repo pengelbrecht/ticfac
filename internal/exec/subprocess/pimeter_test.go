@@ -90,14 +90,30 @@ func TestGatewayMeteringWritesTheOverrideTheReaderJoins(t *testing.T) {
 	if secret := regexp.MustCompile(`"(cfut|cf)_[A-Za-z0-9_-]{20,}"`).FindString(body); secret != "" {
 		t.Errorf("the override carries a credential value %s: the token is read at request time from ~/.ticfacrc, and a copy baked into per-attempt state is one nobody asked for", secret)
 	}
-	// The credential, resolved at request time: the SAME key the factory
-	// itself authenticates this exact route with, stamped as the gateway's
-	// own cf-aig-authorization header — pi's stored wallet key does not
-	// open the gateway (live: 401 code 2009) and cannot be displaced from
-	// Authorization by a provider override (live: pi sent it anyway), so the
-	// account token rides the header the gateway reads with priority.
+	// The gateway's own credential, resolved at request time: the SAME key
+	// the factory itself authenticates this exact route with, stamped as the
+	// gateway's cf-aig-authorization header — the header that OPENS the
+	// gateway (pi's stored wallet key does not, live: 401 code 2009). It is
+	// not, on its own, the credential the call authenticates upstream with:
+	// the gateway forwards the caller's Authorization to Workers AI (live,
+	// tick 648 probe e), which is why the next entry exists.
 	if !strings.Contains(body, `"cf-aig-authorization": "!grep '^factory_cloudflare_api_token=' `) {
 		t.Errorf("the override does not name the credential the gateway route authenticates:\n%s", body)
+	}
+	// The upstream credential, DISPLACED: the gateway forwards the
+	// caller's Authorization to Workers AI, which authenticates that header
+	// and not the gateway's own (live, tick 648 probe e: a valid
+	// cf-aig-authorization beside a bogus Authorization logs a failed row,
+	// upstream code 10000 Authentication error) — so a host whose pi
+	// stores a key Workers AI refuses turns every metered dispatch into a
+	// 401, exactly the dm2 host's state. A headers.Authorization entry in
+	// the override DOES displace pi's stored key (tick m4t, verified
+	// against a fake gateway — the drain test pins it end to end), so the
+	// SAME request-time account token rides both headers. Which credential
+	// pays is the operator's decision, stated by the ~/.ticfacrc key they
+	// configure: the account token the factory's own cloud runs ride.
+	if !strings.Contains(body, `"Authorization": "!grep '^factory_cloudflare_api_token=' `) {
+		t.Errorf("the override does not displace pi's stored key in Authorization:\n%s", body)
 	}
 	// The argv that loads it.
 	if args := metering.ExtensionArgs(path); len(args) != 2 || args[0] != "--extension" || args[1] != path {

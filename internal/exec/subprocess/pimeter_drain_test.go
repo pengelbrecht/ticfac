@@ -210,6 +210,17 @@ func TestPiDrainsTheGatewayStreamThroughTheMeteringOverride(t *testing.T) {
 	if got := header.Get(gatewayAuthHeader); got != "Bearer fake-account-token" {
 		t.Errorf("pi sent %s %q, want the ~/.ticfacrc token resolved at request time", gatewayAuthHeader, got)
 	}
+	// The displacement (tick m4t): the Authorization the request carries
+	// must be the override's account token, NOT the credential pi itself
+	// resolved (here the fake key in CLOUDFLARE_API_KEY the sealed pi
+	// reads) — the gateway forwards that header to Workers AI, and a key
+	// that is not valid upstream fails the call beside a valid
+	// cf-aig-authorization (live, tick 648 probe e: upstream code 10000).
+	// A metered dispatch that left pi's stored key in place would 401 on
+	// exactly the host this join exists for.
+	if got := header.Get("Authorization"); got != "Bearer fake-account-token" {
+		t.Errorf("pi sent Authorization %q, want the override's account token displacing the key pi resolved on its own (CLOUDFLARE_API_KEY=fake-workers-ai-key)", got)
+	}
 	if abandoned || !served {
 		t.Fatalf("pi left the stream before its tail (abandoned=%v, served=%v): the gateway writes no log row for a call whose stream is not drained, so this run's Workers AI spend would never meter", abandoned, served)
 	}

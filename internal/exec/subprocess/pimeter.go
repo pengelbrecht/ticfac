@@ -23,7 +23,7 @@ import (
 //
 // The join is made where the run launches the worker. pi's extension surface
 // can override a built-in provider's address and headers without touching its
-// models or its stored credential (pi's custom-provider docs: "When only
+// models or its credential store (pi's custom-provider docs: "When only
 // baseUrl and/or headers are provided (no models), all existing models for
 // that provider are preserved with the new endpoint"), and herdr passes the
 // agent's argv through verbatim — so the executor writes one small extension
@@ -45,9 +45,21 @@ import (
 //     prompt prefix stays cached instead of being re-billed at full price.
 //
 // The operator's Cloudflare API token is NOT written anywhere by this: the
-// provider's own stored credential (pi's auth for cloudflare-workers-ai)
-// keeps resolving exactly as it does without the override, and the gateway
-// accepts it for the Workers AI route the same way it accepts the factory's.
+// command below reads it from ~/.ticfacrc at request time, per request, and
+// pi's own credential STORE is left exactly as it resolved. But the request
+// itself is a different matter, and tick 648's live probe settled it: the
+// gateway FORWARDS the caller's Authorization header to Workers AI, which
+// authenticates THAT and not the gateway's own cf-aig-authorization (probe
+// e: a valid cf-aig-authorization beside a bogus Authorization logs a
+// failed row, upstream code 10000 Authentication error) — the same
+// displacement the factory's own proxy performs for a cloud run, where
+// gateway.ts stamps authorization over the sanitized caller headers with
+// the key it holds. So the override displaces pi's stored key in
+// Authorization with the account token too: a host whose pi stores a key
+// Workers AI refuses (the dm2 host's cfu_ wallet key) would otherwise turn
+// every metered dispatch into a 401. Which credential pays is the
+// operator's decision, and they state it with the ~/.ticfacrc key they
+// configure — the same account token the factory's cloud runs ride.
 //
 // NOTHING here is repository content: the extension file lives in the
 // executor's state directory, outside every checkout, because it names the
@@ -80,28 +92,52 @@ const metadataHeader = "cf-aig-metadata"
 
 // gatewayAuthHeader is the AI Gateway's own credential header — the one the
 // factory's proxy stamps from its own CLOUDFLARE_API_TOKEN and the one the
-// gateway honours over any plain Authorization the caller's harness sends
-// (live, tick dm2: a request carrying an unpermitted wallet key in
-// Authorization and the account token here answers 200).
+// gateway reads to decide the caller may route at all (live, tick dm2: a
+// request carrying an unpermitted wallet key in Authorization and the
+// account token here answered 200). It OPENS the gateway; it is not what
+// authenticates the call upstream. The gateway forwards the caller's plain
+// Authorization to Workers AI, which authenticates that header (live, tick
+// 648 probe e: a valid cf-aig-authorization beside a bogus Authorization
+// logs a failed row, upstream code 10000 Authentication error) — so the
+// override displaces pi's stored key in Authorization too, with the SAME
+// account token, the way the factory's proxy stamps its own key over the
+// caller's headers for a cloud run.
 const gatewayAuthHeader = "cf-aig-authorization"
+
+// upstreamAuthHeader is the plain Authorization the gateway forwards to
+// Workers AI untouched — the header whose credential the upstream
+// authenticates (and pays). pi's own stored key would ride it unmodified
+// without this entry (live, tick 648: the drain probe's pi sent the key it
+// resolved), so the override displaces it with the account token, the
+// credential the operator chose by configuring it.
+const upstreamAuthHeader = "Authorization"
 
 // gatewayCredentialCommand reads the operator's Cloudflare API token — the
 // factory_cloudflare_api_token key of ~/.ticfacrc, the SAME credential the
 // factory itself authenticates its own gateway traffic with — at request
 // time, through pi's `!command` config-value syntax (the whole value after
 // `!` runs in the shell, resolved once and cached), and stamps it as the
-// cf-aig-authorization header's Bearer value.
+// Bearer value of BOTH headers the join needs: cf-aig-authorization, which
+// opens the gateway, and Authorization, which the gateway forwards to
+// Workers AI.
 //
-// WHY THE OVERRIDE MUST SUPPLY A CREDENTIAL AT ALL: pi's own stored auth for
-// the cloudflare-workers-ai provider is the Workers AI wallet key (the cfu_…
-// token of the unified billing rung), which api.cloudflare.com accepts and
-// the GATEWAY refuses (live, tick dm2: 401 code 2009) — the gateway's
-// Workers AI route authenticates the account's Cloudflare token, exactly as
-// the factory's proxy stamps it. A provider-config apiKey override cannot
-// displace a stored credential (live: pi sent its own key anyway), so the
-// account token rides a HEADER the gateway reads with priority — and pi's
-// own credential is left exactly as it resolved, used or ignored by the
-// gateway as its docs say.
+// WHY THE OVERRIDE MUST SUPPLY A CREDENTIAL AT ALL, on both headers: pi's
+// own stored auth for the cloudflare-workers-ai provider is the Workers AI
+// wallet key (the cfu_… token of the unified billing rung), which the
+// GATEWAY refuses as its own credential (live, tick dm2: 401 code 2009) —
+// and Workers AI, reached through the gateway, still authenticates the
+// plain Authorization the gateway forwards, stored key or not (live, tick
+// 648 probe e: a bogus Authorization beside a valid cf-aig-authorization
+// fails with upstream code 10000). The earlier dm2 claim — that a
+// provider-config apiKey override cannot displace the stored credential,
+// that pi sends it anyway, and that the gateway then uses or ignores it as
+// its docs say — was wrong on both counts: a headers.Authorization entry in
+// the override DOES displace the stored key (verified against a fake
+// gateway, and pinned by the drain test), and the gateway does not ignore
+// it, it forwards it upstream. So the account token rides both headers,
+// and the stored key never reaches a request the operator did not choose
+// it for. Which credential pays upstream is the operator's decision, stated
+// by the ~/.ticfacrc key they configure.
 //
 // The command is resolved at REQUEST time and nothing is copied to disk: the
 // generated file names the KEY, never the token, and only on a host whose
@@ -176,6 +212,7 @@ func (m *GatewayMetering) WriteExtension(dir string) (string, error) {
 	body.WriteString("    baseUrl: " + jsonWord(base) + ",\n")
 	body.WriteString("    api: \"openai-completions\",\n")
 	body.WriteString("    headers: {\n")
+	body.WriteString("      " + jsonWord(upstreamAuthHeader) + ": " + jsonWord(gatewayCredentialCommand) + ",\n")
 	body.WriteString("      " + jsonWord(gatewayAuthHeader) + ": " + jsonWord(gatewayCredentialCommand) + ",\n")
 	body.WriteString("      " + jsonWord(metadataHeader) + ": " + jsonWord(string(metadata)) + ",\n")
 	body.WriteString("      " + jsonWord(affinityHeader) + ": " + jsonWord(m.RunID) + ",\n")
