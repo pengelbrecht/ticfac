@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 148,
-  "state": "dispatching",
-  "reason": "dispatching cni as attempt 25",
-  "updated_at": "2026-10-05T11:09:46Z",
+  "sequence": 149,
+  "state": "running",
+  "reason": "cni is running as attempt 25",
+  "updated_at": "2026-10-05T11:09:59Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -117,7 +117,8 @@
     },
     {
       "tick_id": "cni",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 25
     },
     {
       "tick_id": "hv3",
