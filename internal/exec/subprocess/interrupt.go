@@ -2,6 +2,8 @@ package subprocess
 
 import (
 	"sort"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -122,4 +124,13 @@ func descendantsOf(procs []Proc, root int) []int {
 	}
 	walk(root)
 	return out
+}
+
+// joinInts is pids for a sentence: "4211, 4230".
+func joinInts(ns []int) string {
+	parts := make([]string, len(ns))
+	for i, n := range ns {
+		parts[i] = strconv.Itoa(n)
+	}
+	return strings.Join(parts, ", ")
 }

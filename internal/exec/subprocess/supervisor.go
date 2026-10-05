@@ -284,14 +284,35 @@ func Supervise(stateDir string) error {
 					// steer that cannot be delivered falls back to the CLI runner's
 					// interrupt-and-re-prompt, and a runner with no door and no argv is
 					// nudged as observed-only, as before.
+					//
+					// A steer is read after the current tool round, and a HUNG
+					// tool's round never ends (tick l6n): so a runner with a tool
+					// still running at this look — quiet for the whole window, CPU
+					// included — has that tool interrupted once the steer is
+					// admitted, the way pi-durable's own abort ends one (interrupt.go).
+					// Its round then ends and the steer is the next thing it reads.
 					if record.SteerSock != "" {
 						watch.steers++
-						steerText := StuckPrompt(evidence+", and the supervisor steered you rather than stopping you", stuckAfter)
+						hung, herr := hungToolGroups(runnerPID)
+						if herr != nil {
+							note("the runner's tool processes could not be read (%v); steering without interrupting them", herr)
+						}
+						why := "the supervisor steered you rather than stopping you"
+						if len(hung) > 0 {
+							why = "the supervisor interrupted the command you were running so that you can read this, " +
+								"and steered you rather than stopping you"
+						}
+						steerText := StuckPrompt(evidence+", and "+why, stuckAfter)
 						if err := steerRunner(record.SteerSock, steerText, fmt.Sprintf("stuck-nudge-%d", watch.steers)); err == nil {
 							watch.state.StuckNudgedAt = time.Now()
-							observe(ObsHeartbeat, StuckNudgeDetail(fmt.Sprintf("the %s runner (pid %d) was steered in its own "+
-								"conversation, placed after the current tool round", record.Runner, runnerPID), evidence))
-							note("the runner appears stuck; steered it to commit and carry on (not stopped): %s", evidence)
+							how := fmt.Sprintf("the %s runner (pid %d) was steered in its own conversation, placed after "+
+								"the current tool round", record.Runner, runnerPID)
+							if killed := interruptToolGroups(runnerPID, hung); len(killed) > 0 {
+								how += fmt.Sprintf(", and its hung tool (process group(s) %s) was interrupted so that round ends",
+									joinInts(killed))
+							}
+							observe(ObsHeartbeat, StuckNudgeDetail(how, evidence))
+							note("the runner appears stuck; %s (not stopped): %s", how, evidence)
 							break
 						} else {
 							note("the steer could not be delivered (%v); falling back to interrupt and re-prompt", err)
