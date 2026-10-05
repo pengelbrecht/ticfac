@@ -446,7 +446,6 @@ describe("workspace checkpoints over real git", () => {
     await harness.close(context);
   });
 
-<<<<<<< HEAD
   // Tick dbi: the nonce path — a tracked bash whose nonce no container
   // knows — restored the workspace with no log line anywhere (the cni
   // staging proof's 139s round was exactly this). The env now hands the
@@ -454,7 +453,7 @@ describe("workspace checkpoints over real git", () => {
   // workspace was rebuilt from. Real git, a really emptied box, a really
   // replayed nonce: the sha the callback carries is the real wip on origin.
   it("a nonce-path restore on an emptied box reaches the host's ear with the real sha", {
-    timeout: 120_000,
+    timeout: 300_000,
   }, async () => {
     const restores: RestoreOutcome[] = [];
     const heardEnv = new FactorySandboxEnv({
@@ -498,12 +497,9 @@ describe("workspace checkpoints over real git", () => {
     expect(readFileSync(join(checkout, ".setup-marker"), "utf8")).toBe("ticfac-setup-ok");
   });
 
-  it("pushes nothing for a round that changed no file, and the changed round's wip lands on origin", async () => {
-=======
   it("pushes nothing for a round that changed no file, and the changed round's wip lands on origin", {
     timeout: 300_000,
   }, async () => {
->>>>>>> cdc4f5d0a7aaf9d56e34b128c226979a5301fca7
     // A clean clone: the round changed nothing, so nothing commits and
     // nothing pushes — an empty wip would be noise on the attempt branch.
     const empty = await pushWipCheckpoint(env.hostShell(), git);

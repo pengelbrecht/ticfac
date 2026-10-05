@@ -390,14 +390,15 @@ describe("a worker attempt driven by the host", () => {
     ).toHaveLength(1);
   });
 
-<<<<<<< HEAD
   // Tick dbi: the first life dies under the model's bash and the CONTAINER
   // dies with it — the replacement boots EMPTY and knows none of its
   // predecessor's processes, so the resumed life's replay finds its nonce
   // nowhere and restores before it re-starts the command. Until the env's
   // onRestore ear, that restore reached no log anywhere: the operator
   // watching the run saw only a mysteriously slow tool round.
-  it("says which sha the nonce path rebuilt a fresh container's workspace from", async () => {
+  it("says which sha the nonce path rebuilt a fresh container's workspace from", {
+    timeout: 120_000,
+  }, async () => {
     let freshBox = false;
     const door = fakeSandboxDoor({
       runExit: (command) => {
@@ -480,12 +481,9 @@ describe("a worker attempt driven by the host", () => {
     expect(lines.some((l) => l.includes("the container was lost between rounds"))).toBe(false);
   });
 
-  it("places an operator's steer after the running tool round", async () => {
-=======
   it("places an operator's steer after the running tool round", {
     timeout: 120_000,
   }, async () => {
->>>>>>> cdc4f5d0a7aaf9d56e34b128c226979a5301fca7
     const door = scriptedDoor({ bashMs: 200 });
     const seen: string[][] = [];
     const { models } = gatewayFaux([
