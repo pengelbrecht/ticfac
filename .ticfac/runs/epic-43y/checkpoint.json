@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 322,
-  "state": "publishing",
-  "reason": "closing lmt behind the integrated gate on f4da3736f145",
-  "updated_at": "2026-10-05T19:25:45Z",
+  "sequence": 323,
+  "state": "running",
+  "reason": "lmt is closed",
+  "updated_at": "2026-10-05T19:25:54Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -228,7 +228,7 @@
     },
     {
       "tick_id": "lmt",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 51
     },
     {
