@@ -203,7 +203,6 @@ func TestAResolveJobsReportIsNotMintedIntoTheMerge(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 // The base fold's mint is the hole #169's guard did not cover (ab0cdab4):
 // the resolve-conflict job of a conflicted fold starts from a tree that
 // still carries the integration branch's reports (the fold brings in what
@@ -211,8 +210,8 @@ func TestAResolveJobsReportIsNotMintedIntoTheMerge(t *testing.T) {
 // commits a report of its own on its branch. The merge minted from the
 // job's whole tree landed a REWRITTEN RESULT-hn6.md on epic/hn6 through
 // exactly this path, after the reports guard was already on the branch.
-// The mint keeps every report as the epic head the job resolved against
-// has it (report_merge.go).
+// The mint drops every report, the integration branch's included, like
+// every merge into it (report_merge.go).
 //
 // short: one small git repository, one conflicted tree and one mint, no harness, no runner
 func TestTheBaseFoldMintKeepsTheResolveJobsReportOut(t *testing.T) {
@@ -251,9 +250,8 @@ func TestTheBaseFoldMintKeepsTheResolveJobsReportOut(t *testing.T) {
 	if paths["RESULT-bf.md"] {
 		t.Errorf("the resolve job's report was minted into the base-fold merge")
 	}
-	got, _ := showAt(dir, merged, "RESULT-t1.md")
-	if got != "the integration branch's report\n" {
-		t.Errorf("the integration branch's report was rewritten by the base-fold mint: %q", got)
+	if paths["RESULT-t1.md"] {
+		t.Errorf("the integration branch's report survived the base-fold mint")
 	}
 	code, _ := showAt(dir, merged, "shared.txt")
 	if code != "main and side\n" {
@@ -261,7 +259,9 @@ func TestTheBaseFoldMintKeepsTheResolveJobsReportOut(t *testing.T) {
 	}
 	if !paths["work.txt"] {
 		t.Errorf("the base branch's work did not reach the minted fold")
-=======
+	}
+}
+
 // obk: 06t's commit removed the seven reports epic/hn6 carried, and the
 // integration merge of that commit restored all seven, because each report
 // was kept "as the integration branch has it". A removal the incoming side
@@ -316,7 +316,6 @@ func TestAReportAlreadyOnTheBranchLeavesWithTheNextMerge(t *testing.T) {
 	}
 	if !paths["work.txt"] || !paths["README.md"] {
 		t.Errorf("the merge lost work: %v", paths)
->>>>>>> 382cffa2908ec5c27dc8689b5c386aca211858dc
 	}
 }
 

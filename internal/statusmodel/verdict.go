@@ -67,6 +67,7 @@ func buildHealth(feed []runfeed.Event) Health {
 			h.WallClocksFired++
 		}
 	}
+	h.Pushes, h.PeakPushesPerMinute, h.GitHubErrors = PushHealth(feed)
 	return h
 }
 

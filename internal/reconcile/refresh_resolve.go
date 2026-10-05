@@ -381,13 +381,12 @@ func (r *Reconciler) mintBaseFold(resolveHead, baseHead string, marker attemptHa
 			"is not a fold, whatever the commit says", path)
 	}
 	// The job's container commits its own report on its branch, and the
-	// conflicted fold its worktree starts from still carries the integration
-	// branch's reports (the fold brings in what the BASE has; it is the epic
-	// side that has them): the tree is minted with every report as the epic
-	// head the job resolved against has it (report_merge.go). ab0cdab4
-	// rewrote RESULT-hn6.md on epic/hn6 through exactly this path, after the
-	// reports guard was already on the branch.
-	tree, err := r.treeWithoutReports(resolveHead, epicHead)
+	// conflicted fold its worktree starts from may still carry reports an
+	// older merge left on the integration branch: the tree is minted with no
+	// report in it, like every merge into the integration branch
+	// (report_merge.go). ab0cdab4 rewrote RESULT-hn6.md on epic/hn6 through
+	// exactly this path, after the reports guard was already on the branch.
+	tree, err := r.treeWithoutReports(resolveHead)
 	if err != nil {
 		return "", err
 	}

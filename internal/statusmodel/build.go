@@ -607,33 +607,6 @@ func buildWorkers(src Sources, recs Records) *[]Worker {
 	return &workers
 }
 
-<<<<<<< HEAD
-// buildGates carries the epic's gate evidence per check per head, merged
-// per tick across runs — keyed by the SOURCE the check ran on, the rule the
-// gate's own evidence learned the hard way (a run writes .ticfac/ to the
-// branch it gates).
-=======
-// buildHealth counts the run's own typed statements about its health — the
-// remote retries, the interventions it resumed by itself, the stall
-// warnings, the wall clock firings. Counts of lines, never parses of prose.
-func buildHealth(feed []runfeed.Event) Health {
-	h := Health{}
-	for _, e := range feed {
-		switch e.Stage {
-		case reconcile.StageRemoteRetried:
-			h.RemoteRetries++
-		case reconcile.StageResumedAutomatically:
-			h.Interventions++
-		case reconcile.StageStallWarned:
-			h.StallWarnings++
-		case reconcile.StageWallClock:
-			h.WallClocksFired++
-		}
-	}
-	h.Pushes, h.PeakPushesPerMinute, h.GitHubErrors = PushHealth(feed)
-	return h
-}
-
 // PushHealth counts a run's pushes, its peak pushes in any sixty seconds and
 // its GitHub errors by class, from the typed lines the push queue and the
 // remote runners wrote (tick rlp). A line whose time does not parse counts
@@ -673,10 +646,10 @@ func PushHealth(feed []runfeed.Event) (pushes, peak int, errs GitHubErrors) {
 	return pushes, peak, errs
 }
 
-// buildGates carries the run's gate evidence per check per head, keyed by the
-// SOURCE the check ran on — the rule the gate's own evidence learned the
-// hard way (a run writes .ticfac/ to the branch it gates).
->>>>>>> 382cffa2908ec5c27dc8689b5c386aca211858dc
+// buildGates carries the epic's gate evidence per check per head, merged
+// per tick across runs — keyed by the SOURCE the check ran on, the rule the
+// gate's own evidence learned the hard way (a run writes .ticfac/ to the
+// branch it gates).
 func buildGates(evidence []runstate.Evidence) []Gate {
 	gates := []Gate{}
 	for _, e := range evidence {

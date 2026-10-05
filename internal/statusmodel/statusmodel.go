@@ -574,12 +574,20 @@ type Attention Wait
 // answer itself — a word a person reads, grown by its own wave-2 tick from
 // the counts and the run's own words.
 type Health struct {
-<<<<<<< HEAD
-	RemoteRetries   int           `json:"remote_retries"`
-	Interventions   int           `json:"interventions"`
-	StallWarnings   int           `json:"stall_warnings"`
-	WallClocksFired int           `json:"wall_clocks_fired"`
-	Verdict         HealthVerdict `json:"verdict"`
+	RemoteRetries   int `json:"remote_retries"`
+	Interventions   int `json:"interventions"`
+	StallWarnings   int `json:"stall_warnings"`
+	WallClocksFired int `json:"wall_clocks_fired"`
+	// Pushes is the run's pushes to its hosted repository, counted from the
+	// push queue's pushed lines, and PeakPushesPerMinute the most of
+	// them in any sixty seconds — the number GitHub's six-a-minute guidance
+	// is about (tick rlp).
+	Pushes              int `json:"pushes"`
+	PeakPushesPerMinute int `json:"peak_pushes_per_minute"`
+	// GitHubErrors is the run's failed remote attempts by class, from its
+	// github_error_<class> lines.
+	GitHubErrors GitHubErrors  `json:"github_errors"`
+	Verdict      HealthVerdict `json:"verdict"`
 }
 
 // HealthVerdict is the headline: a state a person reads, the one-line why
@@ -599,20 +607,6 @@ type Recovery struct {
 	What    string `json:"what"`
 	Count   int    `json:"count"`
 	Seconds *int64 `json:"seconds"`
-=======
-	RemoteRetries   int `json:"remote_retries"`
-	Interventions   int `json:"interventions"`
-	StallWarnings   int `json:"stall_warnings"`
-	WallClocksFired int `json:"wall_clocks_fired"`
-	// Pushes is the run's pushes to its hosted repository, counted from the
-	// push queue's pushed lines, and PeakPushesPerMinute the most of
-	// them in any sixty seconds — the number GitHub's six-a-minute guidance
-	// is about (tick rlp).
-	Pushes              int `json:"pushes"`
-	PeakPushesPerMinute int `json:"peak_pushes_per_minute"`
-	// GitHubErrors is the run's failed remote attempts by class, from its
-	// github_error_<class> lines.
-	GitHubErrors GitHubErrors `json:"github_errors"`
 }
 
 // GitHubErrors counts a run's GitHub errors by class (runstate.GitHubErrorClasses).
@@ -644,7 +638,6 @@ func (g GitHubErrors) Classes() []ClassCount {
 type ClassCount struct {
 	Class string
 	N     int
->>>>>>> 382cffa2908ec5c27dc8689b5c386aca211858dc
 }
 
 // Gate is one gate evidence record, per check per head, exactly as the run
