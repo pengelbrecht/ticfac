@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "cg4",
   "attempt": 25,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T14:24:40Z",
+  "triaged_at": "2026-10-05T14:24:52Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing tnm",
+  "promoted_as": "tnm",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "cg4",
