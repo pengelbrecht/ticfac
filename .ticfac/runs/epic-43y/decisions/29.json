@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 29,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "On this loaded host, full `pnpm test` runs in harness/ failed three different tests across three runs — gateway-provider 'sends every request to the run's gateway route…', node/local-host 'serves the live conversation to a watcher…', node/workspace-checkpoints 'runs the host shell's git at the env's checkout…' — each passed on an immediate re-run, and none of their files is touched by this diff. The failure moves between files per run, the classic CPU-contention shape this repository files as a defect rather than re-running forever. Reproduce deterministically (or under synthetic contention) before changing anything; do not raise timeouts to make it pass.\nevidence: harness/test/gateway-provider.test.ts, harness/test/node/local-host.test.ts, harness/test/node/workspace-checkpoints.test.ts — observed failing once each across `pnpm test` runs on this host, passing on re-run\n\nticfac run epic-43y created this tick by absorbing the finding db4c8f086a2b624bd50767531565163788586747e68e1d81122489d7ba8aa550 (reported by run-epic-43y/tick-i3h/attempt-18): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/db4c8f086a2b624bd50767531565163788586747e68e1d81122489d7ba8aa550.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "hv3",
+    "title": "Harness node-suite tests flake under host load (flaky-means-bug rule)"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.98,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0,
+      "design": 0,
+      "diagnosis": 0.99,
+      "mechanical": 0,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1411,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T11:31:23Z",
+  "answered_at": "2026-10-05T11:31:23Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "hv3",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "bafcf3fd496e0b89a760469c286667fa877891d1",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
