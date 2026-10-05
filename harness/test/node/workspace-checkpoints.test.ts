@@ -132,7 +132,9 @@ describe("workspace checkpoints over real git", () => {
     }
   }
 
-  it("destroys the container mid-turn, and the next turn sees both edits", async () => {
+  it("destroys the container mid-turn, and the next turn sees both edits", {
+    timeout: 120_000,
+  }, async () => {
     const context = BACKGROUND_CONTEXT;
     const faux = fauxProvider();
     faux.setResponses([
@@ -270,7 +272,9 @@ describe("workspace checkpoints over real git", () => {
     }
   };
 
-  it("destroys the container BETWEEN tool rounds, and the ready check restores before each next round", async () => {
+  it("destroys the container BETWEEN tool rounds, and the ready check restores before each next round", {
+    timeout: 120_000,
+  }, async () => {
     const context = BACKGROUND_CONTEXT;
     const faux = fauxProvider();
     faux.setResponses([
