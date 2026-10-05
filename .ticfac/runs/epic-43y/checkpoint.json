@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 203,
-  "state": "running",
-  "reason": "hv3 is closed",
-  "updated_at": "2026-10-05T14:48:25Z",
+  "sequence": 204,
+  "state": "dispatching",
+  "reason": "dispatching kkt as attempt 33",
+  "updated_at": "2026-10-05T14:48:37Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -165,6 +165,10 @@
     },
     {
       "tick_id": "dbi",
+      "state": "ready"
+    },
+    {
+      "tick_id": "fim",
       "state": "ready"
     }
   ],
