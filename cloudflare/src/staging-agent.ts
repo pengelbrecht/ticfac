@@ -25,17 +25,20 @@
  * - `GET  /proof/state?name=` / `GET /proof/log?name=&offset=`;
  * - `POST /proof/steer?name=` `{text}`; `GET /proof/watch?name=` (WebSocket);
  * - `POST /proof/reclaim?name=`;
- * - `POST /proof/exec?name=` `{command}` — one short command in the
+ * - `POST /proof/exec?name=&tick=` `{command}` — one short command in the
  *   attempt's container, for the evidence (the branch the finish pushed);
- * - `POST /proof/destroy?name=` — the attempt's container destroyed, so a
- *   proof can rehearse a loss the platform would otherwise not offer.
+ * - `POST /proof/destroy?name=&tick=` — the attempt's container destroyed, so
+ *   a proof can rehearse a loss the platform would otherwise not offer.
+ *
+ * `tick` names the attempt's tick (default `xd3`); exec and destroy need the
+ * one the start was given, because the container's name carries it.
  */
 
 import { getRun, insertRun } from "./db";
 import { FactorySandbox, type FactorySandboxNamespace } from "./factory-sandbox";
 import type { ProxyOptions } from "./gateway";
 import { issueWorkerRunToken } from "./gateway";
-import { DO_V1, recordRunSubstrate, runIDOfSandboxName } from "./run-substrate";
+import { DO_V1, recordRunSubstrate } from "./run-substrate";
 import { bindingUpstream, type StagingGatewayEnv } from "./staging-gateway";
 import { WorkerAgent as BaseWorkerAgent, type WorkerAgentNamespace } from "./worker-agent";
 
@@ -66,11 +69,17 @@ function sameToken(a: string, b: string): boolean {
  * the WorkerAgent finds its door by the substrate row of the run PARSED from
  * that name (runIDOfSandboxName), so a name that does not parse back to the
  * run whose row this Worker wrote is routed to the sdk0 door staging does
- * not bind. The run id carries no dash, so the parse is exact.
+ * not bind. The run id carries no dash, so the parse is exact; the tick is
+ * the attempt's (`proofTick`), so the container reads as the production one.
  */
-export function proofAttempt(name: string): { runId: string; sandbox: string } {
+export function proofAttempt(name: string, tick = "xd3"): { runId: string; sandbox: string } {
   const runId = `run_proof_${name.replaceAll("-", "_")}`;
-  return { runId, sandbox: `${runId}-xd3-1` };
+  return { runId, sandbox: `${runId}-${tick}-1` };
+}
+
+/** The tick a proof request names, or `xd3` when it names none it may. */
+export function proofTick(value: unknown): string {
+  return typeof value === "string" && /^[a-z0-9]{1,16}$/.test(value) ? value : "xd3";
 }
 
 async function body(request: Request): Promise<Record<string, unknown>> {
@@ -107,13 +116,8 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
       if (prompt.trim() === "") return new Response("a prompt", { status: 400 });
       const model =
         typeof input.model === "string" ? input.model : "workers-ai/@cf/zai-org/glm-5.3";
-<<<<<<< HEAD
-      const { runId, sandbox } = proofAttempt(name);
-=======
-      const tick =
-        typeof input.tick === "string" && /^[a-z0-9]{1,16}$/.test(input.tick) ? input.tick : "xd3";
-      const runId = `run_proof_${name.replaceAll("-", "_")}`;
->>>>>>> 634436bf17caffaa707509f7903d42bf1c2e7ea0
+      const tick = proofTick(input.tick);
+      const { runId, sandbox } = proofAttempt(name, tick);
       if ((await getRun(env.DB, runId)) === null) {
         await insertRun(env.DB, {
           run_id: runId,
@@ -132,23 +136,15 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
         // the durable_object policy): the run is on `do_v1`, and the
         // attempt's door routes there (tick hxd — before it, every run was
         // hosted whose record said do_v1, so a row nobody read was free to
-        // be missing; now the row is what the door is keyed on). Two keys:
-        // the run id the token carries, and the one the agent DERIVES from
-        // the sandbox name (`runIDOfSandboxName` cuts at the first dash, so
-        // `proof-cni-x` reads `proof` — a staging name does not round-trip
-        // to `run_proof_…`, and the row must exist under both).
+        // be missing; now the row is what the door is keyed on). The
+        // container's name parses back to this run id (proofAttempt), so
+        // the one row is the one the agent derives.
         await recordRunSubstrate(env.DB, runId, DO_V1);
-        await recordRunSubstrate(env.DB, runIDOfSandboxName(name), DO_V1);
       }
       const issued = await issueWorkerRunToken(env, { run_id: runId, tick_id: tick, attempt: 1 });
       const state = await agent.start({
-<<<<<<< HEAD
         name: sandbox,
-        tick: "xd3",
-=======
-        name,
         tick,
->>>>>>> 634436bf17caffaa707509f7903d42bf1c2e7ea0
         role: "implement-tick",
         env: {
           TICKS_TICK: tick,
@@ -182,14 +178,16 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
     case "exec": {
       const input = await body(request);
       const command = typeof input.command === "string" ? input.command : "";
-      const stub = sandboxes.get(sandboxes.idFromName(proofAttempt(name).sandbox));
+      const { sandbox } = proofAttempt(name, proofTick(url.searchParams.get("tick")));
+      const stub = sandboxes.get(sandboxes.idFromName(sandbox));
       return Response.json(await stub.run(command, {}, { readyWaitMs: 5_000 }));
     }
     case "destroy": {
       if (request.method !== "POST") return new Response("POST", { status: 405 });
-      const stub = sandboxes.get(sandboxes.idFromName(name));
+      const { sandbox } = proofAttempt(name, proofTick(url.searchParams.get("tick")));
+      const stub = sandboxes.get(sandboxes.idFromName(sandbox));
       await stub.destroy();
-      return Response.json({ destroyed: name });
+      return Response.json({ destroyed: sandbox });
     }
     default:
       return new Response("not found", { status: 404 });

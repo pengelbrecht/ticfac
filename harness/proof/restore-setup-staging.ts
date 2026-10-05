@@ -70,7 +70,12 @@ async function call(verb: string, init: RequestInit = {}, query = ""): Promise<u
 async function exec(
   command: string,
 ): Promise<{ ready: boolean; exitCode?: number; output?: string }> {
-  return (await call("exec", { method: "POST", body: JSON.stringify({ command }) })) as {
+  // The container's name carries the tick (src/staging-agent.ts proofAttempt).
+  return (await call(
+    "exec",
+    { method: "POST", body: JSON.stringify({ command }) },
+    `&tick=${tick}`,
+  )) as {
     ready: boolean;
     exitCode?: number;
     output?: string;

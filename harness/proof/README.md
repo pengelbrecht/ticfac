@@ -165,7 +165,6 @@ deploy finished, with no restart observable in its log), a harness killed
 mid-tool, a container destroyed mid-turn — epic 43y's [A2], tick jhp's proof
 runs.
 
-<<<<<<< HEAD
 # Staging proof: the fault claims of epic 43y's [A2] (tick jhp)
 
 `agent-faults-staging.ts` drives the same staging agent Worker as
@@ -216,7 +215,8 @@ What the first staging start FOUND, fixed in this tick with a test
 reads its run's substrate row by the run id it parses from the container
 name, and the staging Worker passed the bare proof name — so every start
 fell to the sdk0 door staging does not bind ("binds no container
-namespace"). The staging Worker now names the container `<run>-xd3-1`.
+namespace"). The staging Worker now names the container `<run>-<tick>-1`
+(the tick a start names, `xd3` by default).
 
 A first full pass (before the resume line existed) also held every claim,
 but its log could not tell a resumed host from one that never died; the
@@ -225,7 +225,7 @@ host now logs the resume (`harness/src/host/worker-attempt.ts`, pinned in
 
 The staging Worker, its D1 database and its container application were
 deleted after the proof.
-=======
+
 # Staging proof: the restore's setup survives a real dependency install (tick cni)
 
 `restore-setup-staging.ts` proves the one long line of the restore — the
@@ -256,8 +256,9 @@ Two questions, both observed on the staging agent Worker:
 ## Running it
 
 The staging agent Worker deployed as the xd3 proof above (its `--setup`
-entry, its `tick` parameter and its `destroy` route are this tick's), then
-from `harness/`:
+entry, its `tick` parameter and its `destroy` route are this tick's — exec
+and destroy take the same `tick` as the start, because the container's name
+`<run>-<tick>-1` carries it), then from `harness/`:
 
 ```bash
 PROOF_URL=https://ticfac-staging-agent.<subdomain>.workers.dev PROOF_TOKEN=<the token> \
@@ -300,4 +301,3 @@ prints past its bound — that one it REFUSES by design: the bounding `head -c`
 SIGPIPEs the writer, which is why the restore's setup no longer rides it.
 
 The staging Worker and its D1 database were deleted after the proof.
->>>>>>> 634436bf17caffaa707509f7903d42bf1c2e7ea0
