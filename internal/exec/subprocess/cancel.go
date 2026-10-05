@@ -229,6 +229,14 @@ func (e *Executor) awaitOwnSettlement(st *store, grace time.Duration) bool {
 // stopTree stops everything this attempt started, and says whether there was
 // anything to stop.
 //
+// The runner's detached tool groups are interrupted FIRST, while the runner's
+// descendants are still its to name (tick ug0): pi-durable's environment
+// spawns every bash tool `detached`, in a group of its own, so a group
+// signal to the runner's group ends the runner and leaves those tools
+// running — orphaned, holding the runner's inherited lock fd — and once the
+// runner is stopped they are nobody's children and no stop can find them
+// again.
+//
 // It signals only what the attempt's own locks prove is its own (tick rmc).
 // It used to signal every saved pid that kill(pid, 0) called alive, and a
 // saved pid of a dead attempt is, on a busy host, soon somebody else's: a
@@ -237,6 +245,7 @@ func (e *Executor) awaitOwnSettlement(st *store, grace time.Duration) bool {
 // cannot be read proves nothing, and so stops nothing.
 func (e *Executor) stopTree(st *store) bool {
 	if st.byLock() {
+		e.interruptDetachedTools(st)
 		stopped, _ := stopProven(st, stopTree)
 		return stopped
 	}
@@ -250,6 +259,34 @@ func (e *Executor) stopTree(st *store) bool {
 		}
 	}
 	return stopped
+}
+
+// interruptDetachedTools kills the detached tool process groups under every
+// live runner this attempt has. A held runner lock names a live process this
+// attempt started — or a descendant holding the fd the runner was handed —
+// so the groups interrupted here are groups it proves are its own, the same
+// proof stopProven signals on (tick rmc). A nudged runner is a new process
+// with a lock of its own, so an attempt can hold more than one runner lock;
+// a lock whose holder has no detached descendants names nothing, and a table
+// that cannot be read stops nothing — the caller's own liveness read reports
+// whatever it could not reach.
+func (e *Executor) interruptDetachedTools(st *store) {
+	live, err := st.liveLocks()
+	if err != nil {
+		return
+	}
+	for _, lock := range live {
+		if lock.kind != lockRunner {
+			continue
+		}
+		pid := lock.pid()
+		if pid <= 0 {
+			continue
+		}
+		if hung, err := hungToolGroups(pid); err == nil {
+			interruptToolGroups(pid, hung)
+		}
+	}
 }
 
 func mustJSON(value any) []byte {
