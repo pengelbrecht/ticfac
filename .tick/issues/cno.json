@@ -1,0 +1,14 @@
+{
+  "id": "cno",
+  "title": "Tracker-closed tick reads live '●review' when an older run is the subject",
+  "description": "mergedRuns.stateOf prefers any run's non-ready row over the tracker, and treats the subject run as the newest. When the subject is an older, ended run (here the stopped cloud run run_08f5 that `epic-hn6` resolves to from a checkout without the local feed), its stale 'dispatched' row for v16 wins over the tracker's closed status and over a later run that closed it. The table shows 'v16 review hn6 claim ▸ ●review ▸ … 21h23m'. A row from a run that has ended should not override a tracker-closed tick.\nevidence: internal/statusmodel/epic.go:170-178; ticfac status epic-hn6 --json -\u003e v16 state dispatched while .tick/issues/v16.json on epic/hn6 is closed\n\nticfac run epic-hn6 created this tick by absorbing the finding dcbc3a68290022cd9fef9081e5979a28fd8fad730777a8aaf9c89edceffed47a (reported by run-epic-hn6/tick-435/attempt-22): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/dcbc3a68290022cd9fef9081e5979a28fd8fad730777a8aaf9c89edceffed47a.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-435/attempt-22",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T13:10:14Z",
+  "updated_at": "2026-10-05T13:10:14Z"
+}
