@@ -58,6 +58,19 @@ function sameToken(a: string, b: string): boolean {
   return diff === 0;
 }
 
+/**
+ * The run and the container a proof attempt named `name` runs under. The
+ * container name is `<run>-<tick>-<n>`, the production shape: since tick hxd
+ * the WorkerAgent finds its door by the substrate row of the run PARSED from
+ * that name (runIDOfSandboxName), so a name that does not parse back to the
+ * run whose row this Worker wrote is routed to the sdk0 door staging does
+ * not bind. The run id carries no dash, so the parse is exact.
+ */
+export function proofAttempt(name: string): { runId: string; sandbox: string } {
+  const runId = `run_proof_${name.replaceAll("-", "_")}`;
+  return { runId, sandbox: `${runId}-xd3-1` };
+}
+
 async function body(request: Request): Promise<Record<string, unknown>> {
   try {
     const parsed = (await request.json()) as unknown;
@@ -92,7 +105,7 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
       if (prompt.trim() === "") return new Response("a prompt", { status: 400 });
       const model =
         typeof input.model === "string" ? input.model : "workers-ai/@cf/zai-org/glm-5.3";
-      const runId = `run_proof_${name.replaceAll("-", "_")}`;
+      const { runId, sandbox } = proofAttempt(name);
       if ((await getRun(env.DB, runId)) === null) {
         await insertRun(env.DB, {
           run_id: runId,
@@ -116,7 +129,7 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
       }
       const issued = await issueWorkerRunToken(env, { run_id: runId, tick_id: "xd3", attempt: 1 });
       const state = await agent.start({
-        name,
+        name: sandbox,
         tick: "xd3",
         role: "implement-tick",
         env: {
@@ -151,7 +164,7 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
     case "exec": {
       const input = await body(request);
       const command = typeof input.command === "string" ? input.command : "";
-      const stub = sandboxes.get(sandboxes.idFromName(name));
+      const stub = sandboxes.get(sandboxes.idFromName(proofAttempt(name).sandbox));
       return Response.json(await stub.run(command, {}, { readyWaitMs: 5_000 }));
     }
     default:

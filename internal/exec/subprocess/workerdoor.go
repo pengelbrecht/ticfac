@@ -53,8 +53,8 @@ func (d WorkerDoor) Listening() bool {
 }
 
 // ErrNoDurableWorker is a door that exists but has no conversation behind
-// it: the attempt runs a CLI runner (claude, codex, the pi CLI), whose
-// session lives inside a process nobody can talk to.
+// it: the attempt runs a CLI runner (claude, codex), whose session lives
+// inside a process nobody can talk to.
 var ErrNoDurableWorker = errors.New("not a pi-durable worker")
 
 // FindWorkerDoor finds one attempt's door under the run's state root:

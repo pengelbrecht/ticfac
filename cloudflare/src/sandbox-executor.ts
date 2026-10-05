@@ -850,8 +850,8 @@ async function startHostedAttempt(
       // dispatch's profile named for the container its tools run in, so a
       // handle echoing that name would say the container's harness ran the
       // attempt — the same lie the cross-check on the client exists to
-      // keep out of a record every trace reads. The container env keeps
-      // carrying the dispatch's harness until jhp deletes the CLI path;
+      // keep out of a record every trace reads. The container env carries
+      // the hosted kind too since jhp deleted the CLI path (hostedBoot);
       // the client accepts exactly this one mismatch (workerAgentHarness).
       harness: WORKER_AGENT_HARNESS,
       // No one container process is the attempt: its boot, its tools and its
@@ -871,7 +871,7 @@ async function startHostedAttempt(
     const runningModel =
       recorded !== null && recorded.trim() !== "" ? recorded : (state.model ?? "");
     if (runningModel.trim() === "") throw new AdoptionModelUnknownError(spec);
-    const boot = await deps.boot(spec);
+    const boot = hostedBoot(await deps.boot(spec));
     return {
       handle: handleOf(
         boot,
@@ -882,7 +882,7 @@ async function startHostedAttempt(
     };
   }
 
-  const boot = await deps.boot(spec);
+  const boot = hostedBoot(await deps.boot(spec));
   // Recorded BEFORE the agent is started, as a container boot is: an agent
   // can never hold an attempt with no durable record of what it was booted on.
   await deps.boots.record({
@@ -934,6 +934,18 @@ async function startHostedAttempt(
  */
 function bootedModel(boot: WorkerBootInput): string {
   return workerBootEnv(boot).TICKS_MODEL ?? "";
+}
+
+/**
+ * A hosted attempt's container boot (epic 43y, tick jhp): the dispatch's own
+ * inputs, told the HOSTED kind whatever harness the dispatch's profile named.
+ * The container runs only the `--boot`/`--finish` halves — the conversation
+ * is the WorkerAgent's — and the image ships no pi CLI and refuses `pi` at
+ * boot, so a client whose profiles still say runner `pi` (or any CLI) must
+ * not reach the boot env, or the attempt dies at its own boot.
+ */
+function hostedBoot(boot: WorkerBootInput): WorkerBootInput {
+  return { ...boot, harness: WORKER_AGENT_HARNESS };
 }
 
 /**

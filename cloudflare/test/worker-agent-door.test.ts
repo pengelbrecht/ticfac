@@ -221,7 +221,7 @@ function startBody(overrides: Record<string, unknown> = {}): Record<string, unkn
     title: "Cloud host: a WorkerAgent DO per attempt",
     base_sha: BASE_SHA,
     model: MODEL,
-    harness: "pi",
+    harness: "pi-durable",
     prompt: PROMPT,
     ...overrides,
   };
@@ -312,6 +312,23 @@ describe("the start route on a run whose workers are WorkerAgents", () => {
     // The attempt's container is the agent's to boot; the door asked none.
     expect(sandboxes.addressed).toEqual([]);
     expect(sandboxesV1.addressed).toEqual([]);
+  });
+
+  it("boots the container's halves on the hosted kind whatever harness the dispatch named (tick jhp)", async () => {
+    // The pi CLI is deleted from the image, and the container's kind set
+    // refuses `pi`: a dispatch from a client whose profiles still say
+    // runner "pi" (or any CLI) must not reach the boot env, or the hosted
+    // attempt dies at its own --boot. The container runs only the hosted
+    // halves, so it is told the hosted kind.
+    for (const [attempt, harness] of [
+      [1, "pi"],
+      [2, "omp"],
+    ] as const) {
+      const response = await postStart(startBody({ attempt, harness }));
+      expect(response.status).toBe(201);
+      const spec = agentOf(attempt).started[0]!;
+      expect(spec.env.TICKS_HARNESS).toBe(WORKER_AGENT_HARNESS);
+    }
   });
 
   it("adopts an attempt its agent already holds: one start, the recorded model", async () => {

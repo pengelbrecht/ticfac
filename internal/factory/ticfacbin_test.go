@@ -133,7 +133,7 @@ func TestSetSandboxTicfacPinsTeachesTheDockerfileToInstallTicfac(t *testing.T) {
 	if pins < base {
 		t.Errorf("the ticfac pins are in the version block at the top, where they bust every RUN's cache")
 	}
-	for _, other := range []string{"ARG TK_VERSION=", "ARG GO_VERSION=", "ARG PI_VERSION="} {
+	for _, other := range []string{"ARG TK_VERSION=", "ARG GO_VERSION="} {
 		if i := strings.Index(got, other); i > pins {
 			t.Errorf("%s is below the ticfac pins", other)
 		}

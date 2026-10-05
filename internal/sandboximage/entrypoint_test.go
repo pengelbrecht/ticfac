@@ -4,16 +4,15 @@ package sandboximage
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
-	"time"
 )
 
 const (
@@ -156,7 +155,8 @@ exit "${TICKS_TEST_HARNESS_EXIT:-0}"
 `
 	writeStub(t, filepath.Join(binDir, "omp"), harness)
 	writeStub(t, filepath.Join(binDir, "claude"), harness)
-	writeStub(t, filepath.Join(binDir, "pi"), harness)
+	// The pi CLI harness is deleted (epic 43y, tick jhp): no stub for it and
+	// no case in the scripts that could launch one.
 	// The version manager and the toolchains it decides about are stubbed so
 	// the provisioning decision is deterministic, not a property of the host.
 	mise := filepath.Join(root, "mise-record")
@@ -374,6 +374,17 @@ func (f *fixture) ticfacCalls() string {
 	return string(b)
 }
 
+// mustNotBeEmpty reads a record file the caller has already confirmed exists,
+// for the error message of an assertion that it should not.
+func mustNotBeEmpty(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading %s: %v", path, err)
+	}
+	return string(b)
+}
+
 // harnessProbeCalls returns what the harness stub saw on the pre-flight
 // round-trip, empty when the entrypoint never probed the harness.
 func (f *fixture) harnessProbeCalls() string {
@@ -385,19 +396,8 @@ func (f *fixture) harnessProbeCalls() string {
 	return string(b)
 }
 
-// ompProviderConfig returns the provider file the entrypoint wrote for omp,
-// empty when it wrote none.
-// piProviderConfig returns the models.json the entrypoint wrote for pi, empty
-// when it wrote none.
-func (f *fixture) piProviderConfig() string {
-	f.t.Helper()
-	b, err := os.ReadFile(filepath.Join(f.home, ".pi", "agent", "models.json"))
-	if err != nil {
-		return ""
-	}
-	return string(b)
-}
-
+// piProviderConfig is GONE with the pi CLI (epic 43y, tick jhp): the
+// entrypoint writes no models.json, and no fixture needs one.
 func (f *fixture) ompProviderConfig() string {
 	f.t.Helper()
 	b, err := os.ReadFile(filepath.Join(f.home, ".omp", "agent", "models.yml"))
@@ -495,7 +495,7 @@ func TestEntrypointReachesTheSkillLoop(t *testing.T) {
 		t.Fatalf("exit %d, want 0\n%s", code, out)
 	}
 	rec := f.harnessRecord()
-	mustContain(t, rec, "BIN=pi", "the pinned harness runs by default")
+	mustContain(t, rec, "BIN=omp", "the pinned harness runs by default")
 	mustContain(t, rec, "ARG=-p", "the harness runs headless")
 	mustContain(t, rec, "ticks", "the prompt names the skill")
 	mustContain(t, rec, "ko8", "the prompt names the epic")
@@ -509,17 +509,18 @@ func TestEntrypointReachesTheSkillLoop(t *testing.T) {
 }
 
 // The factory always sets TICKS_HARNESS, so the default is a last resort — but
-// when it is reached it must be the harness the cloud actually runs: pi (on
-// GLM), for the orchestrator and the per-tick worker alike (tick ymg).
-func TestEntrypointBootsPiWhenTheHarnessIsUnset(t *testing.T) {
+// when it is reached it must be a harness the image actually carries: omp, the
+// documented default kind, for the orchestrator and the per-tick worker alike
+// (tick ymg; the pi default died with the pi CLI, epic 43y tick jhp).
+func TestEntrypointBootsOmpWhenTheHarnessIsUnset(t *testing.T) {
 	f := newFixture(t, "- `true`\n")
 	delete(f.env, EnvHarness)
 	out, code := f.run()
 	if code != 0 {
 		t.Fatalf("exit %d, want 0\n%s", code, out)
 	}
-	mustContain(t, f.harnessRecord(), "BIN=pi", "an unset TICKS_HARNESS boots pi")
-	mustContain(t, out, "(harness pi,", "the boot log names the default it fell back to")
+	mustContain(t, f.harnessRecord(), "BIN=omp", "an unset TICKS_HARNESS boots omp")
+	mustContain(t, out, "(harness omp,", "the boot log names the default it fell back to")
 
 	w := newWorkerFixture(t)
 	delete(w.env, EnvHarness)
@@ -527,7 +528,7 @@ func TestEntrypointBootsPiWhenTheHarnessIsUnset(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("worker exit %d, want 0\n%s", code, out)
 	}
-	mustContain(t, out, "(harness pi)", "an unset TICKS_HARNESS boots a pi worker")
+	mustContain(t, out, "(harness omp)", "an unset TICKS_HARNESS boots an omp worker")
 }
 
 // The submitted SHA is the run's base, not "whatever the branch points at now".
@@ -753,7 +754,7 @@ func TestEntrypointStreamsHarnessOutputDuringTheRun(t *testing.T) {
 	f := newFixture(t, "- `true`\n")
 	gate := filepath.Join(f.root, "gate")
 	f.env["TICKS_TEST_GATE"] = gate
-	writeStub(t, filepath.Join(f.root, "bin", "pi"), harnessStubPreamble+`echo "harness: started"
+	writeStub(t, filepath.Join(f.root, "bin", "omp"), harnessStubPreamble+`echo "harness: started"
 while [ ! -f "$TICKS_TEST_GATE" ]; do sleep 0.05; done
 echo "harness: finished"
 `)
@@ -811,7 +812,7 @@ echo "harness: finished"
 // to tell a finished run from a crashed one.
 func TestEntrypointPropagatesTheHarnessExitStatus(t *testing.T) {
 	f := newFixture(t, "- `true`\n")
-	writeStub(t, filepath.Join(f.root, "bin", "pi"), harnessStubPreamble+"exit 42\n")
+	writeStub(t, filepath.Join(f.root, "bin", "omp"), harnessStubPreamble+"exit 42\n")
 	out, code := f.run()
 	if code != 42 {
 		t.Fatalf("exit %d, want 42\n%s", code, out)
@@ -1243,7 +1244,7 @@ func TestEntrypointRoutesTheOrchestratorModelFromTheRepository(t *testing.T) {
 
 [orchestrator]
 harness = "omp"
-kind = "pi"
+kind = "omp"
 model = "workers-ai/meta/llama-3.3-70b-instruct-fp8-fast"
 
 [roles.implement]
@@ -1859,157 +1860,65 @@ func TestEntrypointStopsOnAnUnresolvableSubstrate(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// The pi kind (ticfac tick ha9). pi is cross-provider like omp, but calls
-// Workers AI by its own built-in provider, `cloudflare-workers-ai`, which the
-// entrypoint overrides to the run's gateway rather than replacing.
+// The pi CLI harness is deleted (epic 43y, tick jhp): no pi binary ships in
+// the image and no case in the scripts can launch one. What remains here pins
+// the two facts the deletion must not lose: the durable family's model
+// spelling still routes, and the hosted kind is refused loudly by the boots
+// that would have nothing to run it with.
 // ---------------------------------------------------------------------------
 
-// A pi run gets pi, provider-qualified with pi's own name for the route, and
-// headless with project-local files trusted.
-func TestEntrypointRunsPiOnTheWorkersAIRoute(t *testing.T) {
+// The durable harness family spells its Workers AI models
+// cloudflare-workers-ai/@cf/... (the spelling .tick/runners.toml's implement
+// cell and CloudRule.ModelNamespaces share, ticfac tick qu3), so a repository
+// whose roles use it runs unchanged in a container on the harnesses that
+// remain.
+func TestEntrypointAcceptsTheDurableSpellingOfTheWorkersAIRoute(t *testing.T) {
 	f := newFixture(t, "- `true`\n")
-	f.env[EnvHarness] = "pi"
-	f.env[EnvModel] = "workers-ai/@cf/zai-org/glm-5.3"
-	out, code := f.run()
-	if code != 0 {
-		t.Fatalf("exit %d, want 0\n%s", code, out)
-	}
-	rec := f.harnessRecord()
-	mustContain(t, rec, "BIN=pi", "the requested harness runs")
-	mustContain(t, rec, "ARG=-p", "pi runs headless")
-	mustContain(t, rec, "ARG=--approve", "pi trusts the checkout it has never seen")
-	mustContain(t, rec, "ARG=cloudflare-workers-ai/@cf/zai-org/glm-5.3",
-		"the model flag names pi's provider for the route, not a bare id")
-}
-
-// pi reads its Workers AI credential as CLOUDFLARE_API_KEY, and counts the
-// provider as unconfigured without an account id beside it.
-func TestEntrypointGivesPiTheGatewayCredentialAndAnAccountID(t *testing.T) {
-	f := newFixture(t, "- `true`\n")
-	f.env[EnvHarness] = "pi"
-	f.env[EnvModel] = "workers-ai/@cf/zai-org/glm-5.3"
-	out, code := f.run()
-	if code != 0 {
-		t.Fatalf("exit %d, want 0\n%s", code, out)
-	}
-	rec := f.harnessRecord()
-	mustContain(t, rec, "CLOUDFLARE_API_KEY="+testGatewayToken, "pi reads the run token under its provider's own name")
-	mustContain(t, rec, "CLOUDFLARE_ACCOUNT_ID=", "pi refuses the provider as unconfigured without an account id")
-}
-
-// The override: pi's built-in provider pointed at the route the probe proved,
-// with no models array so the catalog entry for the model survives, and the
-// token as pi's "$VAR" interpolation rather than a literal.
-func TestEntrypointOverridesPisBuiltInWorkersAIProvider(t *testing.T) {
-	f := newFixture(t, "- `true`\n")
-	f.env[EnvHarness] = "pi"
-	f.env[EnvModel] = "workers-ai/@cf/zai-org/glm-5.3"
-	if out, code := f.run(); code != 0 {
-		t.Fatalf("exit %d, want 0\n%s", code, out)
-	}
-	raw := f.piProviderConfig()
-	if raw == "" {
-		t.Fatal("the entrypoint wrote pi no models.json, so pi would call api.cloudflare.com directly")
-	}
-	var cfg struct {
-		Providers map[string]map[string]any `json:"providers"`
-	}
-	if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
-		t.Fatalf("pi's models.json is not JSON: %v\n%s", err, raw)
-	}
-	p, ok := cfg.Providers["cloudflare-workers-ai"]
-	if !ok {
-		t.Fatalf("models.json does not override pi's built-in cloudflare-workers-ai provider:\n%s", raw)
-	}
-	if got, want := p["baseUrl"], testGatewayURL+"/workers-ai/v1"; got != want {
-		t.Errorf("baseUrl = %v, want %s", got, want)
-	}
-	if got := p["api"]; got != "openai-completions" {
-		t.Errorf("api = %v, want openai-completions", got)
-	}
-	if got := p["apiKey"]; got != "$CLOUDFLARE_API_KEY" {
-		t.Errorf("apiKey = %v, want the interpolation $CLOUDFLARE_API_KEY", got)
-	}
-	if _, has := p["models"]; has {
-		t.Errorf("models.json carries a models array, which would replace pi's catalog entry for the model:\n%s", raw)
-	}
-	if strings.Contains(raw, testGatewayToken) {
-		t.Errorf("the run's gateway token was written to pi's config file:\n%s", raw)
-	}
-}
-
-// pi's spelling of the route is the same route, so a repository whose roles
-// are written for pi runs unchanged in a container (ticfac tick qu3).
-func TestEntrypointAcceptsPisSpellingOfTheWorkersAIRoute(t *testing.T) {
-	f := newFixture(t, "- `true`\n")
-	f.env[EnvHarness] = "pi"
+	f.env[EnvHarness] = "omp"
 	f.env[EnvModel] = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 	out, code := f.run()
 	if code != 0 {
 		t.Fatalf("exit %d, want 0\n%s", code, out)
 	}
 	rec := f.harnessRecord()
-	mustContain(t, rec, "TICKS_MODEL_PROVIDER=workers-ai", "pi's spelling routes to the gateway's workers-ai route")
-	mustContain(t, rec, "ARG=cloudflare-workers-ai/@cf/zai-org/glm-5.3", "and pi is handed its own spelling back")
+	mustContain(t, rec, "TICKS_MODEL_PROVIDER=workers-ai", "the durable spelling routes to the gateway's workers-ai route")
+	mustContain(t, rec, "TICKS_MODEL_ID=@cf/zai-org/glm-5.3", "the id is carried in the provider's own namespace")
 }
 
-// The pre-flight round-trip runs pi with nothing but the route under test.
-func TestEntrypointProbesPiWithEverythingButTheRouteSwitchedOff(t *testing.T) {
-	f := newFixture(t, "- `true`\n")
-	f.env[EnvHarness] = "pi"
-	f.env[EnvModel] = "workers-ai/@cf/zai-org/glm-5.3"
-	if out, code := f.run(); code != 0 {
-		t.Fatalf("exit %d, want 0\n%s", code, out)
-	}
-	probe := f.harnessProbeCalls()
-	for _, want := range []string{"BIN=pi", "ARG=--no-session", "ARG=--no-tools", "ARG=--no-context-files",
-		"ARG=cloudflare-workers-ai/@cf/zai-org/glm-5.3"} {
-		mustContain(t, probe, want, "the probe isolates the route")
-	}
-}
-
-// GLM 5.3's catalog entry in pi 0.85.1 overstates its output limit, pi asks
-// for nearly all of it, and Workers AI refuses with a 400 on which pi -p
-// prints nothing and exits 0 — the first real pi boot died on that at the
-// probe. The correction is per model: GLM 5.3 gets it, a model with no known
-// correction gets none, because a blanket cap would break a model whose real
-// limit is lower.
-func TestEntrypointCorrectsPisCatalogForGLM53Only(t *testing.T) {
+// A pi-durable harness on an orchestrator or review boot is a routing
+// mistake, not a harness to run: those boots exec a CLI (omp, claude) or the
+// ticfac binary, and a pi-durable conversation is a worker attempt the
+// factory's WorkerAgent hosts. Refused loudly, because falling through the
+// case with an empty cmd would exec NOTHING and exit 0.
+func TestEntrypointRefusesTheHostedHarness(t *testing.T) {
 	shorttest.EndToEnd(t) // its fixtures are built inside subtests
-	for model, want := range map[string]bool{
-		"workers-ai/@cf/zai-org/glm-5.3":                      true,
-		"workers-ai/@cf/zai-org/glm-5.3-flash":                true,
-		"workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast": false,
-	} {
-		t.Run(model, func(t *testing.T) {
+	for name, fixture := range map[string]func(t *testing.T){
+		"the orchestrator boot": func(t *testing.T) {
 			f := newFixture(t, "- `true`\n")
-			f.env[EnvHarness] = "pi"
-			f.env[EnvModel] = model
-			if out, code := f.run(); code != 0 {
-				t.Fatalf("exit %d, want 0\n%s", code, out)
+			f.env[EnvHarness] = "pi-durable"
+			out, code := f.run()
+			if code != ExitConfig {
+				t.Fatalf("exit %d, want %d\n%s", code, ExitConfig, out)
 			}
-			raw := f.piProviderConfig()
-			var cfg struct {
-				Providers map[string]struct {
-					ModelOverrides map[string]struct {
-						MaxTokens int `json:"maxTokens"`
-						Compat    struct {
-							ThinkingFormat string `json:"thinkingFormat"`
-						} `json:"compat"`
-					} `json:"modelOverrides"`
-				} `json:"providers"`
+			mustContain(t, out, "pi-durable", "the refusal names the kind")
+			mustContain(t, out, "hosted", "the refusal says why: the conversation is hosted elsewhere")
+			if _, err := os.Stat(f.record); err == nil {
+				t.Errorf("a refused boot still ran a harness:\n%s", mustNotBeEmpty(t, f.record))
 			}
-			if err := json.Unmarshal([]byte(raw), &cfg); err != nil {
-				t.Fatalf("pi's models.json is not JSON: %v\n%s", err, raw)
+		},
+		"the worker all-in-one": func(t *testing.T) {
+			f := newWorkerFixture(t)
+			f.env[EnvHarness] = "pi-durable"
+			out, code := f.run()
+			if code != ExitConfig {
+				t.Fatalf("exit %d, want %d\n%s", code, ExitConfig, out)
 			}
-			id := strings.TrimPrefix(model, "workers-ai/")
-			o, has := cfg.Providers["cloudflare-workers-ai"].ModelOverrides[id]
-			if has != want {
-				t.Fatalf("override for %s present=%v, want %v:\n%s", id, has, want, raw)
+			mustContain(t, out, "pi-durable", "the refusal names the kind")
+			if rec := f.harnessRecord(); rec != "" {
+				t.Errorf("a refused all-in-one still ran a harness:\n%s", rec)
 			}
-			if want && (o.MaxTokens != 65536 || o.Compat.ThinkingFormat != "deepseek") {
-				t.Errorf("override for %s = %+v, want maxTokens 65536 and thinkingFormat deepseek", id, o)
-			}
-		})
+		},
+	} {
+		t.Run(name, fixture)
 	}
 }
