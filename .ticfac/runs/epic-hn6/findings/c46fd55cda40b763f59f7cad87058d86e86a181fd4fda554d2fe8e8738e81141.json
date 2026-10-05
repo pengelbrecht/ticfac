@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "cno",
   "attempt": 26,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T13:39:32Z",
+  "triaged_at": "2026-10-05T13:39:44Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing c9n",
+  "promoted_as": "c9n",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "cno",
