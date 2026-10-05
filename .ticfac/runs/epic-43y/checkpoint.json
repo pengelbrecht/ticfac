@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 379,
-  "state": "dispatching",
-  "reason": "dispatching rpw as attempt 60",
-  "updated_at": "2026-10-05T20:57:13Z",
+  "sequence": 380,
+  "state": "running",
+  "reason": "rpw is running as attempt 60",
+  "updated_at": "2026-10-05T20:57:27Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -272,7 +272,8 @@
     },
     {
       "tick_id": "rpw",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 60
     },
     {
       "tick_id": "ug0",
