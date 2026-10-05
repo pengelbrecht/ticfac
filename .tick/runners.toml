@@ -33,11 +33,21 @@ effort = "medium"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
 
-[roles.implement.tiers.balanced]
-kind = "codex"
-model = "gpt-5.6-luna"
-effort = "max"
-args = []
+# `balanced` is NOT declared for implement, deliberately (epic 43y, tick
+# 7ml): until 2026-10-05 this cell named kind = "codex" (a Phase-2
+# leftover), and because runners.local.toml declares no [roles.implement]
+# role cell to overlay it away, a local run pinning --tier balanced
+# dispatched an implement worker on the codex CLI — a worker harness that is
+# neither pi-durable nor the claude-CLI frontier rung the operator's
+# 2026-10-04 decision keeps. No ladder ever derives balanced (the local
+# ladder climbs strong -> frontier, the cloud's economy -> strong), and in
+# the cloud this cell never reached a container anyway (the cloud's own role
+# cell applied last). With the cell gone, a pin of balanced is REFUSED
+# naming the tier — the profile layer's fail-closed rule (a tier that
+# silently falls back to the role is a tier an operator paid for and did not
+# get) — and internal/reconcile's routing guard resolves every tier name
+# a pin can reach on every substrate, so a cell like the old one cannot come
+# back unnoticed.
 
 # The frontier-tier review at epic completion.
 [roles.review]

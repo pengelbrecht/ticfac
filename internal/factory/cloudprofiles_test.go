@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -188,9 +189,14 @@ func TestNoRoleOfACloudRunResolvesToTheLocalSubprocessExecutor(t *testing.T) {
 	}
 	gate := filepath.Join(root, ".tick", "runners.toml")
 
-	// Every role, and every tier the roles table can route a role to — the
-	// balanced tier among them, whose common-file cell routes codex and whose
-	// cloud overlay is what must win.
+	// Every role, and every tier the roles table can route a role to. The
+	// balanced tier's common-file cell used to name codex, and this case
+	// proved the cloud overlay won over it (tick gbs); since tick 7ml
+	// deleted the cell, a pin of balanced REFUSES naming the tier under the
+	// cloud substrate too — fail-closed, never a fall back to another
+	// routing — and that refusal is the outcome this test accepts for it.
+	// What it must never see is a resolution onto the local executor or any
+	// runner but pi.
 	cases := []struct{ role, tier string }{
 		{"implement-tick", ""},
 		{"implement-tick", "economy"},
@@ -204,6 +210,12 @@ func TestNoRoleOfACloudRunResolvesToTheLocalSubprocessExecutor(t *testing.T) {
 			Dir: staged, RunnersConfig: gate, Tier: c.tier, Substrate: string(runconfig.SubstrateCloud),
 		})
 		if err != nil {
+			if c.tier == "balanced" && strings.Contains(err.Error(), fmt.Sprintf("declares no tier %q", c.tier)) {
+				// 7ml: no file declares the tier any more, so the profile layer
+				// refuses it naming the cell — the cloud never ran it and now
+				// cannot even resolve it.
+				continue
+			}
 			t.Fatalf("%s (tier %q) did not resolve from the staged cloud set under the cloud substrate: %v", c.role, c.tier, err)
 		}
 		if p.Executor == subprocess.ExecutorName {
