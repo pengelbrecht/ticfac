@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 155,
-  "state": "publishing",
-  "reason": "closing 435 behind its validated review-epic answer",
-  "updated_at": "2026-10-05T13:11:27Z",
+  "sequence": 156,
+  "state": "running",
+  "reason": "435 is closed",
+  "updated_at": "2026-10-05T13:11:37Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -88,7 +88,7 @@
     },
     {
       "tick_id": "435",
-      "state": "reported",
+      "state": "closed",
       "attempt": 22
     },
     {
