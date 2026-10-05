@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 373,
-  "state": "running",
-  "reason": "4ao try 1 (run dispatch #58) is rejected (no-commits): the attempt branch carries no commit beyond the base it was cut from (f9d637c855da)",
-  "updated_at": "2026-10-05T20:23:44Z",
+  "sequence": 374,
+  "state": "collecting",
+  "reason": "collecting jpy attempt 49",
+  "updated_at": "2026-10-05T20:47:18Z",
   "ticks": [
     {
       "tick_id": "92k",
