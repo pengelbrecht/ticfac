@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 156,
-  "state": "running",
-  "reason": "435 is closed",
-  "updated_at": "2026-10-05T13:11:37Z",
+  "sequence": 157,
+  "state": "dispatching",
+  "reason": "dispatching 2xk as attempt 23",
+  "updated_at": "2026-10-05T13:11:53Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -120,6 +120,26 @@
       "tick_id": "5ba",
       "state": "closed",
       "attempt": 21
+    },
+    {
+      "tick_id": "2xk",
+      "state": "ready"
+    },
+    {
+      "tick_id": "3yx",
+      "state": "ready"
+    },
+    {
+      "tick_id": "cg4",
+      "state": "ready"
+    },
+    {
+      "tick_id": "cno",
+      "state": "ready"
+    },
+    {
+      "tick_id": "g94",
+      "state": "ready"
     }
   ],
   "provenance": {
