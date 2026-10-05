@@ -1,0 +1,14 @@
+{
+  "id": "frr",
+  "title": "pi's credential grep and credentials.Get read ~/.ticfacrc differently",
+  "description": "credentials.Get trims spaces around the key and '=' and takes the first match. pi's !grep command needs an exact '^factory_cloudflare_api_token=' and returns every match. Failing input: a hand-edited 'factory_cloudflare_api_token = …'. localMetering builds the join, pi sends an empty credential, and every Workers AI dispatch is refused instead of just going unmetered. A duplicated key line produces a two-line header value.\nevidence: internal/credentials/credentials.go:173-182; internal/exec/subprocess/pimeter.go:152\n\nticfac run epic-hn6 created this tick by absorbing the finding 18858e62675693e645eccec4bb63c87775a5bea55dd81db1e9330d48e5597299 (reported by run-epic-hn6/tick-pv7/attempt-42): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/18858e62675693e645eccec4bb63c87775a5bea55dd81db1e9330d48e5597299.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-pv7/attempt-42",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T23:23:37Z",
+  "updated_at": "2026-10-05T23:23:37Z"
+}
