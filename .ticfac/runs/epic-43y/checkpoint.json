@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 374,
-  "state": "collecting",
-  "reason": "collecting jpy attempt 49",
-  "updated_at": "2026-10-05T20:47:18Z",
+  "sequence": 375,
+  "state": "integrating",
+  "reason": "integrating jpy attempt 49 into epic/43y",
+  "updated_at": "2026-10-05T20:47:53Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -218,7 +218,7 @@
     },
     {
       "tick_id": "jpy",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 49
     },
     {
