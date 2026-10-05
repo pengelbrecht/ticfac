@@ -1,0 +1,13 @@
+{
+  "id": "obk",
+  "title": "Integration merge resurrects RESULT-*.md: 06t's removal never landed",
+  "description": "keepReportsOut sets every worker report in a merge into the integration branch to what the epic head has, including when the incoming branch DELETES it. So 06t's commit 0b9b9087 (which removes the seven RESULT-{378,3gk,7uv,hn6,ltg,oro,r5i}.md) was merged as eb368bab with all seven restored, and they are still at the root of epic/hn6. The epic's PR would land them on main, the thing #172 cleaned up. No tick can remove them through the run's merge path. What would make it ready: let keepReportsOut honour a report deletion the incoming head makes against the merge base (a deletion can never land a new report or cause a report conflict), or commit the removal straight onto epic/hn6. Then add a test that merges a deleting attempt through mergeInWorktree and asserts the integrated head carries no RESULT-*.md. 06t's test exercised only the base-fold mint path.\nevidence: git ls-tree --name-only 0b9b90872 | grep -c RESULT -\u003e 0; git ls-tree --name-only eb368babe | grep -c RESULT -\u003e 7 (same at HEAD 36a5e925); internal/reconcile/report_merge.go:24-30,44-75\n\nticfac run epic-hn6 filed this backlog tick from the finding cb9033b71d88a711e5e69a7b976d0d893d79837f881a012bb7936446cbfad355 (reported by run-epic-hn6/tick-435/attempt-22): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/cb9033b71d88a711e5e69a7b976d0d893d79837f881a012bb7936446cbfad355.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-435/attempt-22",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T13:09:30Z",
+  "updated_at": "2026-10-05T13:09:30Z"
+}
