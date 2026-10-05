@@ -2400,3 +2400,4 @@
 {"ts":"2026-10-05T10:57:49.017186Z","tick":"5d4","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"phone-page row and watch frame tell a stopped cloud run's ending differently"}}
 {"ts":"2026-10-05T10:58:06.981764Z","tick":"3qg","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"composed stopped row's why reads run_progress, not the run's stopped line"}}
 {"ts":"2026-10-05T11:01:06.092858Z","tick":"fzt","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-05 13:01 - ticfac run epic-hn6: fzt try 1 (run dispatch #16) merged into epic/hn6 as 538543449154; the integrated gate (go, ts) passed.","title":"jev usage's cost_usd still marshals an unset zero into decision records"}}
+{"ts":"2026-10-05T11:01:08.900368Z","tick":"fzt","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"jev usage's cost_usd still marshals an unset zero into decision records"}}
