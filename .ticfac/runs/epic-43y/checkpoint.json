@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 306,
-  "state": "integrating",
-  "reason": "integrating i5e attempt 48 into epic/43y",
-  "updated_at": "2026-10-05T19:04:33Z",
+  "sequence": 307,
+  "state": "gating",
+  "reason": "running the integrated gate for i5e on 3ca7906c848e",
+  "updated_at": "2026-10-05T19:04:46Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -213,7 +213,7 @@
     },
     {
       "tick_id": "i5e",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 48
     },
     {
