@@ -142,9 +142,9 @@ A redirect-asserting route test passes `redirect: "manual"`.
 GLM; GLM via `cloudflare-workers-ai` leaked `<think>` tags. **Rule:** A bodyless 4xx is REQUEST SHAPE
 until proven otherwise; change one variable at a time. Off-vendor, set `compat.thinkingFormat`.
 
-**Problem:** dm2's gateway join: pi's streamed Workers AI calls left NO gateway log row while curl
-to the same route logged instantly — the row is written only when the client DRAINS the stream
-(pi stops after `finish_reason`); the gateway also refuses pi's stored `cfu_…` wallet key
-(needs `cf-aig-authorization` with the account token; a provider-config `apiKey` override
-cannot displace a stored credential) and the route needs `/workers-ai/v1` (else 7003).
-**Rule:** a gateway route is verified by reading the LOG ROW back, not by the call answering 200.
+**Problem:** dm2 blamed two row-less pi runs on pi abandoning the stream after `finish_reason`;
+648 found pi DOES drain it (pi-ai reads the SDK stream to EOF; 4 live pi calls, 4 tagged rows). The
+gateway passes pi's own `Authorization` upstream (a bad key fails 10000 despite a valid
+`cf-aig-authorization`), and the route needs `/workers-ai/v1` (else 7003).
+**Rule:** a gateway route is verified by reading the LOG ROW back, not by the call answering 200;
+a cause is verified by reproducing it, not by the symptom it would explain.
