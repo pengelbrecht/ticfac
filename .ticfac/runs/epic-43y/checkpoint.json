@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 327,
-  "state": "integrating",
-  "reason": "integrating 7sn attempt 45 into epic/43y",
-  "updated_at": "2026-10-05T19:39:28Z",
+  "sequence": 328,
+  "state": "gating",
+  "reason": "running the integrated gate for 7sn on 201f45c3d636",
+  "updated_at": "2026-10-05T19:39:42Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -198,7 +198,7 @@
     },
     {
       "tick_id": "7sn",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 45
     },
     {
