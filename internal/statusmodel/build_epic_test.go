@@ -656,6 +656,141 @@ func TestAParkedTrysNextStepAgreesWithTheNeedsYouHeader(t *testing.T) {
 	})
 }
 
+// endedSubjectSources is tick cno's own shape: the surface named an OLDER,
+// ended run as the subject — a stopped cloud run resolved from a checkout
+// without the local feed — so the merge treats its records as the newest.
+// The subject dispatched the review, then was stopped mid-flight, and its
+// checkpoint still says "dispatched" for a tick the TRACKER has since
+// closed — a later run closed it, and the epic's own tracker records the
+// close. The stale row read as live work: "●review" with a countdown that
+// only grew, over the tracker's closed status and over the later run that
+// closed the tick. The mutate hook bends the fixture into each case.
+func endedSubjectSources(mutate func(*Sources)) Sources {
+	now := testNow.Add(72 * time.Hour)
+	// The subject: the older, stopped run. It dispatched the review and
+	// was stopped mid-flight 21h23m before the model's now; its checkpoint
+	// is the terminal word a stopped run leaves, with the tick's row still
+	// saying "dispatched" — the run never settled anything after the stop.
+	subject := &Records{
+		Checkpoint: &runstate.Checkpoint{
+			SchemaVersion: runstate.SchemaVersion,
+			RunID:         "run_08f5",
+			EpicID:        "hpd",
+			Sequence:      7,
+			State:         "failed",
+			Reason:        "the factory stopped the run mid-flight",
+			UpdatedAt:     now.Add(-22 * time.Hour).Format(time.RFC3339),
+			Ticks:         []runstate.TickState{{TickID: "v16", State: "dispatched", Attempt: 4}},
+		},
+		Attempts: []runstate.Attempt{
+			attemptMarker(4, "v16", now.Add(-76980*time.Second).Format(time.RFC3339),
+				"strong", "@cf/zai-org/glm-5.3", "cloudflare-sandbox"),
+		},
+	}
+	// The later run that actually closed the tick: newer in time, but in
+	// the prior records because the subject is the run the surface named.
+	later := Records{
+		Checkpoint: &runstate.Checkpoint{
+			SchemaVersion: runstate.SchemaVersion,
+			RunID:         "run_closed",
+			EpicID:        "hpd",
+			Sequence:      2,
+			State:         "completed",
+			Reason:        "v16 closed",
+			UpdatedAt:     now.Add(-3 * time.Hour).Format(time.RFC3339),
+			Ticks:         []runstate.TickState{{TickID: "v16", State: "closed", Attempt: 1}},
+		},
+	}
+	src := Sources{
+		Now:   now,
+		RunID: "run_08f5",
+		Host:  HostCloud,
+		Graph: &tk.Graph{
+			Epic: tk.GraphEpic{ID: "hpd", Title: "the epic the runs worked"},
+			Waves: []tk.GraphWave{{Wave: 1, Tasks: []tk.GraphTask{
+				{ID: "v16", Title: "the review tick", Gloss: "review", Role: "review", Status: "closed",
+					ClosedAt: now.Add(-3 * time.Hour).Format(time.RFC3339)},
+			}}},
+		},
+		Records:      subject,
+		PriorRecords: []Records{later},
+		Liveness: LivenessInput{
+			Alive:  false,
+			State:  "failed",
+			Reason: "the Workflow's own record says failed, so the run has ended",
+			Source: "workflow-record",
+		},
+	}
+	if mutate != nil {
+		mutate(&src)
+	}
+	return src
+}
+
+// TestATrackerClosedTickIsClosedThoughAnEndedRunLeftItDispatched (tick cno):
+// a row from a run that has ended is that run's LAST word, and a last word
+// can be stale — the run stopped mid-flight and the tick was closed after
+// it, by a later run or by the person. A tick the tracker closed reads
+// closed: no live stage, no countdown that only grows, its span measured to
+// the close. The row from a LIVE run is that run's present tense and still
+// wins, and a tick the tracker has NOT closed keeps an ended run's row too
+// — that row is the history the holds and the resume read.
+func TestATrackerClosedTickIsClosedThoughAnEndedRunLeftItDispatched(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the ended subject run's stale dispatched row yields to the close", func(t *testing.T) {
+		t.Parallel()
+		model := Build(endedSubjectSources(nil))
+		tick := epicTick(t, model, "v16")
+		if tick.State != tickClosed {
+			t.Errorf("the tick reads state %q, want closed: the tracker closed it after the ended run's stale row", tick.State)
+		}
+		if tick.ElapsedSeconds != nil {
+			t.Errorf("the closed tick reads a live elapsed of %ds, want none: the countdown the stale row grew is not live work", *tick.ElapsedSeconds)
+		}
+		for _, stage := range tick.Pipeline {
+			if stage.State != StageStateDone {
+				t.Errorf("the closed tick's %s stage reads %s, want done: a closed tick's cell fills to the end", stage.Stage, stage.State)
+			}
+		}
+		if tick.DurationSeconds == nil || *tick.DurationSeconds != 66180 {
+			t.Errorf("the closed tick reads duration %v, want its span measured to the tracker's close (66180s from the dispatch to the closed_at), not growing to now", tick.DurationSeconds)
+		}
+		if model.Progress.Ticks == nil || model.Progress.Ticks.Closed != 1 {
+			t.Errorf("the progress counts %+v, want the tracker-closed tick among the closed", model.Progress.Ticks)
+		}
+	})
+
+	t.Run("a live run's row is its present tense and still wins", func(t *testing.T) {
+		t.Parallel()
+		model := Build(endedSubjectSources(func(src *Sources) {
+			src.Records.Checkpoint.State = "running"
+			src.Records.Checkpoint.Reason = "the review is in flight"
+			src.Liveness = LivenessInput{Alive: true, State: "running",
+				Reason: "the Workflow's supervisor says the orchestrator container is running",
+				Source: "workflow-supervisor"}
+		}))
+		tick := epicTick(t, model, "v16")
+		if tick.State != tickDispatched {
+			t.Errorf("the tick reads state %q, want the live run's own dispatched: the exception is for ended runs only", tick.State)
+		}
+	})
+
+	t.Run("an open tick keeps the ended run's row", func(t *testing.T) {
+		t.Parallel()
+		model := Build(endedSubjectSources(func(src *Sources) {
+			task := &src.Graph.Waves[0].Tasks[0]
+			task.Status = "open"
+			task.ClosedAt = ""
+			src.PriorRecords = nil
+		}))
+		tick := epicTick(t, model, "v16")
+		if tick.State != tickDispatched {
+			t.Errorf("the tick reads state %q, want the ended run's dispatched: the row is the epic's history until the tracker closes the tick", tick.State)
+		}
+	})
+}
+
 // epicTick finds one tick's row in a built model — the same lookup the
 // across-runs assertions make.
 func epicTick(t *testing.T, model Model, tickID string) Tick {
