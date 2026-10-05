@@ -1,0 +1,14 @@
+{
+  "id": "hv3",
+  "title": "Harness node-suite tests flake under host load (flaky-means-bug rule)",
+  "description": "On this loaded host, full `pnpm test` runs in harness/ failed three different tests across three runs — gateway-provider 'sends every request to the run's gateway route…', node/local-host 'serves the live conversation to a watcher…', node/workspace-checkpoints 'runs the host shell's git at the env's checkout…' — each passed on an immediate re-run, and none of their files is touched by this diff. The failure moves between files per run, the classic CPU-contention shape this repository files as a defect rather than re-running forever. Reproduce deterministically (or under synthetic contention) before changing anything; do not raise timeouts to make it pass.\nevidence: harness/test/gateway-provider.test.ts, harness/test/node/local-host.test.ts, harness/test/node/workspace-checkpoints.test.ts — observed failing once each across `pnpm test` runs on this host, passing on re-run\n\nticfac run epic-43y created this tick by absorbing the finding db4c8f086a2b624bd50767531565163788586747e68e1d81122489d7ba8aa550 (reported by run-epic-43y/tick-i3h/attempt-18): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/db4c8f086a2b624bd50767531565163788586747e68e1d81122489d7ba8aa550.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-i3h/attempt-18",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T10:31:19Z",
+  "updated_at": "2026-10-05T10:31:19Z"
+}
