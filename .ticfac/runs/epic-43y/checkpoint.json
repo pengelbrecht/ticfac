@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 363,
-  "state": "dispatching",
-  "reason": "dispatching 4ao as attempt 58",
-  "updated_at": "2026-10-05T20:14:28Z",
+  "sequence": 364,
+  "state": "running",
+  "reason": "4ao is running as attempt 58",
+  "updated_at": "2026-10-05T20:14:50Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -262,7 +262,8 @@
     },
     {
       "tick_id": "4ao",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 58
     },
     {
       "tick_id": "3c2",
