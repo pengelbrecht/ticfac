@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 272,
-  "state": "running",
-  "reason": "66a is running as attempt 42",
-  "updated_at": "2026-10-05T17:48:05Z",
+  "sequence": 273,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for 66a",
+  "updated_at": "2026-10-05T18:00:58Z",
   "ticks": [
     {
       "tick_id": "92k",
