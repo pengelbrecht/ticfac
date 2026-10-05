@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "pv7",
   "attempt": 42,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T23:23:01Z",
+  "triaged_at": "2026-10-05T23:23:16Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing ziy",
+  "promoted_as": "ziy",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "pv7",
