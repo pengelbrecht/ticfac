@@ -55,6 +55,12 @@ func TestDocExamplesParse(t *testing.T) {
 			roles: []string{"implement", "review"},
 		},
 		{
+			name: "example 6 declared sandbox", toml: docExample6,
+			substrate: SubstrateAuto, detect: DetectEnvOrSocket, maxParallel: 0,
+			fullAuto: true, branchPrefix: "tick/", orchHarness: "",
+			roles: []string{"implement"},
+		},
+		{
 			name: "tier overrides kind snippet", toml: docTierKindOverride,
 			substrate: SubstrateAuto, detect: DetectEnvOrSocket, maxParallel: 0,
 			fullAuto: true, branchPrefix: "tick/", orchHarness: "",

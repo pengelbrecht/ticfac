@@ -276,10 +276,12 @@ start_harness() {
 	#
 	# No IS_SANDBOX export. That was the claude CLI's requirement: it refuses
 	# ` + "`--permission-mode bypassPermissions`" + ` under root unless told it is in a
-	# sandbox. pi has no equivalent check — it has no permission gate at all;
-	# its only approval-shaped flag (` + "`--approve`" + `) is trust of project-local
-	# files, verified live 2026-09-10 (tick gjk; herdr-kinds.md's pi section,
-	# kinds.go's pi row) — so the requirement went with the CLI that had it.
+	# sandbox. The deleted pi CLI had no equivalent check — it had no permission
+	# gate at all; its only approval-shaped flag (` + "`--approve`" + `) was trust
+	# of project-local files, verified live 2026-09-10 (tick gjk and retained as
+	# history in herdr-kinds.md's deleted-pi section). Its kinds.go row left with
+	# the CLI path in epic 43y, tick uxi, so the requirement went with the CLI
+	# that had it.
 
 	# The base branch, and the LOCAL ref that makes it resolvable.
 	#

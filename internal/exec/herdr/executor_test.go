@@ -17,7 +17,7 @@ import (
 // on what herdr was actually asked: the branch and the base the spec named,
 // the kind and args the host configured, the pane the create handed back.
 func TestStartCreatesTheWorkspaceAndLaunchesTheAgent(t *testing.T) {
-	h := newHarness(t, harnessOptions{kind: "pi", args: []string{"--model", "glm-5.3"}})
+	h := newHarness(t, harnessOptions{kind: "codex", args: []string{"-m", "gpt-5.6-luna"}})
 	handle, err := h.start("t1")
 	if err != nil {
 		t.Fatal(err)
@@ -65,10 +65,10 @@ func TestStartCreatesTheWorkspaceAndLaunchesTheAgent(t *testing.T) {
 			break
 		}
 	}
-	if startParams.Kind != "pi" {
+	if startParams.Kind != "codex" {
 		t.Errorf("agent.start kind = %q, want the configured kind", startParams.Kind)
 	}
-	if strings.Join(startParams.Args, " ") != "--model glm-5.3" {
+	if strings.Join(startParams.Args, " ") != "-m gpt-5.6-luna" {
 		t.Errorf("agent.start args = %v, want the configured args", startParams.Args)
 	}
 	if startParams.PaneID == "" {

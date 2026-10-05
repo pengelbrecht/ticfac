@@ -28,7 +28,7 @@ import (
 func TestARealTickRunsEndToEndThroughThisExecutor(t *testing.T) {
 	// The tick: a real unit of work, recorded the way the tracker records
 	// one, pointed at by the prompt the executor renders.
-	h := newHarness(t, harnessOptions{spawnAgent: true, agentMode: "implement", kind: "pi"})
+	h := newHarness(t, harnessOptions{spawnAgent: true, agentMode: "implement", kind: "codex"})
 	tick := "t1"
 
 	// ---- dispatched -----------------------------------------------------

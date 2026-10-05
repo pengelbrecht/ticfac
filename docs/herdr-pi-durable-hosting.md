@@ -148,6 +148,14 @@ image side, the `TICFAC_RUNNER_ARGV` escape hatch that still makes the pi
 CLI reachable on the subprocess executor, and the real local + cloud runs
 that prove the whole posture.
 
+A later absorbed finding closed the compiler-shaped remainder (epic 43y,
+tick `uxi`): ticfac's Herdr capability matrix still carried a `pi` template
+and still read `pi --list-models`, even though no embedded profile selected
+it. Both are deleted. A profile that pairs executor `herdr` with runner `pi`
+is now refused before Herdr is dialled, with a fix naming the local/headless
+or cloud/hosted pi-durable routes. The generic `TICFAC_RUNNER_ARGV` test seam
+remains, but no production runner table or profile points it at the pi CLI.
+
 ## What happens to attempts recorded before the re-cut
 
 The rebuild path — a dispatch reconstructed from a marker: adopt, settle,
