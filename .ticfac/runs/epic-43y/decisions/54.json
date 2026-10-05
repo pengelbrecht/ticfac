@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 54,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "twa (540910e09) binds runner pi-durable for every profile dispatching into Cloudflare, but the e2e fixtures still declare the cloudflare-sandbox KnownExecutor with Runners [\"pi\"], so usableProfile refuses every run ('profile implement-tick names runner \"pi-durable\" for executor cloudflare-sandbox, which launches pi'). The tests call shorttest.EndToEnd, so the per-tick integrated gate skipped them; CI on epic/43y has been red on reconcile shards 1-3 since 15:25 UTC (runs 37332698366..37340930478; last green d7ca3e572). Reproduced locally at HEAD. Fix: fixtures use profile.CloudRule.Harnesses (as internal/cli/executor.go:82 does) or include pi-durable; then CI on the epic head must be green.\nevidence: internal/reconcile/sandbox_adoption_test.go:625 and substrate_routing_test.go:183 (Runners: []string{\"pi\"}); internal/reconcile/profiles.go:516; gh run view 37340930478 --log-failed\n\nticfac run epic-43y created this tick by absorbing the finding 90b1f843fec3abd1734da5fa17a4166417709f952d856d904d6a2cc534c8904a (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/90b1f843fec3abd1734da5fa17a4166417709f952d856d904d6a2cc534c8904a.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "enb",
+    "title": "Full Go suite red: 7 reconcile e2e fixtures still declare cloud runner pi"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.75,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.11,
+      "design": 0,
+      "diagnosis": 0.01,
+      "mechanical": 0.8,
+      "translation": 0.08
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1502,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T18:06:26Z",
+  "answered_at": "2026-10-05T18:06:26Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "enb",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "a72a78ff3d78b12ef6b09d87e139ee5faf6ad078",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
