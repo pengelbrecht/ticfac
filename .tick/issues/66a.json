@@ -1,6 +1,7 @@
 {
   "id": "66a",
   "title": "Final review of the pi-durable harness epic diff",
+  "notes": "2026-10-05 20:01 - ticfac run epic-43y: 66a try 1 (run dispatch #42) reported a finding the run itself decided — defect \"Full Go suite red: 7 reconcile e2e fixtures still declare cloud runner pi\" (key 90b1f843fec3abd1734da5fa17a4166417709f952d856d904d6a2cc534c8904a, severity high, for this repository) is absorbed into the running epic as tick enb, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/90b1f843fec3abd1734da5fa17a4166417709f952d856d904d6a2cc534c8904a.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -37,6 +38,6 @@
   "role": "review",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.706053Z",
-  "updated_at": "2026-10-05T17:47:58.317479Z",
+  "updated_at": "2026-10-05T18:01:16.327572Z",
   "started_at": "2026-10-05T17:47:58.317478Z"
 }
