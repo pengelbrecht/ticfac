@@ -2331,3 +2331,4 @@
 {"ts":"2026-10-05T20:06:49.359339Z","tick":"umx","action":"close","actor":"ticfac","epic":"43y","data":{"title":"agent-faults proof's 'checkpoints after the resume' claim is not order-checked"}}
 {"ts":"2026-10-05T20:07:12.090094Z","tick":"7oy","action":"start","actor":"ticfac","epic":"43y","data":{"title":"harness node half fails at base: dumb-git-origin test under its own 300s rule"}}
 {"ts":"2026-10-05T20:14:08.596244Z","tick":"h3c","action":"note","actor":"ticfac","epic":"43y","data":{"note":"\n2026-10-05 22:14 - ticfac run epic-43y: h3c try 1 (run dispatch #56) merged into epic/43y as 5a306663682d; the integrated gate (go, ts) passed.","title":"Node suite red at epic head: dumb-git-origin test lacks 300s timeout"}}
+{"ts":"2026-10-05T20:14:11.984738Z","tick":"h3c","action":"close","actor":"ticfac","epic":"43y","data":{"title":"Node suite red at epic head: dumb-git-origin test lacks 300s timeout"}}
