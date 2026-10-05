@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "l6n",
   "attempt": 54,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T19:59:38Z",
+  "triaged_at": "2026-10-05T19:59:54Z",
+  "triaged_by": "ticfac run epic-43y absorbing rpw",
+  "promoted_as": "rpw",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "l6n",
