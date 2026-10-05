@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 142,
-  "state": "gating",
-  "reason": "running the integrated gate for 3qg on 0278fdffd926",
-  "updated_at": "2026-10-05T11:27:56Z",
+  "sequence": 143,
+  "state": "publishing",
+  "reason": "closing 3qg behind the integrated gate on 0278fdffd926",
+  "updated_at": "2026-10-05T11:30:38Z",
   "ticks": [
     {
       "tick_id": "v16",
