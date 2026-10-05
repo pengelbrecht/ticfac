@@ -152,8 +152,8 @@ func TestTheCloudProfileSetPairsTheRepairJobWithTheSandboxExecutor(t *testing.T)
 	if resolved.Executor != cloudExecutorName {
 		t.Errorf("the plan-repair profile names executor %q, want %q", resolved.Executor, cloudExecutorName)
 	}
-	if resolved.Runner != "pi" || resolved.Model != glm53 {
-		t.Errorf("the plan-repair profile pairs %s/%s, want pi/%s", resolved.Runner, resolved.Model, glm53)
+	if resolved.Runner != "pi-durable" || resolved.Model != glm53 {
+		t.Errorf("the plan-repair profile pairs %s/%s, want pi-durable/%s", resolved.Runner, resolved.Model, glm53)
 	}
 }
 

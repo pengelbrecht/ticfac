@@ -127,6 +127,39 @@ model = "`+glm53+`"
 	assertCloudRefusal(t, err, "implement", "claude", glm53)
 }
 
+// The hosted harness is one the gateway serves (epic 43y, tick qf4): the
+// cloud profile set names `pi-durable` — the kind a hosted attempt runs on,
+// whatever harness the dispatch names for the container its tools run in
+// (tick 4uj) — so a role the cloud routing resolves to it on a Workers AI
+// model is NOT refused at start: the rule is the provider, and the harness
+// list is the factory gateway's, which serves the hosted kind.
+func TestTheCloudRuleAdmitsTheHostedHarness(t *testing.T) {
+	config := cloudRuleConfig(t, `version = 2
+
+[roles.implement]
+kind = "pi-durable"
+model = "`+glm53+`"
+`)
+	p, err := Resolve("implement-tick", Options{RunnersConfig: config, Substrate: "cloud"})
+	if err != nil {
+		t.Fatalf("the hosted harness on a Workers AI model was refused by the cloud rule: %v", err)
+	}
+	if p.Runner != "pi-durable" || p.Model != glm53 {
+		t.Errorf("implement-tick resolved to %s/%s, want pi-durable/%s", p.Runner, p.Model, glm53)
+	}
+
+	// And the raw cloud set resolves the same way: no config at all, the
+	// rule keyed on the executor the set names — the shape a start check
+	// sees before any repository routing applies.
+	raw, err := Resolve("implement-tick", Options{Dir: cloudProfileDir(t)})
+	if err != nil {
+		t.Fatalf("the cloud set's own pi-durable pairing was refused: %v", err)
+	}
+	if raw.Runner != "pi-durable" || raw.Model != glm53 {
+		t.Errorf("the cloud set's own pairing is %s/%s, want pi-durable/%s", raw.Runner, raw.Model, glm53)
+	}
+}
+
 // The tier overlay applied AFTER the cloud cell (finding ea1a62d3): the cloud
 // file's own tier cell applies last of all, so a cell that is pi on Workers AI
 // at its base can still finally resolve to claude at a tier — and the refusal

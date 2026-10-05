@@ -13,14 +13,20 @@ import (
 // is the directory a cloud orchestrator container points `ticfac run-epic
 // --profiles` at — the pairing neither shipped profile makes.
 //
-// profiles-herdr/ carries the ROUTING this set keeps — pi on
-// cloudflare-workers-ai/@cf/zai-org/glm-5.3, the pairing the operator's
-// 2026-09-22 decision names — beside an executor (herdr) for which a container
+// profiles-herdr/ carries the ROUTING this set keeps — GLM 5.3 on
+// cloudflare-workers-ai, the pairing the operator's 2026-09-22 decision names
+// — beside an executor (herdr) for which a container
 // has no server. profiles/ carries a local executor beside claude + sonnet,
 // which is the local default and the half the operator took off the cloud.
 // This set is profiles-herdr/'s routing with the executor the container's
 // factory can actually dispatch through: one Cloudflare sandbox per tick,
 // booted by the factory the container asks over the dispatch door.
+//
+// The runner names the two hosts' names for ONE harness (epic 43y, tick qf4):
+// the cloud set names the hosted kind `pi-durable` — the WorkerAgent a
+// factory run hosts the conversation on, whose tools run in this container
+// — where the local sets name the same durable harness `pi` (the local
+// runner table's name for it since tick hpk).
 //
 // It is a directory BESIDE the compiled-in profiles/ rather than a replacement
 // of it. The compiled-in set is the LOCAL default a plain `ticfac run-epic`
@@ -63,14 +69,14 @@ func cloudProfileDir(t *testing.T) string {
 	return filepath.Join(root, cloudDirName)
 }
 
-// A dispatch profile exists pairing runner pi, executor cloudflare-sandbox and
+// A dispatch profile exists pairing runner pi-durable, executor cloudflare-sandbox and
 // model cloudflare-workers-ai/@cf/zai-org/glm-5.3 — njj's first acceptance
 // item. All three roles resolve from the one set, because a run resolves every
 // role up front: a cloud profile set that profiled only implement-tick is a
 // set a run refuses at construction, not one it selects.
 //
 // short: reads of this repository's own profile files; no I/O.
-func TestTheCloudProfileSetPairsPiOnGLMWithTheSandboxExecutor(t *testing.T) {
+func TestTheCloudProfileSetPairsTheHostedHarnessOnGLMWithTheSandboxExecutor(t *testing.T) {
 	all, err := ResolveAll(Options{Dir: cloudProfileDir(t)})
 	if err != nil {
 		t.Fatalf("the cloud profile set did not resolve: %v", err)
@@ -87,9 +93,10 @@ func TestTheCloudProfileSetPairsPiOnGLMWithTheSandboxExecutor(t *testing.T) {
 				"a container) and not with the local subprocess one (no worker shares the orchestrator)",
 				role, p.Executor, cloudExecutorName)
 		}
-		if p.Runner != "pi" {
-			t.Errorf("%s names runner %q, want pi: workers run GLM through pi, the harness the "+
-				"operator's 2026-09-22 decision names", role, p.Runner)
+		if p.Runner != "pi-durable" {
+			t.Errorf("%s names runner %q, want pi-durable: the cloud set names the hosted harness "+
+				"the factory's WorkerAgent runs the conversation on (epic 43y, tick qf4), not the "+
+				"deleted pi CLI's name", role, p.Runner)
 		}
 		if p.Model != cloudGLM53 {
 			t.Errorf("%s names model %q, want %q", role, p.Model, cloudGLM53)
@@ -112,7 +119,7 @@ func TestTheCloudProfileSetPairsPiOnGLMWithTheSandboxExecutor(t *testing.T) {
 // container is pointed at. A claude process in the cloud is the thing the
 // whole epic exists to prevent (xte: "don't use claude on the orchestrator"),
 // so every role in the set — review and closeout included, which is where a
-// claude profile would otherwise hide — names pi.
+// claude profile would otherwise hide — names the hosted harness.
 //
 // The roles-table routing that could still route a role back onto claude is
 // substrate-blind today and is tick 84z's to make substrate-aware; what this
@@ -131,9 +138,10 @@ func TestNoProfileTheCloudContainerSelectsStartsAClaudeProcess(t *testing.T) {
 			t.Errorf("%s names runner claude: a cloud dispatch of it would start the one process "+
 				"this epic exists to keep out of the container", role)
 		}
-		if p.Runner != "pi" {
-			t.Errorf("%s names runner %q: the operator's constraint is that cloud workers run via pi, "+
-				"so a profile naming any other runner is one no cloud run should select", role, p.Runner)
+		if p.Runner != "pi-durable" {
+			t.Errorf("%s names runner %q: the operator's constraint is that cloud workers run on "+
+				"the hosted pi-durable harness, so a profile naming any other runner is one no "+
+				"cloud run should select", role, p.Runner)
 		}
 	}
 }

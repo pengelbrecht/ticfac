@@ -43,7 +43,15 @@ var CloudRule = struct {
 
 	// Harnesses are the runner kinds that reach Workers AI through the
 	// factory gateway. A Workers AI id on a harness that cannot call it is
-	// not a Workers AI worker.
+	// not a Workers AI worker. Both names of the ONE durable harness are
+	// served (epic 43y, tick qf4): `pi-durable` is the hosted kind — the
+	// cloud profile set names it, the factory's WorkerAgent runs the
+	// conversation on it whatever harness the dispatch names for the
+	// container its tools run in (tick 4uj) — and `pi` is the local runner
+	// table's name for the same durable harness (tick hpk), which this
+	// repository's own cloud routing (`.tick/runners.cloud.toml`) still
+	// spells and which stays admitted until that overlay names the hosted
+	// kind too.
 	Harnesses []string
 
 	// Executors are the executors that dispatch their workers INTO Cloudflare
@@ -55,7 +63,7 @@ var CloudRule = struct {
 	Executors []string
 }{
 	ModelNamespaces: []string{"cloudflare-workers-ai/", "workers-ai/", "@cf/"},
-	Harnesses:       []string{"pi"},
+	Harnesses:       []string{"pi", "pi-durable"},
 	Executors:       []string{"cloudflare-sandbox"},
 }
 
