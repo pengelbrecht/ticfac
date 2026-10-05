@@ -1,0 +1,13 @@
+{
+  "id": "oc5",
+  "title": "doctor's routing check cannot refuse a runner the run's executors cannot launch",
+  "description": "reconcile.CheckRouting (internal/reconcile/profiles.go:758) resolves every role profile against the roles table but never runs usableProfile over them — routeOnDemandJob skips the executor check when executors is nil, and the base profiles get no check at all — so ticfac doctor's 'routing' check (internal/cli/doctor.go:400) blessed a --runner pi repository's review/closeout cells that the run's construction refused on the herdr substrate (the exact defect tick jiv fixes on the writer side). The run still refuses fail-closed at construction, so nothing dispatches wrongly; doctor under-reports what this machine's runs will refuse. A tick could give CheckRouting the honoured-executor set (or let doctor pass knownExecutors() through a CheckRouting variant) so the pre-flight names the same refusals the run does.\nevidence: internal/reconcile/profiles.go:758 (CheckRouting, no usableProfile over base profiles); internal/cli/doctor.go:400 (doctor's routingCheck calls it); contrast internal/reconcile/reconcile.go New's construction loop, which runs usableProfile over every role\n\nticfac run epic-43y filed this backlog tick from the finding 4b94941a0e21bc181ef8ef68edc438b50e974681fdbffc69e75c330a05cf5461 (reported by run-epic-43y/tick-jiv/attempt-40): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/4b94941a0e21bc181ef8ef68edc438b50e974681fdbffc69e75c330a05cf5461.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-jiv/attempt-40",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T16:17:30Z",
+  "updated_at": "2026-10-05T16:17:30Z"
+}
