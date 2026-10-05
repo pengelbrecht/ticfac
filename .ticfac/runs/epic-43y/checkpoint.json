@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 417,
-  "state": "integrating",
-  "reason": "integrating 30e attempt 64 into epic/43y",
-  "updated_at": "2026-10-05T21:56:19Z",
+  "sequence": 418,
+  "state": "gating",
+  "reason": "running the integrated gate for 30e on 15c185286395",
+  "updated_at": "2026-10-05T21:58:09Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -287,7 +287,7 @@
     },
     {
       "tick_id": "30e",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 64
     }
   ],
