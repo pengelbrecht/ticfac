@@ -1,0 +1,13 @@
+{
+  "id": "jq6",
+  "title": "Read epic-head CI after each integration, not first at the review",
+  "description": "Twice in 43y the integrated per-tick gate stayed green while CI on epic/43y went red on a shorttest.EndToEnd test. enb: seven reconcile e2e fixtures still declared cloud runner pi after twa. 4w7: the classification pin was stale after 7sn's profile edit. Each red sat until a final review read CI hours later and absorbed it after the review, costing a review round each time. The run already reads CI on main and at the close-out. Reading the epic branch's CI for each integrated code commit, and absorbing a red as a finding at once, would catch the next one at the tick that caused it. 3sd is the narrow fix for one of the two shapes.\nevidence: .tick/issues/66a.json and .tick/issues/o68.json notes (enb, 4w7 absorptions); CI runs 37380024533, 37378487207, 37376277849 (red, epic head)\n\nticfac run epic-43y filed this backlog tick from the finding aa99bb63ee11ebf1a366a801893c4d29674c0007228a8b828e7cfc2467c901a0 (reported by run-epic-43y/tick-j2k/attempt-69): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/aa99bb63ee11ebf1a366a801893c4d29674c0007228a8b828e7cfc2467c901a0.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-j2k/attempt-69",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T23:36:26Z",
+  "updated_at": "2026-10-05T23:36:26Z"
+}
