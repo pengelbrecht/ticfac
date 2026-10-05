@@ -2512,3 +2512,4 @@
 {"ts":"2026-10-05T19:44:10.945577Z","tick":"dm2","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"Meter local runs' Workers AI spend via the gateway; no live run ever metered"}}
 {"ts":"2026-10-05T19:44:24.809836Z","tick":"24u","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"the local jev classifier's gateway calls are untagged (run_id None)"}}
 {"ts":"2026-10-05T19:44:44.572368Z","tick":"648","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"pi's streamed workers-ai calls leave no gateway log row"}}
+{"ts":"2026-10-05T19:45:04.518703Z","tick":"gzv","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"the subprocess executor's pi runner has no gateway metering wiring"}}
