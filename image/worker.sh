@@ -1522,8 +1522,16 @@ restore_finish_state() {
 #
 # It takes NONE of the boot's inputs: the checkout is already there (a
 # container booted by hand, or restored, may have nothing else), so there is
-# no TICKS_TICK to require and no clone to make — only the one step it exists
+# no TICKS_TICK to require and no clone to make — only the steps it exists
 # for, with the wave's setup lever still honoured.
+#
+# The toolchain the repository declares is provisioned here too (tick r2m):
+# the boot runs provision_toolchain before the setup, and the restored
+# container is rebuilt from the image, which may not carry what the tree
+# declares (mise.toml, .tool-versions). A restore that re-ran only the
+# installs handed the conversation a box whose declared tools died with the
+# container — the same order the boot uses, so a setup that needs them has
+# them.
 run_setup_entry() {
 	[[ -d $workdir ]] ||
 		die $EXIT_CLONE "no checkout at ${workdir} — the setup entry re-runs a repository's [sandbox] setup in a box a boot or a restore built, and this one holds no workspace"
@@ -1537,6 +1545,7 @@ run_setup_entry() {
 	# boot's always did.
 	configure_caches
 	cd "$workdir" || die $EXIT_CLONE "cannot enter $workdir"
+	provision_toolchain
 	worker_repo_setup
 }
 

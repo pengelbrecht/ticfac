@@ -366,6 +366,46 @@ func TestWorkerSetupEntryRunsTheRepositorySetupAndNothingElse(t *testing.T) {
 	}
 }
 
+// The restored box gets the toolchain the repository declares, not just
+// its setup (epic 43y, tick r2m): the boot provisions a declared toolchain
+// (image/common.sh `provision_toolchain`) before it runs the repository's
+// setup, and a container lost mid-turn takes those installs with it — the
+// restored container is rebuilt from the image, which may not carry what
+// the tree declares (mise.toml, .tool-versions). A restore that re-ran only
+// the setup handed the conversation a tree whose tests could not run.
+func TestWorkerSetupEntryProvisionsTheDeclaredToolchain(t *testing.T) {
+	shorttest.EndToEnd(t)
+	f := newWorkerFixture(t)
+	f.phasesState(t)
+	if out, code := f.run(WorkerBootArg); code != 0 {
+		t.Fatalf("the boot that made the checkout exited %d:\n%s", code, out)
+	}
+	// The tree the snapshot restores: a repository that declares a toolchain
+	// the image does not satisfy. Written after the boot so the boot's own
+	// provisioning is not the thing under test.
+	write(t, filepath.Join(f.workdir, "mise.toml"), "[tools]\nnode = '22'\n")
+	// The container the host restored: the checkout is there, everything the
+	// boot resolved is not — and the version manager's record starts empty.
+	delete(f.env, EnvTick)
+	f.env["TICKS_TEST_MISE_RECORD"] = f.miseRecord
+	os.Remove(f.ticfacRecord)
+
+	out, code := f.run(WorkerSetupArg)
+	if code != 0 {
+		t.Fatalf("the setup entry exited %d:\n%s", code, out)
+	}
+	if calls := f.miseCalls(); !strings.Contains(calls, "install") {
+		t.Errorf("the restored box provisioned no declared toolchain; the version manager was asked:\n%s", calls)
+	}
+	mustContain(t, out, "the repository declares a toolchain", "the provisioning the boot ran, re-run by the restore")
+	mustContain(t, f.ticfacCalls(), "sandbox setup", "the repository's own setup, still run after the toolchain")
+	// Toolchain BEFORE setup, the boot's order: a repository's setup can need
+	// the very tools the tree declares.
+	if p, s := strings.Index(out, "the repository declares a toolchain"), strings.Index(out, "repository setup took"); p < 0 || s < 0 || p > s {
+		t.Errorf("the setup entry did not provision the declared toolchain before the repository's setup")
+	}
+}
+
 // A box with no checkout is not a restored workspace: the setup entry runs
 // only after the boot or the host's restore made one, and it refuses as the
 // clone class rather than provisioning a checkout of its own.
