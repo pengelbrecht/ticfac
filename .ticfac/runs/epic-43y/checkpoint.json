@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 384,
-  "state": "publishing",
-  "reason": "closing 3c2 behind the integrated gate on 25e979feea94",
-  "updated_at": "2026-10-05T21:03:26Z",
+  "sequence": 385,
+  "state": "running",
+  "reason": "3c2 is closed",
+  "updated_at": "2026-10-05T21:03:36Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -267,7 +267,7 @@
     },
     {
       "tick_id": "3c2",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 59
     },
     {
