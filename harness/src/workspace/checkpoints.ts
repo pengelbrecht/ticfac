@@ -201,13 +201,14 @@ function varsOf(git: WorkspaceGit, vars: Record<string, string>): Record<string,
  * the old box's git dir while HEAD sits one commit under the branch's
  * snapshot — both leave the agent's commits nowhere origin can restore
  * from, and the next container loss rewinds to the older tip. So the first
- * clean round pushes unless HEAD is still the BASE the restore falls back
- * to — the one state a loss rebuilds without any push — and pushes too
- * when the base is unknown: pushing is idempotent, assuming is what lost
- * commits. A round that changed nothing since the last push pushes
- * nothing — the record (the pushed HEAD and tree) is kept in the checkout's
- * git dir. The push IS the durability: the branch on origin is what
- * survives the container.
+ * clean round pushes unless the record is ABSENT and HEAD is still the
+ * BASE the restore falls back to — the boot's own first clean round, the
+ * one state a loss rebuilds without any push — and pushes too when the
+ * base is unknown: pushing is idempotent, assuming is what lost commits.
+ * A round that changed nothing since the last push pushes nothing — the
+ * record (the pushed HEAD and tree) is kept in the checkout's git dir. The
+ * push IS the durability: the branch on origin is what survives the
+ * container.
  *
  * Never throws: a failure (the door unavailable, a refused push) is the
  * outcome, for the caller to report.
@@ -222,12 +223,15 @@ export async function pushWipCheckpoint(shell: HostShell, git: WorkspaceGit): Pr
         'key="$head $tree" && ' +
         'if [ -f "$rec" ] && [ "$(cat "$rec")" = "$key" ]; then exit 3; fi && ' +
         'if [ "$tree" = "$(git rev-parse "HEAD^{tree}")" ]; then ' +
-        // The one skip (tick 4s2): HEAD still the base the restore falls
-        // back to — a loss rebuilds it from origin without any push. Any
-        // other HEAD (a round-1 commit, a commit after a restore deleted
-        // the record) is PUSHED: assuming it was on origin already is how
+        // The one skip (tick 4s2): the record is ABSENT and HEAD is still
+        // the BASE the restore falls back to — the boot's own first clean
+        // round, the one state a loss rebuilds from origin without any
+        // push (and the one push that must NOT happen: a resumed box's
+        // branch may hold the last wip, and base would overwrite it). Any
+        // other HEAD — a round-1 commit, a commit after a restore deleted
+        // the record — is PUSHED: assuming it was on origin already is how
         // commits were lost. An unknown base pushes too — never assume.
-        'if [ "$head" = "$BASE" ]; then printf %s "$key" > "$rec"; exit 3; fi; ' +
+        'if [ ! -f "$rec" ] && [ "$head" = "$BASE" ]; then printf %s "$key" > "$rec"; exit 3; fi; ' +
         'printf "%s\n%s\n" "$head" "$key"; exit 0; fi && ' +
         'c="$(git commit-tree "$tree" -p "$head" -m "$MSG")" && printf "%s\n%s\n" "$c" "$key"',
       varsOf(git, {
