@@ -8,6 +8,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/acceptance"
 	"github.com/pengelbrecht/ticfac/internal/jev"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
 // The fixture is gvc's own shape: an epic whose done enumerates into items,
@@ -56,7 +57,7 @@ func answerOver(probabilities map[string]float64, choice string) jev.AnswerResul
 			Probabilities: probabilities,
 		}},
 		Model: "jev-2026-09",
-		Usage: jev.Usage{InputTokens: 900, OutputTokens: 40, CostUSD: 0.0001},
+		Usage: jev.Usage{InputTokens: 900, OutputTokens: 40, CostUSD: runstate.Ptr(0.0001)},
 	}
 }
 

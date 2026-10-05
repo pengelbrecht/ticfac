@@ -53,11 +53,12 @@ var claudeModelAliases = map[string]bool{"opus": true, "sonnet": true, "haiku": 
 //
 //   - decisions: the model exchanges the run itself recorded a measured
 //     price for — metered because the records state the price, and ONLY
-//     then (tick 1tm): a record whose usage block carries no price — the
-//     marshalled zero of a field nothing ever set, or no usage block at
-//     all — is not a measurement, so the line says "not metered" and
-//     states no number instead of a fabricated $0.00. Omitted when the
-//     run recorded no decision at all.
+//     then (tick 1tm): a record whose usage block carries no price — no
+//     usage block at all, or cost_usd as the explicit null the jev usage
+//     states since tick fzt (the field is a pointer: a never-set price is
+//     no price, not a zero) — is not a measurement, so the line says
+//     "not metered" and states no number instead of a fabricated $0.00.
+//     Omitted when the run recorded no decision at all.
 //   - workers-ai: the dispatches that ran through the factory's gateway.
 //     Its number is the HOST's ground truth (Sources.WorkerCost — the
 //     factory's own gateway-backed cost_usd) where the host stated one;
@@ -92,12 +93,15 @@ func buildCost(src Sources, recs Records) Cost {
 				continue
 			}
 			carrying++
-			// A measured price is one the record STATES: the marshalled zero
-			// of the jev usage's own never-set cost field is not a statement
-			// — it is the fabrication this split exists to end — so only a
-			// price above zero meters the line. A record that states a
-			// measured zero is not distinguishable from that marshalled zero
-			// and reads unmeasured here, the conservative side of rule 7.
+			// A measured price is one the record STATES. Since tick fzt the
+			// jev usage states no price as an explicit null (the field is a
+			// pointer), so a null or absent cost_usd is the distinguishable
+			// no-price and never meters. A stated zero remains ambiguous —
+			// on a record that predates the pointer it is the marshalled
+			// zero of a field nothing ever set, the fabrication this split
+			// exists to end — so only a price above zero meters the line and
+			// a stated zero reads unmeasured here, the conservative side of
+			// rule 7.
 			if v, ok := usage["cost_usd"].(float64); ok && v > 0 {
 				measured++
 				usd += v
