@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 450,
-  "state": "publishing",
-  "reason": "closing yp8 behind its validated review-epic answer",
-  "updated_at": "2026-10-05T23:20:52Z",
+  "sequence": 451,
+  "state": "running",
+  "reason": "yp8 is closed",
+  "updated_at": "2026-10-05T23:20:55Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -298,7 +298,7 @@
     },
     {
       "tick_id": "yp8",
-      "state": "reported",
+      "state": "closed",
       "attempt": 68
     }
   ],
