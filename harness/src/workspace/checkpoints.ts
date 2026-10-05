@@ -96,7 +96,8 @@ export type WorkspaceGit = {
   /**
    * The base commit the attempt was cut from: a container lost before the
    * FIRST wip (nothing pushed yet) restores to it, the same state the boot
-   * cloned.
+   * cloned — and it is the one HEAD a clean first round may leave unpushed
+   * (tick 4s2), because a loss rebuilds it from origin without any push.
    */
   readonly base?: string;
   /** Extra env vars on every git line (e.g. GITHUB_TOKEN, GIT_CONFIG_GLOBAL). */
@@ -194,11 +195,19 @@ function varsOf(git: WorkspaceGit, vars: Record<string, string>): Record<string,
  *
  * A clean round (the working tree is HEAD's tree) pushes the agent's own
  * HEAD when its commits moved since the last push, so the branch carries
- * them; the first clean round only records what it saw (the boot's HEAD is
- * on origin already: the base, or the branch it adopted). A round that
- * changed nothing since the last push pushes nothing — the record (the
- * pushed HEAD and tree) is kept in the checkout's git dir. The push IS the
- * durability: the branch on origin is what survives the container.
+ * them. The first clean round cannot ASSUME the boot's HEAD is still what
+ * origin holds (tick 4s2): a round-1 commit moves HEAD past origin before
+ * anything was ever pushed, and a restore deletes the record along with
+ * the old box's git dir while HEAD sits one commit under the branch's
+ * snapshot — both leave the agent's commits nowhere origin can restore
+ * from, and the next container loss rewinds to the older tip. So the first
+ * clean round pushes unless HEAD is still the BASE the restore falls back
+ * to — the one state a loss rebuilds without any push — and pushes too
+ * when the base is unknown: pushing is idempotent, assuming is what lost
+ * commits. A round that changed nothing since the last push pushes
+ * nothing — the record (the pushed HEAD and tree) is kept in the checkout's
+ * git dir. The push IS the durability: the branch on origin is what
+ * survives the container.
  *
  * Never throws: a failure (the door unavailable, a refused push) is the
  * outcome, for the caller to report.
@@ -213,13 +222,19 @@ export async function pushWipCheckpoint(shell: HostShell, git: WorkspaceGit): Pr
         'key="$head $tree" && ' +
         'if [ -f "$rec" ] && [ "$(cat "$rec")" = "$key" ]; then exit 3; fi && ' +
         'if [ "$tree" = "$(git rev-parse "HEAD^{tree}")" ]; then ' +
-        'if [ ! -f "$rec" ]; then printf %s "$key" > "$rec"; exit 3; fi; ' +
+        // The one skip (tick 4s2): HEAD still the base the restore falls
+        // back to — a loss rebuilds it from origin without any push. Any
+        // other HEAD (a round-1 commit, a commit after a restore deleted
+        // the record) is PUSHED: assuming it was on origin already is how
+        // commits were lost. An unknown base pushes too — never assume.
+        'if [ "$head" = "$BASE" ]; then printf %s "$key" > "$rec"; exit 3; fi; ' +
         'printf "%s\n%s\n" "$head" "$key"; exit 0; fi && ' +
         'c="$(git commit-tree "$tree" -p "$head" -m "$MSG")" && printf "%s\n%s\n" "$c" "$key"',
       varsOf(git, {
         MSG: WIP_COMMIT_SUBJECT,
         NAME: git.identity.name,
         EMAIL: git.identity.email,
+        BASE: git.base ?? "",
       }),
     );
     if (snapshot.exitCode === EMPTY) return { kind: "empty" };
