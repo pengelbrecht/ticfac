@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 222,
-  "state": "running",
-  "reason": "jmf is running as attempt 33",
-  "updated_at": "2026-10-05T16:43:56Z",
+  "sequence": 223,
+  "state": "collecting",
+  "reason": "collecting 7l6 attempt 31",
+  "updated_at": "2026-10-05T17:26:24Z",
   "ticks": [
     {
       "tick_id": "v16",
