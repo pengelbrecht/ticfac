@@ -409,12 +409,13 @@ func (g GitHub) call(ctx context.Context, method, path string, body any, out any
 		return err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		var message struct {
-			Message string `json:"message"`
+		var answer struct {
+			Message string           `json:"message"`
+			Errors  []APIErrorDetail `json:"errors"`
 		}
-		_ = json.Unmarshal(raw, &message)
-		return fmt.Errorf("GitHub answered %d for %s %s: %s", resp.StatusCode, method, path,
-			firstLine(message.Message))
+		_ = json.Unmarshal(raw, &answer)
+		return &APIError{Status: resp.StatusCode, Method: method, Path: path,
+			Message: answer.Message, Errors: answer.Errors}
 	}
 	if out == nil {
 		return nil
@@ -471,7 +472,8 @@ func (g GitHub) Find(ctx context.Context, headRef, baseRef string) (*PullRequest
 	return nil, nil
 }
 
-// Open creates the PR for headRef into baseRef.
+// Open creates the PR for headRef into baseRef. The body is fitted under
+// GitHub's limit (see writeBody), so its length never refuses the open.
 func (g GitHub) Open(ctx context.Context, headRef, baseRef, title, body string) (*PullRequest, error) {
 	var created struct {
 		Number  int    `json:"number"`
@@ -485,8 +487,10 @@ func (g GitHub) Open(ctx context.Context, headRef, baseRef, title, body string) 
 			Ref string `json:"ref"`
 		} `json:"base"`
 	}
-	if err := g.call(ctx, http.MethodPost, "/repos/"+g.Repo+"/pulls",
-		map[string]string{"title": title, "head": headRef, "base": baseRef, "body": body}, &created); err != nil {
+	if err := writeBody(body, func(body string) error {
+		return g.call(ctx, http.MethodPost, "/repos/"+g.Repo+"/pulls",
+			map[string]string{"title": title, "head": headRef, "base": baseRef, "body": body}, &created)
+	}); err != nil {
 		return nil, err
 	}
 	return &PullRequest{
@@ -500,13 +504,16 @@ func (g GitHub) Open(ctx context.Context, headRef, baseRef, title, body string) 
 // run's record where the person merging reads it. The body is a VIEW of the
 // run's durable state, recomposed by the close-out on every admission and
 // again at its close, so this method is a pure overwrite: see the interface
-// for why it is an edit and not a comment.
+// for why it is an edit and not a comment. The body is fitted under GitHub's
+// limit like Open's is.
 func (g GitHub) UpdateBody(ctx context.Context, pr PullRequest, body string) error {
 	if pr.Number == 0 {
 		return fmt.Errorf("the PR to rewrite names no number to address")
 	}
-	return g.call(ctx, http.MethodPatch, "/repos/"+g.Repo+"/pulls/"+strconv.Itoa(pr.Number),
-		map[string]string{"body": body}, nil)
+	return writeBody(body, func(body string) error {
+		return g.call(ctx, http.MethodPatch, "/repos/"+g.Repo+"/pulls/"+strconv.Itoa(pr.Number),
+			map[string]string{"body": body}, nil)
+	})
 }
 
 // checkRun is one check run as the GitHub API answers it.
