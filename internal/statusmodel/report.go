@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
+	"github.com/pengelbrecht/ticfac/internal/sandboximage"
 )
 
 // The per-tick report drill-in (epic hn6, wave 2 — tick ltg): what a person
@@ -261,8 +263,15 @@ func attemptNamesTick(state, tickID string) bool {
 }
 
 // reportSummary is the drill-in's one line: the report's first non-empty
-// paragraph that is not a heading, flattened and bounded to 300 characters —
-// what a person reads to decide whether to open the whole report.
+// paragraph that is neither a heading nor the container's preamble,
+// flattened and bounded to 300 characters — what a person reads to decide
+// whether to open the whole report. The preamble skip (tick wvn): every
+// report a per-tick container pushes carries facts ticks-worker prepended
+// after the harness exited — an HTML comment, italic facts lines naming the
+// branch, base and exit status, and, when they happened, the boundary and
+// cancellation sections — ABOVE the agent's words, and the one line a
+// person reads to decide whether to open the report must be what the
+// worker did, not the container's accounting of it.
 func reportSummary(body string) string {
 	var paragraph []string
 	flush := func() string {
@@ -271,6 +280,9 @@ func reportSummary(body string) string {
 			return ""
 		}
 		if strings.HasPrefix(paragraph[0], "#") {
+			return ""
+		}
+		if containerPreamble(paragraph) {
 			return ""
 		}
 		return oneLine(strings.Join(paragraph, " "), 300)
@@ -286,6 +298,33 @@ func reportSummary(body string) string {
 		paragraph = append(paragraph, line)
 	}
 	return flush()
+}
+
+// containerPreamble says whether one paragraph is part of the per-tick
+// container's own preamble — the facts ticks-worker (image/worker.sh,
+// prepend_container_facts) prepends to every report it pushes, above the
+// agent's words: its HTML comment, its italic facts lines (which spell the
+// container's own name, the basename of the command the image installs it
+// as), and the boundary and cancellation sections. The two section markers
+// are the container's stated contract with its readers — sandboximage
+// exports them for exactly that — and worker-collect.ts matches them too;
+// quoting them here by the constants keeps this reader honest against the
+// same strings instead of a retyped paraphrase of them. A blockquote that
+// carries neither marker is the agent's, and stays quotable.
+func containerPreamble(paragraph []string) bool {
+	first := paragraph[0]
+	if strings.HasPrefix(first, "<!--") {
+		return true
+	}
+	if strings.HasPrefix(first, "_"+path.Base(sandboximage.WorkerCommand)+":") {
+		return true
+	}
+	if strings.HasPrefix(first, ">") {
+		joined := strings.Join(paragraph, " ")
+		return strings.Contains(joined, sandboximage.WorkerBoundaryReportMarker) ||
+			strings.Contains(joined, sandboximage.WorkerCancelReportMarker)
+	}
+	return false
 }
 
 // ---- the diff -------------------------------------------------------------
