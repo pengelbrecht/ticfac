@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "l6n",
   "attempt": 54,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T19:59:14Z",
+  "triaged_at": "2026-10-05T19:59:30Z",
+  "triaged_by": "ticfac run epic-43y absorbing ug0",
+  "promoted_as": "ug0",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "l6n",
