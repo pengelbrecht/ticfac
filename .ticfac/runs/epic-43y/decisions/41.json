@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 41,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The staging stand-in seeds its bare origin (/srv/origin.git) INSIDE the container (cloudflare/staging/agent.Dockerfile --boot), and the attempt's WorkspaceGit.remote is that path (harness/src/host/worker-attempt.ts workspaceGit). A destroyed container therefore boots a fresh box with no origin at all: the restore's git fetch fails, and jhp's planned mid-turn destroy proof on staging cannot exercise the restore it exists for. tick cni's proof emptied the workspace instead (same restore code, same setup line), but epic 43y's [A2] asks for the destroy proven on staging. The stand-in needs an origin that outlives the box: a container volume on /srv, or an origin the container reaches over the network.\nevidence: cloudflare/staging/agent.Dockerfile --boot (git init --bare /srv/origin.git inside the image's container); harness/src/host/worker-attempt.ts:764 workspaceGit (remote: spec.repoUrl)\n\nticfac run epic-43y created this tick by absorbing the finding 0c747c9065092a9686ee036453d33b0a06e5efbda44719229bcb6b23474f9aa9 (reported by run-epic-43y/tick-cni/attempt-25): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/0c747c9065092a9686ee036453d33b0a06e5efbda44719229bcb6b23474f9aa9.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "a2l",
+    "title": "A container destroyed mid-turn cannot restore on staging: no origin"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.69,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.02,
+      "design": 0.75,
+      "diagnosis": 0.17,
+      "mechanical": 0.05,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1431,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T15:01:19Z",
+  "answered_at": "2026-10-05T15:01:19Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "a2l",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "e1539300b7e23e375c5cd24282072d818f95eacf",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
