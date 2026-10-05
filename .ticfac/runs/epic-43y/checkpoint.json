@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 147,
-  "state": "running",
-  "reason": "nou is closed",
-  "updated_at": "2026-10-05T11:09:34Z",
+  "sequence": 148,
+  "state": "dispatching",
+  "reason": "dispatching cni as attempt 25",
+  "updated_at": "2026-10-05T11:09:46Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -125,6 +125,10 @@
     },
     {
       "tick_id": "7wg",
+      "state": "ready"
+    },
+    {
+      "tick_id": "x8e",
       "state": "ready"
     }
   ],
