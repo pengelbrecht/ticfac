@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 222,
-  "state": "running",
-  "reason": "twa is running as attempt 37",
-  "updated_at": "2026-10-05T15:03:17Z",
+  "sequence": 223,
+  "state": "collecting",
+  "reason": "collecting j6o attempt 35",
+  "updated_at": "2026-10-05T15:03:22Z",
   "ticks": [
     {
       "tick_id": "92k",
