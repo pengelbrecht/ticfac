@@ -396,11 +396,7 @@ describe("the local worker host", () => {
   });
 
   it("serves the live conversation to a watcher, and a steer round-trips through what it watches", {
-<<<<<<< HEAD
     timeout: 300_000,
-=======
-    timeout: 120_000,
->>>>>>> 575b133ca4b75e6ae0e17c3563bb3e1313fed7e8
   }, async () => {
     // Tick y03: `ticfac watch <run> <tick>` reads a local worker through
     // the same door the stuck nudge steers through. The watcher sees the
@@ -417,10 +413,10 @@ describe("the local worker host", () => {
     // The gate is capped at its own 120s (600 × 0.2s): a test that died
     // before releasing it leaves a child that still ends on its own, and
     // afterEach reaps it by process group regardless.
-    // This test still states its own wall clock (120s, the kjs rule): its
-    // runtime is the whole child boot, the rounds and the finish phase,
-    // which grows with host load — 21s measured at synthetic load 200
-    // against the quiet-host 30s default.
+    // This test still states its own wall clock (300s, tick 7wg's
+    // full-worker bound): its runtime is the whole child boot, the rounds
+    // and the finish phase, which grows with host load — 21s measured at
+    // synthetic load 200 against the quiet-host 30s default.
     const transcript = f.transcript([
       {
         thinking: "The tick wants a step file; a bash round writes it.",
@@ -529,13 +525,8 @@ describe("the local worker host", () => {
     }
   });
 
-<<<<<<< HEAD
-  it("refuses a request that is neither a steer nor a watch, by name", {
-    timeout: 300_000,
-  }, async () => {
-=======
   it("meets the live conversation when the watcher attaches late, whatever the host load", {
-    timeout: 120_000,
+    timeout: 300_000,
   }, async () => {
     // Tick hv3: the reproduced flake, made a permanent regression test.
     // The full `pnpm test` runs failed this file's watcher test once on a
@@ -641,8 +632,9 @@ describe("the local worker host", () => {
     expect(textOf(settled.at(-1) as Message)).toBe("watched late");
   });
 
-  it("refuses a request that is neither a steer nor a watch, by name", async () => {
->>>>>>> 575b133ca4b75e6ae0e17c3563bb3e1313fed7e8
+  it("refuses a request that is neither a steer nor a watch, by name", {
+    timeout: 300_000,
+  }, async () => {
     const transcript = f.transcript([
       {
         toolCalls: [
