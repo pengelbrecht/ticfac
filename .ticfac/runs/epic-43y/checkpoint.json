@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 173,
-  "state": "gating",
-  "reason": "running the integrated gate for x8e on 2e56cce8b211",
-  "updated_at": "2026-10-05T11:56:11Z",
+  "sequence": 174,
+  "state": "publishing",
+  "reason": "closing x8e behind the integrated gate on 2e56cce8b211",
+  "updated_at": "2026-10-05T11:59:06Z",
   "ticks": [
     {
       "tick_id": "92k",
