@@ -169,21 +169,24 @@
 // command or test that would demonstrate it — which rides the draft, is
 // marked on every surface a person deciding reads (the event feed, the
 // triage listing, the hold, the epic PR body), and — since tick wz0 —
-// REACHES THE DECISION ITSELF AS AN INPUT: the oracle scores the claim
-// against what the done actually did, and the predictor carries it into the
-// classifier's question as evidence — never as the verdict, which is the
-// whole distinction the record's Basis field keeps; a finding reported
-// without it is accepted and marked UNLINKED, because the evidence is a
-// claim to score, never a verdict. A tick
+// REACHES THE DECISION ITSELF: since the absorption policy of 2026-10-06
+// (absorb_policy.go) a HIGH-severity finding that names an item of the done
+// it breaks is the one worker-asserted basis for absorbing it, and no
+// classifier second-guesses the claim; a finding reported without it is
+// accepted and marked UNLINKED, and is backlog work. A tick
 // whose findings are untriaged CLOSES, the finding rides to the close-out,
 // and the close-out does not hand over while one is untriaged or missing
 // from the epic PR — which is the one thing that stops a finding falling
 // on the floor. And since tick npq the run TRIAGES what its own decision
-// machinery can reach: a finding judged GATING against the epic's own
-// definition of done is absorbed into the running epic as a tick placed
-// before the final review, a non-gating one becomes a backlog tick with an
-// owner, and the decision — item id, verdict, observed or predicted,
-// confidence — is a record on the run branch (absorb.go), and so is the
+// machinery can reach, by the absorption policy (absorb_policy.go): a
+// finding the final reviewer names blocking, or a high-severity one whose
+// reporter names the done item it breaks while the epic's work is under way,
+// is absorbed into the running epic as a tick placed before the final review;
+// such a high-severity one reported once the work is done is deferred to the
+// reviewer; every other finding becomes a backlog tick with an owner, listed
+// on the epic PR; and the decision — item id, verdict, basis (reviewer,
+// worker-asserted-high, backlog-default) — is a record on the run branch
+// (absorb.go), and so is the
 // recursion's depth bound (tick wz0, absorb_bound.go): the first decision
 // that needs it records it, a cold restart without the flag applies the
 // recorded bound rather than dropping back to the default over git state it
@@ -192,8 +195,7 @@
 // a backlog tick named on the epic PR, and the run carries on. What the run
 // cannot decide is still a person's, triaged with `ticfac triage` (the old
 // `ticfac finding` kept for what it alone can do: promoting a tick that
-// already exists, into another repository): an epic whose acceptance is
-// prose — the refusal the absorption refuses to guess past. A finding routed
+// already exists, into another repository). A finding routed
 // to ANOTHER repository is not among them (the epic-2jn close-out stall): it
 // never gates, and the run files it in the target's tracker when
 // .tick/runners.toml allows it, or backlogs it here naming the target

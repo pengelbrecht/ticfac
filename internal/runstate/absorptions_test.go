@@ -64,7 +64,7 @@ func TestAnAbsorptionRecordRefusesWhatItCannotSay(t *testing.T) {
 		want string
 	}{
 		{"no tick", func(a *Absorption) { a.TickID = "" }, "names no tick"},
-		{"basis outside the vocabulary", func(a *Absorption) { a.Basis = "felt" }, "is not observed, predicted or rule"},
+		{"basis outside the vocabulary", func(a *Absorption) { a.Basis = "felt" }, "is not one of"},
 		{"placement outside the vocabulary", func(a *Absorption) { a.Placement = "appended" }, "not one of"},
 		{"no reason", func(a *Absorption) { a.Reason = "" }, "carries no reason"},
 		{"no decided_at", func(a *Absorption) { a.DecidedAt = "" }, "no decided_at"},
@@ -101,6 +101,57 @@ func TestAnAbsorptionRecordRefusesWhatItCannotSay(t *testing.T) {
 				t.Errorf("%s refused with %q, want it to name %q", testCase.name, err, testCase.want)
 			}
 		})
+	}
+}
+
+// THE POLICY'S BASES (operator decision 2026-10-06): reviewer,
+// worker-asserted-high and backlog-default, each agreeing with itself — no
+// classifier's answer on any of them, gating exactly where the basis allows.
+//
+// short: Validate over records already in memory
+func TestAPolicyAbsorptionRecordAgreesWithItsBasis(t *testing.T) {
+	t.Parallel()
+	valid := map[string]func(*Absorption){
+		"worker-asserted-high absorbed": func(a *Absorption) { a.Basis = AbsorptionWorkerAssertedHigh },
+		"worker-asserted-high deferred": func(a *Absorption) {
+			a.Basis, a.Gating, a.ItemID, a.Placement = AbsorptionWorkerAssertedHigh, false, "", AbsorptionDeferredToReview
+		},
+		"backlog-default": func(a *Absorption) {
+			a.Basis, a.Gating, a.ItemID, a.Placement = AbsorptionBacklogDefault, false, "", AbsorptionBacklog
+		},
+		"reviewer": func(a *Absorption) { a.Basis, a.ItemID = AbsorptionReviewer, "" },
+	}
+	for name, warp := range valid {
+		record := testAbsorption("dc02fb31")
+		warp(&record)
+		if err := record.Validate(); err != nil {
+			t.Errorf("%s does not validate: %v", name, err)
+		}
+	}
+	refused := map[string]func(*Absorption){
+		"backlog-default gating": func(a *Absorption) { a.Basis = AbsorptionBacklogDefault },
+		"reviewer not gating": func(a *Absorption) {
+			a.Basis, a.Gating, a.ItemID, a.Placement = AbsorptionReviewer, false, "", AbsorptionBacklog
+		},
+		"worker-asserted-high with a model": func(a *Absorption) {
+			a.Basis, a.Model = AbsorptionWorkerAssertedHigh, "jev-1.13.0"
+		},
+		"worker-asserted-high with a confidence": func(a *Absorption) {
+			a.Basis, a.Confidence = AbsorptionWorkerAssertedHigh, 0.44
+		},
+		"worker-asserted-high backlogged": func(a *Absorption) {
+			a.Basis, a.Gating, a.ItemID, a.Placement = AbsorptionWorkerAssertedHigh, false, "", AbsorptionBacklog
+		},
+		"deferred on a prediction": func(a *Absorption) {
+			a.Basis, a.Gating, a.ItemID, a.Placement = AbsorptionPredicted, false, "", AbsorptionDeferredToReview
+		},
+	}
+	for name, warp := range refused {
+		record := testAbsorption("dc02fb31")
+		warp(&record)
+		if err := record.Validate(); err == nil {
+			t.Errorf("%s validated; want a refusal", name)
+		}
 	}
 }
 

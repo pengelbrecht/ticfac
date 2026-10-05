@@ -88,7 +88,7 @@ func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, finding
 			"\"resolve-conflict: …\"): check each resolution keeps both sides' intent.",
 			strings.Join(dedupe(resolves), ", ")))
 	}
-	var absorbed, liveRun, pastBound []string
+	var absorbed, liveRun, pastBound, deferredToReview []string
 	for _, record := range absorptions {
 		switch {
 		case record.Gating:
@@ -97,6 +97,8 @@ func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, finding
 			liveRun = append(liveRun, record.TickID)
 		case isPastBound(record):
 			pastBound = append(pastBound, record.TickID)
+		case isDeferredToReview(record):
+			deferredToReview = append(deferredToReview, record.TickID)
 		}
 	}
 	if len(pastBound) > 0 {
@@ -108,6 +110,15 @@ func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, finding
 			"have extended a chain of absorbed fixes already at the bound, so the run filed it as a backlog tick "+
 			"with an owner rather than absorb it, whatever done item it claims. Judge whether any must land "+
 			"before this merges: %s.", len(pastBound), strings.Join(pastBound, ", ")))
+	}
+	if len(deferredToReview) > 0 {
+		// The policy's late rule (absorb_policy.go): high-severity findings
+		// reported once the epic's work was done, which the final reviewer
+		// did not name blocking.
+		items = append(items, fmt.Sprintf("%d high-severity finding(s) naming a done item they break were reported "+
+			"after the epic's work was done, so the run deferred them to the final reviewer instead of absorbing "+
+			"them, and the reviewer did not name them blocking; each is a backlog tick with an owner. Judge whether "+
+			"any must land before this merges: %s.", len(deferredToReview), strings.Join(deferredToReview, ", ")))
 	}
 	if len(absorbed) > 0 {
 		items = append(items, fmt.Sprintf("The run ABSORBED %d tick(s) into the epic mid-run, fixes its own "+

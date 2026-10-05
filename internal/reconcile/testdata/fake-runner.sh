@@ -760,6 +760,19 @@ review_not_ready_then_ready)
 		report
 	fi
 	;;
+review_ready_then_not_ready)
+	# The READY-review gap: the first review (rv) judges the epic READY, and
+	# any later review — one the run makes because the tree changed after that
+	# READY — judges it NOT READY, naming a blocking finding.
+	if [ "$TICFAC_ROLE" = "review-epic" ] && [ "$TICFAC_TICK" = "rv" ]; then
+		report
+	elif [ "$TICFAC_ROLE" = "review-epic" ]; then
+		review_not_ready_report "the change after the READY review broke it" "The change after the READY review broke it"
+	else
+		commit
+		report
+	fi
+	;;
 review_no_verdict)
 	# The refusal case (tick b50): a review whose report says in prose that the
 	# epic is not ready but never states its typed REVIEW-VERDICT line. Prose is
@@ -806,6 +819,53 @@ closeout_finding)
 		commit
 		report
 	fi
+	;;
+closeout_finding_high|closeout_finding_low)
+	# The absorption policy's late rule (operator decision 2026-10-06): only
+	# the close-out reports, after every implementation tick closed and the
+	# final review ran, ONE in-repository finding naming done item A1 — high
+	# severity in the one mode, low in the other. Neither is absorbed: the
+	# high one is deferred to the reviewer, the low one is backlog work.
+	if [ "$TICFAC_TICK" = "co" ]; then
+		severity=high
+		[ "$mode" = "closeout_finding_low" ] && severity=low
+		commit
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf 'The close-out found something after the work was done.\n\n'
+			printf '%s\n' '```findings'
+			printf '%s\n' '[{'
+			printf '%s\n' '  "kind": "proposed-tick",'
+			printf '%s\n' '  "title": "A late finding the close-out reports",'
+			printf '%s\n' '  "body": "Found after the epic work was done.",'
+			printf '%s\n' "  \"severity\": \"$severity\","
+			printf '%s\n' '  "target": "",'
+			printf '%s\n' '  "done_item": "A1",'
+			printf '%s\n' '  "demonstrating_check": "done"'
+			printf '%s\n' '}]'
+			printf '%s\n' '```'
+			printf '\nSTATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+	else
+		commit
+		report
+	fi
+	;;
+finding_local_low)
+	# The absorption policy's default (operator decision 2026-10-06): the
+	# finding_local finding at LOW severity, still naming done item A1. A
+	# reporter's claim at low severity is backlog work, whatever it names.
+	commit
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The fake runner also found things outside its tick.\n\n'
+		findings_block_local | sed 's/"severity": "high"/"severity": "low"/'
+		printf '\n'
+		verdict_line
+		printf 'STATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
 	;;
 finding_bad)
 	# A findings block that does not parse: collect carries the problem, and
