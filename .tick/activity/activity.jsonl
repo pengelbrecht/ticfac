@@ -2316,3 +2316,4 @@
 {"ts":"2026-10-05T19:42:59.829023Z","tick":"7sn","action":"close","actor":"ticfac","epic":"43y","data":{"title":"Cloud PR-review omp exception to A1 was recorded by a worker, not the operator"}}
 {"ts":"2026-10-05T19:43:24.210523Z","tick":"umx","action":"start","actor":"ticfac","epic":"43y","data":{"title":"agent-faults proof's 'checkpoints after the resume' claim is not order-checked"}}
 {"ts":"2026-10-05T19:47:58.383923Z","tick":"r2m","action":"note","actor":"ticfac","epic":"43y","data":{"note":"\n2026-10-05 21:47 - ticfac run epic-43y: r2m try 1 (run dispatch #52) merged into epic/43y as df5bc3330036; the integrated gate (go, ts) passed.","title":"Restore's setup entry skips provision_toolchain; a restored box lacks mise tools"}}
+{"ts":"2026-10-05T19:48:01.840339Z","tick":"r2m","action":"close","actor":"ticfac","epic":"43y","data":{"title":"Restore's setup entry skips provision_toolchain; a restored box lacks mise tools"}}
