@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "j2k",
   "attempt": 69,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T23:36:14Z",
+  "triaged_at": "2026-10-05T23:36:30Z",
+  "triaged_by": "ticfac run epic-43y absorbing jq6",
+  "promoted_as": "jq6",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "j2k",
