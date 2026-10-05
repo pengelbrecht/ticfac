@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 23,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "TestTheDurableRunnerRunsAWholeWorkerOnTheHarness fails at 091225a4 with verdict no-commits. Since xd3, the wip checkpoint is a snapshot ON TOP of the agent's HEAD, force-pushed and invisible to the branch's own history, so a worker that never commits leaves nothing collect counts (the test's faux transcript never commits). The local host (harness/src/local/worker-host.ts) also never retires its last snapshot the way the cloud host does (retireWipSnapshot) before the supervisor's push. So a supervisor push of HEAD after a dirty round may be refused as non-fast-forward over the snapshot (pushBranch's reflog rescue cannot apply: the snapshot was never on the branch). Decide: should the local host retire the snapshot and salvage-commit uncommitted work at the end, as the cloud finish phase does, or should the test's transcript commit? It keeps CI's full go job red, which is the epic's [A5].\nevidence: go test -run TestTheDurableRunnerRunsAWholeWorkerOnTheHarness -count=1 ./internal/exec/subprocess/ — internal/exec/subprocess/local_host_e2e_test.go:119 — verdict no-commits, want ready-to-merge (reproduced at base in a clean worktree); harness/src/workspace/checkpoints.ts retireWipSnapshot has no caller in harness/src/local/\n\nticfac run epic-43y created this tick by absorbing the finding bc0774975a9ba8d5c62d54bb44cbbcd285fe8496c01aa37712387eca3ee393f2 (reported by run-epic-43y/tick-y03/attempt-17): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/bc0774975a9ba8d5c62d54bb44cbbcd285fe8496c01aa37712387eca3ee393f2.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "nou",
+    "title": "Local durable worker e2e is red at base: no-commits since xd3's wip snapshot"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.95,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0,
+      "design": 0.97,
+      "diagnosis": 0.03,
+      "mechanical": 0,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1533,
+      "output_tokens": 56
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T10:30:28Z",
+  "answered_at": "2026-10-05T10:30:28Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "nou",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "40e2ecacb3dfa30af27cfcf87cb5d8ac9fe39d2c",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
