@@ -12,8 +12,11 @@
   "attempt": 66,
   "done_item": "A5",
   "demonstrating_check": "go test -run TestTheClassificationRecordIsPinnedAsItIsWritten -timeout 20m ./internal/reconcile/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T22:14:15Z",
+  "triaged_at": "2026-10-05T22:14:25Z",
+  "triaged_by": "ticfac run epic-43y absorbing 4w7",
+  "promoted_as": "4w7",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "o68",
