@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 127,
-  "state": "gating",
-  "reason": "running the integrated gate for i3h on c401bccb2f54",
-  "updated_at": "2026-10-05T10:31:53Z",
+  "sequence": 128,
+  "state": "publishing",
+  "reason": "closing i3h behind the integrated gate on c401bccb2f54",
+  "updated_at": "2026-10-05T10:33:46Z",
   "ticks": [
     {
       "tick_id": "92k",
