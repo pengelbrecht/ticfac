@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 250,
-  "state": "dispatching",
-  "reason": "dispatching 8em as attempt 41",
-  "updated_at": "2026-10-05T16:02:42Z",
+  "sequence": 251,
+  "state": "running",
+  "reason": "8em is running as attempt 41",
+  "updated_at": "2026-10-05T16:02:58Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -182,7 +182,8 @@
     },
     {
       "tick_id": "8em",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 41
     }
   ],
   "provenance": {
