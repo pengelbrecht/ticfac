@@ -467,32 +467,21 @@ describe("the load-dependent tests of both suites state their own wall clock", (
         "pushes nothing for a round that changed no file, and the changed round's wip lands on origin",
       ),
     ).toBe(true);
-<<<<<<< HEAD
-    // The omq seam (tick umx found it red at the epic base; the fix raised
-    // it to 300_000): dumb-git-origin's whole-container story drives real
-    // git through the real local door, and it binds through the door
-    // fixture variable rather than a direct entry-point call. A
-    // classification that loses it is a bound no longer enforced there and
-    // a guard that still reads green — named for the same reason the fim
+    // Both of dumb-git-origin's tests are named, not just counted. The first
+    // is the omq seam (tick umx found it red at the epic base; the fix raised
+    // it to 300_000): its whole-container story drives real git through the
+    // real local door, and it binds through the door fixture variable rather
+    // than a direct entry-point call. The second (tick 30e) hid behind the
+    // promisified spelling until the vocabulary learned execFileAsync. A
+    // classification that loses either is a bound no longer enforced there
+    // and a guard that still reads green — named for the same reason the fim
     // titles above are named.
-=======
-    // Both of dumb-git-origin's tests are named (tick 30e), not just counted:
-    // the first was this epic's repeatedly-absorbed underbound finding (ticks
-    // 4ao, h3c, omq, 7oy — a2l wrote it with the 120s harness bound before
-    // the process criterion existed), and the second hid behind the promisified
-    // spelling until the vocabulary learned execFileAsync. If either stops
-    // binding, that is a criterion that reads a file it no longer guards —
-    // a look, not a green tick.
->>>>>>> 7a553973f5edfea06ec40f654d33f8ed98d20389
     expect(
       processTitles.has(
         "an origin that outlives the box carries the boot, the wip and the restore",
       ),
     ).toBe(true);
-<<<<<<< HEAD
-=======
     expect(processTitles.has("keeps the fast-forward-only push a dumb origin must")).toBe(true);
->>>>>>> 7a553973f5edfea06ec40f654d33f8ed98d20389
     // The two spellings fim added the harness criterion for: the helper that
     // opens (the gateway tests) and the whole host whose open is in src.
     const workerdHarnessTitles = new Set(
