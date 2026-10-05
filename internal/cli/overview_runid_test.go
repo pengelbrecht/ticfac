@@ -200,7 +200,7 @@ func TestTheOverviewResolvesTheEpicOfARegisteredRun(t *testing.T) {
 	ownRegistry(t)
 	fakeOverviewGraph(t)
 	fakeEpicStatus(t)
-	working, operator, release := mwtRegisteredRunFixture(t, now)
+	_, operator, release := mwtRegisteredRunFixture(t, now)
 	defer release()
 
 	var stdout, stderr bytes.Buffer
@@ -344,9 +344,6 @@ func TestTheOverviewPrintsNoCommandWithAnEmptyOperand(t *testing.T) {
 		if row.ClearWith != nil {
 			t.Errorf("%s names the clearing command %q with no epic to put in it", runID, *row.ClearWith)
 		}
-		if !mwtCarriesItsOperands(stringOrEmpty(row.ClearWith)) {
-			t.Errorf("%s carries a command that lost an operand", runID)
-		}
 		for _, attention := range row.Model.Attention {
 			if attention.UnblockCommand != nil && !mwtCarriesItsOperands(*attention.UnblockCommand) {
 				t.Errorf("%s's attention carries the operandless command %q", runID, *attention.UnblockCommand)
@@ -374,14 +371,6 @@ func TestTheOverviewPrintsNoCommandWithAnEmptyOperand(t *testing.T) {
 			t.Errorf("%s names a clearing command its unresolvable epic cannot spell: %q", runID, line)
 		}
 	}
-}
-
-// stringOrEmpty is a nil-safe read of an optional string pointer.
-func stringOrEmpty(p *string) string {
-	if p == nil {
-		return ""
-	}
-	return *p
 }
 
 // TestTheOverviewBoundsEveryRowToTheWidth: the row's first line is a glance,

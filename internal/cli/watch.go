@@ -1385,10 +1385,18 @@ func watchEndHolding(model statusmodel.Model, runID string, stderr io.Writer) in
 				detail = model.Liveness.LastEvent.Detail
 			}
 			fmt.Fprintf(stderr, "\nticfac watch: run %s ended FAILED:\n%s\n", runID, detail)
-			fmt.Fprintf(stderr, "Nothing is held for a person: the work has to be fixed and the epic run again — "+
-				"`%s` resumes it under this run id, without redoing what "+
-				"already passed. The evidence is on the integration branch, not in this line.\n\n",
-				statusmodel.ResumeCommand(model.Host, model.EpicID))
+			// The resume is named only when the model can spell it (tick mwt):
+			// an epic nothing resolved names no command, and a sentence that
+			// points at an empty backticked nothing is worse than the plain
+			// one that says what has to happen.
+			if resume := statusmodel.ResumeCommand(model.Host, model.EpicID); resume != "" {
+				fmt.Fprintf(stderr, "Nothing is held for a person: the work has to be fixed and the epic run again — "+
+					"`%s` resumes it under this run id, without redoing what "+
+					"already passed. The evidence is on the integration branch, not in this line.\n\n", resume)
+			} else {
+				fmt.Fprintf(stderr, "Nothing is held for a person: the work has to be fixed and the epic run again. "+
+					"The evidence is on the integration branch, not in this line.\n\n")
+			}
 			return exitGeneric
 		}
 		if watchModelEndedCancelled(model) {

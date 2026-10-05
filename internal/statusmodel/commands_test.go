@@ -18,7 +18,6 @@ import (
 // says what is wanted.
 
 func heldLine(tickID string, attempt int) runfeed.Event {
-	tick := tickID
 	n := attempt
 	return runfeed.NewEvent(time.Now(), "run_x", tickID, &n, reconcile.StageRunHeld,
 		"attempt_struck_out: the report names no status")
