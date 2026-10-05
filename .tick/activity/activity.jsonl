@@ -2511,3 +2511,4 @@
 {"ts":"2026-10-05T19:44:10.647399Z","tick":"dm2","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-05 21:44 - ticfac run epic-hn6: dm2 try 1 (run dispatch #32) merged into epic/hn6 as 3f7a5d27e412; the integrated gate (go, ts) passed.","title":"Meter local runs' Workers AI spend via the gateway; no live run ever metered"}}
 {"ts":"2026-10-05T19:44:10.945577Z","tick":"dm2","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"Meter local runs' Workers AI spend via the gateway; no live run ever metered"}}
 {"ts":"2026-10-05T19:44:24.809836Z","tick":"24u","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"the local jev classifier's gateway calls are untagged (run_id None)"}}
+{"ts":"2026-10-05T19:44:44.572368Z","tick":"648","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"pi's streamed workers-ai calls leave no gateway log row"}}
