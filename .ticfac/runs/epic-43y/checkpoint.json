@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 215,
-  "state": "publishing",
-  "reason": "closing uxi behind the integrated gate on d648c0a51bba",
-  "updated_at": "2026-10-05T15:00:52Z",
+  "sequence": 216,
+  "state": "running",
+  "reason": "uxi is closed",
+  "updated_at": "2026-10-05T15:01:09Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -142,7 +142,7 @@
     },
     {
       "tick_id": "uxi",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 34
     },
     {
