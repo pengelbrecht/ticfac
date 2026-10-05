@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 28,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "For a stopped run the model's attention is a dead-run resume, so the frame shows 'needs you: … ticfac run hn6 --cloud' and the alert prints '! … is holding for a person … move it on: ticfac run hn6 --cloud'. The ending then prints 'ended CANCELLED … nothing is held for a person' without the resume command, and exits 7. One command run gives two opposite answers. The cancelled ending should name the resume command, the same one the frame names.\nevidence: internal/cli/watch.go:1279-1287 (watchEndHolding cancelled branch) vs :1226 (watchAttentionAlertText); live: ticfac watch epic-hn6 in a pty, exit 7\n\nticfac run epic-hn6 created this tick by absorbing the finding a56238cd0c1175da211f1e63dbe169fcc943bdb11edb60a324863e6f727c9cbe (reported by run-epic-hn6/tick-435/attempt-22): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/a56238cd0c1175da211f1e63dbe169fcc943bdb11edb60a324863e6f727c9cbe.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "3yx",
+    "title": "watch on a stopped run says 'holding for a person' then 'nothing is held'"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.6,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.16,
+      "design": 0,
+      "diagnosis": 0.15,
+      "mechanical": 0.68,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1366,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T13:12:12Z",
+  "answered_at": "2026-10-05T13:12:12Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "3yx",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "fb4146f0f9bdf15ad76820d5373b3b0891ce5c38",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
