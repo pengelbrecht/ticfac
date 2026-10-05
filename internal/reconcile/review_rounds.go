@@ -183,17 +183,7 @@ func (r *Reconciler) answerNotReadyReview(ctx context.Context) (bool, error) {
 		// argue with its review — but a tree that changed since the final
 		// review judged it is a tree no review has judged (epic-hn6): it is
 		// reviewed once more, and only an unchanged tree holds.
-		head, changed, err := r.treeChangedSinceReview(ctx, final)
-		if err != nil || !changed {
-			return false, err
-		}
-		acted := false
-		err = r.heldStep(func() error {
-			var stepErr error
-			acted, stepErr = r.placeChangedTreeReview(ctx, durable, rounds, final, reviewed, head)
-			return stepErr
-		})
-		return acted, err
+		return r.reviewIfTreeChanged(ctx, durable, rounds)
 	}
 	blocking := blockingFindingsOf(final)
 	if len(blocking) == 0 {
@@ -528,10 +518,78 @@ func isCloseoutMerge(message string, closeouts []string) bool {
 	return false
 }
 
-// placeChangedTreeReview is answerNotReadyReview's held step past the bound:
+// A READY review is about the tree it judged too (after epic-hn6, 2026-10-06).
+//
+// WHAT WAS WRONG. hn6's branch closed three ticks (lfm, m4t, gzv) hours after
+// its final review answered, and nothing reviewed them. Had that review said
+// READY, the run would have merged them under it: the land asked "is the
+// final review READY?", never "is this still the tree it judged?" — the
+// question the NOT READY side above learned to ask.
+//
+// THE RULE. Before the run lands, a READY final review whose tree has changed
+// since (treeChangedSinceReview: the same reading, the close-out's own merge
+// excepted, so the normal path — review, close-out, land — is never a change)
+// is followed by ONE more review of the tree as it stands, and the land waits
+// for its verdict: READY lands, NOT READY is the final review's NOT READY and
+// follows the rules above. Every round is gated the same way, so it
+// terminates: a review over a tree unchanged since it lands or holds.
+//
+// It is asked where the run can still work a new tick: where a run is
+// resumed (Run, beside answerNotReadyReview) and where a run's plan has
+// drained, just before the readying (Run's work-the-plan loop) — which is
+// where a change after the READY review in the same run is seen.
+
+// reviewOverChangedTree places one more review when the final review's tree
+// has changed and nothing else will review it: a READY final review, or a
+// NOT READY one past the bound (below the bound the absorption owns the next
+// round). It reports whether a review was placed, so the caller re-reads the
+// graph and works it.
+func (r *Reconciler) reviewOverChangedTree(ctx context.Context) (bool, error) {
+	if r.store == nil || r.opts.notReadyForAPerson {
+		return false, nil
+	}
+	durable, ok := r.tracker.(*durableTracker)
+	if !ok {
+		return false, nil
+	}
+	rounds, err := r.readReviewRounds()
+	if err != nil || rounds.final == nil {
+		return false, err
+	}
+	switch reviewVerdictOf(rounds.final.Response) {
+	case subprocess.ReviewVerdictReady:
+	case subprocess.ReviewVerdictNotReady:
+		if rounds.rounds < maxReviewRounds {
+			return false, nil
+		}
+	default:
+		return false, nil
+	}
+	return r.reviewIfTreeChanged(ctx, durable, rounds)
+}
+
+// reviewIfTreeChanged is the gate both verdicts share: one more review only
+// when the tree changed since the final review judged it.
+func (r *Reconciler) reviewIfTreeChanged(ctx context.Context, durable *durableTracker, rounds reviewRounds) (bool, error) {
+	final := *rounds.final
+	reviewed, _ := final.Request["tick_id"].(string)
+	head, changed, err := r.treeChangedSinceReview(ctx, final)
+	if err != nil || !changed {
+		return false, err
+	}
+	acted := false
+	err = r.heldStep(func() error {
+		var stepErr error
+		acted, stepErr = r.placeChangedTreeReview(ctx, durable, rounds, final, reviewed, head)
+		return stepErr
+	})
+	return acted, err
+}
+
+// placeChangedTreeReview is the held step of a review over a changed tree:
 // one more review of the tree as it now stands, filed under the epic (reused
-// when an earlier incarnation already made it) and placed before the
-// close-out when that is still open.
+// when an earlier incarnation already made it), behind every open work tick
+// of the epic, and placed before the close-out when that is still open.
 func (r *Reconciler) placeChangedTreeReview(ctx context.Context, durable *durableTracker, rounds reviewRounds,
 	final runstate.Decision, reviewed, head string) (bool, error) {
 	judged, _ := final.Request["source_sha"].(string)
@@ -540,6 +598,9 @@ func (r *Reconciler) placeChangedTreeReview(ctx context.Context, durable *durabl
 		return false, err
 	}
 	round := rounds.rounds + 1
+	if reviewVerdictOf(final.Response) == subprocess.ReviewVerdictReady {
+		return r.placeReviewAfterReady(ctx, durable, final, reviewed, judged, head, rereview, closeout, round)
+	}
 	if rereview == "" {
 		description := fmt.Sprintf(
 			"Review the epic %s again, AS INTEGRATED: its final review (%s, decision %d) judged it NOT READY at "+
@@ -558,6 +619,9 @@ func (r *Reconciler) placeChangedTreeReview(ctx context.Context, durable *durabl
 			return false, err
 		}
 	}
+	if err := r.placeBehindOpenWork(ctx, durable, rereview, reviewed); err != nil {
+		return false, err
+	}
 	if closeout != "" {
 		if err := durable.BlockOn(ctx, closeout, rereview); err != nil {
 			return false, fmt.Errorf("place the close-out %s behind the re-review %s: %w", closeout, rereview, err)
@@ -571,4 +635,62 @@ func (r *Reconciler) placeChangedTreeReview(ctx context.Context, durable *durabl
 		final.Decision, r.opts.EpicID, notReadyReasons(final), rounds.rounds, maxReviewRounds, short(judged),
 		short(head), rereview, round)
 	return true, nil
+}
+
+// placeReviewAfterReady is placeChangedTreeReview for a READY final review:
+// the review the land waits on.
+func (r *Reconciler) placeReviewAfterReady(ctx context.Context, durable *durableTracker, final runstate.Decision,
+	reviewed, judged, head, rereview, closeout string, round int) (bool, error) {
+	if rereview == "" {
+		description := fmt.Sprintf(
+			"Review the epic %s again, AS INTEGRATED, before the run lands it: its final review (%s, decision %d) "+
+				"judged it READY at %s, and the epic branch has changed since — now at %s, with work that review "+
+				"never saw (a tick closed or a commit pushed after it). This is review round %d, made only because "+
+				"the tree changed; the run lands on YOUR verdict, not the earlier one.\n\nJudge the tree as it "+
+				"stands: READY when the epic does what it said it would, NOT READY naming what blocks it.",
+			r.opts.EpicID, reviewed, final.Decision, short(judged), short(head), round)
+		var err error
+		rereview, err = r.createReReview(ctx, durable,
+			fmt.Sprintf("Re-review %s: its tree changed since its READY final review (round %d)", r.opts.EpicID, round),
+			description)
+		if err != nil {
+			return false, err
+		}
+	}
+	if err := r.placeBehindOpenWork(ctx, durable, rereview, reviewed); err != nil {
+		return false, err
+	}
+	if closeout != "" {
+		if err := durable.BlockOn(ctx, closeout, rereview); err != nil {
+			return false, fmt.Errorf("place the close-out %s behind the re-review %s: %w", closeout, rereview, err)
+		}
+	}
+	r.record(reviewed, StageReviewRound,
+		"the final review (decision %d) judged %s READY, but the epic branch changed since the tree it judged (%s, "+
+			"now %s) with more than run state, tracker records and the close-out's merge: the READY is about a tree "+
+			"that no longer exists, so the run reviews the tree as it stands before it lands — %s (round %d)",
+		final.Decision, r.opts.EpicID, short(judged), short(head), rereview, round)
+	return true, nil
+}
+
+// placeBehindOpenWork blocks a review on every open work tick of the epic —
+// everything but the reviews and the close-out — so it judges the tree once
+// they are in it, not the tree halfway there.
+func (r *Reconciler) placeBehindOpenWork(ctx context.Context, durable *durableTracker, review, reviewed string) error {
+	graph, err := r.tracker.Graph(ctx, r.opts.EpicID)
+	if err != nil {
+		return fmt.Errorf("read the epic graph of %s to place the re-review: %w", r.opts.EpicID, err)
+	}
+	for _, wave := range graph.Waves {
+		for _, task := range wave.Tasks {
+			if task.Status == "closed" || task.ID == review || task.ID == reviewed || task.Role == "review" ||
+				task.Role == "closeout" {
+				continue
+			}
+			if err := durable.BlockOn(ctx, review, task.ID); err != nil {
+				return fmt.Errorf("place the re-review %s behind %s: %w", review, task.ID, err)
+			}
+		}
+	}
+	return nil
 }
