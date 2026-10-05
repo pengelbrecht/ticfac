@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 192,
-  "state": "publishing",
-  "reason": "closing 2xk behind the integrated gate on af882c904b6f",
-  "updated_at": "2026-10-05T14:54:42Z",
+  "sequence": 193,
+  "state": "running",
+  "reason": "2xk is closed",
+  "updated_at": "2026-10-05T14:54:55Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -123,7 +123,7 @@
     },
     {
       "tick_id": "2xk",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 23
     },
     {
