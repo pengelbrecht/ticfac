@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 424,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-10-05T22:06:25Z",
+  "sequence": 425,
+  "state": "dispatching",
+  "reason": "dispatching 4ao as attempt 65",
+  "updated_at": "2026-10-05T22:06:32Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -262,7 +262,7 @@
     },
     {
       "tick_id": "4ao",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 58
     },
     {
