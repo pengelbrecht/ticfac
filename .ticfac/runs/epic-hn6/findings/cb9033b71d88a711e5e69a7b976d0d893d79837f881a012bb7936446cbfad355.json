@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "435",
   "attempt": 22,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T13:09:24Z",
+  "triaged_at": "2026-10-05T13:09:34Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing obk",
+  "promoted_as": "obk",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "435",
