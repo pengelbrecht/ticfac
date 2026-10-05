@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 330,
-  "state": "running",
-  "reason": "7sn is closed",
-  "updated_at": "2026-10-05T19:43:03Z",
+  "sequence": 331,
+  "state": "dispatching",
+  "reason": "dispatching umx as attempt 53",
+  "updated_at": "2026-10-05T19:43:18Z",
   "ticks": [
     {
       "tick_id": "92k",
