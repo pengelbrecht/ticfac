@@ -12,8 +12,11 @@
   "attempt": 19,
   "done_item": "A5",
   "demonstrating_check": "cd harness && pnpm exec vitest run -c vitest.node.config.ts test/node/local-host.test.ts",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T10:34:59Z",
+  "triaged_at": "2026-10-05T10:35:12Z",
+  "triaged_by": "ticfac run epic-43y absorbing 7wg",
+  "promoted_as": "7wg",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "kjs",
