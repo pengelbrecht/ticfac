@@ -6,7 +6,8 @@
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "blocked_by": [
-    "66a"
+    "66a",
+    "o68"
   ],
   "parent": "43y",
   "role": "closeout",
