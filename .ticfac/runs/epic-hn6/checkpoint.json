@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 245,
-  "state": "publishing",
-  "reason": "closing wvn behind the integrated gate on c61a03541ee1",
-  "updated_at": "2026-10-05T18:15:17Z",
+  "sequence": 246,
+  "state": "running",
+  "reason": "wvn is closed",
+  "updated_at": "2026-10-05T18:15:19Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -179,7 +179,7 @@
     },
     {
       "tick_id": "wvn",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 35
     }
   ],
