@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 253,
-  "state": "integrating",
-  "reason": "integrating dm2 attempt 32 into epic/hn6",
-  "updated_at": "2026-10-05T19:27:45Z",
+  "sequence": 254,
+  "state": "gating",
+  "reason": "running the integrated gate for dm2 on 3f7a5d27e412",
+  "updated_at": "2026-10-05T19:40:46Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -164,7 +164,7 @@
     },
     {
       "tick_id": "dm2",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 32
     },
     {
