@@ -1,0 +1,13 @@
+{
+  "id": "8wa",
+  "title": "Close-out PR body: amendments section is never condensed under the body budget",
+  "description": "After the main merge, composePRBodyAt condenses findings text (level 1) and absorption decisions (level 2) to stay under prBodyBudget, but the 7sn 'Amendments to the epic's record' section always writes each amendment's full Value. Today amendments are few and short so this is not a reason the epic is not ready; a run with many or long worker-proposed notes would push the body back over the budget and fall to the forge's last-resort fit, which truncates the tail (where the readiness section sits). Either count amendments toward a condensation level or place them before the condensable sections' tail.\nevidence: internal/reconcile/closeout_body.go composePRBodyAt: the amendments loop writes amendment.Value unconditionally; condensePRBody levels prBodyOmitFindingText/prBodyCountAbsorptions do not cover it\n\nticfac run epic-43y filed this backlog tick from the finding ad7c6da9878fdde2ed2336aaac24d44d5f0ce3b382f9caaa4bbbf29194ca7266 (reported by run-epic-43y/tick-yp8/attempt-68): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/ad7c6da9878fdde2ed2336aaac24d44d5f0ce3b382f9caaa4bbbf29194ca7266.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-yp8/attempt-68",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T23:20:34Z",
+  "updated_at": "2026-10-05T23:20:34Z"
+}
