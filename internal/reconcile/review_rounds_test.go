@@ -84,11 +84,20 @@ func assertAbsorbedAndReReviewed(t *testing.T, f *fixture) {
 	if tick.Status != "closed" {
 		t.Errorf("the blocking finding's tick %s is %s: the run works it before the re-review", tick.ID, tick.Status)
 	}
+	// The absorption policy (2026-10-06): the reviewer's blocking verdict is
+	// the basis the finding entered the epic on, and the record says so.
+	if record.Basis != runstate.AbsorptionReviewer || !record.Gating || record.Placement != runstate.AbsorptionBeforeReview {
+		t.Errorf("the blocking finding's decision is %+v, want gating on basis %s, placed before the re-review",
+			record, runstate.AbsorptionReviewer)
+	}
 
 	low := findingByTitle(t, store, "A polish the review noticed on the way")
 	lowRecord, ok, err := store.Absorption(low.Key)
 	if err != nil || !ok {
 		t.Fatalf("the low finding has no decision record: %v %v", ok, err)
+	}
+	if lowRecord.Basis != runstate.AbsorptionBacklogDefault || lowRecord.Gating {
+		t.Errorf("the low finding's decision is %+v, want backlog-default: the review did not name it blocking", lowRecord)
 	}
 	lowTick, err := f.Tracker.Show(ctx, lowRecord.TickID)
 	if err != nil {

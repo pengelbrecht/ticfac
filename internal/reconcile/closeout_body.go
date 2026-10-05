@@ -261,10 +261,10 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 	}
 
 	// WHAT THIS EPIC ABSORBED (tick jlv): the close-out must be able to say,
-	// for this epic, what was absorbed, against which acceptance item,
-	// whether the verdict was observed or predicted, by WHICH MODEL it was
-	// predicted, and — for each prediction later checked — whether it was
-	// right. An epic that absorbed silently is an epic whose shape changed
+	// for this epic, what was absorbed, against which acceptance item, and on
+	// which basis — reviewer, worker-asserted-high or backlog-default since
+	// the 2026-10-06 policy; an earlier run's observed or predicted record,
+	// with its model and any checked score, is still reported as it was. An epic that absorbed silently is an epic whose shape changed
 	// with no account of why, so the body carries every absorption decision
 	// with its item id, its basis, its answering model and the score of each
 	// checked prediction, composed from the same durable records the retro
@@ -333,6 +333,7 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 		}
 	}
 
+<<<<<<< HEAD
 	// AMENDMENTS TO THE EPIC'S OWN RECORD (tick 7sn): every note a WORKER
 	// proposed to the record the close-out scores the acceptance from, each
 	// with the operator's decision on it — a pending or rejected one is what
@@ -373,6 +374,26 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 					r.attemptName(amendment.ProposedBy, amendment.Attempt), r.opts.EpicID, amendment.Key)
 			}
 			fmt.Fprintf(&body, "\n  %s\n", strings.ReplaceAll(amendment.Value, "\n", "\n  "))
+=======
+	// DEFERRED FINDINGS (the 2026-10-06 absorption policy): a high-severity
+	// finding whose reporter named the done item it breaks, reported once the
+	// epic's work was done, is deferred to the final reviewer rather than
+	// absorbed on the reporter's word — and one the reviewer did not name
+	// blocking stays a backlog tick. So is a finding the absorption bound
+	// deferred. The PR is where a person sees each of them.
+	var deferred []runstate.Absorption
+	for _, record := range absorptions {
+		if isDeferredToReview(record) || isPastBound(record) {
+			deferred = append(deferred, record)
+		}
+	}
+	if len(deferred) > 0 {
+		body.WriteString("\n## Deferred findings\n\n")
+		body.WriteString("Findings the run did not absorb into the epic although they claim to break its done: " +
+			"each is a backlog tick with an owner. Judge whether any must land before this merges.\n\n")
+		for _, record := range deferred {
+			fmt.Fprintf(&body, "- tick %s (finding %s) — %s\n", record.TickID, short(record.Key), placementLine(record))
+>>>>>>> c543bf47ae7806cd844f6681d921a72fd5586c7e
 		}
 	}
 
