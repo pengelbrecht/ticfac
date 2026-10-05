@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 189,
-  "state": "running",
-  "reason": "qdg is closed",
-  "updated_at": "2026-10-05T14:03:32Z",
+  "sequence": 190,
+  "state": "dispatching",
+  "reason": "dispatching twa as attempt 31",
+  "updated_at": "2026-10-05T14:03:59Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -151,6 +151,10 @@
     },
     {
       "tick_id": "j6o",
+      "state": "ready"
+    },
+    {
+      "tick_id": "kkt",
       "state": "ready"
     }
   ],
