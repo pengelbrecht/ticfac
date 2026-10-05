@@ -631,7 +631,7 @@ func (r *Reconciler) conflictedMergeOf(epicHead, head, message string, config []
 		}
 	}
 	if keepReports {
-		if err := r.keepReportsOut(dir, epicHead); err != nil {
+		if err := r.keepReportsOut(dir); err != nil {
 			return "", err
 		}
 	}
@@ -817,9 +817,8 @@ func (r *Reconciler) mintResolveMerge(resolveHead, head, epicHead string, marker
 			r.attemptName(marker.TickID, marker.Attempt), short(resolveHead), err, r.branch)
 	}
 	// The job's container commits its own report on its branch: the tree is
-	// minted with every report as the head it resolved over has it
-	// (report_merge.go).
-	tree, err := r.treeWithoutReports(resolveHead, resolvedOver)
+	// minted with no report in it (report_merge.go).
+	tree, err := r.treeWithoutReports(resolveHead)
 	if err != nil {
 		return "", fmt.Errorf("read the tree the resolve-conflict job resolved to: %w", err)
 	}
@@ -855,7 +854,7 @@ func (r *Reconciler) mergeResolutionOnto(resolution, resolvedOver, epicHead stri
 		"attempt %d was resolved against %s; %s has moved to %s since, and the resolution is merged onto it",
 		marker.TickID, r.branch, r.runID, marker.TickID, marker.Attempt, short(resolvedOver), r.branch,
 		short(epicHead))
-	if stdout, stderr, unmerged, err := r.mergeKeepingReportsOut(dir, epicHead, message, resolution); err != nil {
+	if stdout, stderr, unmerged, err := r.mergeKeepingReportsOut(dir, message, resolution); err != nil {
 		return "", r.refuse(RefusedMerge, marker.TickID,
 			"the resolve-conflict job resolved the conflict of %s (%s) against %s at %s, and %s has moved to %s "+
 				"since with work that does not merge with the resolution: %s. A second conflict on the same tick "+
