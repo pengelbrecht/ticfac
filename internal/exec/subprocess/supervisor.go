@@ -200,6 +200,27 @@ func Supervise(stateDir string) error {
 	relaunches := 0
 	var lastLife *runnerLife
 
+	// stopRunner ends this runner: its detached tool groups first, then its
+	// own process group. pi-durable's environment spawns every bash tool
+	// `detached`, in a process group of its own (interrupt.go, tick l6n), so
+	// a group signal to the RUNNER's group ends the runner and leaves those
+	// tools running — orphaned to init, holding the runner's inherited lock
+	// fd, which is the attempt's liveness — and before tick ug0 every stop
+	// here did exactly that. The tools are interrupted BEFORE the stop
+	// because they are named as the descendants of a runner that is still
+	// alive: once the runner's group is gone they are nobody's children,
+	// and no stop can find them again.
+	stopRunner := func(runnerPID int, runnerAlive func() bool) {
+		hung, err := hungToolGroups(runnerPID)
+		if err != nil {
+			note("the runner's tool groups could not be read before the stop (%v); stopping its own group only", err)
+		} else if killed := interruptToolGroups(runnerPID, hung); len(killed) > 0 {
+			note("detached tool group(s) %s interrupted before the stop, which the runner's own group signal "+
+				"would have left running", joinInts(killed))
+		}
+		stopTree(runnerPID, runnerAlive)
+	}
+
 	// runTurn starts one runner process and waits for it. settled is true
 	// when the attempt was settled on the way — the runner could not be
 	// started, or the supervisor itself was stopped — and runner.exit is
@@ -339,7 +360,7 @@ func Supervise(stateDir string) error {
 						"re-prompted in its own session", record.Runner, runnerPID), evidence))
 					note("the runner appears stuck; interrupting it to re-prompt it: %s", evidence)
 					stuckRestart = true
-					stopTree(runnerPID, runnerAlive)
+					stopRunner(runnerPID, runnerAlive)
 				case StuckStop:
 					detail := StuckStopDetail(fmt.Sprintf("the %s runner (pid %d) was stopped by its supervisor",
 						record.Runner, runnerPID), evidence)
@@ -347,17 +368,17 @@ func Supervise(stateDir string) error {
 					watch.state.StuckStopped = true
 					_ = atomicWrite(st.path(fileStuckStopped), []byte(detail+"\n"), 0o644)
 					observe(ObsExited, detail)
-					stopTree(runnerPID, runnerAlive)
+					stopRunner(runnerPID, runnerAlive)
 				}
 
 			case <-wall:
 				note("wall clock of %ds exceeded; stopping the runner", record.WallSeconds)
 				_ = atomicWrite(st.path(fileWallExceeded), []byte(now()+"\n"), 0o644)
-				stopTree(runnerPID, runnerAlive)
+				stopRunner(runnerPID, runnerAlive)
 
 			case sig := <-stopping:
 				note("supervisor received %s; stopping the runner", sig)
-				stopTree(runnerPID, runnerAlive)
+				stopRunner(runnerPID, runnerAlive)
 				// A stop is not an exit — but an attempt nobody settles is an
 				// attempt nobody CAN settle. Returning here left no runner.exit
 				// and no live pid, which inspect reads as `lost`; the reconciler
