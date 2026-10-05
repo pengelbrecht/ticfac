@@ -12,5 +12,5 @@ var parseOnly bool
 // never escape the check by naming a command nobody taught it.
 var parseOnlyCommands = map[string]bool{
 	"settle": true, "finding": true, "findings": true, "status": true, "events": true,
-	"triage": true, "run": true,
+	"triage": true, "run": true, "factory": true,
 }
