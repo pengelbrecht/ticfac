@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 448,
-  "state": "running",
-  "reason": "yp8 is running as attempt 68",
-  "updated_at": "2026-10-05T23:15:05Z",
+  "sequence": 449,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for yp8",
+  "updated_at": "2026-10-05T23:20:15Z",
   "ticks": [
     {
       "tick_id": "92k",
