@@ -114,6 +114,22 @@ export type HostShell = {
     line: string,
     vars: Record<string, string>,
   ) => Promise<{ readonly exitCode: number; readonly output: string }>;
+  /**
+   * One LONG host command — the restore's setup (tick cni): a real
+   * repository's `[sandbox]` setup is a dependency install that runs
+   * MINUTES and prints megabytes, and the run door's one-RPC shape is for
+   * short commands — its bounding `head -c` SIGPIPEs a command that prints
+   * past its bound, so the install dies mid-way (the `exit 141` the node
+   * suite reproduces). A shell that can carries the setup through the
+   * process doors instead (started once, polled to its end, the output a
+   * file a cursor reads); one that cannot falls back to {@link execLine}.
+   * Same shape as {@link execLine}: at the workspace root, exit code and
+   * merged output (the tail, bounded).
+   */
+  readonly execLong?: (
+    line: string,
+    vars: Record<string, string>,
+  ) => Promise<{ readonly exitCode: number; readonly output: string }>;
 };
 
 /** One round's wip checkpoint. */
@@ -393,7 +409,12 @@ export async function restoreWorkspace(
     if (sha === "") return failed(`git rev-parse HEAD answered nothing: ${brief(checkout.output)}`);
 
     if (git.setup !== undefined) {
-      const setup = await shell.execLine(git.setup, varsOf(git, {}));
+      // The one LONG line of the restore (see HostShell.execLong): through
+      // the process doors when the shell has them, never through the run
+      // door's bounding `head -c` — the tick cni rule is to carry the
+      // minutes-long install on the doors that already hold minutes-long
+      // commands, not to widen any bound or timeout.
+      const setup = await (shell.execLong ?? shell.execLine)(git.setup, varsOf(git, {}));
       if (setup.exitCode !== 0) return failed(said("the setup command", setup));
     }
     return { kind: "restored", sha, subject };

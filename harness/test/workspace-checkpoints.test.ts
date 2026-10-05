@@ -14,6 +14,7 @@ import {
 import { createReadTool, createWriteTool } from "@earendil-works/pi-durable/tools";
 import { describe, expect, it } from "vitest";
 import { BASH_NONCE_VAR, FactorySandboxEnv } from "../src/env/factory-sandbox.js";
+import { PROCESS_CWD } from "../src/env/sandbox-door.js";
 import { createTrackedBashTool } from "../src/tools/tracked-bash.js";
 import {
   type RestoreOutcome,
@@ -165,9 +166,12 @@ describe("a container lost mid-turn", () => {
     expect(result.error.message).toContain("restored to cafef00d (wip: tool round)");
     expect(result.error.message).toContain("re-run");
 
-    // The restore drove the whole sequence through the run door, in order:
-    // one line clearing and cloning the workspace, then the fetch of the
-    // attempt branch, the checkout of its tip, and the setup command.
+    // The restore drove the whole sequence in order: one line clearing and
+    // cloning the workspace, then the fetch of the attempt branch and the
+    // checkout of its tip — all SHORT lines through the run door — and the
+    // SETUP as a background process the door polls (tick cni): through the
+    // run door its bounding `head -c` SIGPIPEs a chatty install, so the one
+    // long line of the restore rides the process doors instead.
     const lines = door.runs.map((r) => r.command);
     const at = (needle: string) => lines.findIndex((line) => line.includes(needle));
     const prepare = at("find . -mindepth 1 -maxdepth 1");
@@ -177,12 +181,17 @@ describe("a container lost mid-turn", () => {
     expect(prepareLine).toContain('git remote add origin "$REMOTE"');
     const fetch = at('git fetch -q origin "$BRANCH"');
     const checkout = at('git checkout -q -B "$BRANCH" FETCH_HEAD');
-    const setup = at(".setup-marker");
     expect(fetch).toBeGreaterThan(prepare);
     expect(checkout).toBeGreaterThan(fetch);
-    expect(setup).toBeGreaterThan(checkout);
     const fetchRun = door.runs[fetch];
     expect(fetchRun?.env.BRANCH).toBe(GIT.branch);
+    const started = door.starts.findIndex((s) => s.command.includes(".setup-marker"));
+    expect(started).toBeGreaterThanOrEqual(0);
+    expect(lines.some((line) => line.includes(".setup-marker"))).toBe(false);
+    const setupLine = door.starts[started]?.command ?? "";
+    expect(setupLine).toContain('mkdir -p "$TICFAC_WORKSPACE"');
+    expect(setupLine).toContain('cd "$TICFAC_WORKSPACE"');
+    expect(door.starts[started]?.env.TICFAC_WORKSPACE).toBe(PROCESS_CWD);
   });
 
   it("is restored when the fresh container knows none of its processes", async () => {

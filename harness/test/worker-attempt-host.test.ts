@@ -449,10 +449,16 @@ describe("a worker attempt driven by the host", () => {
 
     // The restore ran the contract's setup entry (tick i3h): a container lost
     // mid-turn comes back with its dependency installs, not just its tree.
-    const setup = door.runs.find((r) => r.command.includes(WORKER_BOOT_PROTOCOL.setupCommand));
+    // It rides the PROCESS doors, never the run door (tick cni): a real
+    // install is minutes of chatty output, and the run door's bounding
+    // `head -c` SIGPIPEs a writer past its bound.
+    const setup = door.starts.find((r) => r.command.includes(WORKER_BOOT_PROTOCOL.setupCommand));
     expect(setup).toBeDefined();
     expect(setup?.command).toContain('cd "$TICFAC_WORKSPACE"');
     expect(setup?.env.TICFAC_WORKSPACE).toBe("/work/repo");
+    expect(door.runs.some((r) => r.command.includes(WORKER_BOOT_PROTOCOL.setupCommand))).toBe(
+      false,
+    );
     // The wave's setup lever rides the restore, and none of the model's
     // credentials do.
     expect(setup?.env.TICKS_WORKER_SETUP).toBe("always");
