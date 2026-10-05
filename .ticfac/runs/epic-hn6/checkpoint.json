@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 130,
-  "state": "gating",
-  "reason": "running the integrated gate for 5d4 on a33447ea302b",
-  "updated_at": "2026-10-05T10:55:36Z",
+  "sequence": 131,
+  "state": "publishing",
+  "reason": "closing 5d4 behind the integrated gate on a33447ea302b",
+  "updated_at": "2026-10-05T10:57:42Z",
   "ticks": [
     {
       "tick_id": "v16",
