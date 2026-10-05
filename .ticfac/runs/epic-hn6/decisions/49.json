@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 49,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "TestPiDrainsTheGatewayStreamThroughTheMeteringOverride is the only end-to-end check that pi resolves the !command and that the account token displaces pi's stored key. It skips when pi is not on PATH, which includes every CI runner, so CI checks m4t only through a string match on the generated extension. Installing a pinned pi into the go test job would make the claim CI-verified.\nevidence: internal/exec/subprocess/pimeter_drain_test.go\n\nticfac run epic-hn6 created this tick by absorbing the finding 9d64c1cf34f7a38a8ceabd57224ac37cb5bcea20cc244338f8de117dc0bd2691 (reported by run-epic-hn6/tick-pv7/attempt-42): the finding was judged against the epic's definition of done and gates done item A6. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/9d64c1cf34f7a38a8ceabd57224ac37cb5bcea20cc244338f8de117dc0bd2691.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "3wq",
+    "title": "Run the real-pi metering tests in CI (m4t displacement, 648 stream drain)"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.4,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.51,
+      "design": 0.02,
+      "diagnosis": 0.02,
+      "mechanical": 0.33,
+      "translation": 0.12
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1311,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T23:59:26Z",
+  "answered_at": "2026-10-05T23:59:26Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "3wq",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "c40676d59c97ca4030b2d70ca1681a91326545e2",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:a04fcc6adca25baf76e8f9ef27d5f11c4acbc2e1a72e018047e915994c67984b",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
