@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 187,
-  "state": "gating",
-  "reason": "running the integrated gate for qdg on 4b741851d620",
-  "updated_at": "2026-10-05T13:56:57Z",
+  "sequence": 188,
+  "state": "publishing",
+  "reason": "closing qdg behind the integrated gate on 4b741851d620",
+  "updated_at": "2026-10-05T14:03:02Z",
   "ticks": [
     {
       "tick_id": "92k",
