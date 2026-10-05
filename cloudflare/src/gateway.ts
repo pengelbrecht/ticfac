@@ -857,7 +857,16 @@ export async function proxyModelRequest(
   }
 
   if (slug === JEV_ROUTE_SLUG) {
-    return await runJev(env, request, path, key, config.config, authorized.run, options);
+    return await runJev(
+      env,
+      request,
+      path,
+      key,
+      config.config,
+      authorized.token,
+      authorized.run,
+      options,
+    );
   }
 
   const upstream = new URL(request.url);
@@ -929,7 +938,13 @@ export async function proxyModelRequest(
  * The route runs ONE model: a body naming any other is refused rather than
  * rewritten, so a run token cannot buy arbitrary Workers AI inference through
  * the classifier's door, and nothing but the model and its input is forwarded
- * — none of the caller's headers reach Cloudflare's API.
+ * — none of the caller's headers reach Cloudflare's API. Attribution is the
+ * one deliberate exception, and it is not forwarded but stamped: the same
+ * cf-aig-metadata header the proxied routes carry (D17), built out of the
+ * token and run this Worker authorized, so a cloud run's classification spend
+ * is joinable to its run by run_id exactly as its proxied model calls and the
+ * local classifier's tag are (tick lfm). Without it the rows exist with no
+ * run_id, and the run's cost line undercounts exactly this spend.
  */
 async function runJev(
   env: Env,
@@ -937,6 +952,7 @@ async function runJev(
   path: string[],
   apiToken: string,
   gateway: GatewayConfig,
+  token: RunGatewayToken,
   run: Run,
   options: ProxyOptions,
 ): Promise<Response> {
@@ -990,7 +1006,14 @@ async function runJev(
   try {
     return await fetcher(target, {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${apiToken}` },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${apiToken}`,
+        // Attribution the caller cannot forge or suppress (D17): the same
+        // stamped header every proxied route carries, so the classifier's
+        // spend is filed under the run that spent it.
+        "cf-aig-metadata": JSON.stringify(gatewayMetadata(token, run)),
+      },
       body: JSON.stringify({ model: JEV_MODEL, input }),
     });
   } catch (error) {
