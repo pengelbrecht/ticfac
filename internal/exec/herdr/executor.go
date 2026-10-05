@@ -118,6 +118,17 @@ type Options struct {
 	// watch off.
 	StuckAfter time.Duration
 
+	// Metering, when set, joins this run's Workers AI spend to the operator's
+	// AI Gateway logs (tick dm2, hn6 rule 7): a pi worker launched on a
+	// Workers AI model gets a generated provider override appended to its
+	// argv — pi's --extension flag — that routes the provider's calls through
+	// the gateway and tags every request with the run id. Nil, or a dispatch
+	// on a model outside the Workers AI namespaces, launches the agent
+	// exactly as before this tick, its spend unattributed and the cost line
+	// honestly unmetered. The caller that knows the run id and the host's
+	// gateway URL builds it; this executor only writes and names the file.
+	Metering *subprocess.GatewayMetering
+
 	// Procs reads the process table the stuck watch walks. Nil is
 	// subprocess.SystemProcs; tests hand in a table of their own.
 	Procs subprocess.ProcTable
@@ -505,11 +516,15 @@ var errNoShape = errors.New("the reply carries no usable shape")
 // repeated substrate error is a diagnosis for a person and not something a
 // second identical call is likelier to fix.
 func (e *Executor) startAgent(ctx context.Context, st *store, record *attemptRecord) (*client.AgentStarted, error) {
+	args, err := e.agentLaunchArgs(st, record)
+	if err != nil {
+		return nil, err
+	}
 	params := client.AgentStartParams{
 		Name:   record.AgentName,
 		Kind:   record.Kind,
 		PaneID: record.PaneID,
-		Args:   record.AgentArgs,
+		Args:   args,
 	}
 	// The readiness acknowledgement is asked for in the launch itself. The
 	// caller's StartupTimeout is the budget and is never lengthened: a
@@ -564,6 +579,33 @@ func (e *Executor) startAgent(ctx context.Context, st *store, record *attemptRec
 		}
 		e.sleepUntil(paneBusyRetryInterval)
 	}
+}
+
+// agentLaunchArgs is the argv herdr types after the kind's own template:
+// the configured argv, plus — for a pi worker on a Workers AI model with
+// metering configured — the one flag that loads the generated provider
+// override into the agent's own CLI (subprocess.GatewayMetering, tick dm2).
+// The override file is written on EVERY launch path that reaches here,
+// Start and the name-taken relaunch alike, from the same two facts the
+// executor holds, so an agent never starts without the join its dispatch
+// was configured for.
+func (e *Executor) agentLaunchArgs(st *store, record *attemptRecord) ([]string, error) {
+	// Copied, never appended in place: the configured argv belongs to the
+	// executor's options, and a shared backing array would let one attempt's
+	// flag grow the next attempt's argv.
+	args := append([]string{}, record.AgentArgs...)
+	// The join is a PI flag ("--extension"): another kind given it would
+	// read it as its own argument or refuse it, so only the pi kind loads
+	// the override. The model check is the metering's own — a worker on a
+	// claude or openrouter id keeps the river it already has.
+	if !e.opts.Metering.Applies(record.Model) || record.Kind != "pi" {
+		return args, nil
+	}
+	path, err := e.opts.Metering.WriteExtension(st.dir)
+	if err != nil {
+		return nil, fmt.Errorf("write the gateway metering extension for %s: %w", record.AgentName, err)
+	}
+	return append(args, e.opts.Metering.ExtensionArgs(path)...), nil
 }
 
 // herdrStartupWait converts the caller's startup budget into agent.start's

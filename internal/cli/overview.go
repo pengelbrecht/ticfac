@@ -270,7 +270,7 @@ func overviewCommand(ctx context.Context, repo string, asJSON, all bool, stdout,
 	// origin; for a cloud run the factory's feed, the Workflow instance and
 	// the forge), and nothing about one row depends on another.
 	full := asJSON || all
-	gatherers := modelGatherers{graph: epicGraph, ci: statusCI}
+	gatherers := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost}
 	var todo []int
 	for i := range runs {
 		if full || !runs[i].History {

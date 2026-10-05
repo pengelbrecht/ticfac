@@ -424,7 +424,7 @@ func TestTheModelCarriesGatesPerCheckPerHead(t *testing.T) {
 func TestTheModelSumsTheRecordedCost(t *testing.T) {
 	t.Parallel()
 	model := Build(runningEpicSources())
-	if model.Cost.RecordedUSD != 0.04 {
+	if model.Cost.RecordedUSD == nil || *model.Cost.RecordedUSD != 0.04 {
 		t.Errorf("the recorded cost is %v, want 0.04 from the one decision that carries usage", model.Cost.RecordedUSD)
 	}
 	if model.Cost.Attempts != 3 {

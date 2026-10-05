@@ -725,7 +725,7 @@ func watchRunStillAlive(source runfeed.Source, kind, repo, runID string) bool {
 // durable sources — so the watch's one document and the live view's last
 // frame cannot disagree.
 func watchGatherModel(ctx context.Context, source runfeed.Source, kind, repo, runID string) (statusmodel.Model, error) {
-	gather := modelGatherers{graph: epicGraph, ci: statusCI}
+	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost}
 	if cloudSource, ok := source.(*cloudFeedSource); ok && kind == "cloud" {
 		record, err := readCloudRunRecord(ctx, cloudSource.client, cloudSource.runID)
 		if err != nil {
@@ -846,7 +846,8 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	// moment the feed says the epic's shape changed.
 	graphCache := &watchGraphCache{ttl: watchSourceTTL, read: epicGraph}
 	ciCache := &watchCICache{ttl: watchSourceTTL, read: statusCI}
-	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI}
+	costCache := &watchCostCache{ttl: watchSourceTTL, read: statusWorkerCost}
+	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI, workerCost: costCache.WorkerCost}
 
 	// The model builder: local and cloud gather through their own sources
 	// (status_model.go), and both are the same model — the same frame renders
@@ -1485,6 +1486,32 @@ func (c *watchCICache) CI(ctx context.Context, repo, epicID string) (*statusmode
 	}
 	c.ci, c.cached, c.at = ci, true, time.Now()
 	return ci, nil
+}
+
+// watchCostCache serves the gateway's answer at most once per TTL, for the
+// same reason the CI is cached — with the extra weight that each ask opens a
+// remote and pages the operator's logs (tick dm2). An error is returned
+// fresh, exactly like the CI's; a successful answer, nil included, is
+// cached: nil is the honest answer of a run whose calls were never joined,
+// not a failure to read.
+type watchCostCache struct {
+	ttl    time.Duration
+	read   func(context.Context, string) (*statusmodel.WorkerCostInput, error)
+	cost   *statusmodel.WorkerCostInput
+	cached bool
+	at     time.Time
+}
+
+func (c *watchCostCache) WorkerCost(ctx context.Context, runID string) (*statusmodel.WorkerCostInput, error) {
+	if c.cached && time.Since(c.at) < c.ttl {
+		return c.cost, nil
+	}
+	cost, err := c.read(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	c.cost, c.cached, c.at = cost, true, time.Now()
+	return cost, nil
 }
 
 // clockOf is the line's own time, as a person reads it. A stamp that does not

@@ -193,6 +193,12 @@ type harnessOptions struct {
 	agentMode  string
 	kind       string
 	args       []string
+	// model is the dispatch's model, the executor's Options.Model — what the
+	// gateway metering join keys on (tick dm2).
+	model string
+	// metering, when set, is the gateway metering join the executor writes
+	// the provider override for (tick dm2).
+	metering *subprocess.GatewayMetering
 	// paneCloseLingers makes herdr's records lag a pane.close: the close is
 	// accepted but agent.get keeps answering live (see the field on
 	// harness).
@@ -604,6 +610,8 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		SocketPath: s.Path(),
 		Kind:       opts.kind,
 		Args:       opts.args,
+		Model:      opts.model,
+		Metering:   opts.metering,
 		Remote:     "origin",
 		Attempt:    1,
 		Now:        clock,
