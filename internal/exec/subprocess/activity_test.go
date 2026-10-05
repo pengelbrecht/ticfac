@@ -106,11 +106,31 @@ func TestClaudeTranscriptsAreReadWhereTheHarnessWritesThem(t *testing.T) {
 // mistaken for went with the herdr pi kind (epic 43y, tick uxi): TranscriptDir
 // knows no pi layout any more, so nothing under ~/.pi can be read as the
 // durable runner's evidence (tick bgx).
+//
+// The record's RunnerArgv is the RESOLVED argv — what the supervisor runs,
+// rendered at Start and never empty — and not the launch-time override the
+// durable predicate is decided on (tick rpw): the record carries the
+// override as its own flag, and a test that fakes the record the way the
+// supervisor reads it must use that shape, or it certifies the defect it
+// hides.
 func TestTheDurableRunnersTranscriptSignalIsItsStorageNotTheCliSessions(t *testing.T) {
 	worktree := t.TempDir()
 	state := t.TempDir()
 
-	record := &attemptRecord{Runner: "pi", Worktree: worktree, State: state}
+	// The production shape, as executor.go records it: the RESOLVED argv,
+	// which is never empty, and the override flag unset because this launch
+	// came from the runner table.
+	record := &attemptRecord{
+		Runner: "pi", Worktree: worktree, State: state,
+		RunnerArgv: []string{"node", "--experimental-strip-types",
+			"--import", filepath.Join("harness", "runtime", "register.mjs"),
+			filepath.Join("harness", "src", "local", "main.ts"),
+			"--config", filepath.Join(state, "worker.json"),
+			"--message", "do the job"},
+	}
+	if !durableAttempt(record) {
+		t.Error("a table-launched durable attempt read back with its resolved argv is not durable")
+	}
 
 	// No storage yet: nothing can be read — and the CLI transcript is not
 	// read in its place, or the evidence would point an operator at a file
@@ -140,10 +160,39 @@ func TestTheDurableRunnersTranscriptSignalIsItsStorageNotTheCliSessions(t *testi
 	// the pi CLI's layout left with the herdr pi kind, so the watch answers
 	// nothing rather than pointing an operator at a file it no longer knows
 	// how to find — the other signals (the process table, the storage) are
-	// what an overridden runner has.
-	record.RunnerArgv = []string{"pi", "-p"}
+	// what an overridden runner has. The override is the RECORD's flag: an
+	// override replaces the whole invocation, so nothing of the table's —
+	// not the durable storage, which belongs to the table's argv — is read
+	// through one, whatever argv it happens to spell.
+	record.RunnerArgvOverride = true
+	if durableAttempt(record) {
+		t.Error("an overridden runner is not the table's durable runner")
+	}
 	if ev, ok := lastRunnerEvent(record); ok {
 		t.Errorf("overridden runner event = %+v, want none: the pi CLI session layout is gone with the herdr pi kind", ev)
+	}
+}
+
+// The record's half of the durable predicate (tick rpw): the supervisor
+// reads an attempt back, not the launch, so what decides is the record's
+// own override flag — never its RunnerArgv, which is the resolved argv and
+// never empty. An attempt recorded before the flag is not an override: the
+// executor that wrote the record and the supervisor that reads it are the
+// same binary, and a table launch is the default a bare record spells.
+func TestDurableAttemptIsDecidedOnTheRecordsOverrideFlag(t *testing.T) {
+	for _, name := range []string{"claude", "codex"} {
+		if durableAttempt(&attemptRecord{Runner: name}) {
+			t.Errorf("the %s runner is not durable", name)
+		}
+	}
+	if durableAttempt(&attemptRecord{Runner: "no-such-runner"}) {
+		t.Error("an unknown runner is not durable")
+	}
+	// The durable runner is durable by name, with the argv the supervisor
+	// runs recorded beside it — the shape the defect hid in.
+	durable := &attemptRecord{Runner: "pi", RunnerArgv: []string{"node", "main.ts"}}
+	if !durableAttempt(durable) {
+		t.Error("the durable runner with its resolved argv recorded is not durable")
 	}
 }
 

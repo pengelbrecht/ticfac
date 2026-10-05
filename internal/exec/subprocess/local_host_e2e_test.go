@@ -519,6 +519,14 @@ func TestAStuckDurableWorkerInAHungToolIsSteeredThroughIt(t *testing.T) {
 			if !strings.Contains(o.Detail, "steered in its own conversation") || !strings.Contains(o.Detail, "hung tool") {
 				t.Errorf("the stuck nudge does not say it steered and interrupted the hung tool: %s", o.Detail)
 			}
+			// The durable runner's last-event signal is its conversation
+			// storage (tick rpw): a supervisor reading only the tool CPU
+			// and the worktree used to say “no session transcript could be
+			// read” here, and could nudge and stop a worker that was quietly
+			// streaming to its storage the whole window.
+			if !strings.Contains(o.Detail, "conversation storage was last written") {
+				t.Errorf("the stuck nudge's evidence does not name the conversation storage: %s", o.Detail)
+			}
 		case IsStuckStop(o):
 			stops++
 		case o.Kind == ObsStarted && strings.Contains(o.Detail, "re-prompted as stuck"):

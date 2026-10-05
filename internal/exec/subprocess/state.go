@@ -90,9 +90,19 @@ type attemptRecord struct {
 	ResultPath string `json:"result_path"`
 	ResultRel  string `json:"result_rel"`
 
-	Runner     string   `json:"runner"`
-	RunnerArgv []string `json:"runner_argv"`
-	RunnerEnv  []string `json:"runner_env"`
+	// RunnerArgvOverride says the RunnerArgv below came in WHOLE from the
+	// host's override (TICFAC_RUNNER_ARGV) rather than from the runner table
+	// (tick rpw): the record's argv is the RESOLVED one the supervisor runs,
+	// never empty, so it cannot itself tell the two apart — and the
+	// supervisor's durable decisions (the conversation storage as the
+	// last-event signal, activity.go) read this flag. An attempt recorded
+	// before the flag is a table launch, which is the default a bare record
+	// spells: the executor that writes the record and the supervisor that
+	// reads it are the same binary.
+	Runner             string   `json:"runner"`
+	RunnerArgv         []string `json:"runner_argv"`
+	RunnerArgvOverride bool     `json:"runner_argv_override,omitempty"`
+	RunnerEnv          []string `json:"runner_env"`
 
 	// Session is the runner session this attempt runs in (claude
 	// --session-id), empty for a runner with none this executor can name —

@@ -442,6 +442,11 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 		return nil, err
 	}
 	record.RunnerArgv = argv
+	// The override flag, not the argv, is what the record says about its own
+	// launch (tick rpw): RunnerArgv above is the RESOLVED argv the supervisor
+	// runs and is never empty, so it cannot tell a table launch from an
+	// override — and the supervisor's durable decisions read the flag.
+	record.RunnerArgvOverride = len(e.opts.RunnerArgv) > 0
 	record.Session = session
 	// What a runner that exits 0 without its report is prompted again with
 	// (nudge.go), rendered now for the same reason the argv is: it is this
