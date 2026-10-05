@@ -2,6 +2,7 @@
   "id": "2xk",
   "title": "Keep the dashboard open for drill-in after a run has ended",
   "description": "watch draws one final frame for a run that has ended and exits at once, so enter (tick drill-in) and e (feed) are reachable only while the run lives. After a run stops or fails is exactly when a person wants the per-tick attempts, reasons and gate evidence. Consider waiting for q on a TTY when the run has already ended.\nevidence: ticfac watch epic-hn6 against the stopped run_08f5 exits 7 immediately in a pty\n\nticfac run epic-hn6 created this tick by absorbing the finding 3f9660d2383738b9bb743f70022770b47365136dfd5cf1aa7be8d956967a38ae (reported by run-epic-hn6/tick-435/attempt-22): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/3f9660d2383738b9bb743f70022770b47365136dfd5cf1aa7be8d956967a38ae.json on the run branch.",
+  "notes": "2026-10-05 15:11 - ticfac run epic-hn6: created by absorbing finding 3f9660d2383738b9bb743f70022770b47365136dfd5cf1aa7be8d956967a38ae — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-hn6/absorptions/3f9660d2383738b9bb743f70022770b47365136dfd5cf1aa7be8d956967a38ae.json on epic/hn6, and it says: the classifier put 0.87 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A3: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -10,5 +11,5 @@
   "discovered_from": "run-epic-hn6/tick-435/attempt-22",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-05T13:11:13Z",
-  "updated_at": "2026-10-05T13:11:13Z"
+  "updated_at": "2026-10-05T13:11:19.651195Z"
 }
