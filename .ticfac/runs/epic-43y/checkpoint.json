@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 298,
-  "state": "collecting",
-  "reason": "collecting 4s2 attempt 44",
-  "updated_at": "2026-10-05T18:43:33Z",
+  "sequence": 299,
+  "state": "integrating",
+  "reason": "integrating 4s2 attempt 44 into epic/43y",
+  "updated_at": "2026-10-05T18:44:05Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -193,7 +193,7 @@
     },
     {
       "tick_id": "4s2",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 44
     },
     {
