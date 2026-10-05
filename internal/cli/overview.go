@@ -816,11 +816,11 @@ func overviewIdentityStyles() watchStyles {
 }
 
 // renderOverview draws the prose listing the JSON answers with: one row per
-// run — the state word, the reason, and — for a stop a person clears — the
-// one command that clears it, the row's first line bounded to the width
-// the screen names (tick mwt: boundOverviewRow) — and, under every run
-// whose model was gathered,
-// the run's dashboard headline (tick 3rc): dashboardHeadline's progress and
+// run — the state word, the reason, and, for a stop a person clears, the
+// one command that clears it, the row's first line bounded to the width the
+// screen names (tick mwt: boundOverviewRow) — and, under every run whose
+// model was gathered, the run's dashboard headline (tick 3rc):
+// dashboardHeadline's progress and
 // health verdict, the phase bar and the needs-you answer, and the holds'
 // own lines — indented two spaces, the same functions the watch renders
 // with. A stop with no command (the merge, which is a person's by design
