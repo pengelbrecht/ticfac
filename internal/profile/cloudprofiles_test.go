@@ -44,11 +44,12 @@ import (
 // that the profile and the wiring answer different questions and were split
 // into different ticks on purpose.
 
-// The two Workers AI models the operator's decision names, in pi's spelling:
-// GLM 5.3 for complex work and GLM 5.3 Flash for simple work. Both spellings
-// are a `provider/id` pair exactly as `pi --list-models` prints them — the
-// workers-ai/… form is omp's spelling, and omp is not the harness this set
-// dispatches.
+// The two Workers AI models the operator's decision names, in the durable
+// provider's `cloudflare-workers-ai/<id>` namespace: GLM 5.3 for complex work
+// and GLM 5.3 Flash for simple work. The `workers-ai/…` form is omp's spelling,
+// and omp is not the harness this set dispatches. This is not a pi-CLI catalog
+// claim: that worker path and its `pi --list-models` oracle are deleted (epic
+// 43y, tick uxi).
 const (
 	cloudGLM53        = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 	cloudGLM53Flash   = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
@@ -213,7 +214,7 @@ func TestBothGLMModelsAreNameableAsAWorkerModel(t *testing.T) {
 	}
 	if base.Runner != "pi" || base.Model != cloudGLM53 {
 		t.Errorf("the base resolution is %s/%s, want pi/%s: .tick/runners.toml's [roles.implement] "+
-			"states the repo's own intent — implementation runs entirely on GLM on cloudflare through pi",
+			"states the repo's own intent — implementation runs on GLM through the local name of the durable pi harness",
 			base.Runner, base.Model, cloudGLM53)
 	}
 

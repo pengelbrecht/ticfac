@@ -287,14 +287,13 @@ var claudeSlug = regexp.MustCompile(`[^A-Za-z0-9]`)
 // TranscriptDir is where a harness of the given kind keeps the sessions of a
 // working directory, or "" for a harness whose layout is not known.
 //
-//   - pi (@earendil-works/pi-coding-agent, dist/core/session-manager.js
-//     getDefaultSessionDirPath): <agent dir>/sessions/--<cwd without its
-//     leading slash, / \ : → ->--, agent dir $PI_CODING_AGENT_DIR or
-//     ~/.pi/agent.
 //   - claude: <config dir>/projects/<cwd with every non-alphanumeric → ->,
 //     config dir $CLAUDE_CONFIG_DIR or ~/.claude.
 //
-// codex keeps its rollouts by date, not by directory, and is not read.
+// codex keeps its rollouts by date, not by directory, and is not read. A
+// "pi" case existed for the pi CLI's transcript layout and went with the
+// herdr pi kind (epic 43y, tick uxi): the durable runner named "pi" writes no
+// session transcript at all — see LastStorageEvent below.
 func TranscriptDir(kind, cwd string) string {
 	if cwd == "" {
 		return ""
@@ -304,13 +303,6 @@ func TranscriptDir(kind, cwd string) string {
 	}
 	home := transcriptHome()
 	switch kind {
-	case "pi":
-		agentDir := filepath.Join(home, ".pi", "agent")
-		if d := os.Getenv("PI_CODING_AGENT_DIR"); d != "" && os.Getenv(EnvTranscriptHome) == "" {
-			agentDir = d
-		}
-		slug := "--" + strings.NewReplacer("/", "-", "\\", "-", ":", "-").Replace(strings.TrimLeft(cwd, "/\\")) + "--"
-		return filepath.Join(agentDir, "sessions", slug)
 	case "claude":
 		configDir := filepath.Join(home, ".claude")
 		if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" && os.Getenv(EnvTranscriptHome) == "" {
@@ -340,9 +332,10 @@ func LastStorageEvent(stateDir string) (TranscriptEvent, bool) {
 
 // lastRunnerEvent is the watch's last-event look for ONE runner: the durable
 // `pi` runner's conversation is the attempt's own storage (its mtime is the
-// signal), and every other runner — the CLI harnesses, and an overridden
-// `pi`, the pi CLI escape hatch, which is the only pi that still writes
-// session files — keeps its harness's session transcript.
+// signal), and every other runner — the CLI harnesses — keeps its harness's
+// session transcript. An overridden `pi` (TICFAC_RUNNER_ARGV, the tests' fake
+// runner) answers no transcript at all since the pi CLI's layout left with
+// the herdr pi kind (epic 43y, tick uxi): the process table is its signal.
 func lastRunnerEvent(record *attemptRecord) (TranscriptEvent, bool) {
 	if durableResume(record.Runner, record.RunnerArgv) {
 		return LastStorageEvent(record.State)
@@ -392,7 +385,9 @@ func LastTranscriptEvent(kind, cwd string) (TranscriptEvent, bool) {
 	return event, true
 }
 
-// transcriptLine is the union of the pi and claude line shapes this reads.
+// transcriptLine is the claude line shape this reads (with the content
+// blocks carried inside message.content; pi's toolCall/thinking block
+// vocabulary is read too, generically, for any harness that writes it).
 type transcriptLine struct {
 	Type      string `json:"type"`
 	Timestamp string `json:"timestamp"`

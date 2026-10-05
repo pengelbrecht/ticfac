@@ -302,9 +302,10 @@ type AgentSendKeysParams struct {
 
 // AgentSendKeys sends key presses to an agent's pane — herdr's interactive
 // interrupt surface, the same one `herdr agent send-keys` drives.
-// Which keys stop an agent's turn is the HARNESS's, not herdr's: pi, claude
-// and codex interrupt a turn on ["esc"] (pi reads ctrl+c as "clear the
-// editor"); the herdr executor keeps that table (exec/herdr/interrupt.go).
+// Which keys stop an agent's turn is the HARNESS's, not herdr's. Ticfac's
+// verified claude and codex kinds interrupt a turn on ["esc"]; the herdr
+// executor keeps that table and gives unverified kinds the generic chord
+// (exec/herdr/interrupt.go). The deleted pi kind has no ticfac table entry.
 //
 // The result is the resolved agent when the server echoes one
 // (result discriminator `agent_info`, the shape the CLI's own guidance —
