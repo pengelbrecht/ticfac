@@ -1,0 +1,13 @@
+{
+  "id": "tnm",
+  "title": "make gate flaked once on this host; the failing package was not captured",
+  "description": "The first `make gate` invocation on this worktree exited 1, but the failing package's FAIL line scrolled out of the tail used to watch it, so it could not be attributed. Two subsequent fully uncached invocations (GOFLAGS=\"-p=2 -count=1\" GOTEST_PARALLEL=4 make gate) exited 0 with no FAIL anywhere in the log. The learnings already record wall-clock tests on this shared host refusing innocent work; this may be another instance. Not attributable to this tick's diff, which touches only internal/cli rendering and passed green in every run.\n\nticfac run epic-hn6 filed this backlog tick from the finding 9125c0ac9afea9b25a8e0d2709f4b16c517543dfcc9d7266012061f1874eefee (reported by run-epic-hn6/tick-cg4/attempt-25): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/9125c0ac9afea9b25a8e0d2709f4b16c517543dfcc9d7266012061f1874eefee.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-cg4/attempt-25",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T14:24:48Z",
+  "updated_at": "2026-10-05T14:24:48Z"
+}
