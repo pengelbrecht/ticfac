@@ -97,6 +97,12 @@ describe("the tracked bash survives a harness killed mid-bash", () => {
     // is issued after the kill and never answers, so it cannot race the
     // resumed harness once the door thaws.
     await waitFor("the dead harness to be parked on a dead call", () => door.deadCalls >= 1);
+    // A deploy restarts the Durable Object between the death and the
+    // replay (tick 2oa): the container and its process live on, the
+    // object's in-memory ready flag is lost. This env runs guardDir null,
+    // so no `run` comes before the replay's list — the reattach must not
+    // depend on one having marked the object ready.
+    door.restartObject();
 
     // Harness 2: a new process, the same storage. Opening it recovers the
     // unfinished tool task; the replay runs prepare, which reads the

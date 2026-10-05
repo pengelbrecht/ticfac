@@ -56,6 +56,13 @@ export function fakeSandboxDoor(
   let dead = false;
   let deadCalls = 0;
   let readyRefusals = 0;
+  // The object's in-memory ready flag (cloudflare/src/factory-sandbox.ts):
+  // lost when a deploy restarts the Durable Object, set again the moment the
+  // container answers a probe — a `run`, a `startProcess`, or the list's
+  // own probe (tick 2oa: the list must not depend on a run having come
+  // first, or the guardless nonce replay misses a live process and runs
+  // the command twice).
+  let objectReady = false;
 
   const view = (p: FakeProcess) => ({
     id: p.id,
@@ -78,6 +85,7 @@ export function fakeSandboxDoor(
         readyRefusals -= 1;
         return Promise.resolve({ ready: false } as const);
       }
+      objectReady = true;
       return Promise.resolve({
         ready: true,
         exitCode: options.runExit?.(command, env) ?? 0,
@@ -86,6 +94,7 @@ export function fakeSandboxDoor(
       });
     },
     async startProcess(command, env) {
+      objectReady = true;
       const id = crypto.randomUUID();
       const p: FakeProcess = { id, command, output: "", state: "running", exit: null };
       processes.set(id, p);
@@ -109,7 +118,15 @@ export function fakeSandboxDoor(
       });
     },
     listProcesses() {
-      return maybe(() => [...processes.values()].map(view));
+      return maybe(() => {
+        // The fixed object's contract: the list answers as soon as its
+        // container answers, probing for itself when this instance's flag
+        // is unset — pinned on the object itself by cloudflare/test/
+        // factory-sandbox.test.ts ("after the object itself restarted").
+        // The fake's container always answers, so the probe never fails.
+        objectReady = true;
+        return [...processes.values()].map(view);
+      });
     },
     readOutput(id, offset) {
       return maybe(() => {
@@ -160,6 +177,18 @@ export function fakeSandboxDoor(
     /** The container died and came back EMPTY: it knows none of its processes. */
     forget() {
       processes.clear();
+    },
+    /**
+     * A deploy restarting the Durable Object: the container and its
+     * processes live on, the object's in-memory state — the ready flag —
+     * is lost. The next door call must work anyway.
+     */
+    restartObject() {
+      objectReady = false;
+    },
+    /** Whether the object's in-memory ready flag is currently set. */
+    get objectReady() {
+      return objectReady;
     },
     /** From here on, calls never answer — a process dying mid-call. */
     die() {
