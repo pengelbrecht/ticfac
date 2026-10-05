@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 270,
-  "state": "publishing",
-  "reason": "closing 24u behind the integrated gate on affdb63e6abe",
-  "updated_at": "2026-10-05T20:18:42Z",
+  "sequence": 271,
+  "state": "running",
+  "reason": "24u is closed",
+  "updated_at": "2026-10-05T20:18:45Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -184,7 +184,7 @@
     },
     {
       "tick_id": "24u",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 36
     },
     {
