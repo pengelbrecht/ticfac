@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 392,
-  "state": "running",
-  "reason": "rpw is closed",
-  "updated_at": "2026-10-05T21:19:35Z",
+  "sequence": 393,
+  "state": "dispatching",
+  "reason": "dispatching omq as attempt 62",
+  "updated_at": "2026-10-05T21:19:50Z",
   "ticks": [
     {
       "tick_id": "92k",
