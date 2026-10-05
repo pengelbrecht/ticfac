@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 201,
+  "sequence": 202,
   "state": "running",
-  "reason": "CI on the epic PR #219 is pending; the close-out of hn6 is held",
-  "updated_at": "2026-10-05T15:08:42Z",
+  "reason": "CI is green on the epic PR #219; the close-out of hn6 is admitted",
+  "updated_at": "2026-10-05T15:13:50Z",
   "ticks": [
     {
       "tick_id": "v16",
