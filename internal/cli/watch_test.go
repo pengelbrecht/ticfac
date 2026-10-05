@@ -1042,6 +1042,40 @@ func TestWatchExitsCancelledWhenTheRunEndedCancelled(t *testing.T) {
 	}
 }
 
+// The stream's cancelled end names the resume the model's needs-you line
+// names (tick 3yx): the factory's own stop word — "stopped:" — is a
+// dead-run RESUME in the model's attention, the same attention a frame
+// renders as "needs you" and the alert prints "is holding for a person …
+// move it on" — so the pipe's ending must not answer the same deliberate
+// stop with "nothing is held for a person" and no command. One deliberate
+// stop, one answer, on both watch paths.
+func TestWatchStreamEndsCancelledNamingTheResume(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+
+	writeFeedEvent(t, repo, "epic-rmod", runfeed.NewEvent(now, "epic-rmod", "", nil,
+		reconcile.StageRunFinished, "stopped: stop requested by the operator"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-rmod"}, &stdout, &stderr)
+	if code != exitCancelled {
+		t.Fatalf("exit code %d, want %d (the cancelled class) for a stopped run; stderr %q", code, exitCancelled, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended CANCELLED") {
+		t.Errorf("the cancelled end is not said to the person reading the stream: %q", stderr.String())
+	}
+	resume := statusmodel.ResumeCommand(statusmodel.HostLocal, "rmod")
+	if !strings.Contains(stderr.String(), resume) {
+		t.Errorf("the cancelled end does not name the resume %q the model's attention holds: %q", resume, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "nothing is held for a person") {
+		t.Errorf("the end said nothing is held while the model's attention holds the resume: %q", stderr.String())
+	}
+}
+
 // Every word the run's own terminal line can spell a deliberate stop with
 // is the cancelled class — or the decided answer is a word nothing
 // recognizes. The resume path's already-terminal branch replays a cancelled
