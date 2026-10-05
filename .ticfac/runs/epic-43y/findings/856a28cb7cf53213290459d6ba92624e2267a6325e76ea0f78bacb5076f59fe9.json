@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "dbi",
   "attempt": 38,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T15:37:33Z",
+  "triaged_at": "2026-10-05T15:37:45Z",
+  "triaged_by": "ticfac run epic-43y absorbing qzg",
+  "promoted_as": "qzg",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "dbi",
