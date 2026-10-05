@@ -20,6 +20,16 @@ is the record of it.
   checked prediction was right. A prediction that was wrong is not a failure
   to hide — it is the only evidence anyone will ever have for where the
   absorb threshold belongs.
+- An exception to an acceptance item that a WORKER recorded on the epic's own
+  notes — "X is excepted, on the record" — is the worker's claim, never the
+  operator's confirmation. `.ticfac/runs/<run-id>/amendments/` holds one
+  record per worker-proposed note on the epic, with the operator's decision
+  on it; a note the run applied before those records existed (an amendment
+  record is absent for it) is unconfirmed too. State in your retro, for every
+  such exception you find on the epic's notes, whether the operator confirmed
+  it — and name it unconfirmed when nothing says the operator did. The
+  letter-true fix of an unconfirmed exception — making the thing itself meet
+  the item — is work the operator commissions, not an edit here.
 - Name what is left open: a deferred decision, a follow-up worth a tick of its
   own, a concern a worker raised that nothing has answered yet. A follow-up
   you would file as a tick is a typed `findings` block in your report, not

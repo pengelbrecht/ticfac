@@ -113,6 +113,8 @@ than maintained beside it:
 | `ticfac findings <epic-id>` | list the worker findings drafted for triage |
 | `ticfac finding <epic-id> <key>` | triage one drafted finding |
 | `ticfac triage <epic-id> [<key-prefix>=<decision>...]` | settle every untriaged finding — absorb / file / fixed / discard — interactively or by short key prefix (`--json` for agents) |
+| `ticfac amendments <epic-id>` | list the worker-proposed notes on the epic's own record awaiting the operator (`--json` for agents); the epic close-out does not hand over while one is undecided |
+| `ticfac amendment <epic-id> <key-prefix>` | record the operator's decision on one worker-proposed epic amendment: `--confirm` (it stands as the operator's own), `--reject` (disowned; the close-out holds until the record is repaired or the decision revisited), `--by` who decided |
 | `ticfac status <run-id>` | is the run alive, and when did it last say anything; an epic id with no run here answers the run the factory holds for this checkout's project |
 | `ticfac events <run-id>` | a run's event feed: what it did, as it does it (`--follow` subscribes) |
 | `ticfac watch <run-id>` | the whole epic at a glance: on a terminal, one live block redrawn in place — attention first, the lifecycle as a progress bar with elapsed and cost, the active wave one fixed row per tick with a colour-graded silence, done and upcoming waves one line each, fitting the pane; on a pipe, plain lines one per event — and on both, it says, to a human, when a run ends holding something for one, and it exits the ended run's own class: 0 done, 1 failed, 3 holding for a person, 7 cancelled |

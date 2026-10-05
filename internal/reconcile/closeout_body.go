@@ -101,8 +101,15 @@ func (r *Reconciler) composePRBody(readinessSection string) (string, int, error)
 	if err != nil {
 		return "", 0, fmt.Errorf("read the run's absorption decisions: %w", err)
 	}
+	// The worker-proposed amendments to the epic's OWN record (tick 7sn) —
+	// read here so the "where to look first" opening and the amendments
+	// section below compose from one fetch of the same durable records.
+	amendments, err := r.store.Amendments()
+	if err != nil {
+		return "", 0, fmt.Errorf("read the run's amendments: %w", err)
+	}
 	body.WriteString("\n\n## Where to look first\n\n")
-	body.WriteString(r.lookFirst(decisions, final, findings, absorptions))
+	body.WriteString(r.lookFirst(decisions, final, findings, absorptions, amendments))
 	body.WriteString("\n## What this epic did\n\n")
 	body.WriteString(r.epicSummary())
 	body.WriteString("\n## Definition of done\n\n")
@@ -244,6 +251,49 @@ func (r *Reconciler) composePRBody(readinessSection string) (string, int, error)
 				}
 			}
 			body.WriteString("\n")
+		}
+	}
+
+	// AMENDMENTS TO THE EPIC'S OWN RECORD (tick 7sn): every note a WORKER
+	// proposed to the record the close-out scores the acceptance from, each
+	// with the operator's decision on it — a pending or rejected one is what
+	// the close-out's amendments gate holds the hand-over on, and this is the
+	// text the operator reads to decide. Full text, like the findings: a
+	// decision made against a summary is a decision made against prose
+	// nobody scored.
+	body.WriteString("\n## Amendments to the epic's record\n\n")
+	if len(amendments) == 0 {
+		// The absence is stated from the RECORD's view, and says so: a worker's
+		// note applied by an older run — before these records existed — is
+		// outside them, and the close-out's retro names such exceptions from
+		// the epic's notes themselves. An absence that read as "no worker ever
+		// wrote to the record" would be a claim the record cannot make.
+		body.WriteString("No worker-proposed amendment to the epic's record is filed with this run. A note a " +
+			"worker applied in an earlier run — before the amendment records existed — is outside these " +
+			"records, and the close-out's retro names it from the epic's notes.\n")
+	} else {
+		body.WriteString("Every note a worker proposed to the epic's own record — the one the acceptance is scored " +
+			"from — applied by the run, and waiting for or carrying the operator's decision. A worker's words on " +
+			"it are a claim, never the operator's word: the close-out does not hand over while one is undecided " +
+			"(confirm lets it stand as the operator's own, reject disowns it).\n")
+		for _, amendment := range amendments {
+			switch amendment.Status {
+			case runstate.AmendmentConfirmed:
+				fmt.Fprintf(&body, "\n- CONFIRMED — %q (key %s, %s on the epic, proposed by %s): the operator let it "+
+					"stand, by %s at %s\n", amendment.FirstLine(), short(amendment.Key), amendment.Field,
+					r.attemptName(amendment.ProposedBy, amendment.Attempt), amendment.DecidedBy, amendment.DecidedAt)
+			case runstate.AmendmentRejected:
+				fmt.Fprintf(&body, "\n- REJECTED — %q (key %s, %s on the epic, proposed by %s): the operator disowned "+
+					"it, by %s at %s, and the close-out does not hand over while the record still carries it\n",
+					amendment.FirstLine(), short(amendment.Key), amendment.Field,
+					r.attemptName(amendment.ProposedBy, amendment.Attempt), amendment.DecidedBy, amendment.DecidedAt)
+			default:
+				fmt.Fprintf(&body, "\n- PENDING — %q (key %s, %s on the epic, proposed by %s): waiting for the "+
+					"operator — confirm with `ticfac amendment %s %s --confirm --by <who>`, reject with --reject\n",
+					amendment.FirstLine(), amendment.Key, amendment.Field,
+					r.attemptName(amendment.ProposedBy, amendment.Attempt), r.opts.EpicID, amendment.Key)
+			}
+			fmt.Fprintf(&body, "\n  %s\n", strings.ReplaceAll(amendment.Value, "\n", "\n  "))
 		}
 	}
 

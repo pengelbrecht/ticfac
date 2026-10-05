@@ -90,6 +90,14 @@ func FindingPath(runID, key string) string {
 	return RunDir(runID) + "/findings/" + key + ".json"
 }
 
+// AmendmentPath is `.ticfac/runs/<run-id>/amendments/<key>.json`, where <key>
+// is the amendment's dedup key — a hash over the amended record, field and
+// value (tick 7sn): one confirmation per worker-proposed amendment to the
+// epic's own record, whatever attempt proposed it.
+func AmendmentPath(runID, key string) string {
+	return RunDir(runID) + "/amendments/" + key + ".json"
+}
+
 // PredictionScorePath is `.ticfac/runs/<run-id>/predictions/<key>.json`, where
 // <key> is the finding's dedup key — the same key the absorption decision
 // record carries, so a checked prediction is joined to the prediction it
