@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 210,
-  "state": "publishing",
-  "reason": "closing qjl behind the integrated gate on aadd768b55e3",
-  "updated_at": "2026-10-05T16:20:39Z",
+  "sequence": 211,
+  "state": "running",
+  "reason": "qjl is closed",
+  "updated_at": "2026-10-05T16:20:49Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "qjl",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 29
     },
     {
