@@ -1,0 +1,121 @@
+{
+  "schema_version": 3,
+  "decision": 48,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "hn6",
+    "job_id": "run-epic-hn6/tick-pv7/attempt-42",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:d251a161caa636cf29259dc058d36015243e7c7363028f39590d33e915e23b2d",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "fbce6fc37f64a37a54ad1399d7780ea912b2e823",
+    "tick_id": "pv7"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "mergedRuns.stateOf lets an ended run's row give way to the tracker's closed status only when runEnded is true. runEnded reads a terminal checkpoint state alone. A run stopped by a signal or a host death leaves state \"running\" (run_08f5, the case in cno's own evidence). Failing input: an older subject run with a running checkpoint and dead liveness, no later sibling run, and the tick closed in the tracker by a person. The tick reads state=dispatched with pipeline review:active and a growing elapsed time. The live hn6 case reads right only because c9n puts a later run's closed row on top. cno's test uses State \"failed\", a state real stopped runs don't have; with c9n present, removing cno's guard still passes its main subtest. Fix: treat a run with a dead liveness as ended here too, and test with a running checkpoint plus dead liveness.\nevidence: internal/statusmodel/epic.go:237-258",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "cno's tracker-closed demotion ignores a dead run with a 'running' checkpoint"
+      },
+      {
+        "body": "statusWorkerCost returns a sum for any non-empty set of gateway rows. cost.go then marks the whole workers-ai line Metered with basis \"AI Gateway logs\" and Attempts counting every workers-ai attempt. Failing input: a resumed epic-<id> run with 30 attempts dispatched before metering existed (or while ~/.ticfacrc named no gateway) and 2 after. The line states a measured $X over 32 attempts, and the 30 unmeasured ones are never called \"not metered\". Related: the join key is just run_id=epic-<id>, so a later re-run of the same epic, or the same epic id in another repo on the same gateway, sums into this run. Also, after 24u, the classifier's own jev calls carry the same run_id. A run with no Workers AI workers then gets a metered \"Workers AI $0.0x (0 attempts)\" line while the decisions line says not metered.\nevidence: internal/cli/status_model.go:415-443; internal/statusmodel/cost.go:130-135",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Workers AI line reads fully metered when only some attempts were joined"
+      },
+      {
+        "body": "localMetering's comment says a non-Cloudflare gateway gets no metering. But gatewaytrace.GatewayIDs checks only the path shape /v1/<account>/<gateway>, and WriteExtension only requires '://', so an http:// or third-party host passes. Since m4t, pi then sends the Cloudflare account token in both Authorization and cf-aig-authorization to that host, and in cleartext over http. Failing input: factory_gateway_url=http://proxy.example/v1/a/b in ~/.ticfacrc. The operator sets this value, so this is not high, but the guard should require https and the gateway.ai.cloudflare.com host.\nevidence: internal/gatewaytrace/trace.go:79-89; internal/exec/subprocess/pimeter.go:152,221-222",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Local metering guard checks the gateway URL path, not its host"
+      },
+      {
+        "body": "mwt's epic-of-run resolution fetches all of origin's epic/* branches into refs/ticfac/peek/runscan/<pid>-<n>/ and never deletes them. The main checkout already holds 55 such refs, about 11 more per bare ticfac, status or watch call that resolves an unhinted run_* id. This sits on top of an older leak of the same kind (refs/ticfac/peek/status). It also puts a network fetch on the overview's cheap path. Fix: delete the refs after the read, or read the remote-tracking refs without a fetch.\nevidence: internal/cli/epic_of_run.go:84-87; git for-each-ref refs/ticfac/peek/runscan | wc -l",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Every status/watch/overview call leaks refs/ticfac/peek/runscan refs"
+      },
+      {
+        "body": "mwt made the command builders refuse an empty operand, but two drill-in next-step sentences still concatenate the command unconditionally. For a run whose epic cannot be resolved they read '… —  takes it up', with the command missing. TestNoClearingCommandCarriesAnEmptyOperand does not cover them.\nevidence: internal/statusmodel/pipeline.go:620,636",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Pipeline next step prints an empty command when the run's epic is unresolved"
+      },
+      {
+        "body": "2xk's stay-open view is entered when keyed && stayOnEnd. If the key reader died before the run ended, keys is set to nil but keyed stays true, so the standing select waits on a nil channel. The 'keyboard is gone' exit can never fire, and watch waits until a signal arrives. Fix: also require keys != nil.\nevidence: internal/cli/watch.go:969-990,1062-1070,1090",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "watch can hang standing open after its key reader has died"
+      },
+      {
+        "body": "3yx fixed the cancelled ending. The FAILED endings, live and stream, still say 'Nothing is held for a person' while the frame shows a needs-you line: the same contradiction. The stream FAILED path also builds its command from epicOf(), which falls back to the run id, so an unresolved run_* id can print 'ticfac run-epic run_…'.\nevidence: internal/cli/watch.go:546-552",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "watch's FAILED ending says 'nothing is held' beside a red needs-you"
+      },
+      {
+        "body": "credentials.Get trims spaces around the key and '=' and takes the first match. pi's !grep command needs an exact '^factory_cloudflare_api_token=' and returns every match. Failing input: a hand-edited 'factory_cloudflare_api_token = …'. localMetering builds the join, pi sends an empty credential, and every Workers AI dispatch is refused instead of just going unmetered. A duplicated key line produces a two-line header value.\nevidence: internal/credentials/credentials.go:173-182; internal/exec/subprocess/pimeter.go:152",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "pi's credential grep and credentials.Get read ~/.ticfacrc differently"
+      },
+      {
+        "body": "TestPiDrainsTheGatewayStreamThroughTheMeteringOverride is the only end-to-end check that pi resolves the !command and that the account token displaces pi's stored key. It skips when pi is not on PATH, which includes every CI runner, so CI checks m4t only through a string match on the generated extension. Installing a pinned pi into the go test job would make the claim CI-verified.\nevidence: internal/exec/subprocess/pimeter_drain_test.go",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Run the real-pi metering tests in CI (m4t displacement, 648 stream drain)"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-hn6/tick-pv7/attempt-42",
+      "commits": 0,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-hn6/pv7/RESULT-pv7.md",
+      "review_verdict": "READY",
+      "review_verdict_detail": ""
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (READY)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T23:24:15Z",
+  "answered_at": "2026-10-05T23:24:15Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "pv7",
+    "attempt": 42,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "fbce6fc37f64a37a54ad1399d7780ea912b2e823",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:d251a161caa636cf29259dc058d36015243e7c7363028f39590d33e915e23b2d",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}
