@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 343,
-  "state": "running",
-  "reason": "xba is running as attempt 55",
-  "updated_at": "2026-10-05T19:48:26Z",
+  "sequence": 344,
+  "state": "collecting",
+  "reason": "collecting l6n attempt 54",
+  "updated_at": "2026-10-05T19:59:10Z",
   "ticks": [
     {
       "tick_id": "92k",
