@@ -2,7 +2,7 @@
   "id": "c9n",
   "title": "Merge orders the subject run last regardless of checkpoint chronology",
   "description": "newMergedRuns always appends the subject run's records as the newest layer, even when an older run is the subject and a chronologically later prior run exists (the checkout-without-the-local-feed resolution). The later run that actually closed a tick loses row, owner and marker precedence to the older subject, so a closed row can show the ended run's attempt and tier rather than the closing run's. Tick cno fixed the state this produced; ordering the merge by the checkpoints' own UpdatedAt (with a defined tie-break) would fix the provenance too.\nevidence: internal/statusmodel/epic.go newMergedRuns (runs = prior..., current always last); internal/cli/status_model.go priorRunsForEpic already orders the priors by UpdatedAt\n\nticfac run epic-hn6 created this tick by absorbing the finding c46fd55cda40b763f59f7cad87058d86e86a181fd4fda554d2fe8e8738e81141 (reported by run-epic-hn6/tick-cno/attempt-26): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/c46fd55cda40b763f59f7cad87058d86e86a181fd4fda554d2fe8e8738e81141.json on the run branch.",
-  "notes": "2026-10-05 15:39 - ticfac run epic-hn6: created by absorbing finding c46fd55cda40b763f59f7cad87058d86e86a181fd4fda554d2fe8e8738e81141 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-hn6/absorptions/c46fd55cda40b763f59f7cad87058d86e86a181fd4fda554d2fe8e8738e81141.json on epic/hn6, and it says: the classifier put 0.39 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A3: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
+  "notes": "2026-10-05 15:39 - ticfac run epic-hn6: created by absorbing finding c46fd55cda40b763f59f7cad87058d86e86a181fd4fda554d2fe8e8738e81141 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-hn6/absorptions/c46fd55cda40b763f59f7cad87058d86e86a181fd4fda554d2fe8e8738e81141.json on epic/hn6, and it says: the classifier put 0.39 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A3: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side\n2026-10-05 17:02 - ticfac run epic-hn6: c9n try 1 (run dispatch #28) merged into epic/hn6 as cf54c29d9fba; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +11,6 @@
   "discovered_from": "run-epic-hn6/tick-cno/attempt-26",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-05T13:39:40Z",
-  "updated_at": "2026-10-05T14:10:34.451102Z",
+  "updated_at": "2026-10-05T15:02:58.976099Z",
   "started_at": "2026-10-05T14:10:34.451101Z"
 }
