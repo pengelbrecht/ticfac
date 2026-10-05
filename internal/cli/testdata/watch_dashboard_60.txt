@@ -1,5 +1,5 @@
 6in ticfac Phase 7: cut over and simplify ti…  local · alive
-2/4 ticks · 2h9m · ● healthy (recovered: net ×14)
+████████████░░░░░░░░░░░░ 2/4 ticks · 2h9m · ● healthy (reco…
 ✓ plan ◐ waves 2/3 ✓ review ◐ close-out ◐ ci ○ merge
                                           needs you: nothing
 

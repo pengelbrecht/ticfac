@@ -785,6 +785,92 @@ func dashWorkerPanelLine(frame []string, handle string) int {
 	return -1
 }
 
+// TestDashboardProgressBarKeepsItsSeatUnderALongVerdict (tick g94): a
+// stopped or degraded run's summary is routinely a sentence, and the bar is
+// the header's answer to "how far along" (A1) — the verdict's summary is the
+// elastic part, truncated with an ellipsis, never the whole bar dropped. The
+// live defect: a 120-column frame of a stopped run read
+// "53/56 ticks · 5d3h · ● stopped: the Workflow instance is complete and the
+// run record says stopped" with no bar at all, because dashProgressLine gave
+// up the bar the moment bar + counts + verdict crossed the pane.
+func TestDashboardProgressBarKeepsItsSeatUnderALongVerdict(t *testing.T) {
+	t.Parallel()
+	m := dashboardFixture()
+	elapsed := int64(5*24*3600 + 3*3600) // 5d3h
+	m.Progress = statusmodel.Progress{
+		Ticks:             &statusmodel.TickProgress{Total: 56, Closed: 53, Open: 3},
+		RunElapsedSeconds: &elapsed,
+	}
+	m.Health.Verdict = statusmodel.HealthVerdict{
+		State:   statusmodel.VerdictStopped,
+		Summary: "the Workflow instance is complete and the run record says stopped",
+	}
+	m.Health.Verdict.Recovered = nil
+
+	progressLine := func(frame []string) string {
+		t.Helper()
+		for _, line := range frame {
+			if strings.Contains(line, "53/56 ticks") {
+				return line
+			}
+		}
+		t.Fatalf("the frame carries no progress line:\n%s", strings.Join(frame, "\n"))
+		return ""
+	}
+
+	// The pane the defect lived at: 120 columns, room for the bar, the
+	// counts and a cut of the summary — the bar keeps its seat, the state
+	// word survives, the summary gives way with an ellipsis, and the whole
+	// line still fits the pane.
+	line := progressLine(renderWatchFrame(m, plainStyles(), 120, 0, ""))
+	if !strings.Contains(line, "█") || !strings.Contains(line, "░") {
+		t.Errorf("a 120-column pane dropped the progress bar under a long verdict:\n%s", line)
+	}
+	if !strings.Contains(line, "● stopped: ") {
+		t.Errorf("the truncated verdict lost its state word:\n%s", line)
+	}
+	if !strings.HasSuffix(line, "…") {
+		t.Errorf("the verdict summary is not cut with an ellipsis:\n%s", line)
+	}
+	if strings.Contains(line, "run record says stopped") {
+		t.Errorf("the truncated verdict still carries the whole summary:\n%s", line)
+	}
+	if got := ansi.StringWidth(line); got > 120 {
+		t.Errorf("the progress line is %d cells wide in a 120-column pane:\n%s", got, line)
+	}
+
+	// Narrower but still roomy: the same rule, a deeper cut of the summary.
+	line = progressLine(renderWatchFrame(m, plainStyles(), 60, 0, ""))
+	if !strings.Contains(line, "█") {
+		t.Errorf("a 60-column pane dropped the progress bar under a long verdict:\n%s", line)
+	}
+	if !strings.Contains(line, "● stopped: ") || !strings.HasSuffix(line, "…") {
+		t.Errorf("a 60-column pane did not keep the state word over the cut summary:\n%s", line)
+	}
+	if got := ansi.StringWidth(line); got > 60 {
+		t.Errorf("the progress line is %d cells wide in a 60-column pane:\n%s", got, line)
+	}
+
+	// The bar gives way only when the pane cannot seat even a readable stub
+	// of the verdict beside it: bar + counts alone cross these panes, so the
+	// answers keep the width and the bar waits for a wider one.
+	for _, width := range []int{48, 40} {
+		frame := renderWatchFrame(m, plainStyles(), width, 0, "")
+		line := progressLine(frame)
+		if strings.Contains(line, "█") {
+			t.Errorf("a %d-column pane seats the bar it cannot fit beside the answers:\n%s", width, line)
+		}
+		if !strings.Contains(line, "● stopped: ") {
+			t.Errorf("a %d-column pane dropped the verdict for the bar:\n%s", width, line)
+		}
+		for i, l := range frame {
+			if got := ansi.StringWidth(l); got > width {
+				t.Errorf("line %d is %d cells wide in a %d-column pane: %q", i, got, width, l)
+			}
+		}
+	}
+}
+
 // TestDashboardFitsHeight: a pane shorter than the frame keeps the headline
 // and the tail, and compresses the middle in place — contiguous runs of
 // closed rows collapse into one dim "✓ N closed" line standing where the
