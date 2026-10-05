@@ -789,11 +789,16 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 		// The command is named by WHAT the run is holding, not by the line's
 		// own shape (tick gtk): the close-out's untriaged-findings hold is
 		// cleared by triage — settle releases an attempt, and this hold
-		// holds a person's decision about findings, not an attempt. Every
-		// other hold is the settle command the run-wide dispatch number
-		// addresses — the same sentence `ticfac watch` prints.
+		// holds a person's decision about findings, not an attempt; the
+		// close-out's unconfirmed-amendments hold is cleared the same way,
+		// by the amendments surface (tick 7sn). Every other hold is the
+		// settle command the run-wide dispatch number addresses — the same
+		// sentence `ticfac watch` prints.
 		if strings.HasPrefix(held.Detail, reconcile.RefusedFindingUntriaged+":") {
 			unblock := TriageCommand(m.EpicID)
+			w.UnblockCommand = &unblock
+		} else if strings.HasPrefix(held.Detail, reconcile.RefusedEpicAmendmentUnconfirmed+":") {
+			unblock := AmendmentsCommand(m.EpicID)
 			w.UnblockCommand = &unblock
 		} else if held.TickID != nil && held.Attempt != nil {
 			unblock := fmt.Sprintf("ticfac settle %s %s %d --release \"<who>\"", m.EpicID, *held.TickID, *held.Attempt)

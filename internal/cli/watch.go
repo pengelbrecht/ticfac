@@ -389,6 +389,14 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 					"or answer what the tick is waiting for. The "+
 					"evidence is on the integration branch, not in this line.\n\n",
 					runID, what, event.Detail, epicID)
+			} else if strings.HasPrefix(event.Detail, reconcile.RefusedEpicAmendmentUnconfirmed+":") {
+				fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
+					"Nothing proceeds until the operator decides. `ticfac amendments %s` lists the "+
+					"worker-proposed notes on the epic's own record; settle each with "+
+					"`ticfac amendment %s <key> --confirm --by <who>` — or the same command with --reject to "+
+					"disown it — or answer what the tick is waiting for. The evidence is on the "+
+					"integration branch, not in this line.\n\n",
+					runID, what, event.Detail, epicID, epicID)
 			} else {
 				fmt.Fprintf(stderr, "\nticfac watch: run %s is HOLDING %s for a person:\n%s\n"+
 					"Nothing proceeds until somebody decides. Release it with `ticfac settle %s %s %s "+
