@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "qjl",
   "attempt": 29,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T15:45:25Z",
+  "triaged_at": "2026-10-05T15:45:38Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing dm2",
+  "promoted_as": "dm2",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "qjl",
