@@ -53,6 +53,19 @@ loud.
 
 ---
 
+## 1.2.0
+
+MINOR: three health counts added to the status model. `status-model.json`'s
+`health` gains `pushes`, `peak_pushes_per_minute` and `github_errors` (a
+closed object counting `network`, `ref_update_failed`, `server_fault`,
+`auth_refused` and `cross_repo_refused`), counted from the run feed's new
+`pushed` and `github_error_<class>` lines (ticks rlp and gy9;
+docs/analysis/github-failures.md). The model's producer is ticfac, which
+always emits them; a reader that ignores them (the factory's status page) is
+still correct.
+
+---
+
 ## 1.1.0
 
 MINOR: one environment variable added. `worker-boot-contract.json` gains

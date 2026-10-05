@@ -338,7 +338,11 @@ func snapshotGit(dir string, env []string, args ...string) (string, error) {
 		"GIT_PAGER=cat",
 		"GIT_OPTIONAL_LOCKS=0",
 	), env...)
+	// Nothing here pushes today; the queue costs nothing for anything else
+	// and holds the line if that changes (tick rlp).
+	done := gitbin.PushQueue(dir, args, nil)
 	out, err := cmd.Output()
+	done(err)
 	if err != nil {
 		return "", &gitError{args: args, dir: dir, stderr: stderr.String(), err: err}
 	}
@@ -358,7 +362,9 @@ func snapshotGitStdin(dir string, env []string, stdin []byte, args ...string) (s
 		"GIT_OPTIONAL_LOCKS=0",
 	), env...)
 	cmd.Stdin = bytes.NewReader(stdin)
+	done := gitbin.PushQueue(dir, args, nil)
 	out, err := cmd.Output()
+	done(err)
 	if err != nil {
 		return "", &gitError{args: args, dir: dir, stderr: stderr.String(), err: err}
 	}

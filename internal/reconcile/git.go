@@ -97,7 +97,12 @@ func (g *repoGit) onceEnv(dir string, extraEnv []string, args ...string) (stdout
 	cmd.Env = append(append(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"), gitbin.TransportEnv()...), extraEnv...)
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout, cmd.Stderr = &outBuf, &errBuf
+	// Every push — tracker records, integrations, folds, start refs, routed
+	// filings, each retry of one — waits its slot in the repository's
+	// host-wide push queue (tick rlp), and the queue tells the run.
+	done := gitbin.PushQueue(dir, args, g.retry.Pushed)
 	err = cmd.Run()
+	done(err)
 	stdout = strings.TrimSpace(outBuf.String())
 	stderr = strings.TrimSpace(errBuf.String())
 	if err != nil {
