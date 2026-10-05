@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 231,
-  "state": "integrating",
-  "reason": "integrating twa attempt 37 into epic/43y",
-  "updated_at": "2026-10-05T15:13:42Z",
+  "sequence": 232,
+  "state": "gating",
+  "reason": "running the integrated gate for twa on 23cc16233369",
+  "updated_at": "2026-10-05T15:22:30Z",
   "ticks": [
     {
       "tick_id": "92k",
