@@ -1,0 +1,106 @@
+{
+  "schema_version": 3,
+  "decision": 33,
+  "role": "closeout-epic",
+  "request": {
+    "epic_id": "hn6",
+    "job_id": "run-epic-hn6/tick-qjl/attempt-29",
+    "output_schema": "ticfac.job-result.closeout-epic.v1",
+    "profile": "closeout-epic@1.0.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:02d4205dfe376c01cceea8466fcf910859b131f3680bd8b685849c25c4108589",
+    "role": "closeout-epic",
+    "source_grade": "write",
+    "source_sha": "d1c35d15628c9daa977de61c565a8e7375aeff43",
+    "tick_id": "qjl"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "epic-hn6 died by SIGINT (run_died 'cancelled: stopped by a signal' at 2026-10-04T21:19:50Z) with a non-terminal checkpoint, and the restart under the same run id wrote no `resumed` line: Run records StageResumed only for a FAILED or COMPLETED checkpoint. statusmodel's runEnding/lastTerminalLine therefore still reads the old run_died as the run's ending, so the LIVE run's model says lifecycle.phase 'cancelled' and buildRemaining suppresses the ETA beside 61 closed ticks. watch survives only because watchRunEnded checks liveness first; any surface keyed on the phase (overview classes, notify.ts, a liveness flicker) reads a working run as cancelled. Fix at the writer (every incarnation records a resume line over a standing terminal line) and add a test: run_died, then a restart, then the phase is the epic's.\nevidence: internal/reconcile/reconcile.go:1955-1981 (StageResumed only for Completed/Failed); internal/statusmodel/build.go:853-890 (runEnding, lastTerminalLine); live: `ticfac status epic-hn6 --json` -> lifecycle.phase \"cancelled\", liveness.alive true, remaining null; ~/Development/ticfac/.ticfac/logs/epic-hn6/events.jsonl line 538 is the last run_died and no resumed follows",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Restart after a signal death leaves the live run's phase 'cancelled', no ETA"
+      },
+      {
+        "body": "runnerOf returns the attempt's provenance model, which for every claude review/closeout worker is the bare 'opus' (runners.toml), and transcriptKind maps anything not containing 'claude' to pi. So a live claude worker's activity window and last action are never read: the dashboard's WORKERS panel shows an empty sparkline and no LAST for the only worker of this close-out, though its Claude Code transcript exists under ~/.claude/projects/<worktree slug>. The activity test spells the model 'claude-opus-5', a string no real record carries. Key the mapping on the executor/harness kind the attempt record names, and fix the fixture to a real record's spelling.\nevidence: internal/statusmodel/activity.go:149-151 (runnerOf), :213-217 (transcriptKind); internal/statusmodel/activity_test.go:335 ('claude-opus-5'); .ticfac/runs/epic-hn6/attempts/29.json provenance.model \"opus\"; live workers[0].activity null",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Status model reads an 'opus' claude worker through pi's transcript layout"
+      },
+      {
+        "body": "When watch returns a non-zero exit (5 detached, 6 held, 7 cancelled), fang.Execute's error path calls mustColorscheme -> lipgloss.HasDarkBackground, which writes OSC 11 and reads stdin for the reply. watchReadKeys' goroutine is still blocked in a raw read on the same *os.File (it only checks ctx between reads), so the query cannot even take the fd's read lock. On a terminal that does not answer OSC 11 (script(1), many CI ptys, likely Bombadil's driver for z7w) the process hangs until another byte arrives; measured: exit 10s after q in one run, still alive 30s+ after q in another. On a terminal that does answer, the reply is swallowed by the key reader and the query waits out its timeout. Stop the key reader (cancelable reader or non-blocking fd) before returning, or skip fang's colour query for watch's own exit codes.\nevidence: goroutine dump (SIGQUIT) of a stalled `ticfac watch epic-hn6`: main in charm.land/lipgloss/v2.queryTerminal via fang@v1.0.0/fang.go:175 mustColorscheme, blocked in poll.fdMutex.rwlock; goroutine in syscall.read from internal/cli/watch_keys.go:307 watchReadKeys",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "watch exit stalls: its key reader holds stdin while fang queries the terminal"
+      },
+      {
+        "body": "`ticfac` at a 120-column tty lists six earlier runs of hn6 (run_6d88, run_d51a, run_09eb, run_37b3, run_3f03, run_ee8e) beside the live epic-hn6. Their models carry epic_id '' (their records are not found from the checkout), so markOverviewHistory cannot mark them superseded, and their clearing commands lose the epic: 'clear with: ticfac run-epic ' (nothing after it) and 'ticfac settle  yjq 12 --run-id …' (double space). Their first line is unbounded (325, 788, 1225, 2488, 2792 characters at width 120) and the failed ones say 'it needs a person' above 'needs you: nothing'. The headline the epic adopted is right; the rows around it are not. Resolve the epic for a registered run_* id (its checkpoint names it), never print a command with an empty operand, and bound the state line to the width.\nevidence: internal/cli/overview.go:388 (rows with EpicID == \"\" never enter `latest`), internal/statusmodel/commands.go:28-32 ResumeCommand(host, \"\"); `ticfac status run_09ebaf290f934172912b00bd112d8e06 --json` -> epic_id \"\"",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Bare overview lists superseded run_* runs with no epic id and an empty resume"
+      },
+      {
+        "body": "reportSummary takes the first non-heading paragraph, and cloud worker reports open with '<!-- ticks-worker: container facts, prepended after the harness exited … -->'. So 11 ticks' drill-in report line (0rx 378 3rc 7uv c2u fq0 lh4 ltg oro zl1 u5n) reads the container preamble rather than what the worker did. Skip HTML comment paragraphs.\nevidence: internal/statusmodel/report.go:262-284 (reportSummary); live tick view for 0rx; `ticfac status epic-hn6 --json` .waves[].ticks[].report.summary",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Drill-in report summary is the ticks-worker preamble comment, not the report"
+      },
+      {
+        "body": "In a pane shorter than the plan, the live frame collapses closed rows into '✓ 64 closed' beside a header of '61/62 ticks': the fold counts the three duplicate rows (dvv, log, qrl) that progress excludes. And j/k walk the cursor through the collapsed rows, so after `jjj` no row carries '▸' while enter opens a tick (0rx) the person cannot see they selected. Count the fold as progress counts, and expand (or mark) the row under the cursor.\nevidence: internal/cli/watch_view.go:1184-1205 (fitDashboard), :1260 (dashCollapseClosed), internal/cli/watch_keys.go:95-98 (watchNeighbourTick over watchPlanOrder); live 120x40 frame of epic-hn6",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Closed fold counts duplicates and swallows the cursor"
+      },
+      {
+        "body": "Rule 7 wants metered spend where measured, naming Workers AI via gateway logs. Every implementation tick here ran on GLM through Workers AI, yet the local run's cost line says 'Workers AI not metered: this run's Workers AI calls are not joined to gateway logs', and the cloud run's says 'the gateway's cost telemetry has not answered'. A4 holds by never lying, but the metered half has only been seen in fixtures. Join local pi calls to the AI Gateway logs (tag requests with the run id) so the dashboard can show real spend. Also consider a null recorded_usd when no line is metered: the JSON says recorded_usd 0 beside all-unmetered lines.\nevidence: `ticfac status epic-hn6 --json` .cost.lines; internal/statusmodel/cost.go",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Meter local runs' Workers AI spend via the gateway; no live run ever metered"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-hn6/tick-qjl/attempt-29",
+      "commits": 1,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-hn6/qjl/RESULT-qjl.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "closeout-epic",
+    "schema_id": "ticfac.job-result.closeout-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "435's round-2 NOT READY stands: the seven RESULT-*.md (obk) are still on epic/hn6, so the land holds for a person. PR #219 also conflicts with main's #218 in the status-model contract files."
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T15:45:47Z",
+  "answered_at": "2026-10-05T15:45:47Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "qjl",
+    "attempt": 29,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "d1c35d15628c9daa977de61c565a8e7375aeff43",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "closeout",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:02d4205dfe376c01cceea8466fcf910859b131f3680bd8b685849c25c4108589",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}
