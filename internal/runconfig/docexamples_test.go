@@ -147,55 +147,10 @@ harness = "codex"
 effort = "high"
 `
 
+// docExample4 is worked example 4 from runners-config.md, transcribed
+// verbatim: opencode, a kind with no effort dimension. (The pi example that
+// used to sit here went with the pi herdr kind — epic 43y, tick uxi.)
 const docExample4 = `
-version = 1
-
-[orchestrator]
-harness = "pi"
-kind = "pi"
-model = "openai-codex/gpt-5.6-sol"
-effort = "xhigh"
-
-[orchestration]
-substrate = "herdr"
-max_parallel = 4
-
-[roles.plan]
-kind = "pi"
-harness = "pi"
-model = "openai-codex/gpt-5.6-sol"
-effort = "xhigh"
-
-[roles.scout]
-kind = "pi"
-harness = "pi"
-model = "openai-codex/gpt-5.6-sol"
-effort = "low"
-
-[roles.implement]
-kind = "pi"
-harness = "pi"
-model = "openai-codex/gpt-5.6-sol"
-effort = "medium"
-
-[roles.implement.tiers.economy]
-effort = "low"
-
-[roles.implement.tiers.strong]
-effort = "high"
-
-[roles.implement.tiers.frontier]
-model = "anthropic/claude-opus-4-6"   # cross-provider within one kind
-effort = "max"
-
-[roles.review]
-kind = "pi"
-harness = "pi"
-model = "openai-codex/gpt-5.6-sol"
-effort = "xhigh"
-`
-
-const docExample5 = `
 version = 1
 
 [orchestrator]
@@ -236,9 +191,9 @@ kind = "claude"
 model = "haiku"
 `
 
-// docExample6 is worked example 6 from runners-config.md, transcribed
+// docExample5 is worked example 5 from runners-config.md, transcribed
 // verbatim: routing plus the whole command surface — and so a version 2 file.
-const docExample6 = `
+const docExample5 = `
 version = 2
 
 [orchestrator]
@@ -300,9 +255,9 @@ pnpm = { command = "which pnpm", description = "pnpm on PATH (never npm/yarn in 
 git-identity = { command = "git config user.email", description = "git identity configured" }
 `
 
-// docExample7 is worked example 7 from runners-config.md, transcribed
+// docExample6 is worked example 6 from runners-config.md, transcribed
 // verbatim: a repo that declares its own sandbox on top of the base image.
-const docExample7 = `
+const docExample6 = `
 version = 2
 
 [roles.implement]

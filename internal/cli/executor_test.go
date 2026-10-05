@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
 
 // The honoured set's third entry (tick xev): a profile naming
@@ -49,6 +51,18 @@ func TestTheHonouredSetNamesTheSandboxExecutor(t *testing.T) {
 			t.Errorf("the sandbox executor launches %v, none of which is pi: the dispatch profile pairs it with pi",
 				executor.Runners)
 		}
+		// The cloud's Runners list is the DURABLE harness set, not
+		// runconfig.KnownKinds() (epic 43y, tick uxi): herdr's kinds are
+		// interactive CLIs, and the pi row among them is deleted — the pi
+		// worker path is pi-durable, hosted or headless. The cloud still
+		// admits the name "pi" because this repository's own
+		// .tick/runners.cloud.toml routes every role to it as the local
+		// runner table's name for the same durable harness, and "pi-durable"
+		// is the hosted kind the cloud profile set names.
+		if !reflect.DeepEqual(executor.Runners, profile.CloudRule.Harnesses) {
+			t.Errorf("the sandbox executor launches %v, want the durable harness set %v",
+				executor.Runners, profile.CloudRule.Harnesses)
+		}
 	}
 	if !found {
 		t.Fatalf("the honoured set is %v, without %s: a run still cannot select the per-tick sandbox executor, "+
@@ -56,6 +70,42 @@ func TestTheHonouredSetNamesTheSandboxExecutor(t *testing.T) {
 	}
 	if !strings.Contains(honouredNames(), cloudflaresandbox.ExecutorName) {
 		t.Errorf("a refusal naming the honoured set says %q, without the sandbox executor", honouredNames())
+	}
+}
+
+// The honoured set's herdr half refuses kind pi (epic 43y, tick uxi): the
+// herdr executor launches the interactive CLIs runconfig can compile argv
+// for, and pi is no longer one — a herdr pane running the pi CLI was the
+// last pi-CLI worker path in the tree, and the durable harness owns the
+// name now. The refusal is construction-time (usableProfile) and
+// compile-time (runconfig.Compile) on the same list, so a profile routed
+// to kind pi on herdr never reaches a pane.
+//
+// short: table lookups over the honoured set; nothing is dialled.
+func TestTheHerdrExecutorRefusesKindPi(t *testing.T) {
+	known := knownExecutors()
+	var herdrRunners []string
+	found := false
+	for _, executor := range known {
+		if executor.Name != "herdr" {
+			continue
+		}
+		found = true
+		herdrRunners = executor.Runners
+	}
+	if !found {
+		t.Fatalf("the honoured set is %v, without herdr", honouredNames())
+	}
+	for _, runner := range herdrRunners {
+		if runner == "pi" {
+			t.Errorf("the herdr executor still launches %v including pi: kind pi spawned the pi CLI, "+
+				"the worker path epic 43y deletes — pi is the durable harness's runner name, not a herdr kind", herdrRunners)
+		}
+	}
+	if !reflect.DeepEqual(herdrRunners, runconfig.KnownKinds()) {
+		t.Errorf("the herdr executor launches %v, want runconfig's compiled kinds %v: the two lists are "+
+			"the same refusal stated twice, and a kind one admits that the other will not compile is a pane "+
+			"that starts and then fails", herdrRunners, runconfig.KnownKinds())
 	}
 }
 

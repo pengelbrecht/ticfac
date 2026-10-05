@@ -17,7 +17,7 @@ import (
 // shape `.tick/config.md`'s structured sections migrate into, so a repo that
 // has migrated must still be loadable by `tk herd spawn`.
 func TestCommandSurfaceParses(t *testing.T) {
-	cfg, err := Parse([]byte(docExample6))
+	cfg, err := Parse([]byte(docExample5))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
