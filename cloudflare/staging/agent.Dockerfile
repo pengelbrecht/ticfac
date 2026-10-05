@@ -11,7 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends bash coreutils 
 COPY proc.sh /usr/local/bin/ticks-proc
 COPY <<'WORKER' /usr/local/bin/ticks-worker
 #!/usr/bin/env bash
-# The stand-in worker: the contract's markers and exit codes, nothing else.
+# The stand-in worker: the contract's markers and exit codes, and (tick
+# cni) a --setup that is a REAL dependency install — minutes of apt traffic,
+# a gcc and go toolchain — so the restore's setup line proves on the platform
+# what a repository's [sandbox] setup really costs.
 set -uo pipefail
 workdir="${TICKS_WORKDIR:-/work/repo}"
 state_dir="${TICKS_WORKER_STATE_DIR:-/tmp/ticks-worker}"
@@ -43,6 +46,27 @@ case "${1:-}" in
 	printf '%s\n' "ticks-worker-boot-prompt-end"
 	exit 0
 	;;
+--setup)
+	# A real repository's [sandbox] setup (tick cni): minutes of a real
+	# dependency install, output and all — what pnpm install or go mod
+	# download cost — with the evidence in the workspace, where the finish
+	# phase commits it.
+	start="$(date +%s)"
+	say "setup: installing the toolchain"
+	export DEBIAN_FRONTEND=noninteractive
+	apt-get update || exit 3
+	apt-get install -y --no-install-recommends build-essential golang || exit 3
+	rm -rf /var/lib/apt/lists/*
+	end="$(date +%s)"
+	{
+		echo "gcc: $(gcc --version | sed -n 1p)"
+		echo "go: $(go version)"
+		echo "packages: $(dpkg-query -W -f='${Status}\n' 2>/dev/null | grep -c 'install ok installed')"
+		echo "seconds: $((end - start))"
+	} >"$workdir/.setup-ran"
+	say "setup installed the toolchain in $((end - start))s"
+	exit 0
+	;;
 --finish)
 	status="${2:-0}"
 	cd "$workdir" || exit 3
@@ -57,7 +81,7 @@ case "${1:-}" in
 	exit 0
 	;;
 *)
-	say "the stand-in runs --boot and --finish only"
+	say "the stand-in runs --boot, --setup and --finish only"
 	exit 2
 	;;
 esac

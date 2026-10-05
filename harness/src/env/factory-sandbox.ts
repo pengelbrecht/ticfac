@@ -93,6 +93,15 @@ const READ_MAX_BYTES = 4 * 1024 * 1024;
 /** One write chunk, before base64: an env var's value is bounded (Linux caps one at 128 KiB). */
 const WRITE_CHUNK_BYTES = 24 * 1024;
 
+/**
+ * How much of a LONG host command's output the env keeps: the tail, for the
+ * failure quote — a real dependency install prints megabytes, and none of it
+ * needs holding. The run door bounds output by KILLING the writer past its
+ * bound (the `exit 141` tick cni exists for); this bounds by dropping the
+ * head, so the writer runs to its end.
+ */
+const LONG_TAIL_BYTES = 16 * 1024;
+
 /** How long the env keeps asking a booting container for its first answer. */
 const READY_TIMEOUT_MS = 20 * 60 * 1000;
 
@@ -304,6 +313,12 @@ export class FactorySandboxEnv implements ExecutionEnv {
    * checkpoint and the lost-container restore drive `git` through
    * (./workspace/checkpoints.ts). Host commands, never the model's tracked
    * bash: untracked, un-nonce'd, and the door's output bound applies.
+   *
+   * The ONE long host command — the restore's setup, a real dependency
+   * install (tick cni) — rides the process doors instead
+   * ({@link execLongAt}): the run door's bounding `head -c` SIGPIPEs a
+   * command that prints past its bound, and its whole-exchange-in-one-RPC
+   * shape is for short commands.
    */
   hostShell(): HostShell {
     // AT the workspace root: the door runs a command in the container's own
@@ -319,7 +334,57 @@ export class FactorySandboxEnv implements ExecutionEnv {
           ...vars,
           TICFAC_WORKSPACE: this.cwd,
         }),
+      execLong: (line, vars) =>
+        this.execLongAt(
+          `mkdir -p "$TICFAC_WORKSPACE" && cd "$TICFAC_WORKSPACE" || exit 1\n${line}`,
+          {
+            ...vars,
+            TICFAC_WORKSPACE: this.cwd,
+          },
+        ),
     };
+  }
+
+  /**
+   * One long host command as a background process the door polls to its end
+   * — the same doors that already carry the minutes-long tracked bash and
+   * the boot and finish phases. Never `run`: that door holds one RPC for the
+   * command's whole exchange and SIGPIPEs a writer past its output bound,
+   * and the restore's setup is a minutes-long install that prints
+   * megabytes. No timeout of its own (the rule is to carry the install, not
+   * to widen anything): the process ends, or a lost container ends the
+   * wait — which the caller reports as the restore's failure.
+   */
+  private async execLongAt(line: string, vars: Record<string, string>): Promise<ShortOutcome> {
+    await this.ensureGuard();
+    const id = (
+      await this.door.startProcess(`${this.withGuard("")}${line}`, vars, { keepAlive: true })
+    ).id;
+    let output = "";
+    let cursor = 0;
+    while (true) {
+      const view = await this.door.getProcess(id);
+      if (view === null) {
+        throw new SandboxUnavailableError(
+          "the container was lost while the setup command ran — the restore must start again",
+        );
+      }
+      const chunk: SandboxOutput = await this.door.readOutput(id, cursor);
+      cursor = chunk.offset;
+      // Keep the TAIL only, so a megabyte-printing install costs nothing:
+      // what a failure quote reads is the end, where the error is.
+      output += chunk.text;
+      if (output.length > LONG_TAIL_BYTES) output = output.slice(-LONG_TAIL_BYTES);
+      if (view.state !== "running") {
+        if (view.exit_code === null) {
+          throw new SandboxUnavailableError(
+            "the setup command was lost without an exit code — the container died mid-install",
+          );
+        }
+        return { exitCode: view.exit_code, output, truncated: false };
+      }
+      await this.nap(this.pollMs, undefined);
+    }
   }
 
   /** Writes `content` as `path`, in chunks: one env var's value is bounded. */

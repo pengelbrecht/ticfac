@@ -260,6 +260,72 @@ describe("workspace checkpoints over real git", () => {
   });
 
   /**
+   * A REAL dependency install's shape (tick cni): a repository's `[sandbox]`
+   * setup — pnpm install, go mod download, an apt toolchain — prints far more
+   * than the run door's whole-output bound (256 KiB, cloudflare/src
+   * `RUN_MAX_BYTES`) and runs for minutes. Through the run door the
+   * bounding `head -c` SIGPIPEs the install the moment it prints past the
+   * bound — the restore would report `the setup command: exit 141` and hand
+   * the model a workspace without its dependencies — so the restore's setup
+   * line rides the PROCESS doors instead (started once, polled to its end,
+   * its output a file a cursor reads: the same doors that already carry the
+   * minutes-long tracked bash and the boot and finish phases).
+   */
+  const chattyInstall =
+    'count=0; for i in $(seq 40); do printf "resolving packages %03d: " "$i"; ' +
+    'head -c 8192 /dev/zero | tr "\\0" x; printf "\\n"; count=$((count+8217)); done; ' +
+    "sleep 0.3; " + // the minutes a real install takes, compressed
+    'printf "%s\\n" "$count" > .setup-bytes && printf ticfac-setup-ok > .setup-marker';
+
+  it("a restore's setup that prints past the run door's bound survives it", {
+    timeout: 120_000,
+  }, async () => {
+    const installEnv = new FactorySandboxEnv({
+      sandbox: door.sandbox,
+      cwd: checkout,
+      guardDir: join(root, "guard-install"),
+      pollMs: 10,
+      workspace: { ...git, setup: chattyInstall },
+    });
+
+    // One round's wip first — the state a mid-turn loss restores from:
+    // the round's own edit, snapshotted by the checkpoint extension's own
+    // producer through the env's own host shell.
+    writeFileSync(join(checkout, "a.txt"), "the first edit");
+    const wip = await pushWipCheckpoint(installEnv.hostShell(), {
+      ...git,
+      setup: chattyInstall,
+    });
+    expect(wip.kind).toBe("pushed");
+
+    // The container is lost: the fresh box boots with an EMPTY workspace —
+    // the state the restore rebuilds from the attempt branch.
+    for (const entry of readdirSync(checkout)) {
+      rmSync(join(checkout, entry), { recursive: true, force: true });
+    }
+    const restore = await installEnv.restoreLostWorkspace();
+
+    // THE ACCEPTANCE: the install ran to its end — the marker it only writes
+    // AFTER the last byte — and the restore held, from the last wip.
+    expect(restore).toEqual({
+      kind: "restored",
+      ...(wip.kind === "pushed" ? { sha: wip.sha } : {}),
+      subject: WIP_COMMIT_SUBJECT,
+    });
+    expect(readFileSync(join(checkout, ".setup-marker"), "utf8")).toBe("ticfac-setup-ok");
+    // 328,680 bytes — past the run door's 262,144 — all of them survived.
+    expect(Number(readFileSync(join(checkout, ".setup-bytes"), "utf8"))).toBe(328680);
+
+    // The setup line rode the process doors, never the run door: a chatty
+    // install through `run` is the SIGPIPE this test exists to end.
+    expect(door.runCommands.some((line) => line.includes(".setup-marker"))).toBe(false);
+    expect(door.startCommands.some((line) => line.includes(".setup-marker"))).toBe(true);
+    // And at the workspace root, like every other restore line.
+    const setupLine = door.startCommands.find((line) => line.includes(".setup-marker"));
+    expect(setupLine).toContain('mkdir -p "$TICFAC_WORKSPACE"');
+  });
+
+  /**
    * The between-rounds loss (tick 4fs): the box is destroyed while NO
    * harness call is in flight — after one round's wip push, before the next
    * round's request — so no loss signal ever reaches the env; its
