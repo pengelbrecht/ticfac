@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 399,
-  "state": "running",
-  "reason": "xba is closed",
-  "updated_at": "2026-10-05T21:24:31Z",
+  "sequence": 400,
+  "state": "dispatching",
+  "reason": "dispatching 30e as attempt 63",
+  "updated_at": "2026-10-05T21:24:45Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -284,6 +284,10 @@
       "tick_id": "omq",
       "state": "dispatched",
       "attempt": 62
+    },
+    {
+      "tick_id": "30e",
+      "state": "ready"
     }
   ],
   "provenance": {
