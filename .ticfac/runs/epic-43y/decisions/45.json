@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 45,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Beyond the three tests hv3 fixed, the harness node suite's other load-dependent tests still carry the quiet-host 30s vitest default, and the harness-timeout-discipline guard does not scan them: its criterion is `Harness.open` inside the it body of test/node files only, so process-driving tests (boundary-guard, tracked-bash, factory-sandbox-env, the rest of local-host — 7wg's named tests among them) and the workerd pool's full-Harness tests (the gateway test's open sits inside a helper) are all unbounded and unguarded. Under synthetic 12x oversubscription (spawn storms; harsher than the observed load 23-47) 24 node-suite tests failed at 30s, beforeEach hooks timed out at the 30s hookTimeout, and a 120s bound was crossed by a git-heavy test (138s). Proposal: extend the discipline guard's criterion (workerd-suite files; tests that spawn processes or drive the door) and state load-sized bounds where the criterion lands.\nevidence: synthetic-contention run log: 24 failed incl. 'Hook timed out in 30000ms' (beforeEach) and 'Test timed out in 120000ms' for the git-heavy test at 138s; harness/test/node/harness-timeout-discipline.test.ts scans test/node/*.test.ts for in-body Harness.open only\n\nticfac run epic-43y created this tick by absorbing the finding cc7761c9ad1c66f16dc50860d6dc05ff51d49a76520dd9d949dcd6ee1b0aac0c (reported by run-epic-43y/tick-hv3/attempt-26): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/cc7761c9ad1c66f16dc50860d6dc05ff51d49a76520dd9d949dcd6ee1b0aac0c.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "fim",
+    "title": "Harness suite-wide 30s test/hook defaults fail under extreme load"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.61,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.09,
+      "design": 0.69,
+      "diagnosis": 0.03,
+      "mechanical": 0.06,
+      "translation": 0.13
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1522,
+      "output_tokens": 56
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T15:25:08Z",
+  "answered_at": "2026-10-05T15:25:08Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "fim",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "82f2c24eab0b5c215f824930329643ce8ede73c0",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
