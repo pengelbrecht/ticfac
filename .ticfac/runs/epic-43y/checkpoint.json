@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 155,
-  "state": "dispatching",
-  "reason": "dispatching hv3 as attempt 26",
-  "updated_at": "2026-10-05T11:31:26Z",
+  "sequence": 156,
+  "state": "running",
+  "reason": "hv3 is running as attempt 26",
+  "updated_at": "2026-10-05T11:31:38Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -122,7 +122,8 @@
     },
     {
       "tick_id": "hv3",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 26
     },
     {
       "tick_id": "7wg",
