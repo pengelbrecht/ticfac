@@ -368,11 +368,10 @@ describe("the stop vocabulary (pure)", () => {
     // refuses it; this is the same refusal on the page's side of the one
     // model the two render.
     for (const host of ["local", "cloud"]) {
-      const unattributed = doc(
-        "run_6d88e3de89ca466c8dab3841185931c1",
-        "",
-        { ...failed, host },
-      ) as unknown as StatusDoc;
+      const unattributed = doc("run_6d88e3de89ca466c8dab3841185931c1", "", {
+        ...failed,
+        host,
+      }) as unknown as StatusDoc;
       const stop = stopsFromStatusDoc(unattributed).find((s) => s.kind === "failed")!;
       expect(stop.clear_with).toBeNull();
       expect(classifyStatusDoc(unattributed).clear_with).toBeNull();

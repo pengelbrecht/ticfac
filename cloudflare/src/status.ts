@@ -748,7 +748,9 @@ export function classifyStatusDoc(doc: StatusDoc): {
         // The resume is the host's, not always the local foreground form: a
         // failed cloud run's page must not send the person to restart the
         // epic on their own machine (tick tt6).
-        clear_with: resumeCommand(doc.host, doc.epic_id) || null, /* an epic the doc cannot state names no command (tick mwt) */
+        clear_with:
+          resumeCommand(doc.host, doc.epic_id) ||
+          null /* an epic the doc cannot state names no command (tick mwt) */,
       };
       break;
     case "cancelled":
@@ -776,7 +778,9 @@ export function classifyStatusDoc(doc: StatusDoc): {
       answer = {
         state: "failed",
         reason: doc.liveness.reason,
-        clear_with: resumeCommand(doc.host, doc.epic_id) || null, /* an epic the doc cannot state names no command (tick mwt) */
+        clear_with:
+          resumeCommand(doc.host, doc.epic_id) ||
+          null /* an epic the doc cannot state names no command (tick mwt) */,
       };
       break;
     case "stopped":

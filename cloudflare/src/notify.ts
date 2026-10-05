@@ -92,7 +92,9 @@ export function stopsFromStatusDoc(doc: StatusDoc): StatusStop[] {
         // own answer (statusmodel.ResumeCommand): a failed cloud run's page
         // must not name `run-epic` — the local foreground form that would
         // restart the epic on the reader's machine (tick tt6).
-        clear_with: resumeCommand(doc.host, doc.epic_id) || null, /* an epic the doc cannot state names no command (tick mwt) */
+        clear_with:
+          resumeCommand(doc.host, doc.epic_id) ||
+          null /* an epic the doc cannot state names no command (tick mwt) */,
       });
     } else if (doc.lifecycle.phase === "done" && primary === null) {
       const reason =
