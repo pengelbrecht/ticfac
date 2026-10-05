@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 251,
-  "state": "running",
-  "reason": "8em is running as attempt 41",
-  "updated_at": "2026-10-05T16:02:58Z",
+  "sequence": 252,
+  "state": "collecting",
+  "reason": "collecting fim attempt 39",
+  "updated_at": "2026-10-05T16:05:53Z",
   "ticks": [
     {
       "tick_id": "92k",
