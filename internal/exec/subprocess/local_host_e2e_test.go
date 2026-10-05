@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -436,6 +437,141 @@ func TestAnOperatorWatchesAndSteersALiveDurableWorker(t *testing.T) {
 	}
 	if status := f.inspect(handle); status.State != StateSucceeded {
 		t.Errorf("state %s, want succeeded", status.State)
+	}
+}
+
+// THE TICK 3C2 ACCEPTANCE, at the level only a Go test can prove: a
+// signal-killed durable runner is relaunched IN-ATTEMPT by the real
+// supervisor, and the relaunched process resumes the killed turn from the
+// attempt's storage — the mid-tool kill recovery the WorkerAgent host's own
+// storage already gives the cloud rung, observed here on the local one.
+// The kill is a real SIGKILL of the real harness process (the operator's
+// kill, the OOM); everything else is real — the supervisor, the harness, the
+// tools in the attempt worktree, and the REAL report checker on every yield.
+func TestAKilledDurableRunnerIsRelaunchedAndResumesMidTool(t *testing.T) {
+	shorttest.EndToEnd(t)
+	if testing.Short() {
+		t.Skip("short mode: this one runs a real supervisor and a real Node harness")
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skipf("the pi-durable harness runs on node: %v", err)
+	}
+	root, err := contracts.RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	harnessDir := filepath.Join(root, "harness")
+	if _, err := os.Stat(filepath.Join(harnessDir, "node_modules", "@earendil-works", "pi-durable")); err != nil {
+		t.Skipf("the harness package's dependencies are not installed: %v — run pnpm install in harness/ to run this end-to-end test", err)
+	}
+	t.Setenv("TICFAC_HARNESS_DIR", harnessDir)
+	t.Setenv("TICFAC_STEER_SOCK_DIR", shortSocketDir(t))
+
+	const jobID = "run-3c2/tick-k9r/attempt-1"
+	const tick = "k9r"
+	reportRel := "runs/" + jobID + "/RESULT-" + tick + ".md"
+	writeReport := "mkdir -p runs/run-3c2 && printf '# " + tick + "\\n\\nThe killed runner resumed in a new process.\\n\\nSTATUS: DONE\\n' > " + reportRel
+
+	// The faux transcript is the scripted model, and the faux provider is
+	// stateless PER PROCESS: the first process's script holds a tool round
+	// that leaves its mark and then hangs, so the kill lands mid-tool; the
+	// recovery script — in place BEFORE the kill, because the first process
+	// loaded its own at boot and never reads the file again — is what the
+	// relaunched process serves its recovery continuation from: the report,
+	// then the final answer.
+	transcript := filepath.Join(t.TempDir(), "transcript.json")
+	writeScript := func(steps []map[string]any) {
+		t.Helper()
+		raw, err := json.Marshal(steps)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(transcript, raw, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeScript([]map[string]any{
+		{"toolCalls": []any{map[string]any{
+			"name": "bash",
+			"args": map[string]any{"command": "echo started >> marker.txt; sleep 60"},
+		}}},
+	})
+
+	f := newFixture(t, fixtureOptions{
+		runner:         "pi",
+		noFakeRunner:   true,
+		stuckAfter:     time.Minute,
+		fauxTranscript: transcript,
+		model:          "faux/faux-1",
+	})
+	handle := f.Start(f.spec(jobID, tick))
+	local, err := handle.Local()
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := newStore(local.State)
+
+	// The tool round is running — the marker is the proof — when the
+	// harness process is killed by its exact recorded pid, the way an
+	// operator or an OOM killer would: no signal to the supervisor, no
+	// chance to settle, the group left to the orphaned tool.
+	waitFor(t, "the first tool round to run", 60*time.Second, func() bool {
+		_, err := os.Stat(filepath.Join(local.Worktree, "marker.txt"))
+		return err == nil
+	})
+	writeScript([]map[string]any{
+		{"toolCalls": []any{map[string]any{
+			"name": "bash",
+			"args": map[string]any{"command": writeReport},
+		}}},
+		{"text": "recovered after the kill"},
+	})
+	pid := provenPID(t, st, lockRunner)
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+		t.Fatalf("kill the harness process %d: %v", pid, err)
+	}
+
+	f.waitSettled(handle)
+
+	status := f.inspect(handle)
+	rawLog, _ := os.ReadFile(filepath.Join(local.State, fileRunnerLog))
+	if status.State != StateSucceeded {
+		t.Fatalf("state %s, want succeeded — the killed runner recovered, not failed:\n%s\nthe runner's log:\n%s",
+			status.State, formatObservations(status.Observations), rawLog)
+	}
+
+	// The relaunch is on the record, exactly once, and says the death it
+	// recovered: [A2]'s local half, visible where the run reads it.
+	got := relaunches(status.Observations)
+	if len(got) != 1 {
+		t.Fatalf("%d relaunch observations, want 1:\n%s\nthe runner's log:\n%s",
+			len(got), formatObservations(status.Observations), rawLog)
+	}
+	if !strings.Contains(got[0].Detail, "relaunch 1 of 2") ||
+		!strings.Contains(got[0].Detail, "signal 9") {
+		t.Errorf("the relaunch observation does not name the death and the recovery: %s", got[0].Detail)
+	}
+	if len(nudges(status.Observations)) != 0 {
+		t.Errorf("a recovered runner was nudged:\n%s", formatObservations(status.Observations))
+	}
+
+	// THE mid-tool proof: the interrupted round was continued, not re-run —
+	// the marker says "started" exactly once, the report is the recovered
+	// conversation's own, and the attempt collects like any other.
+	marker, err := os.ReadFile(filepath.Join(local.Worktree, "marker.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(marker) != "started\n" {
+		t.Errorf("the marker = %q: the interrupted tool was re-run rather than resumed", marker)
+	}
+	report, err := os.ReadFile(local.ResultPath)
+	if err != nil || !strings.Contains(string(report), "STATUS: DONE") {
+		t.Errorf("the recovered runner's report is missing or wrong: %v\n%s", err, report)
+	}
+	collected := f.collect(handle)
+	if collected.Verdict != VerdictReadyToMerge {
+		t.Fatalf("verdict %s, want ready-to-merge:\n%s", collected.Verdict, collected.Message)
 	}
 }
 

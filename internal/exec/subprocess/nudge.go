@@ -28,7 +28,12 @@ import (
 // durable runner (tick hpk), and as a fresh run on the same worktree when it
 // has neither.
 // Only after that is it missing-result. A non-zero exit is not nudged: that
-// runner failed, and its own words are what collect classifies.
+// runner failed, and its own words are what collect classifies. A death by
+// SIGNAL is the one non-zero exit that is not a failure of the runner's own
+// making — a durable runner's conversation survives its process, so the
+// supervisor replays the same argv, bounded, before anything settles
+// (relaunch.go, tick 3c2); only when those relaunches are spent does the
+// kill settle the attempt.
 
 // MaxNudges bounds how often one attempt is re-prompted. A worker that ends
 // without its report twice more after being told what is missing is not
