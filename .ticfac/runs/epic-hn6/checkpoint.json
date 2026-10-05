@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 246,
-  "state": "running",
-  "reason": "wvn is closed",
-  "updated_at": "2026-10-05T18:15:19Z",
+  "sequence": 247,
+  "state": "collecting",
+  "reason": "collecting mwt attempt 34",
+  "updated_at": "2026-10-05T19:23:03Z",
   "ticks": [
     {
       "tick_id": "v16",
