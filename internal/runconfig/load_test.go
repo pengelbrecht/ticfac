@@ -43,13 +43,13 @@ func TestDocExamplesParse(t *testing.T) {
 			roles: []string{"implement", "review"},
 		},
 		{
-			name: "example 4 cross-provider pi", toml: docExample4,
-			substrate: SubstrateHerdr, detect: DetectEnvOrSocket, maxParallel: 4,
-			fullAuto: true, branchPrefix: "tick/", orchHarness: "pi",
-			roles: []string{"implement", "plan", "review", "scout"},
+			name: "example 4 opencode, no effort dimension", toml: docExample4,
+			substrate: SubstrateHerdr, detect: DetectEnvOrSocket, maxParallel: 3,
+			fullAuto: true, branchPrefix: "tick/", orchHarness: "claude",
+			roles: []string{"implement", "review"},
 		},
 		{
-			name: "example 6 routing plus command surface", toml: docExample6,
+			name: "example 5 routing plus command surface", toml: docExample5,
 			substrate: SubstrateAuto, detect: DetectEnvOrSocket, maxParallel: 4,
 			fullAuto: true, branchPrefix: "tick/", orchHarness: "claude",
 			roles: []string{"implement", "review"},

@@ -14,12 +14,9 @@ import (
 const docGitCommonDir = "/repo/.git"
 
 // testEnv is the spawn environment these tests compile in: a repo whose git
-// metadata was resolved, and a host whose pi catalog is the fixture listing
-// (picatalog_test.go). A production spawner fills both from the repository
-// and the spawn host.
+// metadata was resolved. A production spawner fills it from the repository.
 var testEnv = SpawnContext{
-	GitCommonDir:     docGitCommonDir,
-	ResolvePiCatalog: fixturePiCatalogResolver,
+	GitCommonDir: docGitCommonDir,
 }
 
 // TestDocExamplesResolveAndCompile is the round-trip proof: every worked
@@ -131,51 +128,31 @@ func TestDocExamplesResolveAndCompile(t *testing.T) {
 			wantArgv: []string{"-a", "never", "-s", "workspace-write", "--add-dir", docGitCommonDir, "-c", `model_reasoning_effort="high"`},
 		},
 
-		// --- Example 4: cross-provider pi ----------------------------------
-		// The argv carries `--approve` now: pi's full-auto template was
-		// verified live 2026-09-10 (tick gjk), so these expectations state
-		// what actually runs rather than what the pre-verification doc could
-		// only guess at.
+		// --- Example 4: opencode, a kind with no effort dimension ----------
 		{
-			name: "ex4 implement/frontier — the doc's compiled argv line",
-			toml: docExample4, role: "implement", tier: TierFrontier,
-			wantResolvedRole: "implement", wantTierApplied: true,
-			wantKind: "pi", wantModel: "anthropic/claude-opus-4-6", wantEffort: EffortMax,
-			wantArgv: []string{"--approve", "--model", "anthropic/claude-opus-4-6:max"},
-		},
-		{
-			name: "ex4 implement/economy — tier effort rides the inherited model id",
-			toml: docExample4, role: "implement", tier: TierEconomy,
-			wantResolvedRole: "implement", wantTierApplied: true,
-			wantKind: "pi", wantModel: "openai-codex/gpt-5.6-sol", wantEffort: EffortLow,
-			wantArgv: []string{"--approve", "--model", "openai-codex/gpt-5.6-sol:low"},
-		},
-
-		// --- Example 5: opencode, a kind with no effort dimension ----------
-		{
-			name: "ex5 implement/strong — the doc's compiled argv line",
-			toml: docExample5, role: "implement", tier: TierStrong,
+			name: "ex4 implement/strong — the doc's compiled argv line",
+			toml: docExample4, role: "implement", tier: TierStrong,
 			wantResolvedRole: "implement", wantTierApplied: true,
 			wantKind: "opencode", wantModel: "openai/gpt-5.6-sol",
 			wantArgv: []string{"--auto", "--model", "openai/gpt-5.6-sol"},
 		},
 		{
-			name: "ex5 implement/economy — the ladder is built from model, not effort",
-			toml: docExample5, role: "implement", tier: TierEconomy,
+			name: "ex4 implement/economy — the ladder is built from model, not effort",
+			toml: docExample4, role: "implement", tier: TierEconomy,
 			wantResolvedRole: "implement", wantTierApplied: true,
 			wantKind: "opencode", wantModel: "openai/gpt-5.4-mini-fast",
 			wantArgv: []string{"--auto", "--model", "openai/gpt-5.4-mini-fast"},
 		},
 		{
-			name: "ex5 implement — the role's own model, no effort anywhere",
-			toml: docExample5, role: "implement", tier: "",
+			name: "ex4 implement — the role's own model, no effort anywhere",
+			toml: docExample4, role: "implement", tier: "",
 			wantResolvedRole: "implement",
 			wantKind:         "opencode", wantModel: "openai/gpt-5.6-luna",
 			wantArgv: []string{"--auto", "--model", "openai/gpt-5.6-luna"},
 		},
 		{
-			name: "ex5 review — crosses back to claude, which does have effort",
-			toml: docExample5, role: "review", tier: "",
+			name: "ex4 review — crosses back to claude, which does have effort",
+			toml: docExample4, role: "review", tier: "",
 			wantResolvedRole: "review", wantKind: "claude", wantModel: "opus", wantEffort: EffortHigh,
 			wantArgv: []string{"--permission-mode", "bypassPermissions", "--settings", ClaudeHeadlessSettings, "--model", "opus", "--effort", "high"},
 		},
@@ -345,46 +322,6 @@ func TestEveryClaudeSpawnRunsWithoutBackgroundTasks(t *testing.T) {
 	}
 }
 
-// TestPiCarriesTheVerifiedFullAutoTemplate pins what tick gjk round-tripped
-// live on 2026-09-10 (pi 0.85.1, herdr protocol 22): pi has no permission gate
-// of the kind claude and codex have, `--approve` covers the trust dimension
-// and that is the whole of the full-auto story. The pre-verification row
-// warned on every compile; the verified one compiles clean. Evidence:
-// .tick/logs/herd/av8/gjk.RESULT.md and herdr-kinds.md's pi section.
-func TestPiCarriesTheVerifiedFullAutoTemplate(t *testing.T) {
-	cfg, err := Parse([]byte(docExample4))
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	sp, err := cfg.SpawnFor(RoleImplement, TierStrong, testEnv)
-	if err != nil {
-		t.Fatalf("SpawnFor: %v", err)
-	}
-	if got, want := strings.Join(sp.Argv, " "), "--approve --model"; !strings.HasPrefix(got, want) {
-		t.Errorf("Argv = %q, want it to open with the verified template %q", sp.Argv, want)
-	}
-	if len(sp.Warnings) != 0 {
-		t.Errorf("Warnings = %q, want none — the pi full-auto template is round-tripped (tick gjk)", sp.Warnings)
-	}
-}
-
-// With full_auto off, the verified `--approve` is dropped with every other
-// full-auto template — pi's trust dimension becomes an interactive question,
-// exactly like claude's bypassPermissions and codex's `-a never`.
-func TestPiFullAutoFalseDropsApprove(t *testing.T) {
-	cfg, err := Parse([]byte("[orchestration]\nfull_auto = false\n\n[roles.implement]\nkind = \"pi\"\nmodel = \"openai-codex/gpt-5.6-sol\"\neffort = \"low\"\n"))
-	if err != nil {
-		t.Fatalf("Parse: %v", err)
-	}
-	sp, err := cfg.SpawnFor(RoleImplement, "", testEnv)
-	if err != nil {
-		t.Fatalf("SpawnFor: %v", err)
-	}
-	if !equalArgs(sp.Argv, []string{"--model", "openai-codex/gpt-5.6-sol:low"}) {
-		t.Errorf("Argv = %q, want the capability flags only", sp.Argv)
-	}
-}
-
 // --------------------------------------------------------------------------
 // Computed per-spawn extras: codex's git-metadata grant.
 // --------------------------------------------------------------------------
@@ -434,10 +371,8 @@ func TestCodexGitMetadataAddDirSurvivesFullAutoFalse(t *testing.T) {
 	}
 }
 
-// A kind that declares no computed extras and no model oracle is untouched by
-// the context — a claude spawn compiles identically with and without one.
-// (pi is NOT such a kind any more: its catalog rung consults the context's
-// oracle, so pi's empty-context behaviour is pinned in picatalog_test.go.)
+// A kind that declares no computed extras is untouched by the context — a
+// claude spawn compiles identically with and without one.
 func TestKindsWithoutExtrasIgnoreTheSpawnContext(t *testing.T) {
 	cfg, err := Parse([]byte("[roles.implement]\nkind = \"claude\"\nmodel = \"sonnet\"\neffort = \"high\"\n"))
 	if err != nil {
@@ -526,27 +461,7 @@ func TestSpawnRefusals(t *testing.T) {
 			wantLabel:  "roles.implement", wantKind: "codex", wantModel: "opus",
 		},
 		{
-			name: "pi refuses an unqualified model id",
-			toml: "[roles.implement]\nkind = \"pi\"\nmodel = \"opus\"\n",
-			role: "implement", tier: "",
-			wantReason: RefusalModelFamily,
-			wantIn:     []string{"provider-qualified"},
-			wantLabel:  "roles.implement", wantKind: "pi", wantModel: "opus",
-		},
-		{
-			// The tick's bare-id requirement, pinned at the first rung: an
-			// id that names no provider never reaches the catalog, because
-			// pi's cross-provider namespace cannot resolve it to anything
-			// at all.
-			name: "pi refuses a bare id that names no provider",
-			toml: "[roles.implement]\nkind = \"pi\"\nmodel = \"glm-5.3\"\n",
-			role: "implement", tier: "",
-			wantReason: RefusalModelFamily,
-			wantIn:     []string{"provider-qualified"},
-			wantLabel:  "roles.implement", wantKind: "pi", wantModel: "glm-5.3",
-		},
-		{
-			name: "claude refuses a provider-qualified id that pi would take",
+			name: "claude refuses a provider-qualified id that opencode would take",
 			toml: "[roles.implement]\nkind = \"claude\"\nmodel = \"anthropic/claude-opus-4-6\"\n",
 			role: "implement", tier: "",
 			wantReason: RefusalModelFamily,
@@ -778,8 +693,53 @@ func TestResolveErrors(t *testing.T) {
 }
 
 func TestKnownKinds(t *testing.T) {
-	if got := strings.Join(KnownKinds(), ","); got != "claude,codex,opencode,pi" {
+	if got := strings.Join(KnownKinds(), ","); got != "claude,codex,opencode" {
 		t.Errorf("KnownKinds = %q", got)
+	}
+}
+
+// TestThePiKindIsRefused is epic 43y's design choice (tick uxi), turned into
+// a pin: the herdr executor has no pi kind, because a herdr agent template
+// spawns the pi CLI and the pi CLI is not a worker harness any more —
+// pi-durable is, and it runs headless through the local subprocess executor
+// (whose runner table names the harness "pi") or hosted in a cloud container
+// (the kind "pi-durable"), never in a herdr pane. The names are shared on
+// purpose (.tick/runners.toml routes [roles.implement] kind = "pi" to the
+// subprocess executor's durable runner), so the REFUSAL is the mechanism
+// that keeps the one name from re-opening the other path: a herdr profile
+// routed to kind pi is refused here, before herdr is dialled, and the refusal
+// names where pi workers DO run rather than pointing back at herdr, whose
+// own `herdr agent` still lists a pi kind it must no longer be given.
+func TestThePiKindIsRefused(t *testing.T) {
+	cfg, err := Parse([]byte("[roles.implement]\nkind = \"pi\"\nmodel = \"cloudflare-workers-ai/@cf/zai-org/glm-5.3\"\neffort = \"high\"\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v — the refusal must be shape-valid first", err)
+	}
+	sp, err := cfg.SpawnFor(RoleImplement, "", SpawnContext{})
+	if err == nil {
+		t.Fatalf("SpawnFor succeeded with argv %q, want a refusal: the pi-CLI worker path is deleted", sp.Argv)
+	}
+	if sp != nil {
+		t.Error("a refusal must return no spawn — never a pi pane")
+	}
+	var ref *RefusalError
+	if !errors.As(err, &ref) {
+		t.Fatalf("error is %T, want *RefusalError", err)
+	}
+	if ref.Reason != RefusalUnknownKind {
+		t.Errorf("Reason = %q, want %q", ref.Reason, RefusalUnknownKind)
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		FileName, "[roles.implement]", `"pi"`, `"cloudflare-workers-ai/@cf/zai-org/glm-5.3"`,
+		// The fix must point at where pi workers DO run, not at
+		// `herdr agent` — herdr still lists a pi kind, and adding it
+		// back would re-open the path this refusal closes.
+		"pi-durable", "herdr pane",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("message does not contain %q:\n  %s", want, msg)
+		}
 	}
 }
 
@@ -881,7 +841,7 @@ func TestOpencodeModelFamily(t *testing.T) {
 	bad := []string{
 		"gpt-5.6-luna",             // bare: opencode wants provider/model
 		"opus",                     // a claude alias
-		"openai/gpt-5.6-luna:high", // pi's model:thinking shorthand
+		"openai/gpt-5.6-luna:high", // a `:<variant>` suffix — no compiled kind takes one
 		"openai/",                  // empty model half
 		"/gpt-5.6-luna",            // empty provider half
 	}
