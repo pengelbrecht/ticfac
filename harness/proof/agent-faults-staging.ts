@@ -41,6 +41,8 @@ import { execFile } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { promisify } from "node:util";
 
+import { resumedFromStorage, wipCheckpointsAfterResume } from "./fault-claims.ts";
+
 const run = promisify(execFile);
 
 const base = (process.env.PROOF_URL ?? "").replace(/\/+$/, "");
@@ -260,11 +262,18 @@ function claim(text: string, ok: boolean): void {
   );
   claim(
     "kill the host mid-tool: a new host life resumed the conversation from its storage",
-    /a new host life resumed the conversation from its storage/.test(log),
+    resumedFromStorage.test(log),
   );
+  // Order-checked (tick umx): the checkpoint lines must FOLLOW the resume
+  // line in the log — the proof's log is an append-only stream, so position
+  // in it is order in time, and a checkpoint from before the kill no longer
+  // passes this claim. The count is recorded so the evidence says how many
+  // landed, the number the README's "four … after the resume" read by hand.
+  const checkpointsAfterResume = wipCheckpointsAfterResume(log);
+  evidence.checkpoints_after_resume = checkpointsAfterResume;
   claim(
     "kill the host mid-tool: wip checkpoints kept landing after the resume",
-    /wip checkpoint [0-9a-f]+ pushed/.test(log),
+    checkpointsAfterResume > 0,
   );
 }
 
@@ -372,7 +381,7 @@ function claim(text: string, ok: boolean): void {
   claim("deploy mid-run: the attempt settles 0", state.exit_code === 0);
   claim(
     "deploy mid-run: a new host life resumed the conversation from its storage",
-    /a new host life resumed the conversation from its storage/.test(log),
+    resumedFromStorage.test(log),
   );
   claim(
     "deploy mid-run: the work was delivered (the report is on the pushed branch)",

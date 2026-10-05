@@ -198,6 +198,14 @@ Tear-down also needs the container application, which `wrangler delete`
 leaves behind: `pnpm exec wrangler containers list`, then
 `pnpm exec wrangler containers delete <id>` for `ticfac-staging-agent-sandbox`.
 
+Since tick umx the "wip checkpoints kept landing after the resume" claim is
+checked in order, not read by hand: the checkpoint lines must FOLLOW the
+resume line in the log (the proof's log is an append-only stream, so a line's
+position in it is its order in time — a checkpoint from before the kill no
+longer passes it), the count is recorded in the evidence
+(`checkpoints_after_resume`), and the read itself lives in
+`proof/fault-claims.ts`, pinned by `test/agent-faults-claims.test.ts`.
+
 ## Recorded result, 2026-10-05 (pi-ai / pi-durable 1.0.2)
 
 `PROOF HOLDS`, every claim, in 455 s (three attempts, GLM 5.3 on Workers AI):
