@@ -138,6 +138,12 @@ describe("a dumb-HTTP origin, over real git", () => {
    * turn that continues from the restored tree:
    */
   it("an origin that outlives the box carries the boot, the wip and the restore", {
+<<<<<<< HEAD
+=======
+    // A process-driving test (harness-timeout-discipline.test.ts): real git
+    // through the real local door over a live socket — the very shape that
+    // crossed a 120s bound at 138s under load — so it states the 300s bound.
+>>>>>>> 2405782ec5705f72ef8603b812cf8a38b99719a9
     timeout: 300_000,
   }, async () => {
     const branch = "tick/proof/a2l";
