@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 199,
+  "sequence": 200,
   "state": "running",
-  "reason": "the epic PR #219 (epic/hn6 → main) is open; close-out of hn6 waits on CI",
-  "updated_at": "2026-10-05T15:03:29Z",
+  "reason": "no check runs yet on the epic PR #219; the close-out of hn6 waits for CI to appear",
+  "updated_at": "2026-10-05T15:03:32Z",
   "ticks": [
     {
       "tick_id": "v16",
