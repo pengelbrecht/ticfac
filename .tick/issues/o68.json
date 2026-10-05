@@ -7,7 +7,8 @@
   "type": "task",
   "owner": "ticfac",
   "blocked_by": [
-    "enb"
+    "enb",
+    "jpy"
   ],
   "parent": "43y",
   "role": "review",
