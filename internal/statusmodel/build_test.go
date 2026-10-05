@@ -1273,6 +1273,56 @@ func TestADeadCloudRunResumesThroughTheFactory(t *testing.T) {
 	}
 }
 
+// TestALiveRunRestatedOverItsOwnRunDiedIsTheEpicAgain: the incident of tick
+// 7l6, exactly as the records read. A run died by SIGINT — run_died led by
+// the cancelled word — and was restarted under the same run id with a
+// NON-TERMINAL checkpoint standing, so the only thing separating "a run that
+// was cancelled" from "a run that is working" is the resume line the
+// restart's writer records over its previous incarnation's death. With it,
+// the death is history: the phase is the EPIC's and no ending is stated — the
+// empty ending is what lets buildRemaining keep the ETA a live run owes.
+// Without it — the writer's defect, repaired on the reconciler's side — the
+// same model reads phase cancelled and suppresses the estimate beside a run
+// whose liveness is alive, which is what `ticfac status` printed on the live
+// incident.
+func TestALiveRunRestatedOverItsOwnRunDiedIsTheEpicAgain(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	// The interrupted incarnation's death, and the restart's resume over it,
+	// appended at the feed's end: position in the file is the clock.
+	death := runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "", nil,
+		reconcile.StageRunDied, "cancelled: stopped by a signal (interrupt) before the run finished")
+	restated := runfeed.NewEvent(testNow.Add(-9*time.Minute), "epic-2jn", "", nil,
+		reconcile.StageResumed, "the run was interrupted at running and is resumed under the same run id: 6dh is dispatched — "+
+			"this resume answers the previous incarnation's run_died line, which is that incarnation's ending and not this one's")
+
+	// Without the resume, the same records are the incident's own reading:
+	// phase cancelled, the death still the run's last word.
+	unstated := runningEpicSources()
+	unstated.Feed = append(append([]runfeed.Event{}, src.Feed...), death)
+	model := Build(unstated)
+	if model.Lifecycle.Phase != PhaseCancelled {
+		t.Fatalf("the fixture's own control reads phase %q, want cancelled: without the resume line this test proves nothing about one",
+			model.Lifecycle.Phase)
+	}
+	if ending := runEnding(unstated, *unstated.Records); ending != endCancelled {
+		t.Fatalf("the unanswered run_died classifies the ending as %q, want %q", ending, endCancelled)
+	}
+
+	// With the restart's own statement, the death is the previous
+	// incarnation's: the run states no ending, the phase is where the EPIC
+	// stands, and the ending being empty is what keeps the estimate standing.
+	src.Feed = append(append([]runfeed.Event{}, src.Feed...), death, restated)
+	model = Build(src)
+	if model.Lifecycle.Phase != PhaseWaves {
+		t.Errorf("the restated live run reads phase %q, want waves: the previous incarnation's run_died is not the live run's ending",
+			model.Lifecycle.Phase)
+	}
+	if ending := runEnding(src, *src.Records); ending != "" {
+		t.Errorf("the answered run_died still states the run's ending as %q; an empty ending is what keeps the ETA standing beside a live run", ending)
+	}
+}
+
 // TestAResumedRunWhoseFirstIncarnationFailedIsNotCompleted: a failed run is
 // resumable under the same run id, so its feed carries the failed
 // incarnation's run_finished beside the resumed run's own lines. The model

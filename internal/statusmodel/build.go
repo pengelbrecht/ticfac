@@ -908,21 +908,14 @@ func runEnding(src Sources, recs Records) string {
 }
 
 // lastTerminalLine is the run's own last terminal word that no resume
-// answered: the newest run_finished or run_died line, when no resume
-// (deliberate or automatic) stands after it in the feed — position in the
-// file is the clock, and a resume standing after a terminal line makes that
-// line the previous incarnation's history.
+// answered — the position rule itself lives in runfeed.StandingTerminal,
+// shared with the WRITER: the incarnation that resumes over a standing
+// terminal line asks this same question to decide whether to state itself
+// (tick 7l6), and a reader and a writer each holding their own copy of the
+// rule is exactly the drift that left a restarted live run reading as its
+// previous incarnation's death.
 func lastTerminalLine(feed []runfeed.Event) *runfeed.Event {
-	var terminal *runfeed.Event
-	for i := range feed {
-		switch feed[i].Stage {
-		case reconcile.StageRunFinished, reconcile.StageRunDied:
-			terminal = &feed[i]
-		case reconcile.StageResumed, reconcile.StageResumedAutomatically:
-			terminal = nil
-		}
-	}
-	return terminal
+	return runfeed.StandingTerminal(feed)
 }
 
 // classifyEnding reads the state word a terminal line leads with — the same
