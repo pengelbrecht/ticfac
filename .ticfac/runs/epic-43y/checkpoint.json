@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 415,
-  "state": "running",
-  "reason": "30e is running as attempt 64",
-  "updated_at": "2026-10-05T21:50:01Z",
+  "sequence": 416,
+  "state": "collecting",
+  "reason": "collecting 30e attempt 64",
+  "updated_at": "2026-10-05T21:55:53Z",
   "ticks": [
     {
       "tick_id": "92k",
