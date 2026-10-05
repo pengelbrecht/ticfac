@@ -1050,8 +1050,12 @@ const (
 	StageClosed       = "closed"
 	StageRedispatched = "redispatched"
 	StageCleanedUp    = "cleaned_up"
-	StageResumed      = "resumed"
-	StageSettled      = "settled"
+	// StageResumed aliases the feed's own line class (runfeed.terminal.go):
+	// the four stages the feed itself classifies — terminal and resume —
+	// have one spelling, shared with the reader that decides what they mean
+	// (tick 7l6).
+	StageResumed = runfeed.StageResumed
+	StageSettled = "settled"
 	// StageRepairDispatched is the dispatch of the repair job a failed gate
 	// dispatches (tick wj6) — its own line rather than StageDispatched because
 	// the two answer different questions: a dispatch admits a tick's work,
@@ -1059,7 +1063,7 @@ const (
 	// and the journal's readers — like the test that proves the run admits
 	// nothing past a refusal — must be able to tell them apart.
 	StageRepairDispatched = "repair_dispatched"
-	StageRunFinished      = "run_finished"
+	StageRunFinished      = runfeed.StageRunFinished
 	// StageBudgetSet is the effective budget, said at ADMISSION while the run
 	// can still be cancelled cheaply. It is NOT run_finished: a subscriber to
 	// the run feed must not be told the run ended seconds after it started,
@@ -1083,7 +1087,7 @@ const (
 	// is LED by runstate's cancelled word (tick vqc), the same vocabulary
 	// run_finished's details are led by — the watch classifies that line
 	// cancelled, every other death failed.
-	StageRunDied = "run_died"
+	StageRunDied = runfeed.StageRunDied
 	// StageTierDerived is the record of one dispatch's tier DERIVATION —
 	// the pure function's answer and reason, written before the tick is
 	// claimed, so "why was this expensive" is a question the run's own
@@ -1388,7 +1392,7 @@ const (
 	// Both are run-level and carry no tick: the subject is the run's
 	// continuation, not any one tick's, even when the refusal underneath them
 	// names one.
-	StageResumedAutomatically = "resumed_automatically"
+	StageResumedAutomatically = runfeed.StageResumedAutomatically
 	StageSupervisionHalted    = "supervision_halted"
 )
 
@@ -1845,6 +1849,32 @@ func (r *Reconciler) Stages(tick string) []string {
 	return out
 }
 
+// resumeOverStandingTerminal states this incarnation over the terminal feed
+// line a previous one left standing (tick 7l6): when the run's feed carries a
+// run_finished or run_died that no resume — deliberate or automatic — answers,
+// the resume line this records makes that ending the PREVIOUS incarnation's
+// history, exactly as every reader of the position rule reads it. Nothing is
+// recorded when nothing stands: a first incarnation, a supervised continuation
+// whose predecessor already wrote its resumed_automatically line, and a fresh
+// clone whose feed is empty all append nothing, because a resume line with no
+// ending to answer is noise a chronology would have to forgive.
+func (r *Reconciler) resumeOverStandingTerminal(standing string) {
+	events, err := runfeed.Read(r.feed.Path())
+	if err != nil {
+		// No feed to read — nothing was written, or it was written on a disk
+		// this checkout does not hold. The feed is exhaust and a hint: a run
+		// that cannot read its own still answers for itself through its work.
+		return
+	}
+	line := runfeed.StandingTerminal(events)
+	if line == nil {
+		return
+	}
+	r.record("", StageResumed,
+		"%s — this resume answers the previous incarnation's %s line, which is that incarnation's ending and not this one's",
+		standing, line.Stage)
+}
+
 // ------------------------------------------------------------------ run ---
 
 // Result is what the run concluded.
@@ -2007,7 +2037,29 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		if checkpoint.State == runstate.StateFailed {
 			r.record("", StageResumed, "the run stopped at %s and is resumed under the same run id: %s",
 				checkpoint.State, checkpoint.Reason)
+		} else {
+			// A NON-TERMINAL checkpoint is a run a previous incarnation was
+			// interrupted in the middle of — a signal, a panic, a lost
+			// container — and that incarnation's terminal line is still
+			// standing in the append-only feed this one appends to (tick
+			// 7l6). The resume has to be STATED, not inferred: runEnding and
+			// every reader behind it answer "how did this run end" from the
+			// last terminal line no resume answers, so an incarnation that
+			// continues without saying so leaves the death speaking for the
+			// live run — phase cancelled, no ETA, beside a run that is
+			// working.
+			r.resumeOverStandingTerminal(fmt.Sprintf(
+				"the run was interrupted at %s and is resumed under the same run id: %s",
+				checkpoint.State, checkpoint.Reason))
 		}
+	} else {
+		// No checkpoint at all, and a terminal feed line may still be
+		// standing: a run can die before its first checkpoint write, and the
+		// next incarnation under the same run id starts fresh against a feed
+		// that says the run ended. It states itself for the same reason the
+		// non-terminal branch above does.
+		r.resumeOverStandingTerminal(
+			"the run left no checkpoint and is resumed under the same run id")
 	}
 
 	// Every live worker a previous incarnation left is polled BEFORE the slow
