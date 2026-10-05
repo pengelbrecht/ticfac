@@ -326,7 +326,11 @@ var runAttach = func(ctx context.Context, repo, runID string, stdout, stderr io.
 	interval := defaultWatchInterval
 	repoArg := repo
 	plainJSON := false
-	return watchCommand(ctx, []string{runID}, &repoArg, &interval, &plainJSON, stdout, stderr)
+	// The attach never stands past the run's end (tick 2xk): its exit
+	// belongs to the run command, and a pane a command or an agent owns
+	// must return when the run does — the dashboard that stays open for
+	// drill-in is `ticfac watch`'s own answer, never this one's.
+	return watchCommand(ctx, []string{runID}, &repoArg, &interval, &plainJSON, false, stdout, stderr)
 }
 
 // runCommand is `run`'s body.

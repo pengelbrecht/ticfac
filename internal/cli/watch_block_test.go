@@ -681,7 +681,7 @@ func TestWatchOnATerminalTakesKeys(t *testing.T) {
 // above; the real-terminal proof of the same fact lives in the pty test.
 func TestWatchKeyedFramesEndCRLF(t *testing.T) {
 	fakeTerminal(t)
-	_, restored := fakeKeys(t)
+	keys, restored := fakeKeys(t)
 
 	now := time.Now()
 	repo, home := modelFixture(t, now)
@@ -709,11 +709,19 @@ func TestWatchKeyedFramesEndCRLF(t *testing.T) {
 	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "", nil,
 		reconcile.StageRunFinished, "completed: every tick closed behind the gate"))
 	life.Release("ended")
+	// The run's end no longer closes a keyboarded dashboard (tick 2xk): the
+	// end is kept above the block and the view stands for drill-in, so the
+	// key that ends the watch is the test's to send — and the assertions
+	// below pin that the end still rides the exit the way it always did.
+	watchWaitsFor(t, "the end kept above the block", func() bool {
+		return strings.Contains(stdout.String(), "has ended — the dashboard stays open")
+	}, &stdout, &stderr)
+	keys <- watchKeyQuit
 	var got int
 	select {
 	case got = <-code:
 	case <-time.After(10 * time.Second):
-		t.Fatal("the watch never returned after the run ended")
+		t.Fatal("q never closed the dashboard over the ended run")
 	}
 	if got != 0 {
 		t.Fatalf("exit code %d for a run that ended clean; stderr:\n%s", got, stderr.String())

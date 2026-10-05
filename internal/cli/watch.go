@@ -153,6 +153,14 @@ a terminal — a pipe, a log — the same command streams plain lines, one per
 event, and says, to a human, when the run stops holding something for one:
 which tick, which attempt, why, and the command that moves it on.
 
+When the run ends while the dashboard is up on a keyboarded terminal, the
+dashboard does not close: the end is kept above the block once, enter and e
+keep answering over the ended run — the attempts, reasons and gate evidence
+are most wanted exactly then — and q or Ctrl-C closes the watch through the
+run's own ending, with its exit code. The watch 'ticfac run' attaches never
+waits: it returns when the run does, so a pane a command owns is never held
+for a key nobody will type.
+
 Exit codes: 0 the run ended done (the last line says how), 7 it ended
 CANCELLED — stopped deliberately, its terminal line naming the stop —
 3 it ended holding something only a person can move, 5 the watch was
@@ -172,12 +180,21 @@ content.`,
 	asJSON := fs.Bool("json", false, "answer once, at the watch's end: one versioned document (ticfac.watch.v1) holding the status model, the state word and — when it ended holding — the wait kind only a person moves")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(watchCommand(c.Context(), args, repo, interval, asJSON, stdout, stderr))
+		return codeToErr(watchCommand(c.Context(), args, repo, interval, asJSON, true, stdout, stderr))
 	}
 	return cmd
 }
 
-func watchCommand(ctx context.Context, args []string, repo *string, interval *time.Duration, asJSON *bool, stdout, stderr io.Writer) int {
+// stayOnEnd (tick 2xk) is whether the LIVE view stands past the run's own
+// end, waiting for q: true for `ticfac watch` itself — after a run stops or
+// fails is exactly when a person wants the per-tick attempts, reasons and
+// gate evidence, so its dashboard stays open for drill-in — and false for
+// the attach `ticfac run` and `ticfac run --cloud` put up, whose exit
+// belongs to the run command: a pane a command or an agent owns must return
+// when the run does, never wait for a key nobody will type. It only ever
+// applies on a keyboarded terminal: keyless, the end exits at once exactly
+// as it always has.
+func watchCommand(ctx context.Context, args []string, repo *string, interval *time.Duration, asJSON *bool, stayOnEnd bool, stdout, stderr io.Writer) int {
 	rest := args
 	if len(rest) != 1 || rest[0] == "" {
 		fmt.Fprintf(stderr, "ticfac watch: exactly one run id (epic-<id>) or epic id is required\n")
@@ -278,7 +295,7 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	// document. Both paths end the same way — on the run's own last word —
 	// and their exit codes mean the same things.
 	if watchIsTerminal(stdout) && !*asJSON {
-		return watchLive(ctx, source, kind, *repo, runID, *interval, stdout, stderr)
+		return watchLive(ctx, source, kind, *repo, runID, *interval, stayOnEnd, stdout, stderr)
 	}
 
 	// The stream path: subscribe exactly as `events --follow` does — open
@@ -772,7 +789,15 @@ func emitWatchJSON(ctx context.Context, source runfeed.Source, kind, repo, runID
 // the block any more: the frame's own two-line tail carries it (epic hn6,
 // rule 6), and `e` opens the whole feed — so the block stays one block, and
 // a person who wants the stream has the stream path.
-func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID string, interval time.Duration, stdout, stderr io.Writer) int {
+//
+// The end itself (tick 2xk): on a keyboarded terminal, when stayOnEnd asks
+// for it, the run's end does not close the dashboard — the end is kept
+// above the block once and the view stands for drill-in until q or Ctrl-C
+// closes it through the run's own ending, because after a run stops or
+// fails is exactly when a person wants the per-tick attempts, reasons and
+// gate evidence. Keyless — or the attach `ticfac run` puts up — the end
+// exits at once, exactly as it always has.
+func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID string, interval time.Duration, stayOnEnd bool, stdout, stderr io.Writer) int {
 	if interval <= 0 {
 		interval = defaultWatchInterval
 	}
@@ -919,7 +944,49 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	}
 
 	attentionRaised := false
+	// The run's own end, stood past (tick 2xk): once the run has said it
+	// ended and the dashboard is staying open for drill-in, the periodic
+	// rebuild stops — an ended run's records do not change — and only the
+	// keys (and the caller's context) move the view, redrawing the frozen
+	// model. endNow is the exit q and Ctrl-C take there: the same restore,
+	// the same last word below the final frame and the same exit class the
+	// one-frame end has always had — never the interrupted words, which
+	// would tell a caller the run is still going.
+	ended := false
+	var model statusmodel.Model
+	endNow := func() int {
+		restore()
+		if last := watchLastWord(model); last != "" {
+			fmt.Fprintf(stdout, "%s\n", last)
+		}
+		return watchEndHolding(model, runID, stderr)
+	}
 	for {
+		// The standing view over an ended run: nothing below rebuilds, and
+		// the select waits on the keys alone — the frozen frame answers
+		// drill-in until q closes the watch.
+		if ended {
+			select {
+			case <-ctx.Done():
+				return endNow()
+			case key, ok := <-keys:
+				if !ok {
+					// The keyboard is gone; an ended dashboard nobody can close
+					// ends itself, the way the keyless end always has.
+					return endNow()
+				}
+				if key == watchKeyCtrlC || (key == watchKeyQuit && ui.view == watchViewDashboard) {
+					return endNow()
+				}
+				ui = ui.key(key, model)
+				if ui.view == watchViewFeed {
+					ui.scroll = watchClampScroll(ui.scroll, len(feedEvents), height)
+				}
+				// Redrawn immediately: a key is a person waiting, not a timer.
+				draw(model)
+			}
+			continue
+		}
 		// The feed, for the shape changes that invalidate the graph cache
 		// and the full feed the drill views read. A read that fails here is
 		// a blip: the frame still renders (the model degrades "feed" and
@@ -955,19 +1022,20 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 
 		// The model: the frame's whole content, rebuilt from the run's own
 		// durable sources.
-		model, err := build()
+		var buildErr error
+		model, buildErr = build()
 		switch {
-		case err != nil && lastGood == nil:
+		case buildErr != nil && lastGood == nil:
 			// The watch ends here, and the words it says end it with: the
 			// terminal is restored first, cooked output is cooked.
 			restore()
-			fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
+			fmt.Fprintf(stderr, "ticfac watch: %v\n", buildErr)
 			return 1
-		case err != nil:
+		case buildErr != nil:
 			// Keep the warning where the person reading the block reads the
 			// block's own history: above it, in the scrollback.
 			keepAboveBlock(stdout, previous, width, eol, styles.red,
-				fmt.Sprintf("the run's host could not be read: %v", err))
+				fmt.Sprintf("the run's host could not be read: %v", buildErr))
 			model = *lastGood
 		default:
 			modelCopy := model
@@ -990,16 +1058,22 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 		draw(model)
 
 		if watchRunEnded(model) {
+			if keyed && stayOnEnd {
+				// The dashboard stands (tick 2xk): the end is kept above the
+				// block once — a person coming back to the pane reads what
+				// happened and that the keys still answer — and the standing
+				// select above holds the view open for drill-in until q or
+				// Ctrl-C closes it through the run's own ending.
+				keepAboveBlock(stdout, previous, width, eol, styles.bold, watchEndedHint(runID))
+				ended = true
+				continue
+			}
 			// The run's own last word, in the scrollback below the final
 			// frame: a person who comes back late reads how it ended. The
 			// terminal is restored FIRST — the last word and the summary after
 			// it are ordinary cooked output, and a line written in raw mode
 			// would staircase just like the frames did (tick r3x).
-			restore()
-			if last := watchLastWord(model); last != "" {
-				fmt.Fprintf(stdout, "%s\n", last)
-			}
-			return watchEndHolding(model, runID, stderr)
+			return endNow()
 		}
 		select {
 		case <-ctx.Done():
@@ -1077,6 +1151,14 @@ func watchRunEnded(model statusmodel.Model) bool {
 		return stage == reconcile.StageRunFinished || stage == reconcile.StageRunDied
 	}
 	return false
+}
+
+// watchEndedHint is the line kept above the block when the run's own end
+// leaves the dashboard standing (tick 2xk): what happened, and that the
+// keys still answer over the ended run until q closes the watch through
+// the run's own ending.
+func watchEndedHint(runID string) string {
+	return fmt.Sprintf("ticfac watch: run %s has ended — the dashboard stays open: enter opens a tick, e the whole feed; q closes the watch", runID)
 }
 
 // watchLastWord is the run's own terminal line, said plainly for the

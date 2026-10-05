@@ -70,7 +70,9 @@ var runCloudAttach = func(ctx context.Context, repo, epicID, runID string, stdou
 	repoArg := repo
 	interval := defaultWatchInterval
 	plainJSON := false
-	code := watchCommand(ctx, []string{runID}, &repoArg, &interval, &plainJSON, stdout, stderr)
+	// The same end the local attach takes (tick 2xk): the attach returns
+	// when the run does, and never waits for a key.
+	code := watchCommand(ctx, []string{runID}, &repoArg, &interval, &plainJSON, false, stdout, stderr)
 	if code == exitRunning {
 		// The watch itself learned the run's claim and says the run keeps
 		// going: the same detach, in the local attach's words.

@@ -173,11 +173,35 @@ func watchOnAPty(t *testing.T, width, height int) {
 		return strings.Contains(s, "▸t1")
 	})
 
-	// The run ends, still holding: the watch ends 3, and the closing message
-	// is the end-of-watch message the acceptance covers.
+	// The run ends, still holding: the dashboard does not close (tick 2xk) —
+	// the end is kept above the block once, the keys keep answering over the
+	// ended run, and q closes the watch through the run's own ending: the
+	// held class, 3, and the closing message the acceptance covers.
 	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "", nil,
 		reconcile.StageRunFinished, "failed: t2 did not pass"))
 	life.Release("ended holding")
+	ptyWaitsFor(t, stream, "the end kept above the block", func(s string) bool {
+		return strings.Contains(s, "has ended — the dashboard stays open")
+	})
+	// Drill-in answers on the real terminal too: j moves the cursor on (the
+	// cursor already sat on t1 from the press above, so this one reaches t2),
+	// enter opens that tick's view, and esc comes back down — then q closes
+	// the standing dashboard.
+	if _, err := master.Write([]byte("j")); err != nil {
+		t.Fatalf("press j on the pty: %v", err)
+	}
+	ptyWaitsFor(t, stream, "the cursor marker j moved past the end", func(s string) bool {
+		return strings.Contains(s, "▸t2")
+	})
+	if _, err := master.Write([]byte("\r")); err != nil {
+		t.Fatalf("press enter on the pty: %v", err)
+	}
+	ptyWaitsFor(t, stream, "the tick view after the end", func(s string) bool {
+		return strings.Contains(s, "[esc] back")
+	})
+	if _, err := master.Write([]byte("\x1bq")); err != nil {
+		t.Fatalf("press esc and q on the pty: %v", err)
+	}
 
 	if err := cmd.Wait(); err != nil {
 		t.Fatalf("the watch on the pty did not end clean: %v\nthe terminal received:\n%s",
