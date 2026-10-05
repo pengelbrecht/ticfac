@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 285,
-  "state": "running",
-  "reason": "lfm is closed",
-  "updated_at": "2026-10-05T20:40:57Z",
+  "sequence": 286,
+  "state": "collecting",
+  "reason": "collecting m4t attempt 41",
+  "updated_at": "2026-10-05T20:52:14Z",
   "ticks": [
     {
       "tick_id": "v16",
