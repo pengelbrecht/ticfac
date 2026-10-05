@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 250,
-  "state": "publishing",
-  "reason": "closing mwt behind the integrated gate on 31da0c6ab3ab",
-  "updated_at": "2026-10-05T19:26:31Z",
+  "sequence": 251,
+  "state": "running",
+  "reason": "mwt is closed",
+  "updated_at": "2026-10-05T19:26:33Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -174,7 +174,7 @@
     },
     {
       "tick_id": "mwt",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 34
     },
     {
