@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 389,
-  "state": "integrating",
-  "reason": "integrating rpw attempt 60 into epic/43y",
-  "updated_at": "2026-10-05T21:15:34Z",
+  "sequence": 390,
+  "state": "gating",
+  "reason": "running the integrated gate for rpw on 6dc8edb66b88",
+  "updated_at": "2026-10-05T21:15:47Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -272,7 +272,7 @@
     },
     {
       "tick_id": "rpw",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 60
     },
     {
