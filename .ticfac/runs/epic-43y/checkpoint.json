@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 168,
-  "state": "running",
-  "reason": "7ml is closed",
-  "updated_at": "2026-10-05T11:38:51Z",
+  "sequence": 169,
+  "state": "dispatching",
+  "reason": "dispatching x8e as attempt 28",
+  "updated_at": "2026-10-05T11:39:03Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -144,6 +144,10 @@
     },
     {
       "tick_id": "twa",
+      "state": "ready"
+    },
+    {
+      "tick_id": "j6o",
       "state": "ready"
     }
   ],
