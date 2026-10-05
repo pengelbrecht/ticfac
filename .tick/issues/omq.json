@@ -1,0 +1,14 @@
+{
+  "id": "omq",
+  "title": "harness timeout-discipline guard fails at base on dumb-git-origin's 120s bound",
+  "description": "The harness node suite is red at the epic branch's base (e179e74c, reproduced with my changes stashed): the timeout-discipline guard classifies dumb-git-origin.test.ts's 'an origin that outlives the box carries the boot, the wip and the restore' as process-driving (real git, real bash) and demands a declared timeout of at least 300_000 ms, but the test declares 120_000. This fails `pnpm test` in harness — the CI job the epic close-out waits on for [A5] — independently of anything tick umx touched. The fix is the test's own declared bound, not the guard: raise that it()'s timeout to 300_000.\nevidence: harness/test/node/dumb-git-origin.test.ts:140 (timeout: 120_000) vs harness/test/node/harness-timeout-discipline.test.ts:489-495; reproduced at base with: cd harness \u0026\u0026 pnpm exec vitest run -c vitest.node.config.ts test/node/harness-timeout-discipline.test.ts\n\nticfac run epic-43y created this tick by absorbing the finding 4e0ed9151e377439bb619274361cdda4e6c16d408b5d643137b31fb3faf04984 (reported by run-epic-43y/tick-umx/attempt-53): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/4e0ed9151e377439bb619274361cdda4e6c16d408b5d643137b31fb3faf04984.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-umx/attempt-53",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T20:04:07Z",
+  "updated_at": "2026-10-05T20:04:07Z"
+}
