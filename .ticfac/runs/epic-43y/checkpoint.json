@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 316,
-  "state": "running",
-  "reason": "ewd is closed",
-  "updated_at": "2026-10-05T19:11:33Z",
+  "sequence": 317,
+  "state": "dispatching",
+  "reason": "dispatching lmt as attempt 51",
+  "updated_at": "2026-10-05T19:11:46Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -256,6 +256,10 @@
     },
     {
       "tick_id": "4ao",
+      "state": "ready"
+    },
+    {
+      "tick_id": "3c2",
       "state": "ready"
     }
   ],
