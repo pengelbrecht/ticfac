@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 264,
-  "state": "running",
-  "reason": "648 try 1 (run dispatch #37) is rejected (missing-result): the agent settled with no report at /Users/peterengelbrecht/.herdr/worktrees/ticfac/ticfac-run-epic-hn6-tick-648-attempt-37/runs/epic-hn6/648/RESULT-648.md: settled is not finished, and this is neither running nor done",
-  "updated_at": "2026-10-05T20:06:42Z",
+  "sequence": 265,
+  "state": "dispatching",
+  "reason": "dispatching 648 as attempt 39",
+  "updated_at": "2026-10-05T20:07:06Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -189,7 +189,7 @@
     },
     {
       "tick_id": "648",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 37
     },
     {
