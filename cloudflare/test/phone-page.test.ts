@@ -726,16 +726,17 @@ describe("a cloud run renders the model its own orchestrator pushed (hn6 h7w)", 
     await env.DB.prepare("UPDATE runs SET state = 'stopped', ended_at = ? WHERE run_id = ?")
       .bind(new Date().toISOString(), runID)
       .run();
-    // The durable-evidence verdict the factory's own finalize recorded, and
-    // a second stopped run whose progress stamp never landed — the bare
-    // word, never a dangling "stopped: ".
+    // The durable-evidence verdict the factory's own finalize stamps beside
+    // the terminal state (run_progress — the branch comparison, not the
+    // stop's own words), and a second stopped run whose stamp never landed:
+    // the bare word, never a dangling "stopped: ".
     await env.DB.prepare(
       "INSERT INTO run_progress (run_id, progress, detail, recorded_at) VALUES (?, ?, ?, ?)",
     )
       .bind(
         runID,
         "none",
-        "the operator stopped the run: 2 of 35 ticks still open",
+        "no branch on origin changed while the run was alive: nothing was committed, pushed, or recorded on the tracker",
         new Date().toISOString(),
       )
       .run();
@@ -748,7 +749,7 @@ describe("a cloud run renders the model its own orchestrator pushed (hn6 h7w)", 
     // The verdict the frame's headline spells, from the run's own word, in
     // the one vocabulary both renderers share (verdictWord).
     expect(body).toContain(
-      '<span class="dot"></span>stopped: the operator stopped the run: 2 of 35 ticks still open</span>',
+      '<span class="dot"></span>stopped: no branch on origin changed while the run was alive: nothing was committed, pushed, or recorded on the tracker</span>',
     );
     // The bare word for the run whose records state no reason.
     expect(body).toContain('<span class="dot"></span>stopped</span>');
@@ -758,7 +759,7 @@ describe("a cloud run renders the model its own orchestrator pushed (hn6 h7w)", 
     // resume, a new submission to this factory, never the local foreground
     // restart (tick tt6).
     expect(body).toContain(
-      `needs you: run ${runID} is stopped: the operator stopped the run: 2 of 35 ticks still open — ticfac run h7w --cloud`,
+      `needs you: run ${runID} is stopped: no branch on origin changed while the run was alive: nothing was committed, pushed, or recorded on the tracker — ticfac run h7w --cloud`,
     );
     expect(body).toContain("clear with: ticfac run h7w --cloud");
     // The row reads the held band — the same band the bare `ticfac` overview
