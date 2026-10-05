@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 122,
-  "state": "running",
-  "reason": "2q5 is closed",
-  "updated_at": "2026-10-05T10:30:20Z",
+  "sequence": 123,
+  "state": "dispatching",
+  "reason": "dispatching nou as attempt 21",
+  "updated_at": "2026-10-05T10:30:32Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -106,6 +106,10 @@
     },
     {
       "tick_id": "qf4",
+      "state": "ready"
+    },
+    {
+      "tick_id": "7ml",
       "state": "ready"
     }
   ],
