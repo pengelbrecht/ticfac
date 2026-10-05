@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 265,
-  "state": "running",
-  "reason": "8em is closed",
-  "updated_at": "2026-10-05T16:27:03Z",
+  "sequence": 266,
+  "state": "collecting",
+  "reason": "collecting a2l attempt 36",
+  "updated_at": "2026-10-05T17:44:30Z",
   "ticks": [
     {
       "tick_id": "92k",
