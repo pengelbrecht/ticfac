@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 262,
-  "state": "collecting",
-  "reason": "collecting 8em attempt 41",
-  "updated_at": "2026-10-05T16:25:12Z",
+  "sequence": 263,
+  "state": "gating",
+  "reason": "running the integrated gate for 8em on f4b443bf2dc0",
+  "updated_at": "2026-10-05T16:25:37Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -182,7 +182,7 @@
     },
     {
       "tick_id": "8em",
-      "state": "dispatched",
+      "state": "integrated",
       "attempt": 41
     }
   ],
