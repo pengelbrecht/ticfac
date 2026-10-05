@@ -101,9 +101,10 @@ hop goes through the Worker's AI binding (the staging gateway's one difference,
 above), and the container's `ticks-worker` is a stand-in
 (`cloudflare/staging/agent.Dockerfile`) that honours the pinned
 `--boot`/`--finish` contract — markers, prompt handoff, branch record, the
-fast-forward-only push, exit codes — on a throwaway repository inside the
-container, because the factory image needs the deploy pipeline, a GitHub
-repository and tk, which staging does not carry.
+fast-forward-only push, exit codes — on a throwaway repository that lives
+on the staging Worker itself (the `/proof/git` origin, since tick a2l),
+because the factory image needs the deploy pipeline, a GitHub repository and
+tk, which staging does not carry.
 
 ## Running it
 
@@ -177,17 +178,21 @@ the three faults the epic's acceptance names, one attempt each:
    WorkerAgent Durable Object while the tracked bash keeps running in its
    container; the next heartbeat's host resumes the conversation from DO
    SQLite and the tracked bash reattaches by its nonce.
-2. **Workspace lost mid-turn** — `/work/repo` removed once a round's wip
-   checkpoint has landed: the next round's ready check restores from that
-   checkpoint before the model's next request.
+2. **Container destroyed mid-turn** — since tick a2l the proof destroys the
+   whole container between tool rounds, not just the workspace: the
+   attempt's throwaway origin is the staging Worker's own (`/proof/git`, in
+   Durable Object storage), so it outlives the box, and the next round's
+   ready check boots the replacement, fetches from that origin and checks
+   out the last wip checkpoint before the model's next request.
 3. **Deploy mid-run** — a deploy fired the moment the boot has handed off
    and the first model request is in flight.
 
-One stand-in beyond the two `agent-staging.ts` names: the throwaway origin
-lives inside the container, so the mid-turn proof destroys the workspace
-rather than the whole container (a destroyed staging container would take
-its origin with it). The node suite's `workspace-checkpoints.test.ts`
-destroys a whole container against an origin that outlives it.
+The mid-turn destroy is the [A2] claim it is because the origin OUTLIVES
+THE BOX (tick a2l): the container platform has no volumes to put it in
+(wrangler 4.147's container config carries no volumes key), so the
+repository lives in the `GIT_ORIGINS` Durable Objects and the box reaches
+it over the network — git's dumb HTTP protocol, whose wire behaviour is
+pinned against real git by the node suite's `dumb-git-origin.test.ts`.
 
 Tear-down also needs the container application, which `wrangler delete`
 leaves behind: `pnpm exec wrangler containers list`, then
@@ -223,6 +228,13 @@ but its log could not tell a resumed host from one that never died; the
 host now logs the resume (`harness/src/host/worker-attempt.ts`, pinned in
 `test/worker-attempt-host.test.ts`), and the pass recorded above claims it.
 
+The second scenario above was recorded in its pre-a2l shape: the
+WORKSPACE was lost, because the throwaway origin then lived inside the
+container and a destroyed box could not fetch anything back. Since tick
+a2l the origin outlives the box (the staging Worker's own
+`/proof/git` door), and the proof destroys the whole container —
+recorded result to be re-run at the next staging pass.
+
 The staging Worker, its D1 database and its container application were
 deleted after the proof.
 
@@ -237,10 +249,11 @@ agent Worker deployed (above).
 Two questions, both observed on the staging agent Worker:
 
 1. **THE RESTORE'S SETUP.** An attempt's workspace is emptied between tool
-   rounds (the loss a destroyed container would leave; the staging stand-in
-   keeps the bare origin INSIDE the container, so a destroyed box could not
-   fetch anything back — the setup line is the same either way, and the
-   mid-turn destroy is jhp's proof). The round that meets the empty workspace
+   rounds (the same setup line a destroyed container's restore runs — the
+   workspace loss, so the observation is about the INSTALL and not the
+   container's whole boot; the mid-turn container destroy is the jhp
+   proof's, carried by the origin that outlives the box since tick a2l).
+   The round that meets the empty workspace
    restores it — clear, clone, fetch of the attempt branch, checkout of the
    wip tip, then `ticks-worker --setup`: a REAL dependency install (apt
    build-essential + golang, ~139 s, 172 packages) — and the turn continues

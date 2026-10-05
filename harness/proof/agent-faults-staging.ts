@@ -14,18 +14,16 @@
  *      the tracked bash REATTACHES to the process it left running — and the
  *      tool must not run twice. Evidence: the attempt settles 0 and the
  *      tool's side-effect file carries exactly one line.
- *   2. WORKSPACE LOST MID-TURN — the workspace directory is removed between
- *      tool rounds, the loss the checkpoint extension's ready check exists
- *      for (tick 4fs): the next round's request goes out only after
- *      ensureWorkspaceReady has cleared, fetched and checked out the last
- *      wip commit, and the turn completes from the restored tree. Evidence:
- *      the attempt settles 0, the log shows "workspace restored to …", and
- *      both steps' work is on the pushed branch.
- *      (One staging stand-in, named: the throwaway origin lives INSIDE the
- *      container, so the proof destroys the workspace rather than the whole
- *      container — a destroyed staging container would lose its origin too.
- *      The full container-loss variant, restored from an origin that
- *      outlives the container, is what the real cloud run of [A4] carries.)
+ *   2. CONTAINER DESTROYED MID-TURN — since tick a2l the staging origin
+ *      OUTLIVES THE BOX (the attempt's repository is the staging Worker's
+ *      own /proof/git origin, in Durable Object storage), so the proof
+ *      destroys the whole container between tool rounds, the loss the
+ *      checkpoint extension's ready check exists for (tick 4fs): the next
+ *      round's request goes out only after ensureWorkspaceReady has booted
+ *      the replacement, fetched from the origin that survived, and checked
+ *      out the last wip commit — and the turn completes from the restored
+ *      tree. Evidence: the attempt settles 0, the log shows "workspace
+ *      restored to …", and both steps' work is on the pushed branch.
  *   3. DEPLOY MID-RUN — a `wrangler deploy` fired during the conversation,
  *      under a generation rather than at a tool: the attempt settles 0 with
  *      the work delivered, whatever the deploy interrupted. Evidence: the
@@ -209,8 +207,8 @@ async function attempt(
 
 /**
  * Releases the attempt's container. Called only AFTER its evidence is read:
- * a reclaim destroys the container, and the bare origin the stand-in pushed
- * to lives inside it.
+ * a reclaim destroys the container; the origin it pushed to outlives the
+ * box (tick a2l) but its workspace does not.
  */
 async function reclaim(): Promise<void> {
   await call("reclaim", { method: "POST" }).catch(() => undefined);
@@ -250,7 +248,9 @@ function claim(text: string, ok: boolean): void {
     },
   );
 
-  const runs = await exec(`git -C /srv/origin.git show ${branchOf(state)}:tool-runs.txt`);
+  // The evidence, from the attempt's own workspace: the branch the finish
+  // pushed, checked out in the container that holds it.
+  const runs = await exec(`git -C /work/repo show ${branchOf(state)}:tool-runs.txt`);
   evidence.tool_runs_file = runs.output;
   await reclaim();
   claim("kill the host mid-tool: the attempt settles 0", state.exit_code === 0);
@@ -268,11 +268,11 @@ function claim(text: string, ok: boolean): void {
   );
 }
 
-// --- 2. WORKSPACE LOST MID-TURN (removed between rounds; the restore) ------
+// --- 2. CONTAINER DESTROYED MID-TURN (the replacement box; the restore) ------
 
 {
   const { state, log } = await attempt(
-    "workspace-lost-mid-turn",
+    "container-destroyed-mid-turn",
     [
       "You are working in /work/repo, a git checkout on its own branch.",
       "",
@@ -285,10 +285,10 @@ function claim(text: string, ok: boolean): void {
     ].join("\n"),
     async (seen) => {
       // Wait for a round boundary — every started tool has ended — then for
-      // that round's wip checkpoint to land on the origin, and remove the
-      // workspace while the model is between rounds: the next round's ready
-      // check must restore it from that checkpoint before the request goes
-      // out.
+      // that round's wip checkpoint to land on the origin that outlives the
+      // box, and destroy the whole CONTAINER while the model is between
+      // rounds: the next round's ready check must boot the replacement and
+      // restore it from that checkpoint before the request goes out.
       for (;;) {
         const ends = seen("tool_execution_end");
         if (ends >= 1 && ends === seen("tool_execution_start")) break;
@@ -306,23 +306,25 @@ function claim(text: string, ok: boolean): void {
         if ((log.match(/wip checkpoint [0-9a-f]+ pushed/g) ?? []).length > hadCheckpoints) break;
         await new Promise((resolve) => setTimeout(resolve, 500));
       }
-      mark("a round's checkpoint landed; removing the workspace between rounds");
-      const gone = await exec("rm -rf /work/repo");
-      mark(`the workspace is gone (${gone.exitCode === 0 ? "removed" : gone.output.trim()})`);
+      mark("a round's checkpoint landed on the origin; destroying the container between rounds");
+      const destroyed = await call("destroy", { method: "POST" }, "&tick=xd3");
+      mark(`the container is destroyed (${JSON.stringify(destroyed)}) — the origin outlived it`);
     },
   );
 
-  const first = await exec(`git -C /srv/origin.git show ${branchOf(state)}:first-step.txt`);
-  const second = await exec(`git -C /srv/origin.git show ${branchOf(state)}:second-step.txt`);
+  // The evidence, from the container the restore left behind: its workspace
+  // is the pushed branch, checked out at the tip the finish pushed.
+  const first = await exec(`git -C /work/repo show ${branchOf(state)}:first-step.txt`);
+  const second = await exec(`git -C /work/repo show ${branchOf(state)}:second-step.txt`);
   evidence.restored_files = { first: first.output, second: second.output };
   await reclaim();
-  claim("workspace lost mid-turn: the attempt settles 0", state.exit_code === 0);
+  claim("container destroyed mid-turn: the attempt settles 0", state.exit_code === 0);
   claim(
-    "workspace lost mid-turn: the log shows the restore from the last wip commit",
+    "container destroyed mid-turn: the log shows the restore from the last wip commit",
     /workspace restored to [0-9a-f]+/.test(log),
   );
   claim(
-    "workspace lost mid-turn: the turn completed on the restored tree (both steps' work pushed)",
+    "container destroyed mid-turn: the turn completed on the restored tree (both steps' work pushed)",
     first.output.trim() === "step one" && second.output.trim() === "step two",
   );
 }
@@ -364,7 +366,7 @@ function claim(text: string, ok: boolean): void {
   const log = await readLog();
   evidence.attempts["deploy-mid-run"] = { state, log };
 
-  const report = await exec(`git -C /srv/origin.git show ${branchOf(state)}:RESULT-xd3.md`);
+  const report = await exec(`git -C /work/repo show ${branchOf(state)}:RESULT-xd3.md`);
   evidence.deploy_mid_run_report = report.output;
   await reclaim();
   claim("deploy mid-run: the attempt settles 0", state.exit_code === 0);

@@ -11,10 +11,9 @@
  *     `[sandbox]` setup (`ticks-worker --setup`: a real apt toolchain
  *     install, minutes of it) — and the turn completes on the restored
  *     workspace with its dependencies live. The workspace is EMPTIED rather
- *     than the container destroyed because the staging stand-in keeps the
- *     bare origin INSIDE the container, so a destroyed box could fetch
- *     nothing back; the setup line is the same either way, and the
- *     mid-turn destroy is jhp's proof.
+ *     than the container destroyed: the setup line is the same either way,
+ *     and the mid-turn CONTAINER destroy is the jhp proof's, which the
+ *     origin that now outlives the box (tick a2l) exists to carry.
  *
  *  2. THE RUN DOOR'S HOLD — the tick's open question, now an observation
  *     rather than a dependency: does ONE `run` RPC, holding one container
@@ -178,12 +177,16 @@ if (seen !== null && restoredLine === null) {
 
 // The evidence, from the container's own origin: what the finish pushed.
 const fromOrigin = async (what: string) => {
-  const answer = await exec(`git -C /srv/origin.git show "${branch}:${what}"`);
+  const answer = await exec(`git -C /work/repo show "${branch}:${what}"`);
   return answer.ready ? (answer.output ?? "") : "";
 };
 const setupRan = await fromOrigin(".setup-ran");
 const report = await fromOrigin(`RESULT-${tick}.md`);
-const history = await exec(`git -C /srv/origin.git log --format=%s main..${branch}`);
+// The origin outlives the box (tick a2l), so the evidence reads from the
+// workspace the attempt left: main is fetched back for the range.
+const history = await exec(
+  `git -C /work/repo fetch -q origin main && git -C /work/repo log --format=%s origin/main..${branch}`,
+);
 const greet = await fromOrigin("greet.sh");
 const liveToolchain = await exec("cd /work/repo && gcc --version | sed -n 1p");
 
