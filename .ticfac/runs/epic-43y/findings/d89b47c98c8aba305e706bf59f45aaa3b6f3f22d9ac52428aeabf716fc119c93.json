@@ -11,8 +11,11 @@
   "tick_id": "j2k",
   "attempt": 69,
   "done_item": "A1",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T23:34:52Z",
+  "triaged_at": "2026-10-05T23:35:08Z",
+  "triaged_by": "ticfac run epic-43y absorbing 8gd",
+  "promoted_as": "8gd",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "j2k",
