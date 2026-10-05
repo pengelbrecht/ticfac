@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 196,
-  "state": "gating",
-  "reason": "running the integrated gate for c9n on cf54c29d9fba",
-  "updated_at": "2026-10-05T15:00:25Z",
+  "sequence": 197,
+  "state": "publishing",
+  "reason": "closing c9n behind the integrated gate on cf54c29d9fba",
+  "updated_at": "2026-10-05T15:02:49Z",
   "ticks": [
     {
       "tick_id": "v16",
