@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 152,
-  "state": "gating",
-  "reason": "running the integrated gate for jhp on 27e76ae17e98",
-  "updated_at": "2026-10-05T11:28:42Z",
+  "sequence": 153,
+  "state": "publishing",
+  "reason": "closing jhp behind the integrated gate on 27e76ae17e98",
+  "updated_at": "2026-10-05T11:31:06Z",
   "ticks": [
     {
       "tick_id": "92k",
