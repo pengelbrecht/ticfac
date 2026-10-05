@@ -20,20 +20,22 @@
  *   that staging does not carry (spike n0b round 2, pre-existing problem 1).
  *
  * Routes, all behind `PROOF_TOKEN` (no token configured is a closed door):
- * - `POST /proof/start?name=<attempt>` `{prompt, model?, wall_s?}` — a run row,
- *   its worker token, and the attempt started on its WorkerAgent;
+ * - `POST /proof/start?name=<attempt>` `{prompt, model?, tick?, wall_s?}` — a
+ *   run row, its worker token, and the attempt started on its WorkerAgent;
  * - `GET  /proof/state?name=` / `GET /proof/log?name=&offset=`;
  * - `POST /proof/steer?name=` `{text}`; `GET /proof/watch?name=` (WebSocket);
  * - `POST /proof/reclaim?name=`;
  * - `POST /proof/exec?name=` `{command}` — one short command in the
- *   attempt's container, for the evidence (the branch the finish pushed).
+ *   attempt's container, for the evidence (the branch the finish pushed);
+ * - `POST /proof/destroy?name=` — the attempt's container destroyed, so a
+ *   proof can rehearse a loss the platform would otherwise not offer.
  */
 
 import { getRun, insertRun } from "./db";
 import { FactorySandbox, type FactorySandboxNamespace } from "./factory-sandbox";
 import type { ProxyOptions } from "./gateway";
 import { issueWorkerRunToken } from "./gateway";
-import { DO_V1, recordRunSubstrate } from "./run-substrate";
+import { DO_V1, recordRunSubstrate, runIDOfSandboxName } from "./run-substrate";
 import { bindingUpstream, type StagingGatewayEnv } from "./staging-gateway";
 import { WorkerAgent as BaseWorkerAgent, type WorkerAgentNamespace } from "./worker-agent";
 
@@ -105,7 +107,13 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
       if (prompt.trim() === "") return new Response("a prompt", { status: 400 });
       const model =
         typeof input.model === "string" ? input.model : "workers-ai/@cf/zai-org/glm-5.3";
+<<<<<<< HEAD
       const { runId, sandbox } = proofAttempt(name);
+=======
+      const tick =
+        typeof input.tick === "string" && /^[a-z0-9]{1,16}$/.test(input.tick) ? input.tick : "xd3";
+      const runId = `run_proof_${name.replaceAll("-", "_")}`;
+>>>>>>> 634436bf17caffaa707509f7903d42bf1c2e7ea0
       if ((await getRun(env.DB, runId)) === null) {
         await insertRun(env.DB, {
           run_id: runId,
@@ -124,16 +132,26 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
         // the durable_object policy): the run is on `do_v1`, and the
         // attempt's door routes there (tick hxd — before it, every run was
         // hosted whose record said do_v1, so a row nobody read was free to
-        // be missing; now the row is what the door is keyed on).
+        // be missing; now the row is what the door is keyed on). Two keys:
+        // the run id the token carries, and the one the agent DERIVES from
+        // the sandbox name (`runIDOfSandboxName` cuts at the first dash, so
+        // `proof-cni-x` reads `proof` — a staging name does not round-trip
+        // to `run_proof_…`, and the row must exist under both).
         await recordRunSubstrate(env.DB, runId, DO_V1);
+        await recordRunSubstrate(env.DB, runIDOfSandboxName(name), DO_V1);
       }
-      const issued = await issueWorkerRunToken(env, { run_id: runId, tick_id: "xd3", attempt: 1 });
+      const issued = await issueWorkerRunToken(env, { run_id: runId, tick_id: tick, attempt: 1 });
       const state = await agent.start({
+<<<<<<< HEAD
         name: sandbox,
         tick: "xd3",
+=======
+        name,
+        tick,
+>>>>>>> 634436bf17caffaa707509f7903d42bf1c2e7ea0
         role: "implement-tick",
         env: {
-          TICKS_TICK: "xd3",
+          TICKS_TICK: tick,
           TICKS_RUN_ID: runId,
           TICKS_WORKDIR: "/work/repo",
           TICKS_WORKER_STATE_DIR: "/tmp/ticks-worker",
@@ -166,6 +184,12 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
       const command = typeof input.command === "string" ? input.command : "";
       const stub = sandboxes.get(sandboxes.idFromName(proofAttempt(name).sandbox));
       return Response.json(await stub.run(command, {}, { readyWaitMs: 5_000 }));
+    }
+    case "destroy": {
+      if (request.method !== "POST") return new Response("POST", { status: 405 });
+      const stub = sandboxes.get(sandboxes.idFromName(name));
+      await stub.destroy();
+      return Response.json({ destroyed: name });
     }
     default:
       return new Response("not found", { status: 404 });

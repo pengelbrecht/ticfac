@@ -165,6 +165,7 @@ deploy finished, with no restart observable in its log), a harness killed
 mid-tool, a container destroyed mid-turn — epic 43y's [A2], tick jhp's proof
 runs.
 
+<<<<<<< HEAD
 # Staging proof: the fault claims of epic 43y's [A2] (tick jhp)
 
 `agent-faults-staging.ts` drives the same staging agent Worker as
@@ -224,3 +225,79 @@ host now logs the resume (`harness/src/host/worker-attempt.ts`, pinned in
 
 The staging Worker, its D1 database and its container application were
 deleted after the proof.
+=======
+# Staging proof: the restore's setup survives a real dependency install (tick cni)
+
+`restore-setup-staging.ts` proves the one long line of the restore — the
+repository's `[sandbox]` setup, re-run on a rebuilt workspace — on the real
+platform, and answers the run door's open question along the way. Not part of
+CI: it spends (cents of Workers AI and container time) and needs the staging
+agent Worker deployed (above).
+
+Two questions, both observed on the staging agent Worker:
+
+1. **THE RESTORE'S SETUP.** An attempt's workspace is emptied between tool
+   rounds (the loss a destroyed container would leave; the staging stand-in
+   keeps the bare origin INSIDE the container, so a destroyed box could not
+   fetch anything back — the setup line is the same either way, and the
+   mid-turn destroy is jhp's proof). The round that meets the empty workspace
+   restores it — clear, clone, fetch of the attempt branch, checkout of the
+   wip tip, then `ticks-worker --setup`: a REAL dependency install (apt
+   build-essential + golang, ~139 s, 172 packages) — and the turn continues
+   on the restored tree, its dependencies live.
+2. **THE RUN DOOR'S HOLD** — tick cni's open question, now an observation:
+   does one `run` RPC, holding one container exec await for minutes, answer
+   with the command's own exit code? (The restore's setup no longer rides
+   this door: its bounding `head -c` SIGPIPEs any command that prints past
+   256 KiB — a chatty install dies `exit 141` mid-way, reproduced by the node
+   suite — so the setup rides the process doors instead, polled, its output
+   read by cursor.)
+
+## Running it
+
+The staging agent Worker deployed as the xd3 proof above (its `--setup`
+entry, its `tick` parameter and its `destroy` route are this tick's), then
+from `harness/`:
+
+```bash
+PROOF_URL=https://ticfac-staging-agent.<subdomain>.workers.dev PROOF_TOKEN=<the token> \
+  node proof/restore-setup-staging.ts evidence.json
+```
+
+Tear down afterwards, as the xd3 proof says. The 150 s run-door probe sits
+under undici's 300 s headers timeout; keep it under that on any rerun.
+
+## Recorded result, 2026-10-05 (pi-ai / pi-durable 1.0.2)
+
+`PROOF HOLDS`, every claim (attempt `proof-cni-…`, 10.5 min end to end):
+boot 10 s, conversation 9.7 min of which the restore's install was 139 s,
+finish 1 s, then the 150 s run-door probe.
+
+| Claim | Evidence |
+|---|---|
+| The attempt settled with exit 0 | `settled`, `exit_code: 0`, "the finish phase exited 0"; the finish pushed `tick/proof/cni` at `93a13f8` |
+| The lost workspace was rebuilt by the restore | `.setup-ran` in the pushed tree — written by the setup entry, which only the restore runs, into a tree the loss had emptied |
+| The restore's setup was a real dependency install, minutes of it | `.setup-ran`: `gcc (Debian 14.2.0-19) 14.2.0`, `go version go1.24.4 linux/amd64`, `packages: 172`, `seconds: 139`; the round that met the empty workspace (bash `./greet.sh`) ran 154 s → 295 s wall clock — the install inside it |
+| The install is live in the container the turn continued in | `gcc --version` in the restored container answers `gcc (Debian 14.2.0-19) 14.2.0` |
+| The round's edit survived the loss | the `greet.sh` fix — a wip, uncommitted, when the workspace was emptied — prints `Hello, world` on the pushed branch, beside the model's own commit and the finish's report commit |
+| The report is on the pushed branch | `RESULT-cni.md` with `STATUS: DONE` read back from the bare origin |
+| One run-door RPC held one 150 s container exec | `{ready: true, exitCode: 0, output: "held", truncated: false}` after 150.1 s, twice (and once at 150.1 s in an earlier run of the same probe): the whole exchange — one RPC awaiting one container exec — holds minutes |
+
+The restore fired through the tracked bash's nonce check (the round was
+already in flight when the workspace was emptied), which restores silently;
+the ready check's announced path — `the container was lost between rounds;
+workspace restored to <sha>` — was observed in the proof's first run, at the
+eighth loss, and both paths are the same `restoreLostWorkspace`, pinned by
+the node and workerd suites. An earlier run of this proof also emptied the
+workspace after EVERY round to chase the announced line: the model restored
+seven times, investigated the harness ("the environment re-ran a setup
+process between my tool calls"), re-committed its report and STILL settled
+exit 0 — the resilience note this proof did not plan and would not claim.
+
+What this proof does NOT claim: a container destroyed mid-TURN (jhp's), a
+deploy mid-run (xd3's note above), and the run door holding a command that
+prints past its bound — that one it REFUSES by design: the bounding `head -c`
+SIGPIPEs the writer, which is why the restore's setup no longer rides it.
+
+The staging Worker and its D1 database were deleted after the proof.
+>>>>>>> 634436bf17caffaa707509f7903d42bf1c2e7ea0
