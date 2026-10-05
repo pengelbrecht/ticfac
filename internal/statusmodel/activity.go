@@ -76,7 +76,7 @@ func decorateWorkers(src Sources, recs Records, m *Model) {
 		key := fmt.Sprintf("%s#%d", w.TickID, w.Attempt)
 		var input *ActivityInput
 		if src.Activity != nil && w.Worktree != "" {
-			input = src.Activity(runnerOf(attempts[key]), w.Worktree)
+			input = src.Activity(runnerOf(src, w, attempts[key]), w.Worktree)
 		}
 		n := nudges[key]
 		switch {
@@ -141,12 +141,23 @@ func activityBuckets(events []time.Time, now time.Time) []int {
 }
 
 // runnerOf is the string the activity seam is addressed by for one worker:
-// the attempt's own MODEL when its provenance names one — the model is what
-// says which harness runs the worker ("claude opus" writes Claude Code's
-// transcript layout, everything else pi's) — else the executor. The two
-// spellings name the same fact from two record vintages, and
-// TranscriptActivity's mapping accepts either.
-func runnerOf(a runstate.Attempt) string {
+// the harness KIND the executor's own attempt record names — read through
+// the Sources.Runner seam, the LIVE word, which is the one fact that says
+// which transcript layout the worker writes — over the durable attempt's
+// provenance, which spells the model it ran on and the executor that ran it
+// and cannot name the harness itself (the same reading the cost river
+// makes of the same two fields, cost.go): the bare alias "opus" runs under
+// claude, the executor "herdr" under any kind, so neither spelling says
+// which layout to read. The durable spellings answer wherever the reader
+// says nothing — the model's family names the harness for the claude
+// aliases, else the executor — and TranscriptActivity's mapping accepts
+// all of them.
+func runnerOf(src Sources, w *Worker, a runstate.Attempt) string {
+	if src.Runner != nil {
+		if named := src.Runner(w.TickID, w.Attempt); named != nil && *named != "" {
+			return *named
+		}
+	}
 	if a.Provenance.Model != nil && *a.Provenance.Model != "" {
 		return *a.Provenance.Model
 	}
@@ -190,12 +201,12 @@ func handleOf(jobHandle map[string]any) *string {
 // line. The reader owns nothing about the window: it answers moments, and
 // the model buckets them against its own one clock (src.Now).
 //
-// The first parameter is the worker's runner, addressed by its model or its
-// executor (see runnerOf): a string naming claude reads Claude Code's own
-// layout, everything else reads pi's.
-func TranscriptActivity(home string) func(executor, worktree string) *ActivityInput {
-	return func(executor, worktree string) *ActivityInput {
-		events, ok := subprocess.ReadTranscriptEvents(home, transcriptKind(executor), worktree)
+// The first parameter is the worker's runner, addressed by its harness
+// kind, its model or its executor (see runnerOf): a string naming claude
+// reads Claude Code's own layout, everything else reads pi's.
+func TranscriptActivity(home string) func(runner, worktree string) *ActivityInput {
+	return func(runner, worktree string) *ActivityInput {
+		events, ok := subprocess.ReadTranscriptEvents(home, transcriptKind(runner), worktree)
 		if !ok {
 			return nil
 		}
@@ -207,11 +218,17 @@ func TranscriptActivity(home string) func(executor, worktree string) *ActivityIn
 	}
 }
 
-// transcriptKind maps the executor-or-model string the Sources seam passes
-// to the harness whose transcript layout is read: a string naming claude
-// reads claude's, everything else reads pi's.
-func transcriptKind(executorOrModel string) string {
-	if strings.Contains(strings.ToLower(executorOrModel), "claude") {
+// transcriptKind maps the runner string the Sources seam passes — the
+// harness kind the executor's attempt record names where it answered, else
+// the durable record's model-or-executor spelling — to the harness whose
+// transcript layout is read: claude's own kind and every claude-family
+// model spelling read claude's (the aliases and claude-… names the runner
+// config itself recognises, the same family the cost river reads, cost.go
+// — the bare "opus" every real claude attempt record carries is one of
+// them), everything else reads pi's.
+func transcriptKind(runner string) string {
+	runner = strings.ToLower(strings.TrimSpace(runner))
+	if runner == "claude" || isClaudeModel(runner) {
 		return "claude"
 	}
 	return "pi"

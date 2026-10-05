@@ -100,8 +100,23 @@ type Sources struct {
 
 	// Activity answers one worker's measured activity window: the events
 	// of its transcript and its last action. Nil when there is no reader —
-	// every caller is nil-safe, and the model leaves activity null.
-	Activity func(executor, worktree string) *ActivityInput
+	// every caller is nil-safe, and the model leaves activity null. The first
+	// parameter is the worker's runner string: the harness kind the executor's
+	// own attempt record names where the Runner reader answered one, else the
+	// durable attempt's model-or-executor spelling (see runnerOf).
+	Activity func(runner, worktree string) *ActivityInput
+
+	// Runner answers one (tick, attempt) worker's harness kind — the agent
+	// kind the executor launched: herdr's `kind`, the local supervisor's
+	// `runner` — from the attempt record in the dispatch's state directory
+	// on this machine (tick 5uq). The durable attempt cannot name the
+	// harness: its provenance carries the model and the executor, and
+	// neither says which harness runs the worker (the bare alias "opus" runs
+	// under claude, the executor "herdr" under any kind). The reader's
+	// answer wins over the durable spelling, which addresses the activity
+	// seam wherever the reader says nothing. Nil when there is no reader —
+	// a cloud run's workers are not on this machine.
+	Runner func(tickID string, attempt int) *string
 
 	// Handle answers one (tick, attempt) worker's executor-own name from
 	// where this machine keeps it: the attempt record in the dispatch's
