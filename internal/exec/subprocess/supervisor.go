@@ -181,12 +181,12 @@ func Supervise(stateDir string) error {
 	// quiet as long again, stopped and settled as stuck.
 	var watch activityWatch
 	stuckAfter := time.Duration(record.StuckAfterMS) * time.Millisecond
+	var stuckTicker *time.Ticker
 	var stuckTick <-chan time.Time
 	if stuckAfter > 0 {
-		t := time.NewTicker(CheckEvery(stuckAfter))
-		defer t.Stop()
-		stuckTick = t.C
-		watch.state.FirstSeenAt = time.Now()
+		stuckTicker = time.NewTicker(CheckEvery(stuckAfter))
+		defer stuckTicker.Stop()
+		stuckTick = stuckTicker.C
 	}
 	stuckRestart := false
 
@@ -254,6 +254,25 @@ func Supervise(stateDir string) error {
 		life := watchRunner(runner, runnerLockPath)
 		runnerAlive := life.alive
 
+		// The watch begins here, at every turn's loop, and not when its ticker
+		// was made: every write between the two (the pid file and the
+		// announcements, each fsynced) can hold a loaded host for longer than
+		// a short window. Its baseline is dated here, because the first CPU
+		// sample is a baseline dated at FirstSeenAt, not activity: dated
+		// earlier, the first look read "quiet for the window" over CPU it had
+		// never watched and nudged a runner whose tool was burning it (tick
+		// onv's gate: nudged 2s into a 4s busy phase with a 1.5s window). And
+		// its ticker restarts here, so a tick that went stale during the
+		// hold is not a look taken before this turn's exit can be seen: a
+		// re-prompted runner that had finished during the hold was looked at
+		// first and re-prompted as stuck again.
+		if stuckTicker != nil {
+			if watch.state.FirstSeenAt.IsZero() {
+				watch.state.FirstSeenAt = time.Now()
+			}
+			stuckTicker.Reset(CheckEvery(stuckAfter))
+		}
+
 		for {
 			select {
 			case <-life.exitedCh:
@@ -274,6 +293,12 @@ func Supervise(stateDir string) error {
 				if stuckRestart || watch.state.StuckStopped {
 					// This turn is already being stopped; the next look belongs
 					// to the turn after it, if there is one.
+					break
+				}
+				if life.exited.Load() {
+					// A runner that has exited is not stuck: its exit is this
+					// loop's to collect, and select picks among ready cases at
+					// random.
 					break
 				}
 				switch step, evidence := watch.look(record, runnerPID, stuckAfter); step {

@@ -2,6 +2,9 @@ package subprocess
 
 import (
 	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -195,6 +198,74 @@ func TestALocalRunnerIsNotStuckWhileItsToolIsBusyAndIsRepromptedWhenItHangs(t *t
 	}
 	if !strings.Contains(nudges[0].Detail, "tool process(es) last used CPU") {
 		t.Errorf("the nudge's evidence does not name the tool CPU: %s", nudges[0].Detail)
+	}
+}
+
+// superviseSlowStartArg is the helper mode: Supervise, with every runner held
+// for slowStartHold after it starts and before its supervisor first looks at
+// it — where a loaded host held tick onv's gate: the fsynced pid file and the
+// announcements between the runner's start and the watch loop.
+const superviseSlowStartArg = "__supervise_slow_start__"
+
+const slowStartHold = 2 * time.Second
+
+func superviseSlowStart(args []string) int {
+	fs := flag.NewFlagSet("supervise", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	state := fs.String("state", "", "")
+	if err := fs.Parse(args); err != nil || *state == "" {
+		fmt.Fprintf(os.Stderr, "supervise helper: --state is required\n")
+		return 2
+	}
+	runnerStarted = func([]string) { time.Sleep(slowStartHold) }
+	if err := Supervise(*state); err != nil {
+		fmt.Fprintf(os.Stderr, "supervise helper: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// The same runner, with its supervisor held past the 1.5s window between the
+// runner's start and the first look — tick onv's gate, made to happen every
+// time. The watch's baseline was dated before the hold, so the first look
+// read "quiet for the window" over tool CPU it had never watched and nudged
+// at once, 2s into the 4s busy phase. And the re-prompted runner, which
+// reports and exits during its own hold, was looked at once more before its
+// exit was collected — select picks among ready cases at random — and nudged
+// as stuck a second time.
+func TestASlowStartingSupervisorDoesNotNudgeABusyRunner(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "busy_then_hang", stuckAfter: 1500 * time.Millisecond,
+		env: []string{"FAKE_RUNNER_BUSY=4"}, supervisorArgv: []string{os.Args[0], superviseSlowStartArg}})
+	handle := f.Start(f.spec("run-onv/tick-slw/attempt-1", "slw"))
+	f.waitSettled(handle)
+
+	status := f.inspect(handle)
+	if collected := f.collect(handle); collected.Verdict != VerdictReadyToMerge {
+		t.Fatalf("verdict %s, want ready-to-merge\n%s", collected.Verdict, formatObservations(status.Observations))
+	}
+	var nudges, restarts int
+	var nudgedAt, startedAt time.Time
+	for _, o := range status.Observations {
+		switch {
+		case IsStuckNudge(o):
+			nudges++
+			nudgedAt, _ = time.Parse(time.RFC3339, o.At)
+		case o.Kind == ObsStarted && strings.Contains(o.Detail, "re-prompted as stuck"):
+			restarts++
+		case o.Kind == ObsStarted && startedAt.IsZero():
+			startedAt, _ = time.Parse(time.RFC3339, o.At)
+		}
+	}
+	if nudges != 1 || restarts != 1 {
+		t.Fatalf("stuck nudges %d, restarts %d, want 1 and 1:\n%s", nudges, restarts, formatObservations(status.Observations))
+	}
+	// The start is announced after the hold, so the busy phase has 2s of its
+	// 4s left when the watch begins; a nudge at the first look is 0-1s after
+	// the announcement (the stamps are whole seconds), one after the tool
+	// went quiet 3-4s.
+	if nudgedAt.Sub(startedAt) < 2*time.Second {
+		t.Errorf("the runner was nudged %s after its start was announced, inside its busy phase:\n%s",
+			nudgedAt.Sub(startedAt), formatObservations(status.Observations))
 	}
 }
 
