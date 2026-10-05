@@ -1,0 +1,14 @@
+{
+  "id": "2oa",
+  "title": "Nonce replay relies on ensureGuard marking FactorySandbox ready first",
+  "description": "FactorySandbox.listProcesses returns nothing while the in-memory ready flag is false, as it is after a deploy restarts the DO. Tracked bash's resume then misses the live process and starts the command again. Today ensureGuard's door.run sets ready first; with guardDir null (a supported option) the tool would run twice. The resume tests use guardDir null with fakes that do not model ready.\nevidence: cloudflare/src/factory-sandbox.ts:597; harness/src/env/factory-sandbox.ts:758,774-786; harness/test/tracked-bash-resume.test.ts\n\nticfac run epic-43y created this tick by absorbing the finding fd3da3610c420a2a5ca06feff2b45e6426c90a582fc2adc1a96d0344462f6f4a (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/fd3da3610c420a2a5ca06feff2b45e6426c90a582fc2adc1a96d0344462f6f4a.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-66a/attempt-42",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T18:04:18Z",
+  "updated_at": "2026-10-05T18:04:18Z"
+}
