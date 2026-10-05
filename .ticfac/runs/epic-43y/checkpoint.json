@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 408,
-  "state": "integrating",
-  "reason": "integrating omq attempt 62 into epic/43y",
-  "updated_at": "2026-10-05T21:47:11Z",
+  "sequence": 409,
+  "state": "gating",
+  "reason": "running the integrated gate for omq on 931fa6afc261",
+  "updated_at": "2026-10-05T21:47:25Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -282,7 +282,7 @@
     },
     {
       "tick_id": "omq",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 62
     },
     {
