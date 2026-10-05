@@ -5,7 +5,8 @@ import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 /**
- * The timeout discipline of this suite's full-Harness tests (tick kjs).
+ * The timeout discipline of this suite's full-Harness tests (tick kjs) and
+ * full-worker tests (tick 7wg).
  *
  * The node config's 30_000 default is a quiet-host number. The tests that
  * open the full pi-durable Harness over the local door drive real git and
@@ -16,10 +17,21 @@ import { describe, expect, it } from "vitest";
  * host's, not the tree's. A test whose runtime is load-dependent may not
  * borrow a quiet-host bound, so each one states its own: at least
  * FULL_HARNESS_TIMEOUT_MS, 4x the default — room for a loaded host, still a
- * bound a genuinely hung test fails inside. Enforced rather than remembered,
- * the same way internal/shorttest keeps the Go gate's short-suite
- * discipline: a full-Harness test added next month without its own bound
- * fails here, not in a run.
+ * bound a genuinely hung test fails inside.
+ *
+ * Tick 7wg extended the same discipline to the full-WORKER tests of
+ * local-host.test.ts: those spawn a whole worker child process — the real
+ * `src/local/main.ts` entry, the way the Go supervisor launches it — and
+ * wait on wall-clock conditions of that child's own progress (a steer
+ * socket that appears, a file a running tool writes), which a loaded shared
+ * host starves. Observed twice in one night at load average 23-47: one of
+ * them failed `timed out waiting for the tool to be running` after 1040 s.
+ * A full-worker test does strictly more than a full-Harness one — a process
+ * spawn and boot on top of everything the in-process Harness tests drive —
+ * so its bound is FULL_WORKER_TIMEOUT_MS, 10x the default. Both are enforced
+ * rather than remembered, the same way internal/shorttest keeps the Go
+ * gate's short-suite discipline: a full-Harness or full-worker test added
+ * next month without its own bound fails here, not in a run.
  */
 
 /** Where this suite lives, whatever checkout it runs in. */
@@ -28,10 +40,16 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 /** The wall clock a full-Harness test must declare for itself, in ms. */
 const FULL_HARNESS_TIMEOUT_MS = 120_000;
 
+/** The wall clock a full-worker test must declare for itself, in ms. */
+const FULL_WORKER_TIMEOUT_MS = 300_000;
+
 /** The per-test timeout one `it(...)` declared, or undefined for none. */
 type DeclaredTimeout = number | undefined;
 
-type HarnessTest = { file: string; title: string; timeout: DeclaredTimeout };
+/** Why a test is bound: it opens a whole Harness, or launches a whole worker. */
+type GuardedKind = "harness" | "worker";
+
+type GuardedTest = { file: string; title: string; kind: GuardedKind; timeout: DeclaredTimeout };
 
 /** Whether the node's subtree calls `Harness.open` at any depth. */
 function opensHarness(root: ts.Node): boolean {
@@ -50,6 +68,31 @@ function opensHarness(root: ts.Node): boolean {
   };
   walk(root);
   return opens;
+}
+
+/**
+ * Whether the node's subtree launches the worker child: this suite's
+ * fixture `run` — a `spawn` of the real local-worker entry as a separate
+ * process, the way the Go supervisor launches it. A whole worker carries a
+ * whole Harness inside it, so the full-Harness bound is not enough for one
+ * of these; the receiver is whatever identifier holds the fixture (today
+ * `f.run(...)` in local-host.test.ts).
+ */
+function launchesWorker(root: ts.Node): boolean {
+  let launches = false;
+  const walk = (node: ts.Node): void => {
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      node.expression.name.text === "run"
+    ) {
+      launches = true;
+    }
+    node.forEachChild(walk);
+  };
+  walk(root);
+  return launches;
 }
 
 /**
@@ -90,10 +133,17 @@ function declaredTimeout(
   );
 }
 
-/** Every `it(...)` in the source that opens the Harness in its own body. */
-function harnessOpeningTests(source: string): { title: string; timeout: DeclaredTimeout }[] {
+/**
+ * Every `it(...)` in the source this guard binds, with why: a worker launch
+ * binds the stricter worker bound even when the body also opens a Harness.
+ */
+function guardedTests(source: string): {
+  title: string;
+  kind: GuardedKind;
+  timeout: DeclaredTimeout;
+}[] {
   const file = ts.createSourceFile("node.test.ts", source, ts.ScriptTarget.Latest, true);
-  const tests: { title: string; timeout: DeclaredTimeout }[] = [];
+  const tests: { title: string; kind: GuardedKind; timeout: DeclaredTimeout }[] = [];
   const visit = (node: ts.Node): void => {
     if (
       ts.isCallExpression(node) &&
@@ -106,8 +156,20 @@ function harnessOpeningTests(source: string): { title: string; timeout: Declared
       const testFn = node.arguments.find(
         (argument) => ts.isArrowFunction(argument) && argument.body,
       );
-      if (testFn && ts.isArrowFunction(testFn) && opensHarness(testFn)) {
-        tests.push({ title: title.text, timeout: declaredTimeout(title, node.arguments) });
+      if (testFn && ts.isArrowFunction(testFn)) {
+        if (launchesWorker(testFn)) {
+          tests.push({
+            title: title.text,
+            kind: "worker",
+            timeout: declaredTimeout(title, node.arguments),
+          });
+        } else if (opensHarness(testFn)) {
+          tests.push({
+            title: title.text,
+            kind: "harness",
+            timeout: declaredTimeout(title, node.arguments),
+          });
+        }
       }
     }
     node.forEachChild(visit);
@@ -116,28 +178,49 @@ function harnessOpeningTests(source: string): { title: string; timeout: Declared
   return tests;
 }
 
-describe("the full-Harness tests of this suite state their own wall clock", () => {
+describe("the full-Harness and full-worker tests of this suite state their own wall clock", () => {
   const files = readdirSync(HERE)
     .filter((name) => name.endsWith(".test.ts"))
     .sort();
-  const harnessTests: HarnessTest[] = files.flatMap((name) =>
-    harnessOpeningTests(readFileSync(join(HERE, name), "utf8")).map((test) => ({
+  const tests: GuardedTest[] = files.flatMap((name) =>
+    guardedTests(readFileSync(join(HERE, name), "utf8")).map((test) => ({
       file: name,
       ...test,
     })),
   );
+  const harnessTests = tests.filter((test) => test.kind === "harness");
+  const workerTests = tests.filter((test) => test.kind === "worker");
 
   it("finds the tests it guards, so it cannot pass by reading nothing", () => {
     expect(files.length).toBeGreaterThan(0);
-    // At least the two the tick names: the destroy tests over real git, whose
+    // At least the two kjs names: the destroy tests over real git, whose
     // mid-turn sibling took 33.5 s under a concurrent `make gate`. Both gone
-    // means this guard binds nothing and needs a look, not a green tick.
+    // means this half of the guard binds nothing and needs a look, not a
+    // green tick.
     expect(harnessTests.length).toBeGreaterThanOrEqual(2);
+    // At least the six full-worker tests of local-host.test.ts, whose
+    // spawn-and-wait shape starved past every quiet-host bound twice in one
+    // night (tick 7wg) — including the two that night's failure log names.
+    expect(workerTests.length).toBeGreaterThanOrEqual(6);
+    const titles = new Set(workerTests.map((test) => test.title));
+    expect(
+      titles.has("resumes from the storage after the harness is killed mid-tool, without re-running the tool"),
+    ).toBe(true);
+    expect(
+      titles.has("continues the SAME conversation when relaunched with a follow-up message"),
+    ).toBe(true);
   });
 
   it("declares a timeout of at least 120_000 ms on every full-Harness test", () => {
     const underbound = harnessTests.filter(
       (test) => test.timeout === undefined || test.timeout < FULL_HARNESS_TIMEOUT_MS,
+    );
+    expect(underbound).toEqual([]);
+  });
+
+  it("declares a timeout of at least 300_000 ms on every full-worker test", () => {
+    const underbound = workerTests.filter(
+      (test) => test.timeout === undefined || test.timeout < FULL_WORKER_TIMEOUT_MS,
     );
     expect(underbound).toEqual([]);
   });
