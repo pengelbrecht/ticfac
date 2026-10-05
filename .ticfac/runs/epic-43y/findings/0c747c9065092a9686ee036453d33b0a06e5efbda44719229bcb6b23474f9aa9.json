@@ -12,8 +12,11 @@
   "attempt": 25,
   "done_item": "A2",
   "demonstrating_check": "node proof/agent-staging.ts with POST /proof/destroy mid-turn",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T14:26:20Z",
+  "triaged_at": "2026-10-05T14:26:37Z",
+  "triaged_by": "ticfac run epic-43y absorbing a2l",
+  "promoted_as": "a2l",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "cni",
