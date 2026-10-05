@@ -149,11 +149,15 @@ func requestSeen(requests *[]cloudFactoryRequest, method, pathPrefix string) boo
 	return false
 }
 
-// TestRunCloudRefusesAKindTheFactorysImageDoesNotShip: the overlay routes the
-// cloud jobs to "pi" while the factory ships pi-durable — the exact state the
-// runbook guards between the close-out merge and the overlay flip. The
-// submission is refused locally, with the runbook's order in the message, and
-// the only traffic that reached the factory is the two reads.
+// TestRunCloudRefusesAKindTheFactorysImageDoesNotShip: the factory answers
+// with an image that does not ship the durable harness (omp and claude only —
+// the image before jhp) while the branch routes its cloud jobs on it, spelled
+// the way this repository's own overlay spells it ("pi", which resolution
+// binds to pi-durable, tick twa). That is the state the runbook guards between
+// the close-out merge and its deploy. The submission is refused locally,
+// naming the job's RESOLVED kind (what its container would be told) and the
+// runbook's factory-side fix, and the only traffic that reached the factory
+// is the two reads.
 func TestRunCloudRefusesAKindTheFactorysImageDoesNotShip(t *testing.T) {
 	stubCloudTk(t)
 	repo, _, _ := setupCloudRepo(t, true)
@@ -165,7 +169,7 @@ func TestRunCloudRefusesAKindTheFactorysImageDoesNotShip(t *testing.T) {
 		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
 			return 200, map[string]any{"runs": []any{}}
 		case request.Method == http.MethodGet && request.Path == "/api/deployment":
-			return deploymentAnswer("v1.0.0-7-gdeadbeef0123", []string{"omp", "claude", "pi-durable"})
+			return deploymentAnswer("v1.0.0-7-gdeadbeef0123", []string{"omp", "claude"})
 		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
 			t.Errorf("the preflight refused nothing: the factory was asked to start %s", started)
 			return 201, map[string]any{"run": map[string]any{"run_id": started, "state": "starting"}}
@@ -183,9 +187,11 @@ func TestRunCloudRefusesAKindTheFactorysImageDoesNotShip(t *testing.T) {
 	joined := stdout.String() + stderr.String()
 	for _, want := range []string{
 		"does not ship",
-		"implement-tick: pi",                // the offending kind, named per job
-		`wait-deployed <merge sha>`,         // the runbook's step the message names
-		`flip the .tick/runners.cloud.toml`, // the runbook's other step
+		"implement-tick: pi-durable",   // the offending job, named by the kind its container would be told
+		"v1.0.0-7-gdeadbeef0123",       // which factory refused: the deployment to move
+		"the fix is the factory's",     // no overlay cell can name a kind the old image ships
+		`wait-deployed <merge sha>`,    // the runbook's step the message names
+		"pi-durable-cloud-run-runbook", // the runbook, by the path it is at
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the refusal does not name %q:\n%s", want, joined)
@@ -197,45 +203,55 @@ func TestRunCloudRefusesAKindTheFactorysImageDoesNotShip(t *testing.T) {
 }
 
 // TestRunCloudSubmitsWhenEveryRoutedKindShips: the overlay routes the same
-// jobs to pi-durable and the factory ships it — the post-merge end state the
-// runbook walks to. The preflight passes silently and the submission goes
-// through unchanged.
+// jobs on the durable harness and the factory ships it — the post-merge end
+// state the runbook walks to. Both spellings pass: "pi-durable", and "pi", a
+// runner table's name for the same harness that this repository's own
+// .tick/runners.cloud.toml carries and resolution binds to the hosted kind
+// (tick twa) — refusing it would refuse this repository's every cloud run.
+// The preflight passes silently and the submission goes through unchanged.
 func TestRunCloudSubmitsWhenEveryRoutedKindShips(t *testing.T) {
-	stubCloudTk(t)
-	repo, _, _ := setupCloudRepo(t, true)
-	commitPreflightConfig(t, repo, preflightCommonRunners, preflightOverlayOf("pi-durable"))
-	started := cloudRunIDOf("cc33")
+	for _, tc := range []struct{ kind, run string }{
+		{"pi-durable", "cc33"},
+		{"pi", "cc34"},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			stubCloudTk(t)
+			repo, _, _ := setupCloudRepo(t, true)
+			commitPreflightConfig(t, repo, preflightCommonRunners, preflightOverlayOf(tc.kind))
+			started := cloudRunIDOf(tc.run)
 
-	endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
-		switch {
-		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
-			if request.Query.Get("project") == "" {
-				t.Errorf("the run index was read without the project window")
+			endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+				switch {
+				case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+					if request.Query.Get("project") == "" {
+						t.Errorf("the run index was read without the project window")
+					}
+					return 200, map[string]any{"runs": []any{}}
+				case request.Method == http.MethodGet && request.Path == "/api/deployment":
+					return deploymentAnswer("v1.0.0-8-gfeedface0123", []string{"omp", "claude", "pi-durable"})
+				case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+					return 201, map[string]any{"run": map[string]any{"run_id": started, "state": "starting"}}
+				}
+				t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
+				return 404, map[string]any{"error": "not_found"}
+			})
+			configureCloudFactory(t, endpoint)
+			rec := recordCloudAttach(t)
+
+			code, stdout, stderr := runRunCloud(t, repo, "epic1")
+			if code != exitSuccess {
+				t.Fatalf("exit %d starting a cloud run the preflight passed:\nstdout:\n%s\nstderr:\n%s", code, stdout.String(), stderr.String())
 			}
-			return 200, map[string]any{"runs": []any{}}
-		case request.Method == http.MethodGet && request.Path == "/api/deployment":
-			return deploymentAnswer("v1.0.0-8-gfeedface0123", []string{"omp", "claude", "pi-durable"})
-		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
-			return 201, map[string]any{"run": map[string]any{"run_id": started, "state": "starting"}}
-		}
-		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
-		return 404, map[string]any{"error": "not_found"}
-	})
-	configureCloudFactory(t, endpoint)
-	rec := recordCloudAttach(t)
-
-	code, stdout, stderr := runRunCloud(t, repo, "epic1")
-	if code != exitSuccess {
-		t.Fatalf("exit %d starting a cloud run the preflight passed:\nstdout:\n%s\nstderr:\n%s", code, stdout.String(), stderr.String())
-	}
-	if !requestSeen(requests, http.MethodPost, cloudIndexPath) {
-		t.Errorf("the preflight passed but no run was submitted")
-	}
-	if len(rec.runIDs) != 1 || rec.runIDs[0] != started {
-		t.Errorf("attached to %v, want [%s]", rec.runIDs, started)
-	}
-	if strings.Contains(stdout.String()+stderr.String(), "preflight") {
-		t.Errorf("a passing preflight said something:\n%s%s", stdout.String(), stderr.String())
+			if !requestSeen(requests, http.MethodPost, cloudIndexPath) {
+				t.Errorf("the preflight passed but no run was submitted")
+			}
+			if len(rec.runIDs) != 1 || rec.runIDs[0] != started {
+				t.Errorf("attached to %v, want [%s]", rec.runIDs, started)
+			}
+			if strings.Contains(stdout.String()+stderr.String(), "preflight") {
+				t.Errorf("a passing preflight said something:\n%s%s", stdout.String(), stderr.String())
+			}
+		})
 	}
 }
 

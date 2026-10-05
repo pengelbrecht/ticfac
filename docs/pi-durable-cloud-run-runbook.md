@@ -23,8 +23,10 @@ and write the runbook down.
    PR + CI close-out (`.tick/config.md`). This carries, in one merge: the
    pi-durable image (jhp — `image/common.sh`'s kind set is
    `omp | claude | pi-durable`), the hosted WorkerAgent (xd3, 4uj), and the
-   cloud overlay flip (twa — `.tick/runners.cloud.toml`'s role cells to
-   `kind = "pi-durable"`), because they are all children of the same epic.
+   cloud harness binding (twa — profile resolution binds the hosted kind
+   `pi-durable` for every profile that dispatches into Cloudflare, so
+   `.tick/runners.cloud.toml`'s `kind = "pi"` cells need no flip), because
+   they are all children of the same epic.
 2. **The deploy.** `ticfac factory wait-deployed <merge sha>` — exit 0.
    Never a hand-rolled `gh run list` loop: a deploy superseded by a newer
    main commit is normal and the loop never ends (AGENTS.md). The
@@ -79,9 +81,10 @@ cloud half moved from *predicted* to *observed*.
 
 `ticfac run <epic> --cloud` refuses, **at the knee, before anything is pushed
 or booted**, a submission whose branch routes a cloud job to a harness kind
-the deployed factory's image does not ship — the state this repository was
-in between the image change and twa's overlay flip, where every container of
-a run died at boot with `unknown harness kind 'pi'`:
+the deployed factory's image does not ship — the trap twa found, where every
+container of a run died at boot with `unknown harness kind 'pi'`. twa closed
+the branch side of it (a cloud job resolves only to `pi-durable` now); what
+remains is the factory side, a deployment whose image predates the kind:
 
 - **The branch half** is HEAD's `.tick/runners.toml` with the
   `.tick/runners.cloud.toml` overlay, resolved exactly the way the run's own
@@ -100,7 +103,10 @@ a run died at boot with `unknown harness kind 'pi'`:
 - The expert `ticfac cloud run` submits without the preflight: the expert
   verbs are the operator's escape hatch, as with their other flags.
 
-The refusal names both of the runbook's fixes in order — flip the
-`.tick/runners.cloud.toml` cells to a kind the image ships, or
-`ticfac factory wait-deployed <merge sha>` for the deploy that ships the
-kind — so the trap the runbook exists for cannot be executed by accident.
+The refusal names each offending job by the kind its container would be
+told (`implement-tick: pi-durable`), the factory version that refused, and
+the runbook's fix — which is the factory's, never the overlay's: no cell the
+branch could flip names a kind an older image ships instead, so the fix is
+the merge that ships the kind and `ticfac factory wait-deployed <merge sha>`
+for its deploy. The trap the runbook exists for cannot be executed by
+accident.

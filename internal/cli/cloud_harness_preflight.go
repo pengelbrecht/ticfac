@@ -10,11 +10,11 @@ package cli
 // BRANCH — which kind each of its cloud-routed jobs resolves to. When they
 // disagree, every container of the run dies at boot, one wave at a time,
 // with "unknown harness kind" (tick twa's finding: a cloud dispatch of this
-// repository on the new image, pre-flip overlay). The runbook for [A4]'s
-// cloud half (docs/pi-durable-cloud-runbook.md) orders the steps that keep
-// them in agreement; this preflight is the order made mechanical — the
-// refusal happens at the operator's knee, before anything is pushed,
-// booted or paid for.
+// repository on the new image, before twa bound `pi` to its hosted kind).
+// The runbook for [A4]'s cloud half (docs/pi-durable-cloud-run-runbook.md)
+// orders the steps that keep them in agreement; this preflight is the order
+// made mechanical — the refusal happens at the operator's knee, before
+// anything is pushed, booted or paid for.
 //
 // What each half is read from, and why it is the authority it is:
 //
@@ -137,13 +137,18 @@ func preflightCloudHarness(ctx context.Context, client *cloudClient, repo string
 	if len(unshipped) == 0 {
 		return nil
 	}
+	// The fix is the factory's, never the overlay's: a cloud job resolves
+	// only to the durable harness, and a runner table's `pi` binds to its
+	// hosted kind (profile.HostedDurableHarness, tick twa), so no cell the
+	// branch could flip names a kind an older image ships instead.
 	return fmt.Errorf(
 		"the cloud routing at HEAD names harness kinds this factory%s does not ship — %s:\n  %s\n"+
 			"every container of a run started now would die at boot with \"unknown harness kind\". "+
-			"The runbook's order (docs/pi-durable-cloud-runbook.md): flip the .tick/runners.cloud.toml cells to a kind the image ships (%s), "+
-			"or wait for the factory to carry the kind's support with `ticfac factory wait-deployed <merge sha>`",
+			"The image ships %s; a cloud job resolves only to the hosted durable harness (%s — a runner table's \"pi\" binds to it), "+
+			"so the fix is the factory's, not the overlay's. The runbook's order (docs/pi-durable-cloud-run-runbook.md): "+
+			"merge the change that ships the kind, then wait for its deploy with `ticfac factory wait-deployed <merge sha>`",
 		deployedAt(facts), pluralJobs(len(unshipped)), strings.Join(unshipped, "\n  "),
-		strings.Join(facts.HarnessKinds, ", "),
+		strings.Join(facts.HarnessKinds, ", "), profile.HostedDurableHarness,
 	)
 }
 
