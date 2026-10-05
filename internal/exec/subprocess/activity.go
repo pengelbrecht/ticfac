@@ -349,8 +349,10 @@ func LastStorageEvent(stateDir string) (TranscriptEvent, bool) {
 // session transcript. An overridden `pi` (TICFAC_RUNNER_ARGV, the tests' fake
 // runner) answers no transcript at all since the pi CLI's layout left with
 // the herdr pi kind (epic 43y, tick uxi): the process table is its signal.
+// Durability is decided on the record's override flag, never its argv — the
+// recorded argv is the resolved one and is never empty (tick rpw).
 func lastRunnerEvent(record *attemptRecord) (TranscriptEvent, bool) {
-	if durableResume(record.Runner, record.RunnerArgv) {
+	if durableAttempt(record) {
 		return LastStorageEvent(record.State)
 	}
 	return LastTranscriptEvent(record.Runner, record.Worktree)
@@ -692,8 +694,10 @@ func (w *activityWatch) look(record *attemptRecord, runnerPID int, after time.Du
 	// The durable `pi` runner writes no session transcript (tick bgx): its
 	// conversation is the attempt's own storage, and the storage file's
 	// mtime is the honest last-event signal — never the pi CLI's session
-	// files, which would be some other pi's progress.
-	if durableResume(record.Runner, record.RunnerArgv) {
+	// files, which would be some other pi's progress. Durability is decided
+	// on the record's override flag, never its argv — the recorded argv is
+	// the resolved one and is never empty (tick rpw).
+	if durableAttempt(record) {
 		a.TranscriptSource = sourceStorage
 	} else {
 		a.TranscriptSource = sourceTranscript

@@ -108,6 +108,21 @@ func durableResume(name string, override []string) bool {
 	return ok && def.DurableResume && len(override) == 0
 }
 
+// durableAttempt is durableResume's answer for a record read back by the
+// supervisor (tick rpw): the record's RunnerArgv is the RESOLVED argv —
+// what the supervisor runs — and never empty, so durableResume cannot be
+// asked it directly: an override is indistinguishable in it, and every
+// durable attempt read as not durable, so its conversation storage was
+// never read as activity and a quiet, working durable worker was nudged
+// and stopped on the tool CPU alone. The override flag, recorded at Start,
+// is what the record knows about where its argv came from: an override is
+// the whole invocation, and a runner read through one is not the table's
+// durable runner whatever its name.
+func durableAttempt(record *attemptRecord) bool {
+	def, ok := runners[record.Runner]
+	return ok && def.DurableResume && !record.RunnerArgvOverride
+}
+
 // nudgeArgv is the argv that re-prompts this attempt's runner. It resumes the
 // runner's own session when the attempt has one, and otherwise repeats the
 // launch with the fresh-run section appended to the prompt — which is also
