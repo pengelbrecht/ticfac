@@ -1,0 +1,14 @@
+{
+  "id": "ptb",
+  "title": "Local workers never trigger macOS privacy prompts: confine their filesystem reach",
+  "gloss": "confine local workers (no TCC)",
+  "description": "2026-10-04: with two local runs live (hn6, 43y), the operator's Mac sat on a macOS file-access permission dialog raised from the terminal (herdr panes) until the operator accepted it; meanwhile workers blocked, and 43y's xd3 try 1 went silent and was stopped as stuck (likely the same block). Earlier the same day a pi worker ran `find / -name pi-durable` (a whole-disk scan). Local workers must stay inside their worktree plus the toolchains/caches they need, so they can never touch TCC-protected locations (~/Documents, ~/Desktop, ~/Downloads, other apps' data, removable/network volumes) or scan the disk: run each local worker with a per-worker HOME and TMPDIR, and confine it (macOS sandbox-exec profile, or the pi-durable local execution env's path allowlist in 43y) to the worktree, the run's scratch, the toolchain and package caches; a confined access fails fast with a clear error the model sees instead of a dialog. Applies to pi and the local claude rung.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A local worker that tries to read ~/Documents (or runs find /) gets an immediate permission error, no system dialog; normal ticks (go/ts builds, tests, git) still pass; tests for the confinement profile/allowlist.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-04T17:30:18.995151Z",
+  "updated_at": "2026-10-04T17:30:18.995151Z"
+}

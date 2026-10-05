@@ -99,6 +99,14 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 // the remedy in the line.
 const StoppedRemoteTokenRefused = "remote_token_refused"
 
+// StoppedLeaseTaken is the factory refusing a dispatch because ANOTHER run
+// holds the project's dispatch lease (hn6's restarted cloud run halted over
+// the lease as "a stop this run has no classification for"). It needs a
+// person — two arbiters may never write one `.tick/` (D4) — and it is named
+// so the halt says which run to let finish or stop. A lease that merely
+// lapsed is not this: the door reclaims it, or answers transiently.
+const StoppedLeaseTaken = "lease_taken"
+
 // resumesWithoutAPerson is the closed set of stops the run may continue across
 // by itself: the ones that are resumable BY CONSTRUCTION, where the next
 // incarnation adopts by identity, re-derives, and continues, and where no
@@ -321,6 +329,10 @@ func errorStopReason(err error) string {
 	if errors.As(err, &transient) && transient.TransientRemote() {
 		return StoppedRemoteTransient
 	}
+	var taken interface{ LeaseTaken() bool }
+	if errors.As(err, &taken) && taken.LeaseTaken() {
+		return StoppedLeaseTaken
+	}
 	switch runstate.ClassifyRemote(err) {
 	case runstate.RemoteTransient:
 		return StoppedRemoteTransient
@@ -494,6 +506,9 @@ func (r *Reconciler) Supervise(ctx context.Context) (*Result, error) {
 // told first: a decision beats a spin, and a spin beats a budget.
 func haltReason(stop, previous supervisedStop, made, capped int) string {
 	switch {
+	case stop.Reason == StoppedLeaseTaken:
+		return "another run holds this project's dispatch lease, and one project has one arbiter (D4): this " +
+			"run stops rather than write beside it — let that run finish, or stop it, then resume this one"
 	case stop.Reason == StoppedRemoteAuthRefused:
 		return "the remote refused this machine's credentials past the retry bound — a key, an ssh-agent, " +
 			"an access grant or a token's permissions is a person's to fix, and the refusal below says what to check"

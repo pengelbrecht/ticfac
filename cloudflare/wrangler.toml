@@ -288,6 +288,9 @@ GITHUB_CONSENT_LABEL = "tk"
 # ticks, ~1h per tick on GLM-class workers) could not fit four hours, and the
 # operator's rule for Workers AI spend is not to cap it: both are now runaway
 # guards, not budgets. Liveness is judged by activity (wv2), not by this clock.
+# The supervisor's look budget is DERIVED from this number (lookBudget in
+# src/run-workflow.ts) and its cadence paced to reach it: a fixed 80 looks
+# (~6h) killed hn6's healthy cloud run a quarter of the way into this clock.
 RUN_MAX_WALL_CLOCK_MS = "86400000"
 RUN_MAX_COST_USD = "250"
 # How long the in-flight work has to land before a clean stop kills the

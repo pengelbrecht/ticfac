@@ -116,6 +116,9 @@ export type {
  */
 export { DEFAULT_LEASE_TTL_MS, MAX_LEASE_TTL_MS, MIN_LEASE_TTL_MS } from "./lease";
 
+/** How long a swept lease stays reclaimable by its own run (hn6): a run's wall clock at most. */
+const LAPSED_LEASE_MEMORY_MS = 86_400_000;
+
 /** The lease as its holder sees it, and as everyone else sees it — see `src/lease.ts`. */
 
 export type ReleaseLeaseResult =
@@ -491,6 +494,14 @@ export class RunRoom extends DurableObject<Env> {
     // Synchronous, so it is complete before any request or alarm is delivered
     // — DO storage SQL does not yield.
     ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS lapsed_dispatch_lease (
+        run_id TEXT PRIMARY KEY,
+        token TEXT NOT NULL,
+        epic TEXT NOT NULL,
+        origin TEXT NOT NULL,
+        requested_by TEXT,
+        lapsed_at INTEGER NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS dispatch_lease (
         id TEXT PRIMARY KEY,
         run_id TEXT NOT NULL,
@@ -621,7 +632,10 @@ export class RunRoom extends DurableObject<Env> {
    */
   async reclaimDispatchLease(request: ReclaimLeaseRequest): Promise<ReclaimLeaseResult> {
     const result = this.#lease.reclaim(request);
-    if (result.ok) await this.#armAlarm();
+    if (result.ok) {
+      this.#forgetLapsed(request.run_id);
+      await this.#armAlarm();
+    }
     return result;
   }
 
@@ -633,6 +647,8 @@ export class RunRoom extends DurableObject<Env> {
   async releaseDispatchLease(request: HolderCredentials): Promise<ReleaseLeaseResult> {
     const result = this.#lease.release(request);
     if (!result.ok) return result;
+    // A released lease was given up on purpose: nothing may reclaim it.
+    this.#forgetLapsed(request.run_id);
     // The lease is free for exactly as long as it takes to hand it to the next
     // parked submission — the release is what ignites a queued run (D22).
     const { ignited, expired } = await this.#igniteNextQueued();
@@ -649,6 +665,126 @@ export class RunRoom extends DurableObject<Env> {
    */
   async leaseStatus(): Promise<DispatchLeaseView | null> {
     return this.#lease.status();
+  }
+
+  /**
+   * Takes back a run's lapsed lease on behalf of the run itself, for a caller
+   * that has proven it IS the run but does not carry the lease token — the
+   * sandbox dispatch door, holding the run's credential (hn6).
+   *
+   * Evidence (run_3ca22fbd, 2026-10-04): the Workflow renewed the lease for
+   * 60s at 14:55:41 and then took no step for three minutes; the lease lapsed
+   * and was swept with nobody else holding it, and the healthy orchestrator's
+   * first dispatch was refused `lease_lost`. The lease was durable throughout
+   * (DO SQL, not memory) — it was the RENEWAL that depended on one party.
+   *
+   * The same compare-and-swap as `reclaimDispatchLease` (tick oen), under the
+   * run's own token, which is read from the lapsed row if the alarm has not
+   * swept it yet, or from the memory the sweep left. It answers:
+   *  - `held`: the lease is live and this run's — nothing to do;
+   *  - `reclaimed`: it had lapsed, nobody else held it, it is this run's again;
+   *  - `taken`: another run holds it (or acquired it after this run's lapsed);
+   *  - `unknown`: nothing is held and this room has no lapse of this run's to
+   *    take back — it was released, or never this run's.
+   */
+  async reclaimLapsedLeaseFor(request: {
+    run_id: string;
+    ttl_ms?: number;
+  }): Promise<
+    | { outcome: "held" | "reclaimed"; detail: string }
+    | { outcome: "taken"; holder: DispatchLeaseView; detail: string }
+    | { outcome: "unknown"; detail: string }
+  > {
+    const runID = request.run_id;
+    const live = this.#lease.status();
+    if (live !== null) {
+      if (live.run_id === runID)
+        return { outcome: "held", detail: "the lease is live and this run's" };
+      return {
+        outcome: "taken",
+        holder: live,
+        detail: `the dispatch lease is held by run ${live.run_id}, not ${runID}`,
+      };
+    }
+    const row = this.#lease.read();
+    const lapsed =
+      row !== null && row.run_id === runID
+        ? { token: row.token, epic: row.epic, origin: row.origin, requested_by: row.requested_by }
+        : this.#lapsedOf(runID);
+    if (lapsed === null) {
+      if (row !== null) {
+        return {
+          outcome: "taken",
+          holder: this.#lease.view(row),
+          detail: `run ${row.run_id} acquired the dispatch lease after run ${runID}'s lapsed`,
+        };
+      }
+      return {
+        outcome: "unknown",
+        detail: `no dispatch lease is held, and run ${runID} has no lapsed lease here to take back`,
+      };
+    }
+    const reclaimed = this.#lease.reclaim({
+      run_id: runID,
+      token: lapsed.token,
+      epic: lapsed.epic,
+      origin: lapsed.origin === "local" ? "local" : "cloud",
+      ...(lapsed.requested_by === null ? {} : { requested_by: lapsed.requested_by }),
+      ...(request.ttl_ms === undefined ? {} : { ttl_ms: request.ttl_ms }),
+    });
+    if (!reclaimed.ok) {
+      if (reclaimed.error === "lease_lost") {
+        return { outcome: "taken", holder: reclaimed.holder, detail: reclaimed.detail };
+      }
+      return { outcome: "unknown", detail: reclaimed.detail };
+    }
+    this.#forgetLapsed(runID);
+    await this.#armAlarm();
+    return { outcome: reclaimed.reclaimed ? "reclaimed" : "held", detail: reclaimed.detail };
+  }
+
+  #rememberLapsed(record: LeaseRecord): void {
+    // One row per run, and only recent ones: a lapse older than a day is no
+    // live run's, and the table must not grow with the project's history.
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "DELETE FROM lapsed_dispatch_lease WHERE lapsed_at < ?",
+      now - LAPSED_LEASE_MEMORY_MS,
+    );
+    this.ctx.storage.sql.exec(
+      `INSERT INTO lapsed_dispatch_lease (run_id, token, epic, origin, requested_by, lapsed_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(run_id) DO UPDATE SET token = excluded.token, epic = excluded.epic,
+         origin = excluded.origin, requested_by = excluded.requested_by, lapsed_at = excluded.lapsed_at`,
+      record.run_id,
+      record.token,
+      record.epic,
+      record.origin,
+      record.requested_by,
+      now,
+    );
+  }
+
+  #lapsedOf(
+    runID: string,
+  ): { token: string; epic: string; origin: string; requested_by: string | null } | null {
+    const rows = [
+      ...this.ctx.storage.sql.exec<{
+        token: string;
+        epic: string;
+        origin: string;
+        requested_by: string | null;
+      }>(
+        "SELECT token, epic, origin, requested_by FROM lapsed_dispatch_lease WHERE run_id = ? AND lapsed_at >= ?",
+        runID,
+        Date.now() - LAPSED_LEASE_MEMORY_MS,
+      ),
+    ];
+    return rows[0] ?? null;
+  }
+
+  #forgetLapsed(runID: string): void {
+    this.ctx.storage.sql.exec("DELETE FROM lapsed_dispatch_lease WHERE run_id = ?", runID);
   }
 
   /**
@@ -674,6 +810,12 @@ export class RunRoom extends DurableObject<Env> {
 
     const sweptLease = this.#lease.expireDue();
     if (sweptLease !== null) {
+      // Remembered BEFORE the queue is ignited (hn6): the run whose lease
+      // lapsed may be alive and working — a Workflow that missed its renewal
+      // by a few minutes — and its dispatch door can only take the lease back
+      // under the run's own token. If a queued run ignites below, it holds a
+      // live lease and the reclaim is refused `taken`, exactly as it should be.
+      this.#rememberLapsed(sweptLease);
       // An abandoned run must not strand the queue behind it: the expiry is a
       // release like any other.
       const swept = await this.#igniteNextQueued();

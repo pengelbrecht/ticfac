@@ -127,7 +127,7 @@ import {
   START_FEED_SEQ,
   UNANSWERABLE_FEED_SEQ,
 } from "./run-feed";
-import { DEFAULT_LEASE_TTL_MS, type LeaseLostReason, MAX_LEASE_TTL_MS } from "./run-room";
+import { type LeaseLostReason, MAX_LEASE_TTL_MS } from "./run-room";
 import { logDispatch, type RunWorkflowParams, roomFor } from "./runs";
 import {
   deploymentImage,
@@ -195,17 +195,42 @@ export const PROCESS_QUERY_ATTEMPTS = 3;
 export const MAX_UNANSWERED_LOOKS = 3;
 
 /**
- * Observations per boot.
+ * Cloudflare's cap on the steps one Workflow instance may run: 10,000 by
+ * default on Workers Paid (configurable to 25,000 per workflow; 1,024 on the
+ * free plan, which cannot run containers anyway). `step.sleep` is free;
+ * `step.do` and `step.waitForEvent` count. This deployment does not raise it,
+ * so the look budget below is sized against the default.
+ */
+export const WORKFLOW_STEP_LIMIT = 10_000;
+
+/**
+ * The worst case one look costs in steps: the wait for the done event, the
+ * watch itself, and the `heard` record when the event landed.
+ */
+export const STEPS_PER_LOOK = 3;
+
+/** Steps a run spends outside its looks, generously: context, progress, stop record, finalize. */
+const RUN_OVERHEAD_STEPS = 64;
+/** Steps one boot spends outside its looks: kill check, boot, lease, trip/drain, ended, destroy, reconcile. */
+const BOOT_OVERHEAD_STEPS = 16;
+
+/**
+ * How many times the looks the plain backoff needs to cover the wall clock a
+ * boot is given. The margin pays for every way a run spends looks faster than
+ * the backoff: a spend cap shortening sleeps, a deadline cap, unanswered
+ * looks, an early wake.
+ */
+const LOOK_BUDGET_MARGIN = 2;
+
+/**
+ * The floor of the look budget (and what it used to be outright). Eighty looks
+ * of the backoff span about six hours — the old default wall clock.
  *
- * Cloudflare caps a Workflow instance's step count, and each observation costs
- * two steps (a sleep and a check). This bound, times the boot allowances above,
- * is what keeps a long run inside that cap — see `pollDelay` for how the
- * interval stretches to cover a long run within a fixed number of looks.
- *
- * Running out of looks is NOT a dead orchestrator. It is a run that outlived
- * what this Workflow instance can watch, and it takes the clean-stop path: the
- * one thing it must never do is boot a second orchestrator alongside a healthy
- * one, which would put two writers on the same `.tick/` (D4).
+ * A FIXED count is the defect hn6's cloud run died of (run_f44b6ad8): when the
+ * deployment raised RUN_MAX_WALL_CLOCK_MS to 24 hours (#127) nothing
+ * re-derived the looks, and a healthy orchestrator six hours in was drained
+ * and killed as "the run outlived its observation budget (80 looks)". The
+ * budget is now {@link lookBudget}, derived from the wall clock it must cover.
  */
 export const MAX_OBSERVATIONS = 80;
 
@@ -296,7 +321,12 @@ export type RunConfig = {
   stop_grace_ms: number;
   /** A fixed cadence when the deployment asks for one; else the backoff above. */
   poll_interval_ms: number | null;
-  /** Looks per boot before the run is stopped cleanly rather than watched on. */
+  /**
+   * Looks per boot. Derived from the wall clock ({@link lookBudget}) unless a
+   * deployment pins RUN_MAX_OBSERVATIONS; either way the backoff cadence is
+   * paced (`pollDelay`) so the looks reach the wall-clock deadline, and
+   * running out of them is not how a healthy run ends.
+   */
   max_observations: number;
   harness: string | null;
   model: string | null;
@@ -389,6 +419,8 @@ export function runConfig(env: Env, override: RunBudgetOverride = {}): RunConfig
   const costCeiling = positiveVar(env, "RUN_MAX_COST_USD", DEFAULT_MAX_COST_USD, false);
   const cost = boundedBudget(costCeiling, override.max_cost_usd, "max_cost_usd", false);
   const wall = boundedBudget(wallCeiling, override.max_wall_clock_ms, "max_wall_clock_ms", true);
+  const pollInterval =
+    poll === null ? null : positiveVar(env, "RUN_POLL_INTERVAL_MS", MIN_POLL_MS, true);
   return {
     max_wall_clock_ms: wall.value,
     max_cost_usd: cost.value,
@@ -398,9 +430,13 @@ export function runConfig(env: Env, override: RunBudgetOverride = {}): RunConfig
     // it spend unmeasured.
     cost_budget_configured: hasPositiveVar(env, "RUN_MAX_COST_USD", false) || cost.applied,
     stop_grace_ms: positiveVar(env, "RUN_STOP_GRACE_MS", DEFAULT_STOP_GRACE_MS, true),
-    poll_interval_ms:
-      poll === null ? null : positiveVar(env, "RUN_POLL_INTERVAL_MS", MIN_POLL_MS, true),
-    max_observations: positiveVar(env, "RUN_MAX_OBSERVATIONS", MAX_OBSERVATIONS, true),
+    poll_interval_ms: pollInterval,
+    max_observations: positiveVar(
+      env,
+      "RUN_MAX_OBSERVATIONS",
+      lookBudget({ max_wall_clock_ms: wall.value, poll_interval_ms: pollInterval }),
+      true,
+    ),
     harness: textVar(env, "RUN_HARNESS"),
     model: textVar(env, "RUN_MODEL"),
   };
@@ -511,7 +547,7 @@ export type Cadence = {
 };
 
 /** The backoff the cadence starts from, before any budget caps it. */
-function baseDelay(config: RunConfig, n: number): number {
+function baseDelay(config: Pick<RunConfig, "poll_interval_ms">, n: number): number {
   if (config.poll_interval_ms !== null) return config.poll_interval_ms;
   return Math.min(Math.round(MIN_POLL_MS * POLL_BACKOFF ** n), MAX_POLL_MS);
 }
@@ -547,7 +583,12 @@ function spendCap(config: RunConfig, spend: SpendSample | null): number | null {
  * only ever shorten it, never below the fast cadence (or below a deliberately
  * tiny fixed interval, which is already faster than that floor).
  */
-export function pollDelay(config: RunConfig, n: number, cadence: Cadence | null = null): number {
+export function pollDelay(
+  config: RunConfig,
+  n: number,
+  cadence: Cadence | null = null,
+  looksLeft: number | null = null,
+): number {
   const base = baseDelay(config, n);
   if (cadence === null) return base;
 
@@ -556,10 +597,87 @@ export function pollDelay(config: RunConfig, n: number, cadence: Cadence | null 
   if (deadline !== null) caps.push(deadline);
   const spend = spendCap(config, cadence.spend);
   if (spend !== null) caps.push(spend);
-  if (caps.length === 0) return base;
 
   const floor = Math.min(base, MIN_POLL_MS);
-  return Math.max(floor, Math.min(base, Math.round(Math.min(...caps))));
+  const capped =
+    caps.length === 0 ? base : Math.max(floor, Math.min(base, Math.round(Math.min(...caps))));
+  return Math.max(capped, paceFloor(config, cadence, looksLeft));
+}
+
+/**
+ * The shortest sleep that still lets the looks left reach the deadline (hn6).
+ *
+ * The caps above only ever SHORTEN a sleep, so on their own they can spend a
+ * boot's looks before its wall clock is up — and a boot out of looks has its
+ * healthy orchestrator drained and killed. Spreading the time that is left
+ * over the looks that are left makes the last look land on the deadline,
+ * where the wall-clock trip ends the run honestly. With the derived budget's
+ * margin this almost never binds; when it does, it wins over a spend cap,
+ * because a coarser look is a smaller cost than a killed run.
+ *
+ * Only the backoff is paced. A fixed interval is a deployment's (or the
+ * suite's) explicit choice of cadence, and pinning it pins the look budget's
+ * reach with it.
+ */
+function paceFloor(config: RunConfig, cadence: Cadence, looksLeft: number | null): number {
+  if (config.poll_interval_ms !== null) return 0;
+  if (looksLeft === null || looksLeft < 1 || cadence.deadline_ms === null) return 0;
+  const remaining = cadence.deadline_ms - cadence.now_ms;
+  if (remaining <= 0) return 0;
+  return Math.ceil(remaining / looksLeft);
+}
+
+/** How many looks of the plain cadence (no caps, no pace) it takes to span the wall clock. */
+export function looksToCover(
+  config: Pick<RunConfig, "max_wall_clock_ms" | "poll_interval_ms">,
+): number {
+  if (config.poll_interval_ms !== null) {
+    return Math.ceil(config.max_wall_clock_ms / config.poll_interval_ms);
+  }
+  let covered = 0;
+  let looks = 0;
+  while (covered < config.max_wall_clock_ms) {
+    const delay = baseDelay(config, looks);
+    looks++;
+    if (delay >= MAX_POLL_MS) {
+      // The backoff has reached its ceiling: the rest is arithmetic.
+      const rest = config.max_wall_clock_ms - covered - delay;
+      return looks + Math.max(0, Math.ceil(rest / MAX_POLL_MS));
+    }
+    covered += delay;
+  }
+  return looks;
+}
+
+/** The most looks per boot that keep a whole run inside {@link WORKFLOW_STEP_LIMIT}. */
+function stepBoundLooks(): number {
+  const available =
+    WORKFLOW_STEP_LIMIT - RUN_OVERHEAD_STEPS - MAX_SANDBOX_BOOTS * BOOT_OVERHEAD_STEPS;
+  return Math.floor(available / (MAX_SANDBOX_BOOTS * STEPS_PER_LOOK));
+}
+
+/**
+ * Looks per boot, derived from the wall clock they must cover (hn6).
+ *
+ * Twice what the plain backoff needs — never fewer than the six-hour figure
+ * this used to be — and never more than the instance's step limit allows
+ * for every boot a run may spend. Past that bound (a wall clock of several
+ * days) the pace in `pollDelay` stretches the sleeps instead: the run is
+ * watched less often, but it is still watched to its deadline.
+ */
+export function lookBudget(
+  config: Pick<RunConfig, "max_wall_clock_ms" | "poll_interval_ms">,
+): number {
+  const wanted = Math.max(MAX_OBSERVATIONS, looksToCover(config) * LOOK_BUDGET_MARGIN);
+  return Math.min(wanted, stepBoundLooks());
+}
+
+/** The most steps a run under `config` can spend: what must fit {@link WORKFLOW_STEP_LIMIT}. */
+export function worstCaseRunSteps(config: RunConfig): number {
+  return (
+    RUN_OVERHEAD_STEPS +
+    MAX_SANDBOX_BOOTS * (BOOT_OVERHEAD_STEPS + config.max_observations * STEPS_PER_LOOK)
+  );
 }
 
 /**
@@ -568,10 +686,21 @@ export function pollDelay(config: RunConfig, n: number, cadence: Cadence | null 
  * It has to outlive the gap to the *next* observation, or the run would expire
  * its own lease between two looks and hand the project to a queued submission
  * while it is still working.
+ *
+ * And it has to outlive a Workflow that STALLS between steps, which the poll
+ * cadence knows nothing about (hn6, run_3ca22fbd): renewed for 60s at
+ * 14:55:41, the instance took no step until 14:58:41, the lease lapsed under
+ * a healthy orchestrator and its first dispatch was refused. The floor is
+ * {@link RENEWAL_TTL_FLOOR_MS}, the ten minutes a run's first acquire already
+ * gets; what it costs is how long a run whose supervisor died without
+ * finalizing can wedge its project, which is the bound that acquire accepted.
  */
 export function renewalTtl(pollMs: number): number {
-  return Math.min(Math.max(pollMs * 3, DEFAULT_LEASE_TTL_MS), MAX_LEASE_TTL_MS);
+  return Math.min(Math.max(pollMs * 3, RENEWAL_TTL_FLOOR_MS), MAX_LEASE_TTL_MS);
 }
+
+/** The shortest lease a renewal asks for: BOOT_LEASE_TTL_MS's ten minutes (hn6). */
+export const RENEWAL_TTL_FLOOR_MS = 600_000;
 
 /**
  * What one renewal returned, kept as the RunRoom answered it (tick 7n7).
@@ -1000,8 +1129,34 @@ export async function acquireContext(env: Env, params: RunWorkflowParams): Promi
  */
 export type Trip = { hard: boolean } & (
   | { kind: "stop"; detail: string }
-  | { kind: "budget"; budget: "wall_clock" | "cost"; detail: string }
+  | { kind: "budget"; budget: "wall_clock" | "cost" | "observations"; detail: string }
 );
+
+/**
+ * What a run that ran out of looks is told, honestly (hn6).
+ *
+ * Out of looks is a limit of the SUPERVISOR, not one of the run's budgets:
+ * the record must not read as a wall-clock breach (it used to, with the
+ * wall clock 18 hours from spent), and it must say the orchestrator was alive
+ * and how to carry on. The clean stop that follows lets `ticfac run-epic`'s
+ * SIGTERM path commit and push, so the branch holds the work and a
+ * resubmission resumes from it. `at_ms` is a checkpointed reading, never a
+ * live clock, so a replay writes the same words.
+ */
+export function outOfLooksDetail(
+  config: RunConfig,
+  started_at_ms: number,
+  at_ms: number,
+  resume: string,
+): string {
+  const left = Math.max(0, started_at_ms + config.max_wall_clock_ms - at_ms);
+  return (
+    `the supervisor ran out of looks (${config.max_observations} for this watch) with the ` +
+    `orchestrator still alive and ${Math.round(left / 60_000)}m of the ` +
+    `${Math.round(config.max_wall_clock_ms / 60_000)}m wall clock left — a limit of this ` +
+    `Workflow instance, not a budget the run breached; it was stopped cleanly and ${resume}`
+  );
+}
 
 /** The reason a revocation is recorded under, so the row says which stop killed it. */
 function tripRevokeReason(trip: Trip): string {
@@ -1748,11 +1903,14 @@ async function supervisePass(
       let unasked = 0;
 
       for (let look = 0; look < context.config.max_observations; look++) {
-        const pollMs = pollDelay(context.config, look, {
-          now_ms: lastAt,
-          deadline_ms: cadenceDeadline,
-          spend,
-        });
+        // Paced by the looks left (hn6): the last one lands on the deadline,
+        // so a healthy orchestrator meets its wall clock, never this loop's end.
+        const pollMs = pollDelay(
+          context.config,
+          look,
+          { now_ms: lastAt, deadline_ms: cadenceDeadline, spend },
+          context.config.max_observations - look,
+        );
         // The wait for THIS look (ticks cr4 and 7eq): `step.waitForEvent` on
         // the orchestrator's completion signal, with the poll cadence as its
         // timeout — whichever lands first. The container's own "I am done"
@@ -1943,13 +2101,22 @@ async function supervisePass(
         await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
           drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
         );
-        const detail = `the run outlived its observation budget (${context.config.max_observations} looks)`;
+        // Unreachable on the paced backoff (hn6) — kept, and worded honestly,
+        // for a pinned cadence or an early wake on the very last look.
+        const detail = outOfLooksDetail(
+          context.config,
+          context.started_at_ms,
+          lastAt,
+          options.job === "review"
+            ? "the review can be requested again"
+            : "its work is on the run branch, so resubmitting the epic resumes it",
+        );
         bootEnded = `orchestrator boot ${boot} was stopped: ${detail}`;
         return options.on_exhausted === "fail"
           ? { kind: "failed", detail, boots: counter.next - 1 }
           : {
               kind: "tripped",
-              trip: { kind: "budget", budget: "wall_clock", hard: true, detail },
+              trip: { kind: "budget", budget: "observations", hard: false, detail },
               boots: counter.next - 1,
             };
       }
@@ -2778,11 +2945,13 @@ async function superviseLocalOrchestrator(
     let spend: SpendSample | null = null;
     let lastAt = context.started_at_ms;
     for (let look = 0; look < context.config.max_observations; look++) {
-      const pollMs = pollDelay(context.config, look, {
-        now_ms: lastAt,
-        deadline_ms: cadenceDeadline,
-        spend,
-      });
+      // Paced by the looks left, exactly as the container's watch is (hn6).
+      const pollMs = pollDelay(
+        context.config,
+        look,
+        { now_ms: lastAt, deadline_ms: cadenceDeadline, spend },
+        context.config.max_observations - look,
+      );
       const signal = await waitDoneSignal(step, label, 1, look, pollMs);
       if (signal !== null) {
         await step.do(`${label}:heard:${look}`, OBSERVE_RETRIES, async () => {
@@ -2852,11 +3021,17 @@ async function superviseLocalOrchestrator(
         return { kind: "failed", detail, boots: 0 };
       }
     }
-    const detail = `the run outlived its observation budget (${context.config.max_observations} looks)`;
+    // Unreachable on the paced backoff (hn6); honest if a pinned cadence gets here.
+    const detail = outOfLooksDetail(
+      context.config,
+      context.started_at_ms,
+      lastAt,
+      "`ticfac run <epic> --cloud-workers` resumes it",
+    );
     ended = `the local orchestrator's run was stopped: ${detail}`;
     return {
       kind: "tripped",
-      trip: { kind: "budget", budget: "wall_clock", hard: true, detail },
+      trip: { kind: "budget", budget: "observations", hard: false, detail },
       boots: 0,
     };
   } finally {

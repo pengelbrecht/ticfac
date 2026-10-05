@@ -291,6 +291,13 @@ export const NO_CAPACITY = "no_capacity";
  * Every id the tracker mints already fits; a caller that cannot state one
  * that fits has no container to name.
  */
+/**
+ * How long a lease the door takes back for its run lasts (hn6): long enough
+ * that the supervisor's own next renewal arrives inside it, the same ten
+ * minutes a run's first acquire gets (BOOT_LEASE_TTL_MS).
+ */
+export const DOOR_RECLAIM_LEASE_TTL_MS = 600_000;
+
 const TICK_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 
 /**
@@ -568,21 +575,40 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
   // verifies it: the in-run orchestrator is the holder, and a holder does not
   // take a second lease. Anything that is not the holder is refused here
   // exactly as a competing dispatch is refused at submission.
-  const lease = await roomFor(env, run.project).leaseStatus();
-  if (lease === null) {
-    return refuse(
-      409,
-      "lease_lost",
-      `run ${run.run_id} no longer holds the dispatch lease for ${run.project} — it expired, ` +
-        "which means this run is no longer the project's arbiter and must not boot containers",
-    );
-  }
-  if (lease.run_id !== run.run_id) {
+  //
+  // A lease that LAPSED with nobody else holding it is not a stop (hn6,
+  // run_3ca22fbd): the Workflow that renews it took no step for three minutes,
+  // the 60s lease lapsed under a healthy orchestrator, and its first dispatch
+  // was refused. The caller has just proven it is the run (an unrevoked
+  // credential of an active run), so the door takes the lease back for it —
+  // the room's compare-and-swap under the run's own token, refused if any
+  // other run has since taken the project. Only THAT is a stop.
+  const room = roomFor(env, run.project);
+  const lease = await room.reclaimLapsedLeaseFor({
+    run_id: run.run_id,
+    ttl_ms: DOOR_RECLAIM_LEASE_TTL_MS,
+  });
+  if (lease.outcome === "taken") {
     return refuse(
       409,
       "lease_held_by",
-      `the dispatch lease for ${run.project} is held by ${lease.run_id}, not ${run.run_id}; ` +
-        "one arbiter per project (D4), and this run is not it",
+      `the dispatch lease for ${run.project} is held by ${lease.holder.run_id}, not ${run.run_id}; ` +
+        "one arbiter per project (D4): another run is driving this project now, so this run stops " +
+        "rather than write beside it — let that run finish (or stop it) and resume this one",
+    );
+  }
+  if (lease.outcome === "unknown") {
+    return refuse(
+      409,
+      "lease_lost",
+      `run ${run.run_id} holds no dispatch lease for ${run.project} and none of its own lapsed here ` +
+        `to take back (${lease.detail}); nobody else holds it either, so its supervisor's next ` +
+        "renewal can reclaim it — ask again",
+    );
+  }
+  if (lease.outcome === "reclaimed") {
+    console.warn(
+      `factory sandbox door: ${run.run_id} reclaimed its lapsed dispatch lease: ${lease.detail}`,
     );
   }
 
