@@ -212,20 +212,14 @@ func TestBothGLMModelsAreNameableAsAWorkerModel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("implement-tick did not resolve through this repository's roles table: %v", err)
 	}
-<<<<<<< HEAD
-	if base.Runner != "pi" || base.Model != cloudGLM53 {
-		t.Errorf("the base resolution is %s/%s, want pi/%s: .tick/runners.toml's [roles.implement] "+
-			"states the repo's own intent — implementation runs on GLM through the local name of the durable pi harness",
-			base.Runner, base.Model, cloudGLM53)
-=======
-	// The common file names the durable harness `pi`; a profile from the
-	// cloud set dispatches into Cloudflare, so it binds the hosted name the
-	// sandbox image boots it by (tick twa).
+	// The common file names the durable harness by its local name `pi`; a
+	// profile from the cloud set dispatches into Cloudflare, so it binds the
+	// hosted name the sandbox image boots it by (tick twa).
 	if base.Runner != HostedDurableHarness || base.Model != cloudGLM53 {
 		t.Errorf("the base resolution is %s/%s, want %s/%s: .tick/runners.toml's [roles.implement] "+
-			"states the repo's own intent — implementation runs entirely on GLM on cloudflare through the durable harness",
+			"states the repo's own intent — implementation runs on GLM through the durable harness, bound in "+
+			"the cloud by its hosted name",
 			base.Runner, base.Model, HostedDurableHarness, cloudGLM53)
->>>>>>> 540910e09ad47b803673db6d7463b87bbf864b8f
 	}
 
 	strong, err := Resolve("implement-tick", Options{Dir: dir, RunnersConfig: gate, Tier: "strong"})
