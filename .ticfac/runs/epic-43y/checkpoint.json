@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 278,
-  "state": "dispatching",
-  "reason": "dispatching 4s2 as attempt 44",
-  "updated_at": "2026-10-05T18:05:48Z",
+  "sequence": 279,
+  "state": "running",
+  "reason": "4s2 is running as attempt 44",
+  "updated_at": "2026-10-05T18:05:59Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -193,7 +193,8 @@
     },
     {
       "tick_id": "4s2",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 44
     },
     {
       "tick_id": "7sn",
