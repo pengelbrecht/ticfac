@@ -490,11 +490,27 @@ export function workerHarness(run?: string | null, deployment?: string | null): 
 export const REVIEW_DEFAULT_HARNESS = "omp";
 
 /**
+ * The harness names no review container can run: the hosted kind, whose
+ * conversation is a WorkerAgent's and never a CLI in the container, and the
+ * deleted pi CLI. Both still reach the review's ladder — the run's profile
+ * runner and the deployment's `RUN_WORKER_HARNESS` (pinned `pi-durable`) are
+ * WORKER choices — and the container refuses both at boot.
+ */
+const NOT_A_REVIEW_HARNESS = new Set([WORKER_DEFAULT_HARNESS, "pi"]);
+
+/** A configured rung, unless it names a harness no review container runs. */
+function reviewRung(value: string | null | undefined): string | null {
+  const name = configured(value);
+  return name === null || NOT_A_REVIEW_HARNESS.has(name) ? null : name;
+}
+
+/**
  * Which harness a review container is actually told to run — the same
- * ladder as {@link workerHarness} with the review's own floor under it.
+ * ladder as {@link workerHarness} with the review's own floor under it, a
+ * rung naming a worker-only harness passed over.
  */
 export function reviewHarness(run?: string | null, deployment?: string | null): string {
-  return configured(run) ?? configured(deployment) ?? REVIEW_DEFAULT_HARNESS;
+  return reviewRung(run) ?? reviewRung(deployment) ?? REVIEW_DEFAULT_HARNESS;
 }
 
 /**

@@ -280,6 +280,18 @@ describe("the boot environment", () => {
       expect(reviewHarness(null, "claude")).toBe("claude");
       expect(reviewHarness("   ", "omp")).toBe("omp");
     });
+
+    it("passes over a rung naming the hosted kind or the deleted pi CLI", () => {
+      // What production actually hands it: the run's profile runner ("pi"
+      // until the cloud profiles flip, "pi-durable" after) and the
+      // deployment's RUN_WORKER_HARNESS, which wrangler.toml pins to
+      // pi-durable. A review container refuses both at boot, so neither is
+      // a review harness — the next rung, or the floor, is.
+      expect(reviewHarness("pi", "pi-durable")).toBe("omp");
+      expect(reviewHarness("pi-durable", "pi-durable")).toBe("omp");
+      expect(reviewHarness("pi-durable", "claude")).toBe("claude");
+      expect(reviewHarness(" pi ", null)).toBe("omp");
+    });
   });
 
   // tick 1cd. ys3 was right to put the worker's route in the factory rather
