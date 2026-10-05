@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 458,
-  "state": "gating",
-  "reason": "running the integrated gate for j2k on 32098b7c6f0b",
-  "updated_at": "2026-10-05T23:37:22Z",
+  "sequence": 459,
+  "state": "running",
+  "reason": "CI on the epic PR #222 is pending on the head that includes the close-out's own commits; the close-out of 43y is held",
+  "updated_at": "2026-10-05T23:40:08Z",
   "ticks": [
     {
       "tick_id": "92k",
