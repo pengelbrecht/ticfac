@@ -156,6 +156,44 @@ func TestTheCPUMarkMovesOnlyOnRealUse(t *testing.T) {
 	}
 }
 
+// A first look that comes a window or more after the baseline has watched no
+// CPU at all: it must not call the worker quiet on CPU, or a tool burning CPU
+// right now is nudged on that very look. It is what failed tick onv's gate:
+// on a loaded host the local supervisor's first look came after the window
+// (reproduced: 1.6s into a 1.5s window, 1.4s of tool CPU seen, and a nudge).
+// The tool then gets the window to show it is moving, and is nudged only if
+// it does not.
+func TestALateFirstLookDoesNotCallABusyToolQuiet(t *testing.T) {
+	t0 := time.Date(2026, 9, 28, 8, 0, 0, 0, time.UTC)
+	window := 15 * time.Minute
+	look := func(s *ActivityState, cpu time.Duration, at time.Time) StuckStep {
+		s.ObserveCPU(cpu, at, window)
+		return DecideStuck(s, Activity{FirstSeenAt: s.FirstSeenAt, CPUMeasured: true, CPUAt: s.CPUMarkAt}, at, window)
+	}
+
+	s := &ActivityState{FirstSeenAt: t0}
+	late := t0.Add(16 * time.Minute)
+	if step := look(s, 14*time.Minute, late); step != StuckNone {
+		t.Fatalf("the first look, 16m in, with 14m of tool CPU = %v, want none: it has watched no CPU yet", step)
+	}
+	if step := look(s, 15*time.Minute, late.Add(window/10)); step != StuckNone {
+		t.Errorf("the next look, with the tool still burning = %v, want none", step)
+	}
+	if step := look(s, 15*time.Minute, late.Add(window/10+window)); step != StuckNudge {
+		t.Errorf("a window of no further CPU after that = %v, want a nudge: the tool did go quiet", step)
+	}
+
+	// A prompt first look keeps its baseline at the watch's own: a worker
+	// whose tools never move is nudged a window after it was first seen.
+	s = &ActivityState{FirstSeenAt: t0}
+	if step := look(s, time.Second, t0.Add(window/10)); step != StuckNone {
+		t.Fatalf("a prompt first look = %v, want none", step)
+	}
+	if step := look(s, time.Second, t0.Add(window)); step != StuckNudge {
+		t.Errorf("a window of no CPU since the worker was first seen = %v, want a nudge", step)
+	}
+}
+
 // End to end, the local supervisor: a runner whose tool burns CPU is not
 // stuck; when the tool goes idle and nothing else moves, the runner is
 // interrupted and re-prompted as stuck — once — and the re-prompted run

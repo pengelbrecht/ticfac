@@ -276,6 +276,15 @@ func Supervise(stateDir string) error {
 					// to the turn after it, if there is one.
 					break
 				}
+				if life.exited.Load() {
+					// A runner that has exited is not stuck: its exit is this
+					// loop's to collect, and select picks among ready cases at
+					// random. A loop that reached select late, with the exit
+					// and a tick both waiting, would otherwise call the
+					// silence since the exit "stuck" and re-prompt a runner
+					// that had finished (tick onv's gate, a second nudge).
+					break
+				}
 				switch step, evidence := watch.look(record, runnerPID, stuckAfter); step {
 				case StuckNudge:
 					if len(record.StuckArgv) == 0 {
