@@ -11,8 +11,11 @@
   "tick_id": "435",
   "attempt": 22,
   "done_item": "A1",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T13:10:02Z",
+  "triaged_at": "2026-10-05T13:10:18Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing cno",
+  "promoted_as": "cno",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "435",
