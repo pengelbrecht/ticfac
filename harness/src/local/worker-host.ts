@@ -29,6 +29,14 @@
  *   pushed to the attempt branch: the same carried-work mechanism at
  *   tool-round granularity, and what a stopped attempt's successor starts
  *   from.
+ * - **The finish phase** (tick nou) — the half this host owns where there
+ *   is no container to run it in: the last round's wip snapshot RETIRED
+ *   (the attempt branch back on the agent's own HEAD, the way the cloud
+ *   host's prepareFinish does), and the uncommitted tree salvaged into its
+ *   own commit (the cloud finish phase's own move). Without it a worker
+ *   that settles without committing leaves the branch holding a snapshot
+ *   its own history cannot count, and the supervisor's fast-forward push of
+ *   HEAD is refused over it.
  * - **The steer socket** (`./steer-socket.ts`) — the door the supervisor's
  *   stuck watch steers a live worker through, instead of killing it and
  *   re-prompting a fresh process. THE STUCK NUDGE IS A STEER: the tick's
@@ -50,6 +58,7 @@
 
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { isAbsolute, relative } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Message } from "@earendil-works/pi-ai";
 import {
@@ -80,6 +89,8 @@ import { armWallDeadline, type WorkerContractOptions, workerOnYield } from "../w
 import {
   type HostShell,
   type WorkspaceGit,
+  retireWipSnapshot,
+  salvageUncommittedWork,
   workspaceCheckpointExtension,
 } from "../workspace/checkpoints.js";
 import { piAuthStore } from "./pi-auth-store.js";
@@ -354,6 +365,11 @@ export async function runLocalWorker(options: LocalWorkerOptions): Promise<Local
   registry.install(CodingTools);
   registry.install(contract);
   let checkpoints: ReturnType<typeof workspaceCheckpointExtension> | undefined;
+  // The finish phase's inputs (tick nou), hoisted out of the wiring block
+  // below: the shell and workspace the end-of-run retire and salvage run
+  // through — undefined when the checkpoints are off, which is also when
+  // there is no branch to retire anything onto.
+  let finish: { readonly shell: HostShell; readonly workspace: WorkspaceGit } | undefined;
   const selected = [CodingTools, contract];
   if (config.remote !== "" && config.branch !== "") {
     const identity = await resolveIdentity(env, config.worktree);
@@ -366,6 +382,7 @@ export async function runLocalWorker(options: LocalWorkerOptions): Promise<Local
       identity,
       ...(config.base === undefined || config.base === "" ? {} : { base: config.base }),
     };
+    finish = { shell, workspace };
     checkpoints = workspaceCheckpointExtension({
       shell,
       workspace,
@@ -481,6 +498,43 @@ export async function runLocalWorker(options: LocalWorkerOptions): Promise<Local
   const last = view.messages.filter((m) => m.role === "assistant").at(-1);
   const answer = last === undefined ? "" : textOf(last).join("\n");
   await harness.close(context);
+
+  // THE FINISH PHASE (tick nou): the half of the cloud's finish this host
+  // owns, because on local there is no container to run it in. The cloud
+  // host's prepareFinish retires the last round's wip snapshot (the branch
+  // back on the agent's own HEAD) before the container's finish phase
+  // salvages the uncommitted tree; here one process is both, in the same
+  // order — retire first, so the push after the salvage is a fast-forward,
+  // then the salvage, so a worker that settles without committing still
+  // leaves a commit collect can count. Whatever the conversation's outcome:
+  // the durable layer gets the branch and the work, never only the verdict.
+  if (finish !== undefined) {
+    const retired = await retireWipSnapshot(finish.shell, finish.workspace);
+    if (retired.kind === "retired") {
+      log(`the attempt branch is back on the agent's own HEAD (the last round's wip snapshot retired)`);
+    } else {
+      log(`could not put the attempt branch back on the agent's own HEAD: ${retired.error}`);
+    }
+    const reportRel = relative(config.worktree, config.report);
+    const salvaged = await salvageUncommittedWork(finish.shell, finish.workspace, {
+      subject: `tick ${config.tick}: work in progress salvaged by the local worker host (the conversation settled ${settled.status})`,
+      // The report's exclusion is only meaningful inside the worktree; one
+      // placed outside it is nothing `git add -A` could stage anyway.
+      ...(isAbsolute(reportRel) || reportRel.startsWith("..")
+        ? {}
+        : { reportPath: reportRel }),
+    });
+    switch (salvaged.kind) {
+      case "salvaged":
+        log(`salvaged the worker's uncommitted work into its own commit on ${config.branch}: ${salvaged.sha}`);
+        break;
+      case "failed":
+        log(`could not salvage the worker's uncommitted work: ${salvaged.error}`);
+        break;
+      default:
+        log("the worker's uncommitted tree was empty: nothing to salvage");
+    }
+  }
 
   if (settled.status !== "done") {
     const reason =

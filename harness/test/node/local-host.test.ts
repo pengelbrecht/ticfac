@@ -238,13 +238,30 @@ describe("the local worker host", () => {
     expect(readFileSync(config.report, "utf8")).toContain("STATUS: DONE");
 
     // Every tool round pushed its wip snapshot to the attempt branch — the
-    // carried-work mechanism at tool-round granularity, on a real origin.
-    // Since tick xd3 a snapshot is a commit ON TOP of the agent's own HEAD,
-    // force-pushed over the previous round's (src/workspace/checkpoints.ts:
-    // "a checkpoint must be invisible to the work it checkpoints"), so the
-    // branch carries ONE snapshot — the last round's — holding both rounds'
-    // files, and the base beneath it.
-    const subjects = execFileSync(
+    // carried-work mechanism at tool-round granularity, on a real origin —
+    // and then the FINISH PHASE (tick nou) retired the last one and
+    // salvaged the uncommitted tree. Since tick xd3 a snapshot is a commit
+    // ON TOP of the agent's own HEAD, force-pushed over the previous
+    // round's (src/workspace/checkpoints.ts: "a checkpoint must be
+    // invisible to the work it checkpoints"), so during the run the
+    // branch carried ONE snapshot — the last round's — holding both
+    // rounds' files, which the runner log names push by push.
+    const pushes = child.output().match(/wip checkpoint pushed to /g) ?? [];
+    expect(pushes.length).toBe(2);
+
+    // The finish phase, in this host's own words: the branch back on the
+    // agent's HEAD, the uncommitted tree its own commit. The push of that
+    // commit is the supervisor's (its durability timer's final beat) —
+    // the Go end-to-end test proves the whole chain — so what this
+    // process leaves behind is the retired branch and the salvage commit
+    // in the worktree it hands over.
+    expect(child.output()).toContain(
+      "the attempt branch is back on the agent's own HEAD (the last round's wip snapshot retired)",
+    );
+    expect(child.output()).toContain(
+      "salvaged the worker's uncommitted work into its own commit",
+    );
+    const onOrigin = execFileSync(
       "git",
       ["--git-dir", f.origin, "log", "--format=%s", config.branch],
       {
@@ -253,15 +270,33 @@ describe("the local worker host", () => {
     )
       .trim()
       .split("\n");
-    expect(subjects).toEqual(["wip: tool round", "the base commit"]);
-    const files = execFileSync(
+    expect(onOrigin).toEqual(["the base commit"]);
+
+    // The salvage commit is the worktree's own HEAD — the commit the
+    // supervisor's final push lands. It carries the WORK, never the report:
+    // the report is read from its own path (or committed by its own owner
+    // on the cloud), and a salvage commit carrying it would make the work
+    // indistinguishable from the account of it.
+    const subjects = execFileSync(
       "git",
-      ["--git-dir", f.origin, "ls-tree", "--name-only", config.branch],
+      ["-C", config.worktree, "log", "--format=%s"],
       { encoding: "utf8" },
     )
       .trim()
       .split("\n");
-    expect(files).toEqual(expect.arrayContaining(["work.txt", "RESULT-hpk.md", "README.md"]));
+    expect(subjects).toEqual([
+      "tick hpk: work in progress salvaged by the local worker host (the conversation settled done)",
+      "the base commit",
+    ]);
+    const files = execFileSync(
+      "git",
+      ["-C", config.worktree, "ls-tree", "--name-only", "HEAD"],
+      { encoding: "utf8" },
+    )
+      .trim()
+      .split("\n");
+    expect(files).toEqual(expect.arrayContaining(["work.txt", "README.md"]));
+    expect(files).not.toContain("RESULT-hpk.md");
 
     // The conversation in storage ends with the faux answer.
     const messages = await messagesOf(config.storage);
