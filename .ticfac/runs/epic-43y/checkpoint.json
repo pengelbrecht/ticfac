@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 362,
-  "state": "running",
-  "reason": "h3c is closed",
-  "updated_at": "2026-10-05T20:14:14Z",
+  "sequence": 363,
+  "state": "dispatching",
+  "reason": "dispatching 4ao as attempt 58",
+  "updated_at": "2026-10-05T20:14:28Z",
   "ticks": [
     {
       "tick_id": "92k",
