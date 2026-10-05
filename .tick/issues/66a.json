@@ -1,10 +1,10 @@
 {
   "id": "66a",
   "title": "Final review of the pi-durable harness epic diff",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "jhp",
     "lid",
@@ -37,5 +37,6 @@
   "role": "review",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.706053Z",
-  "updated_at": "2026-10-04T11:59:00.706053Z"
+  "updated_at": "2026-10-05T17:47:58.317479Z",
+  "started_at": "2026-10-05T17:47:58.317478Z"
 }
