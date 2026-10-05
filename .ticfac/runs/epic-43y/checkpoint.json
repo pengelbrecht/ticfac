@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 386,
-  "state": "dispatching",
-  "reason": "dispatching ug0 as attempt 61",
-  "updated_at": "2026-10-05T21:03:49Z",
+  "sequence": 387,
+  "state": "running",
+  "reason": "ug0 is running as attempt 61",
+  "updated_at": "2026-10-05T21:04:02Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -277,7 +277,8 @@
     },
     {
       "tick_id": "ug0",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 61
     },
     {
       "tick_id": "omq",
