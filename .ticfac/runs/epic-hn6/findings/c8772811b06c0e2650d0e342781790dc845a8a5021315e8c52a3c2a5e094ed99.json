@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "qjl",
   "attempt": 29,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T15:44:16Z",
+  "triaged_at": "2026-10-05T15:44:29Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing mwt",
+  "promoted_as": "mwt",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "qjl",
