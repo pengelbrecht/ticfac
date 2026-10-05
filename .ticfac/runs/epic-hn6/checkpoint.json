@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 206,
-  "state": "integrating",
-  "reason": "integrating qjl attempt 29 into epic/hn6",
-  "updated_at": "2026-10-05T15:45:48Z",
+  "sequence": 207,
+  "state": "gating",
+  "reason": "running the integrated gate for qjl on 0e530b69cea7",
+  "updated_at": "2026-10-05T15:45:56Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "qjl",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 29
     },
     {
