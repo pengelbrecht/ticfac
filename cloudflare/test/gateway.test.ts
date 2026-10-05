@@ -483,7 +483,11 @@ describe("the classifier route: Jev on Workers AI, through the run token", () =>
     // No opt-in var names jev: it is credit-billed, like workers-ai.
     set(PROVIDER_OPT_IN_VAR, undefined);
     const run = await liveRun();
-    const { token } = await issueRunToken(env, { run_id: run.run_id, tick_id: "k2s", attempt: 1 });
+    const { token, record } = await issueRunToken(env, {
+      run_id: run.run_id,
+      tick_id: "k2s",
+      attempt: 1,
+    });
     const gateway = new FakeGateway();
 
     const response = await proxyModelRequest(env, classifyRequest(token), ["jev", "ai", "run"], {
@@ -503,7 +507,15 @@ describe("the classifier route: Jev on Workers AI, through the run token", () =>
     // The run token never leaves this Worker, and none of the gateway's
     // furniture is sent to the REST API.
     expect(JSON.stringify([...gateway.last.headers])).not.toContain(token);
-    expect(gateway.last.headers.get("cf-aig-metadata")).toBeNull();
+    // A cloud run's classification spend is attributed exactly like its
+    // proxied model calls (tick lfm): the same cf-aig-metadata header,
+    // stamped out of the token and run this Worker authorized — never taken
+    // from the request — so the gateway's logs carry the run_id a per-run
+    // cost read joins this call's spend by.
+    expect(gateway.last.headers.get("cf-aig-metadata")).toBe(
+      JSON.stringify(gatewayMetadata(record, run)),
+    );
+    expect(gateway.metadata()).toMatchObject({ run_id: run.run_id, tick_id: "k2s" });
     expect(gateway.last.headers.get(SESSION_AFFINITY_HEADER)).toBeNull();
   });
 
@@ -530,6 +542,35 @@ describe("the classifier route: Jev on Workers AI, through the run token", () =>
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toMatchObject({ error: "jev_model_only" });
     expect(gateway.calls).toHaveLength(0);
+  });
+
+  it("drops attribution the caller tried to write for itself, exactly like a proxied route", async () => {
+    const run = await liveRun();
+    const { token, record } = await issueRunToken(env, {
+      run_id: run.run_id,
+      tick_id: "k2s",
+      attempt: 1,
+    });
+    const gateway = new FakeGateway();
+    const forged = new Request(`${FACTORY}${GATEWAY_PATH_PREFIX}/jev/ai/run`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        "cf-aig-metadata": JSON.stringify({ run_id: "run_somebody_else", tick_id: "free" }),
+      },
+      body: JSON.stringify({ model: JEV_MODEL, input: JEV_INPUT }),
+    });
+
+    const response = await proxyModelRequest(env, forged, ["jev", "ai", "run"], {
+      fetcher: gateway.fetcher,
+    });
+
+    expect(response.status).toBe(200);
+    expect(gateway.metadata()).toMatchObject({ run_id: run.run_id, tick_id: "k2s" });
+    expect(gateway.last.headers.get("cf-aig-metadata")).toBe(
+      JSON.stringify(gatewayMetadata(record, run)),
+    );
   });
 
   it("serves the run path only", async () => {
