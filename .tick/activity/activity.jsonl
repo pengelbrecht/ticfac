@@ -2400,3 +2400,4 @@
 {"ts":"2026-10-05T22:15:22.549811Z","tick":"4w7","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Epic head CI red: classify-tick pin stale after 7sn changed closeout profile"}}
 {"ts":"2026-10-05T22:25:57.619283Z","tick":"4w7","action":"note","actor":"ticfac","epic":"43y","data":{"note":"\n2026-10-06 00:25 - ticfac run epic-43y: 4w7 try 1 (run dispatch #67) merged into epic/43y as 43cb750909b1; the integrated gate (go, ts) passed.","title":"Epic head CI red: classify-tick pin stale after 7sn changed closeout profile"}}
 {"ts":"2026-10-05T22:26:00.968845Z","tick":"4w7","action":"close","actor":"ticfac","epic":"43y","data":{"title":"Epic head CI red: classify-tick pin stale after 7sn changed closeout profile"}}
+{"ts":"2026-10-05T23:14:54.909857Z","tick":"yp8","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Re-review 43y: its tree changed since its NOT READY final review (round 3)"}}
