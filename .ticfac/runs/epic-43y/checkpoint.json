@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 411,
-  "state": "running",
-  "reason": "omq is closed",
-  "updated_at": "2026-10-05T21:48:43Z",
+  "sequence": 412,
+  "state": "collecting",
+  "reason": "collecting 30e attempt 63",
+  "updated_at": "2026-10-05T21:48:50Z",
   "ticks": [
     {
       "tick_id": "92k",
