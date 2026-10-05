@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 435,
-  "state": "running",
-  "reason": "o68 is closed",
-  "updated_at": "2026-10-05T22:15:03Z",
+  "sequence": 436,
+  "state": "dispatching",
+  "reason": "dispatching 4w7 as attempt 67",
+  "updated_at": "2026-10-05T22:15:18Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -290,6 +290,10 @@
       "tick_id": "30e",
       "state": "closed",
       "attempt": 64
+    },
+    {
+      "tick_id": "4w7",
+      "state": "ready"
     }
   ],
   "provenance": {
