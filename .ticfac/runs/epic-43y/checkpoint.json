@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 375,
-  "state": "integrating",
-  "reason": "integrating jpy attempt 49 into epic/43y",
-  "updated_at": "2026-10-05T20:47:53Z",
+  "sequence": 376,
+  "state": "gating",
+  "reason": "running the integrated gate for jpy on 9144e8f15f0e",
+  "updated_at": "2026-10-05T20:53:25Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -218,7 +218,7 @@
     },
     {
       "tick_id": "jpy",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 49
     },
     {
