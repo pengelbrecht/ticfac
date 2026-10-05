@@ -83,6 +83,17 @@ func TestNoSettlementHandleHardcodesAnExecutor(t *testing.T) {
 //
 // Only `--profiles herdr` worked: a person made to say what the marker says.
 // The executor is resolved from the attempt's own record.
+//
+// Since tick 2q5 the marker's role cannot be implement-tick any more: the
+// herdr profile set no longer names the herdr executor for implementation
+// work (docs/herdr-pi-durable-hosting.md — a herdr pi-kind implementer is
+// the pi CLI pane, the worker path epic 43y deletes). A marker carrying that
+// pre-re-cut pairing must REFUSE — loudly, naming the recorded executor —
+// and must not fall through to the run's own set: a dispatch handed the
+// local profile would hand a herdr handle to the local executor, which is
+// exactly the 823 failure again, in a new doorway. The refusal is what A1
+// enforcement looks like on the rebuild path: the deleted pairing is
+// unwritable in the shipped sets, and unreachable in the records too.
 func TestADispatchRebuiltFromAMarkerRoutesThroughTheMarkersExecutor(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
@@ -108,9 +119,13 @@ func TestADispatchRebuiltFromAMarkerRoutesThroughTheMarkersExecutor(t *testing.T
 		t.Fatalf("fixture: the run's own profile set names %+v, want the local one", p)
 	}
 
+	// A role the herdr set still routes onto panes — review, the frontier
+	// rung — rebuilds through the marker's own executor from the herdr set
+	// the binary carries, exactly as 823 needed and without the operator
+	// naming a --profiles the record already implies.
 	marker := attemptHandle{
 		Executor: "herdr", JobID: "epic-6in/823/attempt-9", Attempt: 9, TickID: "823",
-		Role: "implement-tick", StateRoot: t.TempDir(),
+		Role: "review-epic", StateRoot: t.TempDir(),
 	}
 	dispatch, err := r.dispatchFor(marker)
 	if err != nil {
@@ -125,6 +140,24 @@ func TestADispatchRebuiltFromAMarkerRoutesThroughTheMarkersExecutor(t *testing.T
 	_, _, _, _ = r.addressForSettlement(marker)
 	if len(built) == 0 || built[len(built)-1] != "herdr" {
 		t.Errorf("settle asked the executor factory for %v, want herdr — the executor the marker names", built)
+	}
+
+	// The deleted pairing — a herdr implement attempt, the pre-re-cut shape
+	// every tick of a herdr run recorded before the re-cut — refuses rather
+	// than routing through the run's own set.
+	legacy := attemptHandle{
+		Executor: "herdr", JobID: "run-9pd/cwa/attempt-7", Attempt: 7, TickID: "cwa",
+		Role: "implement-tick", StateRoot: t.TempDir(),
+	}
+	if dispatch, err := r.dispatchFor(legacy); err == nil {
+		t.Fatalf("the deleted herdr/implement pairing rebuilt a dispatch through %+v: the factory "+
+			"would build a local executor for a herdr handle (the 823 failure again)", dispatch.Profile)
+	} else {
+		for _, want := range []string{`executor "herdr"`, "implement-tick", subprocess.ExecutorName} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("the refusal for a pre-re-cut herdr implement attempt does not name %q: %v", want, err)
+			}
+		}
 	}
 }
 

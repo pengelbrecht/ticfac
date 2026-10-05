@@ -455,7 +455,12 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 				"--no-herdr skips this probe\n", err)
 		} else {
 			profileDir = profile.EmbeddedHerdr
-			fmt.Fprintf(prose, "%s — dispatching into herdr panes with the profile set embedded in this binary\n", detail)
+			// The set is split, not uniform (tick 2q5, docs/herdr-pi-durable-hosting.md):
+			// herdr panes host the frontier rung, implement workers run headless on
+			// the pi-durable harness. Saying "into herdr panes" alone would promise
+			// an operator a pane per worker that never appears.
+			fmt.Fprintf(prose, "%s — dispatching with the profile set embedded in this binary: "+
+				"herdr panes host the frontier rung (claude), implement workers run headless on the pi-durable harness\n", detail)
 		}
 	}
 
