@@ -12,8 +12,11 @@
   "attempt": 53,
   "done_item": "A5",
   "demonstrating_check": "cd harness && pnpm test",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T20:04:00Z",
+  "triaged_at": "2026-10-05T20:04:17Z",
+  "triaged_by": "ticfac run epic-43y absorbing omq",
+  "promoted_as": "omq",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "umx",
