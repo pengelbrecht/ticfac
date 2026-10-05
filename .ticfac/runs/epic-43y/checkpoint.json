@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 364,
-  "state": "running",
-  "reason": "4ao is running as attempt 58",
-  "updated_at": "2026-10-05T20:14:50Z",
+  "sequence": 365,
+  "state": "collecting",
+  "reason": "collecting 7oy attempt 57",
+  "updated_at": "2026-10-05T20:17:35Z",
   "ticks": [
     {
       "tick_id": "92k",
