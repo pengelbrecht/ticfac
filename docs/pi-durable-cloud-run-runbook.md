@@ -98,20 +98,29 @@ epic run. Until the run below observes both faults, the close-out scores
 the same posture as [A4]'s cloud half above.
 
 **Why the cloud run, not another local one.** The tick that added this
-section could instead have injected a harness kill into a real *local* run,
-and the reason it did not is mechanical, not a preference. Locally, a harness
-process killed mid-tool settles its attempt — a non-zero exit is never
-nudged (`internal/exec/subprocess/nudge.go`: "the runner failed"), the
-supervisor relaunches only a runner that exited 0 or that it stopped itself —
-and the run's recovery is the redispatch ladder starting the successor from
-the killed attempt's carried wip commits (tick dwn's afterTools checkpoint:
-"what a stopped attempt's successor starts from"). That is the
-restored-from-wip fault at run granularity, but it is not "resumes in a new
-process without re-running the tool": the mid-tool conversation resume is
-the WorkerAgent host's, and the real run that exercises it is the cloud one
-this document owns. The local rung's own resume paths — the nudge, the
-report pushback, the stuck re-prompt — are supervisor relaunches of a
-runner that is still an attempt, never recoveries from a kill.
+section could not inject a harness kill into a real *local* run, and the
+reason was mechanical, not a preference. Locally, a harness process killed
+mid-tool settled its attempt — a non-zero exit was never nudged
+(`internal/exec/subprocess/nudge.go`: "the runner failed"), so the run's
+recovery was the redispatch ladder starting the successor from the killed
+attempt's carried wip commits (tick dwn's afterTools checkpoint: "what a
+stopped attempt's successor starts from"): the restored-from-wip fault at
+run granularity, but not "resumes in a new process without re-running the
+tool". Tick 3c2 changed that mechanics: the local supervisor now replays a
+signal-killed durable runner's same argv, bounded and in-attempt, and the
+relaunched process resumes the killed turn mid-tool from the attempt
+storage — proven mechanically by
+`TestAKilledDurableRunnerIsRelaunchedAndResumesMidTool`
+(`internal/exec/subprocess/local_host_e2e_test.go`), so a local run can
+observe this fault line below too. The cloud run remains the owner this
+document records, for the half only it risks: the WorkerAgent host's own
+version of the fault — the Durable Object's life lost mid-tool while the
+tracked bash keeps running in its container, the conversation resumed from
+the DO's SQLite and the tool reattached by its nonce — is a mechanism the
+local rung does not have, and the real run that exercises it is the cloud
+one this document owns. The local rung's other resume paths — the nudge,
+the report pushback, the stuck re-prompt — remain supervisor relaunches of
+a runner that is still an attempt, never recoveries from a kill.
 
 The two faults are injected into the run above, once each, during one hosted
 worker dispatch's turn (implement or closeout — the review's omp boot is the
