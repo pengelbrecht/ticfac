@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 166,
-  "state": "gating",
-  "reason": "running the integrated gate for 7ml on d012aac45817",
-  "updated_at": "2026-10-05T11:36:22Z",
+  "sequence": 167,
+  "state": "publishing",
+  "reason": "closing 7ml behind the integrated gate on d012aac45817",
+  "updated_at": "2026-10-05T11:38:41Z",
   "ticks": [
     {
       "tick_id": "92k",
