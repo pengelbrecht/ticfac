@@ -46,14 +46,14 @@ func releaseCarrying(t *testing.T, f *fixture, mode string) (releasedRef, releas
 	releasedRef, _, releasedHead = waitHeldWork(t, f, "a1")
 	f.stopEverything()
 
-	_, held, err := f.run(f.Repo, fixtureOptions{mode: "hang"})
+	_, held, err := f.run(f.Repo, fixtureOptions{mode: mode})
 	if err != nil {
 		t.Fatalf("the run that found the lost attempt errored: %v", err)
 	}
 	if held.Failure == nil || held.Failure.Reason != RefusedUnaddressed {
 		t.Fatalf("the lost attempt was not held: %+v", held.Failure)
 	}
-	settler, err := New(f.options(f.Repo, fixtureOptions{mode: "hang"}))
+	settler, err := New(f.options(f.Repo, fixtureOptions{mode: mode}))
 	if err != nil {
 		t.Fatal(err)
 	}
