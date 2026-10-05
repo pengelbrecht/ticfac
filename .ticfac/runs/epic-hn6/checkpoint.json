@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 157,
-  "state": "dispatching",
-  "reason": "dispatching 2xk as attempt 23",
-  "updated_at": "2026-10-05T13:11:53Z",
+  "sequence": 158,
+  "state": "running",
+  "reason": "2xk is running as attempt 23",
+  "updated_at": "2026-10-05T13:12:05Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -123,7 +123,8 @@
     },
     {
       "tick_id": "2xk",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 23
     },
     {
       "tick_id": "3yx",
