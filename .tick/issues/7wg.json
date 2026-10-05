@@ -1,0 +1,14 @@
+{
+  "id": "7wg",
+  "title": "local-host node-suite tests starve past their waits under host load",
+  "description": "The same failure class this tick (kjs) fixed in workspace-checkpoints.test.ts exists in harness/test/node/local-host.test.ts, which kjs does not cover: its tests spawn a whole worker child process and wait on wall-clock conditions (waitFor, 30s bound) that a loaded shared host starves. Observed twice in one night while a live reconcile.test and an Xprotect scan ran beside: 'resumes from the storage after the harness is killed mid-tool, without re-running the tool' failed 'timed out waiting for the tool to be running' after 1040s, and an earlier run failed 'continues the SAME conversation when relaunched with a follow-up message' in the same file. Both pre-exist this tick's diff (the file is untouched by it) and both pass on a quiet host, so it is the host, not the tree — but per the repo's flaky-means-bug rule these tests need the same treatment kjs gave the workspace-checkpoints pair: a longer per-test timeout, and/or extending harness-timeout-discipline's guard to full-worker tests.\nevidence: harness/test/node/local-host.test.ts:168 (waitFor throw) via :460; failure log of this attempt's run: 'timed out waiting for the tool to be running', test took 1040817ms at load average 23-47\n\nticfac run epic-43y created this tick by absorbing the finding 90d3606325713abe8188177baac93a1b17a3e61f04fe2889685e24657a04e6b7 (reported by run-epic-43y/tick-kjs/attempt-19): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/90d3606325713abe8188177baac93a1b17a3e61f04fe2889685e24657a04e6b7.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-kjs/attempt-19",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T10:35:06Z",
+  "updated_at": "2026-10-05T10:35:06Z"
+}
