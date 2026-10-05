@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 218,
-  "state": "running",
-  "reason": "a2l is running as attempt 36",
-  "updated_at": "2026-10-05T15:01:46Z",
+  "sequence": 219,
+  "state": "collecting",
+  "reason": "collecting twa attempt 31",
+  "updated_at": "2026-10-05T15:01:51Z",
   "ticks": [
     {
       "tick_id": "92k",
