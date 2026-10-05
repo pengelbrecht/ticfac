@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 255,
-  "state": "publishing",
-  "reason": "closing dm2 behind the integrated gate on 3f7a5d27e412",
-  "updated_at": "2026-10-05T19:44:08Z",
+  "sequence": 256,
+  "state": "running",
+  "reason": "dm2 is closed",
+  "updated_at": "2026-10-05T19:44:11Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -164,7 +164,7 @@
     },
     {
       "tick_id": "dm2",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 32
     },
     {
