@@ -263,6 +263,13 @@ func (r *Reconciler) absorbNotReadyFindings(ctx context.Context, durable *durabl
 			if _, err := r.tracker.Note(ctx, record.TickID, note); err != nil {
 				return false, fmt.Errorf("note the absorption of %s: %w", record.TickID, err)
 			}
+			// The decision record says so (the 2026-10-06 policy): the finding
+			// is in the epic on the REVIEWER's basis now, whatever placed it
+			// outside — so a cold reconstruction reads the epic the warm run
+			// reached, and the PR says who brought it in.
+			if err := r.recordReviewerAbsorption(*record, final, reviewed); err != nil {
+				return false, err
+			}
 			r.record(reviewed, StageAbsorbed, "blocking finding %s (%q) of the NOT READY review is absorbed into "+
 				"the running epic: its tick %s, filed as %s, is now a child of %s", key, f.Title, record.TickID,
 				record.Placement, r.opts.EpicID)
@@ -691,6 +698,29 @@ func (r *Reconciler) placeBehindOpenWork(ctx context.Context, durable *durableTr
 				return fmt.Errorf("place the re-review %s behind %s: %w", review, task.ID, err)
 			}
 		}
+	}
+	return nil
+}
+
+// recordReviewerAbsorption rewrites the decision record of a finding the
+// NOT READY review named blocking and the run adopted into the epic: basis
+// reviewer, gating, placed before the re-review, the earlier decision kept in
+// the reason. A record already on the reviewer's basis is left alone.
+func (r *Reconciler) recordReviewerAbsorption(record runstate.Absorption, final runstate.Decision, reviewed string) error {
+	if record.Basis == runstate.AbsorptionReviewer {
+		return nil
+	}
+	earlier := fmt.Sprintf("basis %s, placed %s: %s", record.Basis, record.Placement, record.Reason)
+	record.Basis = runstate.AbsorptionReviewer
+	record.Gating = true
+	record.Placement = runstate.AbsorptionBeforeReview
+	record.Confidence, record.Model, record.Fallback = 0, "", ""
+	record.Reason = fmt.Sprintf("the final review (%s, decision %d) judged the epic NOT READY and named this "+
+		"finding blocking, so it is the epic's work and is fixed before the re-review. It had been decided "+
+		"before the review named it (%s)", reviewed, final.Decision, earlier)
+	record.DecidedAt = r.now().UTC().Format(time.RFC3339)
+	if _, err := r.store.UpdateAbsorption(record); err != nil {
+		return fmt.Errorf("record the reviewer's absorption of finding %s: %w", record.Key, err)
 	}
 	return nil
 }

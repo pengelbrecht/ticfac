@@ -49,6 +49,26 @@ func (s *Store) PutAbsorption(a Absorption) (Outcome, error) {
 	return outcome, nil
 }
 
+// UpdateAbsorption rewrites a standing decision record — the reviewer's
+// adoption of a finding the policy had backlogged or deferred (basis
+// reviewer), so a cold reconstruction reads the epic the warm run reached —
+// under the sha-guarded update the finding records use: a racing writer that
+// moved the record first wins, and the loser re-reads what stands.
+func (s *Store) UpdateAbsorption(a Absorption) (Outcome, error) {
+	a.SchemaVersion = SchemaVersion
+	if err := a.Validate(); err != nil {
+		return "", fmt.Errorf("runstate: %w", err)
+	}
+	if err := s.checkRun(a.Provenance); err != nil {
+		return "", err
+	}
+	content, err := encodeRecord(a)
+	if err != nil {
+		return "", err
+	}
+	return s.UpdateIfSHA(AbsorptionPath(s.runID, a.Key), content)
+}
+
 // Absorption returns one decision record by the finding's key.
 func (s *Store) Absorption(key string) (*Absorption, bool, error) {
 	if err := checkSegment("absorption key", key); err != nil {

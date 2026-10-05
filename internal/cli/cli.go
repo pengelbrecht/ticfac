@@ -398,7 +398,6 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	}
 	if classifier != nil {
 		opts.Classifier = classifier
-		opts.GatingClassifier = classifier
 	}
 	reconciler, err := reconcile.New(opts)
 	if err != nil {
