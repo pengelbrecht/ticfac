@@ -2279,3 +2279,4 @@
 {"ts":"2026-10-05T18:04:57.355868Z","tick":"66a","action":"close","actor":"ticfac","epic":"43y","data":{"title":"Final review of the pi-durable harness epic diff"}}
 {"ts":"2026-10-05T18:05:32.028667Z","tick":"2oa","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Nonce replay relies on ensureGuard marking FactorySandbox ready first"}}
 {"ts":"2026-10-05T18:05:52.441109Z","tick":"4s2","action":"start","actor":"ticfac","epic":"43y","data":{"title":"First clean wip round is recorded as pushed without a push; commits can be lost"}}
+{"ts":"2026-10-05T18:06:13.737752Z","tick":"7sn","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Cloud PR-review omp exception to A1 was recorded by a worker, not the operator"}}
