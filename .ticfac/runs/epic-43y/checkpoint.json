@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 210,
-  "state": "dispatching",
-  "reason": "dispatching j6o as attempt 35",
-  "updated_at": "2026-10-05T14:56:19Z",
+  "sequence": 211,
+  "state": "running",
+  "reason": "j6o is running as attempt 35",
+  "updated_at": "2026-10-05T14:56:43Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -152,8 +152,8 @@
     },
     {
       "tick_id": "j6o",
-      "state": "ready",
-      "attempt": 32
+      "state": "dispatched",
+      "attempt": 35
     },
     {
       "tick_id": "kkt",
