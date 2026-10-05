@@ -91,6 +91,7 @@ type workerFixture struct {
 	env          map[string]string
 	ticfacRecord string
 	record       string
+	miseRecord   string
 	epic         string
 	tick         string
 }
@@ -133,6 +134,7 @@ func newWorkerFixture(t *testing.T) *workerFixture {
 		baseSHA:      base,
 		ticfacRecord: filepath.Join(root, "ticfac-record"),
 		record:       filepath.Join(root, "harness-record"),
+		miseRecord:   filepath.Join(root, "mise-record"),
 		epic:         workerTestEpic,
 		tick:         workerTestTick,
 	}
@@ -223,7 +225,12 @@ if [ -n "${TICKS_TEST_WORKER_RESULT:-}" ]; then
 fi
 exit "${TICKS_TEST_WORKER_EXIT:-0}"
 `)
-	writeStub(t, filepath.Join(f.binDir, "mise"), "exit 0\n")
+	// The version-manager stand-in records what it was asked to do — the
+	// entrypoint fixture's mise stub does the same — so a test can assert a
+	// door provisioned (or, for a review, did not provision) a toolchain.
+	writeStub(t, filepath.Join(f.binDir, "mise"), `[ -z "${TICKS_TEST_MISE_RECORD:-}" ] || printf '%s\n' "$*" >> "$TICKS_TEST_MISE_RECORD"
+exit 0
+`)
 	// The report checker the image ships beside ticfac (hn6 run_d51a, u5n).
 	// A stand-in, like every other binary here, so no test picks up a real
 	// one from the developer's PATH: it records how it was asked, refuses a
@@ -364,6 +371,16 @@ func (f *workerFixture) remoteLog(branch string) []string {
 func (f *workerFixture) ticfacCalls() string {
 	f.t.Helper()
 	b, err := os.ReadFile(f.ticfacRecord)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// miseCalls returns everything the version-manager stub was asked to do.
+func (f *workerFixture) miseCalls() string {
+	f.t.Helper()
+	b, err := os.ReadFile(f.miseRecord)
 	if err != nil {
 		return ""
 	}
