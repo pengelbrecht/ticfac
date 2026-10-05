@@ -378,15 +378,43 @@ export async function restoreWorkspace(
     // The attempt branch's tip IS the last wip commit. Before the first one
     // it may not exist on origin yet — a container lost that early restores
     // to the base the attempt was cut from, the state the boot cloned.
+    //
+    // But "the fetch failed" is not "the branch does not exist" (tick i5e):
+    // a forge 5xx, a network blip or a token-door hiccup fails the fetch of
+    // a branch that IS there, and a restore that falls back to the base on
+    // any non-zero exit hands the next round's FORCED wip push a base tree
+    // to wipe the attempt branch with — every earlier snapshot and the
+    // agent's commits, silently gone. The fallback needs PROOF the ref is
+    // missing — `git ls-remote`, the one query whose empty answer MEANS
+    // missing — and everything else fails the restore: a fetch that failed
+    // while the branch is still listed, an origin that cannot be asked. A
+    // failed restore is what the next round's ready check retries; a wiped
+    // branch is lost work.
     const fetched = await shell.execLine(
       'git fetch -q origin "$BRANCH"',
       varsOf(git, { BRANCH: git.branch }),
     );
     let from = `the attempt branch ${git.branch}`;
     let out = fetched;
-    if (fetched.exitCode !== 0 && git.base !== undefined) {
-      out = await shell.execLine('git fetch -q origin "$BASE"', varsOf(git, { BASE: git.base }));
-      from = `the base ${git.base}`;
+    if (fetched.exitCode !== 0) {
+      // The missing-ref proof: does origin LIST the branch? A failed
+      // ls-remote cannot prove the ref missing — no fallback on it.
+      const listed = await shell.execLine(
+        'git ls-remote origin "refs/heads/$BRANCH"',
+        varsOf(git, { BRANCH: git.branch }),
+      );
+      if (listed.exitCode !== 0) {
+        return failed(said("git ls-remote of the attempt branch", listed));
+      }
+      if (listed.output.includes(`refs/heads/${git.branch}`)) {
+        // The branch is there: the fetch itself failed (the forge's 5xx,
+        // the network's blip, the door's hiccup) — never the base.
+        return failed(said(`git fetch (the attempt branch ${git.branch})`, fetched));
+      }
+      if (git.base !== undefined) {
+        out = await shell.execLine('git fetch -q origin "$BASE"', varsOf(git, { BASE: git.base }));
+        from = `the base ${git.base}`;
+      }
     }
     if (out.exitCode !== 0) return failed(said(`git fetch (${from})`, out));
 
