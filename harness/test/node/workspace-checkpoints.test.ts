@@ -18,7 +18,7 @@ import {
 } from "@earendil-works/pi-durable";
 import { createReadTool, createWriteTool } from "@earendil-works/pi-durable/tools";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { FactorySandboxEnv } from "../../src/env/factory-sandbox.js";
+import { BASH_NONCE_VAR, FactorySandboxEnv } from "../../src/env/factory-sandbox.js";
 import { createTrackedBashTool } from "../../src/tools/tracked-bash.js";
 import {
   pushWipCheckpoint,
@@ -437,6 +437,57 @@ describe("workspace checkpoints over real git", () => {
     expect(prepares.length).toBe(2);
 
     await harness.close(context);
+  });
+
+  // Tick dbi: the nonce path — a tracked bash whose nonce no container
+  // knows — restored the workspace with no log line anywhere (the cni
+  // staging proof's 139s round was exactly this). The env now hands the
+  // restore's outcome to the host's ear, so the host can say which sha the
+  // workspace was rebuilt from. Real git, a really emptied box, a really
+  // replayed nonce: the sha the callback carries is the real wip on origin.
+  it("a nonce-path restore on an emptied box reaches the host's ear with the real sha", {
+    timeout: 120_000,
+  }, async () => {
+    const restores: RestoreOutcome[] = [];
+    const heardEnv = new FactorySandboxEnv({
+      sandbox: door.sandbox,
+      cwd: checkout,
+      guardDir: join(root, "guard-heard"),
+      pollMs: 10,
+      workspace: git,
+      onRestore: (outcome) => {
+        restores.push(outcome);
+      },
+    });
+
+    // One round's wip: the state a nonce-path restore rebuilds from.
+    writeFileSync(join(checkout, "a.txt"), "the carried edit\n");
+    const wip = await pushWipCheckpoint(heardEnv.hostShell(), git);
+    expect(wip.kind).toBe("pushed");
+
+    // The container died while no harness watched: the fresh box booted
+    // EMPTY, and the replay's nonce is known by no process list.
+    for (const entry of readdirSync(checkout)) {
+      rmSync(join(checkout, entry), { recursive: true, force: true });
+    }
+    const result = await heardEnv.exec(
+      "cat a.txt",
+      { env: { [BASH_NONCE_VAR]: "bash-nonce-heard-1" } },
+      BACKGROUND_CONTEXT,
+    );
+    expect(result.ok).toBe(true);
+
+    // THE ACCEPTANCE: the host heard which sha the nonce path rebuilt from —
+    // the real wip on origin, not a mysteriously slow tool round and
+    // nothing else.
+    expect(restores).toEqual([
+      { kind: "restored", sha: wip.kind === "pushed" ? wip.sha : "", subject: WIP_COMMIT_SUBJECT },
+    ]);
+
+    // And the command ran on the rebuilt tree: the edit the wip carried,
+    // the setup the restore re-ran.
+    expect(readFileSync(join(checkout, "a.txt"), "utf8")).toBe("the carried edit\n");
+    expect(readFileSync(join(checkout, ".setup-marker"), "utf8")).toBe("ticfac-setup-ok");
   });
 
   it("pushes nothing for a round that changed no file, and the changed round's wip lands on origin", async () => {

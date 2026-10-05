@@ -267,6 +267,65 @@ describe("a container lost mid-turn", () => {
     expect(door.runs.some((r) => r.command.includes('test -e "$CWD/.git"'))).toBe(true);
     expect(door.starts.length).toBe(2);
   });
+
+  // Tick dbi: the nonce path — a tracked bash whose nonce no container
+  // knows — restored the workspace with no log line anywhere; the operator
+  // watching the run saw only a mysteriously slow tool round. The env now
+  // hands the restore's outcome to the host's ear (`onRestore`), the same
+  // shape the extension's ready-check wiring already announces through.
+  it("tells the host which sha the nonce-path restore rebuilt from", async () => {
+    // The fresh box booted EMPTY: the ready marker is gone, so the nonce
+    // path restores before the command re-starts on it.
+    let emptyBox = true;
+    const door = fakeSandboxDoor({
+      commandMs: 60,
+      runOutput: (command) =>
+        command.includes("git rev-parse HEAD && git log -1 --format=%s")
+          ? "cafef00d\nwip: tool round\n"
+          : "",
+      runExit: (command) => {
+        if (emptyBox && command.includes('test -e "$CWD/.git"')) {
+          emptyBox = false;
+          return 1;
+        }
+        return undefined;
+      },
+    });
+    const restores: RestoreOutcome[] = [];
+    const env = new FactorySandboxEnv({
+      sandbox: door.sandbox,
+      guardDir: null,
+      pollMs: 10,
+      workspace: GIT,
+      onRestore: (outcome) => {
+        restores.push(outcome);
+      },
+    });
+
+    // A replay whose nonce no container knows: the restore runs BEFORE the
+    // command re-starts, and the host hears which sha it rebuilt from.
+    const result = await env.exec(
+      "echo replayed",
+      { env: { [BASH_NONCE_VAR]: "bash-heard-1" } },
+      BACKGROUND_CONTEXT,
+    );
+    expect(result.ok).toBe(true);
+    expect(restores).toEqual([{ kind: "restored", sha: "cafef00d", subject: "wip: tool round" }]);
+    // The restore really ran, and the command re-started on the rebuilt box.
+    expect(door.runs.some((r) => r.command.includes("find . -mindepth 1 -maxdepth 1"))).toBe(true);
+    expect(door.starts[0]?.command).toContain("echo replayed");
+
+    // A replay on a box that is READY hears nothing: the callback is the
+    // restore's, not the ready check's — the check runs per tracked bash,
+    // and only a lost box announces.
+    const again = await env.exec(
+      "echo again",
+      { env: { [BASH_NONCE_VAR]: "bash-heard-2" } },
+      BACKGROUND_CONTEXT,
+    );
+    expect(again.ok).toBe(true);
+    expect(restores.length).toBe(1);
+  });
 });
 
 describe("a container lost BETWEEN tool rounds", () => {

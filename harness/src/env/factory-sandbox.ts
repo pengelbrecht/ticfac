@@ -151,6 +151,18 @@ export type FactorySandboxEnvOptions = {
    * lost container is only reported, never restored.
    */
   readonly workspace?: WorkspaceGit;
+  /**
+   * The host's ear for a restore this env performs on its own (tick dbi): a
+   * tracked bash whose nonce no container knows — the replay path —
+   * restores the workspace BEFORE it re-starts the command, and until this
+   * callback that restore reached no log anywhere: the operator watching
+   * the run saw only a mysteriously slow tool round (the cni staging
+   * proof's 139s round was exactly this). The ready check the host itself
+   * drives ({@link ensureWorkspaceReady}) does not fire it — that path
+   * announces through the checkpoint extension's own `onRestore` wiring
+   * (./workspace/checkpoints.ts), so one restore says one line.
+   */
+  readonly onRestore?: (outcome: RestoreOutcome) => void;
 };
 
 /** One short command's outcome, as the env classifies it. */
@@ -219,6 +231,7 @@ export class FactorySandboxEnv implements ExecutionEnv {
   private readonly pollMs: number;
   private readonly now: () => number;
   private readonly workspace: WorkspaceGit | null;
+  private readonly onRestore: ((outcome: RestoreOutcome) => void) | undefined;
   private guardInstalling: Promise<void> | undefined;
   private restoring: Promise<RestoreOutcome> | undefined;
 
@@ -231,6 +244,7 @@ export class FactorySandboxEnv implements ExecutionEnv {
     this.pollMs = options.pollMs ?? BASH_POLL_MS;
     this.now = options.now ?? Date.now;
     this.workspace = options.workspace ?? null;
+    this.onRestore = options.onRestore;
   }
 
   // ------------------------------------------------------------ the guard ---
@@ -826,11 +840,15 @@ export class FactorySandboxEnv implements ExecutionEnv {
    * Whether a replay's fresh start is on a live workspace: a container
    * destroyed while no harness watched boots EMPTY, and a re-started
    * command would run on nothing. One short command; restore only when the
-   * workspace is missing. Throws the restore's failure — the replay must
-   * not start on a box it could not rebuild.
+   * workspace is missing. The restore this performs is the one no other
+   * path announces (tick dbi), so its outcome goes to the host's ear
+   * ({@link FactorySandboxEnvOptions.onRestore}) — the operator watching
+   * the run hears which sha it rebuilt from. Throws the restore's failure —
+   * the replay must not start on a box it could not rebuild.
    */
   private async ensureWorkspaceRestored(): Promise<void> {
     const ready = await this.ensureWorkspaceReady();
+    if (ready.kind !== "ready") this.onRestore?.(ready);
     if (ready.kind === "failed") {
       throw new Error(`the workspace could not be restored: ${ready.error}`);
     }

@@ -682,6 +682,18 @@ export class WorkerAttemptHost {
       ...(this.deps.guardDir === undefined ? {} : { guardDir: this.deps.guardDir }),
       ...(this.deps.bashPollMs === undefined ? {} : { pollMs: this.deps.bashPollMs }),
       ...(git.branch === "" ? {} : { workspace: git }),
+      // The nonce path's ear (tick dbi): a tracked bash whose nonce no
+      // container knows restores before it re-starts — until this wiring
+      // that restore reached no log anywhere, and the operator watching the
+      // run saw only a mysteriously slow tool round. The between-rounds
+      // loss keeps its own line (the checkpoint extension's onRestore in
+      // registryFor), so one restore says one line.
+      onRestore: (outcome) =>
+        void this.say(
+          outcome.kind === "restored"
+            ? `a tracked bash found a fresh container; the workspace was restored to ${outcome.sha.slice(0, 12)} (${outcome.subject})`
+            : `a tracked bash found a fresh container and the workspace could not be restored: ${outcome.error}`,
+        ),
     });
     return this.env;
   }
