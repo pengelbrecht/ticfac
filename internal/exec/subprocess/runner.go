@@ -171,6 +171,15 @@ type launch struct {
 	// session again rather than starting it (the nudge, nudge.go).
 	Session string
 	Resume  bool
+
+	// Extension is the path of a pi extension file this launch loads with
+	// --extension: the gateway metering join (tick dm2, wired into this
+	// executor by tick gzv). The flags go in front of the prompt, like the
+	// model, because the prompt is a positional argument — and the flag is
+	// the PI CLI's own, so a non-pi runner handed one is a refusal, never a
+	// silent drop and never a flag another CLI would misread. Empty launches
+	// the runner exactly as the table wrote it.
+	Extension string
 }
 
 // resolveRunner turns a runner name and an optional override into the argv the
@@ -203,6 +212,16 @@ func resolveRunner(name string, override []string, at launch) ([]string, error) 
 			return nil, err
 		}
 		argv = withModelArgv
+		// The gateway metering override rides the same position, for the same
+		// reason — and only the runner whose CLI owns the flag.
+		if at.Extension != "" {
+			if name != "pi" {
+				return nil, fmt.Errorf("the extension flag is the pi CLI's own, and runner %q would read it "+
+					"as its own argument or refuse it: the gateway metering join belongs to a pi launch, never %s's",
+					name, name)
+			}
+			argv = insertBeforePrompt(argv, []string{extensionFlag, at.Extension})
+		}
 	}
 	// An override is the whole invocation — the escape hatch a build with a
 	// runner's flags wrong reaches for — so nothing is inserted into one. The
