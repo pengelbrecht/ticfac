@@ -1,5 +1,13 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -330,6 +338,146 @@ describe("workspace checkpoints over real git", () => {
     // And at the workspace root, like every other restore line.
     const setupLine = door.startCommands.find((line) => line.includes(".setup-marker"));
     expect(setupLine).toContain('mkdir -p "$TICFAC_WORKSPACE"');
+  });
+
+  /**
+   * Tick i5e: the restore's branch FETCH can fail for reasons that are NOT
+   * "the branch does not exist yet" — a forge 5xx, a network blip, a
+   * token-door hiccup — and the restore used to fall back to the base on ANY
+   * non-zero fetch exit. The next round's wip push is FORCED, so the fallback
+   * handed it a base tree to wipe the attempt branch with: every earlier wip
+   * snapshot and the agent's commits, silently gone. The fallback now needs
+   * PROOF the ref is missing (git ls-remote); a fetch that failed while the
+   * branch is still listed — or an origin that cannot be asked — FAILS the
+   * restore instead, and a failed restore is what the next round retries,
+   * not what wipes.
+   *
+   * The transient failure, made exact: a ref on the bare origin pointing at
+   * an object the origin cannot serve — ls-remote lists the branch (exit 0,
+   * the ref there), fetching it fails (exit 128), fetching the base holds.
+   * That is the one shape that separates "the fetch failed" from "the
+   * branch is missing", which is exactly what the fix must separate.
+   */
+  it("fails the restore when the attempt branch's fetch fails but the branch is not missing", {
+    timeout: 300_000,
+  }, async () => {
+    const floorEnv = new FactorySandboxEnv({
+      sandbox: door.sandbox,
+      cwd: checkout,
+      guardDir: join(root, "guard-i5e-fetch"),
+      pollMs: 10,
+      workspace: { ...git, base: "main" },
+    });
+
+    // One round's wip: the branch exists on origin, its tip the snapshot.
+    writeFileSync(join(checkout, "a.txt"), "the carried edit\n");
+    const wip = await pushWipCheckpoint(floorEnv.hostShell(), { ...git, base: "main" });
+    expect(wip.kind).toBe("pushed");
+    const tip = execFileSync("git", ["--git-dir", origin, "rev-parse", git.branch], {
+      encoding: "utf8",
+    }).trim();
+
+    // The branch is listed but cannot be fetched.
+    writeFileSync(
+      join(origin, "refs", "heads", ...git.branch.split("/")),
+      "0123456789012345678901234567890123456789\n",
+    );
+
+    // The container is lost: the fresh box boots EMPTY.
+    for (const entry of readdirSync(checkout)) {
+      rmSync(join(checkout, entry), { recursive: true, force: true });
+    }
+
+    // THE ACCEPTANCE: the restore FAILS on the failed fetch — the branch is
+    // not missing, so the base is not a fallback to hand the next forced
+    // push. The error names the fetch that failed.
+    const restore = await floorEnv.restoreLostWorkspace();
+    expect(restore.kind).toBe("failed");
+    if (restore.kind === "failed") {
+      expect(restore.error).toContain(`git fetch (the attempt branch ${git.branch})`);
+    }
+    // And the box was NOT restored at the base: the clear ran, nothing was
+    // checked out — where the old fallback left the base's README.md.
+    expect(existsSync(join(checkout, "README.md"))).toBe(false);
+
+    // The wipe the fallback used to buy cannot happen: a wip push from the
+    // failed restore's box cannot even snapshot (unborn HEAD), so nothing
+    // was pushed over the attempt branch — its ref is untouched and the
+    // real wip snapshot is still there for the retry that follows.
+    const next = await pushWipCheckpoint(floorEnv.hostShell(), { ...git, base: "main" });
+    expect(next.kind).toBe("failed");
+    expect(
+      execFileSync("git", ["--git-dir", origin, "rev-parse", git.branch], {
+        encoding: "utf8",
+      }).trim(),
+    ).toBe("0123456789012345678901234567890123456789"); // the ref we broke, untouched
+    execFileSync("git", ["--git-dir", origin, "cat-file", "-e", tip]); // the wip still resolvable
+  });
+
+  /**
+   * The fallback the missing-ref proof must PRESERVE (tick i5e): before the
+   * first wip lands, the attempt branch genuinely does not exist on origin
+   * yet — ls-remote lists nothing — and a container lost that early restores
+   * to the base the attempt was cut from, the state the boot cloned.
+   */
+  it("restores to the base when the attempt branch is genuinely missing", {
+    timeout: 300_000,
+  }, async () => {
+    const floorEnv = new FactorySandboxEnv({
+      sandbox: door.sandbox,
+      cwd: checkout,
+      guardDir: join(root, "guard-i5e-missing"),
+      pollMs: 10,
+      workspace: { ...git, base: "main" },
+    });
+    const baseSha = execFileSync("git", ["--git-dir", origin, "rev-parse", "main"], {
+      encoding: "utf8",
+    }).trim();
+
+    // No wip was ever pushed — origin holds only the base — and the box is
+    // lost: the fresh one boots EMPTY.
+    for (const entry of readdirSync(checkout)) {
+      rmSync(join(checkout, entry), { recursive: true, force: true });
+    }
+
+    // THE ACCEPTANCE: restored FROM the base, its commit, its tree — the
+    // fallback the proof gates, on the proof the branch is missing.
+    const restore = await floorEnv.restoreLostWorkspace();
+    expect(restore).toEqual({ kind: "restored", sha: baseSha, subject: "the base commit" });
+    expect(readFileSync(join(checkout, "README.md"), "utf8")).toBe("# the base\n");
+    expect(readFileSync(join(checkout, ".setup-marker"), "utf8")).toBe("ticfac-setup-ok");
+  });
+
+  /**
+   * The proof itself can fail (tick i5e): an origin that cannot be asked —
+   * the network blip, the forge 5xx, the token-door hiccup — cannot prove
+   * the branch missing, so the restore fails on the ls-remote rather than
+   * falling back to a base it cannot even reach.
+   */
+  it("fails the restore when the origin cannot be asked whether the branch exists", {
+    timeout: 300_000,
+  }, async () => {
+    const floorEnv = new FactorySandboxEnv({
+      sandbox: door.sandbox,
+      cwd: checkout,
+      guardDir: join(root, "guard-i5e-unreachable"),
+      pollMs: 10,
+      workspace: { ...git, base: "main", remote: join(root, "origin-gone.git") },
+    });
+
+    for (const entry of readdirSync(checkout)) {
+      rmSync(join(checkout, entry), { recursive: true, force: true });
+    }
+
+    // THE ACCEPTANCE: the restore fails naming the ls-remote — no base
+    // fetch, no fallback, nothing restored to wipe from.
+    const restore = await floorEnv.restoreLostWorkspace();
+    expect(restore.kind).toBe("failed");
+    if (restore.kind === "failed") {
+      expect(restore.error).toContain("git ls-remote of the attempt branch");
+      expect(restore.error).not.toContain("the base main");
+    }
+    expect(existsSync(join(checkout, "README.md"))).toBe(false);
   });
 
   /**
