@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 190,
-  "state": "integrating",
-  "reason": "integrating 2xk attempt 23 into epic/hn6",
-  "updated_at": "2026-10-05T14:49:37Z",
+  "sequence": 191,
+  "state": "gating",
+  "reason": "running the integrated gate for 2xk on af882c904b6f",
+  "updated_at": "2026-10-05T14:49:55Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -123,7 +123,7 @@
     },
     {
       "tick_id": "2xk",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 23
     },
     {
