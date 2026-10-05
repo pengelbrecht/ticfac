@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 338,
-  "state": "integrating",
-  "reason": "integrating r2m attempt 52 into epic/43y",
-  "updated_at": "2026-10-05T19:45:22Z",
+  "sequence": 339,
+  "state": "gating",
+  "reason": "running the integrated gate for r2m on df5bc3330036",
+  "updated_at": "2026-10-05T19:45:33Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -233,7 +233,7 @@
     },
     {
       "tick_id": "r2m",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 52
     },
     {
