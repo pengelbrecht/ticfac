@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 370,
-  "state": "dispatching",
-  "reason": "dispatching 3c2 as attempt 59",
-  "updated_at": "2026-10-05T20:23:18Z",
+  "sequence": 371,
+  "state": "running",
+  "reason": "3c2 is running as attempt 59",
+  "updated_at": "2026-10-05T20:23:32Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -267,7 +267,8 @@
     },
     {
       "tick_id": "3c2",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 59
     },
     {
       "tick_id": "rpw",
