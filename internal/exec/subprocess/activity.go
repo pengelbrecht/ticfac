@@ -317,17 +317,30 @@ func TranscriptDir(kind, cwd string) string {
 // conversation's SQLite storage was last written. The `pi` runner is the
 // pi-durable Node host (tick hpk), not the pi CLI: it writes no session
 // transcript, its conversation lives in worker.sqlite beside the attempt
-// record (workerconfig.go), and the storage file's mtime is the honest
+// record (workerconfig.go), and the storage's mtime is the honest
 // evidence — the file an operator can go read, written on every model and
 // tool round while the worker streams (the wip commits are the heartbeat).
-// False when there is no storage to read.
+// pi-durable opens the database with journal_mode=WAL (wal_autocheckpoint
+// 1000), so the commits of a live conversation land in worker.sqlite-wal
+// and the main file's mtime stays put until a checkpoint (tick lmt): the
+// signal is the NEWER of the two, and the event's path names the file that
+// moved. False when there is no storage to read.
 func LastStorageEvent(stateDir string) (TranscriptEvent, bool) {
 	path := filepath.Join(stateDir, fileWorkerStorage)
+	walPath := path + "-wal"
 	info, err := os.Stat(path)
-	if err != nil {
+	walInfo, walErr := os.Stat(walPath)
+	if err != nil && walErr != nil {
 		return TranscriptEvent{}, false
 	}
-	return TranscriptEvent{At: info.ModTime(), Kind: "storage written", Path: path}, true
+	event := TranscriptEvent{Kind: "storage written"}
+	if err == nil {
+		event.At, event.Path = info.ModTime(), path
+	}
+	if walErr == nil && (err != nil || walInfo.ModTime().After(event.At)) {
+		event.At, event.Path = walInfo.ModTime(), walPath
+	}
+	return event, true
 }
 
 // lastRunnerEvent is the watch's last-event look for ONE runner: the durable

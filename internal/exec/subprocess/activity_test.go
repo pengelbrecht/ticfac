@@ -147,6 +147,67 @@ func TestTheDurableRunnersTranscriptSignalIsItsStorageNotTheCliSessions(t *testi
 	}
 }
 
+// pi-durable opens its SQLite with journal_mode=WAL (wal_autocheckpoint=1000),
+// so a live conversation's commits land in worker.sqlite-wal and the main
+// file's mtime stays put until a checkpoint (tick lmt): a worker that has
+// been thinking or reading for a long time must not read as quiet because
+// only the main file was asked. The signal is the newer of the two files.
+func TestTheStorageSignalCountsTheWalCommitsBesideTheMainFile(t *testing.T) {
+	state := t.TempDir()
+	storage := filepath.Join(state, fileWorkerStorage)
+	wal := storage + "-wal"
+	setMtime := func(path string, at time.Time) {
+		t.Helper()
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	checkedOut := time.Now().Add(-time.Hour)  // the last checkpoint, long ago
+	streaming := time.Now().Add(-time.Minute) // commits going to the WAL
+
+	// A quiesced database: only the main file, checkpointed long ago. Its
+	// mtime is the signal, as before.
+	setMtime(storage, checkedOut)
+	ev, ok := LastStorageEvent(state)
+	if !ok {
+		t.Fatal("no event with the storage present")
+	}
+	if !ev.At.Equal(checkedOut) || ev.Path != storage {
+		t.Errorf("event = %s @ %s, want the main file %s @ %s", ev.Path, ev.At, storage, checkedOut)
+	}
+
+	// The worker streams: commits land in the WAL, the main file stays put.
+	// The WAL's mtime must be the signal, or the worker reads as quiet for
+	// the whole window and is nudged and stopped while it works.
+	setMtime(wal, streaming)
+	ev, ok = LastStorageEvent(state)
+	if !ok {
+		t.Fatal("no event with the WAL present")
+	}
+	if !ev.At.Equal(streaming) {
+		t.Errorf("event at %s, want the WAL's mtime %s: a streaming worker is not quiet", ev.At, streaming)
+	}
+	if ev.Path != wal {
+		t.Errorf("event path = %s, want the WAL %s: the evidence must name the file that moved", ev.Path, wal)
+	}
+
+	// A checkpoint between rounds moves the main file past the WAL: the
+	// newer of the two is the signal, whichever wrote it.
+	afterCheckpoint := time.Now()
+	setMtime(storage, afterCheckpoint)
+	ev, ok = LastStorageEvent(state)
+	if !ok {
+		t.Fatal("no event after the checkpoint")
+	}
+	if !ev.At.Equal(afterCheckpoint) || ev.Path != storage {
+		t.Errorf("event = %s @ %s, want the main file %s @ %s after the checkpoint", ev.Path, ev.At, storage, afterCheckpoint)
+	}
+}
+
 // The evidence sentence names where a live worker's progress lives: the
 // durable runner's storage when it can be read, the storage honestly when
 // it cannot, and the CLI transcript for every other runner as before.
