@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 140,
-  "state": "collecting",
-  "reason": "collecting 3qg attempt 20",
-  "updated_at": "2026-10-05T11:27:33Z",
+  "sequence": 141,
+  "state": "integrating",
+  "reason": "integrating 3qg attempt 20 into epic/hn6",
+  "updated_at": "2026-10-05T11:27:44Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -112,7 +112,7 @@
     },
     {
       "tick_id": "3qg",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 20
     }
   ],
