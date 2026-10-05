@@ -1,0 +1,14 @@
+{
+  "id": "t6q",
+  "title": "Re-review hn6: its tree changed since its READY final review (round 4)",
+  "description": "Review the epic hn6 again, AS INTEGRATED, before the run lands it: its final review (pv7, decision 48) judged it READY at fbce6fc37f64, and the epic branch has changed since — now at e361821014b8, with work that review never saw (a tick closed or a commit pushed after it). This is review round 4, made only because the tree changed; the run lands on YOUR verdict, not the earlier one.\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what blocks it.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "role": "review",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T23:58:58Z",
+  "updated_at": "2026-10-05T23:58:58Z"
+}
