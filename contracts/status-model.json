@@ -559,7 +559,7 @@
       "required": ["recorded_usd", "attempts", "basis", "lines"],
       "additionalProperties": false,
       "properties": {
-        "recorded_usd": { "type": "number", "description": "What the records state about money: the decision records' own usage. The basis names the coverage so the number cannot quietly claim more than the records do." },
+        "recorded_usd": { "type": ["number", "null"], "description": "The sum of the metered lines, and null when no line is metered — a 0 beside all-unmetered lines is the fabricated $0.00 the per-river split exists to end (hn6 rule 7, tick dm2). The basis names the coverage so the number cannot quietly claim more than the records do." },
         "attempts": { "type": "integer", "description": "How many dispatches the run paid for — the count a person multiplies by their own rates." },
         "basis": { "type": "string" },
         "lines": {
@@ -999,7 +999,7 @@
         ]
       },
       "cost": {
-        "recorded_usd": 0,
+        "recorded_usd": null,
         "attempts": 9,
         "basis": "usage recorded on decision records; worker jobs record no cost",
         "lines": []

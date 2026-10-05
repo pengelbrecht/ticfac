@@ -53,6 +53,22 @@ loud.
 
 ---
 
+## 2.0.0
+
+MAJOR: `recorded_usd` is null when no line is metered (tick dm2, epic hn6
+— A4, rule 7). The status model's cost roll-up answered `recorded_usd: 0`
+beside cost lines that were all "not metered", which is the fabricated
+$0.00 the per-river split exists to end, this time on the roll-up instead
+of the line. The field becomes `number | null`: the sum of the metered
+lines where one exists, null when none is metered — a measured zero is
+still a number (a decision whose records state a price of zero), so an
+unchanged consumer that assumes a number is now wrong on the all-
+unmetered document, which is why this is MAJOR and not MINOR.
+`status-model.json`'s schema gains the null alternative, the golden
+`status_model_completed_awaiting_merge` states `recorded_usd: null` beside
+its empty lines, and the Go builder and both parity suites move in the
+same commit. The cloudflare pin bumps in the same commit.
+
 ## 1.7.0
 
 MINOR: the fold of main into epic/hn6 — two parallel cuts become one again,
