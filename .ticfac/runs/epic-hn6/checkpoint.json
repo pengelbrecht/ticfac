@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 213,
-  "state": "gating",
-  "reason": "running the integrated gate for c9n on 1491e9c83ca2",
-  "updated_at": "2026-10-05T16:40:27Z",
+  "sequence": 214,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-10-05T16:42:39Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -151,6 +151,30 @@
       "tick_id": "c9n",
       "state": "closed",
       "attempt": 28
+    },
+    {
+      "tick_id": "5uq",
+      "state": "ready"
+    },
+    {
+      "tick_id": "7l6",
+      "state": "ready"
+    },
+    {
+      "tick_id": "dm2",
+      "state": "ready"
+    },
+    {
+      "tick_id": "jmf",
+      "state": "ready"
+    },
+    {
+      "tick_id": "mwt",
+      "state": "ready"
+    },
+    {
+      "tick_id": "wvn",
+      "state": "ready"
     }
   ],
   "provenance": {
