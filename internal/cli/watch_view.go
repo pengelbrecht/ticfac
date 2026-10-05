@@ -188,7 +188,33 @@ func dashboardHeadline(m statusmodel.Model, st watchStyles, width int) []string 
 		dashSeat(identity, st.dim(m.Host+" · "+life), width),
 		dashProgressLine(m, st, width),
 	}
+<<<<<<< HEAD
 	return append(head, dashPhaseLine(m, st, width)...)
+=======
+	if h := m.Health; h != (statusmodel.Health{}) {
+		var counts []string
+		for _, c := range []struct {
+			n    int
+			what string
+		}{
+			{h.RemoteRetries, "remote retry"},
+			{h.Interventions, "intervention"},
+			{h.StallWarnings, "stall warning"},
+			{h.WallClocksFired, "wall clock"},
+			{h.Pushes, "push"},
+			{h.GitHubErrors.Total(), "GitHub error"},
+		} {
+			if c.n > 0 {
+				counts = append(counts, watchPlural(c.n, c.what))
+			}
+		}
+		line += " · " + strings.Join(counts, ", ")
+	}
+	if len(m.Degraded) > 0 {
+		line += " · " + st.red("degraded: "+strings.Join(m.Degraded, ", "))
+	}
+	return line
+>>>>>>> 382cffa2908ec5c27dc8689b5c386aca211858dc
 }
 
 // dashSeat places `right` at the pane's right edge beside `left`, truncating
@@ -1386,6 +1412,7 @@ func watchPlural(n int, what string) string {
 	if n == 1 {
 		return fmt.Sprintf("1 %s", what)
 	}
+<<<<<<< HEAD
 	word := what
 	if strings.HasSuffix(what, "y") && len(what) >= 2 && !strings.ContainsAny(what[len(what)-2:len(what)-1], "aeiouy") {
 		word = what[:len(what)-1] + "ies"
@@ -1393,4 +1420,10 @@ func watchPlural(n int, what string) string {
 		word = what + "s"
 	}
 	return fmt.Sprintf("%d %s", n, word)
+=======
+	if strings.HasSuffix(what, "sh") {
+		return fmt.Sprintf("%d %ses", n, what)
+	}
+	return fmt.Sprintf("%d %ss", n, what)
+>>>>>>> 382cffa2908ec5c27dc8689b5c386aca211858dc
 }

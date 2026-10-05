@@ -453,7 +453,13 @@ func (r *Reconciler) evacGit(dir string, deadline time.Time, args ...string) (st
 	cmd.WaitDelay = evacWaitDelay
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout, cmd.Stderr = &outBuf, &errBuf
-	if err := cmd.Run(); err != nil {
+	// A push waits its slot in the repository's host-wide queue (tick rlp),
+	// but never more than half of what is left of the evacuation's bound: the
+	// other half is the push's own.
+	done := gitbin.PushQueueUntil(time.Now().Add(time.Until(deadline)/2), dir, args, nil)
+	err := cmd.Run()
+	done(err)
+	if err != nil {
 		if ctx.Err() != nil {
 			return "", fmt.Errorf("did not finish inside its bound: %w", ctx.Err())
 		}

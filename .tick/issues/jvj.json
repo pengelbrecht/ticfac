@@ -1,0 +1,18 @@
+{
+  "id": "jvj",
+  "title": "Spike: cloud workers on claude -p with the operator's Max subscription token",
+  "gloss": "claude-sub in cloud workers",
+  "description": "Operator, 2026-10-05: how well could cloud workers run `claude -p` on the Max subscription? The 'no claude in the cloud' rule (memory: cloud-off-claude-local-opus-fine) is economic — cloud claude billed per token; a subscription token changes that, so the rule would become 'no per-token claude in the cloud'. FIRST: the operator checks Anthropic's current consumer terms / usage policy for unattended automated use of a subscription (setup-token is designed for CI/headless use; Anthropic's weekly limits target always-on background agents) — record the answer on this tick before any build. Then: (1) token via `claude setup-token` (CLAUDE_CODE_OAUTH_TOKEN), kept OUT of the container: the Worker injects it for api.anthropic.com via the Sandbox SDK 1.0 outbound per-host interception (umq) — never in the container env or disk; (2) the claude CLI in the worker image (the local claude-CLI exception from 43y also applies in the cloud); (3) one cloud final-review job (review-epic) on opus via claude -p — the use case: opus reviews without moving a cloud run local (hn6 2026-10-04); (4) measure latency from a Cloudflare container, how many concurrent claude jobs the subscription tolerates before 429s, and how a 429 behaves; (5) design: a capped 'claude-sub' rung (1–2 concurrent) for review/closeout (and maybe the top implement rung), stepping down to the Workers AI ladder on a subscription rate limit instead of stalling; the cloud routing rule changed in one place (tick nwn).",
+  "notes": "2026-10-05 15:44 - Operator, 2026-10-05: wants to switch between multiple subscriptions when one runs out. Part of the terms check: whether rotating across subscriptions/accounts to continue when one hits its usage limit is permitted by Anthropic's consumer terms and usage policy (it may count as circumventing usage limits); only build multi-subscription failover if the terms allow it — otherwise the fallback on a subscription limit is the Workers AI ladder. If allowed: the Worker holds N tokens, picks one per job, marks a token exhausted on its rate-limit response until its reset, never mixes them within a job.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "after": [
+    "umq"
+  ],
+  "acceptance_criteria": "[1] Terms answer recorded on the tick. [2] A staging cloud review job ran on opus via claude -p with the token injected by the Worker (never in the container). [3] Measured latency, concurrency ceiling and 429 behaviour recorded. [4] A decision doc with the recommended rung/cap/fallback design.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-05T13:42:49.463128Z",
+  "updated_at": "2026-10-05T13:44:34.094314Z"
+}

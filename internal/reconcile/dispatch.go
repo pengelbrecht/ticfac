@@ -942,19 +942,28 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		}
 
 		r.setTick(tick, "ready")
-		if _, err := r.checkpoint(runstate.StateDispatching, fmt.Sprintf("dispatching %s as attempt %d", tick, number)); err != nil {
+		// The dispatching checkpoint and the marker are one step (tick f61):
+		// the checkpoint is held, and the marker — a create, whose answer is
+		// what permits the dispatch — lands at once carrying it, as one push.
+		var outcome runstate.Outcome
+		if err := r.heldStep(func() error {
+			if _, err := r.checkpoint(runstate.StateDispatching, fmt.Sprintf("dispatching %s as attempt %d", tick, number)); err != nil {
+				return err
+			}
+			var err error
+			outcome, err = r.store.PutAttempt(runstate.Attempt{
+				Attempt:      number,
+				TickID:       tick,
+				DispatchedAt: r.now().UTC().Format(time.RFC3339),
+				JobHandle:    marker.asMap(),
+				Provenance:   r.attemptProvenance(dispatch),
+			})
+			if err != nil {
+				return fmt.Errorf("record the dispatch of %s: %w", tick, err)
+			}
+			return nil
+		}); err != nil {
 			return nil, nil, marker, err
-		}
-
-		outcome, err := r.store.PutAttempt(runstate.Attempt{
-			Attempt:      number,
-			TickID:       tick,
-			DispatchedAt: r.now().UTC().Format(time.RFC3339),
-			JobHandle:    marker.asMap(),
-			Provenance:   r.attemptProvenance(dispatch),
-		})
-		if err != nil {
-			return nil, nil, marker, fmt.Errorf("record the dispatch of %s: %w", tick, err)
 		}
 		if !outcome.EffectPermitted() {
 			// The loser of a dispatch race is refused by the repository, not by

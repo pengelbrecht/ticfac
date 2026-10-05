@@ -112,6 +112,18 @@ func (r *Reconciler) decideRoutedFinding(ctx context.Context, marker attemptHand
 	case !declared || !route.File:
 		why = fmt.Sprintf("%s is not a repository this factory files into — no [findings.route.%q] file = true in "+
 			".tick/runners.toml", standing.Target, standing.Target)
+	case runTokenIsRepositoryScoped():
+		// Tick gy9: on the factory's GitHub App rung the run's only GitHub
+		// credential is an installation token minted for the run's own
+		// repository (cloudflare/src/github-app.ts mints it with
+		// repositories: [repo], and the token door names no other). A push
+		// to the target with it is refused with certainty — run_5c7c spent
+		// four of them on ticks — so the run does not make it.
+		self, _ := r.thisRepository()
+		why = fmt.Sprintf("this run's GitHub credential is the factory App's installation token, minted for %s "+
+			"alone, so a write to %s could only be refused (cross-repository; the run did not attempt it). A "+
+			"local run, whose operator credential reaches %s, files it there", orUnknown(self), standing.Target,
+			standing.Target)
 	default:
 		id, fileErr := r.fileIntoTarget(standing, route)
 		if fileErr == nil {
@@ -145,6 +157,22 @@ func (r *Reconciler) decideRoutedFinding(ctx context.Context, marker attemptHand
 		"repository naming %s and carrying the finding verbatim, for a person to carry it there", reason, why,
 		standing.Target)
 	return r.recordRoutedDecision(ctx, marker, standing, record)
+}
+
+// runTokenIsRepositoryScoped answers whether this process's GitHub credential
+// is a token minted for the run's one repository: the factory's GitHub App
+// rung, the only rung whose container is handed the token door
+// (forge.FactoryTokenURLEnv; cloudflare/src/github-app.ts containerGitHub).
+// A variable so a test can say which rung it is on.
+var runTokenIsRepositoryScoped = func() bool {
+	return strings.TrimSpace(os.Getenv(forge.FactoryTokenURLEnv)) != ""
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "this repository"
+	}
+	return s
 }
 
 // recordRoutedDecision writes the decision record create-if-absent and

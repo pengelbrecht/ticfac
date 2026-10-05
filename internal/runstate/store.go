@@ -85,6 +85,15 @@ type Store struct {
 	fetched bool
 	pushes  int
 
+	// The held step (held.go): whether one is held, the records chained and
+	// not yet on origin, the chain's head, origin's view when the chain
+	// began, and how many pushes this store has sent.
+	holding  bool
+	held     []*heldWrite
+	tip      string
+	baseView map[string]string
+	sends    int
+
 	// guardOff disables the compare-and-swap for the negative control. A CAS
 	// that has stopped guarding does not raise: it lets a second reconciler
 	// dispatch the same attempt, and the run pays for both jobs.
@@ -142,7 +151,17 @@ func (s *Store) Pushes() int { return s.pushes }
 // executable in any language; these are the same rules over a repository.
 
 // Fetch refreshes this writer's view of origin.
+//
+// In a held step the fresh view keeps this writer's own held records on top
+// of it: a view of origin that lost them would be a view that lies to their
+// writer (held.go, refreshHeld).
 func (s *Store) Fetch() (Outcome, error) {
+	if len(s.held) > 0 {
+		if err := s.refreshHeld(); err != nil {
+			return "", err
+		}
+		return Fetched, nil
+	}
 	head, view, err := s.peek()
 	if err != nil {
 		return "", err
@@ -192,7 +211,7 @@ func (s *Store) CommitLocal(path string, content []byte) (Outcome, error) {
 // happened, so ConflictExists means another reconciler already did it and this
 // one must not.
 func (s *Store) CreateIfAbsent(path string, content []byte) (Outcome, error) {
-	return s.put(path, content, false)
+	return s.put(path, content, false, false)
 }
 
 // UpdateIfSHA commits and pushes in one operation, guarded on origin's sha for
@@ -200,10 +219,13 @@ func (s *Store) CreateIfAbsent(path string, content []byte) (Outcome, error) {
 // writer's view of the run is stale: re-fetch and reconcile from what is
 // actually there, never retry blindly.
 func (s *Store) UpdateIfSHA(path string, content []byte) (Outcome, error) {
-	return s.put(path, content, true)
+	return s.put(path, content, true, false)
 }
 
-func (s *Store) put(path string, content []byte, update bool) (Outcome, error) {
+// put writes one record. holdable says the record may wait in a held step
+// (held.go): only a non-terminal checkpoint update may, and only while a step
+// is held. Everything else lands before put returns.
+func (s *Store) put(path string, content []byte, update, holdable bool) (Outcome, error) {
 	if err := checkPath(path); err != nil {
 		return "", err
 	}
@@ -240,89 +262,17 @@ func (s *Store) put(path string, content []byte, update bool) (Outcome, error) {
 	if update {
 		verb = "update"
 	}
-
-	landed := func() (Outcome, error) {
-		s.pushes++
-		if update {
-			return Updated, nil
-		}
-		return Created, nil
+	// The record joins the chain — alone, outside a held step, which makes
+	// the flush below exactly the per-record push this always was — and
+	// lands now unless the step may hold it (held.go says which may).
+	w := &heldWrite{message: s.message(verb, path), path: path, blob: blob, update: update, guard: s.guardFor(path)}
+	if err := s.chain(w); err != nil {
+		return "", err
 	}
-
-	base := s.head
-	// pushed is every commit this call has sent, and uncertain says whether
-	// any send failed in transit — a push whose effect on origin nobody heard
-	// back about. Together they are how a lost acknowledgement is told apart
-	// from a foreign write (tick o82).
-	var pushed []string
-	uncertain := false
-	for try := 0; try < maxContendedPushes; try++ {
-		commit, err := s.git.commitWithFile(base, path, blob, s.message(verb, path))
-		if err != nil {
-			return "", err
-		}
-		pushed = append(pushed, commit)
-		_, stderr, tries, pushErr := s.git.tryCounted(nil, nil, "push",
-			"--force-with-lease="+s.branchRef()+":"+base,
-			s.remote, commit+":"+s.branchRef())
-		if tries > 1 {
-			uncertain = true
-		}
-		if pushErr == nil {
-			// A successful push refreshes the WRITER's view of the path it
-			// wrote, and no other actor's.
-			s.head = commit
-			s.view[path] = blob
-			return landed()
-		}
-		if !refusedPush(stderr) {
-			return "", pushErr
-		}
-
-		// The lease is on the branch ref, which is coarser than the per-path
-		// guard. Re-examine THAT guard against origin: a genuine loss is the
-		// contract's typed conflict, and a ref that merely moved for another
-		// path is a commit to rebuild.
-		freshHead, freshView, err := s.peek()
-		if err != nil {
-			return "", err
-		}
-		// Before either: is what moved the ref THIS writer? A push that landed
-		// and whose acknowledgement was lost leaves origin at this writer's
-		// own commit, and the retry of it is refused against a head that is
-		// its own write. Calling that a conflict halts the run on its own
-		// hand — epic-gvc, 2026-09-25. A write that is only ours when it is
-		// provably ours: the path carries this call's blob, AND the head is a
-		// commit this call built, or (after a send that failed in transit)
-		// one indistinguishable from it — same tree, same parent, same message.
-		if freshView[path] == blob {
-			own, err := s.ownWrite(freshHead, pushed, uncertain)
-			if err != nil {
-				return "", err
-			}
-			if own {
-				s.head, s.view = freshHead, freshView
-				return landed()
-			}
-		}
-		if !s.guardOff {
-			if update {
-				if freshView[path] != s.view[path] {
-					return ConflictStaleSHA, nil
-				}
-			} else if _, exists := freshView[path]; exists {
-				return ConflictExists, nil
-			}
-		}
-		// The guard still holds, so the ref moved for some other path. Take
-		// the whole fresh view with the new base: a writer that kept the old
-		// one would know a NEWER ref and an OLDER set of paths, and its next
-		// create would sail past a lease that has nothing to say about paths.
-		s.head, s.view, base = freshHead, freshView, freshHead
+	if s.holding && holdable {
+		return Updated, nil
 	}
-	return "", fmt.Errorf("runstate: %s on %s: origin's %s moved under this writer %d times running; "+
-		"that is an operational problem, not a conflict to spin on",
-		verb, path, s.branch, maxContendedPushes)
+	return s.flush(w)
 }
 
 // ownWrite reports whether origin's head is this writer's own write: one of
@@ -568,7 +518,9 @@ func (s *Store) PutCheckpoint(c Checkpoint) (Outcome, error) {
 	path := CheckpointPath(s.runID)
 	var outcome Outcome
 	if exists {
-		outcome, err = s.UpdateIfSHA(path, content)
+		// A held step may hold a checkpoint update — never a terminal one,
+		// whose commit the run tag is placed on (held.go).
+		outcome, err = s.put(path, content, true, !c.State.Terminal())
 	} else {
 		outcome, err = s.CreateIfAbsent(path, content)
 	}
@@ -706,7 +658,7 @@ func (s *Store) CheckpointHistory() ([]Checkpoint, error) {
 		return nil, nil
 	}
 	path := CheckpointPath(s.runID)
-	out, err := s.git.run("log", "--format=%H", "--reverse", s.head, "--", path)
+	out, err := s.git.run("log", "--format=%H", "--reverse", s.readHead(), "--", path)
 	if err != nil {
 		return nil, err
 	}
@@ -924,6 +876,11 @@ func (s *Store) load(path string, record any) (bool, error) {
 // in the target's log. It is idempotent: a tag already on origin is left where
 // it is, because a restart replaying a terminal checkpoint must not move it.
 func (s *Store) ensureRunTag() error {
+	// The tag goes on origin's head, so whatever a held step chained lands
+	// first.
+	if _, err := s.flush(nil); err != nil {
+		return err
+	}
 	sha, placed, err := s.RunTag()
 	if err != nil {
 		return err

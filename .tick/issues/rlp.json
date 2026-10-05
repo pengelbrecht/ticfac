@@ -1,0 +1,16 @@
+{
+  "id": "rlp",
+  "title": "One paced, jittered push queue per repository on a host, shared by every run; count pushes and GitHub errors per run",
+  "gloss": "per-repo push queue",
+  "description": "docs/analysis/github-failures.md: 7 of 8 bare '[remote rejected] \u003csha\u003e -\u003e \u003cref\u003e (failed)' rejections (hn6/43y, 2026-10-04/05) came within 5s of the OTHER live run's push to the same repository, against 3% of all pushes. 11% of pushes were the 7th or later in their trailing minute, above GitHub's documented recommended maximum of 6 pushes per minute per repository. A merge to main makes every live run fold and push within ~140ms of each other. Nothing paces pushes across runs on a host: each Reconciler pushes on its own, and the retry after (failed) is a fixed 2s/4s/8s with no jitter. The cloud already has one serialized publisher per repository (ef7); local runs have none.\n\nWork: every push a ticfac process makes to a repository (tracker publishes, integrations, evidence, base folds, start refs, wip refs; worker pushes where ticfac launches them) goes through one host-wide queue keyed by the repository (a lock under the git common dir or the ticfac state dir), paced by a token bucket below 6 pushes/minute with a small burst, with full-jitter backoff on a transient remote failure and a jittered delay before a base-refresh fold push. The feed and 'ticfac status' report each run's push count, its peak pushes per minute, and GitHub errors by class, so the effect of this and of f61 is measurable. The queue wait is bounded and visible: a run waiting on the queue must read as waiting on the queue, never as a hang.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "Two local runs on one origin never push in the same pacing slot (test with two reconcilers against one origin); a (failed) retry waits a jittered interval; a base-refresh fold push is jittered; status and the feed show per-run push counts and GitHub errors by class; a queue wait past its bound is its own feed line.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-05T12:37:27.97509Z",
+  "updated_at": "2026-10-05T14:14:49.224588Z",
+  "closed_at": "2026-10-05T14:14:49.224588Z",
+  "closed_reason": "PR #218 (6ac559ee): every push through gitbin.PushQueue; pushes + GitHub errors per run in status; each GitHub error logs trailing-60s push count and other-run-within-5s; jittered (failed) retry and post-merge fold; hard throttle behind TICFAC_PUSH_QUEUE=1 (off by default) until the data supports it"
+}

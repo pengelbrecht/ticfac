@@ -53,6 +53,7 @@ loud.
 
 ---
 
+<<<<<<< HEAD
 ## 1.6.1
 
 PATCH: `status-model.json`'s `remaining` description names the second
@@ -299,6 +300,18 @@ stage's `failed`), and a superseded try carried a `next_step` while a later
 try stood (a next step is stated on the last try of a refusal only). The
 schema, the rules and every other byte are unchanged, and both corrected
 values remain schema-admitted. No consumer has anything to do.
+=======
+## 1.2.0
+
+MINOR: three health counts added to the status model. `status-model.json`'s
+`health` gains `pushes`, `peak_pushes_per_minute` and `github_errors` (a
+closed object counting `network`, `ref_update_failed`, `server_fault`,
+`auth_refused` and `cross_repo_refused`), counted from the run feed's new
+`pushed` and `github_error_<class>` lines (ticks rlp and gy9;
+docs/analysis/github-failures.md). The model's producer is ticfac, which
+always emits them; a reader that ignores them (the factory's status page) is
+still correct.
+>>>>>>> 382cffa2908ec5c27dc8689b5c386aca211858dc
 
 ---
 

@@ -1227,7 +1227,11 @@ func cloudGit(ctx context.Context, root string, args ...string) (string, error) 
 	// It pushes the epic branch and reads it back with ls-remote: a silent
 	// remote must fail the command, not hold it (gitbin.TransportEnv).
 	command.Env = append(os.Environ(), gitbin.TransportEnv()...)
+	// The push waits its slot in the repository's host-wide queue, beside
+	// every local run's (tick rlp).
+	done := gitbin.PushQueue(root, args, nil)
 	output, err := command.CombinedOutput()
+	done(err)
 	if err != nil {
 		message := strings.TrimSpace(string(output))
 		if message == "" {

@@ -99,6 +99,13 @@ const StoppedRemoteAuthRefused = runstate.RemoteAuthRefusedClass
 // the remedy in the line.
 const StoppedRemoteTokenRefused = "remote_token_refused"
 
+// StoppedRemoteCrossRepoRefused is a credential refused by a repository other
+// than the one it was minted for (tick gy9): the per-run App token pushed at
+// another repository. It is never retried in the run and never resumed: no
+// fresh token for THIS repository reaches that one, so it is named, with the
+// repository, for a person.
+const StoppedRemoteCrossRepoRefused = runstate.RemoteCrossRepoRefusedClass
+
 // StoppedLeaseTaken is the factory refusing a dispatch because ANOTHER run
 // holds the project's dispatch lease (hn6's restarted cloud run halted over
 // the lease as "a stop this run has no classification for"). It needs a
@@ -333,6 +340,12 @@ func errorStopReason(err error) string {
 	if errors.As(err, &taken) && taken.LeaseTaken() {
 		return StoppedLeaseTaken
 	}
+	// Before the auth classes: its text is a 403 like any token refusal, and
+	// read as one it would be resumed into the same certain refusal.
+	var cross interface{ CrossRepoRefused() string }
+	if errors.As(err, &cross) && cross.CrossRepoRefused() != "" {
+		return StoppedRemoteCrossRepoRefused
+	}
 	switch runstate.ClassifyRemote(err) {
 	case runstate.RemoteTransient:
 		return StoppedRemoteTransient
@@ -512,6 +525,10 @@ func haltReason(stop, previous supervisedStop, made, capped int) string {
 	case stop.Reason == StoppedRemoteAuthRefused:
 		return "the remote refused this machine's credentials past the retry bound — a key, an ssh-agent, " +
 			"an access grant or a token's permissions is a person's to fix, and the refusal below says what to check"
+	case stop.Reason == StoppedRemoteCrossRepoRefused:
+		return "a repository other than this run's refused its credential, which was minted for this run's " +
+			"repository alone — no retry or fresh token changes that, so the write the refusal below names is a " +
+			"person's to make"
 	case !resumesWithoutAPerson(stop.Reason) && !stop.Decides:
 		return "it needs a person — this is a decision, not a retype, and the run stops for it exactly as it " +
 			"always has"
