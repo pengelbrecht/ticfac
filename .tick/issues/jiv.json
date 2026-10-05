@@ -3,7 +3,7 @@
   "title": "init --runner pi writes review/closeout cells the herdr substrate now refuses",
   "description": "ticfac init writes the operator's runner answer as `kind` for all three role cells, including review and closeout. With the herdr pi kind deleted (this tick), a repository init'ed with `--runner pi` whose run resolves the herdr substrate routes its review-epic and closeout-epic profiles (executor `herdr`, runner `claude`) through the roles-table overlay to kind `pi` — and `usableProfile` now refuses at run start, naming the cell and the kinds herdr launches. The refusal is fail-closed and names the fix (edit the routing or pin substrate=harness), so nothing spawns the pi CLI; but init could write those two cells as claude when the runner answer is pi, or say at write time which substrates the routing it wrote supports. Only bites repositories other than this one (this repo's own [roles.review] names claude).\nevidence: internal/cli/init.go (runnersTOML writes kind = answers.runner for implement, review and closeout); internal/reconcile/profiles.go usableProfile's Runners refusal; profiles-herdr/review-epic.json (executor herdr)\n\nticfac run epic-43y created this tick by absorbing the finding bd282f5d7faca7b85ac40b68bc727fa4c36669a64cf54d0b6d9be49e3d30e375 (reported by run-epic-43y/tick-uxi/attempt-30): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/bd282f5d7faca7b85ac40b68bc727fa4c36669a64cf54d0b6d9be49e3d30e375.json on the run branch.",
   "notes": "2026-10-05 16:49 - ticfac run epic-43y: created by absorbing finding bd282f5d7faca7b85ac40b68bc727fa4c36669a64cf54d0b6d9be49e3d30e375 — placed before the final review, which is blocked-by jiv. The decision record is .ticfac/runs/epic-43y/absorptions/bd282f5d7faca7b85ac40b68bc727fa4c36669a64cf54d0b6d9be49e3d30e375.json on epic/43y, and it says: the classifier put 0.54 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A1: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side\n2026-10-05 18:17 - ticfac run epic-43y: jiv try 1 (run dispatch #40) reported a finding the run itself decided — proposed-tick \"doctor's routing check cannot refuse a runner the run's executors cannot launch\" (key 4b94941a0e21bc181ef8ef68edc438b50e974681fdbffc69e75c330a05cf5461, severity low, for this repository) is promoted to a backlog tick with an owner, oc5; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/4b94941a0e21bc181ef8ef68edc438b50e974681fdbffc69e75c330a05cf5461.json, and the draft is triaged as promoted.\n2026-10-05 18:20 - ticfac run epic-43y: jiv try 1 (run dispatch #40) merged into epic/43y as 2505d53114c2; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "discovered_from": "run-epic-43y/tick-uxi/attempt-30",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T14:49:06Z",
-  "updated_at": "2026-10-05T16:20:30.116944Z",
-  "started_at": "2026-10-05T15:42:13.124505Z"
+  "updated_at": "2026-10-05T16:20:33.054787Z",
+  "closed_at": "2026-10-05T16:20:33.054787Z"
 }
