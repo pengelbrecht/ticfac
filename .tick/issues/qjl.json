@@ -3,10 +3,10 @@
   "title": "Close out hn6: verify A1-A6, retro",
   "gloss": "close out hn6",
   "description": "Verify hn6's acceptance item by item, outside-in: A1 render the dashboard from a real run's records (ticfac watch on this run's own epic, or the golden-fixture test when no TTY), A2 hold shown with command, A3 tick view, A4 cost honesty, A5 status --json contract + phone page test, A6 u4l's properties in the gate plus z7w's Bombadil half (state its status; not blocking). Then the epic-close retro into .tick/learnings.md (compact to the 150-line cap).",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "v16",
     "435"
@@ -16,5 +16,6 @@
   "acceptance_criteria": "Retro recorded; A1-A6 each demonstrated or named as pending with its owning tick",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-28T18:41:20.530799Z",
-  "updated_at": "2026-09-28T18:41:20.530799Z"
+  "updated_at": "2026-10-05T15:13:59.408589Z",
+  "started_at": "2026-10-05T15:13:59.408589Z"
 }
