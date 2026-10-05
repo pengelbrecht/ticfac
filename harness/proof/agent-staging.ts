@@ -144,10 +144,14 @@ for (let offset = 0; ; ) {
 }
 
 const branch = state.branch ?? "tick/proof/xd3";
-const greet = await exec(`git -C /srv/origin.git show ${branch}:greet.sh`);
-const readme = await exec(`git -C /srv/origin.git show ${branch}:README.md`);
-const report = await exec(`git -C /srv/origin.git show ${branch}:RESULT-xd3.md`);
-const history = await exec(`git -C /srv/origin.git log --format=%s main..${branch}`);
+const greet = await exec(`git -C /work/repo show ${branch}:greet.sh`);
+const readme = await exec(`git -C /work/repo show ${branch}:README.md`);
+const report = await exec(`git -C /work/repo show ${branch}:RESULT-xd3.md`);
+// The origin outlives the box (tick a2l), so the evidence reads from the
+// workspace the attempt left: main is fetched back for the range.
+const history = await exec(
+  `git -C /work/repo fetch -q origin main && git -C /work/repo log --format=%s origin/main..${branch}`,
+);
 const runGreet = await exec("cd /work/repo && ./greet.sh");
 
 const claims: Record<string, boolean> = {

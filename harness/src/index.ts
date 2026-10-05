@@ -63,6 +63,13 @@ export {
   type WorkspaceReadyOutcome,
   workspaceCheckpointExtension,
 } from "./workspace/checkpoints.js";
+export {
+  DumbGitOrigin,
+  type DumbGitOriginOptions,
+  MemoryOriginStore,
+  ORIGIN_HEAD_REF,
+  type OriginStore,
+} from "./workspace/dumb-git-origin.js";
 
 // ------------------------------------------------- worker contract hooks ---
 // Epic 43y step 5 (tick pom): the report linter pushback (#183) and the

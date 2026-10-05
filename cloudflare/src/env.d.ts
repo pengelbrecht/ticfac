@@ -82,6 +82,14 @@ declare namespace Cloudflare {
       | import("./worker-agent").WorkerAgentNamespace
       | { agent(name: string): import("./worker-agent").WorkerAgentStub };
     /**
+     * One staging git origin per proof attempt (tick a2l,
+     * src/staging-git-origin.ts): the attempt's throwaway repository in Durable
+     * Object storage, so it outlives the container a proof can destroy
+     * mid-turn. A seam, like every binding here, so a test can substitute a
+     * fake; unset everywhere but the staging agent Worker.
+     */
+    GIT_ORIGINS?: import("./staging-git-origin").StagingGitOriginNamespace;
+    /**
      * The orchestrator image this deployment's container application serves,
      * for a deployment that pushed it into its own registry. Unset means the
      * bundled default (`DEFAULT_SANDBOX_IMAGE`).

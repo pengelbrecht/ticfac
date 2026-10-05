@@ -1,10 +1,16 @@
 # syntax=docker/dockerfile:1
 # The staging AGENT image (epic 43y, tick xd3): the staging image plus git and
 # a stand-in `ticks-worker` that honours the pinned --boot/--finish contract
-# (contracts/worker-boot-contract.json) on a throwaway repository inside the
-# container — a bare origin at /srv/origin.git, seeded on the first boot — so
-# a WorkerAgent attempt runs end to end without the factory image, a GitHub
+# (contracts/worker-boot-contract.json) on a throwaway repository — the
+# staging Worker's own git origin, seeded on the first boot — so a
+# WorkerAgent attempt runs end to end without the factory image, a GitHub
 # repository or tk (src/staging-agent.ts says why).
+#
+# The origin is OUTSIDE the box (tick a2l): /srv had it once, but a container
+# destroyed mid-turn took its own origin with it, and the [A2] restore had
+# nothing to fetch back. TICKS_REPO_URL (the same env var the production boot
+# gets, worker-boot.ts) names the Worker's /proof/git origin, which holds the
+# repository in Durable Object storage and therefore outlives every container.
 FROM debian:trixie-slim
 RUN apt-get update && apt-get install -y --no-install-recommends bash coreutils procps util-linux ca-certificates git \
     && rm -rf /var/lib/apt/lists/*
@@ -20,25 +26,39 @@ workdir="${TICKS_WORKDIR:-/work/repo}"
 state_dir="${TICKS_WORKER_STATE_DIR:-/tmp/ticks-worker}"
 tick="${TICKS_TICK:-xd3}"
 branch="tick/proof/${tick}"
+origin="${TICKS_REPO_URL:?TICKS_REPO_URL unset: the stand-in works on the git origin the staging Worker holds (tick a2l)}"
 say() { printf 'ticks-worker: %s\n' "$*"; }
 git config --global user.name "ticks sandbox"
 git config --global user.email "ticks-sandbox@ticks.invalid"
 git config --global init.defaultBranch main
 case "${1:-}" in
 --boot)
-	if [ ! -d /srv/origin.git ]; then
-		git init -q --bare /srv/origin.git || exit 3
-		seed="$(mktemp -d)"
-		git -C "$seed" init -q
-		printf '#!/bin/sh\necho "Helo, world"\n' >"$seed/greet.sh"
-		chmod +x "$seed/greet.sh"
-		printf '# proof\n\nA throwaway repository for the WorkerAgent staging proof.\n' >"$seed/README.md"
-		git -C "$seed" add -A && git -C "$seed" commit -q -m "seed" && git -C "$seed" push -q /srv/origin.git HEAD:main || exit 3
-		say "seeded /srv/origin.git"
+	# The clone lands whatever the origin holds: the seed of a first boot,
+	# or the tip of an attempt that is being booted again (the empty-clone
+	# warning on the very first boot is this branch's own case).
+	rm -rf "$workdir" && git clone -q "$origin" "$workdir" || exit 3
+	if ! git -C "$workdir" rev-parse -q --verify origin/main >/dev/null 2>&1; then
+		printf '#!/bin/sh\necho "Helo, world"\n' >"$workdir/greet.sh"
+		chmod +x "$workdir/greet.sh"
+		printf '# proof\n\nA throwaway repository for the WorkerAgent staging proof.\n' >"$workdir/README.md"
+		git -C "$workdir" add -A && git -C "$workdir" commit -q -m "seed" || exit 3
+		git -C "$workdir" push -q "$origin" HEAD:refs/heads/main || exit 3
+		git -C "$workdir" fetch -q origin main || exit 3
 	fi
-	rm -rf "$workdir" && git clone -q /srv/origin.git "$workdir" || exit 3
-	git -C "$workdir" checkout -q -B "$branch" || exit 3
+	# The attempt branch: whatever the origin already holds, else the seed.
+	# PUSHED at boot, so even a container lost before the first wip
+	# checkpoint restores to the boot state, not to nothing.
+	if git -C "$workdir" fetch -q "$origin" "$branch" 2>/dev/null; then
+		git -C "$workdir" checkout -q -B "$branch" FETCH_HEAD || exit 3
+	else
+		git -C "$workdir" checkout -q -B "$branch" origin/main || exit 3
+	fi
+	git -C "$workdir" push -q "$origin" "HEAD:refs/heads/${branch}" || exit 3
+	# The branch record rides the WORKSPACE, where every wip snapshot
+	# carries it: /tmp dies with the box, and the finish phase runs in
+	# whatever container a restore left behind.
 	mkdir -p "$state_dir" && printf '%s\n' "$branch" >"$state_dir/branch"
+	printf '%s\n' "$branch" >"$workdir/.ticks-worker-branch"
 	say "cloned at $(git -C "$workdir" rev-parse --short HEAD); worker branch ${branch}"
 	say "ticks-worker-boot-ok branch=${branch} result=RESULT-${tick}.md"
 	printf '%s\n' "ticks-worker-boot-prompt-begin"
@@ -70,7 +90,10 @@ case "${1:-}" in
 --finish)
 	status="${2:-0}"
 	cd "$workdir" || exit 3
-	recorded="$(sed -n 1p "$state_dir/branch" 2>/dev/null)"
+	# The workspace's record first (it survives a destroyed container);
+	# the state dir's — written by a boot this box never ran — second.
+	recorded="$(sed -n 1p "$workdir/.ticks-worker-branch" 2>/dev/null)"
+	[ -n "$recorded" ] || recorded="$(sed -n 1p "$state_dir/branch" 2>/dev/null)"
 	[ -n "$recorded" ] || { say "no boot record"; exit 6; }
 	report="RESULT-${tick}.md"
 	git add -A && { git diff --cached --quiet || git commit -q -m "ticks-worker: report and remaining work"; }
