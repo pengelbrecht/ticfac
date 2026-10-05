@@ -36,7 +36,7 @@ package statusmodel
 //     may carry none of them.
 //   - Absorptions and findings accumulate: they are the epic's own history,
 //     keyed by content, and no run's copy is newer than another's.
-//   - Everything else — the run section — stays the newest run's alone; the
+//   - Everything else — the run section — stays the subject run's alone; the
 //     merge is never read for workers, cost, waits or the feed.
 
 import (
@@ -69,9 +69,10 @@ type mergedRuns struct {
 
 	// rows is each tick's newest non-ready row and the run that wrote it.
 	rows map[string]rowState
-	// owner is, per tick, the last run that has records for it: the newest
-	// run with dispatch markers for the tick, else the newest with a
-	// non-ready row, else none (-1).
+	// owner is, per tick, the last run that has records for it — newest by
+	// the checkpoints' own clock (tick c9n): the newest run with dispatch
+	// markers for the tick, else the newest with a non-ready row, else
+	// none (-1).
 	owner map[string]int
 	// markers and evidence are the OWNER run's records for that tick —
 	// never a cross-run union, because attempt numbers are per run and the
