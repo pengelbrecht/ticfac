@@ -12,8 +12,11 @@
   "attempt": 43,
   "done_item": "A5",
   "demonstrating_check": "cd harness && pnpm vitest run -c vitest.node.config.ts",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T18:32:41Z",
+  "triaged_at": "2026-10-05T18:32:55Z",
+  "triaged_by": "ticfac run epic-43y absorbing h3c",
+  "promoted_as": "h3c",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "2oa",
