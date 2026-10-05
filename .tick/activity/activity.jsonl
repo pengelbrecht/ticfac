@@ -2483,3 +2483,4 @@
 {"ts":"2026-10-05T16:42:50.672441Z","tick":"5uq","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Status model reads an 'opus' claude worker through pi's transcript layout"}}
 {"ts":"2026-10-05T16:43:10.285845Z","tick":"7l6","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Restart after a signal death leaves the live run's phase 'cancelled', no ETA"}}
 {"ts":"2026-10-05T16:43:30.42379Z","tick":"dm2","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Meter local runs' Workers AI spend via the gateway; no live run ever metered"}}
+{"ts":"2026-10-05T16:43:49.7703Z","tick":"jmf","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"watch exit stalls: its key reader holds stdin while fang queries the terminal"}}
