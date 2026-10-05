@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 266,
-  "state": "running",
-  "reason": "648 is running as attempt 39",
-  "updated_at": "2026-10-05T20:07:19Z",
+  "sequence": 267,
+  "state": "collecting",
+  "reason": "collecting 24u attempt 36",
+  "updated_at": "2026-10-05T20:14:18Z",
   "ticks": [
     {
       "tick_id": "v16",
