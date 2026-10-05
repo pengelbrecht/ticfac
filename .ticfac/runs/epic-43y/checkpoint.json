@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 205,
-  "state": "running",
-  "reason": "kkt is running as attempt 33",
-  "updated_at": "2026-10-05T14:48:48Z",
+  "sequence": 206,
+  "state": "collecting",
+  "reason": "collecting uxi attempt 30",
+  "updated_at": "2026-10-05T14:48:54Z",
   "ticks": [
     {
       "tick_id": "92k",
