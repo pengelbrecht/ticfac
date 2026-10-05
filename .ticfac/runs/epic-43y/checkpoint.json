@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 264,
-  "state": "publishing",
-  "reason": "closing 8em behind the integrated gate on f4b443bf2dc0",
-  "updated_at": "2026-10-05T16:26:54Z",
+  "sequence": 265,
+  "state": "running",
+  "reason": "8em is closed",
+  "updated_at": "2026-10-05T16:27:03Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -182,7 +182,7 @@
     },
     {
       "tick_id": "8em",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 41
     }
   ],
