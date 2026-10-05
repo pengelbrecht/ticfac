@@ -150,6 +150,157 @@ func TestThisRepositorysLocalImplementTiersRouteOnTheOneHarness(t *testing.T) {
 	}
 }
 
+// short: reads this repository's .tick/runners*.toml — and, to prove the
+// sweep bites, copies of them with one extra cell in a temp directory —
+// and resolves profiles in memory; no harness, no git, milliseconds.
+//
+// The local claude exception, blessed and then GUARDED (epic 43y, tick j6o).
+// The operator's 2026-10-04 decision keeps the claude CLI as the local
+// frontier rung only, and the 2026-10-05 decision on this tick adds the
+// review and closeout cells to the exception: local final reviews and
+// close-outs run on claude opus on purpose — the hn6 run was moved to a
+// local run for exactly that — and the on-demand judgement jobs
+// (resolve-conflict, plan-repair) inherit the review cell at the policy's
+// ceiling. This is the 7ml guard (implement only) extended to every role a
+// run can dispatch, at base values and at every tier a pin can ask for,
+// held to the table below: claude EXACTLY on the blessed cells, pi
+// everywhere else a resolution exists, and a refusal naming the tier
+// where none does. So the exception cannot quietly widen — the old codex
+// balanced cell would fail this sweep, and so would a claude cell added
+// under any rung the operator did not bless — and it cannot quietly
+// narrow either: a config that reroutes a local review or close-out off
+// the claude CLI defies the decision the cells record.
+func TestThisRepositorysLocalClaudeRoutingIsExactlyTheBlessedCells(t *testing.T) {
+	t.Parallel()
+	root, err := contracts.RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := filepath.Join(root, ".tick", "runners.toml")
+	for _, problem := range sweepLocalClaude(config) {
+		t.Error(problem)
+	}
+
+	// The sweep bites. This is the 7ml shape — a leftover cell no ladder
+	// derives, reachable only by a pin, naming a harness the operator did
+	// not bless — and with the cell present the sweep must flag it, or it
+	// certifies nothing.
+	dir := t.TempDir()
+	common, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	local, err := os.ReadFile(filepath.Join(root, ".tick", "runners.local.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTOML(t, filepath.Join(dir, "runners.toml"), string(common)+`
+
+# the leak under test: the claude CLI on a rung the operator did not bless
+[roles.implement.tiers.balanced]
+kind = "claude"
+model = "opus"
+`)
+	writeTOML(t, filepath.Join(dir, "runners.local.toml"), string(local))
+	problems := sweepLocalClaude(filepath.Join(dir, "runners.toml"))
+	if len(problems) == 0 {
+		t.Fatal("a claude cell on an unblessed rung passed the sweep")
+	}
+	joined := strings.Join(problems, "\n")
+	for _, want := range []string{"implement-tick", `"balanced"`, "claude"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the sweep's report does not name %s:\n%s", want, joined)
+		}
+	}
+}
+
+// blessedLocalClaude is the operator's local claude exception as a table:
+// every role a run can dispatch (the profile layer's [Roles] plus its
+// on-demand judgement jobs) against every tier a pin can ask for, and the
+// harness the resolution must produce. "" means the resolution must
+// REFUSE naming the tier — fail-closed, never fail-wrong (the 7ml rule) —
+// and "claude" is the exception itself: implement's kept frontier rung
+// (2026-10-04) and the review/closeout cells (2026-10-05, tick j6o). The
+// on-demand rows are the review cell's routing by construction — their
+// candidates end at [roles.review] — so they are blessed wherever it is.
+var blessedLocalClaude = map[string]map[string]string{
+	// Implementation: pi-durable at base and every rung the files declare,
+	// claude only as the frontier rung, a refusal for the rest (balanced,
+	// since 7ml removed the codex leftover).
+	"implement-tick": {"": "pi", "economy": "pi", "balanced": "", "strong": "pi", "frontier": "claude"},
+
+	// The blessed cells: local final reviews and close-outs on the claude
+	// CLI on purpose, at base values and at every tier the cells declare.
+	"review-epic":   {"": "claude", "economy": "", "balanced": "", "strong": "", "frontier": "claude"},
+	"closeout-epic": {"": "claude", "economy": "", "balanced": "", "strong": "", "frontier": ""},
+
+	// The on-demand judgement jobs, at the review cell's routing.
+	profile.RoleResolveConflict: {"": "claude", "economy": "", "balanced": "", "strong": "", "frontier": "claude"},
+	profile.RoleRepairGate:      {"": "claude", "economy": "", "balanced": "", "strong": "", "frontier": "claude"},
+}
+
+// sweepLocalClaude resolves every local role×tier against config and
+// returns every disagreement with [blessedLocalClaude], as strings rather
+// than t.Errorf calls so the guard's own test can also point it at a config
+// it must flag.
+func sweepLocalClaude(config string) []string {
+	var problems []string
+	tiers := []string{""}
+	for _, tier := range runconfig.TierNames {
+		tiers = append(tiers, string(tier))
+	}
+	for _, tc := range []struct {
+		substrate runconfig.Substrate
+		dir       string
+	}{
+		{runconfig.SubstrateHerdr, ""},
+		{runconfig.SubstrateHerdr, profile.EmbeddedHerdr},
+		{runconfig.SubstrateHarness, ""},
+	} {
+		for _, role := range profile.EveryRole() {
+			for _, tier := range tiers {
+				want := blessedLocalClaude[role][tier]
+				rung := "base values"
+				if tier != "" {
+					rung = fmt.Sprintf("tier %q", tier)
+				}
+				where := fmt.Sprintf("local %s (profiles %q): %s at %s", tc.substrate, tc.dir, role, rung)
+				p, err := profile.Resolve(role, profile.Options{
+					Dir: tc.dir, RunnersConfig: config, Tier: tier, Substrate: string(tc.substrate),
+				})
+				if want == "" {
+					// Fail-closed or fail-loud, never fail-wrong: a rung no file
+					// declares is refused naming it. Any other refusal is a
+					// routing defect in its own right.
+					if err == nil {
+						problems = append(problems, fmt.Sprintf("%s routes to %s/%s, want a REFUSAL naming the rung — "+
+							"no file declares it, and a pin that reaches it must be refused, never silently routed",
+							where, p.Runner, p.Model))
+						continue
+					}
+					if tier != "" && !strings.Contains(err.Error(), fmt.Sprintf("declares no tier %q", tier)) {
+						problems = append(problems, fmt.Sprintf("%s refuses for the wrong reason: %v", where, err))
+					}
+					continue
+				}
+				if err != nil {
+					problems = append(problems, fmt.Sprintf("%s refuses, want the %s harness: %v", where, want, err))
+					continue
+				}
+				if p.Runner != want {
+					problems = append(problems, fmt.Sprintf("%s routes to %s/%s, want the %s harness", where, p.Runner, p.Model, want))
+					continue
+				}
+				if want == "claude" && p.Model != "opus" {
+					problems = append(problems, fmt.Sprintf("%s routes to claude/%s, want claude opus — "+
+						"the operator's exception names opus, the model hn6 was moved to a local run for", where, p.Model))
+				}
+			}
+		}
+	}
+	return problems
+}
+
 // short: writes two small TOML files to a temp directory and resolves
 // profiles in memory; no harness.
 //
