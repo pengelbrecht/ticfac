@@ -11,8 +11,11 @@
   "tick_id": "435",
   "attempt": 22,
   "done_item": "A2",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T13:09:42Z",
+  "triaged_at": "2026-10-05T13:09:54Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing 3yx",
+  "promoted_as": "3yx",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "435",
