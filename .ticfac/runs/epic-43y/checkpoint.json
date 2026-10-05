@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 192,
-  "state": "collecting",
-  "reason": "collecting cni attempt 25",
-  "updated_at": "2026-10-05T14:26:15Z",
+  "sequence": 193,
+  "state": "integrating",
+  "reason": "integrating cni attempt 25 into epic/43y",
+  "updated_at": "2026-10-05T14:27:18Z",
   "ticks": [
     {
       "tick_id": "92k",
