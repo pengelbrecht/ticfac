@@ -1,0 +1,14 @@
+{
+  "id": "4ao",
+  "title": "Node suite red at base: a2l test under-times the discipline guard",
+  "description": "harness/test/node/harness-timeout-discipline.test.ts fails on epic/43y at the base of this attempt (reproduced at dd29e32c0): every process-driving test must declare timeout \u003e= 300_000 (the fim/hv3 rule), and tick a2l's 'an origin that outlives the box carries the boot, the wip and the restore' (harness/test/node/dumb-git-origin.test.ts:140) declares 120_000. CI's harness job runs `pnpm test`, which is BOTH vitest configs, so the epic branch's CI is red at head and the close-out's CI-green gate cannot pass until it is fixed. Fix is one line: raise that test's timeout to 300_000.\nevidence: harness/test/node/dumb-git-origin.test.ts:141 (timeout: 120_000); harness/test/node/harness-timeout-discipline.test.ts:495 — `cd harness \u0026\u0026 pnpm exec vitest run -c vitest.node.config.ts test/node/harness-timeout-discipline.test.ts` fails with 'expected [ Array(1) ] to deeply equal []'\n\nticfac run epic-43y created this tick by absorbing the finding 1e9517a04120b439c6b2cd1c8240f9cd8f11d4745b172f64e845f115b5064373 (reported by run-epic-43y/tick-i5e/attempt-48): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/1e9517a04120b439c6b2cd1c8240f9cd8f11d4745b172f64e845f115b5064373.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-i5e/attempt-48",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T19:04:10Z",
+  "updated_at": "2026-10-05T19:04:10Z"
+}
