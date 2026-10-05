@@ -66,10 +66,14 @@ type pipelineIndex struct {
 	// finding hold addresses THIS store — the same derivation buildWaits
 	// words the header's command from, so a row and the header cannot
 	// disagree about where the drafts are (tick q8m).
-	ownRunID       string
-	epicID         string
-	runID          string
-	host           string
+	ownRunID string
+	epicID   string
+	runID    string
+	host     string
+	// nonNewestOwner names every tick whose records belong to a run other
+	// than the subject's — earlier or later than it in the merge's own
+	// chronology (tick c9n) — so the derivation can word its tries' next
+	// steps once.
 	nonNewestOwner map[string]bool
 	tasks          map[string]tk.GraphTask
 	markersByTick  map[string][]runstate.Attempt
@@ -91,7 +95,7 @@ type pipelineIndex struct {
 // newPipelineIndex groups the sources' per-tick facts once, so decorating a
 // hundred ticks costs one pass over each record kind rather than a hundred.
 func newPipelineIndex(src Sources, merged *mergedRuns, priorHolds []PriorHold, epicID, runID string) *pipelineIndex {
-	newest := merged.newestRun()
+	subject := merged.subjectRun()
 	// The id the current run's own store lives at (tick q8m) — the same
 	// derivation buildWaits words the header's triage command from, so the
 	// row's next step and the header's command name the same store.
@@ -140,11 +144,13 @@ func newPipelineIndex(src Sources, merged *mergedRuns, priorHolds []PriorHold, e
 			p.markersByTry[tryKey(tickID, marker.Attempt)] = marker
 		}
 	}
-	// A tick whose records belong to an EARLIER run is parked work the
-	// newest run's machinery cannot move: its next step is the resume, and
-	// the index carries the fact once for the derivation to read.
+	// A tick whose records belong to a run other than the subject's —
+	// earlier or, since the merge orders layers by their own clocks (tick
+	// c9n), a chronologically later sibling behind an older subject — is
+	// parked work this surface's run cannot move: its next step is the
+	// resume, and the index carries the fact once for the derivation to read.
 	for tickID, owner := range merged.ownerIndex() {
-		if owner != newest {
+		if owner != subject {
 			p.nonNewestOwner[tickID] = true
 		}
 	}
@@ -606,10 +612,10 @@ func (p *pipelineIndex) nextStepOf(tick *Tick, last Try) *string {
 		step := "held — see needs-you"
 		return &step
 	}
-	// A refusal the NEWEST run did not leave — and no hold standing over it:
-	// its run is over, and nothing of it will retry anything — the honest
-	// next step is the resume, the same command the run header names
-	// (hn6, tick gmo).
+	// A refusal the SUBJECT run did not leave — and no hold standing over it:
+	// the try belongs to a run this surface does not watch, and none of the
+	// machinery here will retry anything — the honest next step is the
+	// resume, the same command the run header names (hn6, tick gmo).
 	if p.nonNewestOwner[tick.TickID] {
 		step := "nothing of that run is working — " + ResumeCommand(p.host, p.epicID) + " takes it up"
 		return &step

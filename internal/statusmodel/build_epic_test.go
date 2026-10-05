@@ -705,7 +705,7 @@ func endedSubjectSources(mutate func(*Sources)) Sources {
 			Ticks:         []runstate.TickState{{TickID: "v16", State: "closed", Attempt: 1}},
 		},
 		Attempts: []runstate.Attempt{
-			attemptMarker(1, "v16", now.Add(-4 * time.Hour).Format(time.RFC3339),
+			attemptMarker(1, "v16", now.Add(-4*time.Hour).Format(time.RFC3339),
 				"frontier", "@cf/zai-org/glm-5.3", "cloudflare-sandbox"),
 		},
 	}
@@ -761,8 +761,8 @@ func TestATrackerClosedTickIsClosedThoughAnEndedRunLeftItDispatched(t *testing.T
 				t.Errorf("the closed tick's %s stage reads %s, want done: a closed tick's cell fills to the end", stage.Stage, stage.State)
 			}
 		}
-		if tick.DurationSeconds == nil || *tick.DurationSeconds != 66180 {
-			t.Errorf("the closed tick reads duration %v, want its span measured to the tracker's close (66180s from the dispatch to the closed_at), not growing to now", tick.DurationSeconds)
+		if tick.DurationSeconds == nil || *tick.DurationSeconds != 3600 {
+			t.Errorf("the closed tick reads duration %v, want its span measured to the tracker's close (3600s from the closing run's dispatch to the closed_at), not growing to now", tick.DurationSeconds)
 		}
 		if model.Progress.Ticks == nil || model.Progress.Ticks.Closed != 1 {
 			t.Errorf("the progress counts %+v, want the tracker-closed tick among the closed", model.Progress.Ticks)
