@@ -11,8 +11,11 @@
   "tick_id": "66a",
   "attempt": 42,
   "done_item": "A2",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T18:01:57Z",
+  "triaged_at": "2026-10-05T18:02:08Z",
+  "triaged_by": "ticfac run epic-43y absorbing i5e",
+  "promoted_as": "i5e",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "66a",
