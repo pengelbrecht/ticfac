@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 438,
-  "state": "collecting",
-  "reason": "collecting 4w7 attempt 67",
-  "updated_at": "2026-10-05T22:24:17Z",
+  "sequence": 439,
+  "state": "integrating",
+  "reason": "integrating 4w7 attempt 67 into epic/43y",
+  "updated_at": "2026-10-05T22:24:28Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -293,7 +293,7 @@
     },
     {
       "tick_id": "4w7",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 67
     }
   ],
