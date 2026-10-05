@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 368,
-  "state": "publishing",
-  "reason": "closing 7oy behind the integrated gate on f04bd25313bd",
-  "updated_at": "2026-10-05T20:22:50Z",
+  "sequence": 369,
+  "state": "running",
+  "reason": "7oy is closed",
+  "updated_at": "2026-10-05T20:23:02Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -257,7 +257,7 @@
     },
     {
       "tick_id": "7oy",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 57
     },
     {
