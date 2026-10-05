@@ -35,7 +35,10 @@
  *    exit code — the finish phase's, which is what the all-in-one
  *    entrypoint's exit code always was — and the attempt's log by cursor.
  *  - **steer** places operator input after the running tool round; the
- *    door's steer route and the watch socket both reach it.
+ *    door's steer route and the watch socket both reach it — and the stuck
+ *    watch's nudge is one of these too (tick xba): the host's own watch
+ *    steers a worker that has shown no activity for its window, and stops
+ *    it a window later if nothing moved.
  *  - **reclaim** stops the attempt where it stands (the run is over), and
  *    **release** destroys its container (the attempt settled).
  *  - **fetch** accepts a watch socket: the attempt's state, then the

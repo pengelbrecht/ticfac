@@ -752,6 +752,21 @@ describe("start", () => {
     expect(work.env.TICKS_WORKER_TIMEOUT).toBeUndefined();
   });
 
+  // Tick xba: the stuck window rides the dispatch to the hosted worker's own
+  // watch. Zero is the run that turned the watch OFF — the honest spelling,
+  // because a negative is a malformed bound the door refuses exactly like
+  // the wall's — and a positive window is accepted as it stands.
+  it("carries the stuck watch's window, and refuses a malformed one (tick xba)", async () => {
+    const bad = await postStart(runToken, startBody({ stuck_seconds: -1 }));
+    expect(bad.status).toBe(400);
+    expect((await denialOf(bad)).detail).toContain("stuck_seconds");
+    expect((await postStart(runToken, startBody({ stuck_seconds: 0 }))).status).toBe(201);
+    // The window is accepted: the second start under the same live identity
+    // is the door's own ADOPTION (200), never a rival boot — and it answers
+    // 200 only because the request was accepted in the first place.
+    expect((await postStart(runToken, startBody({ stuck_seconds: 900 }))).status).toBe(200);
+  });
+
   // Epic hn6, run_3f034e68: a carried attempt boots at the released attempt's
   // head, and the container needs the carried work's base to see that a
   // worker which added nothing to complete carried work delivered it.
