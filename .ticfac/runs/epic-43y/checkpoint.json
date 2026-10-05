@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 254,
-  "state": "gating",
-  "reason": "running the integrated gate for fim on 03bffa6e5620",
-  "updated_at": "2026-10-05T16:14:28Z",
+  "sequence": 255,
+  "state": "publishing",
+  "reason": "closing fim behind the integrated gate on 03bffa6e5620",
+  "updated_at": "2026-10-05T16:17:01Z",
   "ticks": [
     {
       "tick_id": "92k",
