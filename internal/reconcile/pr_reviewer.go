@@ -33,9 +33,21 @@ const maxEpicDescription = 2000
 // findings, the changes the run made that no tick asked for (repairs and
 // resolutions), what it absorbed, and what it could not do at all.
 func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, findings []runstate.Finding,
-	absorptions []runstate.Absorption) string {
+	absorptions []runstate.Absorption, amendments []runstate.Amendment) string {
 
 	var items []string
+	var undecided []string
+	for _, amendment := range amendments {
+		if amendment.Status != runstate.AmendmentConfirmed {
+			undecided = append(undecided, fmt.Sprintf("%s (tick %s, %s)", short(amendment.Key),
+				amendment.ProposedBy, amendment.Status))
+		}
+	}
+	if len(undecided) > 0 {
+		items = append(items, fmt.Sprintf("%d worker-proposed amendment(s) to the epic's own record are %s — "+
+			"the operator's word on what a worker wrote to the record the acceptance is scored from, listed with "+
+				"their full text under the amendments below.", len(undecided), strings.Join(undecided, ", ")))
+	}
 	if final >= 0 && reviewVerdictOf(decisions[final].Response) == subprocess.ReviewVerdictNotReady {
 		items = append(items, "**The final review judged the epic NOT READY.** Read its verdict below before the "+
 			"diff: it says what would make the epic ready.")
@@ -107,8 +119,9 @@ func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, finding
 			strings.Join(liveRun, ", ")))
 	}
 	if len(items) == 0 {
-		items = append(items, "Nothing the run flagged: the review answered READY, no finding is untriaged, and the "+
-			"run made no change of its own. Start with the ticks below — each closed behind the integrated gate.")
+		items = append(items, "Nothing the run flagged: the review answered READY, no finding is untriaged, no "+
+			"worker amendment to the epic's record is undecided, and the run made no change of its own. Start "+
+			"with the ticks below — each closed behind the integrated gate.")
 	}
 	var b strings.Builder
 	for i, item := range items {

@@ -2717,6 +2717,21 @@ const (
 	RefusedFindingInvalid   = "finding_report_invalid"
 	RefusedFindingUntriaged = "finding_untriaged"
 
+	// RefusedEpicAmendmentUnconfirmed is the close-out's other person's gate
+	// (tick 7sn, epic 43y): a note on the epic's own record that a WORKER
+	// proposed — the one channel a worker has to the record the close-out
+	// scores the acceptance from — is the worker's claim, never the
+	// operator's word, and the close-out does not hand over while one is
+	// undecided (gateCloseoutOnAmendments). The 8em incident is its shape:
+	// a worker's note declared the PR-review's omp CLI boot excepted from
+	// A1, the run applied it, and the exception was self-ratifying the
+	// moment it did — the operator's recorded exceptions covered only the
+	// local claude rung. It stays distinct from the findings hold because the
+	// two send the next actor somewhere different: a finding is a worker's
+	// discovery waiting for triage, an amendment is the epic's own record
+	// waiting for the operator's word on what a worker wrote to it.
+	RefusedEpicAmendmentUnconfirmed = "epic_amendment_unconfirmed"
+
 	// RefusedClaimWidth is the tracker refusing a claim because the epic's
 	// declared dispatch width is already full (tk exit 8, tk.ErrDispatchWidth).
 	//
@@ -2922,6 +2937,10 @@ const collapsedMessage = "the tick did not pass"
 //   - RefusedFindingUntriaged: the close-out does not hand over while a
 //     finding of the run is untriaged (tick aqm moved the hold here from the
 //     per-tick close), and the triage is a person's;
+//   - RefusedEpicAmendmentUnconfirmed: the close-out does not hand over while
+//     a worker-proposed amendment to the epic's own record is undecided
+//     (tick 7sn) — the operator's word on what a worker wrote to the record
+//     the acceptance is scored from is a decision only a person makes;
 //   - RefusedClaimWidth and RefusedForeignClaim: the epic's width is full of
 //     claims this run does not hold (dz1), or a live foreign claim stands on
 //     the tick it would dispatch (tick 823, finding 08e5bcc0) — both facts
@@ -2939,7 +2958,8 @@ func holdsForAPerson(reason string) bool {
 	switch reason {
 	case RefusedHeld, RefusedUnaddressed, RefusedRejectedWork,
 		RefusedNeedsHuman, RefusedRoleAnswer, RefusedFindingUntriaged,
-		RefusedClaimWidth, RefusedForeignClaim, RefusedLandReviewNotReady:
+		RefusedClaimWidth, RefusedForeignClaim, RefusedLandReviewNotReady,
+		RefusedEpicAmendmentUnconfirmed:
 		return true
 	}
 	return false

@@ -2,6 +2,8 @@ package reconcile
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -56,6 +58,12 @@ const (
 	// StageTrackerEditRefused: the run refused a proposed tracker edit, and
 	// why — it is never applied.
 	StageTrackerEditRefused = "tracker_edit_refused"
+	// StageAmendmentFiled: the run applied a worker-proposed edit that
+	// amends the EPIC's own record — the one the close-out scores the
+	// acceptance from — and filed the amendment as awaiting the operator
+	// (tick 7sn). The write is applied; its meaning is not settled until the
+	// operator confirms or rejects it.
+	StageAmendmentFiled = "amendment_filed"
 )
 
 // tickEditor is the tracker's half of a field edit: one prose field of one
@@ -262,6 +270,18 @@ func (r *Reconciler) applyTrackerEdits(ctx context.Context, marker attemptHandle
 		if err != nil {
 			return "", fmt.Errorf("apply the edit of the %s that %s proposed: %w", edit, source, err)
 		}
+		// A write that amends the EPIC's own record is a worker's claim on
+		// the record the close-out scores the acceptance from (tick 7sn, the
+		// 8em shape): applied — visibly, where the close-out reads it — and
+		// ALSO filed as an amendment awaiting the operator's word, because a
+		// worker-authored exception is not the operator's confirmation however
+		// it is worded. Filed whether the write changed anything or not: a
+		// resume that re-applies the amendment as a no-op re-files its
+		// confirmation as one, and the amendment stands on the record either
+		// way.
+		if err := r.fileEpicAmendment(marker, edit, source); err != nil {
+			return "", err
+		}
 		if changed {
 			r.record(marker.TickID, StageTrackerEdited, "the run applied the edit of the %s that %s proposed "+
 				"(%d characters), through its own tracker writer onto %s", edit, source, len(edit.Value), r.branch)
@@ -271,6 +291,96 @@ func (r *Reconciler) applyTrackerEdits(ctx context.Context, marker attemptHandle
 		}
 	}
 	return r.git.remoteHead(r.branch)
+}
+
+// The amendment channel's source name, the half of the record's dedup key a
+// finding's source is: the same amendment, from the same channel, for the
+// same subject, is one confirmation however many attempts proposed it.
+const amendmentSource = "ticfac-worker"
+
+// amendmentKey is the confirmation's dedup identity, computed over the
+// SUBJECT the amendment is about (the epic's record, the field, the value)
+// rather than the delivery — for the same reason findingKey hashes the
+// finding's subject: the delivery changes with every attempt and the
+// subject does not.
+func amendmentKey(edit subprocess.TrackerEdit) string {
+	sum := sha256.Sum256([]byte(amendmentSource + "\x00" + edit.Tick + "\x00" + edit.Field + "\x00" +
+		strings.TrimSpace(edit.Value)))
+	return hex.EncodeToString(sum[:])
+}
+
+// fileEpicAmendment files one applied worker-proposed edit as an amendment
+// awaiting the operator when it amends the EPIC's own record — and does
+// nothing otherwise. A note on another tick is that tick's context; the
+// epic's record is the one the close-out scores the acceptance from, and a
+// worker's words on it are a claim, never the operator's word (tick 7sn,
+// epic 43y's 8em: a worker's note declared the PR-review's omp boot excepted
+// from A1, the run applied it, and the exception was self-ratifying the
+// moment it did).
+//
+// The record is create-if-absent keyed on the amendment's subject, so a
+// resume that re-applies the same edit re-files the same confirmation and a
+// later attempt re-proposing it proposes nothing new.
+func (r *Reconciler) fileEpicAmendment(marker attemptHandle, edit subprocess.TrackerEdit, source string) error {
+	if edit.Field != subprocess.TrackerFieldNotes || edit.Tick != r.opts.EpicID || r.store == nil {
+		return nil
+	}
+	amendment := runstate.Amendment{
+		Key:        amendmentKey(edit),
+		Source:     amendmentSource,
+		EpicID:     edit.Tick,
+		Field:      edit.Field,
+		Value:      edit.Value,
+		ProposedBy: marker.TickID,
+		Attempt:    marker.Attempt,
+		ProposedAt: r.now().UTC().Format("2006-01-02T15:04:05Z"),
+		Status:     runstate.AmendmentPending,
+		Provenance: r.amendmentProvenance(marker),
+	}
+	if _, err := r.store.Fetch(); err != nil {
+		return err
+	}
+	outcome, err := r.store.PutAmendment(amendment)
+	if err != nil {
+		return fmt.Errorf("file the amendment %s proposed to %s: %w", source, edit, err)
+	}
+	if outcome.EffectPermitted() {
+		r.record(marker.TickID, StageAmendmentFiled,
+			"%s proposed a note on the epic %s itself, and the run applied it — visibly, where the close-out reads it — "+
+				"but a worker's words on the epic's record are a claim, never the operator's word: the amendment is filed "+
+				"(key %s) and the close-out holds it for the operator's confirmation or rejection",
+			source, r.opts.EpicID, short(amendment.Key))
+	}
+	return nil
+}
+
+// amendmentProvenance is the proposing attempt's own provenance, in the same
+// shape a finding draft's is: the attempt that proposed the amendment is
+// the claim's attribution, and a later leg re-reads it off the marker rather
+// than re-deriving what this incarnation would say today.
+func (r *Reconciler) amendmentProvenance(marker attemptHandle) runstate.Provenance {
+	provenance := r.provenance(&marker.TickID, &marker.Attempt, phaseFor(marker.Role), marker.BaseSHA)
+	if marker.Role != "" {
+		role := marker.Role
+		provenance.Role = &role
+	}
+	if marker.Executor != "" {
+		executor := marker.Executor
+		provenance.Executor = &executor
+	}
+	if marker.Tier != "" {
+		tier := marker.Tier
+		provenance.Tier = &tier
+	}
+	if marker.SubstrateProtocol > 0 {
+		protocol := marker.SubstrateProtocol
+		provenance.SubstrateProtocol = &protocol
+	}
+	if marker.SubstrateServerVersion != "" {
+		version := marker.SubstrateServerVersion
+		provenance.SubstrateServerVersion = &version
+	}
+	return provenance
 }
 
 // applyTrackerEdit makes one write, or none when the record already says it.
