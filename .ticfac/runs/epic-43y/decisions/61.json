@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 61,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The kill scenario's last claim matches /wip checkpoint … pushed/ anywhere in the log, so a checkpoint from before the kill satisfies it. The README's 'four … after the resume' was read by hand.\nevidence: harness/proof/agent-faults-staging.ts (kill scenario, last claim)\n\nticfac run epic-43y created this tick by absorbing the finding d4cd5980a425f3f0b59b23be68b533c76e4aecbe0331d382dc5be7d1c4ff377b (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/d4cd5980a425f3f0b59b23be68b533c76e4aecbe0331d382dc5be7d1c4ff377b.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "umx",
+    "title": "agent-faults proof's 'checkpoints after the resume' claim is not order-checked"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.64,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.03,
+      "design": 0.05,
+      "diagnosis": 0.71,
+      "mechanical": 0.19,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1270,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T19:43:13Z",
+  "answered_at": "2026-10-05T19:43:13Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "umx",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "6069271368db916cb959729b1f364b0a1a4706da",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
