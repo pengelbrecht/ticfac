@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 57,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The only recorded staging result for A2's second fault is the pre-a2l shape: the workspace was emptied, the container was not destroyed. The README itself says the destroy is 'to be re-run at the next staging pass'. The code a2l added for a real destroy (the staging Worker's /proof/git origin, the dumb-HTTP origin, /proof/destroy) has never run on the platform. cni's restore-setup proof also only empties the workspace. Fix: run agent-faults-staging.ts with the whole-container destroy and record the result table. Staging deploys from the branch, so this need not wait for the merge.\nevidence: harness/proof/README.md:231-236; harness/proof/README.md recorded table rows 'Workspace lost mid-turn'\n\nticfac run epic-43y created this tick by absorbing the finding 047507f8965f8701da249155876c6bd8a74f9d295d44e4cf0cada3ff263e7834 (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/047507f8965f8701da249155876c6bd8a74f9d295d44e4cf0cada3ff263e7834.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "jpy",
+    "title": "A2's container-destroyed-mid-turn proof was never run on staging after a2l"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.8,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.11,
+      "design": 0,
+      "diagnosis": 0.03,
+      "mechanical": 0.85,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1382,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T18:46:32Z",
+  "answered_at": "2026-10-05T18:46:32Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "jpy",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "f3e55db0c099f5a364bf8b429da6f87f5d1fc357",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
