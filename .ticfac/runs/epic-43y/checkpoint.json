@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 208,
-  "state": "running",
-  "reason": "uxi is running as attempt 34",
-  "updated_at": "2026-10-05T14:49:44Z",
+  "sequence": 209,
+  "state": "collecting",
+  "reason": "collecting j6o attempt 32",
+  "updated_at": "2026-10-05T14:55:52Z",
   "ticks": [
     {
       "tick_id": "92k",
