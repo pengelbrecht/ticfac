@@ -214,8 +214,11 @@ func dashSeat(left, right string, width int) string {
 // dashProgressLine is the second question — how far along — as the tick
 // shaped it: the progress bar, the ticks closed over the total, the elapsed,
 // the approximate time left, and the health verdict beside them. The bar is
-// decoration: a pane too narrow for bar and answers together keeps the
-// answers.
+// the header's answer to "how far along" (A1): a line the pane cannot seat
+// whole gives way at the verdict's summary — truncated with an ellipsis,
+// never the whole bar dropped (g94) — and the bar gives way entirely only
+// when the pane cannot seat it beside its counts, or cannot seat even a
+// readable stub of the verdict beside them: answers over decoration.
 func dashProgressLine(m statusmodel.Model, st watchStyles, width int) string {
 	mid := ""
 	if m.Progress.Ticks != nil {
@@ -253,12 +256,33 @@ func dashProgressLine(m statusmodel.Model, st watchStyles, width int) string {
 	if filled > watchBarCells {
 		filled = watchBarCells
 	}
-	line := join(strings.Repeat("█", filled) + strings.Repeat("░", watchBarCells-filled) + " " + mid)
-	if width > 0 && ansi.StringWidth(line) > width {
+	seat := strings.Repeat("█", filled) + strings.Repeat("░", watchBarCells-filled) + " " + mid
+	line := join(seat)
+	if width <= 0 || ansi.StringWidth(line) <= width {
+		return line
+	}
+	// The pane cannot seat the whole line. The verdict's summary is the
+	// elastic part: the bar keeps its seat and the summary is cut with an
+	// ellipsis, so a stopped run's sentence-long summary no longer evicts
+	// the bar from a 120-column pane (g94). Truncation from the left keeps
+	// the verdict's state word — "● stopped: …" — so the cut lands on the
+	// detail, never on the answer.
+	if ansi.StringWidth(seat) > width {
 		return join(mid)
 	}
-	return line
+	if room := width - ansi.StringWidth(seat) - 3; room >= dashVerdictStubCells {
+		return seat + " · " + ansi.Truncate(verdict, room, "…")
+	}
+	// The bar leaves no room for even a readable stub of the verdict: the
+	// answers keep the width and the bar waits for a wider pane.
+	return join(mid)
 }
+
+// dashVerdictStubCells is the least a truncated verdict needs to stay
+// readable beside the bar: the marker, a space, the state word's first
+// letter and the ellipsis — "● s…". Below that the bar is stealing the
+// answer's width, and the answer wins.
+const dashVerdictStubCells = 4
 
 // dashVerdict is the health headline (hn6 rule 3): a word a person reads —
 // green "● healthy", amber "● degraded: …" or red "● stopped: …" — with what
