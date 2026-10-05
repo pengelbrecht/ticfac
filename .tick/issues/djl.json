@@ -1,0 +1,13 @@
+{
+  "id": "djl",
+  "title": "Fixtures outside the activity test still spell claude models 'claude-opus-5'",
+  "description": "The activity test's fixture was fixed to the real record's spelling (model 'opus') by tick 5uq, but the same invented 'claude-opus-5' string remains in build_test.go, pipeline_test.go, build_epic_test.go (statusmodel) and watch_epic_state_test.go (cli), and runstate/store_test.go. These tests pass today (cost.go maps claude-* names fine), but they are fixture identities no real .ticfac/runs/*/attempts/*.json record ever carried, which is exactly the drift the learnings' fixture rule ('copy identity strings from a real record') exists to prevent - the activity fixture's copy of this string hid a live defect for the whole epic. A mechanical sweep copying real spellings would close the class.\nevidence: grep -rn 'claude-opus-5' internal/ --include='*.go' (10 sites outside the activity test, e.g. internal/statusmodel/build_test.go:130, internal/cli/watch_epic_state_test.go:134)\n\nticfac run epic-hn6 filed this backlog tick from the finding 176120a503acbfa257b623e92cf23f00a0d5e0f2c19bca5159a293a46fd1a3bd (reported by run-epic-hn6/tick-5uq/attempt-30): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/176120a503acbfa257b623e92cf23f00a0d5e0f2c19bca5159a293a46fd1a3bd.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-5uq/attempt-30",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T17:36:21Z",
+  "updated_at": "2026-10-05T17:36:21Z"
+}
