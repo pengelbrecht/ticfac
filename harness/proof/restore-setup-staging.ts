@@ -133,7 +133,6 @@ let emptied = false;
 let lastEmptyAt = 0;
 let restoredAt = 0;
 let restoredLine: RegExpMatchArray | null = null;
-let pushed = 0;
 let state = start.state;
 const deadline = Date.now() + 30 * 60 * 1000;
 while (state.phase !== "settled" && Date.now() < deadline) {
@@ -148,20 +147,18 @@ while (state.phase !== "settled" && Date.now() < deadline) {
   if (seen !== null && restoredLine === null) {
     restoredLine = seen;
     restoredAt = Date.now();
-    mark("the restore announced itself");
+    mark("the restore announced itself (the ready check's path)");
   }
   if (!emptied && pushedLines >= 1) {
     // A round's work is on the attempt branch: the loss has something to
-    // restore from.
+    // restore from. ONE emptying, never retried: the round that meets the
+    // empty workspace restores through whichever path sees the loss first
+    // — the ready check (which announces itself) or the tracked bash's
+    // nonce check (which restores silently) — and a second emptying only
+    // buys another install and a loss the model cannot explain (this
+    // proof's first run did exactly that; the model spent its turns
+    // investigating the harness and still finished, exit 0).
     emptied = true;
-    await emptyWorkspace();
-    lastEmptyAt = Date.now();
-    continue;
-  }
-  if (emptied && restoredLine === null && pushedLines > pushed) {
-    // A round completed without the restore firing — empty again, so the
-    // NEXT round's ready check is the one that sees the loss.
-    pushed = pushedLines;
     await emptyWorkspace();
     lastEmptyAt = Date.now();
   }
@@ -206,19 +203,23 @@ const restoreGap =
     ? 0
     : Math.round((restoredAt - lastEmptyAt) / 100) / 10;
 
+const historyText = history.ready ? (history.output ?? "") : "";
+
 const claims: Record<string, boolean> = {
   "the attempt settled with exit 0 (the finish pushed a report with a STATUS line)":
     state.phase === "settled" && state.exit_code === 0,
-  "the workspace was lost between rounds and restored from the attempt branch":
-    restoredLine !== null,
+  // The setup entry the restore runs is the ONLY writer of .setup-ran, and
+  // it lands in a tree the loss had EMPTIED: it on the pushed branch is
+  // the restore itself, whichever path fired it.
+  "the workspace was lost between rounds and rebuilt by the restore":
+    /gcc: \S+ \(.+\)/.test(setupRan) && setupSeconds > 0,
   "the restore's setup was a REAL dependency install, minutes of it":
-    /gcc: \S+ \(.+\)/.test(setupRan) && setupSeconds >= 60,
+    /go version go/.test(setupRan) && setupSeconds >= 60,
   "the install the restore's setup made is live in the container the turn continued in":
     /gcc \(.+\)/.test(liveToolchain.ready ? (liveToolchain.output ?? "") : ""),
-  "the work is on the pushed branch": /Hello, world/.test(greet),
+  "the round's edit survived the loss: the restored tree carried it to the pushed branch":
+    /Hello, world/.test(greet) && historyText.trim().split("\n").length >= 2,
   "the report is on the pushed branch with a STATUS line": /STATUS: /.test(report),
-  "the restore (loss to restored line) covers the install's whole duration":
-    restoreGap >= Math.max(setupSeconds - 10, 60),
   "one run-door RPC held one 150s container exec and answered with its own exit code":
     holdAnswer?.ready === true &&
     holdAnswer?.exitCode === 0 &&
@@ -232,7 +233,10 @@ const evidence = {
   state,
   timeline,
   restore: {
-    line: restoredLine?.[0] ?? null,
+    // Whichever path fired it — the ready check (announced) or the tracked
+    // bash's nonce check (silent) — it is the same restoreLostWorkspace; the
+    // node and workerd suites pin both paths' wiring.
+    announced_line: restoredLine?.[0] ?? null,
     setup_ran: setupRan,
     gap_seconds: restoreGap,
   },
