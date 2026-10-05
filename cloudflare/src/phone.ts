@@ -70,7 +70,7 @@
 import { STATUS_PAGE_PATH, verifyFactoryToken } from "./auth";
 import { getRunProgress, listRuns, type Run } from "./db";
 import type { Env } from "./index";
-import type { PendingEntry } from "./run-room";
+import type { PendingEntry, RunEventView } from "./run-room";
 import { roomFor } from "./runs";
 import {
   classifyStatusDoc,
@@ -277,7 +277,7 @@ async function overviewPage(request: Request, env: Env): Promise<Response> {
   );
   try {
     const runs = await listRuns(env.DB, { limit: PAGE_RUN_LIMIT });
-    const gates = await gatesByProject(env, runs);
+    const rooms = await roomReads(env, runs);
     for (const run of runs) {
       const progress = await getRunProgress(env.DB, run.run_id);
       // The run's own model where it has pushed one — the same one the
@@ -288,9 +288,10 @@ async function overviewPage(request: Request, env: Env): Promise<Response> {
       // composed from the records the factory itself holds.
       const pushed = pushedCloud.get(run.run_id) ?? null;
       const believesPush = pushed !== null && !(pushed.model.liveness.alive && runEnded(run.state));
+      const room = rooms.get(run.project) ?? { gates: [], events: [] };
       const doc = believesPush
         ? pushed!.model
-        : cloudStatusDoc(run, gates.get(run.project) ?? [], progress, null);
+        : cloudStatusDoc(run, room.gates, progress, lastWordOf(room.events, run));
       rows.push(cloudRow(doc, believesPush ? pushed! : null, now));
     }
   } catch (error) {
@@ -311,18 +312,45 @@ async function overviewPage(request: Request, env: Env): Promise<Response> {
   return htmlPage(overviewHTML(rows, degraded), 200);
 }
 
-/** The project's pending gates, read once per project the listing mentions. */
-async function gatesByProject(env: Env, runs: Run[]): Promise<Map<string, PendingEntry[]>> {
-  const gates = new Map<string, PendingEntry[]>();
+/** What one read of the project's room answered: the pending gates and the
+ *  forwarded tail (tick bne), both read once per project the listing
+ *  mentions — the room owns them, and they outlive runs. */
+type RoomRead = { gates: PendingEntry[]; events: RunEventView[] };
+
+async function roomReads(env: Env, runs: Run[]): Promise<Map<string, RoomRead>> {
+  const reads = new Map<string, RoomRead>();
   for (const project of [...new Set(runs.map((run) => run.project))].sort()) {
     try {
-      gates.set(project, await roomFor(env, project).listQuestions());
+      const room = roomFor(env, project);
+      const [gates, events] = await Promise.all([room.listQuestions(), room.recentEvents()]);
+      reads.set(project, { gates, events });
     } catch (error) {
       console.error(`factory page: the room for ${project} could not be asked: ${String(error)}`);
-      gates.set(project, []);
+      reads.set(project, { gates: [], events: [] });
     }
   }
-  return gates;
+  return reads;
+}
+
+/**
+ * The run's own last word from the room's forwarded tail: its
+ * epic-completed event — the same sentence the run's terminal feed line
+ * carries, because finalize publishes one to each (hn6 3qg). Matched by the
+ * epic AND by the terminal state the run's row and the event both state, so
+ * a NEWER run's words can never answer an older row's why. Null when the
+ * room holds nothing the run said — a container that died before its
+ * finalize, a stop the endpoint recorded directly — and the composition
+ * falls back to run_progress's verdict, the honest record that stays.
+ */
+function lastWordOf(events: RunEventView[], run: Run): RunEventView | null {
+  if (!runEnded(run.state)) return null;
+  for (const event of events) {
+    if (event.epic !== run.epic) continue;
+    if (event.type !== "epic-completed") continue;
+    if (event.status !== run.state) continue;
+    return event;
+  }
+  return null;
 }
 
 function localRow(snapshot: StoredSnapshot, now: number): RunRow {
