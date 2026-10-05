@@ -1,0 +1,13 @@
+{
+  "id": "2f3",
+  "title": "The run feed does not surface a durable runner's signal-death relaunch",
+  "description": "tick 3c2 records each relaunch as a `started` observation a reader can pick out with subprocess.IsRelaunch, but nothing announces it on the run's feed the way nudges are announced: announceNudges (internal/reconcile/dispatch.go) reads IsNudge only, so an operator who kills a worker — or an OOM — sees nothing while the run recovers, only the attempt's own observation store and the settle line afterwards. Two lines in announceNudges plus a test would say 'relaunch 1 of 2: …' on the feed live; it was left out of 3c2 to keep the tick off internal/reconcile, whose suite is the heavy one.\nevidence: internal/reconcile/dispatch.go:2839 (announceNudges filters IsNudge only); internal/exec/subprocess/relaunch.go (IsRelaunch)\n\nticfac run epic-43y filed this backlog tick from the finding 461e776c30f2bff5b6f02cc8a78edf1dce405d02788a86f029c81950f1e28de0 (reported by run-epic-43y/tick-3c2/attempt-59): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/461e776c30f2bff5b6f02cc8a78edf1dce405d02788a86f029c81950f1e28de0.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-3c2/attempt-59",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T20:59:06Z",
+  "updated_at": "2026-10-05T20:59:06Z"
+}
