@@ -594,7 +594,19 @@ export class FactorySandboxCore {
       }
     }
     const container = this.container();
-    if (container === undefined || !container.running || !this.ready) return views;
+    // Never boots, and never trusts this instance's ready flag alone: a
+    // deploy restarts this object — in memory, the flag is lost — while the
+    // container and its processes live on, and the nonce replay of a
+    // tracked bash calls here FIRST, with no earlier `run` to have marked
+    // the container ready (the guardless env runs no short command before
+    // it). A container that answers a probe IS ready; one that does not (a
+    // cold boot still pulling its image) is left to the pending-process
+    // machinery, exactly as before.
+    if (container === undefined || !container.running) return views;
+    if (!this.ready) {
+      if (!(await this.answers(container))) return views;
+      this.ready = true;
+    }
     const listed = await run(container, runner.list());
     for (const id of listed.stdout.split("\n").map((l) => l.trim())) {
       if (id === "") continue;

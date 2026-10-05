@@ -124,6 +124,40 @@ describe("FactorySandboxEnv: the tracked bash", () => {
     expect(chunks.join("")).toBe("done\n");
   });
 
+  // Tick 2oa: the door's object restarted (a deploy: in-memory ready flag
+  // lost) between the death and the replay, and with guardDir null there is
+  // no `run` before the list — the nonce replay must reattach anyway, on
+  // the list's own probe, or the command would run a second time.
+  it("reattaches across a restarted object, with no run before the list", async () => {
+    const fake = fakeSandboxDoor({ commandMs: 120 });
+    const env = new FactorySandboxEnv({ sandbox: fake.sandbox, guardDir: null, pollMs: 5 });
+
+    const first = withCancel(CONTEXT);
+    const promise1 = env.exec(
+      "slow command",
+      { env: { [BASH_NONCE_VAR]: NONCE }, onOutput: () => {} },
+      first.context,
+    );
+    await waitFor("the process to start", () => fake.starts.length === 1);
+    first.cancel("harness killed");
+    await promise1;
+
+    // A deploy restarts the Durable Object while the container and its
+    // process live on: the object's ready flag is gone.
+    fake.restartObject();
+    expect(fake.objectReady).toBe(false);
+
+    const result2 = await env.exec("slow command", { env: { [BASH_NONCE_VAR]: NONCE } }, CONTEXT);
+    expect(result2.ok ? "ok" : result2.error.code).toBe("ok");
+    if (!result2.ok) return;
+    expect(result2.value.exitCode).toBe(0);
+
+    // Reattached on the list alone: one start across both invocations, and
+    // not ONE run RPC — the guardless path never marked the object ready.
+    expect(fake.starts.length).toBe(1);
+    expect(fake.runs.length).toBe(0);
+  });
+
   it("answers an already-finished process with its exit code, without running it again", async () => {
     const fake = fakeSandboxDoor({ commandMs: 30 });
     const env = new FactorySandboxEnv({ sandbox: fake.sandbox, guardDir: null, pollMs: 5 });
