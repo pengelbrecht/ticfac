@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 214,
-  "state": "gating",
-  "reason": "running the integrated gate for uxi on d648c0a51bba",
-  "updated_at": "2026-10-05T14:58:11Z",
+  "sequence": 215,
+  "state": "publishing",
+  "reason": "closing uxi behind the integrated gate on d648c0a51bba",
+  "updated_at": "2026-10-05T15:00:52Z",
   "ticks": [
     {
       "tick_id": "92k",
