@@ -35,7 +35,7 @@ import { getRun, insertRun } from "./db";
 import { FactorySandbox, type FactorySandboxNamespace } from "./factory-sandbox";
 import type { ProxyOptions } from "./gateway";
 import { issueWorkerRunToken } from "./gateway";
-import { DO_V1, recordRunSubstrate } from "./run-substrate";
+import { DO_V1, recordRunSubstrate, runIDOfSandboxName } from "./run-substrate";
 import { bindingUpstream, type StagingGatewayEnv } from "./staging-gateway";
 import { WorkerAgent as BaseWorkerAgent, type WorkerAgentNamespace } from "./worker-agent";
 
@@ -115,8 +115,13 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
         // the durable_object policy): the run is on `do_v1`, and the
         // attempt's door routes there (tick hxd — before it, every run was
         // hosted whose record said do_v1, so a row nobody read was free to
-        // be missing; now the row is what the door is keyed on).
+        // be missing; now the row is what the door is keyed on). Two keys:
+        // the run id the token carries, and the one the agent DERIVES from
+        // the sandbox name (`runIDOfSandboxName` cuts at the first dash, so
+        // `proof-cni-x` reads `proof` — a staging name does not round-trip
+        // to `run_proof_…`, and the row must exist under both).
         await recordRunSubstrate(env.DB, runId, DO_V1);
+        await recordRunSubstrate(env.DB, runIDOfSandboxName(name), DO_V1);
       }
       const issued = await issueWorkerRunToken(env, { run_id: runId, tick_id: tick, attempt: 1 });
       const state = await agent.start({
