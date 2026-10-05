@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 271,
-  "state": "dispatching",
-  "reason": "dispatching 66a as attempt 42",
-  "updated_at": "2026-10-05T17:47:53Z",
+  "sequence": 272,
+  "state": "running",
+  "reason": "66a is running as attempt 42",
+  "updated_at": "2026-10-05T17:48:05Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -54,7 +54,8 @@
     },
     {
       "tick_id": "66a",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 42
     },
     {
       "tick_id": "j2k",
