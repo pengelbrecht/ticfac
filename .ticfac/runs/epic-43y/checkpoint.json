@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 190,
-  "state": "dispatching",
-  "reason": "dispatching twa as attempt 31",
-  "updated_at": "2026-10-05T14:03:59Z",
+  "sequence": 191,
+  "state": "running",
+  "reason": "twa is running as attempt 31",
+  "updated_at": "2026-10-05T14:04:15Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -147,7 +147,8 @@
     },
     {
       "tick_id": "twa",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 31
     },
     {
       "tick_id": "j6o",
