@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 34,
+  "role": "plan-repair",
+  "request": {
+    "attempt": 29,
+    "attempt_head": "75948686e9071b1aca902d88cbcc595ef5b08211",
+    "epic_id": "hn6",
+    "failing_checks": [
+      "go"
+    ],
+    "gate_failures": "go (fail)",
+    "gate_sha": "0e530b69cea70e596d1af6a0a238b1a47e2a0c3e",
+    "job_id": "run-epic-hn6/tick-qjl/repair-29",
+    "output_schema": "ticfac.job-result.plan-repair.v1",
+    "profile": "plan-repair@1.0.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:d7a9ab29459f873d1f3542717b96638765493772e66bc972f5707adadeaf54e2",
+    "repair_branch": "ticfac/run-epic-hn6/tick-qjl/repair-29",
+    "role": "plan-repair",
+    "source_grade": "write",
+    "tick_id": "qjl"
+  },
+  "response": {
+    "gate_failures": "go (fail)",
+    "job_id": "run-epic-hn6/tick-qjl/repair-29",
+    "merge": "aadd768b55e3f121b6c61ddea6344c33659e68fc",
+    "repair_head": "024e0b171a16ba31adccab0e92f3a074ca23938e",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T16:12:23Z",
+  "answered_at": "2026-10-05T16:12:23Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "qjl",
+    "attempt": 29,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "07d51f0865956ffcb22106496b600edc5f832f71",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "plan-repair",
+    "tier": "frontier",
+    "profile_digest": "sha256:d7a9ab29459f873d1f3542717b96638765493772e66bc972f5707adadeaf54e2",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
