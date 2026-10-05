@@ -1,0 +1,13 @@
+{
+  "id": "eln",
+  "title": "KillLiveProcesses leaves a live runner's detached tools running too",
+  "description": "The fixture/reconcile teardown helper (internal/exec/subprocess/lock.go, KillLiveProcesses) SIGKILLs only the process groups the attempt's locks prove are alive. A detached tool group under a live runner is in none of those groups, so a teardown of an attempt with a hung tool still orphans it — the same defect this tick fixed on the supervisor and cancel stops, on the path test fixtures use on this shared host. A small fix now exists to copy: interrupt the detached groups under the live runner locks before the kill loop.\nevidence: internal/exec/subprocess/lock.go:325 (KillLiveProcesses signals only stopProven's lock-proven groups); the interrupt seam it would reuse is interrupt.go interruptToolGroups\n\nticfac run epic-43y filed this backlog tick from the finding 311f541cac126c1b6e2e55c53c32c490e4e0dacaf86e22ff595cf2eeb3175335 (reported by run-epic-43y/tick-ug0/attempt-61): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/311f541cac126c1b6e2e55c53c32c490e4e0dacaf86e22ff595cf2eeb3175335.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-ug0/attempt-61",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T21:25:16Z",
+  "updated_at": "2026-10-05T21:25:16Z"
+}
