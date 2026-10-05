@@ -2,11 +2,14 @@ package reconcile
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
 // A final review's NOT READY is the run's to act on (review_rounds.go,
@@ -237,4 +240,169 @@ func TestAResumeHeldOnANotReadyReviewAbsorbsItsBackloggedBlockingFindingAndLands
 	}
 	assertAbsorbedAndReReviewed(t, f)
 	assertLanded(t, f, result)
+}
+
+// A spent bound is not the end when the tree moved (epic-hn6, 2026-10-06).
+// hn6's run held land_review_not_ready after its second NOT READY, whose only
+// blocking finding was stray RESULT-*.md files at the branch root; a person
+// committed the fix to epic/hn6, and a re-run held again on the same verdict,
+// because the bound alone decided — a verdict on a tree that no longer exists
+// standing over the one that does. These are the acceptance:
+//
+//  5. a spent bound with a tree CHANGED since the final review (a person's
+//     commit) reviews once more instead of holding, and lands on its READY —
+//     with every tick, the close-out included, already closed;
+//  6. a spent bound with an UNCHANGED tree — only the run's own bookkeeping
+//     since — still holds, with the message it always had, and makes no
+//     review;
+//  7. the extra round is gated the same way: its NOT READY over a tree
+//     nothing changed since holds, and so does every re-run after it.
+
+// pushOntoTheEpicBranch lands a commit on origin's epic/qeu the way a person
+// fixing what a review named would: through a clone of their own, never the
+// reconciler's checkout.
+func pushOntoTheEpicBranch(t *testing.T, f *fixture, path, content, message string) string {
+	t.Helper()
+	dir := filepath.Join(f.Root, "a-person")
+	if _, err := os.Stat(dir); err != nil {
+		cloneRepo(t, f.Repo.Origin, dir)
+	}
+	mustRun(t, dir, "git", "fetch", "--quiet", "origin", "epic/qeu")
+	mustRun(t, dir, "git", "checkout", "--quiet", "-B", "epic/qeu", "FETCH_HEAD")
+	writeUnder(t, dir, path, content)
+	mustRun(t, dir, "git", "add", "-A")
+	mustRun(t, dir, "git", "commit", "--quiet", "-m", message)
+	mustRun(t, dir, "git", "push", "--quiet", "origin", "epic/qeu")
+	return strings.TrimSpace(mustRun(t, dir, "git", "rev-parse", "HEAD"))
+}
+
+// heldAfterTheBound runs the review_not_ready fixture to its hold: two NOT
+// READY rounds, the bound spent, every tick closed.
+func heldAfterTheBound(t *testing.T) (*fixture, *landingForge) {
+	t.Helper()
+	pr := &landingForge{}
+	f := newFixture(t, fixtureOptions{mode: "review_not_ready", pullRequests: pr})
+	pr.origin = f.Repo.Origin
+	declareRule(t, f.Repo, landingRule)
+	_, held, err := f.run(f.Repo, fixtureOptions{mode: "review_not_ready", pullRequests: pr})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if held.Failure == nil || held.Failure.Reason != RefusedLandReviewNotReady {
+		t.Fatalf("the run ended %s (%+v), want a %s hold after the bound", held.State, held.Failure,
+			RefusedLandReviewNotReady)
+	}
+	if n := len(reviewDecisions(t, draftsStore(t, f.Repo))); n != maxReviewRounds {
+		t.Fatalf("%d review decisions before the re-run, want %d", n, maxReviewRounds)
+	}
+	return f, pr
+}
+
+// 5. THE CHANGED TREE: a person's fix after the bound is reviewed, and lands.
+func TestASpentReviewBoundReviewsAgainWhenTheTreeChangedSinceTheFinalReview(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f, pr := heldAfterTheBound(t)
+	fix := pushOntoTheEpicBranch(t, f, "fixed-by-a-person.txt", "the stray files are gone\n",
+		"a person fixes what the final review named")
+
+	// The next review answers READY: the fix is what it would judge.
+	f.Runner = fakeRunnerArgv(t, "review_not_ready_then_ready")
+	_, result, err := f.run(f.Repo, fixtureOptions{mode: "review_not_ready_then_ready", pullRequests: pr})
+	if err != nil {
+		t.Fatalf("the re-run: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the re-run ended %s (%+v): a tree changed since the final review is reviewed again, not held "+
+			"on a verdict about a tree that no longer exists", result.State, result.Failure)
+	}
+	reviews := reviewDecisions(t, draftsStore(t, f.Repo))
+	if len(reviews) != maxReviewRounds+1 {
+		t.Fatalf("%d review decisions, want %d: one more round over the changed tree", len(reviews),
+			maxReviewRounds+1)
+	}
+	extra := reviews[len(reviews)-1]
+	if got := reviewVerdictOf(extra.Response); got != subprocess.ReviewVerdictReady {
+		t.Errorf("the extra round's verdict is %q, want READY", got)
+	}
+	if judged, _ := extra.Request["source_sha"].(string); judged == "" ||
+		!mustRunAllowingFailure(f.Repo.Origin, "git", "merge-base", "--is-ancestor", fix, judged) {
+		t.Errorf("the extra round judged %q, which does not carry the person's fix %s", judged, fix)
+	}
+	tick, _ := extra.Request["tick_id"].(string)
+	current, err := f.Tracker.Show(context.Background(), tick)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Parent != "qeu" || current.Role != "review" || current.Status != "closed" {
+		t.Errorf("the extra review %s is parent %q, role %q, %s", tick, current.Parent, current.Role, current.Status)
+	}
+	if !strings.Contains(result.Reason, "merged into main") {
+		t.Errorf("the terminal reason does not say the epic is merged: %q", result.Reason)
+	}
+	if !onOrigin(f, fix, "main") {
+		t.Error("main does not carry the person's fix: the run landed something other than the reviewed tree")
+	}
+}
+
+// 6. THE UNCHANGED TREE: only the run's own bookkeeping since the final review
+// is not a new tree, and the hold stands as it was.
+func TestASpentReviewBoundOverAnUnchangedTreeStillHolds(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f, pr := heldAfterTheBound(t)
+
+	// A review made now would answer READY and land: the hold below is the
+	// rule's, not a second NOT READY's.
+	f.Runner = fakeRunnerArgv(t, "review_not_ready_then_ready")
+	_, result, err := f.run(f.Repo, fixtureOptions{mode: "review_not_ready_then_ready", pullRequests: pr})
+	if err != nil {
+		t.Fatalf("the re-run: %v", err)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedLandReviewNotReady {
+		t.Fatalf("the re-run ended %s (%+v), want the %s hold: nothing but run state changed since the final "+
+			"review", result.State, result.Failure, RefusedLandReviewNotReady)
+	}
+	for _, want := range []string{"after 2 review round(s), the bound being 2", "the Phase 4 gate still never ran",
+		"The Phase 4 gate still never ran after the fix"} {
+		if !strings.Contains(result.Failure.Message, want) {
+			t.Errorf("the hold does not name %q: %s", want, result.Failure.Message)
+		}
+	}
+	if n := len(reviewDecisions(t, draftsStore(t, f.Repo))); n != maxReviewRounds {
+		t.Errorf("%d review decisions, want %d: an unchanged tree is not reviewed again", n, maxReviewRounds)
+	}
+	if onOrigin(f, originHead(t, f, "epic/qeu"), "main") {
+		t.Error("main carries the epic: the run merged work its own review still rejects")
+	}
+}
+
+// 7. THE EXTRA ROUND IS GATED TOO: its NOT READY over a tree nothing changed
+// since holds — and a re-run after that holds without reviewing again.
+func TestAnExtraReviewRoundStillNotReadyOverAnUnchangedTreeHolds(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f, pr := heldAfterTheBound(t)
+	pushOntoTheEpicBranch(t, f, "an-attempted-fix.txt", "not enough\n", "a person tries a fix")
+
+	for i := 1; i <= 2; i++ {
+		_, result, err := f.run(f.Repo, fixtureOptions{mode: "review_not_ready", pullRequests: pr})
+		if err != nil {
+			t.Fatalf("re-run %d: %v", i, err)
+		}
+		if result.Failure == nil || result.Failure.Reason != RefusedLandReviewNotReady {
+			t.Fatalf("re-run %d ended %s (%+v), want the %s hold", i, result.State, result.Failure,
+				RefusedLandReviewNotReady)
+		}
+		if !strings.Contains(result.Failure.Message, "after 3 review round(s), the bound being 2") {
+			t.Errorf("re-run %d's hold does not count the extra round: %s", i, result.Failure.Message)
+		}
+		if n := len(reviewDecisions(t, draftsStore(t, f.Repo))); n != maxReviewRounds+1 {
+			t.Errorf("re-run %d: %d review decisions, want %d: one extra round for the one change, and none "+
+				"for a tree nothing changed since", i, n, maxReviewRounds+1)
+		}
+	}
+	if onOrigin(f, originHead(t, f, "epic/qeu"), "main") {
+		t.Error("main carries the epic: the run merged work its own review still rejects")
+	}
 }
