@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 195,
-  "state": "integrating",
-  "reason": "integrating c9n attempt 28 into epic/hn6",
-  "updated_at": "2026-10-05T15:00:12Z",
+  "sequence": 196,
+  "state": "gating",
+  "reason": "running the integrated gate for c9n on cf54c29d9fba",
+  "updated_at": "2026-10-05T15:00:25Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -148,7 +148,7 @@
     },
     {
       "tick_id": "c9n",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 28
     }
   ],
