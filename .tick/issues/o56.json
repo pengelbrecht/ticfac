@@ -2,6 +2,7 @@
   "id": "o56",
   "title": "A refused tracker note on a sibling tick rejects the attempt's own work",
   "description": "tick 30e attempt 63 delivered a correct commit plus a tracker-edits block with notes on sibling ticks 4ao and omq. omq closed on the live tracker 13s before collect, so trackerEditRefusal refused the omq note and acceptTrackerEdits turned the whole collection into missing-result. That threw away a DONE attempt and cost a tier escalation (strong to frontier). Two seams cause it. (1) lint-report holds the block against the worker's checkout, which is cut at dispatch and goes stale for sibling ticks, so it passed what the run then refused. (2) A refusal of an edit to ANOTHER tick, where the edit is not the attempt's deliverable, rejects the attempt instead of dropping or deferring that one edit (for example, refiling it as a finding). Fixing either, ideally (2), keeps a racing sibling close from voiding real work.\nevidence: internal/reconcile/tracker_edits.go acceptTrackerEdits -\u003e trackerEditsRefused; run feed epic-43y, 30e attempt 63: stage tracker_edit_refused 2026-10-05T21:48:53Z 'omq is closed'; omq closed_at 2026-10-05T21:48:40Z on epic/43y; ticfac-exec-subprocess lint-report on that same report exits 0 ('ok: the report passes the check')\n\nticfac run epic-43y filed this backlog tick from the finding 5a38ca3baf95d8a42c11f0a2793ca297211a6f890be90e30c9a847d12f8592e0 (reported by run-epic-43y/tick-30e/attempt-64): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/5a38ca3baf95d8a42c11f0a2793ca297211a6f890be90e30c9a847d12f8592e0.json on the run branch.",
+  "notes": "2026-10-05 23:56 - ticfac run epic-43y: created by absorbing finding 5a38ca3baf95d8a42c11f0a2793ca297211a6f890be90e30c9a847d12f8592e0 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-43y/absorptions/5a38ca3baf95d8a42c11f0a2793ca297211a6f890be90e30c9a847d12f8592e0.json on epic/43y, and it says: the classifier put 0.07 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-43y/tick-30e/attempt-64",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T21:56:02Z",
-  "updated_at": "2026-10-05T21:56:02Z"
+  "updated_at": "2026-10-05T21:56:07.606008Z"
 }
