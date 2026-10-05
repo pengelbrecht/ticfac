@@ -1,0 +1,14 @@
+{
+  "id": "cg4",
+  "title": "Child tick row misaligns TIER/PIPELINE columns in the 120 golden",
+  "description": "The indented child row ('  └ +823  re-run holds the stopped claim') is not truncated to the WHAT column's width, so its tier, pipeline, time and attempts sit about 3 cells right of the header and the parent rows. The golden pins the misalignment.\nevidence: internal/cli/testdata/watch_dashboard_120.txt line 6\n\nticfac run epic-hn6 created this tick by absorbing the finding d1a55fc88fcba10d279633e57bbed822c70ae13322e3c2f7b191804d06e2afb0 (reported by run-epic-hn6/tick-435/attempt-22): the finding was judged against the epic's definition of done and gates done item A6. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/d1a55fc88fcba10d279633e57bbed822c70ae13322e3c2f7b191804d06e2afb0.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-435/attempt-22",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T13:10:55Z",
+  "updated_at": "2026-10-05T13:10:55Z"
+}
