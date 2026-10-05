@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 440,
-  "state": "gating",
-  "reason": "running the integrated gate for 4w7 on 43cb750909b1",
-  "updated_at": "2026-10-05T22:24:40Z",
+  "sequence": 441,
+  "state": "publishing",
+  "reason": "closing 4w7 behind the integrated gate on 43cb750909b1",
+  "updated_at": "2026-10-05T22:25:53Z",
   "ticks": [
     {
       "tick_id": "92k",
