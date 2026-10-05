@@ -12,8 +12,11 @@
   "attempt": 48,
   "done_item": "A5",
   "demonstrating_check": "cd harness && pnpm test",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T19:04:04Z",
+  "triaged_at": "2026-10-05T19:04:17Z",
+  "triaged_by": "ticfac run epic-43y absorbing 4ao",
+  "promoted_as": "4ao",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "i5e",
