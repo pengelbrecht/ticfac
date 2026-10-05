@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 282,
-  "state": "dispatching",
-  "reason": "dispatching enb as attempt 46",
-  "updated_at": "2026-10-05T18:06:30Z",
+  "sequence": 283,
+  "state": "running",
+  "reason": "enb is running as attempt 46",
+  "updated_at": "2026-10-05T18:06:41Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -203,7 +203,8 @@
     },
     {
       "tick_id": "enb",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 46
     },
     {
       "tick_id": "ewd",
