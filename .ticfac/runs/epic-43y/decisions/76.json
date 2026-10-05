@@ -1,0 +1,72 @@
+{
+  "schema_version": 3,
+  "decision": 76,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "43y",
+    "job_id": "run-epic-43y/tick-o68/attempt-66",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:d251a161caa636cf29259dc058d36015243e7c7363028f39590d33e915e23b2d",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "55975b8eeb895bd5df2b17953cc53a42e3331c54",
+    "tick_id": "o68"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "Tick 7sn (05ab6c83b) edited profiles/closeout-epic.md, which changes profileSetDigest and therefore provenance.profile_digest in every classification decision record. cloudflare/test/fixtures/classify-tick-decision.json was not regenerated, so TestTheClassificationRecordIsPinnedAsItIsWritten fails on the epic head (CI run 37380024533, headSha 9e924ef811, job 'go test (reconcile 2/3)'; also 37378487207 and 37376277849). The test is EndToEnd, so the per-tick make gate skipped it. Fix: run `go test ./internal/reconcile -run TestTheClassificationRecordIsPinnedAsItIsWritten -update-pin`, read the one-line diff (profile_digest sha256:3b438330... -> sha256:59098f58...), commit it, and then wait for CI on the epic head to be green. Verified locally: after regeneration the reconcile and runstate pin tests pass.\nevidence: internal/reconcile/classify_pin_test.go:106; cloudflare/test/fixtures/classify-tick-decision.json provenance.profile_digest; gh run view 37380024533 --log-failed",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Epic head CI red: classify-tick pin stale after 7sn changed closeout profile"
+      },
+      {
+        "body": "This is the second time in this epic that the per-tick integrated gate passed while CI on the epic branch went red on a shorttest.EndToEnd test (enb: cloud runner fixtures; now: the classification pin after a profile edit). The pin's only moving part from a profile edit is profile_digest. A short (non-EndToEnd) test that compares profileSetDigest of the embedded profiles against the pinned record's profile_digest would fail the gate at the tick that edits a profile, not hours later on the epic branch.\nevidence: internal/reconcile/harness_test.go:1065 (newFixture calls shorttest.EndToEnd); internal/reconcile/reconcile.go:1613 (profileSetDigest)",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Pin the classification profile digest in a short test so make gate catches it"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-43y/tick-o68/attempt-66",
+      "commits": 0,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-43y/o68/RESULT-o68.md",
+      "review_verdict": "NOT READY",
+      "review_verdict_detail": "regenerate cloudflare/test/fixtures/classify-tick-decision.json with -update-pin (stale after 7sn's profiles/closeout-epic.md edit), then CI on the epic head must be green"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (NOT READY — regenerate cloudflare/test/fixtures/classify-tick-decision.json with -update-pin (stale after 7sn's profiles/closeout-epic.md edit), then CI on the epic head must be green)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T22:14:52Z",
+  "answered_at": "2026-10-05T22:14:52Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "o68",
+    "attempt": 66,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "55975b8eeb895bd5df2b17953cc53a42e3331c54",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:d251a161caa636cf29259dc058d36015243e7c7363028f39590d33e915e23b2d",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}
