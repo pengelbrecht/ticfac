@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 337,
-  "state": "collecting",
-  "reason": "collecting r2m attempt 52",
-  "updated_at": "2026-10-05T19:45:11Z",
+  "sequence": 338,
+  "state": "integrating",
+  "reason": "integrating r2m attempt 52 into epic/43y",
+  "updated_at": "2026-10-05T19:45:22Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -233,7 +233,7 @@
     },
     {
       "tick_id": "r2m",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 52
     },
     {
