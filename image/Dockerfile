@@ -51,10 +51,6 @@ ARG OMP_SHA256_AMD64=efdb54f0054e80afe1c05c09f43d5ced09ce8ec8b75c3fb6b0ca5ce4805
 ARG OMP_SHA256_ARM64=5d97dba8068c9c3b19bc2949567798e0a839dec5f11c458b4c642bfe0f4d14a0
 
 ARG CLAUDE_CODE_VERSION=2.1.227
-# pi (github.com/earendil-works/pi), installed from npm at an exact version like
-# claude-code above. 0.85.1 is the version ticfac verified its pi runner kind
-# against (ticfac tick gjk). It needs Node >= 22.19; the base image carries 22.23.
-ARG PI_VERSION=0.85.1
 
 ARG GO_VERSION=1.27.1
 ARG GO_SHA256_AMD64=63d339f0da5ab53635a56f2490a7984dfe12dfcff22ad749f63edaf590168445
@@ -157,8 +153,12 @@ RUN set -euo pipefail; \
     mise --version
 
 # ---------------------------------------------------------------------------
-# Harness CLIs. omp is the default kind; pi and claude are the alternatives
-# the entrypoint accepts.
+# Harness CLIs. omp is the default kind; claude is the alternative the
+# entrypoint accepts. The pi CLI is gone (epic 43y, tick jhp): pi-durable is
+# the one worker harness, and a hosted attempt's conversation runs in the
+# factory's WorkerAgent while this container runs only the --boot/--finish
+# halves — so no pi binary ships and no pi harness case remains in the
+# scripts.
 # ---------------------------------------------------------------------------
 RUN set -euo pipefail; \
     case "${TARGETARCH}" in \
@@ -172,12 +172,6 @@ RUN set -euo pipefail; \
     rm /tmp/omp
 
 RUN npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
-
-# --ignore-scripts as pi's own container recipe installs it
-# (docs/containerization.md): nothing in pi needs an install hook.
-RUN set -euo pipefail; \
-    npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@${PI_VERSION}"; \
-    pi --version
 
 # ---------------------------------------------------------------------------
 # tk, BUILT FROM SOURCE at the ref the deploy pinned — not downloaded from a

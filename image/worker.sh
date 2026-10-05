@@ -285,8 +285,8 @@ run_probe() {
 		warn "git is not on PATH"
 		failed=1
 	fi
-	if ! command -v "$harness" >/dev/null 2>&1; then
-		warn "the harness '$harness' is not on PATH — this image carries omp, pi and claude"
+	if ! command -v "$harness" >/dev/null 2>&1 && [[ $harness != pi-durable ]]; then
+		warn "the harness '$harness' is not on PATH — this image carries omp and claude; a pi-durable worker is hosted and needs no CLI"
 		failed=1
 	fi
 	if ((failed != 0)); then
@@ -762,8 +762,8 @@ run_cancel() {
 # harness ONCE with no fallback, so a cloud worker that did the same was
 # missing-result immediately. Same shape, same fix, ported: the harness is
 # re-prompted here too, at most NUDGE_MAX times — in its OWN session when
-# this script can name one for it (claude --resume, pi --session-id) and as
-# a fresh run on the same checkout when it cannot (omp) — before the
+# this script can name one for it (claude --resume) and as a fresh run on
+# the same checkout when it cannot (omp) — before the
 # container gives up, salvages, writes the fallback report and pushes.
 #
 # Only a CLEAN exit with no report is nudged. A non-zero exit is the harness
@@ -985,17 +985,11 @@ run_harness() {
 		cmd=(omp -p "$prompt" --auto-approve --mode text --model "$harness_model_selector")
 		[[ -z $max_time ]] || cmd+=(--max-time "$max_time")
 		;;
-	pi)
-		# --session-id is "use exact project session ID, creating it if
-		# missing" (pi 0.85.1 --help), so ONE flag both names the session up
-		# front and re-prompts it — the same runner table the local executor
-		# runs. --approve is pi's whole full-auto story: it has no permission
-		# gate, only a trust prompt for project-local files, and this checkout
-		# is a path pi has never seen. pi has no --max-time; the container's
-		# own harness bound is what stops it.
-		cmd=(pi -p)
-		[[ -z $session ]] || cmd+=(--session-id "$session")
-		cmd+=(--approve --mode text --model "$harness_model_selector" "$prompt")
+	pi-durable)
+		# Unreachable from the all-in-one, which refuses the hosted kind
+		# before it gets here; kept as the belt to that braces, because a
+		# silent empty cmd would run NOTHING and report exit 0.
+		die $EXIT_CONFIG "the pi-durable harness is hosted, not a CLI in this container — its halves are --boot and --finish, and the conversation that drives them runs in the factory's WorkerAgent (epic 43y, tick jhp)"
 		;;
 	claude)
 		# --session-id names the session up front and --resume prompts it
@@ -1467,9 +1461,20 @@ boot_phase() {
 	resolve_model
 	select_model_route
 	probe_model
-	select_harness_route
-	configure_harness_provider
-	probe_harness
+	if [[ $harness == pi-durable ]]; then
+		# The hosted kind has no CLI harness in this container (epic 43y,
+		# tick jhp): its conversation runs in the factory's WorkerAgent, so
+		# there is no provider to configure and no CLI to prove a round-trip
+		# through — the model probe above already proved the run's gateway
+		# route and token from inside this container, which is the only model
+		# fact the hosted halves need. Skipping the three harness steps is
+		# what lets the image carry no pi binary at all.
+		say "harness pi-durable is hosted: no CLI harness to route or probe in this container; the conversation runs in the factory's WorkerAgent"
+	else
+		select_harness_route
+		configure_harness_provider
+		probe_harness
+	fi
 	provision_toolchain
 	worker_repo_setup
 	run_preflight
@@ -1494,7 +1499,7 @@ restore_finish_state() {
 
 main() {
 	if [[ ${1:-} == "--probe" ]]; then
-		harness="${TICKS_HARNESS:-pi}"
+		harness="${TICKS_HARNESS:-omp}"
 		run_probe
 		exit $?
 	fi
@@ -1509,8 +1514,9 @@ main() {
 
 	# The pi-durable host's half of the contract (epic 43y, tick pom): the
 	# boot phase as the env's first command, the finish phase as the host's
-	# last. The all-in-one default below stays the default — the CLI harness
-	# path runs unchanged until jhp deletes it.
+	# last. The all-in-one default below remains for the CLI harnesses the
+	# image still carries (omp, claude) — the pi-CLI case is deleted (tick
+	# jhp) and the hosted kind is refused there, loudly.
 	if [[ ${1:-} == "--boot" ]]; then
 		boot_phase
 		# Booted: the conversation owns the rest, and a boot-stopped marker
@@ -1538,13 +1544,22 @@ main() {
 	fi
 
 	boot_phase
+	# The hosted kind has no CLI in this container: its conversation runs in
+	# the factory's WorkerAgent and this container's halves are --boot and
+	# --finish, both of which have run their course by here. Refused loudly
+	# rather than run to an empty cmd that would report exit 0 having done
+	# nothing — the exact trap the probe's content gate exists for.
+	if [[ $harness == pi-durable ]]; then
+		trap - EXIT
+		die $EXIT_CONFIG "the pi-durable harness is hosted, not a CLI in this container — a worker dispatched on it runs --boot and --finish here while its conversation runs in the factory's WorkerAgent; the all-in-one CLI harness path is for omp and claude (epic 43y, tick jhp)"
+	fi
 	# A session for the harness to run in, so an early exit can be re-prompted
 	# IN its own context rather than from scratch. omp has none this script can
 	# name; for it the nudge is a fresh run with a section saying a run before
 	# it already worked here.
 	local session_id=""
 	case "$harness" in
-	pi | claude)
+	claude)
 		if session_id="$(new_session_id)"; then
 			say "the $harness harness runs in session ${session_id}, so a turn that ends before the report can be resumed"
 		else

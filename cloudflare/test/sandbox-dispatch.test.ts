@@ -222,12 +222,13 @@ const REQUESTED_MODEL = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash";
 
 /**
  * The harness a dispatch names (tick 9iz): the profile's runner — deliberately
- * spelled the same as the built-in default so the test that proves the request
- * outranks the deployment sets `RUN_WORKER_HARNESS` to something else, and a
- * container booted on the deployment's standing choice is told apart from one
- * booted on what the request carried.
+ * spelled the same as the built-in default (pi-durable since epic 43y, tick
+ * jhp — the hosted kind, the only worker harness) so the test that proves the
+ * request outranks the deployment sets `RUN_WORKER_HARNESS` to something
+ * else, and a container booted on the deployment's standing choice is told
+ * apart from one booted on what the request carried.
  */
-const REQUESTED_HARNESS = "pi";
+const REQUESTED_HARNESS = "pi-durable";
 
 /**
  * The rendered role prompt a dispatch carries (tick 9iz): the profile's own

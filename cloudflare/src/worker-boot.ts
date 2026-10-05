@@ -393,14 +393,17 @@ export type WorkerBootInput = {
 /**
  * A worker container's own default harness.
  *
- * `pi`, per the operator's rule (tick uqi): the cloud's harness is pi and only
- * pi, and nothing in the cloud runs claude — `image/common.sh` refuses
- * `claude` outright against a non-Anthropic provider, by design, and the
- * routes the operator pays for are Workers AI ones the image wires pi to.
+ * `pi-durable` (epic 43y, tick jhp): every factory worker is hosted — its
+ * conversation runs in the factory's WorkerAgent and its tools run in the
+ * container via the `--boot`/`--finish` halves — so the hosted kind is what a
+ * container that named no harness is. The pi CLI is deleted from the image
+ * and from `image/common.sh`'s kind set; a profile or deployment naming `pi`
+ * is refused by the container at boot, loudly.
+ *
  * The default and the `wrangler.toml` pins agree; this constant is the floor
  * under a deployment that sets no `RUN_WORKER_HARNESS`, not the rule itself.
  */
-export const WORKER_DEFAULT_HARNESS = "pi";
+export const WORKER_DEFAULT_HARNESS = "pi-durable";
 
 /**
  * A worker container's own default model when nothing else names one.
@@ -469,6 +472,29 @@ function configured(value: string | null | undefined): string | null {
  */
 export function workerHarness(run?: string | null, deployment?: string | null): string {
   return configured(run) ?? configured(deployment) ?? WORKER_DEFAULT_HARNESS;
+}
+
+/**
+ * The review job's own harness floor (epic 43y, tick jhp).
+ *
+ * The review is the one cloud boot that still runs a CLI harness in its
+ * container: it reads a pull request and posts prose, one pass, no
+ * reconcile. Its floor is NOT the worker ladder's — `pi-durable` names a
+ * HOSTED conversation, and a review container would refuse it at boot —
+ * but `omp`, the CLI the image carries that reaches the review's Workers AI
+ * route through the gateway. A deployment that pins `RUN_HARNESS` or
+ * `RUN_WORKER_HARNESS` to a CLI harness it has verified may still route the
+ * review there; this floor is what an unset ladder falls to, and it must
+ * name a harness the image can actually run.
+ */
+export const REVIEW_DEFAULT_HARNESS = "omp";
+
+/**
+ * Which harness a review container is actually told to run — the same
+ * ladder as {@link workerHarness} with the review's own floor under it.
+ */
+export function reviewHarness(run?: string | null, deployment?: string | null): string {
+  return configured(run) ?? configured(deployment) ?? REVIEW_DEFAULT_HARNESS;
 }
 
 /**

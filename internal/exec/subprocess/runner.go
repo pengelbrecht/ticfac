@@ -145,11 +145,15 @@ var runners = map[string]runnerDef{
 	// same conversation, which is this runner's "session".
 	//
 	// Model credentials are the host's own environment (CLOUDFLARE_API_KEY /
-	// CLOUDFLARE_ACCOUNT_ID, resolved by pi-ai exactly as the pi CLI resolved
-	// them); a container's gateway token is the cloud host's, not this one.
-	// The pi CLI itself remains reachable only through TICFAC_RUNNER_ARGV,
-	// the escape hatch for a host that cannot run the harness; jhp (epic step
-	// 9) deletes the CLI path outright.
+	// CLOUDFLARE_ACCOUNT_ID, resolved by pi-ai the same way the deleted pi CLI
+	// resolved them); a container's gateway token is the cloud host's, not
+	// this one.
+	//
+	// The pi CLI is not a runner (epic 43y, tick jhp): the image ships no pi
+	// binary and no profile routes to one. TICFAC_RUNNER_ARGV remains ONLY as
+	// the cross-process seam the e2e tests use to inject their fake runners
+	// into the real executor binary — nothing in the repository points it at
+	// the pi CLI, and the table is the one place a future runner belongs.
 	"pi": {
 		Argv: []string{
 			"node", "--experimental-strip-types",

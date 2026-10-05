@@ -217,7 +217,7 @@ function postStart(): Promise<Response> {
       title: "Cloud host: a WorkerAgent DO per attempt",
       base_sha: BASE_SHA,
       model: "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
-      harness: "pi",
+      harness: "pi-durable",
       prompt: PROMPT,
     }),
   });

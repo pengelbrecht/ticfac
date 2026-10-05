@@ -2168,8 +2168,11 @@ describe("the pull request review job (tick dl8)", () => {
     commenter = new FakeCommenter();
     set("REVIEW_COMMENTER", commenter);
     // The routing floor has to hold with NOTHING pinned: every harness/model
-    // var unset, so the review job's pi-on-GLM comes from the worker ladder's
-    // built-in floor — not from a deployment that happens to pin it.
+    // var unset, so the review job's omp-on-GLM comes from the review ladder's
+    // built-in floor — not from a deployment that happens to pin it. omp is
+    // the review's floor because the review is the one cloud boot that still
+    // runs a CLI harness in its container; the workers are hosted on
+    // pi-durable and the pi CLI is deleted (epic 43y, tick jhp).
     set("RUN_HARNESS", undefined);
     set("RUN_MODEL", undefined);
     set("RUN_WORKER_HARNESS", undefined);
@@ -2228,9 +2231,11 @@ describe("the pull request review job (tick dl8)", () => {
       TICKS_PHASE: "review",
       [REVIEW_PR_ENV]: String(pr),
       [REVIEW_HEAD_SHA_ENV]: "a".repeat(40),
-      // The job's routing, resolved like every other cloud role: pi on GLM by
-      // construction, never the entrypoint's own harness selection.
-      TICKS_HARNESS: "pi",
+      // The job's routing, resolved like every other cloud role: omp on GLM
+      // (the CLI the image still carries for review boots; the workers are
+      // hosted on pi-durable and the pi CLI is deleted, epic 43y tick jhp),
+      // never the entrypoint's own harness selection.
+      TICKS_HARNESS: "omp",
       TICKS_MODEL: "workers-ai/@cf/zai-org/glm-5.3",
       // The door the findings go to, and the credential that authorizes the
       // post — the run's own token, never the operator's.
@@ -2271,7 +2276,7 @@ describe("the pull request review job (tick dl8)", () => {
   it("does not call a reviewer that exited 0 without posting anything done", async () => {
     const { runID, project } = await igniteReview();
     const process = await firstProcess();
-    expect(process.env.TICKS_HARNESS).toBe("pi");
+    expect(process.env.TICKS_HARNESS).toBe("omp");
 
     process.exit(0);
     const run = await settled(runID);

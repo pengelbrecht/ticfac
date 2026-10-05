@@ -221,7 +221,7 @@ function startBody(overrides: Record<string, unknown> = {}): Record<string, unkn
     title: "Cloud host: a WorkerAgent DO per attempt",
     base_sha: BASE_SHA,
     model: MODEL,
-    harness: "pi",
+    harness: "pi-durable",
     prompt: PROMPT,
     ...overrides,
   };
