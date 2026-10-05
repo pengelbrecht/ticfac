@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 183,
-  "state": "running",
-  "reason": "cg4 is closed",
-  "updated_at": "2026-10-05T14:28:37Z",
+  "sequence": 184,
+  "state": "collecting",
+  "reason": "collecting g94 attempt 27",
+  "updated_at": "2026-10-05T14:29:51Z",
   "ticks": [
     {
       "tick_id": "v16",
