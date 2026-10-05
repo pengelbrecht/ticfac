@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 216,
-  "state": "running",
-  "reason": "uxi is closed",
-  "updated_at": "2026-10-05T15:01:09Z",
+  "sequence": 217,
+  "state": "dispatching",
+  "reason": "dispatching a2l as attempt 36",
+  "updated_at": "2026-10-05T15:01:22Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -170,6 +170,10 @@
     },
     {
       "tick_id": "fim",
+      "state": "ready"
+    },
+    {
+      "tick_id": "jiv",
       "state": "ready"
     }
   ],
