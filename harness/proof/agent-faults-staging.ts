@@ -6,7 +6,8 @@
  * names, one attempt each:
  *
  *   1. HOST LOST MID-TOOL — a `wrangler deploy` fired at the first
- *      tool_execution_start of a thirty-second bash: the deploy kills the
+ *      tool_execution_start of a ninety-second bash (a staging deploy takes
+ *      about twenty, so the host dies well inside the tool): the deploy kills the
  *      WorkerAgent Durable Object the way a lost harness process dies, while
  *      the tracked bash keeps running in its container. The new isolate's
  *      heartbeat reopens the storage, pi-durable resumes the unfinished task,
@@ -230,8 +231,8 @@ function claim(text: string, ok: boolean): void {
     [
       "You are working in /work/repo, a git checkout on its own branch.",
       "",
-      "1. Run this EXACT bash command with the bash tool, and wait for it to finish (it takes about thirty seconds):",
-      "   sleep 30 && printf 'tool-ran-once\\n' >> tool-runs.txt",
+      "1. Run this EXACT bash command with the bash tool, and wait for it to finish (it takes about ninety seconds):",
+      "   sleep 90 && printf 'tool-ran-once\\n' >> tool-runs.txt",
       "2. Then run: cat tool-runs.txt",
       "3. Commit everything on the current branch with git.",
       "4. Write RESULT-xd3.md in /work/repo: one line saying what you changed, then a last line `STATUS: DONE`.",
