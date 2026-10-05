@@ -214,7 +214,12 @@ describe("the Workers AI gateway provider", () => {
     await harness.close(context);
   });
 
-  it("carries the GLM maxTokens and thinkingFormat overrides on the wire", async () => {
+  // Tick fim: the two siblings above are full-Harness tests too — the open
+  // sits inside the openHarness helper, which is why the old guard (in-body
+  // opens only) never saw them. Same rule, same bound as the first test.
+  it("carries the GLM maxTokens and thinkingFormat overrides on the wire", {
+    timeout: 120_000,
+  }, async () => {
     const gateway = fakeGateway([{ text: "ok" }]);
     const { harness, root, context } = await openHarness(gateway);
     const settled = await (await root.submit({ type: "input", content: "hi" }, context)).wait(
@@ -234,7 +239,9 @@ describe("the Workers AI gateway provider", () => {
     await harness.close(context);
   });
 
-  it("stops the conversation at the next request once the run token is revoked, without retrying the refusal", async () => {
+  it("stops the conversation at the next request once the run token is revoked, without retrying the refusal", {
+    timeout: 120_000,
+  }, async () => {
     const gateway = fakeGateway([{ tool: "echo", args: { text: "heard" } }, { text: "never" }]);
     // The kill switch fires while the tool runs: the request that follows the
     // tool round is the first one the revocation can stop.

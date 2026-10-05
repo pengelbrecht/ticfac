@@ -20,6 +20,10 @@ const CONTEXT = BACKGROUND_CONTEXT;
 const NONCE = "bash-0001-node-test";
 
 describe("the tracked bash over a real running process", () => {
+  // Tick fim: this test drives the door's real child bash and waits on its
+  // progress — process-driving, so it states its own 300s bound
+  // (harness-timeout-discipline, the 7wg rule) instead of borrowing the
+  // quiet-host 30s default.
   let root: string;
   let door: ReturnType<typeof localSandboxDoor>;
   let env: FactorySandboxEnv;
@@ -63,7 +67,9 @@ describe("the tracked bash over a real running process", () => {
     }
   }
 
-  it("cancels an invocation without killing the process, then reattaches to the same one", async () => {
+  it("cancels an invocation without killing the process, then reattaches to the same one", {
+    timeout: 300_000,
+  }, async () => {
     // A command slow enough that the crash beats it, printing a marker when
     // it finishes.
     const command = "sleep 0.8; echo tick-finished";

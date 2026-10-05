@@ -56,6 +56,11 @@ function makeRealTk(root: string) {
 }
 
 describe("the boundary guard of a local worker environment", () => {
+  // Tick fim: the three bash-driving tests below run real processes — the
+  // guarded env's exec is real bash behind the shim — on the same shared
+  // host as everything else, so under synthetic 12x oversubscription they
+  // failed at the quiet-host 30s default. A process-driving test states
+  // its own 300s bound (harness-timeout-discipline), the 7wg rule.
   let root: string;
   let checkout: string;
   let realTkCalls: string;
@@ -84,7 +89,9 @@ describe("the boundary guard of a local worker environment", () => {
     return existsSync(join(guard, "attempts")) ? readFileSync(join(guard, "attempts"), "utf8") : "";
   }
 
-  it("refuses a tracker write, says the pinned refusal, and never reaches the real tk", async () => {
+  it("refuses a tracker write, says the pinned refusal, and never reaches the real tk", {
+    timeout: 300_000,
+  }, async () => {
     const env = createGuardedNodeExecutionEnv({ cwd: checkout });
     let output = "";
     const result = await env.exec(
@@ -106,7 +113,9 @@ describe("the boundary guard of a local worker environment", () => {
     expect(existsSync(join(checkout, "attempts"))).toBe(false);
   });
 
-  it("passes tracker reads through to the real tk and does not report them", async () => {
+  it("passes tracker reads through to the real tk and does not report them", {
+    timeout: 300_000,
+  }, async () => {
     const env = createGuardedNodeExecutionEnv({ cwd: checkout });
     let output = "";
     const result = await env.exec(
@@ -120,7 +129,9 @@ describe("the boundary guard of a local worker environment", () => {
     expect(ledger()).toBe("");
   });
 
-  it("passes a write against a tracker that is not this checkout's", async () => {
+  it("passes a write against a tracker that is not this checkout's", {
+    timeout: 300_000,
+  }, async () => {
     const fixture = makeCheckout(root, "fixture-repo");
     const env = createGuardedNodeExecutionEnv({ cwd: checkout });
     let output = "";

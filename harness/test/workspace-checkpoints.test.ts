@@ -47,7 +47,12 @@ const GIT: WorkspaceGit = {
 };
 
 describe("the wip checkpoint after every tool round", () => {
-  it("pushes one wip commit to the attempt branch per round, on the real hook wiring", async () => {
+  // A full-Harness test (tick fim): the whole pi-durable Harness runs behind
+  // the scripted door, and the workerd pool runs this file beside the
+  // suite's others — the 120s bound, not the 30s quiet-host default.
+  it("pushes one wip commit to the attempt branch per round, on the real hook wiring", {
+    timeout: 120_000,
+  }, async () => {
     const context = BACKGROUND_CONTEXT;
     // The door answers a scripted sha for the commit line; everything else
     // succeeds. The door runs nothing — the node suite proves the lines.
@@ -279,7 +284,9 @@ describe("a container lost BETWEEN tool rounds", () => {
    * restores before the model's next request goes out; the node suite
    * (test/node/workspace-checkpoints.test.ts) carries the real-git half.
    */
-  it("is restored by the ready check before the next round's request, on the real hook wiring", async () => {
+  it("is restored by the ready check before the next round's request, on the real hook wiring", {
+    timeout: 120_000,
+  }, async () => {
     const context = BACKGROUND_CONTEXT;
     // The destroyed box's replacement boots EMPTY: the ready marker is
     // gone, so `test -e` fails — armed the moment round 1's wip lands, so

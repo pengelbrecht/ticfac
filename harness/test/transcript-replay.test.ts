@@ -42,7 +42,12 @@ function textOf(message: Message): string[] {
  * run in a cloud DO runs under the worker runtime here.
  */
 describe("faux-provider transcript replay", () => {
-  it("answers through a tool call and replays the transcript to the provider", async () => {
+  // A full-Harness test (tick fim): the pool runs this file beside the
+  // suite's other workerd files, so its wall clock grows with contention —
+  // the kjs 120s bound, not the 30s quiet-host default.
+  it("answers through a tool call and replays the transcript to the provider", {
+    timeout: 120_000,
+  }, async () => {
     const context = BACKGROUND_CONTEXT;
     const echoed: string[] = [];
 

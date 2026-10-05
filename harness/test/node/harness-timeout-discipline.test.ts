@@ -231,7 +231,9 @@ function drivenNames(
   const callsMarkedHelper = (root: ts.Node): boolean =>
     walk(root, (node) => {
       return (
-        ts.isCallExpression(node) && ts.isIdentifier(node.expression) && helperNames.has(node.expression.text)
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        helperNames.has(node.expression.text)
       );
     });
   const referencesMarkedVariable = (root: ts.Node): boolean =>
@@ -315,7 +317,11 @@ function guardedTests(source: string): {
   const workerDriven = drivenNames(helpers, assignments, (node) => walk(node, isWorkerLaunch));
   const calls = (body: ts.Node, names: Set<string>): boolean =>
     walk(body, (node) => {
-      return ts.isCallExpression(node) && ts.isIdentifier(node.expression) && names.has(node.expression.text);
+      return (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        names.has(node.expression.text)
+      );
     });
   const names = (body: ts.Node, identifiers: Set<string>): boolean =>
     walk(body, (node) => ts.isIdentifier(node) && identifiers.has(node.text));
@@ -439,7 +445,9 @@ describe("the load-dependent tests of both suites state their own wall clock", (
       ),
     ).toBe(true);
     expect(
-      processTitles.has("cancels an invocation without killing the process, then reattaches to the same one"),
+      processTitles.has(
+        "cancels an invocation without killing the process, then reattaches to the same one",
+      ),
     ).toBe(true);
     expect(
       processTitles.has("writes and reads text back, with a path that is a value, not shell text"),
@@ -455,7 +463,9 @@ describe("the load-dependent tests of both suites state their own wall clock", (
       harnessTests.filter((test) => test.suite === "workerd").map((test) => test.title),
     );
     expect(
-      workerdHarnessTitles.has("carries the GLM maxTokens and thinkingFormat overrides on the wire"),
+      workerdHarnessTitles.has(
+        "carries the GLM maxTokens and thinkingFormat overrides on the wire",
+      ),
     ).toBe(true);
     expect(
       workerdHarnessTitles.has(
