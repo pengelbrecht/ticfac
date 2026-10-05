@@ -1,0 +1,14 @@
+{
+  "id": "yp8",
+  "title": "Re-review 43y: its tree changed since its NOT READY final review (round 3)",
+  "description": "Review the epic 43y again, AS INTEGRATED: its final review (o68, decision 76) judged it NOT READY at 55975b8eeb89, after the 2 review rounds the run makes by itself, and the epic branch has changed since — now at f706e3d199fc, with work that review never saw (a commit closed or pushed since, a person's fix among them perhaps). This is review round 3, and it is made only because the tree changed.\n\nThat review's reasons: regenerate cloudflare/test/fixtures/classify-tick-decision.json with -update-pin (stale after 7sn's profiles/closeout-epic.md edit), then CI on the epic head must be green; its blocking finding(s): \"Epic head CI red: classify-tick pin stale after 7sn changed closeout profile\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY here holds for a person with your reasons unless the tree changes again.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "role": "review",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T23:14:37Z",
+  "updated_at": "2026-10-05T23:14:37Z"
+}
