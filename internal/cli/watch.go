@@ -542,12 +542,24 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 		// nothing (tick rix, the cancelled sibling of the failed branch
 		// above): its own class, with its own code — never done/0, which an
 		// agent branches on as "the epic finished", and never the failed
-		// class, which names a fix nobody needs to make.
+		// class, which names a fix nobody needs to make. The resume is named
+		// when the model's attention holds it (tick 3yx): the same stop is a
+		// dead-run resume a frame renders as "needs you", and this ending
+		// must name the same command rather than answer "nothing is held"
+		// beside a frame that says otherwise.
 		if !*asJSON {
-			fmt.Fprintf(stderr, "\nticfac watch: run %s ended CANCELLED:\n%s\n"+
-				"The run was stopped deliberately: the work is neither done nor failed, and "+
-				"nothing is held for a person. The evidence is on the integration branch, not in this line.\n\n",
-				runID, terminalDetail)
+			if resume := watchDeadRunResume(model); resume != "" {
+				fmt.Fprintf(stderr, "\nticfac watch: run %s ended CANCELLED:\n%s\n"+
+					"The run was stopped deliberately: the work is neither done nor failed — "+
+					"`%s` resumes it under this run id, without redoing what already passed. "+
+					"The evidence is on the integration branch, not in this line.\n\n",
+					runID, terminalDetail, resume)
+			} else {
+				fmt.Fprintf(stderr, "\nticfac watch: run %s ended CANCELLED:\n%s\n"+
+					"The run was stopped deliberately: the work is neither done nor failed, and "+
+					"nothing is held for a person. The evidence is on the integration branch, not in this line.\n\n",
+					runID, terminalDetail)
+			}
 		}
 		return finish(agentStateCancelled, nil)
 	}
@@ -1254,6 +1266,27 @@ func watchHoldAttention(m statusmodel.Model) *statusmodel.Attention {
 	return nil
 }
 
+// watchDeadRunResume is the command the frame's needs-you line and the
+// attention alert name for a run that ended by its own word — the
+// dead-run wait's unblock command, read out of the model rather than
+// spelled again, so an ending and the frame that stands above it cannot
+// name two commands. Empty when the model claims no such wait: a
+// cancelled run is deliberately quiet in the model (its own terminal
+// answer stands), and a run whose records this checkout cannot read is not
+// this checkout's to resume — the same boundary the builder holds for the
+// wait itself (tick 3yx).
+func watchDeadRunResume(m statusmodel.Model) string {
+	for _, a := range m.Attention {
+		if a.Kind != statusmodel.WaitDeadRun {
+			continue
+		}
+		if a.UnblockCommand != nil && *a.UnblockCommand != "" {
+			return *a.UnblockCommand
+		}
+	}
+	return ""
+}
+
 // watchEndHolding is the live view's last word: the final frame stands, the
 // last line of the feed is in the scrollback, and what the run ended holding
 // for a person is said to stderr — where the stream path says it — with the
@@ -1282,8 +1315,19 @@ func watchEndHolding(model statusmodel.Model, runID string, stderr io.Writer) in
 				detail = model.Liveness.LastEvent.Detail
 			}
 			fmt.Fprintf(stderr, "\nticfac watch: run %s ended CANCELLED:\n%s\n", runID, detail)
-			fmt.Fprintf(stderr, "The run was stopped deliberately: the work is neither done nor failed, and "+
-				"nothing is held for a person. The evidence is on the integration branch, not in this line.\n\n")
+			// The resume is named when the frame named it (tick 3yx): the same
+			// deliberate stop is a dead-run resume in the model's attention, so
+			// the frame says "needs you" and the alert above the block names the
+			// command — the ending below must name the same one, never answer
+			// "nothing is held" to an alert that said the opposite.
+			if resume := watchDeadRunResume(model); resume != "" {
+				fmt.Fprintf(stderr, "The run was stopped deliberately: the work is neither done nor failed — "+
+					"`%s` resumes it under this run id, without redoing what already passed. "+
+					"The evidence is on the integration branch, not in this line.\n\n", resume)
+			} else {
+				fmt.Fprintf(stderr, "The run was stopped deliberately: the work is neither done nor failed, and "+
+					"nothing is held for a person. The evidence is on the integration branch, not in this line.\n\n")
+			}
 			return exitCancelled
 		}
 		return 0

@@ -30,6 +30,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -490,6 +491,70 @@ func TestWatchOnATerminalEndsCancelledWhenAPersonStoppedTheRun(t *testing.T) {
 	// The last word is still in the scrollback below the final frame.
 	if !strings.Contains(stdout.String(), "run_died") {
 		t.Errorf("the run's own last word never printed:\n%s", stdout.String())
+	}
+}
+
+// The live view's cancelled end names the resume the frame names (tick
+// 3yx): a run whose terminal line carries the factory's own stop word —
+// "stopped:" — is a dead-run RESUME in the model's attention, so the
+// frame's needs-you line and the alert kept above the block both name the
+// command that moves it on. The ending under that block must not answer
+// the same deliberate stop with the opposite — "nothing is held for a
+// person", no command — or one command run gives two answers. A cancelled
+// run the model is deliberately quiet about (the checkpoint's own word,
+// the tests above) keeps the plain ending; this one names the same resume
+// the frame named.
+func TestWatchOnATerminalEndsCancelledNamingTheResume(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+	runID := "epic-rmod"
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+	fakeTerminal(t)
+
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	// The factory's own word for a deliberate stop: the terminal line the
+	// model reads as the dead-run wait whose unblock command is the resume.
+	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "", nil,
+		reconcile.StageRunFinished, "stopped: stop requested by the operator"))
+
+	var stdout, stderr syncBuffer
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
+	}()
+
+	life.Release("stopped by the operator")
+	var got int
+	select {
+	case got = <-code:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the watch never returned after the run ended")
+	}
+	if got != exitCancelled {
+		t.Fatalf("exit code %d, want %d (the cancelled class) for a stopped run; stderr:\n%s", got, exitCancelled, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended CANCELLED") {
+		t.Errorf("the cancelled end is not said to the person reading the block:\n%s", stderr.String())
+	}
+	// The premise of the contradiction, pinned: the alert above the block
+	// said the run is holding for a person and named the command — and the
+	// ending must name the SAME command, never "nothing is held".
+	resume := statusmodel.ResumeCommand(statusmodel.HostLocal, "rmod")
+	if !strings.Contains(stdout.String(), "move it on: "+resume) {
+		t.Errorf("the alert never named the resume %q (the premise of this test):\n%s", resume, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), resume) {
+		t.Errorf("the cancelled end does not name the resume %q the frame named:\n%s", resume, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "nothing is held for a person") {
+		t.Errorf("the end said nothing is held below a frame and alert that named the resume:\n%s", stderr.String())
 	}
 }
 
