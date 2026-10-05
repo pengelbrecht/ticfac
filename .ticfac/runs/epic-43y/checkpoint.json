@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 119,
-  "state": "integrating",
-  "reason": "integrating 2q5 attempt 12 into epic/43y",
-  "updated_at": "2026-10-05T10:27:53Z",
+  "sequence": 120,
+  "state": "gating",
+  "reason": "running the integrated gate for 2q5 on 44bc48bc3489",
+  "updated_at": "2026-10-05T10:28:00Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -72,7 +72,7 @@
     },
     {
       "tick_id": "2q5",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 12
     },
     {
