@@ -1,0 +1,13 @@
+{
+  "id": "q6z",
+  "title": "[roles.implement] args = [\"--approve\"] is dead config after the herdr re-cut",
+  "description": "The args are pi-CLI trust flags that the HERDR executor compiles into an implement agent's argv — but after tick 2q5 the herdr profile set routes implement onto the local-subprocess executor, which never reads roles-table args, and the durable Node host takes no --approve flag. On every substrate the pairing now does nothing, while its comment still explains pi's trust model as if it launched. A reader of runners.toml will believe implement workers somewhere run with --approve. Cleanup (drop the args, reword the comment) belongs to the operator's routing file; jhp's sweep of the pi-CLI remnants is a natural moment.\nevidence: .tick/runners.toml [roles.implement] args = [\"--approve\"] beside kind = \"pi\"; internal/cli/executor.go spawnArgv is the only consumer, reached only for herdr dispatches\n\nticfac run epic-43y filed this backlog tick from the finding bab4366201a0f1e317912ce9ea784b40efe43500974250511bb99770f33b46d2 (reported by run-epic-43y/tick-2q5/attempt-12): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/bab4366201a0f1e317912ce9ea784b40efe43500974250511bb99770f33b46d2.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-2q5/attempt-12",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T10:27:42Z",
+  "updated_at": "2026-10-05T10:27:42Z"
+}
