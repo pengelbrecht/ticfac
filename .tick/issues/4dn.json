@@ -2,6 +2,7 @@
   "id": "4dn",
   "title": "An ended run's dispatched row for an open tick still grows a live elapsed",
   "description": "isLiveAttempt treats the newest run's dispatched/reported row as a live attempt without checking whether that run itself ended, so a dead subject run's stale 'dispatched' row for a tick the tracker has NOT closed still shows a per-tick countdown that only grows. The run-level clock freezes at the run's end (runEndedAt); the per-tick one does not. Outside tick cno's scope, which is exactly the tracker-closed case.\nevidence: internal/statusmodel/build.go:483-491 (isLiveAttempt): owner == len(PriorRecords) \u0026\u0026 state == tickDispatched answers live with no runEnded check\n\nticfac run epic-hn6 filed this backlog tick from the finding 022dcae80f21a80eec2332cecdf0b4ff0e67077c5117c230df067b54f3b12dc2 (reported by run-epic-hn6/tick-cno/attempt-26): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/022dcae80f21a80eec2332cecdf0b4ff0e67077c5117c230df067b54f3b12dc2.json on the run branch.",
+  "notes": "2026-10-05 15:39 - ticfac run epic-hn6: created by absorbing finding 022dcae80f21a80eec2332cecdf0b4ff0e67077c5117c230df067b54f3b12dc2 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-hn6/absorptions/022dcae80f21a80eec2332cecdf0b4ff0e67077c5117c230df067b54f3b12dc2.json on epic/hn6, and it says: the classifier put 0.20 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-hn6/tick-cno/attempt-26",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-05T13:39:22Z",
-  "updated_at": "2026-10-05T13:39:22Z"
+  "updated_at": "2026-10-05T13:39:27.530206Z"
 }
