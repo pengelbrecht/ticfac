@@ -1,0 +1,14 @@
+{
+  "id": "2pn",
+  "title": "Put the harness package's suites in the per-tick gate",
+  "description": "The harness package 43y created runs lint, typecheck and tests in CI (ci.yml 'harness conformance and replay'), but the per-tick gate's ts cell is cloudflare format, lint, contracts and tsc only. So a tick could merge with the harness suite red. One test's timeout bound (dumb-git-origin under the 300 s discipline guard) was found red at base by five workers and absorbed five times (h3c, 7oy, 4ao, omq, 30e). Add the harness suite to [testing.commands], or at least its fast half, and measure its wall time against the gate bound first, as t8u's tc9 asks for cloudflare vitest.\nevidence: .tick/runners.toml:220 (ts command); .github/workflows/ci.yml:410-412\n\nticfac run epic-43y created this tick by absorbing the finding bf280200414f42c5a8562abacc26d1a799205cb2090339c18f72ce545549931f (reported by run-epic-43y/tick-j2k/attempt-69): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/bf280200414f42c5a8562abacc26d1a799205cb2090339c18f72ce545549931f.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-j2k/attempt-69",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T23:35:58Z",
+  "updated_at": "2026-10-05T23:35:58Z"
+}
