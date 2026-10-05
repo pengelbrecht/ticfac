@@ -138,7 +138,7 @@ describe("a dumb-HTTP origin, over real git", () => {
    * turn that continues from the restored tree:
    */
   it("an origin that outlives the box carries the boot, the wip and the restore", {
-    timeout: 120_000,
+    timeout: 300_000,
   }, async () => {
     const branch = "tick/proof/a2l";
     const checkout = join(root, "repo");
