@@ -263,7 +263,14 @@ func (r *Reconciler) composePRBody(readinessSection string) (string, int, error)
 	// nobody scored.
 	body.WriteString("\n## Amendments to the epic's record\n\n")
 	if len(amendments) == 0 {
-		body.WriteString("No worker proposed an amendment to the epic's own record.\n")
+		// The absence is stated from the RECORD's view, and says so: a worker's
+		// note applied by an older run — before these records existed — is
+		// outside them, and the close-out's retro names such exceptions from
+		// the epic's notes themselves. An absence that read as "no worker ever
+		// wrote to the record" would be a claim the record cannot make.
+		body.WriteString("No worker-proposed amendment to the epic's record is filed with this run. A note a " +
+			"worker applied in an earlier run — before the amendment records existed — is outside these " +
+			"records, and the close-out's retro names it from the epic's notes.\n")
 	} else {
 		body.WriteString("Every note a worker proposed to the epic's own record — the one the acceptance is scored " +
 			"from — applied by the run, and waiting for or carrying the operator's decision. A worker's words on " +

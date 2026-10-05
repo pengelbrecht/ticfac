@@ -305,7 +305,7 @@ func TestThePRBodyCarriesTheAmendments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(plain, "No worker proposed an amendment to the epic's own record.") {
+	if !strings.Contains(plain, "No worker-proposed amendment to the epic's record is filed with this run") {
 		t.Errorf("the plain run's PR body does not state the absence of amendments:\n%s", plain)
 	}
 }

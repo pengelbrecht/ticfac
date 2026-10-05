@@ -140,7 +140,7 @@ func amendmentsCommand(args []string, repo, remote, branch, runID *string, asJSO
 		return exitSuccess
 	}
 	if len(amendments) == 0 {
-		fmt.Fprintf(stdout, "run %s has no worker-proposed amendments to the epic's record.\n", store.RunID())
+		fmt.Fprintf(stdout, "run %s has no worker-proposed amendments to the epic's record filed with it.\n", store.RunID())
 		return exitSuccess
 	}
 	undecided := 0

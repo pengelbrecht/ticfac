@@ -190,6 +190,8 @@ func TestTheOperatorDecidesAnAmendmentOnceAndAttributed(t *testing.T) {
 
 // A decided record states its decision in full or not at all — a decision
 // half in and half out is unauditable either way.
+//
+// short: Validate over a record already in memory
 func TestAnAmendmentStatesItsDecisionInFullOrNotAtAll(t *testing.T) {
 	a := testAmendment("5abf2252")
 	a.Status, a.DecidedBy = AmendmentConfirmed, "the operator"

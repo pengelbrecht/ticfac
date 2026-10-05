@@ -190,7 +190,11 @@ func TestAmendmentsStatesTheAbsence(t *testing.T) {
 	if code := Run([]string{"amendments", "--repo", repo, "qeu"}, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d: %s", code, stderr.String())
 	}
-	if out := stdout.String(); !strings.Contains(out, "no worker-proposed amendments") {
+	out := stdout.String()
+	if !strings.Contains(out, "has no worker-proposed amendments") {
 		t.Errorf("the empty listing does not state the absence:\n%s", out)
+	}
+	if strings.Contains(out, "record, and the epic has") || strings.Contains(out, "amendments, and the epic") {
+		t.Errorf("the empty listing claims something about the epic's record the store cannot know:\n%s", out)
 	}
 }
