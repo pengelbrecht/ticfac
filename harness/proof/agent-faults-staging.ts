@@ -259,7 +259,11 @@ function claim(text: string, ok: boolean): void {
     runs.output.trim() === "tool-ran-once",
   );
   claim(
-    "kill the host mid-tool: the new host resumed from its storage (wip checkpoints kept landing)",
+    "kill the host mid-tool: a new host life resumed the conversation from its storage",
+    /a new host life resumed the conversation from its storage/.test(log),
+  );
+  claim(
+    "kill the host mid-tool: wip checkpoints kept landing after the resume",
     /wip checkpoint [0-9a-f]+ pushed/.test(log),
   );
 }
@@ -339,11 +343,15 @@ function claim(text: string, ok: boolean): void {
     ].join("\n"),
   );
   mark(`started: ${JSON.stringify(start)}`);
-  // Give the conversation a moment to be mid-generation rather than at a
-  // tool boundary, then deploy: whatever the deploy interrupts — a streamed
-  // generation, the wait between rounds — the attempt must still deliver.
-  await new Promise((resolve) => setTimeout(resolve, 8000));
-  mark("deploying the staging Worker mid-conversation");
+  // Deploy the moment the boot has handed off and the conversation is on:
+  // the first model request is in flight, not a tool — whatever the deploy
+  // interrupts, the attempt must still deliver, from its storage.
+  for (;;) {
+    const now = (await call("state")) as State;
+    if (now.phase !== "booting") break;
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  mark("the conversation is on; deploying the staging Worker mid-conversation");
   const stdout = await deploy();
   mark(
     /Deployed|Updated/.test(stdout)
@@ -360,6 +368,10 @@ function claim(text: string, ok: boolean): void {
   evidence.deploy_mid_run_report = report.output;
   await reclaim();
   claim("deploy mid-run: the attempt settles 0", state.exit_code === 0);
+  claim(
+    "deploy mid-run: a new host life resumed the conversation from its storage",
+    /a new host life resumed the conversation from its storage/.test(log),
+  );
   claim(
     "deploy mid-run: the work was delivered (the report is on the pushed branch)",
     /STATUS: /.test(report.output),

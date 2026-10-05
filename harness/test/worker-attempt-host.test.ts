@@ -325,13 +325,16 @@ describe("a worker attempt driven by the host", () => {
     ]);
     const records = memoryRecords();
     const storage = new MemoryStorage();
+    const lines: string[] = [];
     const life = () =>
       new WorkerAttemptHost({
         door: door.sandbox,
         storage: async () => storage,
         models,
         records,
-        log: () => {},
+        log: async (text) => {
+          lines.push(text);
+        },
         pollMs: 5,
         bashPollMs: 5,
         guardDir: null,
@@ -358,6 +361,12 @@ describe("a worker attempt driven by the host", () => {
     expect(faux.state.callCount).toBe(2);
     // One user message: the prompt, submitted once across both lives.
     expect(users).toEqual([1]);
+    // The resume says so in the attempt's log — the one line a watcher (and
+    // the staging fault proof, tick jhp) can tell a new life from: the first
+    // life recorded the submission, the second found it there.
+    expect(
+      lines.filter((l) => l.includes("resumed the conversation from its storage")),
+    ).toHaveLength(1);
   });
 
   it("places an operator's steer after the running tool round", async () => {
