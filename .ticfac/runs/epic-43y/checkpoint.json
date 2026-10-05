@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 318,
-  "state": "running",
-  "reason": "lmt is running as attempt 51",
-  "updated_at": "2026-10-05T19:11:57Z",
+  "sequence": 319,
+  "state": "collecting",
+  "reason": "collecting lmt attempt 51",
+  "updated_at": "2026-10-05T19:21:58Z",
   "ticks": [
     {
       "tick_id": "92k",
