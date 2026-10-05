@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "nou",
   "attempt": 21,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T11:05:56Z",
+  "triaged_at": "2026-10-05T11:06:08Z",
+  "triaged_by": "ticfac run epic-43y absorbing 07h",
+  "promoted_as": "07h",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "nou",
