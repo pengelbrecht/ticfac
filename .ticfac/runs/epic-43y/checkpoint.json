@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 361,
-  "state": "publishing",
-  "reason": "closing h3c behind the integrated gate on 5a306663682d",
-  "updated_at": "2026-10-05T20:14:04Z",
+  "sequence": 362,
+  "state": "running",
+  "reason": "h3c is closed",
+  "updated_at": "2026-10-05T20:14:14Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -252,7 +252,7 @@
     },
     {
       "tick_id": "h3c",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 56
     },
     {
