@@ -44,8 +44,7 @@ var updateGoldens = flag.Bool("update", false, "rewrite the watch dashboard gold
 // was built, so a content assertion reads the words and not the escape
 // codes. The colour tests use ansiWatchStyles() instead.
 func plainStyles() watchStyles {
-	id := func(s string) string { return s }
-	return watchStyles{dim: id, amber: id, red: id, green: id, bold: id}
+	return identityWatchStyles()
 }
 
 // ptr is the one-line pointer helper the model fixtures lean on.
@@ -487,7 +486,9 @@ func TestDashboardRowsKeepTheirOrder(t *testing.T) {
 
 // TestDashboardNeedsYou: the first question. Nothing needs a person and the
 // header says so, dim and quiet, at the phase bar's right. A hold shows in
-// the header, amber, on its own line, with the one command that clears it.
+// the header, red and bold — needs-you is the most prominent thing on
+// screen when non-empty — on its own line, with the one command that
+// clears it.
 func TestDashboardNeedsYou(t *testing.T) {
 	t.Parallel()
 	m := dashboardFixture()
@@ -517,8 +518,8 @@ func TestDashboardNeedsYou(t *testing.T) {
 		t.Errorf("the hold does not show what and the clearing command:\n%s", joined)
 	}
 	coloured = strings.Join(renderWatchFrame(m, ansiWatchStyles(), 0, 0, ""), "\n")
-	if !strings.Contains(coloured, "\x1b[33m"+want+"\x1b[0m") {
-		t.Errorf("the hold line is not amber:\n%s", coloured)
+	if !strings.Contains(coloured, "\x1b[31m\x1b[1m"+want+"\x1b[0m\x1b[0m") {
+		t.Errorf("the hold line is not red and bold:\n%s", coloured)
 	}
 }
 
@@ -578,8 +579,8 @@ func TestDashboardHoldCommandSurvivesNarrowPanes(t *testing.T) {
 	// The wrap colours every line the hold carries, not only its first.
 	coloured := renderWatchFrame(m, ansiWatchStyles(), 30, 0, "")
 	for i, line := range wrapped {
-		if !slices.Contains(coloured, "\x1b[33m"+line+"\x1b[0m") {
-			t.Errorf("the hold's wrapped line %d is not amber:\n%s", i+1, strings.Join(coloured, "\n"))
+		if !slices.Contains(coloured, "\x1b[31m\x1b[1m"+line+"\x1b[0m\x1b[0m") {
+			t.Errorf("the hold's wrapped line %d is not red and bold:\n%s", i+1, strings.Join(coloured, "\n"))
 		}
 	}
 }
@@ -960,9 +961,9 @@ func TestTheFrameWorkersPanel(t *testing.T) {
 }
 
 // TestTheFrameCILine: the forge's answer on the epic PR's head, per check —
-// a running check with its age, a green one plain, a red one red — and no PR
-// yet said dimly, because a run that has not opened its PR is a fact, not a
-// silence.
+// a running check with its age, a passed one green, a red one red — and no
+// PR yet said dimly, because a run that has not opened its PR is a fact,
+// not a silence.
 func TestTheFrameCILine(t *testing.T) {
 	t.Parallel()
 	m := dashboardFixture()

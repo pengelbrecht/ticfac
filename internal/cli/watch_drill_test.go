@@ -346,7 +346,7 @@ func TestFeedViewScrolls(t *testing.T) {
 		tries.Observe(event)
 	}
 
-	view := renderFeedView(events, &tries, nil, 5, 100, 10)
+	view := renderFeedView(events, &tries, nil, 5, 100, 10, plainStyles())
 	joined := strings.Join(view, "\n")
 	if len(view) != 10 {
 		t.Errorf("a 10-line window rendered %d lines:\n%s", len(view), joined)
@@ -363,7 +363,7 @@ func TestFeedViewScrolls(t *testing.T) {
 	}
 
 	// Scroll 0 is the newest end.
-	view = renderFeedView(events, &tries, nil, 0, 100, 10)
+	view = renderFeedView(events, &tries, nil, 0, 100, 10, plainStyles())
 	joined = strings.Join(view, "\n")
 	if !strings.Contains(joined, "event 30") || strings.Contains(joined, "event 20") {
 		t.Errorf("an unscrolled feed is not the newest end:\n%s", joined)
@@ -371,10 +371,10 @@ func TestFeedViewScrolls(t *testing.T) {
 
 	// An unknown height is the whole feed, and a feed shorter than the
 	// window is all of it, without padding.
-	if got := len(renderFeedView(events, &tries, nil, 0, 100, 0)); got != 30 {
+	if got := len(renderFeedView(events, &tries, nil, 0, 100, 0, plainStyles())); got != 30 {
 		t.Errorf("an unknown height rendered %d of the feed's 30 lines", got)
 	}
-	if got := len(renderFeedView(events[:4], &tries, nil, 0, 100, 10)); got != 4 {
+	if got := len(renderFeedView(events[:4], &tries, nil, 0, 100, 10, plainStyles())); got != 4 {
 		t.Errorf("a feed shorter than the window rendered %d of its 4 lines", got)
 	}
 }
@@ -405,7 +405,7 @@ func TestRejectedEventLineNamesReasonAndNextStep(t *testing.T) {
 	tries.Observe(dispatched)
 	tries.Observe(rejected)
 
-	line := watchEventLineWith(rejected, &tries, &m)
+	line := watchEventLineWith(rejected, &tries, &m, plainStyles())
 	for _, want := range []string{"t2#2", "rejected: no-commits", "— next: the run will retry or escalate the tier"} {
 		if !strings.Contains(line, want) {
 			t.Errorf("the refused line does not name %q: %q", want, line)
@@ -416,7 +416,7 @@ func TestRejectedEventLineNamesReasonAndNextStep(t *testing.T) {
 	}
 
 	// No model at hand: the reason still shows, no next step is invented.
-	line = watchEventLineWith(rejected, &tries, nil)
+	line = watchEventLineWith(rejected, &tries, nil, plainStyles())
 	if !strings.Contains(line, "rejected: no-commits") {
 		t.Errorf("the refused line lost its reason without the model: %q", line)
 	}
@@ -427,13 +427,13 @@ func TestRejectedEventLineNamesReasonAndNextStep(t *testing.T) {
 	// A gate failure names its reason the same way.
 	gateFailed := runfeed.NewEvent(at.Add(2*time.Minute), "epic-rmod", "t2", &second,
 		reconcile.StageGateFailed, "the integrated gate did not pass: go test failed")
-	line = watchEventLineWith(gateFailed, &tries, &m)
+	line = watchEventLineWith(gateFailed, &tries, &m, plainStyles())
 	if !strings.Contains(line, "gate_failed: the integrated gate did not pass") {
 		t.Errorf("the gate-failure line does not name its reason: %q", line)
 	}
 
 	// Anything else is the old line, byte for byte — the stream path's words.
-	if got, want := watchEventLineWith(dispatched, &tries, &m), watchEventLine(dispatched, &tries); got != want {
+	if got, want := watchEventLineWith(dispatched, &tries, &m, plainStyles()), watchEventLine(dispatched, &tries); got != want {
 		t.Errorf("a non-refusal line changed form with the model at hand:\n%q\nwant %q", got, want)
 	}
 	if got := watchEventLine(rejected, &tries); !strings.Contains(got, "no-commits: attempt 2 of t2 left no branch; the work is released") {
@@ -488,7 +488,7 @@ func TestRefusalLineNextStepIsTheEventsOwnTrys(t *testing.T) {
 		{events[2], "", true},
 		{events[3], "", true},
 	} {
-		line := watchEventLineWith(tc.event, &tries, &m)
+		line := watchEventLineWith(tc.event, &tries, &m, plainStyles())
 		switch {
 		case tc.none && strings.Contains(line, "— next:"):
 			t.Errorf("line %d invents a next step for an attempt no try states: %q", i, line)
@@ -502,7 +502,7 @@ func TestRefusalLineNextStepIsTheEventsOwnTrys(t *testing.T) {
 
 	// The feed view, the surface the finding named: an older refusal line in
 	// the rendered feed carries its own try's next step, not the newest one's.
-	view := strings.Join(renderFeedView(events, &tries, &m, 0, 200, 0), "\n")
+	view := strings.Join(renderFeedView(events, &tries, &m, 0, 200, 0, plainStyles()), "\n")
 	if !strings.Contains(view, "— next: try 1's own next step") {
 		t.Errorf("the feed view's try-1 refusal lost its own next step:\n%s", view)
 	}

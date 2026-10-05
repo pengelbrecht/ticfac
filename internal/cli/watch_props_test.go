@@ -911,7 +911,7 @@ func propLineFrom(frame []string, want string, start int) int {
 // line for the model, so the property pins the line the model asks for,
 // not a paraphrase of it.
 func propCostHonest(frame []string, _ func() []string, m, _ statusmodel.Model, width, height, unbounded int) error {
-	oracle := dashCost(m)
+	oracle := dashCost(m, plainStyles())
 	if !strings.Contains(oracle, "not metered") {
 		return nil
 	}

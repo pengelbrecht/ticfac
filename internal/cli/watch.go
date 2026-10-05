@@ -768,7 +768,13 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	if w, h, ok := watchTerminalSize(stdout); ok {
 		width, height = w, h
 	}
-	styles := ansiWatchStyles()
+	// The style set the environment names: the ANSI palette, unless NO_COLOR
+	// or a dumb TERM said the terminal shows no colour (tick 5ba).
+	styles := watchStylesForTerminal()
+	// Needs-you is the most prominent thing on screen while it stands: the
+	// durable copy kept above the block is red and bold, like the frame's
+	// own hold lines.
+	alertStyle := func(s string) string { return styles.red(styles.bold(s)) }
 
 	// The keyboard, when the watch is running on one: raw mode so j/k and
 	// the drill-in keys reach the program, restored on every exit path this
@@ -885,7 +891,7 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 		var frame []string
 		switch ui.view {
 		case watchViewFeed:
-			frame = renderFeedView(feedEvents, &tries, &model, ui.scroll, width, height)
+			frame = renderFeedView(feedEvents, &tries, &model, ui.scroll, width, height, styles)
 		case watchViewTick:
 			frame = renderTickView(model, ui.selected, styles, width, height)
 		default:
@@ -962,7 +968,7 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 		// the episode, so a second hold in one run is a second alert.
 		if text := watchAttentionAlertText(model); text != "" {
 			if !attentionRaised {
-				keepAboveBlock(stdout, previous, width, eol, styles.amber, text)
+				keepAboveBlock(stdout, previous, width, eol, alertStyle, text)
 				attentionRaised = true
 			}
 		} else {
@@ -1081,6 +1087,24 @@ func watchLastWord(model statusmodel.Model) string {
 // person reading a log and a person reading the block read one vocabulary.
 func watchEventLine(event runfeed.Event, tries *runfeed.Tries) string {
 	return fmt.Sprintf("%s %-12s %s: %s", clockOf(event.At), watchEventWho(event, tries), event.Stage, event.Detail)
+}
+
+// watchEventLineStyled is the same one-line form carrying the palette
+// (tick 5ba): the timestamp dim — secondary text — the tick's own id cyan,
+// a refusal's stage red. The identity style set renders it byte for byte as
+// the plain form, so the words a pipe prints and the words a terminal
+// shows cannot drift apart.
+func watchEventLineStyled(event runfeed.Event, tries *runfeed.Tries, st watchStyles) string {
+	who := dashPad(watchEventWho(event, tries), 12)
+	if event.TickID != nil && *event.TickID != "" {
+		who = st.cyan(who)
+	}
+	stage := event.Stage
+	switch stage {
+	case reconcile.StageRejected, reconcile.StageGateFailed:
+		stage = st.red(stage)
+	}
+	return fmt.Sprintf("%s %s %s: %s", st.dim(clockOf(event.At)), who, stage, event.Detail)
 }
 
 // watchEventWho is the line's own "who": the run, or the tick with its own
