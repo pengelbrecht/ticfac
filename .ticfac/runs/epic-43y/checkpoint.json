@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 242,
-  "state": "dispatching",
-  "reason": "dispatching jiv as attempt 40",
-  "updated_at": "2026-10-05T15:42:08Z",
+  "sequence": 243,
+  "state": "running",
+  "reason": "jiv is running as attempt 40",
+  "updated_at": "2026-10-05T15:42:20Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -177,7 +177,8 @@
     },
     {
       "tick_id": "jiv",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 40
     }
   ],
   "provenance": {
