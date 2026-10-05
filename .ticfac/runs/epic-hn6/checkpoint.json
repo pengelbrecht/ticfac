@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 303,
-  "state": "running",
-  "reason": "pv7 is closed",
-  "updated_at": "2026-10-05T23:24:19Z",
+  "sequence": 304,
+  "state": "gating",
+  "reason": "running the integrated gate for qjl on 87b05b8d1fd4",
+  "updated_at": "2026-10-05T23:24:42Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -218,7 +218,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/hn6",
-    "source_sha": "0e411b34d2cba8ec1d4be65fe967f14dde695326",
+    "source_sha": "87b05b8d1fd4906b27d0b7b8abf7b2a1d8701dea",
     "integration_ref": "refs/heads/epic/hn6",
     "phase": "worker",
     "executor": null,
