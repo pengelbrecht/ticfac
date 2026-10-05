@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 252,
-  "state": "collecting",
-  "reason": "collecting dm2 attempt 32",
-  "updated_at": "2026-10-05T19:26:39Z",
+  "sequence": 253,
+  "state": "integrating",
+  "reason": "integrating dm2 attempt 32 into epic/hn6",
+  "updated_at": "2026-10-05T19:27:45Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -164,7 +164,7 @@
     },
     {
       "tick_id": "dm2",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 32
     },
     {
