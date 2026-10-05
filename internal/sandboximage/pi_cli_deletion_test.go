@@ -34,6 +34,7 @@ func readScriptText(t *testing.T, name string) string {
 // TestTheImageShipsNoPiCLI pins the second half of the tick: the pi CLI is
 // deleted from the image, so no container can boot a pi-CLI harness even by
 // hand. The Dockerfile's pins are the image's whole software inventory.
+// short: reads the Dockerfile's text; no process runs
 func TestTheImageShipsNoPiCLI(t *testing.T) {
 	df := readDockerfile(t)
 	for _, gone := range []string{
@@ -54,6 +55,7 @@ var piHarnessCase = regexp.MustCompile(`(?m)^\s*pi\)`)
 // TestTheScriptsOfferNoPiCLIHarness pins the first half: worker.sh's
 // pi-CLI harness path is gone — no launch case, no provider configuration, no
 // probe arm, in any of the three scripts a container runs.
+// short: reads the three scripts' text; no process runs
 func TestTheScriptsOfferNoPiCLIHarness(t *testing.T) {
 	for _, script := range []string{string(WorkerScript), string(CommonScript), string(EntrypointScript)} {
 		text := readScriptText(t, script)
@@ -79,6 +81,7 @@ func TestTheScriptsOfferNoPiCLIHarness(t *testing.T) {
 // path) plus pi-durable — the hosted kind, whose halves are --boot/--finish
 // and whose conversation runs in the factory's WorkerAgent, never as a CLI in
 // the container.
+// short: reads the scripts' text; no process runs
 func TestTheScriptsAcceptTheHostedHarness(t *testing.T) {
 	common := readScriptText(t, string(CommonScript))
 	// The closed kind set, and the default a hand-driven container falls to.
