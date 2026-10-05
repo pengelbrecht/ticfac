@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 256,
-  "state": "running",
-  "reason": "fim is closed",
-  "updated_at": "2026-10-05T16:17:10Z",
+  "sequence": 257,
+  "state": "collecting",
+  "reason": "collecting jiv attempt 40",
+  "updated_at": "2026-10-05T16:17:17Z",
   "ticks": [
     {
       "tick_id": "92k",
