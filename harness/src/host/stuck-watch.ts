@@ -84,11 +84,24 @@ export function checkEveryMs(windowMs: number): number {
  * with spaces (the fields are counted past the LAST `)`, exactly as the Go
  * side's `ParseProcStat` does). The container IS the attempt's tool tree,
  * so the whole table is the tool CPU the local watch walks by pid.
+ *
+ * The command is built by {@link containerCpuCommand} so the node suite can
+ * prove it against a real bash over a synthetic `/proc`-shaped tree — the
+ * positional parameters `${12}`/`${13}` must be spelled with their braces
+ * (`$12` is `$1` and a literal `2` to every POSIX shell), and that is
+ * exactly the kind of line a test that never runs a shell certifies
+ * nothing about.
  */
-export const CONTAINER_CPU_COMMAND =
-  't=0; for f in /proc/[0-9]*/stat; do read -r l < "$f" || continue; ' +
-  // biome-ignore lint/suspicious/noTemplateCurlyInString: the ${…} here is the container's bash parameter expansion, never this file's
-  'r=${l##*)}; set -- $r; if [ $# -ge 13 ]; then t=$((t+$12+$13)); fi; done; echo "$t"';
+export const CONTAINER_CPU_COMMAND = containerCpuCommand();
+
+/** The sampler over one `/proc`-shaped root; production reads `/proc` itself. */
+export function containerCpuCommand(root = "/proc"): string {
+  return (
+    `t=0; for f in ${root}/[0-9]*/stat; do read -r l < "$f" || continue; ` +
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: the ${…} here is the container's bash parameter expansion, never this file's
+    'r=${l##*)}; set -- $r; if [ $# -ge 13 ]; then t=$((t+${12}+${13})); fi; done; echo "$t"'
+  );
+}
 
 /** `/proc/<pid>/stat` counts CPU in USER_HZ, which every Linux userspace ABI fixes at 100. */
 const USER_HZ = 100;
