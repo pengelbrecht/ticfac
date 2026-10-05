@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 335,
-  "state": "dispatching",
-  "reason": "dispatching l6n as attempt 54",
-  "updated_at": "2026-10-05T19:43:45Z",
+  "sequence": 336,
+  "state": "running",
+  "reason": "l6n is running as attempt 54",
+  "updated_at": "2026-10-05T19:43:57Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -223,8 +223,8 @@
     },
     {
       "tick_id": "l6n",
-      "state": "ready",
-      "attempt": 50
+      "state": "dispatched",
+      "attempt": 54
     },
     {
       "tick_id": "lmt",
