@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/profile"
 )
 
 // The door's shapes, as Go: the request the start route reads, the handle it
@@ -33,7 +34,7 @@ const ExecutorName = "cloudflare-sandbox"
 // harness that ran. No container boot can produce the name — the
 // container's `TICKS_HARNESS` is the request's own — so a handle carrying it
 // is a hosted answer, never a door that fell back to a standing choice.
-const WorkerAgentHarness = "pi-durable"
+const WorkerAgentHarness = profile.HostedDurableHarness
 
 // PollInterval is the cadence at which a live job on this executor should be
 // addressed. It is the CLOUD number — the same five minutes reconcile's own
