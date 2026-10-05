@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 249,
-  "state": "running",
-  "reason": "kkt is closed",
-  "updated_at": "2026-10-05T16:02:15Z",
+  "sequence": 250,
+  "state": "dispatching",
+  "reason": "dispatching 8em as attempt 41",
+  "updated_at": "2026-10-05T16:02:42Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -179,6 +179,10 @@
       "tick_id": "jiv",
       "state": "dispatched",
       "attempt": 40
+    },
+    {
+      "tick_id": "8em",
+      "state": "ready"
     }
   ],
   "provenance": {
