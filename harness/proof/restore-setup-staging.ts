@@ -158,11 +158,11 @@ while (state.phase !== "settled" && Date.now() < deadline) {
     // A round's work is on the attempt branch: the loss has something to
     // restore from. ONE emptying, never retried: the round that meets the
     // empty workspace restores through whichever path sees the loss first
-    // — the ready check (which announces itself) or the tracked bash's
-    // nonce check (which restores silently) — and a second emptying only
-    // buys another install and a loss the model cannot explain (this
-    // proof's first run did exactly that; the model spent its turns
-    // investigating the harness and still finished, exit 0).
+    // — the ready check or the tracked bash's nonce check (both announce
+    // themselves; until tick dbi the nonce path was the silent one) — and
+    // a second emptying only buys another install and a loss the model
+    // cannot explain (this proof's first run did exactly that; the model
+    // spent its turns investigating the harness and still finished, exit 0).
     emptied = true;
     await emptyWorkspace();
     lastEmptyAt = Date.now();
@@ -238,9 +238,10 @@ const evidence = {
   state,
   timeline,
   restore: {
-    // Whichever path fired it — the ready check (announced) or the tracked
-    // bash's nonce check (silent) — it is the same restoreLostWorkspace; the
-    // node and workerd suites pin both paths' wiring.
+    // Whichever path fired it — the ready check or the tracked bash's
+    // nonce check (silent until tick dbi wired its ear) — it is the same
+    // restoreLostWorkspace; the node and workerd suites pin both paths'
+    // wiring.
     announced_line: restoredLine?.[0] ?? null,
     setup_ran: setupRan,
     gap_seconds: restoreGap,
