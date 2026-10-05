@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 24,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "cloudStatusDoc has a lastEvent parameter for the run's forwarded tail, but its only caller (phone.ts:293) passes null, so a stopped cloud row's verdict summary and needs-you sentence read run_progress's durable-evidence branch verdict (\"no branch on origin changed…\"), while the watch frame's stopped summary reads the run's own last word from its feed (\"stopped: the operator stopped the run: …\"). Both are the factory's own records and honest, but the two renderers answer 'why' from different sentences. Plumbing the run's last feed line (the R2 feed tail via readRunFeedPage, or the room's recentEvents, which observe.ts already reads) into the composition would make the why agree too.\nevidence: cloudflare/src/phone.ts:293 (lastEvent null); cloudflare/src/status.ts cloudStatusDoc reason chain\n\nticfac run epic-hn6 created this tick by absorbing the finding d9d3f9e389f506e9119b78c36820ffa260278901d429d3d4d650384a09341cf2 (reported by run-epic-hn6/tick-5d4/attempt-19): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/d9d3f9e389f506e9119b78c36820ffa260278901d429d3d4d650384a09341cf2.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "3qg",
+    "title": "composed stopped row's why reads run_progress, not the run's stopped line"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.21,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.17,
+      "design": 0.17,
+      "diagnosis": 0.27,
+      "mechanical": 0.37,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1404,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T10:57:58Z",
+  "answered_at": "2026-10-05T10:57:58Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "3qg",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "8b2ed11d81fbde813ac11f5d0c0e05b4da56f917",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
