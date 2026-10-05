@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 139,
-  "state": "publishing",
-  "reason": "closing kjs behind the integrated gate on f32ea8cdb15c",
-  "updated_at": "2026-10-05T10:36:49Z",
+  "sequence": 140,
+  "state": "running",
+  "reason": "kjs is closed",
+  "updated_at": "2026-10-05T10:36:58Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -97,7 +97,7 @@
     },
     {
       "tick_id": "kjs",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 19
     },
     {
