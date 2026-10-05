@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 314,
-  "state": "gating",
-  "reason": "running the integrated gate for ewd on 2632a7266640",
-  "updated_at": "2026-10-05T19:08:46Z",
+  "sequence": 315,
+  "state": "publishing",
+  "reason": "closing ewd behind the integrated gate on 2632a7266640",
+  "updated_at": "2026-10-05T19:11:24Z",
   "ticks": [
     {
       "tick_id": "92k",
