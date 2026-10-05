@@ -145,7 +145,7 @@ import {
   terminalExitReason,
 } from "./sandbox";
 import { workerAgentsFromEnv } from "./worker-agent";
-import { reviewHarness, workerHarness, workerModel } from "./worker-boot";
+import { reviewHarness, workerModel } from "./worker-boot";
 
 // ------------------------------------------------------------- the shape ---
 

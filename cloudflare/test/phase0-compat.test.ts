@@ -791,7 +791,9 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     expect(`RUN_MODEL=${String(vars.RUN_MODEL)}`).toBe("RUN_MODEL=workers-ai/@cf/zai-org/glm-5.3");
     // The per-tick worker's standing route: an unset RUN_WORKER_MODEL would
     // leave the boot to WORKER_DEFAULT_* in src/worker-boot.ts.
-    expect(`RUN_WORKER_HARNESS=${String(vars.RUN_WORKER_HARNESS)}`).toBe("RUN_WORKER_HARNESS=pi-durable");
+    expect(`RUN_WORKER_HARNESS=${String(vars.RUN_WORKER_HARNESS)}`).toBe(
+      "RUN_WORKER_HARNESS=pi-durable",
+    );
     expect(`RUN_WORKER_MODEL=${String(vars.RUN_WORKER_MODEL)}`).toBe(
       "RUN_WORKER_MODEL=workers-ai/@cf/zai-org/glm-5.3",
     );
