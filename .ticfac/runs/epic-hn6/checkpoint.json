@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 301,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for pv7",
-  "updated_at": "2026-10-05T23:20:08Z",
+  "sequence": 302,
+  "state": "publishing",
+  "reason": "closing pv7 behind its validated review-epic answer",
+  "updated_at": "2026-10-05T23:24:17Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -209,7 +209,7 @@
     },
     {
       "tick_id": "pv7",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 42
     }
   ],
