@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 287,
-  "state": "publishing",
-  "reason": "closing enb behind the integrated gate on 2e06b7dda565",
-  "updated_at": "2026-10-05T18:20:32Z",
+  "sequence": 288,
+  "state": "running",
+  "reason": "enb is closed",
+  "updated_at": "2026-10-05T18:20:41Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -203,7 +203,7 @@
     },
     {
       "tick_id": "enb",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 46
     },
     {
