@@ -313,10 +313,106 @@ func TestActivityCarriesTheWorkersExecutorHandle(t *testing.T) {
 	}
 }
 
-// TestActivityReadsAClaudeTranscriptByItsModel: the executor-or-model string
-// the seam is addressed by maps claude's own transcript layout when it names
-// claude — the model is the string that says which harness runs the worker.
-func TestActivityReadsAClaudeTranscriptByItsModel(t *testing.T) {
+// TestActivityReadsAClaudeTranscriptByItsKind: the mapping keys on the
+// harness KIND the attempt record names — the executor's own record in the
+// dispatch's state directory, which spells the agent kind it launched
+// (herdr's `kind`, the local supervisor's `runner`), read through the
+// Sources.Runner seam. This is the live close-out's own shape (tick 5uq):
+// the durable attempt's provenance names model "opus" and executor "herdr"
+// — the spellings a real record carries (.ticfac/runs/epic-hn6/attempts/
+// 29.json) — neither naming claude, so before the kind was read the
+// worker's activity read null: the panel showed an empty sparkline for the
+// only worker of the close-out while its Claude Code transcript existed.
+func TestActivityReadsAClaudeTranscriptByItsKind(t *testing.T) {
+	home := t.TempDir()
+	worktree := t.TempDir()
+	writeSessionTranscript(t, home, "claude", worktree,
+		map[string]any{"type": "assistant", "timestamp": transcriptStamp(testNow.Add(-20 * time.Second)),
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "tool_use", "name": "Bash", "input": map[string]any{"command": "go vet ./..."}},
+			}}})
+
+	stateRoot := t.TempDir()
+	t.Setenv(EnvExecStateDir, stateRoot)
+	// The executor's own attempt record, the shape herdr leaves it in: the
+	// kind is the agent kind it launched, spelled as a live record spells
+	// it.
+	writeAttemptRecord(t, stateRoot, "epic-2jn", "6dh", 3,
+		`{"tick_id": "6dh", "attempt": 3, "agent_name": "tick-6dh-a3", "kind": "claude", "model": "opus"}`)
+
+	src := runningEpicSources()
+	src.Activity = TranscriptActivity(home)
+	src.Runner = WorkerRunner("epic-2jn")
+	src.Standing[0].Worktree = worktree
+	// The durable record's own spellings, copied from a real attempt record:
+	// the bare alias review and closeout route on, and the executor.
+	for i := range src.Records.Attempts {
+		if src.Records.Attempts[i].TickID == "6dh" && src.Records.Attempts[i].Attempt == 3 {
+			src.Records.Attempts[i].Provenance.Model = tickPtr("opus")
+			src.Records.Attempts[i].Provenance.Executor = tickPtr("herdr")
+		}
+	}
+	model := Build(src)
+
+	activity := (*model.Workers)[0].Activity
+	if activity == nil {
+		t.Fatal("the worker's executor record names the claude kind and its activity reads null: the mapping never fired")
+	}
+	if activity.LastAction == nil || *activity.LastAction != "Bash: go vet ./..." {
+		t.Errorf("the last action is %+v, want the claude tool call's own name and first argument", activity.LastAction)
+	}
+	if got := activity.Buckets[9]; got != 1 {
+		t.Errorf("the newest bucket counts %d events, want the one claude tool call", got)
+	}
+}
+
+// TestActivityPrefersTheLiveKindOverTheDurableModel: the executor's own
+// record is the LIVE word, so its kind wins over the durable record's
+// model spelling wherever the two disagree — the same precedence the
+// handle seam holds (zl1). A worker whose state record names the claude
+// kind reads claude's layout even though its durable model spells a
+// provider-qualified id that reads pi's.
+func TestActivityPrefersTheLiveKindOverTheDurableModel(t *testing.T) {
+	home := t.TempDir()
+	worktree := t.TempDir()
+	writeSessionTranscript(t, home, "claude", worktree,
+		map[string]any{"type": "assistant", "timestamp": transcriptStamp(testNow.Add(-20 * time.Second)),
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "tool_use", "name": "Bash", "input": map[string]any{"command": "go vet ./..."}},
+			}}})
+
+	stateRoot := t.TempDir()
+	t.Setenv(EnvExecStateDir, stateRoot)
+	writeAttemptRecord(t, stateRoot, "epic-2jn", "6dh", 3,
+		`{"tick_id": "6dh", "kind": "claude"}`)
+
+	// The durable model keeps the fixture's own spelling — a
+	// provider-qualified id whose family reads pi.
+	src := runningEpicSources()
+	src.Activity = TranscriptActivity(home)
+	src.Runner = WorkerRunner("epic-2jn")
+	src.Standing[0].Worktree = worktree
+	model := Build(src)
+
+	activity := (*model.Workers)[0].Activity
+	if activity == nil {
+		t.Fatal("the executor's own record names the claude kind and the durable model must not overrule it")
+	}
+	if activity.LastAction == nil || *activity.LastAction != "Bash: go vet ./..." {
+		t.Errorf("the last action is %+v, want the claude tool call the live kind's layout reads", activity.LastAction)
+	}
+}
+
+// TestActivityReadsAClaudeTranscriptByTheDurableModelsFamily: where no
+// executor record answered, the durable attempt's own spelling addresses
+// the seam, and a claude-FAMILY model reads claude's layout — the same
+// aliases the runner config recognises and the cost river reads (cost.go).
+// The bare "opus" is the spelling every real claude attempt record carries
+// (.ticfac/runs/epic-hn6/attempts/29.json: provenance.model "opus"), and
+// the activity fixture used to spell it "claude-opus-5", a string no real
+// record carries — so the mapping never fired for a real record and a live
+// claude worker's activity read null (tick 5uq).
+func TestActivityReadsAClaudeTranscriptByTheDurableModelsFamily(t *testing.T) {
 	home := t.TempDir()
 	worktree := t.TempDir()
 	writeSessionTranscript(t, home, "claude", worktree,
@@ -328,19 +424,18 @@ func TestActivityReadsAClaudeTranscriptByItsModel(t *testing.T) {
 	src := runningEpicSources()
 	src.Activity = TranscriptActivity(home)
 	src.Standing[0].Worktree = worktree
-	// The standing attempt's provenance names a claude model: the same record
-	// shape the fixture already carries, with the model swapped.
+	// The durable record's own spelling, copied from a real attempt record:
+	// the bare alias the runner config routes review and closeout on.
 	for i := range src.Records.Attempts {
 		if src.Records.Attempts[i].TickID == "6dh" && src.Records.Attempts[i].Attempt == 3 {
-			model := "claude-opus-5"
-			src.Records.Attempts[i].Provenance.Model = &model
+			src.Records.Attempts[i].Provenance.Model = tickPtr("opus")
 		}
 	}
 	model := Build(src)
 
 	activity := (*model.Workers)[0].Activity
 	if activity == nil {
-		t.Fatal("the worker ran under a claude model and its activity reads null: the mapping never fired")
+		t.Fatal("the durable record names the claude alias opus and the activity reads null: the mapping never fired")
 	}
 	if activity.LastAction == nil || *activity.LastAction != "Bash: go vet ./..." {
 		t.Errorf("the last action is %+v, want the claude tool call's own name and first argument", activity.LastAction)

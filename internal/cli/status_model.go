@@ -542,7 +542,13 @@ func localStatusModelHosted(ctx context.Context, repo, runID string, probe runli
 		Activity: statusmodel.TranscriptActivity(home),
 		Report:   statusmodel.AttemptReports(repo),
 		Handle:   statusmodel.WorkerHandles(runID),
-		CI:       ci,
+		// The worker's harness kind, from the same executor record the handle
+		// reader walks (tick 5uq): the kind is what says which transcript
+		// layout the activity reader reads, and the durable attempt record
+		// cannot name it — its model "opus" and executor "herdr" name
+		// anything but the harness.
+		Runner: statusmodel.WorkerRunner(runID),
+		CI:     ci,
 	})
 }
 
