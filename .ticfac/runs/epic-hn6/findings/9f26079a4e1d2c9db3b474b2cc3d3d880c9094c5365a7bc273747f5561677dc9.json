@@ -11,8 +11,11 @@
   "tick_id": "435",
   "attempt": 22,
   "done_item": "A1",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T13:10:27Z",
+  "triaged_at": "2026-10-05T13:10:38Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing g94",
+  "promoted_as": "g94",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "435",
