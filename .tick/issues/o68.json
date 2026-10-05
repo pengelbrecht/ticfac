@@ -2,7 +2,7 @@
   "id": "o68",
   "title": "Re-review 43y after its NOT READY review's blocking findings (round 2)",
   "description": "Review the epic 43y again, AS INTEGRATED, now that the blocking findings of its NOT READY review are fixed. This is review round 2 of at most 2.\n\nThe previous review (66a, decision 50) judged it NOT READY: make the full Go suite green on the epic head (update the reconcile e2e fixtures to twa's pi-durable cloud binding) and record a real whole-container-destroy run of agent-faults-staging.ts for A2; its blocking finding(s): \"Full Go suite red: 7 reconcile e2e fixtures still declare cloud runner pi\"; \"A2's container-destroyed-mid-turn proof was never run on staging after a2l\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY at this round is not reviewed again by the run: it holds for a person with your reasons.",
-  "notes": "2026-10-06 00:14 - ticfac run epic-43y: o68 try 1 (run dispatch #66) reported a finding the run itself decided — defect \"Epic head CI red: classify-tick pin stale after 7sn changed closeout profile\" (key 0a26431e56904296f9887bae487a2ea06daff0a0a4f14f183ae594b9c741bd7e, severity high, for this repository) is absorbed into the running epic as tick 4w7, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/0a26431e56904296f9887bae487a2ea06daff0a0a4f14f183ae594b9c741bd7e.json, and the draft is triaged as promoted.",
+  "notes": "2026-10-06 00:14 - ticfac run epic-43y: o68 try 1 (run dispatch #66) reported a finding the run itself decided — defect \"Epic head CI red: classify-tick pin stale after 7sn changed closeout profile\" (key 0a26431e56904296f9887bae487a2ea06daff0a0a4f14f183ae594b9c741bd7e, severity high, for this repository) is absorbed into the running epic as tick 4w7, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/0a26431e56904296f9887bae487a2ea06daff0a0a4f14f183ae594b9c741bd7e.json, and the draft is triaged as promoted.\n2026-10-06 00:14 - ticfac run epic-43y: o68 try 1 (run dispatch #66) reported a finding the run itself decided — proposed-tick \"Pin the classification profile digest in a short test so make gate catches it\" (key c23a820dd7b23ed180f7e1170f73d65156afbe077625e45e76d05d036959c260, severity medium, for this repository) is promoted to a backlog tick with an owner, 3sd; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/c23a820dd7b23ed180f7e1170f73d65156afbe077625e45e76d05d036959c260.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -23,6 +23,6 @@
   "role": "review",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T18:05:06Z",
-  "updated_at": "2026-10-05T22:14:30.738878Z",
+  "updated_at": "2026-10-05T22:14:49.759993Z",
   "started_at": "2026-10-05T22:10:32.414762Z"
 }
