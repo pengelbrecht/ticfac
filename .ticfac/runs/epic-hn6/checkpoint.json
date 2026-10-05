@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 212,
-  "state": "failed",
-  "reason": "every tick of hn6 is closed behind the integrated gate, and the epic PR is not ready: the run does not merge the epic hn6: its final review (decision 26) still judges it NOT READY after 2 review round(s), the bound being 2. What the review says would make it ready: the seven worker RESULT-*.md reports are still at epic/hn6's root because the integration merge's keepReportsOut undid 06t's deletion; land the removal (let keepReportsOut honour a report deletion, or commit it directly to epic/hn6) and test that the integrated head carries none; its blocking finding(s): \"Integration merge resurrects RESULT-*.md: 06t's removal never landed\". The verdict is on the epic PR, and accepting work the run's own review rejected is a person's judgement: fix what it names and run the epic again, merge the PR by hand to accept it (a re-run then finds it merged), or close it. Running the epic again resumes at keeping the PR ready",
-  "updated_at": "2026-10-05T16:20:56Z",
+  "sequence": 213,
+  "state": "gating",
+  "reason": "running the integrated gate for c9n on 1491e9c83ca2",
+  "updated_at": "2026-10-05T16:40:27Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -158,7 +158,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/hn6",
-    "source_sha": "c84af474f6bc6b0f4d18673b748c52315f8922f0",
+    "source_sha": "1491e9c83ca27c29091de2837deef3e2d5758dfc",
     "integration_ref": "refs/heads/epic/hn6",
     "phase": "worker",
     "executor": null,
