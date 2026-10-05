@@ -280,7 +280,7 @@ func TestStatusJSONEmitsTheVersionedModel(t *testing.T) {
 	if len(ticks[1].Tries) != 1 || ticks[1].Tries[0].Outcome != statusmodel.TryInFlight {
 		t.Errorf("the dispatched tick's try history reads %+v", ticks[1].Tries)
 	}
-	if model.Cost.RecordedUSD != 0.02 || model.Cost.Attempts != 2 {
+	if model.Cost.RecordedUSD == nil || *model.Cost.RecordedUSD != 0.02 || model.Cost.Attempts != 2 {
 		t.Errorf("the cost reads %+v, want 0.02 recorded over 2 attempts", model.Cost)
 	}
 	if len(model.Gates) != 1 || model.Gates[0].Check != "go" || model.Gates[0].Result != "pass" {

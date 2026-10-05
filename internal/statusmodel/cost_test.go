@@ -29,9 +29,10 @@ func costLineOf(t *testing.T, model Model, source string) CostLine {
 
 // TestCostLocalSpendIsUnmeteredNeverADollarZero: local attempts on claude and
 // on pi serving GLM, with no decision recorded, are two unmetered lines —
-// the subscription spend and the unmeasured pi spend, each with usd null and
-// a basis saying so, recorded_usd a true zero — and the marshalled JSON
-// carries no line that states a number without a measurement.
+// the subscription spend and the unmeasured pi spend, each with usd null
+// and a basis saying so, recorded_usd NULL (tick dm2: a 0 beside
+// all-unmetered lines is the fabricated zero again) — and the marshalled
+// JSON carries no number where no measurement exists.
 func TestCostLocalSpendIsUnmeteredNeverADollarZero(t *testing.T) {
 	t.Parallel()
 	src := runningEpicSources()
@@ -49,26 +50,27 @@ func TestCostLocalSpendIsUnmeteredNeverADollarZero(t *testing.T) {
 	if !reflect.DeepEqual(model.Cost.Lines, want) {
 		t.Errorf("the cost lines are %+v, want the two unmetered ones %+v", model.Cost.Lines, want)
 	}
-	if model.Cost.RecordedUSD != 0 {
-		t.Errorf("recorded_usd is %v, want 0: nothing measured any spend", model.Cost.RecordedUSD)
+	if model.Cost.RecordedUSD != nil {
+		t.Errorf("recorded_usd is %v, want null: nothing measured any spend", *model.Cost.RecordedUSD)
 	}
 
-	// The JSON, not the struct: no line states a number it did not measure.
+	// The JSON, not the struct: no line states a number it did not measure,
+	// and the roll-up states no number either.
 	raw, err := json.Marshal(model)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var document struct {
 		Cost struct {
-			RecordedUSD float64    `json:"recorded_usd"`
+			RecordedUSD *float64   `json:"recorded_usd"`
 			Lines       []CostLine `json:"lines"`
 		} `json:"cost"`
 	}
 	if err := json.Unmarshal(raw, &document); err != nil {
 		t.Fatal(err)
 	}
-	if document.Cost.RecordedUSD != 0 {
-		t.Errorf("the marshalled recorded_usd is %v, want 0", document.Cost.RecordedUSD)
+	if document.Cost.RecordedUSD != nil {
+		t.Errorf("the marshalled recorded_usd is %v, want null: nothing measured any spend", *document.Cost.RecordedUSD)
 	}
 	for _, line := range document.Cost.Lines {
 		if !line.Metered && line.USD != nil {
@@ -107,7 +109,7 @@ func TestCostTheCloudsWorkersAISpendIsMeteredFromTheGateway(t *testing.T) {
 	if !reflect.DeepEqual(model.Cost.Lines, want) {
 		t.Errorf("the cost lines are %+v, want the one metered workers-ai line %+v", model.Cost.Lines, want)
 	}
-	if model.Cost.RecordedUSD != 0.41 {
+	if model.Cost.RecordedUSD == nil || *model.Cost.RecordedUSD != 0.41 {
 		t.Errorf("recorded_usd is %v, want the gateway number 0.41", model.Cost.RecordedUSD)
 	}
 	assertValidatesAgainstTheContract(t, model)
@@ -127,8 +129,8 @@ func TestCostTheCloudsWorkersAISpendIsMeteredFromTheGateway(t *testing.T) {
 	if want := "not metered: this run's Workers AI calls are not joined to gateway logs"; line.Basis != want {
 		t.Errorf("a local workers-ai line's basis is %q, want %q", line.Basis, want)
 	}
-	if localModel.Cost.RecordedUSD != 0 {
-		t.Errorf("recorded_usd is %v, want 0: nothing measured the local spend", localModel.Cost.RecordedUSD)
+	if localModel.Cost.RecordedUSD != nil {
+		t.Errorf("recorded_usd is %v, want null: nothing measured the local spend", *localModel.Cost.RecordedUSD)
 	}
 }
 
@@ -150,12 +152,14 @@ func TestCostDecisionsCarryTheirOwnMeteredUsage(t *testing.T) {
 		t.Errorf("the cost lines are %+v, want %+v", model.Cost.Lines, want)
 	}
 	metered := 0.0
+	anyMetered := false
 	for _, line := range model.Cost.Lines {
 		if line.Metered && line.USD != nil {
 			metered += *line.USD
+			anyMetered = true
 		}
 	}
-	if model.Cost.RecordedUSD != metered {
+	if !anyMetered || model.Cost.RecordedUSD == nil || *model.Cost.RecordedUSD != metered {
 		t.Errorf("recorded_usd is %v, want the metered lines' sum %v", model.Cost.RecordedUSD, metered)
 	}
 	if model.Cost.Attempts != 3 {
@@ -171,7 +175,8 @@ func TestCostDecisionsCarryTheirOwnMeteredUsage(t *testing.T) {
 // pointer), and the marshalled zero every classification record wrote before
 // fzt, when the never-set plain float64 fabricated a price; a role decision
 // carries no usage block at all — none is a measurement, so the line says
-// "not metered" with no number and recorded_usd stays a true zero, the
+// "not metered" with no number and recorded_usd stays null (tick dm2: the
+// roll-up carries no number where no line is metered), the
 // decisions still counted. A record that states a price still meters the
 // line, and the number is the stated price alone.
 func TestCostDecisionsWithoutAMeasuredCostAreNeverMeteredZero(t *testing.T) {
@@ -208,25 +213,26 @@ func TestCostDecisionsWithoutAMeasuredCostAreNeverMeteredZero(t *testing.T) {
 	if want := "not metered: the decision records carry no measured cost"; line.Basis != want {
 		t.Errorf("the decisions line's basis is %q, want %q", line.Basis, want)
 	}
-	if model.Cost.RecordedUSD != 0 {
-		t.Errorf("recorded_usd is %v, want 0: nothing measured the decisions' spend", model.Cost.RecordedUSD)
+	if model.Cost.RecordedUSD != nil {
+		t.Errorf("recorded_usd is %v, want null: nothing measured the decisions' spend", *model.Cost.RecordedUSD)
 	}
-	// The marshalled JSON, not the struct: no unmetered line states a number.
+	// The marshalled JSON, not the struct: no unmetered line states a number,
+	// and the roll-up states none either.
 	raw, err := json.Marshal(model)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var document struct {
 		Cost struct {
-			RecordedUSD float64    `json:"recorded_usd"`
+			RecordedUSD *float64   `json:"recorded_usd"`
 			Lines       []CostLine `json:"lines"`
 		} `json:"cost"`
 	}
 	if err := json.Unmarshal(raw, &document); err != nil {
 		t.Fatal(err)
 	}
-	if document.Cost.RecordedUSD != 0 {
-		t.Errorf("the marshalled recorded_usd is %v, want 0", document.Cost.RecordedUSD)
+	if document.Cost.RecordedUSD != nil {
+		t.Errorf("the marshalled recorded_usd is %v, want null: nothing measured the decisions' spend", *document.Cost.RecordedUSD)
 	}
 	for _, line := range document.Cost.Lines {
 		if !line.Metered && line.USD != nil {
@@ -258,7 +264,7 @@ func TestCostDecisionsWithoutAMeasuredCostAreNeverMeteredZero(t *testing.T) {
 	if want := "usage recorded on decision records"; line.Basis != want {
 		t.Errorf("a metered decisions line's basis is %q, want %q", line.Basis, want)
 	}
-	if metered.Cost.RecordedUSD != 0.02 {
+	if metered.Cost.RecordedUSD == nil || *metered.Cost.RecordedUSD != 0.02 {
 		t.Errorf("recorded_usd is %v, want the stated price 0.02", metered.Cost.RecordedUSD)
 	}
 	assertValidatesAgainstTheContract(t, metered)
@@ -304,8 +310,8 @@ func TestCostAnUnsyncedCloudRunIsNeverAMeteredZero(t *testing.T) {
 	if want := "not metered: the gateway's cost telemetry has not answered for this run"; line.Basis != want {
 		t.Errorf("an unsynced cloud run's workers-ai line basis is %q, want %q", line.Basis, want)
 	}
-	if model.Cost.RecordedUSD != 0 {
-		t.Errorf("recorded_usd is %v, want 0: nothing measured the cloud spend yet", model.Cost.RecordedUSD)
+	if model.Cost.RecordedUSD != nil {
+		t.Errorf("recorded_usd is %v, want null: nothing measured the cloud spend yet", *model.Cost.RecordedUSD)
 	}
 	assertValidatesAgainstTheContract(t, model)
 }
@@ -364,8 +370,8 @@ func TestCostAProviderQualifiedClaudeIdIsPiLocalNotTheSubscription(t *testing.T)
 	if line.Attempts != 2 || line.Metered || line.USD != nil {
 		t.Errorf("the pi-local line is %+v, want both provider-qualified claude dispatches, unmetered with no number", line)
 	}
-	if model.Cost.RecordedUSD != 0 {
-		t.Errorf("recorded_usd is %v, want 0: nothing measured the pi-local spend", model.Cost.RecordedUSD)
+	if model.Cost.RecordedUSD != nil {
+		t.Errorf("recorded_usd is %v, want null: nothing measured the pi-local spend", *model.Cost.RecordedUSD)
 	}
 	assertValidatesAgainstTheContract(t, model)
 

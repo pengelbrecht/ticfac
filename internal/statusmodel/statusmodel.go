@@ -689,13 +689,18 @@ type CheckState struct {
 
 // Cost is what the run spent so far, as far as anything measured it. The
 // costs anything states today are the model exchanges' usage (the decisions'
-// own `usage.cost_usd`) and, for a cloud run, the host's own ground-truth
-// number for its workers (Sources.WorkerCost, the factory's gateway-backed
-// `cost_usd`); worker jobs record no cost of their own, and the basis says
+// own `usage.cost_usd`) and the host's own ground-truth number for its
+// workers (Sources.WorkerCost — the factory's gateway-backed `cost_usd` for
+// a cloud run, the gateway logs joined by this run's tagged calls for a
+// local one); worker jobs record no cost of their own, and the basis says
 // so — a number that quietly claimed more than what was measured would be a
 // lie with a decimal point (hn6 rule 7).
 type Cost struct {
-	RecordedUSD float64 `json:"recorded_usd"`
+	// RecordedUSD is the sum of the metered lines, and NULL when no line
+	// is metered (tick dm2): a 0 beside all-unmetered lines read as a
+	// measured zero — the fabricated $0.00 the split exists to end — so
+	// the number exists only where a measurement does.
+	RecordedUSD *float64 `json:"recorded_usd"`
 	// Attempts is how many dispatches the run paid for — the count a person
 	// multiplies by their own rates when the records carry no prices.
 	Attempts int    `json:"attempts"`

@@ -32,7 +32,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/gatewaytrace"
+	"github.com/pengelbrecht/ticfac/internal/jev"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/runprogress"
@@ -393,6 +396,52 @@ var statusCI = func(ctx context.Context, repo, epicID string) (*statusmodel.CIIn
 // it there.
 var statusBuild = statusmodel.Build
 
+// statusWorkerCost is a LOCAL run's own gateway-joined spend (tick dm2): the
+// operator's AI Gateway logs, read back through the same client the cloud
+// trace reads them with, filtered to the rows stamped with this run id —
+// the rows the metering join's cf-aig-metadata tag produces. Where the
+// logs answer calls for the run, the sum of their measured cost is the
+// host's ground-truth number the model's workers-ai line meters (the same
+// claim the factory's own cost sync makes for a cloud run); where they
+// answer none — the calls were never joined, or the host states no
+// gateway — the answer is nil and the line says "not metered", the honest
+// word for spend no measurement names.
+//
+// A host whose ~/.ticfacrc names no gateway or no token is the documented
+// OPTIONAL state, nil and never an error: cost telemetry is optional, and
+// a status answer must never degrade over it. An error from a gateway that
+// SHOULD have answered (a revoked token, an unreachable API) IS reported —
+// degraded, like every source this model cannot read.
+var statusWorkerCost = func(ctx context.Context, runID string) (*statusmodel.WorkerCostInput, error) {
+	if strings.TrimSpace(runID) == "" {
+		return nil, nil
+	}
+	file, err := credentials.Load()
+	if err != nil {
+		return nil, err
+	}
+	config, err := gatewaytrace.ConfigFrom(file)
+	if err != nil {
+		return nil, nil // not configured: the optional state, not a failed read
+	}
+	// The same test-and-override knob the jev credential resolution honours
+	// (its $TICFAC_JEV_API_BASE), so a test points the reader at a server of
+	// its own without touching production's default.
+	if base := strings.TrimSpace(os.Getenv(jev.OperatorBaseEnv)); base != "" {
+		config.APIBase = base
+	}
+	client := gatewaytrace.New(config, nil)
+	calls, err := client.Calls(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	if len(calls) == 0 {
+		return nil, nil
+	}
+	totals := gatewaytrace.Sum(calls)
+	return &statusmodel.WorkerCostInput{USD: totals.Cost, Source: "gateway"}, nil
+}
+
 // modelGatherers is the per-frame source policy for a FOLLOWING surface:
 // `status --json` answers once and pays every read on the way, but the live
 // watch (89m) re-gathers every frame, and a frame every two seconds must
@@ -400,8 +449,9 @@ var statusBuild = statusmodel.Build
 // `status --follow` already set for its labels. The one-shot surface passes
 // the direct reads; the watch passes the caches (watch.go).
 type modelGatherers struct {
-	graph func(context.Context, string, string) *tk.Graph
-	ci    func(context.Context, string, string) (*statusmodel.CIInput, error)
+	graph      func(context.Context, string, string) *tk.Graph
+	ci         func(context.Context, string, string) (*statusmodel.CIInput, error)
+	workerCost func(context.Context, string) (*statusmodel.WorkerCostInput, error)
 }
 
 // epicIDOf derives the epic id a run id names: `epic-<id>` for a local run,
@@ -517,6 +567,22 @@ func localStatusModelHosted(ctx context.Context, repo, runID string, probe runli
 
 	priorFeeds := priorFeedsLocal(repo, prior)
 
+	// The local run's own gateway-joined spend (tick dm2): the logs read
+	// under the run id the surface named, metering the workers-ai line where
+	// the run's calls were joined to the gateway and answering nil — the
+	// honest not-measured — where they were not. An error from a gateway
+	// that should have answered degrades the model's cost, like every
+	// source this model cannot read; a host that states no gateway is the
+	// documented optional state and degrades nothing.
+	var workerCost *statusmodel.WorkerCostInput
+	if gather.workerCost != nil {
+		if cost, costErr := gather.workerCost(ctx, runID); costErr == nil {
+			workerCost = cost
+		} else {
+			degraded = append(degraded, "cost")
+		}
+	}
+
 	home, _ := os.UserHomeDir()
 	session := func(worktree string) *statusmodel.Turn {
 		return statusmodel.SessionLog(home, worktree)
@@ -555,8 +621,9 @@ func localStatusModelHosted(ctx context.Context, repo, runID string, probe runli
 		// layout the activity reader reads, and the durable attempt record
 		// cannot name it — its model "opus" and executor "herdr" name
 		// anything but the harness.
-		Runner: statusmodel.WorkerRunner(runID),
-		CI:     ci,
+		Runner:     statusmodel.WorkerRunner(runID),
+		WorkerCost: workerCost,
+		CI:         ci,
 	})
 }
 

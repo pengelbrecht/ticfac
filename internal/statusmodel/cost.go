@@ -75,12 +75,15 @@ var claudeModelAliases = map[string]bool{"opus": true, "sonnet": true, "haiku": 
 //     measures them.
 //
 // recorded_usd is the sum of the metered lines only, and no unmetered line
-// ever states a number (rule 7).
+// ever states a number (rule 7). Since tick dm2 the sum itself is NULL when
+// no line is metered: a 0 beside all-unmetered lines is the fabricated
+// $0.00 again — this time on the roll-up instead of the line.
 func buildCost(src Sources, recs Records) Cost {
 	cost := Cost{
 		Attempts: len(recs.Attempts),
-		Basis: "recorded_usd is the sum of the metered lines: usage recorded on decision records, " +
-			"and the host's Workers AI gateway number where it stated one; worker jobs record no cost",
+		Basis: "recorded_usd is the sum of the metered lines, and null when none is: " +
+			"usage recorded on decision records, and the host's Workers AI gateway number where it stated one; " +
+			"worker jobs record no cost",
 		Lines: []CostLine{},
 	}
 
@@ -151,10 +154,17 @@ func buildCost(src Sources, recs Records) Cost {
 	}
 
 	cost.Lines = lines
+	sum, anyMetered := 0.0, false
 	for _, l := range lines {
 		if l.Metered && l.USD != nil {
-			cost.RecordedUSD += *l.USD
+			sum += *l.USD
+			anyMetered = true
 		}
+	}
+	// The number exists only where a measurement does: an all-unmetered
+	// roll-up states null, never a 0 dressed up as a measured zero.
+	if anyMetered {
+		cost.RecordedUSD = &sum
 	}
 	return cost
 }
