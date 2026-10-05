@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 341,
-  "state": "running",
-  "reason": "r2m is closed",
-  "updated_at": "2026-10-05T19:48:04Z",
+  "sequence": 342,
+  "state": "dispatching",
+  "reason": "dispatching xba as attempt 55",
+  "updated_at": "2026-10-05T19:48:15Z",
   "ticks": [
     {
       "tick_id": "92k",
