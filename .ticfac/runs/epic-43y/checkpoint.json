@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 427,
-  "state": "collecting",
-  "reason": "collecting 4ao attempt 65",
-  "updated_at": "2026-10-05T22:08:31Z",
+  "sequence": 428,
+  "state": "gating",
+  "reason": "running the integrated gate for 4ao on 567e203a2506",
+  "updated_at": "2026-10-05T22:08:51Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -262,7 +262,7 @@
     },
     {
       "tick_id": "4ao",
-      "state": "dispatched",
+      "state": "integrated",
       "attempt": 65
     },
     {
