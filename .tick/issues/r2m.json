@@ -2,6 +2,7 @@
   "id": "r2m",
   "title": "Restore's setup entry skips provision_toolchain; a restored box lacks mise tools",
   "description": "The boot runs configure_caches, provision_toolchain and worker_repo_setup. The restore's setup entry (run_setup_entry) runs only configure_caches and worker_repo_setup. A repository that declares a toolchain the image lacks (mise.toml, .tool-versions) gets it at boot, but not after a container loss, so tests on the restored tree fail.\nevidence: image/worker.sh:1527-1541 vs :1460-1493; image/common.sh:1067\n\nticfac run epic-43y created this tick by absorbing the finding cc9334200bc848351c362a3c18951996efd7025e7b836609e20833a0d1490b6b (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/cc9334200bc848351c362a3c18951996efd7025e7b836609e20833a0d1490b6b.json on the run branch.",
+  "notes": "2026-10-05 20:02 - ticfac run epic-43y: created by absorbing finding cc9334200bc848351c362a3c18951996efd7025e7b836609e20833a0d1490b6b — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-43y/absorptions/cc9334200bc848351c362a3c18951996efd7025e7b836609e20833a0d1490b6b.json on epic/43y, and it says: the classifier put 0.87 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A2: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -10,5 +11,5 @@
   "discovered_from": "run-epic-43y/tick-66a/attempt-42",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T18:02:24Z",
-  "updated_at": "2026-10-05T18:02:24Z"
+  "updated_at": "2026-10-05T18:02:29.722568Z"
 }
