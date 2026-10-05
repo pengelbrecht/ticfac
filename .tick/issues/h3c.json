@@ -1,0 +1,14 @@
+{
+  "id": "h3c",
+  "title": "Node suite red at epic head: dumb-git-origin test lacks 300s timeout",
+  "description": "harness/test/node/harness-timeout-discipline.test.ts fails on the branch base (reproduced at 9bb160307948 in a scratch worktree): node/dumb-git-origin.test.ts's test 'an origin that outlives the box carries the boot, the wip and the restore' declares no \u003e= 300_000 ms timeout. Introduced by tick a2l's merge into epic/43y (4fdb71505). Not caused by this tick's diff; a red harness node suite is what the epic close-out's CI can surface.\nevidence: cd harness \u0026\u0026 pnpm vitest run -c vitest.node.config.ts → harness-timeout-discipline.test.ts 'declares a timeout of at least 300_000 ms on every process-driving test': expected [] to deeply equal [ 'node/dumb-git-origin.test.ts: an origin that outlives the box carries the boot, the wip and the restore' ]\n\nticfac run epic-43y created this tick by absorbing the finding 9c38874945aff5aea9317e3d3af849e5a39694b16d05de675141c8f44aa76bcf (reported by run-epic-43y/tick-2oa/attempt-43): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/9c38874945aff5aea9317e3d3af849e5a39694b16d05de675141c8f44aa76bcf.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-2oa/attempt-43",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T18:32:48Z",
+  "updated_at": "2026-10-05T18:32:48Z"
+}
