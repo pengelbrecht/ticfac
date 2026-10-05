@@ -1,0 +1,13 @@
+{
+  "id": "2p3",
+  "title": "runners.toml implement cell still describes the deleted pi CLI",
+  "description": "[roles.implement] in .tick/runners.toml still explains kind = \"pi\" as the pi CLI (gjk's --approve trust story) and passes args = [\"--approve\"]. After 2q5 and uxi, kind pi in this repository only routes to the pi-durable runner through local-subprocess (or the cloud container), and neither of those reads args. The comment and the dead args mislead a reader into thinking a pi-CLI path still exists.\nevidence: .tick/runners.toml [roles.implement] (comment block and args line); profiles-herdr/implement-tick.json executor local-subprocess\n\nticfac run epic-43y filed this backlog tick from the finding c1dded501e26560d1d14df1ba4d3c3714450c8a17236ef265931ce6cd594d546 (reported by run-epic-43y/tick-uxi/attempt-34): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/c1dded501e26560d1d14df1ba4d3c3714450c8a17236ef265931ce6cd594d546.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-uxi/attempt-34",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T14:57:37Z",
+  "updated_at": "2026-10-05T14:57:37Z"
+}
