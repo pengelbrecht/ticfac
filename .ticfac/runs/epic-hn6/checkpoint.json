@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 259,
-  "state": "dispatching",
-  "reason": "dispatching 648 as attempt 37",
-  "updated_at": "2026-10-05T19:44:41Z",
+  "sequence": 260,
+  "state": "running",
+  "reason": "648 is running as attempt 37",
+  "updated_at": "2026-10-05T19:44:52Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -189,7 +189,8 @@
     },
     {
       "tick_id": "648",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 37
     },
     {
       "tick_id": "gzv",
