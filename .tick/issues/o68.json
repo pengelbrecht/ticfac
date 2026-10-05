@@ -6,6 +6,9 @@
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
+  "blocked_by": [
+    "enb"
+  ],
   "parent": "43y",
   "role": "review",
   "created_by": "ticfac run epic-43y",
