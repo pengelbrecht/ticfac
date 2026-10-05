@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 268,
-  "state": "gating",
-  "reason": "running the integrated gate for a2l on 4fdb71505290",
-  "updated_at": "2026-10-05T17:45:08Z",
+  "sequence": 269,
+  "state": "publishing",
+  "reason": "closing a2l behind the integrated gate on 4fdb71505290",
+  "updated_at": "2026-10-05T17:47:23Z",
   "ticks": [
     {
       "tick_id": "92k",
