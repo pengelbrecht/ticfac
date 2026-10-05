@@ -12,8 +12,11 @@
   "attempt": 32,
   "done_item": "A4",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T19:26:43Z",
+  "triaged_at": "2026-10-05T19:26:54Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing 648",
+  "promoted_as": "648",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "dm2",
