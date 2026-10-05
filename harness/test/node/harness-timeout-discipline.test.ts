@@ -457,6 +457,18 @@ describe("the load-dependent tests of both suites state their own wall clock", (
         "pushes nothing for a round that changed no file, and the changed round's wip lands on origin",
       ),
     ).toBe(true);
+    // The omq seam (tick umx found it red at the epic base; the fix raised
+    // it to 300_000): dumb-git-origin's whole-container story drives real
+    // git through the real local door, and it binds through the door
+    // fixture variable rather than a direct entry-point call. A
+    // classification that loses it is a bound no longer enforced there and
+    // a guard that still reads green — named for the same reason the fim
+    // titles above are named.
+    expect(
+      processTitles.has(
+        "an origin that outlives the box carries the boot, the wip and the restore",
+      ),
+    ).toBe(true);
     // The two spellings fim added the harness criterion for: the helper that
     // opens (the gateway tests) and the whole host whose open is in src.
     const workerdHarnessTitles = new Set(
