@@ -12,8 +12,11 @@
   "attempt": 24,
   "done_item": "A1",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T11:35:20Z",
+  "triaged_at": "2026-10-05T11:35:33Z",
+  "triaged_by": "ticfac run epic-43y absorbing j6o",
+  "promoted_as": "j6o",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "7ml",
