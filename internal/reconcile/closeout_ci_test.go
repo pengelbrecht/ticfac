@@ -237,7 +237,7 @@ func (f *restartingForge) RestartCancelledOnce(_ context.Context, runIDs []int64
 func TestACheckpointOnlyHeadResolvesToItsCodeAncestorsRedRun(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
-	code := commitOn(t, f.Repo, ".tick/issues/v7z.json", `{"id":"v7z","status":"in_progress"}`)
+	code := commitOn(t, f.Repo, "internal/thing/thing.go", "package thing\n")
 	commitOn(t, f.Repo, ".ticfac/runs/r-fixture/checkpoint.json", `{"sequence":7}`)
 	head := commitOn(t, f.Repo, ".ticfac/runs/r-fixture/checkpoint.json", `{"sequence":8}`)
 	mustRun(t, f.Repo.Dir, "git", "push", "-q", "origin", "HEAD:refs/heads/epic/qeu")
@@ -303,17 +303,80 @@ func TestACancelledCodeCommitIsRestartedNotWaitedOnForever(t *testing.T) {
 	}
 }
 
-// short: reads .github/workflows/ci.yml as text; no repository, no run
-//
-// The walk borrows a verdict across commits that change only runStatePrefix
-// because CI ignores exactly those paths: a commit touching nothing else
-// starts no run. The two lists must be one list. If ci.yml ignores more, a
-// head changing only the extra paths gets no run and no borrowable verdict
-// (the close-out waits for nothing); if it ignores less, the borrow is still
-// sound but the walk and the workflow no longer describe each other.
-func TestTheWorkflowIgnoresExactlyTheRunStatePaths(t *testing.T) {
+// TICKS 5OB, CIW, B6U: a tracker-only head. A run pushes its tracker records
+// (.tick/issues, .tick/activity, .tick/pending) to the epic branch as often as
+// its own state, and ci.yml starts no run for them either — so the close-out's
+// own tracker commits, and every note and close a run writes after its last
+// code landed, leave the head with no CI of its own. That is also the shape of
+// an epic PR GitHub calls conflicting (it never runs pull_request CI on one):
+// the verdict is the push run's, on the commit that last changed code, and the
+// close-out must see it through every tracker and run-state commit since.
+func TestTheCloseoutSeesCIPastTrackerRecordCommits(t *testing.T) {
 	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "ci.yml"))
+	f := newFixture(t, fixtureOptions{})
+	code := commitOn(t, f.Repo, "internal/thing/thing.go", "package thing\n")
+	commitOn(t, f.Repo, ".tick/issues/v7z.json", `{"id":"v7z","status":"closed"}`)
+	commitOn(t, f.Repo, ".ticfac/runs/r-fixture/checkpoint.json", `{"sequence":9}`)
+	commitOn(t, f.Repo, ".tick/activity/activity.jsonl", `{"op":"close","id":"v7z"}`+"\n")
+	head := commitOn(t, f.Repo, ".tick/pending/q0123.json", `{"id":"q0123"}`)
+	mustRun(t, f.Repo.Dir, "git", "push", "-q", "origin", "HEAD:refs/heads/epic/qeu")
+
+	pr := &forge.PullRequest{Number: 11, URL: "https://example/pr/11", HeadRef: "epic/qeu", BaseRef: "main", HeadSHA: head}
+	forgeFake := &fakeForge{exists: true, pr: pr, bySHA: map[string]forge.CIReport{
+		code: {State: forge.CIGreen},
+	}}
+	r, err := New(f.options(f.Repo, fixtureOptions{pullRequests: forgeFake}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, sha, isHead, err := r.ciForTree(context.Background(), pr)
+	if err != nil {
+		t.Fatalf("ciForTree: %v", err)
+	}
+	if report.State != forge.CIGreen {
+		t.Errorf("CI reads %s, want green: tracker records start no CI run, so a close-out that cannot see past "+
+			"them waits for a run nobody starts (ticks 5ob, ciw)", report.State)
+	}
+	if sha != code || isHead {
+		t.Errorf("the verdict is about %s (head: %v), want the commit that last changed code, %s", short(sha), isHead, short(code))
+	}
+}
+
+// And the tracker files a test DOES read are not records: runners.toml (the
+// gate commands, the profile routing) is read by drift guards, so a change to
+// it starts CI and an older verdict is not borrowed across it.
+func TestAnOlderGreenIsNotBorrowedAcrossATrackerConfigChange(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	code := commitOn(t, f.Repo, "internal/thing/thing.go", "package thing\n")
+	declared, err := os.ReadFile(filepath.Join(f.Repo.Dir, ".tick", "runners.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	head := commitOn(t, f.Repo, ".tick/runners.toml", string(declared)+"\n# the declared gate changed\n")
+	mustRun(t, f.Repo.Dir, "git", "push", "-q", "origin", "HEAD:refs/heads/epic/qeu")
+
+	pr := &forge.PullRequest{Number: 12, URL: "https://example/pr/12", HeadRef: "epic/qeu", BaseRef: "main", HeadSHA: head}
+	forgeFake := &fakeForge{exists: true, pr: pr, bySHA: map[string]forge.CIReport{
+		code: {State: forge.CIGreen},
+	}}
+	r, err := New(f.options(f.Repo, fixtureOptions{pullRequests: forgeFake}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, _, _, err := r.ciForTree(context.Background(), pr)
+	if err != nil {
+		t.Fatalf("ciForTree: %v", err)
+	}
+	if report.State != forge.CINone {
+		t.Errorf("CI reads %s, want none: .tick/runners.toml changed since the green, and CI's drift guards read it", report.State)
+	}
+}
+
+// ciWorkflowIgnores reads ci.yml's paths-ignore lists, as text.
+func ciWorkflowIgnores(t *testing.T, path string) [][]string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,13 +398,48 @@ func TestTheWorkflowIgnoresExactlyTheRunStatePaths(t *testing.T) {
 	if in {
 		lists = append(lists, current)
 	}
+	return lists
+}
+
+// short: reads .github/workflows/ci.yml and the watchdog script as text; no repository, no run
+//
+// The walk borrows a verdict across commits that change only
+// ciIgnoredPrefixes because CI ignores exactly those paths: a commit touching
+// nothing else starts no run. The lists must be one list. If ci.yml ignores
+// more, a head changing only the extra paths gets no run and no borrowable
+// verdict (the close-out waits for nothing); if it ignores less, the borrow
+// is still sound but the walk and the workflow no longer describe each other.
+// The main watchdog leaves a main head alone on the same proof, so its list
+// is the same list too.
+func TestTheWorkflowIgnoresExactlyTheCIIgnoredPaths(t *testing.T) {
+	t.Parallel()
+	var want []string
+	for _, prefix := range ciIgnoredPrefixes {
+		want = append(want, prefix+"**")
+	}
+	lists := ciWorkflowIgnores(t, filepath.Join("..", "..", ".github", "workflows", "ci.yml"))
 	if len(lists) != 2 {
 		t.Fatalf("ci.yml carries %d paths-ignore lists, want two (push and pull_request): %v", len(lists), lists)
 	}
 	for _, list := range lists {
-		if len(list) != 1 || list[0] != runStatePrefix+"**" {
-			t.Errorf("ci.yml ignores %v, want exactly [%s**]: the close-out's walk sees past %s commits only",
-				list, runStatePrefix, runStatePrefix)
+		if fmt.Sprint(list) != fmt.Sprint(want) {
+			t.Errorf("ci.yml ignores %v, want exactly %v: the close-out's walk sees past those paths only", list, want)
 		}
+	}
+
+	raw, err := os.ReadFile(filepath.Join("..", "..", ".github", "scripts", "main-ci-watchdog.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ignored string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if rest, ok := strings.CutPrefix(line, "ignored='"); ok {
+			ignored = strings.TrimSuffix(rest, "'")
+		}
+	}
+	wantRe := "^(" + strings.ReplaceAll(strings.Join(ciIgnoredPrefixes, "|"), ".", `\.`) + ")"
+	if ignored != wantRe {
+		t.Errorf("main-ci-watchdog.sh's ignored pattern is %q, want %q: it must leave alone exactly the main "+
+			"heads ci.yml starts no run for", ignored, wantRe)
 	}
 }
