@@ -47,17 +47,22 @@ type Sources struct {
 	// with the tracker's closed tasks included where the read can serve
 	// them. Nil when the tracker could not be read.
 	Graph *tk.Graph
-	// Records is the NEWEST run's durable state, as gathered. Nil when the
-	// run's records could not be read at all.
+	// Records is the SUBJECT run's durable state — the run the surface was
+	// opened on — as gathered. Nil when the run's records could not be read
+	// at all.
 	Records *Records
-	// PriorRecords is every EARLIER run's records for the same epic, oldest
-	// first — the runs whose work the tracker already carries. The dashboard
-	// answers for the epic, not for the newest run's own checkpoint: a fresh
-	// run seeds its plan "ready" before it settles the tracker's answer, so
-	// a run that failed at boot must not erase the ticks earlier runs
-	// closed. Each tick's row is read from the last run that touched it (its
-	// dispatch markers, gate evidence and provenance); the run SECTION —
-	// alive, workers, cost, feed, waits — is still the newest run's alone,
+	// PriorRecords is every OTHER run's records for the same epic, ordered
+	// oldest first by the reader that selected them — normally the EARLIER
+	// runs whose work the tracker already carries, and, since the merge
+	// orders layers by the checkpoints' own clocks (tick c9n), a
+	// chronologically later sibling too when the surface named an older
+	// subject (a checkout without the local feed). The dashboard answers
+	// for the epic, not for the subject's own checkpoint: a fresh run seeds
+	// its plan "ready" before it settles the tracker's answer, so a run
+	// that failed at boot must not erase the ticks other runs closed. Each
+	// tick's row is read from the chronologically last run that touched it
+	// (its dispatch markers, gate evidence and provenance); the run SECTION
+	// — alive, workers, cost, feed, waits — is still the subject's alone,
 	// with the one exception the waits themselves make: a hold an earlier
 	// run left for a person (PriorFeeds).
 	PriorRecords []Records
@@ -336,8 +341,9 @@ func runEndedAt(src Sources, recs Records) (time.Time, bool) {
 
 // buildWaves lays the epic out as the tracker itself layers it, with every
 // tick's state from the durable records of every run that worked the epic:
-// the newest run's own where it has one, the last run that touched the tick
-// where it does not, the tracker's closed status behind them both. The wave
+// the subject run's own where it has one, the chronologically last run that
+// touched the tick where it does not, the tracker's closed status behind
+// them both. The wave
 // states are derived, not stored: a wave is done when every tick in it is
 // closed, and the first wave that is not done is the frontier the run works
 // on. Duplicates — ticks closed as the duplicate of another — get rows like
@@ -362,7 +368,7 @@ func buildWaves(src Sources, merged *mergedRuns, absorbed map[string]bool) (*[]W
 		}
 	}
 	// Which (tick, attempt) pairs still stand: the census's own answer. The
-	// census is the newest run's; another run's attempts never stand here.
+	// census is the subject run's; another run's attempts never stand here.
 	standing := map[string]bool{}
 	for _, a := range src.Standing {
 		standing[fmt.Sprintf("%s#%d", a.TickID, a.Attempt)] = true
@@ -463,12 +469,13 @@ func buildTick(src Sources, merged *mergedRuns, task tk.GraphTask, state string,
 		t.Attempt = &current
 		if a, ok := byNumber[current]; ok {
 			t.Tier, t.Model, t.Executor = a.Provenance.Tier, a.Provenance.Model, a.Provenance.Executor
-			// Elapsed measures a LIVE attempt only: the newest run's own
+			// Elapsed measures a LIVE attempt only: the subject run's own
 			// in-flight work, or an attempt the census says stands. An
-			// earlier run's last dispatch — its run has ended, whatever its
-			// row still says — is history, and a duration from its stamp to
+			// attempt whose run is not the subject's — a run this surface
+			// does not watch — is history, and a duration from its stamp to
 			// now would be a countdown nobody asked for.
-			if at, err := time.Parse(time.RFC3339, a.DispatchedAt); err == nil && isLiveAttempt(src, state, owner, standing[fmt.Sprintf("%s#%d", task.ID, current)]) {
+			if at, err := time.Parse(time.RFC3339, a.DispatchedAt); err == nil &&
+				isLiveAttempt(state, owner, merged.subjectRun(), standing[fmt.Sprintf("%s#%d", task.ID, current)]) {
 				elapsed := int64(src.Now.Sub(at).Round(time.Second).Seconds())
 				t.ElapsedSeconds = &elapsed
 			}
@@ -478,16 +485,17 @@ func buildTick(src Sources, merged *mergedRuns, task tk.GraphTask, state string,
 }
 
 // isLiveAttempt says whether the tick's current attempt is one the epic is
-// still working: an attempt the newest run's census says stands, or one the
-// NEWEST run dispatched or reported while it is not over. A state the
-// newest run wrote is the newest run's own present tense; the same state in
-// an earlier run's records is history — that run's attempt is not live
-// here, whatever its own census would have said when it ran.
-func isLiveAttempt(src Sources, state string, owner int, stands bool) bool {
+// still working: an attempt the subject run's census says stands, or one
+// the SUBJECT run dispatched or reported while it is not over. A state
+// the subject run wrote is that run's own present tense; the same state in
+// another run's records is history — that run's attempt is not live here,
+// whatever its own census would have said when it ran (tick c9n: the
+// subject is not necessarily the chronologically newest run).
+func isLiveAttempt(state string, owner, subject int, stands bool) bool {
 	if stands {
 		return true
 	}
-	if owner != len(src.PriorRecords) {
+	if owner != subject {
 		return false
 	}
 	return state == tickDispatched || state == tickReported

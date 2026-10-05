@@ -14,6 +14,7 @@ package statusmodel
 // why a naive read of the newest records answered 0/11 with empty rows.
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -689,6 +690,9 @@ func endedSubjectSources(mutate func(*Sources)) Sources {
 	}
 	// The later run that actually closed the tick: newer in time, but in
 	// the prior records because the subject is the run the surface named.
+	// It dispatched the closing attempt at the frontier tier — the
+	// provenance the closed row must show (tick c9n): the later run's word
+	// is the newer truth, and the older subject's stale row is history.
 	later := Records{
 		Checkpoint: &runstate.Checkpoint{
 			SchemaVersion: runstate.SchemaVersion,
@@ -699,6 +703,10 @@ func endedSubjectSources(mutate func(*Sources)) Sources {
 			Reason:        "v16 closed",
 			UpdatedAt:     now.Add(-3 * time.Hour).Format(time.RFC3339),
 			Ticks:         []runstate.TickState{{TickID: "v16", State: "closed", Attempt: 1}},
+		},
+		Attempts: []runstate.Attempt{
+			attemptMarker(1, "v16", now.Add(-4*time.Hour).Format(time.RFC3339),
+				"frontier", "@cf/zai-org/glm-5.3", "cloudflare-sandbox"),
 		},
 	}
 	src := Sources{
@@ -753,8 +761,8 @@ func TestATrackerClosedTickIsClosedThoughAnEndedRunLeftItDispatched(t *testing.T
 				t.Errorf("the closed tick's %s stage reads %s, want done: a closed tick's cell fills to the end", stage.Stage, stage.State)
 			}
 		}
-		if tick.DurationSeconds == nil || *tick.DurationSeconds != 66180 {
-			t.Errorf("the closed tick reads duration %v, want its span measured to the tracker's close (66180s from the dispatch to the closed_at), not growing to now", tick.DurationSeconds)
+		if tick.DurationSeconds == nil || *tick.DurationSeconds != 3600 {
+			t.Errorf("the closed tick reads duration %v, want its span measured to the tracker's close (3600s from the closing run's dispatch to the closed_at), not growing to now", tick.DurationSeconds)
 		}
 		if model.Progress.Ticks == nil || model.Progress.Ticks.Closed != 1 {
 			t.Errorf("the progress counts %+v, want the tracker-closed tick among the closed", model.Progress.Ticks)
@@ -766,13 +774,19 @@ func TestATrackerClosedTickIsClosedThoughAnEndedRunLeftItDispatched(t *testing.T
 		model := Build(endedSubjectSources(func(src *Sources) {
 			src.Records.Checkpoint.State = "running"
 			src.Records.Checkpoint.Reason = "the review is in flight"
+			// The live run's own word must also be the NEWEST one — its
+			// checkpoint written after the later sibling's close — for the
+			// exception to apply: the merge orders layers by the
+			// checkpoints' own clock (tick c9n), and a stale row from a live
+			// run is not the newest word about the tick.
+			src.Records.Checkpoint.UpdatedAt = src.Now.Add(-1 * time.Hour).Format(time.RFC3339)
 			src.Liveness = LivenessInput{Alive: true, State: "running",
 				Reason: "the Workflow's supervisor says the orchestrator container is running",
 				Source: "workflow-supervisor"}
 		}))
 		tick := epicTick(t, model, "v16")
 		if tick.State != tickDispatched {
-			t.Errorf("the tick reads state %q, want the live run's own dispatched: the exception is for ended runs only", tick.State)
+			t.Errorf("the tick reads state %q, want the live run's own dispatched: the exception is for the run whose row is the newest word", tick.State)
 		}
 	})
 
@@ -787,6 +801,76 @@ func TestATrackerClosedTickIsClosedThoughAnEndedRunLeftItDispatched(t *testing.T
 		tick := epicTick(t, model, "v16")
 		if tick.State != tickDispatched {
 			t.Errorf("the tick reads state %q, want the ended run's dispatched: the row is the epic's history until the tracker closes the tick", tick.State)
+		}
+	})
+}
+
+// TestTheLaterRunThatClosedTheTickOwnsItsRow (tick c9n): the merge orders
+// the runs' layers by the checkpoints' own updated_at, never by which run
+// the surface named. A checkout without the local feed can name an OLDER
+// run as the subject while a chronologically later sibling closed the
+// work, and the later run's word is the newer truth: the closing run owns
+// the closed row — its attempt, its tier, its try history, and the
+// drill-in keyed to its own run id — never the older subject, whose stale
+// row and markers are history. The tie-break is defined too: equal
+// updated_at keeps the given order, the subject after every prior it ties
+// with, so a tie never flips precedence by accident.
+func TestTheLaterRunThatClosedTheTickOwnsItsRow(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the closing run's attempt, tier and tries own the row", func(t *testing.T) {
+		t.Parallel()
+		model := Build(endedSubjectSources(nil))
+		tick := epicTick(t, model, "v16")
+		if tick.State != tickClosed {
+			t.Errorf("the tick reads state %q, want closed", tick.State)
+		}
+		if tick.Attempt == nil || *tick.Attempt != 1 {
+			t.Errorf("the closed row reads attempt %v, want the closing run's own 1, not the ended subject's 4", tick.Attempt)
+		}
+		if tick.Tier == nil || *tick.Tier != "frontier" {
+			t.Errorf("the closed row reads tier %v, want the closing run's frontier, not the ended subject's strong", tick.Tier)
+		}
+		if len(tick.Tries) != 1 || tick.Tries[0].Attempt != 1 || tick.Tries[0].Outcome != TryClosed {
+			t.Errorf("the closed row reads tries %+v, want the closing run's one closed try, not the subject's stale marker", tick.Tries)
+		}
+		if tick.DurationSeconds == nil || *tick.DurationSeconds != 3600 {
+			t.Errorf("the closed row reads duration %v, want the closing run's own span: its dispatch to the tracker's close (1h)", tick.DurationSeconds)
+		}
+	})
+
+	t.Run("the drill-in's report is keyed to the closing run", func(t *testing.T) {
+		t.Parallel()
+		var asked []string
+		src := endedSubjectSources(nil)
+		src.Report = func(runID, tickID string, attempt int) *ReportInput {
+			asked = append(asked, fmt.Sprintf("%s/%s#%d", runID, tickID, attempt))
+			return nil
+		}
+		Build(src)
+		if got, want := strings.Join(asked, ","), "run_closed/v16#1"; got != want {
+			t.Errorf("the report reader was asked for %q, want %q: the attempt number a closed row carries is the closing run's own, and the key rides with it", got, want)
+		}
+	})
+
+	t.Run("an equal updated_at keeps the subject's precedence", func(t *testing.T) {
+		t.Parallel()
+		model := Build(endedSubjectSources(func(src *Sources) {
+			src.PriorRecords[0].Checkpoint.UpdatedAt = src.Records.Checkpoint.UpdatedAt
+		}))
+		tick := epicTick(t, model, "v16")
+		// The defined tie-break: among equal updated_at the given order
+		// stands — the priors oldest first as the reader selected them,
+		// the subject after every prior it ties with — so a tie keeps the
+		// subject's row and markers as the pre-c9n merge read them.
+		if tick.State != tickClosed {
+			t.Errorf("the tick reads state %q, want closed by the tracker over the ended subject's stale row", tick.State)
+		}
+		if tick.Attempt == nil || *tick.Attempt != 4 {
+			t.Errorf("the tied row reads attempt %v, want the subject's 4: the tie-break keeps the subject last among equals", tick.Attempt)
+		}
+		if tick.Tier == nil || *tick.Tier != "strong" {
+			t.Errorf("the tied row reads tier %v, want the subject's strong", tick.Tier)
 		}
 	})
 }

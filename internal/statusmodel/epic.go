@@ -19,16 +19,24 @@ package statusmodel
 //     to. A tick no run ever touched is the tracker's closed status, else
 //     ready.
 //   - A tick's ROW (its dispatch markers, gate evidence, provenance, tries)
-//     is the LAST run that has records for it: the newest run with dispatch
-//     markers for the tick, else the run whose row the state came from.
-//     "Closed ticks show done with their last run's pipeline/time/attempts."
+//     is the chronologically LAST run that has records for it (tick c9n):
+//     the newest run with dispatch markers for the tick, else the run
+//     whose row the state came from. "Closed ticks show done with their
+//     last run's pipeline/time/attempts."
+//   - The layers are ordered by the checkpoints' own updated_at, oldest
+//     first (tick c9n) — never by which run the surface named. A read from
+//     a checkout without the local feed can name an OLDER run as the
+//     subject while a chronologically later sibling closed the work, and
+//     the later run's word is the newer truth: row, owner and marker
+//     precedence follow the clock, with a defined tie-break (the given
+//     order, the subject last among equals).
 //   - Gate evidence accumulates across runs: the gates array is the EPIC's
 //     evidence, per tick (tick ihw) — a closed tick's drill-in reads the
 //     gate rows of the run that closed it, and the newest run's own records
 //     may carry none of them.
 //   - Absorptions and findings accumulate: they are the epic's own history,
 //     keyed by content, and no run's copy is newer than another's.
-//   - Everything else — the run section — stays the newest run's alone; the
+//   - Everything else — the run section — stays the subject run's alone; the
 //     merge is never read for workers, cost, waits or the feed.
 
 import (
@@ -39,18 +47,32 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
-// mergedRuns is every run's records for one epic, oldest first, with the
-// per-tick views the model reads built once. Index len-1 is the newest run;
-// the run section reads that one alone.
+// mergedRuns is every run's records for one epic, ordered oldest first by
+// each checkpoint's own updated_at (tick c9n), with the per-tick views the
+// model reads built once. The SUBJECT run — the one the surface was opened
+// on, whose records and feed the Sources carry — is not necessarily the
+// last layer: a checkout without the local feed can name an older run while
+// a later sibling closed the work. The run section — workers, cost, waits,
+// the feed — is the subject's alone either way, read from the Sources
+// themselves and never from this merge.
 type mergedRuns struct {
-	// runs is oldest first; runs[len-1] is the newest.
+	// runs is oldest first by the checkpoints' own updated_at; the
+	// subject's own index is carried beside it.
 	runs []Records
+
+	// subject is the index of the SUBJECT run — the run the surface was
+	// opened on, whose records the Sources carry as Records. Ordering the
+	// layers by their own clocks means it is not necessarily len-1 (tick
+	// c9n): the machinery this model watches — the feed, the census, the
+	// liveness — is the subject's whatever the chronology says.
+	subject int
 
 	// rows is each tick's newest non-ready row and the run that wrote it.
 	rows map[string]rowState
-	// owner is, per tick, the last run that has records for it: the newest
-	// run with dispatch markers for the tick, else the newest with a
-	// non-ready row, else none (-1).
+	// owner is, per tick, the last run that has records for it — newest by
+	// the checkpoints' own clock (tick c9n): the newest run with dispatch
+	// markers for the tick, else the newest with a non-ready row, else
+	// none (-1).
 	owner map[string]int
 	// markers and evidence are the OWNER run's records for that tick —
 	// never a cross-run union, because attempt numbers are per run and the
@@ -82,11 +104,43 @@ type rowState struct {
 	run     int
 }
 
-// newMergedRuns builds the merged view. prior is oldest first; current is
-// the newest run's records and is always last.
+// newMergedRuns builds the merged view. prior is the sibling runs'
+// records, ordered oldest first by the reader that selected them; current
+// is the SUBJECT run's records — the run the surface was opened on. The
+// layers are (re)ordered by the checkpoints' own updated_at, oldest first
+// (tick c9n): the subject is not always the newest run — a checkout
+// without the local feed can name an older run while a chronologically
+// later sibling closed the work — and the later run's word is the newer
+// truth for every precedence the merge decides (rows, owners, markers).
+// The tie-break is the given order, held by a stable sort: the priors stay
+// oldest-first as the reader selected them, the subject stands after every
+// prior it ties with, and a run with no checkpoint — only a subject that
+// wrote no durable record — carries no updated_at and sorts as the oldest
+// layer.
 func newMergedRuns(current Records, prior []Records) *mergedRuns {
+	type layer struct {
+		rec     Records
+		subject bool
+	}
+	layers := make([]layer, 0, len(prior)+1)
+	for _, p := range prior {
+		layers = append(layers, layer{rec: p})
+	}
+	layers = append(layers, layer{rec: current, subject: true})
+	sort.SliceStable(layers, func(i, j int) bool {
+		return layerStamp(layers[i].rec) < layerStamp(layers[j].rec)
+	})
+	runs := make([]Records, len(layers))
+	subject := -1
+	for i, l := range layers {
+		runs[i] = l.rec
+		if l.subject {
+			subject = i
+		}
+	}
 	m := &mergedRuns{
-		runs:            append(append([]Records{}, prior...), current),
+		runs:            runs,
+		subject:         subject,
 		rows:            map[string]rowState{},
 		owner:           map[string]int{},
 		markers:         map[string][]runstate.Attempt{},
@@ -95,8 +149,9 @@ func newMergedRuns(current Records, prior []Records) *mergedRuns {
 		absorptionByKey: map[string]runstate.Absorption{},
 		findingByKey:    map[string]runstate.Finding{},
 	}
-	// Rows, oldest to newest: a newer run's non-ready row replaces an
-	// older one's, and a newer "ready" row never does.
+	// Rows, oldest layer to newest by the checkpoints' own clock: a newer
+	// run's non-ready row replaces an older one's, and a newer "ready" row
+	// never does.
 	for i, r := range m.runs {
 		if r.Checkpoint == nil {
 			continue
@@ -113,7 +168,8 @@ func newMergedRuns(current Records, prior []Records) *mergedRuns {
 			m.rows[ts.TickID] = row
 		}
 	}
-	// Owners and per-tick records, per run, newest run's answer surviving.
+	// Owners and per-tick records, per run, the chronologically newest
+	// run's answer surviving (tick c9n).
 	for i, r := range m.runs {
 		m.allEvidence = append(m.allEvidence, r.Evidence...)
 		perTick := map[string][]runstate.Attempt{}
@@ -202,9 +258,24 @@ func (m *mergedRuns) runEnded(i int) bool {
 	return m.runs[i].Checkpoint != nil && m.runs[i].Checkpoint.State.Terminal()
 }
 
-// newestRun is the index of the newest run's records — the run section's
-// only source.
-func (m *mergedRuns) newestRun() int { return len(m.runs) - 1 }
+// layerStamp is one run layer's own clock: its checkpoint's updated_at,
+// the same field the cli reader orders the prior runs by — one ordering
+// vocabulary, never two that could disagree. A run with no checkpoint
+// carries no clock; it sorts as the oldest layer.
+func layerStamp(r Records) string {
+	if r.Checkpoint == nil {
+		return ""
+	}
+	return r.Checkpoint.UpdatedAt
+}
+
+// subjectRun is the index of the subject run's records — the run the
+// surface was opened on, the one whose feed, census and liveness the
+// Sources carry. It is the last layer in the normal case (the subject is
+// the newest run), but ordering the layers by their own clocks means an
+// older subject can read behind a chronologically later sibling (tick
+// c9n) — and the machinery this model watches is the subject's either way.
+func (m *mergedRuns) subjectRun() int { return m.subject }
 
 // ownerIndex is every tick's owning run, by id.
 func (m *mergedRuns) ownerIndex() map[string]int { return m.owner }
@@ -219,18 +290,19 @@ func (m *mergedRuns) evidenceAll() []runstate.Evidence { return m.allEvidence }
 
 // ownerRunID is the run id of the run whose row one tick reads — the run
 // whose attempt numbers the tick's row carries, and the only run its
-// attempt branches and archived reports are ever filed under. The NEWEST
+// attempt branches and archived reports are ever filed under. The SUBJECT
 // run answers `newest` (the id the surfaces were opened on): its records
-// are the caller's own. An earlier run answers its checkpoint's own id —
-// and "" when its records carried none, which the report readers answer as
-// not read: a run id nobody recorded is not the newest run's by default,
-// which was exactly the collision the (run, tick, attempt) key ends.
+// are the caller's own. Any other run — earlier or later than the subject
+// (tick c9n) — answers its checkpoint's own id, and "" when its records
+// carried none, which the report readers answer as not read: a run id
+// nobody recorded is not the subject's by default, which was exactly the
+// collision the (run, tick, attempt) key ends.
 func (m *mergedRuns) ownerRunID(tickID, newest string) string {
 	i, ok := m.owner[tickID]
 	if !ok || i < 0 || i >= len(m.runs) {
 		return ""
 	}
-	if i == len(m.runs)-1 {
+	if i == m.subject {
 		return newest
 	}
 	if cp := m.runs[i].Checkpoint; cp != nil {
