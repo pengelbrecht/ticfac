@@ -2426,3 +2426,4 @@
 {"ts":"2026-10-05T13:11:58.76409Z","tick":"2xk","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Keep the dashboard open for drill-in after a run has ended"}}
 {"ts":"2026-10-05T13:12:22.05408Z","tick":"3yx","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"watch on a stopped run says 'holding for a person' then 'nothing is held'"}}
 {"ts":"2026-10-05T13:12:42.795795Z","tick":"cg4","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Child tick row misaligns TIER/PIPELINE columns in the 120 golden"}}
+{"ts":"2026-10-05T13:13:04.346609Z","tick":"cno","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Tracker-closed tick reads live '●review' when an older run is the subject"}}
