@@ -38,6 +38,11 @@ func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == superviseHeldAnnouncementArg {
 		os.Exit(superviseHeldAnnouncement(os.Args[2:]))
 	}
+	// And one held between every runner's start and its watch's first look,
+	// as a loaded host holds it (activity_test.go).
+	if len(os.Args) > 1 && os.Args[1] == superviseSlowStartArg {
+		os.Exit(superviseSlowStart(os.Args[2:]))
+	}
 	root, err := contracts.RepoRoot()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "locate the module root: %v\n", err)

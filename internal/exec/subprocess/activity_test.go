@@ -2,6 +2,9 @@ package subprocess
 
 import (
 	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -156,44 +159,6 @@ func TestTheCPUMarkMovesOnlyOnRealUse(t *testing.T) {
 	}
 }
 
-// A first look that comes a window or more after the baseline has watched no
-// CPU at all: it must not call the worker quiet on CPU, or a tool burning CPU
-// right now is nudged on that very look. It is what failed tick onv's gate:
-// on a loaded host the local supervisor's first look came after the window
-// (reproduced: 1.6s into a 1.5s window, 1.4s of tool CPU seen, and a nudge).
-// The tool then gets the window to show it is moving, and is nudged only if
-// it does not.
-func TestALateFirstLookDoesNotCallABusyToolQuiet(t *testing.T) {
-	t0 := time.Date(2026, 9, 28, 8, 0, 0, 0, time.UTC)
-	window := 15 * time.Minute
-	look := func(s *ActivityState, cpu time.Duration, at time.Time) StuckStep {
-		s.ObserveCPU(cpu, at, window)
-		return DecideStuck(s, Activity{FirstSeenAt: s.FirstSeenAt, CPUMeasured: true, CPUAt: s.CPUMarkAt}, at, window)
-	}
-
-	s := &ActivityState{FirstSeenAt: t0}
-	late := t0.Add(16 * time.Minute)
-	if step := look(s, 14*time.Minute, late); step != StuckNone {
-		t.Fatalf("the first look, 16m in, with 14m of tool CPU = %v, want none: it has watched no CPU yet", step)
-	}
-	if step := look(s, 15*time.Minute, late.Add(window/10)); step != StuckNone {
-		t.Errorf("the next look, with the tool still burning = %v, want none", step)
-	}
-	if step := look(s, 15*time.Minute, late.Add(window/10+window)); step != StuckNudge {
-		t.Errorf("a window of no further CPU after that = %v, want a nudge: the tool did go quiet", step)
-	}
-
-	// A prompt first look keeps its baseline at the watch's own: a worker
-	// whose tools never move is nudged a window after it was first seen.
-	s = &ActivityState{FirstSeenAt: t0}
-	if step := look(s, time.Second, t0.Add(window/10)); step != StuckNone {
-		t.Fatalf("a prompt first look = %v, want none", step)
-	}
-	if step := look(s, time.Second, t0.Add(window)); step != StuckNudge {
-		t.Errorf("a window of no CPU since the worker was first seen = %v, want a nudge", step)
-	}
-}
-
 // End to end, the local supervisor: a runner whose tool burns CPU is not
 // stuck; when the tool goes idle and nothing else moves, the runner is
 // interrupted and re-prompted as stuck — once — and the re-prompted run
@@ -233,6 +198,74 @@ func TestALocalRunnerIsNotStuckWhileItsToolIsBusyAndIsRepromptedWhenItHangs(t *t
 	}
 	if !strings.Contains(nudges[0].Detail, "tool process(es) last used CPU") {
 		t.Errorf("the nudge's evidence does not name the tool CPU: %s", nudges[0].Detail)
+	}
+}
+
+// superviseSlowStartArg is the helper mode: Supervise, with every runner held
+// for slowStartHold after it starts and before its supervisor first looks at
+// it — where a loaded host held tick onv's gate: the fsynced pid file and the
+// announcements between the runner's start and the watch loop.
+const superviseSlowStartArg = "__supervise_slow_start__"
+
+const slowStartHold = 2 * time.Second
+
+func superviseSlowStart(args []string) int {
+	fs := flag.NewFlagSet("supervise", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	state := fs.String("state", "", "")
+	if err := fs.Parse(args); err != nil || *state == "" {
+		fmt.Fprintf(os.Stderr, "supervise helper: --state is required\n")
+		return 2
+	}
+	runnerStarted = func([]string) { time.Sleep(slowStartHold) }
+	if err := Supervise(*state); err != nil {
+		fmt.Fprintf(os.Stderr, "supervise helper: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// The same runner, with its supervisor held past the 1.5s window between the
+// runner's start and the first look — tick onv's gate, made to happen every
+// time. The watch's baseline was dated before the hold, so the first look
+// read "quiet for the window" over tool CPU it had never watched and nudged
+// at once, 2s into the 4s busy phase. And the re-prompted runner, which
+// reports and exits during its own hold, was looked at once more before its
+// exit was collected — select picks among ready cases at random — and nudged
+// as stuck a second time.
+func TestASlowStartingSupervisorDoesNotNudgeABusyRunner(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "busy_then_hang", stuckAfter: 1500 * time.Millisecond,
+		env: []string{"FAKE_RUNNER_BUSY=4"}, supervisorArgv: []string{os.Args[0], superviseSlowStartArg}})
+	handle := f.Start(f.spec("run-onv/tick-slw/attempt-1", "slw"))
+	f.waitSettled(handle)
+
+	status := f.inspect(handle)
+	if collected := f.collect(handle); collected.Verdict != VerdictReadyToMerge {
+		t.Fatalf("verdict %s, want ready-to-merge\n%s", collected.Verdict, formatObservations(status.Observations))
+	}
+	var nudges, restarts int
+	var nudgedAt, startedAt time.Time
+	for _, o := range status.Observations {
+		switch {
+		case IsStuckNudge(o):
+			nudges++
+			nudgedAt, _ = time.Parse(time.RFC3339, o.At)
+		case o.Kind == ObsStarted && strings.Contains(o.Detail, "re-prompted as stuck"):
+			restarts++
+		case o.Kind == ObsStarted && startedAt.IsZero():
+			startedAt, _ = time.Parse(time.RFC3339, o.At)
+		}
+	}
+	if nudges != 1 || restarts != 1 {
+		t.Fatalf("stuck nudges %d, restarts %d, want 1 and 1:\n%s", nudges, restarts, formatObservations(status.Observations))
+	}
+	// The start is announced after the hold, so the busy phase has 2s of its
+	// 4s left when the watch begins; a nudge at the first look is 0-1s after
+	// the announcement (the stamps are whole seconds), one after the tool
+	// went quiet 3-4s.
+	if nudgedAt.Sub(startedAt) < 2*time.Second {
+		t.Errorf("the runner was nudged %s after its start was announced, inside its busy phase:\n%s",
+			nudgedAt.Sub(startedAt), formatObservations(status.Observations))
 	}
 }
 

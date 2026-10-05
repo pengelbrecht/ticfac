@@ -786,18 +786,8 @@ func (s *ActivityState) ObserveCPU(cpu time.Duration, now time.Time, window time
 		// The first sample is a baseline, not activity: it says nothing
 		// about when the CPU was used. It is dated at the watch's own
 		// baseline, the moment the worker was issued or first seen.
-		//
-		// Unless it comes a window or more after that baseline: then dating
-		// it there makes this very look "quiet for the window" on CPU it has
-		// never watched, and a tool that is burning CPU right now is nudged
-		// as stuck on the first look. That is a supervisor whose first look
-		// was held up behind its startup writes on a loaded host (epic hn6,
-		// tick onv's gate; reproduced with a first look 1.6s into a 1.5s
-		// window, 1.4s of tool CPU on the table, nudged), or a resumed run's
-		// first look at a live worker. Such a sample is dated at itself, so
-		// the CPU gets the window to show it is moving.
 		s.CPUMark, s.CPUMarkAt = cpu, s.FirstSeenAt
-		if s.CPUMarkAt.IsZero() || now.Sub(s.CPUMarkAt) >= window {
+		if s.CPUMarkAt.IsZero() {
 			s.CPUMarkAt = now
 		}
 	case cpu-s.CPUMark >= cpuFloor(window):
