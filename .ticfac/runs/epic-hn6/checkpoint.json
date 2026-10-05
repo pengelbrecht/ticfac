@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 284,
-  "state": "publishing",
-  "reason": "closing lfm behind the integrated gate on f4d9e99ce8a2",
-  "updated_at": "2026-10-05T20:40:55Z",
+  "sequence": 285,
+  "state": "running",
+  "reason": "lfm is closed",
+  "updated_at": "2026-10-05T20:40:57Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -199,7 +199,7 @@
     },
     {
       "tick_id": "lfm",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 40
     },
     {
