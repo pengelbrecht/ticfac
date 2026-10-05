@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 272,
-  "state": "dispatching",
-  "reason": "dispatching lfm as attempt 40",
-  "updated_at": "2026-10-05T20:19:05Z",
+  "sequence": 273,
+  "state": "running",
+  "reason": "lfm is running as attempt 40",
+  "updated_at": "2026-10-05T20:19:15Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -199,7 +199,8 @@
     },
     {
       "tick_id": "lfm",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 40
     }
   ],
   "provenance": {
