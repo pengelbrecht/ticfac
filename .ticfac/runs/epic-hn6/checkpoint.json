@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 160,
-  "state": "running",
-  "reason": "3yx is running as attempt 24",
-  "updated_at": "2026-10-05T13:12:28Z",
+  "sequence": 161,
+  "state": "dispatching",
+  "reason": "dispatching cg4 as attempt 25",
+  "updated_at": "2026-10-05T13:12:38Z",
   "ticks": [
     {
       "tick_id": "v16",
