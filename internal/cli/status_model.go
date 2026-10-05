@@ -613,7 +613,6 @@ func localStatusModelHosted(ctx context.Context, repo, runID string, probe runli
 		// from the run's records, and — since zl1 — the worker's executor-own
 		// name from the attempt record in the dispatch's state directory on
 		// this machine. All are nil-safe stubs where nothing answers.
-<<<<<<< HEAD
 		Activity: statusmodel.TranscriptActivity(home),
 		Report:   statusmodel.AttemptReports(repo),
 		Handle:   statusmodel.WorkerHandles(runID),
@@ -622,15 +621,9 @@ func localStatusModelHosted(ctx context.Context, repo, runID string, probe runli
 		// layout the activity reader reads, and the durable attempt record
 		// cannot name it — its model "opus" and executor "herdr" name
 		// anything but the harness.
-		Runner: statusmodel.WorkerRunner(runID),
-		CI:     ci,
-=======
-		Activity:   statusmodel.TranscriptActivity(home),
-		Report:     statusmodel.AttemptReports(repo),
-		Handle:     statusmodel.WorkerHandles(runID),
+		Runner:     statusmodel.WorkerRunner(runID),
 		WorkerCost: workerCost,
 		CI:         ci,
->>>>>>> a3b455eb684096cf911c70f8adb0439cf62b60b4
 	})
 }
 
