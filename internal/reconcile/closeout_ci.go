@@ -43,17 +43,37 @@ import (
 // commit CI ran on, the verdict does not describe this tree and the answer is
 // pending — a real wait for a real check, not a borrowed pass.
 const (
-	// ciWalkLimit bounds how far back a CI verdict is looked for. A run-state
-	// commit per phase is a handful; a hundred would mean something else is
-	// wrong and the honest answer is that CI has not run.
-	ciWalkLimit = 25
+	// ciWalkLimit bounds how far back a CI verdict is looked for. Tracker
+	// pushes start no CI either (ticks 5ob/ciw), so the commits between the
+	// last one CI ran on and the head are the run's record writes since its
+	// last code landed: tens, not hundreds. Past the limit the answer is the
+	// head's own, and dispatchSilentCI starts a run on it.
+	ciWalkLimit = 60
 
-	// runStatePrefix is the only path a commit may touch and still be one the
-	// gate can see past. NOT .tick/ as well: tracker files include
-	// runners.toml, which the gate's own drift guards read, so a .tick/ change
-	// can legitimately change what CI says.
+	// runStatePrefix is the run's own durable state. landedAt sees past it
+	// and nothing else: a tracker write the epic branch holds after its merge
+	// is a write the base does not have yet.
 	runStatePrefix = ".ticfac/"
 )
+
+// ciIgnoredPrefixes are the paths a commit may touch and still be one CI
+// starts no run for (ci.yml's paths-ignore, kept equal to this list by
+// TestTheWorkflowIgnoresExactlyTheCIIgnoredPaths) and one the gate can see
+// past: the run's durable state, and the tracker's RECORDS - issues, the
+// activity log, pending questions. A run pushes these to its epic branch
+// several times a minute; when they started CI, epic/hn6 carried 591 CI runs,
+// 86% of them cancelled by the next tracker push (docs/analysis/
+// github-failures.md). None of them can change what CI says: no test reads
+// the repository's own tracker records.
+//
+// NOT the rest of .tick/: runners.toml, config.md and their siblings are read
+// by this repository's drift guards (the gate commands, the close-out rule),
+// so a change to them can legitimately change CI's verdict and must start a
+// run.
+var ciIgnoredPrefixes = []string{runStatePrefix, ".tick/issues/", ".tick/activity/", ".tick/pending/"}
+
+// ciIgnoredSubject is how a feed line names those paths.
+const ciIgnoredSubject = "run state (.ticfac/) and tracker records (.tick/issues, activity, pending)"
 
 // ciForTree answers what CI says about the code this PR would merge.
 //
@@ -76,7 +96,7 @@ func (r *Reconciler) ciForTree(ctx context.Context, pr *forge.PullRequest) (forg
 // ciForCode answers what CI says about the CODE at one commit of the PR's
 // branch: the commit's own verdict when CI ran on it, else the verdict of the
 // newest ancestor CI ran on whose tree differs from it only under the paths
-// CI ignores (.ticfac/, runStatePrefix) — and the sha that verdict is about.
+// CI ignores (ciIgnoredPrefixes) — and the sha that verdict is about.
 //
 // Three things make the answer truthful rather than merely available
 // (epic-6in, 2026-09-28):
@@ -117,7 +137,7 @@ func (r *Reconciler) ciForCode(ctx context.Context, pr forge.PullRequest, at str
 		switch report.State {
 		case forge.CIGreen, forge.CIRed:
 			// A CONCLUSIVE verdict about this very code: sameCodeAncestors
-			// proved every change since it lives under .ticfac/.
+			// proved every change since it lives under ciIgnoredPrefixes.
 			return report, sha, nil
 		case forge.CIPending:
 			// PENDING IS NOT A VERDICT, it is the absence of one, and taking
@@ -147,7 +167,7 @@ func (r *Reconciler) ciForCode(ctx context.Context, pr forge.PullRequest, at str
 				if len(restarted) > 0 {
 					r.record("", StageCIRestarted, "CI on the code of %s has no verdict: its run(s) were cancelled by "+
 						"a later push that changed only %s, so nothing would ever run them again — workflow run(s) "+
-						"%v are restarted ONCE, and the wait is for them", short(at), runStatePrefix, restarted)
+						"%v are restarted ONCE, and the wait is for them", short(at), ciIgnoredSubject, restarted)
 				}
 			}
 		}
@@ -215,7 +235,7 @@ func (r *Reconciler) dispatchSilentCI(ctx context.Context, pr forge.PullRequest,
 }
 
 // sameCodeAncestors lists, newest first, the ancestors of `at` whose tree
-// differs from it only under .ticfac/ — the commits a CI verdict can be
+// differs from it only under ciIgnoredPrefixes — the commits a CI verdict can be
 // borrowed from for `at`'s code. The list ends at the first ancestor outside
 // that chain: it and everything past it describe other code.
 //
@@ -236,7 +256,7 @@ func (r *Reconciler) sameCodeAncestors(branch, at string) []string {
 		if sha == "" || i == 0 {
 			continue // i == 0 is `at` itself, already asked
 		}
-		if !r.onlyRunState(sha, at) {
+		if !r.onlyCIIgnored(sha, at) {
 			break
 		}
 		chain = append(chain, sha)
@@ -251,6 +271,18 @@ func (r *Reconciler) sameCodeAncestors(branch, at string) []string {
 // that lets an older verdict stand for this tree, and an unreadable proof is
 // not a proof.
 func (r *Reconciler) onlyRunState(from, to string) bool {
+	return r.onlyUnder(from, to, []string{runStatePrefix})
+}
+
+// onlyCIIgnored reports whether every path that changed between two commits
+// lives under ciIgnoredPrefixes: the commits CI starts no run for, so CI's
+// verdict on `from` is its verdict on `to`'s code. Unreadable answers false,
+// as onlyRunState does.
+func (r *Reconciler) onlyCIIgnored(from, to string) bool {
+	return r.onlyUnder(from, to, ciIgnoredPrefixes)
+}
+
+func (r *Reconciler) onlyUnder(from, to string, prefixes []string) bool {
 	out, err := r.git.run("", "diff", "--name-only", from, to)
 	if err != nil {
 		return false
@@ -260,7 +292,14 @@ func (r *Reconciler) onlyRunState(from, to string) bool {
 		if path == "" {
 			continue
 		}
-		if !strings.HasPrefix(path, runStatePrefix) {
+		under := false
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(path, prefix) {
+				under = true
+				break
+			}
+		}
+		if !under {
 			return false
 		}
 	}
@@ -273,7 +312,7 @@ func ciSubject(sha string, isHead bool, pr *forge.PullRequest) string {
 		return fmt.Sprintf("the epic PR #%d's head %s", pr.Number, short(sha))
 	}
 	return fmt.Sprintf("%s, the newest commit of the epic PR #%d that CI ran on (every commit since changes only %s, so the verdict is about this tree's code)",
-		short(sha), pr.Number, runStatePrefix)
+		short(sha), pr.Number, ciIgnoredSubject)
 }
 
 // errClosedBehindRepair is the close-out close gate's answer when CI was red
