@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 405,
-  "state": "publishing",
-  "reason": "closing ug0 behind the integrated gate on 8f4f3928fa8f",
-  "updated_at": "2026-10-05T21:30:08Z",
+  "sequence": 406,
+  "state": "running",
+  "reason": "ug0 is closed",
+  "updated_at": "2026-10-05T21:30:18Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -277,7 +277,7 @@
     },
     {
       "tick_id": "ug0",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 61
     },
     {
