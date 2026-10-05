@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 325,
-  "state": "running",
-  "reason": "r2m is running as attempt 52",
-  "updated_at": "2026-10-05T19:26:19Z",
+  "sequence": 326,
+  "state": "collecting",
+  "reason": "collecting 7sn attempt 45",
+  "updated_at": "2026-10-05T19:38:34Z",
   "ticks": [
     {
       "tick_id": "92k",
