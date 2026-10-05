@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 46,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The same defect this tick fixes for a LOCAL run exists for a CLOUD run on the factory side: cloudflare/src/gateway.ts's runJev forwards the classification call to Workers AI with only content-type and authorization headers, while the proxied provider routes stamp cf-aig-metadata out of the run row (line ~870, \"Attribution the caller cannot forge or suppress (D17)\"). A cloud run's typesafe/jev spend is therefore unattributable in the gateway's logs — the rows exist, run_id does not — so it can never be joined per run and the run's cost line undercounts exactly the spend the local run now attributes. runJev already holds the authorized run and token, so gatewayMetadata(authorized.token, authorized.run) is one header away. Out of this tick's scope: it is the factory Worker's own request, deployed by merge to main.\nevidence: cloudflare/src/gateway.ts:993 (runJev's fetch headers carry no cf-aig-metadata) against :870, where the proxied routes stamp it\n\nticfac run epic-hn6 created this tick by absorbing the finding be370a76b7e4eb8f6b2d3932a1faa158deca60f522b0e7df56ed423618d61d4d (reported by run-epic-hn6/tick-24u/attempt-36): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/be370a76b7e4eb8f6b2d3932a1faa158deca60f522b0e7df56ed423618d61d4d.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "lfm",
+    "title": "cloud run classifier calls untagged: factory runJev stamps no cf-aig-metadata"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.82,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.06,
+      "design": 0,
+      "diagnosis": 0.02,
+      "mechanical": 0.86,
+      "translation": 0.06
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1440,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T20:18:52Z",
+  "answered_at": "2026-10-05T20:18:52Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "lfm",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "4562eb3dae521ca8fa3389ad81904cbc015c555a",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
