@@ -1,0 +1,100 @@
+{
+  "schema_version": 3,
+  "decision": 26,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "hn6",
+    "job_id": "run-epic-hn6/tick-435/attempt-22",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:d251a161caa636cf29259dc058d36015243e7c7363028f39590d33e915e23b2d",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "36a5e925dc8ff65c95813e98af6928e75484ac59",
+    "tick_id": "435"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "keepReportsOut sets every worker report in a merge into the integration branch to what the epic head has, including when the incoming branch DELETES it. So 06t's commit 0b9b9087 (which removes the seven RESULT-{378,3gk,7uv,hn6,ltg,oro,r5i}.md) was merged as eb368bab with all seven restored, and they are still at the root of epic/hn6. The epic's PR would land them on main, the thing #172 cleaned up. No tick can remove them through the run's merge path. What would make it ready: let keepReportsOut honour a report deletion the incoming head makes against the merge base (a deletion can never land a new report or cause a report conflict), or commit the removal straight onto epic/hn6. Then add a test that merges a deleting attempt through mergeInWorktree and asserts the integrated head carries no RESULT-*.md. 06t's test exercised only the base-fold mint path.\nevidence: git ls-tree --name-only 0b9b90872 | grep -c RESULT -> 0; git ls-tree --name-only eb368babe | grep -c RESULT -> 7 (same at HEAD 36a5e925); internal/reconcile/report_merge.go:24-30,44-75",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Integration merge resurrects RESULT-*.md: 06t's removal never landed"
+      },
+      {
+        "body": "For a stopped run the model's attention is a dead-run resume, so the frame shows 'needs you: … ticfac run hn6 --cloud' and the alert prints '! … is holding for a person … move it on: ticfac run hn6 --cloud'. The ending then prints 'ended CANCELLED … nothing is held for a person' without the resume command, and exits 7. One command run gives two opposite answers. The cancelled ending should name the resume command, the same one the frame names.\nevidence: internal/cli/watch.go:1279-1287 (watchEndHolding cancelled branch) vs :1226 (watchAttentionAlertText); live: ticfac watch epic-hn6 in a pty, exit 7",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "watch on a stopped run says 'holding for a person' then 'nothing is held'"
+      },
+      {
+        "body": "mergedRuns.stateOf prefers any run's non-ready row over the tracker, and treats the subject run as the newest. When the subject is an older, ended run (here the stopped cloud run run_08f5 that `epic-hn6` resolves to from a checkout without the local feed), its stale 'dispatched' row for v16 wins over the tracker's closed status and over a later run that closed it. The table shows 'v16 review hn6 claim ▸ ●review ▸ … 21h23m'. A row from a run that has ended should not override a tracker-closed tick.\nevidence: internal/statusmodel/epic.go:170-178; ticfac status epic-hn6 --json -> v16 state dispatched while .tick/issues/v16.json on epic/hn6 is closed",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Tracker-closed tick reads live '●review' when an older run is the subject"
+      },
+      {
+        "body": "dashProgressLine drops the whole bar when bar + counts + verdict exceed the pane, instead of truncating the verdict summary. A stopped or degraded run's summary routinely does this at 120 columns, so the header loses the bar A1 names.\nevidence: internal/cli/watch_view.go:256-258; live 120x40 frame: '53/56 ticks · 5d3h · ● stopped: the Workflow instance is complete and the run record says stopped' with no bar",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Progress bar vanishes at 120 cols when the verdict summary is long"
+      },
+      {
+        "body": "The indented child row ('  └ +823  re-run holds the stopped claim') is not truncated to the WHAT column's width, so its tier, pipeline, time and attempts sit about 3 cells right of the header and the parent rows. The golden pins the misalignment.\nevidence: internal/cli/testdata/watch_dashboard_120.txt line 6",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Child tick row misaligns TIER/PIPELINE columns in the 120 golden"
+      },
+      {
+        "body": "watch draws one final frame for a run that has ended and exits at once, so enter (tick drill-in) and e (feed) are reachable only while the run lives. After a run stops or fails is exactly when a person wants the per-tick attempts, reasons and gate evidence. Consider waiting for q on a TTY when the run has already ended.\nevidence: ticfac watch epic-hn6 against the stopped run_08f5 exits 7 immediately in a pty",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Keep the dashboard open for drill-in after a run has ended"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-hn6/tick-435/attempt-22",
+      "commits": 0,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-hn6/435/RESULT-435.md",
+      "review_verdict": "NOT READY",
+      "review_verdict_detail": "the seven worker RESULT-*.md reports are still at epic/hn6's root because the integration merge's keepReportsOut undid 06t's deletion; land the removal (let keepReportsOut honour a report deletion, or commit it directly to epic/hn6) and test that the integrated head carries none"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (NOT READY — the seven worker RESULT-*.md reports are still at epic/hn6's root because the integration merge's keepReportsOut undid 06t's deletion; land the removal (let keepReportsOut honour a report deletion, or commit it directly to epic/hn6) and test that the integrated head carries none)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T13:11:25Z",
+  "answered_at": "2026-10-05T13:11:25Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "435",
+    "attempt": 22,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "36a5e925dc8ff65c95813e98af6928e75484ac59",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:d251a161caa636cf29259dc058d36015243e7c7363028f39590d33e915e23b2d",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}
