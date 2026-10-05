@@ -1557,9 +1557,9 @@ main() {
 
 	# The pi-durable host's half of the contract (epic 43y, tick pom): the
 	# boot phase as the env's first command, the finish phase as the host's
-<<<<<<< HEAD
-	# last. The all-in-one default below stays the default — the CLI harness
-	# path runs unchanged until jhp deletes it.
+	# last. The all-in-one default below remains for the CLI harnesses the
+	# image still carries (omp, claude) — the pi-CLI case is deleted (tick
+	# jhp) and the hosted kind is refused there, loudly.
 	# The setup entry (epic 43y, tick i3h): answered before `require_inputs`,
 	# like `--cancel`, because the box a restore hands it may hold nothing the
 	# boot resolved — only the workspace the restore just rebuilt.
@@ -1567,11 +1567,6 @@ main() {
 		run_setup_entry
 		exit $?
 	fi
-=======
-	# last. The all-in-one default below remains for the CLI harnesses the
-	# image still carries (omp, claude) — the pi-CLI case is deleted (tick
-	# jhp) and the hosted kind is refused there, loudly.
->>>>>>> a38bd17e7ae995245ed441d009ffcb11d8d9f6f8
 	if [[ ${1:-} == "--boot" ]]; then
 		boot_phase
 		# Booted: the conversation owns the rest, and a boot-stopped marker
