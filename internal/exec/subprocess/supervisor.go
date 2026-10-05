@@ -190,6 +190,16 @@ func Supervise(stateDir string) error {
 	}
 	stuckRestart := false
 
+	// relaunches is the ATTEMPT's spend of the signal-death relaunch bound
+	// (relaunch.go, tick 3c2): one budget across every turn, the nudge's own
+	// shape — a nudged or stuck-re-prompted runner that is killed is owed the
+	// same recovery the first turn is. lastLife is the last runner process
+	// this supervisor ran, asked for the signal that killed it when a
+	// relaunch says what it recovered; it is written only from this
+	// goroutine, which is also the only one that reads it.
+	relaunches := 0
+	var lastLife *runnerLife
+
 	// runTurn starts one runner process and waits for it. settled is true
 	// when the attempt was settled on the way — the runner could not be
 	// started, or the supervisor itself was stopped — and runner.exit is
@@ -252,6 +262,7 @@ func Supervise(stateDir string) error {
 		// That is what makes stopTree's signals this supervisor's own child's
 		// and nobody else's, even after the runner itself is gone (exitwait.go).
 		life := watchRunner(runner, runnerLockPath)
+		lastLife = life
 		runnerAlive := life.alive
 
 		for {
@@ -367,21 +378,67 @@ func Supervise(stateDir string) error {
 		}
 	}
 
-	code, settled, err := runTurn(record.RunnerArgv, runnerEnv, func(pid int) {
+	// runAlive runs one turn of the attempt's runner and, when that turn's
+	// process dies by a signal, replays the SAME argv a bounded number of
+	// times before the ordinary ladders take over (relaunch.go, tick 3c2). A
+	// durable runner's conversation survives its process in the attempt's
+	// own storage: the relaunched process resumes the run the killed one left
+	// unfinished — the mid-tool kill recovery the WorkerAgent host's storage
+	// already gives the cloud rung, on the local one — instead of the run
+	// paying a full redispatch over a fresh conversation. The argv AND the
+	// environment are replayed exactly, because the harness identifies a
+	// turn's input by an env-derived requestId and "the same argv replayed
+	// after a crash must find the same one again"
+	// (harness/src/local/worker-host.ts): the killed turn is CONTINUED, not
+	// re-submitted. A pending stuck re-prompt owns the next relaunch itself,
+	// which is why stuckRestart breaks the loop: the watch already stopped
+	// that runner to say something, and its argv — not this turn's — is the
+	// one that must run next.
+	//
+	// started is the first process's callback (the observation and note its
+	// caller records); relaunched is every replayed process's, and a relaunch
+	// announces itself here — BEFORE the process starts, the nudge's own
+	// rule (hol) — rather than re-observing the credential issue.
+	runAlive := func(argv, env []string, started, relaunched func(pid int)) (code int, settled bool, err error) {
+		code, settled, err = runTurn(argv, env, started)
+		for !settled && !stuckRestart {
+			due, why := relaunchDue(st, record, code, relaunches)
+			if !due {
+				if relaunches > 0 {
+					note("no further relaunch: %s", why)
+				}
+				return code, settled, err
+			}
+			relaunches++
+			death := deathWord(lastLife)
+			observe(ObsStarted, RelaunchDetail(relaunches, record.Runner, death))
+			n := relaunches
+			code, settled, err = runTurn(argv, env, func(pid int) {
+				note("the %s runner died by %s; relaunch %d of %d (pid %d): the same argv resumes its own "+
+					"conversation from the attempt storage", record.Runner, death, n, MaxRelaunches, pid)
+				if relaunched != nil {
+					relaunched(pid)
+				}
+			})
+		}
+		return code, settled, err
+	}
+
+	code, settled, err := runAlive(record.RunnerArgv, runnerEnv, func(pid int) {
 		observe(ObsStarted, fmt.Sprintf("%s runner, pid %d, worktree %s", record.Runner, pid, record.Worktree))
 		observe(ObsCredentialIssued, box.note(record))
 		note("started %s (pid %d) on %s", record.Runner, pid, record.Branch)
-	})
+	}, nil)
 	// The stuck nudge: the watch stopped the runner to re-prompt it in its
 	// own session. The re-prompted runner is watched the same way, and a
 	// second silence is a stop, not another nudge (DecideStuck).
 	for stuckRestart && !settled && !st.stuckStopped() && !st.wallClockExceeded() {
 		stuckRestart = false
-		code, settled, err = runTurn(record.StuckArgv,
+		code, settled, err = runAlive(record.StuckArgv,
 			append(append([]string{}, runnerEnv...), EnvStuckNudge+"=1"),
 			func(pid int) {
 				observe(ObsStarted, fmt.Sprintf("the %s runner was re-prompted as stuck, pid %d", record.Runner, pid))
-			})
+			}, nil)
 	}
 	// The nudge (nudge.go): a runner that exited 0 with no report is prompted
 	// again, a bounded number of times, before the attempt settles. And the
@@ -410,14 +467,14 @@ func Supervise(stateDir string) error {
 			}
 			pushed++
 			n := pushed
-			code, settled, err = runTurn(withLintErrors(record.LintArgv, lint.Text()),
+			code, settled, err = runAlive(withLintErrors(record.LintArgv, lint.Text()),
 				append(append([]string{}, runnerEnv...), fmt.Sprintf("%s=%d", EnvLintPushback, n)),
 				func(pid int) {
 					observe(ObsStarted, LintPushbackDetail(n, fmt.Sprintf("the %s runner exited 0", record.Runner),
 						record.ResultPath, fmt.Sprintf("%s (pid %d)", how, pid), len(lint.Errors)))
 					note("the report fails the report check (%d error(s)); pushback %d of %d (pid %d), %s",
 						len(lint.Errors), n, MaxLintPushbacks, pid, how)
-				})
+				}, nil)
 			continue
 		}
 		nudged++
@@ -429,12 +486,12 @@ func Supervise(stateDir string) error {
 		observe(ObsStarted, fmt.Sprintf("%snudge %d of %d: the %s runner exited 0 without "+
 			"writing its report at %s, and a headless runner that ends its turn early ends the job; %s",
 			nudgeDetailPrefix, nudged, MaxNudges, record.Runner, record.ResultPath, how))
-		code, settled, err = runTurn(record.NudgeArgv,
+		code, settled, err = runAlive(record.NudgeArgv,
 			append(append([]string{}, runnerEnv...), fmt.Sprintf("%s=%d", EnvNudge, nudged)),
 			func(pid int) {
 				note("the runner exited 0 with no report; nudge %d of %d (pid %d), %s",
 					nudged, MaxNudges, pid, how)
-			})
+			}, nil)
 	}
 	if settled {
 		return err
