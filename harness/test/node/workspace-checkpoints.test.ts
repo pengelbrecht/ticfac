@@ -500,9 +500,15 @@ describe("workspace checkpoints over real git", () => {
   it("pushes nothing for a round that changed no file, and the changed round's wip lands on origin", {
     timeout: 300_000,
   }, async () => {
+    // The base the boot cloned — the one HEAD a clean first round may leave
+    // unpushed (tick 4s2): a loss restores to it, so nothing is lost.
+    const base = execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+
     // A clean clone: the round changed nothing, so nothing commits and
     // nothing pushes — an empty wip would be noise on the attempt branch.
-    const empty = await pushWipCheckpoint(env.hostShell(), git);
+    const empty = await pushWipCheckpoint(env.hostShell(), { ...git, base });
     expect(empty).toEqual({ kind: "empty" });
     expect(() =>
       execFileSync("git", ["--git-dir", origin, "rev-parse", "--verify", git.branch], {
@@ -513,12 +519,144 @@ describe("workspace checkpoints over real git", () => {
     // One change: the wip commits, and the branch appears on origin — the
     // ref the run reads for the next attempt's carried work.
     writeFileSync(join(checkout, "a.txt"), "a change\n");
-    const pushed = await pushWipCheckpoint(env.hostShell(), git);
+    const pushed = await pushWipCheckpoint(env.hostShell(), { ...git, base });
     expect(pushed).toEqual({ kind: "pushed", sha: expect.stringMatching(/^[0-9a-f]{40}$/) });
     const onOrigin = execFileSync("git", ["--git-dir", origin, "log", "--format=%s", git.branch], {
       encoding: "utf8",
     }).trim();
     expect(onOrigin).toBe(`${WIP_COMMIT_SUBJECT}\nthe base commit`);
+  });
+
+  // Tick 4s2, first shape: the agent commits in round 1 — HEAD moves past
+  // origin BEFORE any wip ever landed — and the first clean round recorded
+  // itself as pushed without pushing, so a further container loss restored
+  // the base and the commit died with the box. The first clean round must
+  // PUSH the agent's commit: only a HEAD still equal to the base (the
+  // restore's fallback, proved above) may be left unpushed.
+  it("pushes a round-1 commit on the first clean round, so a further loss restores it and not the base", {
+    timeout: 300_000,
+  }, async () => {
+    const base = execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+
+    // Round 1: the agent commits its own work, as agents do.
+    writeFileSync(join(checkout, "a.txt"), "the round-1 commit's edit\n");
+    execFileSync("git", ["-C", checkout, "add", "-A"]);
+    execFileSync("git", [
+      "-C",
+      checkout,
+      "-c",
+      "user.name=agent",
+      "-c",
+      "user.email=agent@example.com",
+      "commit",
+      "-q",
+      "-m",
+      "the round-1 commit",
+    ]);
+    const agentCommit = execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+
+    // THE ACCEPTANCE: the first clean round pushes the agent's commit — the
+    // branch on origin carries it, where the old code recorded the round
+    // as pushed without a push.
+    const first = await pushWipCheckpoint(env.hostShell(), { ...git, base });
+    expect(first).toEqual({ kind: "pushed", sha: agentCommit });
+    expect(
+      execFileSync("git", ["--git-dir", origin, "rev-parse", git.branch], {
+        encoding: "utf8",
+      }).trim(),
+    ).toBe(agentCommit);
+
+    // The round after pushes nothing: the push wrote its own record.
+    expect((await pushWipCheckpoint(env.hostShell(), { ...git, base })).kind).toBe("empty");
+
+    // A FURTHER container loss: the restore rebuilds from the branch — the
+    // agent's commit and its edit, not the base the attempt was cut from.
+    for (const entry of readdirSync(checkout)) {
+      rmSync(join(checkout, entry), { recursive: true, force: true });
+    }
+    const restored = await env.restoreLostWorkspace();
+    expect(restored.kind).toBe("restored");
+    expect(
+      execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], {
+        encoding: "utf8",
+      }).trim(),
+    ).toBe(agentCommit);
+    expect(readFileSync(join(checkout, "a.txt"), "utf8")).toBe("the round-1 commit's edit\n");
+  });
+
+  // Tick 4s2, second shape: a restore rebuilds the workspace in a FRESH git
+  // dir — the pushed-record dies with the old box — and the first clean
+  // round after it recorded itself as pushed without pushing, so the
+  // agent's next commit was never carried and a second loss restored the
+  // older snapshot. The first clean round after a restore must push.
+  it("pushes the agent's commit on the first clean round after a restore, so a second loss keeps it", {
+    timeout: 300_000,
+  }, async () => {
+    const base = execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+
+    // One dirty round's snapshot: the state a loss restores from.
+    writeFileSync(join(checkout, "a.txt"), "the carried edit\n");
+    expect((await pushWipCheckpoint(env.hostShell(), { ...git, base })).kind).toBe("pushed");
+
+    // The container is lost; the restore rebuilds from the snapshot — HEAD
+    // unwrapped to the base, the edit left in the tree, the record gone
+    // with the old box's git dir.
+    for (const entry of readdirSync(checkout)) {
+      rmSync(join(checkout, entry), { recursive: true, force: true });
+    }
+    const restored = await env.restoreLostWorkspace();
+    expect(restored.kind).toBe("restored");
+
+    // The agent commits the restored tree: HEAD moves past everything the
+    // branch on origin carries (the old snapshot's parent), and the round
+    // ends clean.
+    execFileSync("git", ["-C", checkout, "add", "-A"]);
+    execFileSync("git", [
+      "-C",
+      checkout,
+      "-c",
+      "user.name=agent",
+      "-c",
+      "user.email=agent@example.com",
+      "commit",
+      "-q",
+      "-m",
+      "the agent's commit after the restore",
+    ]);
+    const agentCommit = execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+
+    // THE ACCEPTANCE: the first clean round after the restore pushes the
+    // agent's commit — the branch on origin carries it, where the old code
+    // recorded the round as pushed without a push.
+    const after = await pushWipCheckpoint(env.hostShell(), { ...git, base });
+    expect(after).toEqual({ kind: "pushed", sha: agentCommit });
+    expect(
+      execFileSync("git", ["--git-dir", origin, "rev-parse", git.branch], {
+        encoding: "utf8",
+      }).trim(),
+    ).toBe(agentCommit);
+
+    // A SECOND loss: the restore rebuilds from the branch — the agent's
+    // commit, not the older snapshot the first restore unwrapped.
+    for (const entry of readdirSync(checkout)) {
+      rmSync(join(checkout, entry), { recursive: true, force: true });
+    }
+    const second = await env.restoreLostWorkspace();
+    expect(second.kind).toBe("restored");
+    expect(
+      execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], {
+        encoding: "utf8",
+      }).trim(),
+    ).toBe(agentCommit);
+    expect(readFileSync(join(checkout, "a.txt"), "utf8")).toBe("the carried edit\n");
   });
 
   // The factory's container runs every door command in /workspace (the
