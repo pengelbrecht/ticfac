@@ -3,7 +3,7 @@
   "title": "Stopping a durable runner leaves its detached tool process groups running",
   "description": "stopTree (stuck stop, wall clock, supervisor signal) and cancel signal only the runner's own process group. pi-durable's NodeExecutionEnv spawns every bash tool detached, so each tool leads its own group and survives the stop, orphaned to init/launchd. A hung tool keeps running forever, and because it can inherit the runner's lock fd it may keep the attempt's liveness lock held. Reproduced: with the l6n interrupt disabled, TestAStuckDurableWorkerInAHungToolIsSteeredThroughIt ends stopped as stuck and leaves 'bash -c …; sleep 3600' plus its sleep alive. The fix is probably to call interruptToolGroups (interrupt.go) on the runner before stopTree, and in cancel.go.\nevidence: internal/exec/subprocess/supervisor.go stopTree; pi-durable dist/env/node.js spawn(..., { detached: true }); ps after the base's stuck stop shows the orphaned group with ppid 1\n\nticfac run epic-43y created this tick by absorbing the finding a021456e45ed5b764e1c0de4dc19d4fe9b79a040b950766b47f15b49cbd8dd3e (reported by run-epic-43y/tick-l6n/attempt-54): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/a021456e45ed5b764e1c0de4dc19d4fe9b79a040b950766b47f15b49cbd8dd3e.json on the run branch.",
   "notes": "2026-10-05 21:59 - ticfac run epic-43y: created by absorbing finding a021456e45ed5b764e1c0de4dc19d4fe9b79a040b950766b47f15b49cbd8dd3e — placed before the final review, which is blocked-by ug0. The decision record is .ticfac/runs/epic-43y/absorptions/a021456e45ed5b764e1c0de4dc19d4fe9b79a040b950766b47f15b49cbd8dd3e.json on epic/43y, and it says: the classifier put 0.61 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A3: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,5 +11,6 @@
   "discovered_from": "run-epic-43y/tick-l6n/attempt-54",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T19:59:21Z",
-  "updated_at": "2026-10-05T19:59:33.240049Z"
+  "updated_at": "2026-10-05T21:03:54.290962Z",
+  "started_at": "2026-10-05T21:03:54.290961Z"
 }
