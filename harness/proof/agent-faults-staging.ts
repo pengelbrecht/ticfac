@@ -203,9 +203,20 @@ async function attempt(
   mark(`settled: ${JSON.stringify(state)}`);
   const log = await readLog();
   evidence.attempts[id] = { state, log };
-  await call("reclaim", { method: "POST" }).catch(() => undefined);
   return { state, log };
 }
+
+/**
+ * Releases the attempt's container. Called only AFTER its evidence is read:
+ * a reclaim destroys the container, and the bare origin the stand-in pushed
+ * to lives inside it.
+ */
+async function reclaim(): Promise<void> {
+  await call("reclaim", { method: "POST" }).catch(() => undefined);
+}
+
+/** The branch the finish phase pushed, as the settled state names it. */
+const branchOf = (state: State) => state.branch ?? "tick/proof/xd3";
 
 function claim(text: string, ok: boolean): void {
   evidence.claims[text] = ok;
@@ -238,8 +249,9 @@ function claim(text: string, ok: boolean): void {
     },
   );
 
-  const runs = await exec("git -C /srv/origin.git show tick/proof/xd3:tool-runs.txt");
+  const runs = await exec(`git -C /srv/origin.git show ${branchOf(state)}:tool-runs.txt`);
   evidence.tool_runs_file = runs.output;
+  await reclaim();
   claim("kill the host mid-tool: the attempt settles 0", state.exit_code === 0);
   claim(
     "kill the host mid-tool: the tool did not run twice (the resumed host reattached, it did not re-run)",
@@ -295,9 +307,10 @@ function claim(text: string, ok: boolean): void {
     },
   );
 
-  const first = await exec("git -C /srv/origin.git show tick/proof/xd3:first-step.txt");
-  const second = await exec("git -C /srv/origin.git show tick/proof/xd3:second-step.txt");
+  const first = await exec(`git -C /srv/origin.git show ${branchOf(state)}:first-step.txt`);
+  const second = await exec(`git -C /srv/origin.git show ${branchOf(state)}:second-step.txt`);
   evidence.restored_files = { first: first.output, second: second.output };
+  await reclaim();
   claim("workspace lost mid-turn: the attempt settles 0", state.exit_code === 0);
   claim(
     "workspace lost mid-turn: the log shows the restore from the last wip commit",
@@ -341,10 +354,10 @@ function claim(text: string, ok: boolean): void {
   mark(`settled: ${JSON.stringify(state)}`);
   const log = await readLog();
   evidence.attempts["deploy-mid-run"] = { state, log };
-  await call("reclaim", { method: "POST" }).catch(() => undefined);
 
-  const report = await exec("git -C /srv/origin.git show tick/proof/xd3:RESULT-xd3.md");
+  const report = await exec(`git -C /srv/origin.git show ${branchOf(state)}:RESULT-xd3.md`);
   evidence.deploy_mid_run_report = report.output;
+  await reclaim();
   claim("deploy mid-run: the attempt settles 0", state.exit_code === 0);
   claim(
     "deploy mid-run: the work was delivered (the report is on the pushed branch)",
