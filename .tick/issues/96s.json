@@ -2,6 +2,7 @@
   "id": "96s",
   "title": "runners.local.toml header: note review/closeout are deliberately not overlaid",
   "description": "Tick j6o records the blessed local claude exception at the review/closeout cells in .tick/runners.toml. The matching one-paragraph note in .tick/runners.local.toml's header (why it declares no review/closeout overlay) could not be written by a worker: runners.local.toml is outside the files a worker may write, and attempt 32 was rejected for exactly that edit. An operator or a run with that authority could add it; the guard test already enforces the behaviour, so this is documentation only.\nevidence: .tick/runners.local.toml header; .ticfac/runs/epic-43y/decisions/40.json (boundary violation: .tick/runners.local.toml)\n\nticfac run epic-43y filed this backlog tick from the finding 8665113a586565d93a9629cc08d86a60038b8c86c835140c177e3ffd56886a93 (reported by run-epic-43y/tick-j6o/attempt-35): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/8665113a586565d93a9629cc08d86a60038b8c86c835140c177e3ffd56886a93.json on the run branch.",
+  "notes": "2026-10-05 17:04 - ticfac run epic-43y: created by absorbing finding 8665113a586565d93a9629cc08d86a60038b8c86c835140c177e3ffd56886a93 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-43y/absorptions/8665113a586565d93a9629cc08d86a60038b8c86c835140c177e3ffd56886a93.json on epic/43y, and it says: the classifier put 0.00 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-43y/tick-j6o/attempt-35",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T15:03:46Z",
-  "updated_at": "2026-10-05T15:03:46Z"
+  "updated_at": "2026-10-05T15:04:07.710785Z"
 }
