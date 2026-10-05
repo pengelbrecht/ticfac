@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "30e",
   "attempt": 63,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T21:48:56Z",
+  "triaged_at": "2026-10-05T21:49:08Z",
+  "triaged_by": "ticfac run epic-43y absorbing s66",
+  "promoted_as": "s66",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "30e",
