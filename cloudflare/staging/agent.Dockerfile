@@ -26,13 +26,23 @@ workdir="${TICKS_WORKDIR:-/work/repo}"
 state_dir="${TICKS_WORKER_STATE_DIR:-/tmp/ticks-worker}"
 tick="${TICKS_TICK:-xd3}"
 branch="tick/proof/${tick}"
-origin="${TICKS_REPO_URL:?TICKS_REPO_URL unset: the stand-in works on the git origin the staging Worker holds (tick a2l)}"
+# TICKS_REPO_URL is the BOOT's input, required in --boot below and nowhere
+# else. The restore's env (restoreEnv, harness/src/host/worker-attempt.ts)
+# carries none of the boot's inputs, and the production setup entry takes
+# none either (image/worker.sh run_setup_entry: "It takes NONE of the boot's
+# inputs") — the first whole-container staging destroy (tick jpy) died on a
+# `:?` here at source time: the replacement box's --setup refused on
+# TICKS_REPO_URL after the restore's own git had already fetched and checked
+# out, and the [A2] claim went unproven. Pinned by the node suite's
+# standin-worker-entry-env.test.ts.
+origin="${TICKS_REPO_URL:-}"
 say() { printf 'ticks-worker: %s\n' "$*"; }
 git config --global user.name "ticks sandbox"
 git config --global user.email "ticks-sandbox@ticks.invalid"
 git config --global init.defaultBranch main
 case "${1:-}" in
 --boot)
+	[ -n "$origin" ] || { say "TICKS_REPO_URL unset: the stand-in works on the git origin the staging Worker holds (tick a2l)"; exit 2; }
 	# The clone lands whatever the origin holds: the seed of a first boot,
 	# or the tip of an attempt that is being booted again (the empty-clone
 	# warning on the very first boot is this branch's own case).
