@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 215,
-  "state": "dispatching",
-  "reason": "dispatching 5uq as attempt 30",
-  "updated_at": "2026-10-05T16:42:47Z",
+  "sequence": 216,
+  "state": "running",
+  "reason": "5uq is running as attempt 30",
+  "updated_at": "2026-10-05T16:42:57Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -154,7 +154,8 @@
     },
     {
       "tick_id": "5uq",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 30
     },
     {
       "tick_id": "7l6",
