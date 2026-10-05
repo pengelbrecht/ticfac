@@ -815,9 +815,11 @@ func overviewIdentityStyles() watchStyles {
 	return identityWatchStyles()
 }
 
-// renderOverview draws the prose listing the JSON answers with: one line per
-// run, the state word, the reason, and — for a stop a person clears — the
-// one command that clears it; and, under every run whose model was gathered,
+// renderOverview draws the prose listing the JSON answers with: one row per
+// run — the state word, the reason, and — for a stop a person clears — the
+// one command that clears it, the row's first line bounded to the width
+// the screen names (tick mwt: boundOverviewRow) — and, under every run
+// whose model was gathered,
 // the run's dashboard headline (tick 3rc): dashboardHeadline's progress and
 // health verdict, the phase bar and the needs-you answer, and the holds'
 // own lines — indented two spaces, the same functions the watch renders
@@ -826,7 +828,7 @@ func overviewIdentityStyles() watchStyles {
 // wanted. The glance is the whole point, so the rows that need nobody —
 // history (markOverviewHistory) — are one summary line naming the flag that
 // lists them, printed exactly as they ever were; with all, they are listed
-// after the rest, each saying why it is history, still one line each.
+// after the rest, each saying why it is history, still one row each.
 // boundOverviewRow bounds one row's first line to the width the screen
 // names (tick mwt). What the bound protects, in order: the row's identity —
 // the run id and the state word, the address a person acts on — is never

@@ -155,14 +155,14 @@ func scanEpicOfRun(repo, runID string) string {
 }
 
 // epicHintOfRunID is the cheap first guess at a run's epic id — from the
-// id's own shape when it names one, else resolved from the run's checkpoint
-// on the epic branches the repo holds (epicOfUnhintedRun, tick mwt), and ""
-// when neither answers. It is the hint the overview's cheap row starts
-// from, so the history rules that read the cheap row can see the epic
-// before any full gather.
+// id's own shape when it names one (epicHintOf), else resolved from the
+// run's checkpoint on the epic branches the repo holds (epicOfUnhintedRun,
+// tick mwt), and "" when neither answers. It is the hint the overview's
+// cheap row starts from, so the history rules that read the cheap row can
+// see the epic before any full gather.
 func epicHintOfRunID(repo, runID string) string {
-	if rest, ok := strings.CutPrefix(runID, "epic-"); ok && rest != "" {
-		return rest
+	if hint := epicHintOf(runID); hint != "" {
+		return hint
 	}
 	return epicOfUnhintedRun(repo, runID)
 }
