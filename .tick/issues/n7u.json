@@ -1,0 +1,13 @@
+{
+  "id": "n7u",
+  "title": "workspace-checkpoints' 15s waitFor default is the same quiet-host bound",
+  "description": "The kjs-covered file still waits on wall-clock conditions with a 15s default while its two full-Harness tests now carry 120s vitest bounds. Under the same load that starved local-host (load average 23-47), an inner 15s waitFor would throw first and fail the test on the host, not the tree - the same class 7wg just fixed one file over. Not observed failing (the pair passed at load ~40 tonight), so low; worth a tick only if it ever bites.\nevidence: harness/test/node/workspace-checkpoints.test.ts:128 (waitFor default 15_000)\n\nticfac run epic-43y filed this backlog tick from the finding cab12fec8a0efd42a639722191c91cfb7060a5e9bfe7f8498dbb04fdce6d9f05 (reported by run-epic-43y/tick-7wg/attempt-27): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/cab12fec8a0efd42a639722191c91cfb7060a5e9bfe7f8498dbb04fdce6d9f05.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-7wg/attempt-27",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T12:26:32Z",
+  "updated_at": "2026-10-05T12:26:32Z"
+}
