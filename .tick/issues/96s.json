@@ -1,0 +1,13 @@
+{
+  "id": "96s",
+  "title": "runners.local.toml header: note review/closeout are deliberately not overlaid",
+  "description": "Tick j6o records the blessed local claude exception at the review/closeout cells in .tick/runners.toml. The matching one-paragraph note in .tick/runners.local.toml's header (why it declares no review/closeout overlay) could not be written by a worker: runners.local.toml is outside the files a worker may write, and attempt 32 was rejected for exactly that edit. An operator or a run with that authority could add it; the guard test already enforces the behaviour, so this is documentation only.\nevidence: .tick/runners.local.toml header; .ticfac/runs/epic-43y/decisions/40.json (boundary violation: .tick/runners.local.toml)\n\nticfac run epic-43y filed this backlog tick from the finding 8665113a586565d93a9629cc08d86a60038b8c86c835140c177e3ffd56886a93 (reported by run-epic-43y/tick-j6o/attempt-35): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/8665113a586565d93a9629cc08d86a60038b8c86c835140c177e3ffd56886a93.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-j6o/attempt-35",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T15:03:46Z",
+  "updated_at": "2026-10-05T15:03:46Z"
+}
