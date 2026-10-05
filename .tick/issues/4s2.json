@@ -1,0 +1,14 @@
+{
+  "id": "4s2",
+  "title": "First clean wip round is recorded as pushed without a push; commits can be lost",
+  "description": "When the tree equals HEAD and no ticfac-wip-pushed record exists, pushWipCheckpoint writes the record and exits 3 without pushing, assuming HEAD is on origin. After a restore (which deletes .git's record) or a round-1 commit, HEAD has moved past origin, so the agent's commits are not pushed. A further container loss restores the older tip.\nevidence: harness/src/workspace/checkpoints.ts:215-216\n\nticfac run epic-43y created this tick by absorbing the finding 0718333001027829a8d99afb042cf1bcbc8713c0adcd591792b047d22c6b02ab (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/0718333001027829a8d99afb042cf1bcbc8713c0adcd591792b047d22c6b02ab.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-66a/attempt-42",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T18:03:58Z",
+  "updated_at": "2026-10-05T18:03:58Z"
+}
