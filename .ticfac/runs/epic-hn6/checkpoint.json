@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 144,
-  "state": "running",
-  "reason": "3qg is closed",
-  "updated_at": "2026-10-05T11:30:47Z",
+  "sequence": 145,
+  "state": "dispatching",
+  "reason": "dispatching 5ba as attempt 21",
+  "updated_at": "2026-10-05T11:30:59Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -114,6 +114,10 @@
       "tick_id": "3qg",
       "state": "closed",
       "attempt": 20
+    },
+    {
+      "tick_id": "5ba",
+      "state": "ready"
     }
   ],
   "provenance": {
