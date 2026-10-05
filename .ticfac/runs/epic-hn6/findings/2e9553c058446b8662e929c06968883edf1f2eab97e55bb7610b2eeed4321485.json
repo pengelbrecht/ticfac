@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "dm2",
   "attempt": 32,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T19:27:20Z",
+  "triaged_at": "2026-10-05T19:27:31Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing gzv",
+  "promoted_as": "gzv",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "dm2",
