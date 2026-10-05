@@ -7,6 +7,12 @@
 # implement ladder starts on GLM 5.3 and climbs to claude after one failed
 # attempt: attempt 1 -> strong (pi on glm-5.3), after a failure -> frontier
 # (claude opus), capped there.
+#
+# Review and closeout are deliberately NOT overlaid here: the common file's
+# cells route them on the claude CLI, the operator's blessed local claude
+# exception (2026-10-05, tick j6o) — local final reviews and close-outs on
+# claude opus on purpose, hn6 moved to a local run for exactly that. The
+# claude CLI is otherwise the local frontier rung only.
 version = 2
 
 [roles.implement.tiers.frontier]
