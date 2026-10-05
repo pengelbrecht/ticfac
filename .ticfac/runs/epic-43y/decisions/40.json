@@ -1,0 +1,45 @@
+{
+  "schema_version": 3,
+  "decision": 40,
+  "role": "triage-failure",
+  "request": {
+    "attempt": 32,
+    "epic_id": "43y",
+    "job_id": "run-epic-43y/tick-j6o/attempt-32",
+    "op": "settle_attempt",
+    "run_id": "epic-43y",
+    "state": "rejected",
+    "tick_id": "j6o"
+  },
+  "response": {
+    "by_run": true,
+    "disposition": "unaddressable",
+    "reason": "boundary violation: .tick/runners.local.toml",
+    "released_by": "ticfac",
+    "settled": true,
+    "state": "rejected",
+    "step": "escalate"
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T14:56:11Z",
+  "answered_at": "2026-10-05T14:56:11Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "j6o",
+    "attempt": 32,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "6f465729013b5d5eaf0a1ae79fd2bec07d247c6a",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:4863fa24ea2a0a6bf379e6f9bf234b6d931e19998ea12f23a15da4314eb3ea94",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}
