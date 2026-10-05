@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 324,
-  "state": "dispatching",
-  "reason": "dispatching r2m as attempt 52",
-  "updated_at": "2026-10-05T19:26:08Z",
+  "sequence": 325,
+  "state": "running",
+  "reason": "r2m is running as attempt 52",
+  "updated_at": "2026-10-05T19:26:19Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -233,7 +233,8 @@
     },
     {
       "tick_id": "r2m",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 52
     },
     {
       "tick_id": "umx",
