@@ -8,19 +8,14 @@ is the record of it.
   the plan.
 - Report what the run ABSORBED, from the run's own decision records — never
   from memory: `.ticfac/runs/<run-id>/absorptions/` holds one record per
-<<<<<<< HEAD
-  finding the run itself triaged, naming the acceptance item the verdict was
-  made against, whether the verdict was OBSERVED or PREDICTED (with the
-  confidence or why no model answered), and the tick the promotion created;
-  `.ticfac/runs/<run-id>/predictions/` holds the score of each prediction the
-  close-out checked against what the done actually did — correct or
-  incorrect, with the command that answered, the commit it ran on, and what
-  the run showed. An epic that absorbed silently is an epic whose shape
-  changed with no account of why: your retro states what was absorbed,
-  against which acceptance item, observed or predicted, and whether each
-  checked prediction was right. A prediction that was wrong is not a failure
-  to hide — it is the only evidence anyone will ever have for where the
-  absorb threshold belongs.
+  finding the run itself triaged, naming the tick the promotion created, the
+  acceptance item it names, and its BASIS: `reviewer` (the final review named
+  it blocking), `worker-asserted-high` (its reporter rated it high and named
+  the done item it breaks — absorbed while the work was under way, or
+  deferred to the reviewer once it was done) or `backlog-default` (everything
+  else, filed as backlog). An epic that absorbed silently is an epic whose
+  shape changed with no account of why: your retro states what was absorbed,
+  on which basis, and which findings were deferred or backlogged.
 - An exception to an acceptance item that a WORKER recorded on the epic's own
   notes — "X is excepted, on the record" — is the worker's claim, never the
   operator's confirmation. `.ticfac/runs/<run-id>/amendments/` holds one
@@ -31,16 +26,6 @@ is the record of it.
   it — and name it unconfirmed when nothing says the operator did. The
   letter-true fix of an unconfirmed exception — making the thing itself meet
   the item — is work the operator commissions, not an edit here.
-=======
-  finding the run itself triaged, naming the tick the promotion created, the
-  acceptance item it names, and its BASIS: `reviewer` (the final review named
-  it blocking), `worker-asserted-high` (its reporter rated it high and named
-  the done item it breaks — absorbed while the work was under way, or
-  deferred to the reviewer once it was done) or `backlog-default` (everything
-  else, filed as backlog). An epic that absorbed silently is an epic whose
-  shape changed with no account of why: your retro states what was absorbed,
-  on which basis, and which findings were deferred or backlogged.
->>>>>>> c543bf47ae7806cd844f6681d921a72fd5586c7e
 - Name what is left open: a deferred decision, a follow-up worth a tick of its
   own, a concern a worker raised that nothing has answered yet. A follow-up
   you would file as a tick is a typed `findings` block in your report, not

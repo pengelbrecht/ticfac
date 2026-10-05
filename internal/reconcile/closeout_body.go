@@ -333,7 +333,6 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 		}
 	}
 
-<<<<<<< HEAD
 	// AMENDMENTS TO THE EPIC'S OWN RECORD (tick 7sn): every note a WORKER
 	// proposed to the record the close-out scores the acceptance from, each
 	// with the operator's decision on it — a pending or rejected one is what
@@ -374,7 +373,9 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 					r.attemptName(amendment.ProposedBy, amendment.Attempt), r.opts.EpicID, amendment.Key)
 			}
 			fmt.Fprintf(&body, "\n  %s\n", strings.ReplaceAll(amendment.Value, "\n", "\n  "))
-=======
+		}
+	}
+
 	// DEFERRED FINDINGS (the 2026-10-06 absorption policy): a high-severity
 	// finding whose reporter named the done item it breaks, reported once the
 	// epic's work was done, is deferred to the final reviewer rather than
@@ -393,7 +394,6 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 			"each is a backlog tick with an owner. Judge whether any must land before this merges.\n\n")
 		for _, record := range deferred {
 			fmt.Fprintf(&body, "- tick %s (finding %s) — %s\n", record.TickID, short(record.Key), placementLine(record))
->>>>>>> c543bf47ae7806cd844f6681d921a72fd5586c7e
 		}
 	}
 
