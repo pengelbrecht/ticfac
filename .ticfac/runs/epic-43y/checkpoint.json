@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 305,
-  "state": "collecting",
-  "reason": "collecting i5e attempt 48",
-  "updated_at": "2026-10-05T19:03:59Z",
+  "sequence": 306,
+  "state": "integrating",
+  "reason": "integrating i5e attempt 48 into epic/43y",
+  "updated_at": "2026-10-05T19:04:33Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -213,7 +213,7 @@
     },
     {
       "tick_id": "i5e",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 48
     },
     {
