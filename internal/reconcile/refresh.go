@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -157,6 +159,15 @@ func (r *Reconciler) refreshFrom(ctx context.Context, base string) error {
 				continue
 			}
 			merged = resolved
+		}
+		// A merge to main makes every live run on the host fold it at once —
+		// hn6 and 43y folded c7e11fe3 140ms apart and pushed together, and
+		// one push failed "(failed)". A jittered pause before the fold's push
+		// keeps the runs from pushing in the same instant (tick rlp); it does
+		// not wait for the push queue, which paces only when turned on.
+		if slept := gitbin.PushJitter(r.opts.Repo, r.opts.Remote); slept > 0 {
+			r.feedOnly(StagePushQueued, "the fold of %s into %s waited a jittered %s before its push, so runs "+
+				"folding the same base do not push in step", short(baseHead), r.branch, slept.Round(time.Millisecond))
 		}
 		_, stderr, pushErr := r.git.try("", "push",
 			"--force-with-lease="+refFor(r.branch)+":"+epicHead,

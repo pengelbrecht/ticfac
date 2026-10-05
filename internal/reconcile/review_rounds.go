@@ -191,6 +191,25 @@ func (r *Reconciler) answerNotReadyReview(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
+	// The adoptions, their notes, the re-review and its placement are one
+	// step (tick f61): one push. The deciding above is NOT in it — a decision
+	// may wait on a classifier, and nothing may wait with a record held.
+	// Nothing in the step acts outside the run, and every write in it is
+	// idempotent on a resume, which re-derives the answer from the review's
+	// recorded decision.
+	acted := false
+	err = r.heldStep(func() error {
+		var stepErr error
+		acted, stepErr = r.absorbNotReadyFindings(ctx, durable, rounds, final, reviewed, blocking)
+		return stepErr
+	})
+	return acted, err
+}
+
+// absorbNotReadyFindings is answerNotReadyReview's held step: the blocking
+// findings' ticks adopted into the epic, and the re-review filed and placed.
+func (r *Reconciler) absorbNotReadyFindings(ctx context.Context, durable *durableTracker, rounds reviewRounds,
+	final runstate.Decision, reviewed string, blocking []subprocess.Finding) (bool, error) {
 	// The blocking findings' ticks, adopted into the epic where the decision
 	// filed them outside it.
 	var absorbed []string

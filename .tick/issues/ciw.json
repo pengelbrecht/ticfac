@@ -3,12 +3,15 @@
   "title": "GitHub sees tracker-file conflicts that tk's merge drivers resolve locally, and silently stops running PR CI",
   "gloss": "tracker conflicts stop PR CI",
   "description": "The epic PR (#11) stopped getting CI runs at 17:37 on 2026-09-19. Six pushes followed, including a code fix; none triggered a pull_request workflow. GitHub status was all green and pushes to main still ran CI.\n\nCause: GitHub reported the PR as mergeable=false / mergeable_state=dirty. Locally the merge was CLEAN — because this repository resolves .tick/issues/*.json and .tick/activity/activity.jsonl with tk's custom merge drivers (.gitattributes: merge=tick, merge=tick-activity). GitHub has no such drivers, so the same merge is a textual conflict there (k4s.json and activity.jsonl this time), and GitHub does not run pull_request workflows on a PR it considers conflicted.\n\nNothing said so. The close-out read 'no checks on the head' and held; an operator sees 'CI pending' indefinitely. The only signal was the ABSENCE of runs, which is the hardest kind to notice.\n\nTwo parties touch .tick/ on both sides of every epic PR: the run publishes tracker writes to the epic branch, and people triage and file tickets on main. So this will recur on every long epic, not just this one.\n\nWork, cheapest first:\n- The run already folds main into the integration branch at run start (k0d). Fold again whenever main moves while an epic PR is open, using the drivers, so GitHub's merge is always a fast-forward-able one.\n- Before holding on 'no CI', the close-out should ask GitHub's mergeable_state; 'dirty' is a different hold with a different repair, and it should be named rather than waited out.\n- Consider whether activity.jsonl belongs on the default branch at all — an append-only log that both sides write is a conflict generator by construction.\n\nWorked around by folding main into epic/ncv by hand (9a76a1a); mergeable_state went dirty -\u003e clean and CI started.",
-  "status": "open",
+  "notes": "2026-10-05 15:18 - Fixed together with ciw/b6u/5ob on branch ci/tracker-pushes-start-no-ci: ci.yml ignores .tick/issues, .tick/activity, .tick/pending (with .ticfac/) on push and pull_request; the close-out CI walk (ciIgnoredPrefixes) and main-ci-watchdog.sh see past the same set. Proven on throwaway epic/zz-ci-paths-proof: tracker-only pushes (b81b042, 937c798) started no CI and did not cancel the running one; the code push (cadd4b7) started CI run 37315555987. GitHub-'conflicting' epic PRs: push-triggered epic/** CI (#38) plus dispatchSilentCI give the code a verdict independent of mergeability, now also when the head is a tracker commit.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "acceptance_criteria": "An epic PR never sits without CI because of a tracker-file conflict GitHub cannot resolve; if it does, the close-out names the conflict rather than waiting on CI",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-19T18:16:27.74958Z",
-  "updated_at": "2026-09-27T06:30:26.786842Z"
+  "updated_at": "2026-10-05T13:18:50.423184Z",
+  "closed_at": "2026-10-05T13:18:50.423184Z",
+  "closed_reason": "CI on epic code no longer depends on GitHub mergeability or tracker head commits"
 }

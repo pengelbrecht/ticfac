@@ -111,11 +111,17 @@ func (r *Reconciler) closeDuplicatePromotions(ctx context.Context) error {
 				"%s by run %s at %s, this one by run %s at %s — and a finding is one tick, so the later promotion "+
 				"is closed; the work is %s's", r.runID, canonical.TickID, key, canonical.TickID, canonical.RunID,
 				canonical.At, dup.RunID, dup.At, canonical.TickID)
-			if _, err := r.tracker.Note(ctx, dup.TickID, note); err != nil {
-				return fmt.Errorf("note %s as a duplicate of %s: %w", dup.TickID, canonical.TickID, err)
-			}
-			if _, err := r.tracker.Close(ctx, dup.TickID); err != nil {
-				return fmt.Errorf("close %s as a duplicate of %s: %w", dup.TickID, canonical.TickID, err)
+			// The note and the close are one step (tick f61): one push.
+			if err := r.heldStep(func() error {
+				if _, err := r.tracker.Note(ctx, dup.TickID, note); err != nil {
+					return fmt.Errorf("note %s as a duplicate of %s: %w", dup.TickID, canonical.TickID, err)
+				}
+				if _, err := r.tracker.Close(ctx, dup.TickID); err != nil {
+					return fmt.Errorf("close %s as a duplicate of %s: %w", dup.TickID, canonical.TickID, err)
+				}
+				return nil
+			}); err != nil {
+				return err
 			}
 			r.record(dup.TickID, StageDuplicateClosed,
 				"%s is closed as a duplicate of %s: both were promoted from finding %s (%s by run %s, %s by run %s), "+

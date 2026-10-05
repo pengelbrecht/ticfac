@@ -49,7 +49,10 @@ func git(dir string, args ...string) (string, error) {
 		"GIT_PAGER=cat",
 		"GIT_OPTIONAL_LOCKS=0",
 	)
+	// A push waits its slot in the repository's host-wide queue (tick rlp).
+	done := gitbin.PushQueue(dir, args, nil)
 	out, err := cmd.Output()
+	done(err)
 	if err != nil {
 		return "", &gitError{args: args, dir: dir, stderr: stderr.String(), err: err}
 	}

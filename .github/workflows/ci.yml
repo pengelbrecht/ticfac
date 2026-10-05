@@ -3,33 +3,52 @@ name: CI
 on:
   push:
     # epic/** as well as main, and the reason is not coverage. An epic's
-    # close-out waits for check runs on its PR's head commit, and GitHub runs a
-    # pull_request workflow only while the PR is MERGEABLE by GitHub's own
-    # merge - which does not run tk's merge drivers. .tick/activity/
-    # activity.jsonl is appended on both sides, merges cleanly through tk and
-    # conflicts as plain text, so any epic whose run overlapped a tracker edit
-    # on main showed as conflicting and never got CI: both epic PRs sat
-    # 'closeout_ci_absent' for an hour on 2026-09-23. A push-triggered run
-    # attaches its check runs to the same head commit the close-out reads
-    # (commits/<sha>/check-runs), whatever GitHub thinks of the merge.
+    # close-out waits for check runs on the code its PR would merge, and
+    # GitHub runs a pull_request workflow only while the PR is MERGEABLE by
+    # GitHub's own merge - which does not run tk's merge drivers. .tick/
+    # activity/activity.jsonl is appended on both sides, merges cleanly
+    # through tk and conflicts as plain text, so any epic whose run overlapped
+    # a tracker edit on main showed as conflicting and never got CI: both epic
+    # PRs sat 'closeout_ci_absent' for an hour on 2026-09-23 (ticks b6u, ciw).
+    # A push-triggered run attaches its check runs to the pushed commit
+    # (commits/<sha>/check-runs, what the close-out reads), whatever GitHub
+    # thinks of the merge.
     branches: [main, "epic/**"]
-    # A run's own durable records (.ticfac/: checkpoints, attempt records,
-    # evidence) are pushed to the epic branch several times a minute. With
-    # cancel-in-progress below, every such push cancelled the CI run on the
-    # code before it and started another: epic/gvc's close-out on 2026-09-26
-    # saw a dozen cancelled runs in one hour. Those commits carry no code, and
-    # the close-out already accepts "CI green on the newest commit it ran on,
-    # with only .ticfac/ changes since" (closeout.go). .tick/ is NOT ignored:
-    # the close-out's own tracker commits must get CI on their head.
+    # Pushes that change ONLY a run's records start no run (ticks 5ob, ciw):
+    # the run's durable state (.ticfac/: checkpoints, attempts, evidence) and
+    # the tracker's records (.tick/issues, .tick/activity, .tick/pending).
+    # A run pushes these to its epic branch several times a minute, and with
+    # cancel-in-progress below each one cancelled the CI run on the code
+    # before it and started another: epic/hn6 carried 591 CI runs, 86% of
+    # them cancelled (docs/analysis/github-failures.md). No test reads the
+    # repository's own tracker records, so none of these can change CI's
+    # verdict. The rest of .tick/ (runners.toml, config.md) is read by drift
+    # guards and still starts a run.
+    #
+    # The list must equal internal/reconcile's ciIgnoredPrefixes (a test
+    # keeps them one list): the close-out takes "CI on the newest commit it
+    # ran on, with only these paths changed since" as CI on the head
+    # (closeout_ci.go), and the main watchdog (.github/scripts/
+    # main-ci-watchdog.sh) leaves a main head alone on the same proof. A
+    # tracker-only commit on main therefore starts no run and deploys
+    # nothing - it ships nothing - and the next code commit's run deploys
+    # against what the factory runs, not against its parent.
     paths-ignore:
       - ".ticfac/**"
+      - ".tick/issues/**"
+      - ".tick/activity/**"
+      - ".tick/pending/**"
   pull_request:
     paths-ignore:
       - ".ticfac/**"
+      - ".tick/issues/**"
+      - ".tick/activity/**"
+      - ".tick/pending/**"
   # The run starts CI itself when the code an epic PR would merge has no run
   # at all — its push's run cancelled while still queued, and every push since
-  # changed only .ticfac/ (internal/reconcile/closeout_ci.go, dispatchSilentCI).
-  # Without this trigger that code would never get a verdict to wait for.
+  # changed only ignored paths (internal/reconcile/closeout_ci.go,
+  # dispatchSilentCI). Without this trigger that code would never get a
+  # verdict to wait for.
   workflow_dispatch:
 
 permissions:
