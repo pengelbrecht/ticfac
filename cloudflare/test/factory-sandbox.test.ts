@@ -306,7 +306,9 @@ describe("FactorySandbox: starting a process", () => {
   it("never waits for a cold container: the process is pending until the alarm starts it", async () => {
     // umq proof run run_6b9f…: a Workflow boot step (5 minutes) waited inline
     // for a cold image pull and timed out. The start must return at once.
-    const c = fakeContainer({ notReadyFor: 3 });
+    // Four refusals: the start's probe, the list's probe (2oa: a restarted
+    // object probes the container itself), and two refusing alarms.
+    const c = fakeContainer({ notReadyFor: 4 });
     const s = fakeState(c.container);
     const object = new FactorySandboxCore(s.state);
 
@@ -561,6 +563,43 @@ describe("FactorySandbox: reading a process", () => {
         { id: work.id, command: "ticks-worker", state: "running", exit_code: null },
       ]),
     );
+  });
+
+  // A deploy restarts every Durable Object while its container lives on: the
+  // object's memory (the in-memory ready flag) is lost, the storage and the
+  // container are not. The nonce replay of a tracked bash calls
+  // listProcesses FIRST — the guardless path runs no short command before
+  // it — so a list that trusts the stale flag misses the live process and
+  // the command runs a second time (tick 2oa).
+  it("lists the live processes after the object itself restarted mid-container", async () => {
+    const c = fakeContainer();
+    const s = fakeState(c.container);
+    const first = new FactorySandboxCore(s.state);
+    const started = await first.startProcess("ticks-worker", {});
+
+    // The restart: fresh memory, same storage, same container.
+    const restarted = new FactorySandboxCore(s.state);
+    await s.settled();
+
+    const listed = await restarted.listProcesses();
+    expect(listed).toEqual([
+      { id: started.id, command: "ticks-worker", state: "running", exit_code: null },
+    ]);
+  });
+
+  // The probe is what separates a restarted object (container answers) from
+  // a cold boot (it does not): a container still pulling its image must not
+  // be asked for a list — the pending-process machinery owns a cold boot.
+  it("answers only what storage knows while the container has not answered yet", async () => {
+    const c = fakeContainer({ running: true, notReadyFor: 99 });
+    const s = fakeState(c.container);
+    const object = new FactorySandboxCore(s.state);
+    const { id } = await object.startProcess("x", {});
+
+    const listed = await object.listProcesses();
+
+    expect(listed).toEqual([{ id, command: "x", state: "running", exit_code: null }]);
+    expect(c.execs.some((e) => e.argv[0] === PROCESS_RUNNER)).toBe(false);
   });
 
   it("never boots a container to answer a question", async () => {
