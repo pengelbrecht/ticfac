@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 280,
-  "state": "running",
-  "reason": "m4t is running as attempt 41",
-  "updated_at": "2026-10-05T20:32:46Z",
+  "sequence": 281,
+  "state": "collecting",
+  "reason": "collecting lfm attempt 40",
+  "updated_at": "2026-10-05T20:37:06Z",
   "ticks": [
     {
       "tick_id": "v16",
