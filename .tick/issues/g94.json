@@ -1,0 +1,14 @@
+{
+  "id": "g94",
+  "title": "Progress bar vanishes at 120 cols when the verdict summary is long",
+  "description": "dashProgressLine drops the whole bar when bar + counts + verdict exceed the pane, instead of truncating the verdict summary. A stopped or degraded run's summary routinely does this at 120 columns, so the header loses the bar A1 names.\nevidence: internal/cli/watch_view.go:256-258; live 120x40 frame: '53/56 ticks · 5d3h · ● stopped: the Workflow instance is complete and the run record says stopped' with no bar\n\nticfac run epic-hn6 created this tick by absorbing the finding 9f26079a4e1d2c9db3b474b2cc3d3d880c9094c5365a7bc273747f5561677dc9 (reported by run-epic-hn6/tick-435/attempt-22): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/9f26079a4e1d2c9db3b474b2cc3d3d880c9094c5365a7bc273747f5561677dc9.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-435/attempt-22",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T13:10:35Z",
+  "updated_at": "2026-10-05T13:10:35Z"
+}
