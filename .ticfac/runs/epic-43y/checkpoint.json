@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 288,
-  "state": "running",
-  "reason": "enb is closed",
-  "updated_at": "2026-10-05T18:20:41Z",
+  "sequence": 289,
+  "state": "dispatching",
+  "reason": "dispatching ewd as attempt 47",
+  "updated_at": "2026-10-05T18:20:53Z",
   "ticks": [
     {
       "tick_id": "92k",
