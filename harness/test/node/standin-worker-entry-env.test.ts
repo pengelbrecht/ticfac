@@ -88,7 +88,8 @@ async function runInRestoreEnv(
       env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HOME: home },
       encoding: "utf8",
     });
-    return { code: result.exitCode ?? 0, output: `${result.stdout}${result.stderr}`, file };
+    // execFile resolves only on exit 0; any other exit lands in the catch.
+    return { code: 0, output: `${result.stdout}${result.stderr}`, file };
   } catch (error) {
     const failure = error as { code?: number; stdout?: string; stderr?: string };
     return {
@@ -100,7 +101,9 @@ async function runInRestoreEnv(
 }
 
 describe("the staging stand-in's entry env (agent.Dockerfile ticks-worker)", () => {
-  it("source time demands none of the boot's inputs — a restored box gets no TICKS_REPO_URL", { timeout: 300_000 }, async () => {
+  it("source time demands none of the boot's inputs — a restored box gets no TICKS_REPO_URL", {
+    timeout: 300_000,
+  }, async () => {
     // The lines the whole-container destroy's --setup runs first. The tick
     // jpy staging run died here: the `:?` at source time refused before the
     // case ever dispatched, so the RESTORE failed on the setup entry.
@@ -109,7 +112,9 @@ describe("the staging stand-in's entry env (agent.Dockerfile ticks-worker)", () 
     expect(answer.output).not.toContain("TICKS_REPO_URL");
   });
 
-  it("--boot without TICKS_REPO_URL refuses legibly with the boot's config exit (2)", { timeout: 300_000 }, async () => {
+  it("--boot without TICKS_REPO_URL refuses legibly with the boot's config exit (2)", {
+    timeout: 300_000,
+  }, async () => {
     // a2l's intent kept: a boot with no origin URL still fails legibly, as
     // the production boot's require_common_inputs does (EXIT_CONFIG=2).
     const answer = await runInRestoreEnv(standinScript, ["--boot"]);
@@ -123,7 +128,9 @@ describe("the staging stand-in's entry env (agent.Dockerfile ticks-worker)", () 
     expect(setup).not.toMatch(/\$\{?origin\}?/);
   });
 
-  it("the script parses (bash -n), whatever the heredoc edits did to it", { timeout: 300_000 }, async () => {
+  it("the script parses (bash -n), whatever the heredoc edits did to it", {
+    timeout: 300_000,
+  }, async () => {
     const answer = await runInRestoreEnv(standinScript, []);
     await execFileAsync("bash", ["-n", answer.file]);
   });
