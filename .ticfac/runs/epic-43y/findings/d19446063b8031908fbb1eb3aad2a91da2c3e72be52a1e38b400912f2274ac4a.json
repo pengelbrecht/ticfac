@@ -11,8 +11,11 @@
   "tick_id": "jhp",
   "attempt": 23,
   "done_item": "A4",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T11:16:47Z",
+  "triaged_at": "2026-10-05T11:17:02Z",
+  "triaged_by": "ticfac run epic-43y absorbing qdg",
+  "promoted_as": "qdg",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "jhp",
