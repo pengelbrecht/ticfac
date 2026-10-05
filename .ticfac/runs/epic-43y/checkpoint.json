@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 232,
-  "state": "gating",
-  "reason": "running the integrated gate for twa on 23cc16233369",
-  "updated_at": "2026-10-05T15:22:30Z",
+  "sequence": 233,
+  "state": "publishing",
+  "reason": "closing twa behind the integrated gate on 23cc16233369",
+  "updated_at": "2026-10-05T15:24:48Z",
   "ticks": [
     {
       "tick_id": "92k",
