@@ -1,0 +1,14 @@
+{
+  "id": "qdg",
+  "title": "Run [A4]'s real cloud and local epic runs on the integrated pi-durable epic",
+  "description": "Epic 43y's [A4] (and [A2]'s 'in a real run') needs one real hn6-style cloud epic run and one local epic run on pi-durable. Neither can run inside jhp. The factory deploys only from main, so a cloud run executes main's code, not the epic's. A local run needs 2q5 (local implement on the durable host, merged on epic/43y but not on jhp's base) and nou (local durable worker no-commits, in flight). jhp delivered the staging [A2] proof (10/10 claims, harness/proof/README.md) and the deletion. The runs belong to a tick placed after nou and qf4 integrate, with the cloud half after the factory carries the epic's code.\nevidence: cloudflare deploy-factory deploys main only (AGENTS.md); .tick/issues/nou.json; epic/43y has 2q5's profiles-herdr re-cut that jhp's base lacks\n\nticfac run epic-43y created this tick by absorbing the finding d19446063b8031908fbb1eb3aad2a91da2c3e72be52a1e38b400912f2274ac4a (reported by run-epic-43y/tick-jhp/attempt-23): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/d19446063b8031908fbb1eb3aad2a91da2c3e72be52a1e38b400912f2274ac4a.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-jhp/attempt-23",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T11:16:55Z",
+  "updated_at": "2026-10-05T11:16:55Z"
+}
