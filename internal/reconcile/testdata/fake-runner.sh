@@ -780,6 +780,19 @@ review_not_ready_then_ready)
 		report
 	fi
 	;;
+review_ready_then_not_ready)
+	# The READY-review gap: the first review (rv) judges the epic READY, and
+	# any later review — one the run makes because the tree changed after that
+	# READY — judges it NOT READY, naming a blocking finding.
+	if [ "$TICFAC_ROLE" = "review-epic" ] && [ "$TICFAC_TICK" = "rv" ]; then
+		report
+	elif [ "$TICFAC_ROLE" = "review-epic" ]; then
+		review_not_ready_report "the change after the READY review broke it" "The change after the READY review broke it"
+	else
+		commit
+		report
+	fi
+	;;
 review_no_verdict)
 	# The refusal case (tick b50): a review whose report says in prose that the
 	# epic is not ready but never states its typed REVIEW-VERDICT line. Prose is

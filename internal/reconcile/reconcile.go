@@ -2165,6 +2165,16 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			return nil, fmt.Errorf("reconcile: read the epic graph: %w", err)
 		}
 	}
+	// And a final review READY over a tree that has changed since — work
+	// closed or a commit pushed after it — is followed by one more review
+	// before anything lands (review_rounds.go, after epic-hn6).
+	if acted, err := r.reviewOverChangedTree(ctx); err != nil {
+		return nil, fmt.Errorf("reconcile: review the tree changed since the final review: %w", err)
+	} else if acted {
+		if graph, err = r.tracker.Graph(ctx, r.opts.EpicID); err != nil {
+			return nil, fmt.Errorf("reconcile: read the epic graph: %w", err)
+		}
+	}
 	// The width's raw material (tick dz1): the claims the graph itself counts
 	// under this epic, whoever holds them — this run's, another run's, a
 	// person's. Taken from the graph the plan is read from (after any re-read
@@ -2250,6 +2260,35 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	failed, err := r.runPlan(ctx, plan)
 	if err != nil {
 		return nil, err
+	}
+	// The plan has drained: before the readying lands anything, the final
+	// review must still be about the tree (review_rounds.go). A change since
+	// it — work this run closed after it, a commit pushed meanwhile — places
+	// one more review, and the run works it before it readies. Each pass
+	// needs a review over a changed tree, so the loop ends: a review over the
+	// tree as it stands places nothing.
+	for len(failed) == 0 {
+		acted, err := r.reviewOverChangedTree(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("reconcile: review the tree changed since the final review: %w", err)
+		}
+		if !acted {
+			break
+		}
+		graph, err := r.tracker.Graph(ctx, r.opts.EpicID)
+		if err != nil {
+			return nil, fmt.Errorf("reconcile: read the epic graph: %w", err)
+		}
+		r.inFlightIDs = graph.Dispatch.InFlightIDs
+		more := planFrom(graph)
+		if len(more) == 0 {
+			break
+		}
+		r.seedTicks(more)
+		r.seedTitles(more)
+		if failed, err = r.runPlan(ctx, more); err != nil {
+			return nil, err
+		}
 	}
 	if len(failed) == 0 {
 		// Every tick closed: the run's job now ends at a READY epic PR, kept
