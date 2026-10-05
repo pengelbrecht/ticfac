@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 141,
-  "state": "dispatching",
-  "reason": "dispatching 7ml as attempt 24",
-  "updated_at": "2026-10-05T10:37:10Z",
+  "sequence": 142,
+  "state": "running",
+  "reason": "7ml is running as attempt 24",
+  "updated_at": "2026-10-05T10:37:22Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -112,7 +112,8 @@
     },
     {
       "tick_id": "7ml",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 24
     },
     {
       "tick_id": "cni",
