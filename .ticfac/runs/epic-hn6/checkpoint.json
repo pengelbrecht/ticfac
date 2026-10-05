@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 169,
-  "state": "running",
-  "reason": "cno is closed",
-  "updated_at": "2026-10-05T14:02:44Z",
+  "sequence": 170,
+  "state": "dispatching",
+  "reason": "dispatching g94 as attempt 27",
+  "updated_at": "2026-10-05T14:03:04Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -143,6 +143,10 @@
     },
     {
       "tick_id": "g94",
+      "state": "ready"
+    },
+    {
+      "tick_id": "c9n",
       "state": "ready"
     }
   ],
