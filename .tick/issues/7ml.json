@@ -1,0 +1,14 @@
+{
+  "id": "7ml",
+  "title": "Local implement 'balanced' tier still routes to the codex CLI, off pi-durable",
+  "description": ".tick/runners.toml's [roles.implement.tiers.balanced] names kind = \"codex\" in the common file, so a local run (herdr or harness substrate) that explicitly pins --tier balanced dispatches an implement worker on the codex CLI — a worker harness that is neither pi-durable nor the claude-CLI frontier exception A1 allows. The local ladder never derives it (strong -\u003e frontier only, runners.local.toml) and the cloud excludes it (runners.cloud.toml: 'balanced is not a rung'), so it is reachable only by explicit pin, but it survives jhp's deletion and a reviewer scoring A1 strictly will find it. Its fate belongs with jhp or an operator routing change; the file is the operator's, not this tick's to edit.\nevidence: .tick/runners.toml, [roles.implement.tiers.balanced] (kind = \"codex\", model = \"gpt-5.6-luna\")\n\nticfac run epic-43y created this tick by absorbing the finding 2f83f272ba247be6e5b3240e9e43acece96bb18906f7b26b5008688549bd6b18 (reported by run-epic-43y/tick-2q5/attempt-12): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/2f83f272ba247be6e5b3240e9e43acece96bb18906f7b26b5008688549bd6b18.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-2q5/attempt-12",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T10:27:21Z",
+  "updated_at": "2026-10-05T10:27:21Z"
+}
