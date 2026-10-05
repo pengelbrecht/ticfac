@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 153,
-  "state": "running",
-  "reason": "435 is running as attempt 22",
-  "updated_at": "2026-10-05T13:01:52Z",
+  "sequence": 154,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for 435",
+  "updated_at": "2026-10-05T13:09:21Z",
   "ticks": [
     {
       "tick_id": "v16",
