@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 349,
-  "state": "dispatching",
-  "reason": "dispatching h3c as attempt 56",
-  "updated_at": "2026-10-05T20:03:36Z",
+  "sequence": 350,
+  "state": "running",
+  "reason": "h3c is running as attempt 56",
+  "updated_at": "2026-10-05T20:03:48Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -252,7 +252,8 @@
     },
     {
       "tick_id": "h3c",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 56
     },
     {
       "tick_id": "7oy",
