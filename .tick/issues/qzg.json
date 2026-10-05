@@ -1,0 +1,13 @@
+{
+  "id": "qzg",
+  "title": "The mid-command restore reaches the model but not the host's log",
+  "description": "containerLost (a tracked bash whose process is gone or ended with no exit code) restores the workspace and tells the MODEL which sha it rebuilt from, but the WorkerAgent host's own log stream never says a line for it — the operator watching the say-stream (not the transcript) still cannot tell a mid-command restore from a mysteriously slow round. The same FactorySandboxEnvOptions.onRestore ear wired for the nonce path in tick dbi could fire from containerLost too; dbi was scoped to the nonce path the tick named, so this is proposed rather than done.\nevidence: harness/src/env/factory-sandbox.ts containerLost (~line 910): the restore's sha goes only into the ExecutionError message the model reads; harness/src/host/worker-attempt.ts logs tool calls (beforeTool) but not tool results\n\nticfac run epic-43y filed this backlog tick from the finding 856a28cb7cf53213290459d6ba92624e2267a6325e76ea0f78bacb5076f59fe9 (reported by run-epic-43y/tick-dbi/attempt-38) instead of absorbing it: it was deferred past the absorption bound — absorbing it would be the 4th absorption of ONE chain that already carries 3 and the bound is 3 (tick qjj), so it is deferred past the absorption bound: a backlog tick with an owner, outside the epic, and the run carries on rather than recurse past the bound or halt for a person. Its verdict was that it gates done item A2 (basis predicted) — the bound wins, and the close-out and the final review see the deferral and can judge it. The chain: tick xd3 reported finding b3f0b2e963560987fceb76e329d0aa7b93a8e47fa9a5b9dcdccb5ecacd899c46 (\"A restored cloud workspace re-runs the repository's setup\"), gates done item A1 and became tick i3h; tick i3h reported finding be4be4971ac851baae246bde6913cb4c4c650552f4905b85af21597c96d6fdc6 (\"Prove the restore's setup survives a real dependency install on staging\"), gates done item A2 and became tick cni; tick cni reported finding 71c6783fce9ab0f9c9eb91e98c285f638195ab6f3873222708b417aa71059e3b (\"A restore fired through the nonce path is invisible in the log\"), gates done item A2 and became tick dbi. Judge it with the epic's PR, and work it as ordinary backlog. The decision record is .ticfac/runs/epic-43y/absorptions/856a28cb7cf53213290459d6ba92624e2267a6325e76ea0f78bacb5076f59fe9.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-dbi/attempt-38",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T15:37:41Z",
+  "updated_at": "2026-10-05T15:37:41Z"
+}
