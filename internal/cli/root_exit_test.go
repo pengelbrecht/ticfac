@@ -23,6 +23,9 @@ import (
 // nil error with the code captured, so fang's error path — and the terminal
 // query inside it — never runs for it.
 func TestAPrintedExitEndsAtCobraNotFang(t *testing.T) {
+	// The refusal under test is the epic's, past the executor check: the
+	// supervisor must be findable whatever the host has installed.
+	stubSupervisorOnPath(t)
 	var stderr syncBuffer
 	root := newRootCommand(io.Discard, &stderr)
 	root.SetArgs([]string{"run-epic", "--repo", t.TempDir(), "no-such-epic"})

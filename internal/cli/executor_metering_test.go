@@ -143,6 +143,7 @@ func oneCommitRepo(t *testing.T) string {
 // short: one factory call per case over a temp HOME and a one-commit repo;
 // nothing is started.
 func TestTheFactoryHandsTheLocalSubprocessExecutorTheJoin(t *testing.T) {
+	stubSupervisorOnPath(t)
 	rc := isolateHostCredentials(t)
 	d := localMeteringDispatch(oneCommitRepo(t))
 
