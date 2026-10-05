@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 175,
-  "state": "running",
-  "reason": "x8e is closed",
-  "updated_at": "2026-10-05T11:59:16Z",
+  "sequence": 176,
+  "state": "dispatching",
+  "reason": "dispatching qdg as attempt 29",
+  "updated_at": "2026-10-05T11:59:30Z",
   "ticks": [
     {
       "tick_id": "92k",
