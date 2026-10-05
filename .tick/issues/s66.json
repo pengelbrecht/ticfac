@@ -2,6 +2,7 @@
   "id": "s66",
   "title": "Tick 4ao duplicates the fixed defect; its record should say so",
   "description": "Tick 4ao names the same under-bound dumb-git-origin test as the closed ticks 7oy/h3c, and that defect is fixed at every attempt base cut after 2405782ec (merged 2026-10-05). 4ao is still in_progress; its next attempt will find the work already in its base. The whole fix is a note on the tick's record so the run closes it against the fact rather than redispatching it blind.\nevidence: commit 2405782ec raised harness/test/node/dumb-git-origin.test.ts's first test to timeout: 300_000; the full node suite (pnpm exec vitest run -c vitest.node.config.ts) passes at base 40284aa76\n\nticfac run epic-43y filed this backlog tick from the finding 6efbd561334571a0b6df51a203da9c121f5d420af64737d25089616daf776ec2 (reported by run-epic-43y/tick-30e/attempt-63): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/6efbd561334571a0b6df51a203da9c121f5d420af64737d25089616daf776ec2.json on the run branch.",
+  "notes": "2026-10-05 23:49 - ticfac run epic-43y: created by absorbing finding 6efbd561334571a0b6df51a203da9c121f5d420af64737d25089616daf776ec2 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-43y/absorptions/6efbd561334571a0b6df51a203da9c121f5d420af64737d25089616daf776ec2.json on epic/43y, and it says: the classifier put 0.05 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-43y/tick-30e/attempt-63",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T21:49:04Z",
-  "updated_at": "2026-10-05T21:49:04Z"
+  "updated_at": "2026-10-05T21:49:10.869415Z"
 }
