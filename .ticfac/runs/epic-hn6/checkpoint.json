@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 288,
-  "state": "gating",
-  "reason": "running the integrated gate for m4t on 43d284e4fb80",
-  "updated_at": "2026-10-05T20:52:37Z",
+  "sequence": 289,
+  "state": "publishing",
+  "reason": "closing m4t behind the integrated gate on 43d284e4fb80",
+  "updated_at": "2026-10-05T20:56:28Z",
   "ticks": [
     {
       "tick_id": "v16",
