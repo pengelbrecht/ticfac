@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 292,
-  "state": "integrating",
-  "reason": "integrating 2oa attempt 43 into epic/43y",
-  "updated_at": "2026-10-05T18:33:10Z",
+  "sequence": 293,
+  "state": "gating",
+  "reason": "running the integrated gate for 2oa on 935c76b7d10d",
+  "updated_at": "2026-10-05T18:33:24Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -188,7 +188,7 @@
     },
     {
       "tick_id": "2oa",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 43
     },
     {
