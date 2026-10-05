@@ -317,7 +317,16 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// redirected invocation and run.log both carry it. Resolution happens here
 	// because the client is a constructor input; the SAY waits until the run
 	// exists, so a refusal writes no stdout of any kind.
-	classifier, classifierNote := classifierForRun()
+	//
+	// The run id the calls are TAGGED with (tick 24u) is the run's own id — the
+	// --run-id flag, else the same default reconcile.New derives — so the
+	// gateway's logs attribute the decisions river's spend to this run exactly
+	// as dm2's metering attributes the workers' calls.
+	runID := *fl.runID
+	if runID == "" {
+		runID = runIDOfEpic(epicID)
+	}
+	classifier, classifierNote := classifierForRun(runID)
 
 	if *fl.runner == "" {
 		*fl.runner = "claude"
@@ -870,10 +879,23 @@ func startupLine(runID string) string {
 // two different questions. It is a function of its own so the wiring is the
 // same under test as in production: what run-epic hands the reconciler is
 // exactly what these tests build.
-func classifierForRun() (classifier *jev.Client, note string) {
+//
+// The run id, when one is named, TAGS every call the client makes (tick 24u):
+// cf-aig-metadata, the same header the factory's proxy stamps for a cloud
+// run and dm2's metering join writes for the workers, so the gateway's logs
+// carry the run a per-run read joins this run's classifier spend by. Empty
+// stays untagged — the doctor probe and a one-off ask file their spend under
+// no run — and the startup note says the tag beside the credential, so the
+// run's own record states its spend is attributable.
+func classifierForRun(runID string) (classifier *jev.Client, note string) {
 	source := resolveClassifierCredential()
 	if !source.Configured {
 		return nil, source.Note
+	}
+	source.Config.RunID = runID
+	if source.Config.RunID != "" {
+		source.Note += "; every call is tagged run_id " + source.Config.RunID +
+			" in the gateway's logs (cf-aig-metadata), so this run's classifier spend is attributable to it"
 	}
 	return jev.New(source.Config, nil), source.Note
 }
