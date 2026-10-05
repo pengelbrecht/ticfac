@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 125,
-  "state": "publishing",
-  "reason": "closing onv behind the integrated gate on d125a3268483",
-  "updated_at": "2026-10-05T10:54:05Z",
+  "sequence": 126,
+  "state": "running",
+  "reason": "onv is closed",
+  "updated_at": "2026-10-05T10:54:07Z",
   "ticks": [
     {
       "tick_id": "v16",
