@@ -1,6 +1,8 @@
 package reconcile
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -66,5 +68,32 @@ func TestAGateDoesNotInheritTheRunsControlPlane(t *testing.T) {
 		if seen[name] == "" {
 			t.Errorf("the gate's command lost %s, which every build needs", name)
 		}
+	}
+}
+
+// TestAGateDoesNotSeeTheHostsInstalledTicfac: the operator's Mac has ticfac
+// installed beside tk and herdr in ~/.local/bin, and epic hn6's integrated
+// gate passed two tests there that GitHub CI — which installs no ticfac —
+// failed: both reached the lookup of ticfac-exec-subprocess, and the
+// installed copy answered for the tree. The gate's command must resolve none
+// of ticfac's own binaries from the host, and keep every other tool the same
+// directory holds.
+//
+// serial: t.Setenv, which a parallel test cannot call
+// short: one short-lived shell in a tempdir; no repository and no run
+func TestAGateDoesNotSeeTheHostsInstalledTicfac(t *testing.T) {
+	installed := t.TempDir()
+	for _, name := range []string{"ticfac", "ticfac-exec-subprocess", "ticfac-dash", "tk"} {
+		if err := os.WriteFile(filepath.Join(installed, name), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", installed+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	got := gateOnce(t, t.TempDir(), `for b in ticfac ticfac-exec-subprocess ticfac-dash tk; do `+
+		`if command -v "$b" >/dev/null 2>&1; then echo "$b=found"; else echo "$b=absent"; fi; done`)
+	if want := "ticfac=absent\nticfac-exec-subprocess=absent\nticfac-dash=absent\ntk=found\n"; got != want {
+		t.Errorf("the gate's command resolved\n%s\nwant\n%s(an installed ticfac must not answer for the tree "+
+			"under the gate; the directory's other tools stay)", got, want)
 	}
 }

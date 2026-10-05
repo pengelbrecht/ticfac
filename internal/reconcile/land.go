@@ -485,7 +485,9 @@ func (r *Reconciler) landedAt(baseHead, epicHead string) (string, bool) {
 // (review_rounds.go): a review whose blocking findings could be absorbed has
 // had them absorbed, fixed and the epic reviewed again, so the hold is the
 // review that is STILL NOT READY after maxReviewRounds rounds — or one that
-// named nothing the run could fix — and it names the remaining reasons.
+// named nothing the run could fix — and it names the remaining reasons. A tree
+// that changed since that review is reviewed again first (epic-hn6), so the
+// hold is a NOT READY about the tree the branch still holds.
 func (r *Reconciler) landingReviewHold(tick string) (*Refusal, error) {
 	rounds, err := r.readReviewRounds()
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -64,7 +65,55 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 // composePRBody is closeoutPRBody with one section the record does not hold
 // appended before the closing line: the readying's account of what it checked
 // the PR against (land.go). Everything else is recomposed from the record.
+//
+// The body must fit GitHub's limit on a PR body (forge.MaxBodyChars, in
+// characters): epic 43y's close-out halted on a 422 because its body carried
+// 75 findings' full text, ~58k characters on their own. So the body is
+// composed in full first and, only when that is over prBodyBudget, composed
+// again CONDENSED — first without each finding's text (each finding keeps its
+// identity line and title, which the close-out's read-back check counts on,
+// and a pointer to the record its full text lives in), then also with the
+// absorption decisions reduced to counts. The head — where to look first,
+// the epic's summary, its done, the review's verdict — is never condensed.
+// The forge fits whatever still overflows as its last resort.
 func (r *Reconciler) composePRBody(readinessSection string) (string, int, error) {
+	return condensePRBody(prBodyBudget, func(condense int) (string, int, error) {
+		return r.composePRBodyAt(readinessSection, condense)
+	})
+}
+
+// condensePRBody composes at each condensation level in turn and answers the
+// first body within budget characters — or the most condensed one, which the
+// forge fits as its last resort.
+func condensePRBody(budget int, compose func(condense int) (string, int, error)) (string, int, error) {
+	var (
+		body     string
+		findings int
+		err      error
+	)
+	for condense := 0; condense <= prBodyMostCondensed; condense++ {
+		body, findings, err = compose(condense)
+		if err != nil || utf8.RuneCountInString(body) <= budget {
+			break
+		}
+	}
+	return body, findings, err
+}
+
+// prBodyBudget is the characters the composed body aims to stay under:
+// GitHub's limit less a margin, so a resumed run's slightly longer record
+// does not cross it between two writes.
+const prBodyBudget = 60000
+
+// The condensation levels composePRBodyAt knows: 0 is the full body, 1 omits
+// each finding's text, 2 also reduces the absorption decisions to counts.
+const (
+	prBodyOmitFindingText  = 1
+	prBodyCountAbsorptions = 2
+	prBodyMostCondensed    = prBodyCountAbsorptions
+)
+
+func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (string, int, error) {
 	if _, err := r.store.Fetch(); err != nil {
 		return "", 0, fmt.Errorf("read the run state on %s: %w", r.branch, err)
 	}
@@ -145,8 +194,15 @@ func (r *Reconciler) composePRBody(readinessSection string) (string, int, error)
 		// what each tick's work discovered, beside that tick's own record,
 		// rather than one flat pile. Full text, not a count, because a link
 		// nobody opens is a finding on the floor.
-		body.WriteString("Every finding this run drafted, grouped by the tick whose attempt reported it, each with " +
-			"its own text and triage state.\n")
+		if condense >= prBodyOmitFindingText {
+			fmt.Fprintf(&body, "Every finding this run drafted, grouped by the tick whose attempt reported it, with its "+
+				"title and triage state. **Each finding's full text is omitted here** to keep this body under GitHub's "+
+				"limit on a PR body: it lives in the run's record at `.ticfac/runs/%s/findings/<key>.json` on %s, "+
+				"named by the key beside each finding.\n", r.runID, r.branch)
+		} else {
+			body.WriteString("Every finding this run drafted, grouped by the tick whose attempt reported it, each with " +
+				"its own text and triage state.\n")
+		}
 		var order []string
 		byTick := make(map[string][]runstate.Finding)
 		for _, finding := range findings {
@@ -166,7 +222,9 @@ func (r *Reconciler) composePRBody(readinessSection string) (string, int, error)
 				// is where a person decides, and a claim the decision cannot
 				// see is evidence the absorption decision does not have.
 				fmt.Fprintf(&body, "   %s\n", finding.LinkageText())
-				if finding.Body != "" {
+				if condense >= prBodyOmitFindingText {
+					fmt.Fprintf(&body, "   key %s\n", finding.Key)
+				} else if finding.Body != "" {
 					// The finding's own text, indented under its identity: "every
 					// finding's text" is the acceptance, not just every title.
 					fmt.Fprintf(&body, "\n   %s\n", strings.ReplaceAll(finding.Body, "\n", "\n   "))
@@ -222,7 +280,28 @@ func (r *Reconciler) composePRBody(readinessSection string) (string, int, error)
 		}
 	}
 	body.WriteString("\n## What this epic absorbed\n\n")
-	if len(absorptions) == 0 {
+	if len(absorptions) > 0 && condense >= prBodyCountAbsorptions {
+		var absorbed, backlogged, ruled, checked int
+		for _, record := range absorptions {
+			switch {
+			case record.Basis == runstate.AbsorptionRule:
+				ruled++
+			case record.Gating:
+				absorbed++
+			default:
+				backlogged++
+			}
+			if _, ok := scored[record.Key]; ok {
+				checked++
+			}
+		}
+		fmt.Fprintf(&body, "This run triaged %d finding(s) itself: %d absorbed into the running epic, %d promoted to "+
+			"a backlog tick with an owner, %d placed by a rule; %d prediction(s) were checked against what the done "+
+			"actually did. **The per-decision list is omitted here** to keep this body under GitHub's limit on a PR "+
+			"body: each decision, with its item, basis, answering model and score, is in the run's record at "+
+			"`.ticfac/runs/%s/absorptions/` on %s.\n",
+			len(absorptions), absorbed, backlogged, ruled, checked, r.runID, r.branch)
+	} else if len(absorptions) == 0 {
 		body.WriteString("This run decided no finding's absorption: nothing was absorbed into " +
 			"the epic, and nothing was backlogged by the run itself.\n")
 	} else {
