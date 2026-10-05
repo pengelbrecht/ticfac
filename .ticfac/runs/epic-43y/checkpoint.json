@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 390,
-  "state": "gating",
-  "reason": "running the integrated gate for rpw on 6dc8edb66b88",
-  "updated_at": "2026-10-05T21:15:47Z",
+  "sequence": 391,
+  "state": "publishing",
+  "reason": "closing rpw behind the integrated gate on 6dc8edb66b88",
+  "updated_at": "2026-10-05T21:19:25Z",
   "ticks": [
     {
       "tick_id": "92k",
