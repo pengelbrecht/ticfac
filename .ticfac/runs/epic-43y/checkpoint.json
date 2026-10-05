@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 181,
-  "state": "publishing",
-  "reason": "closing 7wg behind the integrated gate on 77a8197e0097",
-  "updated_at": "2026-10-05T12:30:58Z",
+  "sequence": 182,
+  "state": "running",
+  "reason": "7wg is closed",
+  "updated_at": "2026-10-05T12:31:15Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -127,7 +127,7 @@
     },
     {
       "tick_id": "7wg",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 27
     },
     {
