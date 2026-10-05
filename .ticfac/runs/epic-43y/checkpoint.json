@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 176,
-  "state": "dispatching",
-  "reason": "dispatching qdg as attempt 29",
-  "updated_at": "2026-10-05T11:59:30Z",
+  "sequence": 177,
+  "state": "running",
+  "reason": "qdg is running as attempt 29",
+  "updated_at": "2026-10-05T11:59:42Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -137,7 +137,8 @@
     },
     {
       "tick_id": "qdg",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 29
     },
     {
       "tick_id": "uxi",
