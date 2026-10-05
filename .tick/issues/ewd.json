@@ -1,0 +1,14 @@
+{
+  "id": "ewd",
+  "title": "A2's 'proven in a real run' has no evidence for either fault",
+  "description": "The local real-run record explicitly disclaims the mid-tool kill and container-loss proofs, and the post-merge cloud runbook (kkt) scores only A4. Nothing records a harness kill or a container loss inside a real epic run. Either inject a local harness kill mid-tool during a real local run, or extend docs/pi-durable-cloud-run-runbook.md so the post-merge cloud run observes and records A2's real-run half. Otherwise the close-out should score A2's real-run clause as predicted.\nevidence: docs/pi-durable-local-epic-run-2026-10-05.md 'Does not claim'; docs/pi-durable-cloud-run-runbook.md (A4 only)\n\nticfac run epic-43y created this tick by absorbing the finding d51e077ecdbd1a3579a2a96465d3d7d31f001771f5976254253a4754929f9a9e (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/d51e077ecdbd1a3579a2a96465d3d7d31f001771f5976254253a4754929f9a9e.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-66a/attempt-42",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T18:01:46Z",
+  "updated_at": "2026-10-05T18:01:46Z"
+}
