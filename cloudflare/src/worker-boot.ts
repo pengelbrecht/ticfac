@@ -504,6 +504,22 @@ export function workerHarness(run?: string | null, deployment?: string | null): 
 export const REVIEW_DEFAULT_HARNESS = "omp";
 
 /**
+ * The harness kinds this factory's image ships — the whole set a worker or
+ * orchestrator container can be told to run, exactly as `image/common.sh`'s
+ * `require_common_inputs` accepts it and nothing else. The Worker and the
+ * image deploy together (one deploy-factory run builds both), so stating
+ * the set here is stating the image's own answer, and the deployment route
+ * serves it as `harness_kinds` (epic 43y, tick kkt) so a submission can be
+ * refused at the operator's knee — `ticfac run <epic> --cloud`'s harness
+ * preflight — rather than as a wave of containers each dying at boot with
+ * `unknown harness kind` (tick twa's finding).
+ *
+ * A Go parity test (internal/factory) pins this list to the case line in
+ * `image/common.sh`; the two cannot drift silently.
+ */
+export const IMAGE_HARNESS_KINDS = ["omp", "claude", "pi-durable"] as const;
+
+/**
  * The harness names no review container can run: the hosted kind, whose
  * conversation is a WorkerAgent's and never a CLI in the container, and the
  * deleted pi CLI. Both still reach the review's ladder — the run's profile

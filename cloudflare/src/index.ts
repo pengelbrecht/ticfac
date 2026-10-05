@@ -176,6 +176,7 @@ import {
 } from "./telegram";
 import { WEBHOOK_SOURCE_PREFIX, webhookSourceRoute } from "./webhook-sources";
 import { WorkerAgent, workerAgentsFromEnv } from "./worker-agent";
+import { IMAGE_HARNESS_KINDS } from "./worker-boot";
 
 /** Bindings from wrangler.toml; declared in src/env.d.ts. */
 export type Env = Cloudflare.Env;
@@ -237,6 +238,13 @@ async function deploymentRoute(env: Env): Promise<Response> {
     deployed_at: record?.deployed_at ?? null,
     image_ref: image?.image_ref ?? null,
     image_digest: image?.image_digest ?? null,
+    // The harness kinds this deployment's image ships (worker-boot.ts's
+    // IMAGE_HARNESS_KINDS, pinned to image/common.sh's kind case): what a
+    // submission may route a container to, so `ticfac run <epic> --cloud`'s
+    // preflight can refuse a repo whose .tick/runners.cloud.toml names a
+    // kind every container would die on (tick kkt) — at the operator's
+    // knee, before anything is pushed or booted.
+    harness_kinds: IMAGE_HARNESS_KINDS,
     worker_version_id: version?.id || null,
     worker_version_timestamp: version?.timestamp || null,
   });
