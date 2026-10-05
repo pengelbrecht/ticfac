@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 56,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "restoreWorkspace treats any non-zero exit of 'git fetch origin $BRANCH' as 'the branch does not exist yet' and restores at the base. That includes a forge 5xx, a network blip or a token-door hiccup. The next round's pushWipCheckpoint does 'git push -f' to the attempt branch, overwriting every earlier wip snapshot and the agent's commits. A transient failure during a restore therefore silently loses the attempt's work. Distinguish a missing ref (git ls-remote) from a failed fetch, and fail the restore on the latter.\nevidence: harness/src/workspace/checkpoints.ts:383-388 (fallback), :237 (git push -f)\n\nticfac run epic-43y created this tick by absorbing the finding cf11b75c1682797a971fe07d33bc445ef16a7d9702fec9dac3e0d36a6a76f9b1 (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/cf11b75c1682797a971fe07d33bc445ef16a7d9702fec9dac3e0d36a6a76f9b1.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "i5e",
+    "title": "Restore falls back to base on any branch-fetch failure, then force-push wipes it"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.54,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.3,
+      "design": 0.02,
+      "diagnosis": 0.03,
+      "mechanical": 0.64,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1369,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T18:36:03Z",
+  "answered_at": "2026-10-05T18:36:03Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "i5e",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "d1f2caf100daccbfd699bb320043681ad639c780",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
