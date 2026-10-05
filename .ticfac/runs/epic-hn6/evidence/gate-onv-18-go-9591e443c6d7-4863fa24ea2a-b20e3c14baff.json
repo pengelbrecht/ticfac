@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-onv-18-go-9591e443c6d7-4863fa24ea2a-b20e3c14baff",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "onv",
+    "attempt": 18,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "d125a326848311f68abb6f8e467371127c4372fa",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:4863fa24ea2a0a6bf379e6f9bf234b6d931e19998ea12f23a15da4314eb3ea94",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-10-05T10:52:07Z",
+  "finished_at": "2026-10-05T10:53:54Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/benchmarks/classifiers\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/acceptance\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/ciwatchdog\t0.857s\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t93.191s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t1.927s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t1.744s\nok  \tgithub.com/pengelbrecht/ticfac/internal/escalation\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox\t29.940s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t1.163s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t99.127s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t36.114s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t0.588s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t1.425s\nok  \tgithub.com/pengelbrecht/ticfac/internal/feedrelay\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gating\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t1.896s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/httpnet\t1.802s\nok  \tgithub.com/pengelbrecht/ticfac/internal/jev\t1.777s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t3.792s\nok  \tgithub.com/pengelbrecht/ticfac/internal/reconcile\t32.359s\nok  \tgithub.com/pengelbrecht/ticfac/internal/release\t10.030s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t10.385s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runenv\t1.889s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t2.388s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runregistry\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runregistry/registrytest\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runsignal\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t4.263s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandbox\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboximage\t13.635s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/shorttest\t0.634s\n?   \tgithub.com/pengelbrecht/ticfac/internal/skills\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/statusmodel\t6.969s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tempdir\t(cached)\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t(cached)\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:a22d800bfbe63992aa8b1e6e6a9db29d4d28e71aa6cc23fdc52bc683ed80f07c",
+  "persistence_uri": "git:refs/heads/epic/hn6:.ticfac/runs/epic-hn6/evidence/gate-onv-18-go-9591e443c6d7-4863fa24ea2a-b20e3c14baff.json"
+}
