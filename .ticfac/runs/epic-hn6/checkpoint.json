@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 171,
-  "state": "running",
-  "reason": "g94 is running as attempt 27",
-  "updated_at": "2026-10-05T14:03:21Z",
+  "sequence": 172,
+  "state": "collecting",
+  "reason": "collecting 3yx attempt 24",
+  "updated_at": "2026-10-05T14:03:34Z",
   "ticks": [
     {
       "tick_id": "v16",
