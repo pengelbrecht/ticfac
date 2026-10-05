@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 202,
-  "state": "running",
-  "reason": "CI is green on the epic PR #219; the close-out of hn6 is admitted",
-  "updated_at": "2026-10-05T15:13:50Z",
+  "sequence": 203,
+  "state": "dispatching",
+  "reason": "dispatching qjl as attempt 29",
+  "updated_at": "2026-10-05T15:13:54Z",
   "ticks": [
     {
       "tick_id": "v16",
