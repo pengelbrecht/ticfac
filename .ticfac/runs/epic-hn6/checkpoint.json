@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 277,
-  "state": "publishing",
-  "reason": "closing 648 behind the integrated gate on 38f83ac8d2dd",
-  "updated_at": "2026-10-05T20:32:20Z",
+  "sequence": 278,
+  "state": "running",
+  "reason": "648 is closed",
+  "updated_at": "2026-10-05T20:32:23Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -189,7 +189,7 @@
     },
     {
       "tick_id": "648",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 39
     },
     {
