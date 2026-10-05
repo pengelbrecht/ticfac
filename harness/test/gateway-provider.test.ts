@@ -173,7 +173,16 @@ async function openHarness(gateway: ReturnType<typeof fakeGateway>, onEcho?: () 
 }
 
 describe("the Workers AI gateway provider", () => {
-  it("sends every request to the run's gateway route with the run token, and nothing that claims attribution", async () => {
+  // Tick hv3: the only test in this file that opens the full Harness, and
+  // the one that failed once in a full `pnpm test` on the loaded host,
+  // passing on re-run. Its wall clock grows with pool contention — the
+  // workerd pool runs its files beside each other, and synthetic load 200
+  // measured it at 15.6s against ~1s quiet — so it may not borrow the
+  // quiet-host 30s default: it states its own 120s bound (the kjs rule
+  // the node suite already enforces for its full-Harness tests).
+  it("sends every request to the run's gateway route with the run token, and nothing that claims attribution", {
+    timeout: 120_000,
+  }, async () => {
     const gateway = fakeGateway([{ tool: "echo", args: { text: "heard" } }, { text: "done" }]);
     const { harness, root, context } = await openHarness(gateway);
 

@@ -80,6 +80,8 @@ type Fixture = {
     env?: Record<string, string>,
     message?: string,
   ) => RunChild;
+  /** Every child `run` spawned, so afterEach can reap one still alive. */
+  readonly children: RunChild[];
 };
 
 /** A real repository, a real origin, a real worktree — the attempt's shape. */
@@ -136,6 +138,8 @@ function makeFixture(): Fixture {
     return merged;
   };
   let transcriptN = 0;
+  /** The children this fixture spawned, for afterEach to reap. */
+  const children: RunChild[] = [];
   const transcript = (turns: unknown[]): string => {
     // A distinct file per script: the faux provider is stateless per
     // process, so a two-process test (the resume below) hands each process
@@ -161,14 +165,25 @@ function makeFixture(): Fixture {
         "--message",
         message,
       ],
-      { cwd: root, env: { ...process.env, ...(env ?? {}) }, stdio: ["ignore", "pipe", "pipe"] },
+      // Detached, in its own process group: a failed test's child is reaped
+      // by afterEach's group kill — SIGKILL to the group takes the child AND
+      // the bash its env spawned (the gate a failed watcher test leaves
+      // behind must not outlive the suite on a shared host).
+      {
+        cwd: root,
+        env: { ...process.env, ...(env ?? {}) },
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
     );
     let said = "";
     child.stdout.on("data", (c: Buffer) => (said += c.toString("utf8")));
     child.stderr.on("data", (c: Buffer) => (said += c.toString("utf8")));
-    return Object.assign(child, { output: () => said }) as unknown as RunChild;
+    const run = Object.assign(child, { output: () => said }) as unknown as RunChild;
+    children.push(run);
+    return run;
   };
-  return { root, origin, worktree, configPath, config, transcript, run };
+  return { root, origin, worktree, configPath, config, transcript, run, children };
 }
 
 /**
@@ -227,6 +242,20 @@ describe("the local worker host", () => {
     f = makeFixture();
   }, 120_000);
   afterEach(() => {
+    // A test that failed before its child settled leaves the child (and a
+    // gated bash round it is holding) still running: the fixture's root is
+    // about to vanish under it, so the child is reaped first, by its own
+    // process group — the same shape the workspace-checkpoints suite's
+    // afterEach uses for its door's detached processes.
+    for (const child of f.children) {
+      if (child.exitCode === null && child.signalCode === null && child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {
+          /* already gone */
+        }
+      }
+    }
     rmSync(f.root, { recursive: true, force: true });
   }, 120_000);
 
@@ -367,17 +396,42 @@ describe("the local worker host", () => {
   });
 
   it("serves the live conversation to a watcher, and a steer round-trips through what it watches", {
+<<<<<<< HEAD
     timeout: 300_000,
+=======
+    timeout: 120_000,
+>>>>>>> 575b133ca4b75e6ae0e17c3563bb3e1313fed7e8
   }, async () => {
     // Tick y03: `ticfac watch <run> <tick>` reads a local worker through
     // the same door the stuck nudge steers through. The watcher sees the
     // snapshot, then every commit — thinking, tool calls, live tool output,
     // tool results — and the steer it sends lands in the stream it reads.
+    //
+    // Tick hv3: the bash round waits on a file the TEST writes, not on a
+    // wall-clock `sleep 2` window. A watcher on a loaded host starves at
+    // the attach moment (this failed once on the loaded host, passing on
+    // re-run): the whole ungated run was ~2.5s, and a watcher delayed past
+    // the tool's window met a conversation that was already over. The run
+    // now holds still for the watcher — see the delayed-attach sibling
+    // below, which is that failure made a deterministic regression test.
+    // The gate is capped at its own 120s (600 × 0.2s): a test that died
+    // before releasing it leaves a child that still ends on its own, and
+    // afterEach reaps it by process group regardless.
+    // This test still states its own wall clock (120s, the kjs rule): its
+    // runtime is the whole child boot, the rounds and the finish phase,
+    // which grows with host load — 21s measured at synthetic load 200
+    // against the quiet-host 30s default.
     const transcript = f.transcript([
       {
         thinking: "The tick wants a step file; a bash round writes it.",
         toolCalls: [
-          { name: "bash", args: { command: "echo working; sleep 2; echo stepped > step.txt" } },
+          {
+            name: "bash",
+            args: {
+              command:
+                'echo working; n=0; until [ -e proceed.txt ] || [ "$n" -ge 600 ]; do sleep 0.2; n=$((n+1)); done; echo stepped > step.txt',
+            },
+          },
         ],
       },
       {
@@ -418,6 +472,9 @@ describe("the local worker host", () => {
     // The operator's steer — what `ticfac steer` sends — while the tool runs.
     const reply = await steerOnce(config.steerSock, "Write the report next.", "operator-steer-1");
     expect(reply).toEqual({ ok: true, requestId: "operator-steer-1" });
+
+    // The steer is placed mid-tool; the gated round may finish now.
+    writeFileSync(join(config.worktree, "proceed.txt"), "");
 
     expect(await exitOf(child)).toBe(0);
     const end = await watch.ended;
@@ -472,9 +529,120 @@ describe("the local worker host", () => {
     }
   });
 
+<<<<<<< HEAD
   it("refuses a request that is neither a steer nor a watch, by name", {
     timeout: 300_000,
   }, async () => {
+=======
+  it("meets the live conversation when the watcher attaches late, whatever the host load", {
+    timeout: 120_000,
+  }, async () => {
+    // Tick hv3: the reproduced flake, made a permanent regression test.
+    // The full `pnpm test` runs failed this file's watcher test once on a
+    // loaded host, passing on re-run: the whole worker child runs ~2.5s of
+    // wall clock while the test process starves at the attach moment, and a
+    // watcher delayed past the tool's `sleep 2` window met a conversation
+    // that was already over — the socket ENOENT, the test failed on the
+    // host's timing, not the tree's. The tool round below therefore waits
+    // on a file THIS test writes — capped at its own 120s, so a test that
+    // died before releasing it leaves a child that still ends on its own —
+    // so the run holds still for the watcher: there is no window to miss,
+    // and the 3s delayed attach this test makes is exactly the
+    // starved-watcher case that failed — now deterministic.
+    const transcript = f.transcript([
+      {
+        thinking: "The tick wants a step file; a bash round writes it.",
+        toolCalls: [
+          {
+            name: "bash",
+            args: {
+              command:
+                'echo working; n=0; until [ -e proceed.txt ] || [ "$n" -ge 600 ]; do sleep 0.2; n=$((n+1)); done; echo stepped > step.txt',
+            },
+          },
+        ],
+      },
+      {
+        thinking: "The steer asked for a report; write it.",
+        toolCalls: [
+          {
+            name: "write",
+            args: {
+              path: "RESULT-hpk.md",
+              content: "# hpk\n\nlate watcher\n\nSTATUS: DONE\n",
+            },
+          },
+        ],
+      },
+      { thinking: "Both rounds landed.", text: "watched late" },
+    ]);
+    const config = f.config({ fauxTranscript: transcript });
+    const child = f.run({ fauxTranscript: transcript });
+    await waitFor("the steer socket to listen", () => existsSync(config.steerSock));
+    // A loaded host's starved watcher process: 3s late at the attach, later
+    // than the whole ungated run ever took. The gated tool round makes that
+    // safe — the conversation is still live, still mid-tool.
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    const frames: WatchFrame[] = [];
+    const lines = (): unknown[] =>
+      frames.flatMap((frame) => (frame.type === "events" ? frame.events : []));
+    const watch = watchOnce(config.steerSock, (frame) => frames.push(frame));
+    const typed = (type: string) =>
+      lines().filter((event) => (event as { type?: string }).type === type) as Record<
+        string,
+        unknown
+      >[];
+    const bashSeen = (): boolean =>
+      typed("tool_execution_start").some((e) => e.toolName === "bash") ||
+      typed("snapshot").some((e) =>
+        (e.tools as { name: string; status: string }[]).some(
+          (slot) => slot.name === "bash" && slot.status === "running",
+        ),
+      );
+    await waitFor("the bash tool to run, seen through the late watch", bashSeen);
+
+    const reply = await steerOnce(config.steerSock, "Write the report next.", "late-watcher-1");
+    expect(reply).toEqual({ ok: true, requestId: "late-watcher-1" });
+
+    // The steer is placed; the tool round may finish now.
+    writeFileSync(join(config.worktree, "proceed.txt"), "");
+    expect(await exitOf(child)).toBe(0);
+    const end = await watch.ended;
+    expect(end).toEqual({ type: "end", reason: "the worker process is exiting" });
+
+    // What the late watcher saw: the bash round live (its start event when it
+    // started after the attach, its running slot when it started before),
+    // its output, and the steer landing after the bash result.
+    expect(bashSeen()).toBe(true);
+    const output = [
+      ...typed("snapshot").flatMap((e) => (e.tools as { output?: string }[]).map((t) => t.output)),
+      ...typed("tool_execution_update").map((e) => JSON.stringify(e.output ?? {})),
+    ].join("");
+    expect(output).toContain("working");
+    type Entry = { id: number; model?: Message[] };
+    const seen = new Set<number>();
+    const settled: Message[] = [];
+    for (const entry of [
+      ...typed("snapshot").flatMap((e) => e.entries as Entry[]),
+      ...typed("message_end").map((e) => e.entry as Entry),
+    ]) {
+      const message = entry.model?.[0];
+      if (seen.has(entry.id) || message === undefined || message.role === "system") continue;
+      seen.add(entry.id);
+      settled.push(message);
+    }
+    const steerAt = settled.findIndex(
+      (m) => m.role === "user" && textOf(m).includes("Write the report next."),
+    );
+    const bashResultAt = settled.findIndex((m) => m.role === "toolResult" && m.toolName === "bash");
+    expect(steerAt).toBeGreaterThan(-1);
+    expect(steerAt).toBeGreaterThan(bashResultAt);
+    expect(textOf(settled.at(-1) as Message)).toBe("watched late");
+  });
+
+  it("refuses a request that is neither a steer nor a watch, by name", async () => {
+>>>>>>> 575b133ca4b75e6ae0e17c3563bb3e1313fed7e8
     const transcript = f.transcript([
       {
         toolCalls: [
