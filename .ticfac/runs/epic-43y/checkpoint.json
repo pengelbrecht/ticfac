@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 145,
-  "state": "gating",
-  "reason": "running the integrated gate for nou on 13b0711c7269",
-  "updated_at": "2026-10-05T11:06:39Z",
+  "sequence": 146,
+  "state": "publishing",
+  "reason": "closing nou behind the integrated gate on 13b0711c7269",
+  "updated_at": "2026-10-05T11:09:24Z",
   "ticks": [
     {
       "tick_id": "92k",
