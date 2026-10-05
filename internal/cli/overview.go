@@ -488,8 +488,8 @@ func cloudCheapEntry(record cloudRunRecord, ours bool) overviewRun {
 // make it history.
 func localCheapEntry(workingRepo, runID string, probe runlife.Status, registeredAt string) overviewRun {
 	entry := overviewRun{
-		RunID:       runID,
-		Host:        statusmodel.HostLocal,
+		RunID: runID,
+		Host:  statusmodel.HostLocal,
 		// The cheap row's epic is the id's own shape when it names one,
 		// else the run's checkpoint on the epic branches the repo holds
 		// (tick mwt): the history rules read this row BEFORE any full
@@ -828,32 +828,53 @@ func overviewIdentityStyles() watchStyles {
 // lists them, printed exactly as they ever were; with all, they are listed
 // after the rest, each saying why it is history, still one line each.
 // boundOverviewRow bounds one row's first line to the width the screen
-// names (tick mwt). The row's head — the id, the state word and the run's
-// own reason — is the part the bound may cut, cut with an ellipsis at the
-// width: the reason is the run's sentence, and the full sentence stands in
-// the model and in the watch; the bound is the glance's, not the record's.
-// The trailing group — the clearing command, the history reason — is the
-// part a person acts on and is never cut: it seats on the same line when
-// the head leaves it room, and wraps under the row, hanging-indented two
-// spaces like every wrapped line the dashboard renders (tick 9um's rule:
-// a command a person cannot read whole is no command), when it does not.
-// A width the screen does not name (zero or less) bounds nothing: one
-// line, everything, as before.
-func boundOverviewRow(head, suffix string, width int) (string, []string) {
-	if width <= 0 || ansi.StringWidth(head+suffix) <= width {
-		return head + suffix, nil
+// names (tick mwt). What the bound protects, in order: the row's identity —
+// the run id and the state word, the address a person acts on — is never
+// cut; the trailing group — the clearing command, the history reason —
+// rides the first line, because the row is where a person reads what to
+// do (tick 3rc's rule: the row names the command the headline names
+// again); and the run's own reason is the one part the bound cuts, cut
+// with an ellipsis — the reason is drill-in material, and the full
+// sentence stands in the model, in the watch and in the headline under
+// the row. When even the identity cannot seat beside the trailing group,
+// a history reason cuts like any reason — and a clearing command never
+// does: it wraps whole under the row, hanging-indented two spaces like
+// every wrapped line the dashboard renders (tick 9um's rule: a command a
+// person cannot read whole is no command). A width the screen does not
+// name (zero or less) bounds nothing: one line, everything, as before.
+func boundOverviewRow(identity, reason, suffix string, cutSuffix bool, width int) []string {
+	reasonPart := ""
+	if reason != "" {
+		reasonPart = " — " + reason
 	}
-	if suffix != "" {
-		if room := width - ansi.StringWidth(suffix); room >= 4 {
-			// Four cells is the least the row's own identity can be cut to
-			// and still say which run it names; below that the trailing
-			// group wraps under a head bounded to the whole width instead.
-			return ansi.Truncate(head, room, "…") + suffix, nil
+	full := identity + reasonPart + suffix
+	if width <= 0 || ansi.StringWidth(full) <= width {
+		return []string{full}
+	}
+	if ansi.StringWidth(identity) <= width-ansi.StringWidth(suffix) {
+		// The identity and the trailing group seat together; the reason
+		// takes what room is left, cut at the width.
+		if room := width - ansi.StringWidth(identity+suffix) - 3; reason != "" && room >= 4 {
+			// Four cells is the least a cut reason can say and still be a
+			// reason at all; less than that and it stays off the line.
+			return []string{identity + " — " + ansi.Truncate(reason, room, "…") + suffix}
 		}
-		wrapped := dashWrapWords(strings.TrimPrefix(suffix, " — "), dashHoldIndent, width)
-		return ansi.Truncate(head, width, "…"), wrapped
+		return []string{identity + suffix}
 	}
-	return ansi.Truncate(head, width, "…"), nil
+	if cutSuffix {
+		return []string{ansi.Truncate(identity+suffix, width, "…")}
+	}
+	// The clearing command never cuts: the row keeps its identity and as
+	// much of its reason as seats, and the command wraps whole under it.
+	first := identity + reasonPart
+	if ansi.StringWidth(first) > width {
+		first = ansi.Truncate(first, width, "…")
+	}
+	if suffix == "" {
+		return []string{first}
+	}
+	return append([]string{first},
+		dashWrapWords(strings.TrimPrefix(suffix, " — "), dashHoldIndent, width)...)
 }
 
 func renderOverview(stdout io.Writer, doc overviewModel, cloudNote string, all bool) {
@@ -879,13 +900,12 @@ func renderOverview(stdout io.Writer, doc overviewModel, cloudNote string, all b
 			continue
 		}
 		head := fmt.Sprintf("%s: %s", run.RunID, overviewStateWord(run.State))
-		if run.Reason != "" {
-			head += fmt.Sprintf(" — %s", run.Reason)
-		}
 		suffix := ""
+		cutSuffix := false
 		switch {
 		case run.History:
 			suffix = fmt.Sprintf(" — history: %s", run.HistoryReason)
+			cutSuffix = true // the history reason is a reason: it may cut
 		case run.ClearWith != nil && *run.ClearWith != "":
 			// A clearing command that carries its operands — the builders
 			// refuse one that cannot (tick mwt), and an empty pointer is
@@ -895,10 +915,8 @@ func renderOverview(stdout io.Writer, doc overviewModel, cloudNote string, all b
 		// The row's first line is bounded to the width (tick mwt): the
 		// run's own last word can run to thousands of characters, and
 		// unbounded it buries every other row.
-		line, wrapped := boundOverviewRow(head, suffix, width)
-		fmt.Fprintln(stdout, line)
-		for _, continuation := range wrapped {
-			fmt.Fprintln(stdout, continuation)
+		for _, line := range boundOverviewRow(head, run.Reason, suffix, cutSuffix, width) {
+			fmt.Fprintln(stdout, line)
 		}
 		if !run.History && !run.provisional {
 			// The run's own headline under it (epic hn6, deliverable (c)):

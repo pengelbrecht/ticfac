@@ -384,9 +384,9 @@ func TestTheOverviewBoundsEveryRowToTheWidth(t *testing.T) {
 	command := "ticfac run-epic " + mwtEpic
 	longReason := strings.Repeat("the integrated gate refused attempt 3 of t2: go test failed because the short suite is long; ", 20)
 	doc := overviewModel{Runs: []overviewRun{{
-		RunID: mwtEarlierRunID,
-		Host:  statusmodel.HostLocal,
-		State: overviewStateFailed,
+		RunID:  mwtEarlierRunID,
+		Host:   statusmodel.HostLocal,
+		State:  overviewStateFailed,
 		Reason: "failed: " + longReason,
 		ClearWith: func() *string {
 			c := command
@@ -426,4 +426,11 @@ func TestTheOverviewBoundsEveryRowToTheWidth(t *testing.T) {
 	buf.Reset()
 	renderOverview(&buf, doc, "", false)
 	check(t, buf.String(), 120)
+
+	// A narrow terminal — 40 columns: the command cannot seat beside the
+	// row's identity, so it wraps whole under the row, never cut.
+	watchTerminalSize = func(io.Writer) (int, int, bool) { return 40, 24, true }
+	buf.Reset()
+	renderOverview(&buf, doc, "", false)
+	check(t, buf.String(), 40)
 }
