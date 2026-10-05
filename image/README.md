@@ -395,7 +395,7 @@ the toolchain set below changes.
 |---|---|
 | Runtimes | Go, Node (+ pnpm via corepack), Bun, Python (+ uv) |
 | Tools | git, ripgrep, jq, curl, unzip, a C toolchain (`build-essential`) |
-| Harnesses | `pi` (default kind), `omp`, `claude` |
+| Harnesses | `omp` (default kind), `claude` — plus the hosted `pi-durable` kind for worker attempts, which runs no CLI in the container (the pi CLI is deleted, epic 43y tick jhp) |
 | Tracker | `tk`, with the ticks skill installed into `/root/.claude/skills/ticks` |
 | Escape hatch | `mise`, for a repository whose toolchain is outside the set |
 
@@ -501,7 +501,7 @@ starts a command in a sandbox.
 | `TICKS_EPIC` | yes | Epic the skill loop runs. |
 | `AI_GATEWAY_BASE_URL` | yes | The gateway every model call goes through — the factory's own `/api/gateway` prefix in a cloud run, or an AI Gateway base URL directly when you are driving the image by hand. Never a vendor host. |
 | `AI_GATEWAY_TOKEN` | yes | The run's gateway credential (D17). It is the ONLY model credential in the container, and it is what every vendor key variable is set to. |
-| `TICKS_HARNESS` | no | `pi` (default), `omp` or `claude`. The factory always sets it, so the default is a last resort only; it is `pi` because the cloud runs pi on GLM. |
+| `TICKS_HARNESS` | no | `omp` (default), `claude`, or `pi-durable` — the HOSTED kind: a worker dispatched on it runs only the `--boot`/`--finish` halves here while its conversation runs in the factory's WorkerAgent, so no CLI harness is routed or probed. The factory always sets it, so the default is a last resort only. The pi CLI is deleted from the image (epic 43y, tick jhp). |
 | `TICKS_MODEL` | no | The model the harness runs on. When unset, the entrypoint asks the checkout (`ticfac sandbox model`); when nothing routes one, the boot is refused with exit 7 rather than started. |
 | `TICKS_MODEL_PROBE_TIMEOUT` | no | Seconds the one-token gateway probe may take (default 30). |
 | `TICKS_MODEL_PROBE_TRIES` | no | How many times the gateway probe is asked in all when it gets no usable answer — none at all, or a transient 408/429/502/504/52x (default 4, about three minutes with the backoff). Still silent after the last try is exit 14. A refusal the gateway answered is never retried. |
@@ -670,7 +670,9 @@ model resolved, **model probe green** — and then died at start with
 `error: No API key found for cloudflare-ai-gateway`.
 
 So the wiring is a table, per kind. Adding a kind is an edit to this table and
-to `select_harness_route` in `entrypoint.sh`, not a rediscovery:
+to `select_harness_route` in `common.sh`, not a rediscovery (`pi-durable` is
+absent because it is hosted, not a CLI this container runs — see its own
+section below):
 
 | Kind | Gateway route | What the kind calls that provider | Credential variable | Wire shape |
 |---|---|---|---|---|
@@ -679,10 +681,6 @@ to `select_harness_route` in `entrypoint.sh`, not a rediscovery:
 | `omp` | `openai` | `openai` | `OPENAI_API_KEY` | `openai-completions` |
 | `omp` | `openrouter` | `openrouter` | `OPENROUTER_API_KEY` | `openai-completions` |
 | `omp` | `workers-ai` | `cloudflare-ai-gateway` | `CLOUDFLARE_AI_GATEWAY_API_KEY` | `openai-completions` |
-| `pi` | `anthropic` | `anthropic` | `ANTHROPIC_API_KEY` | `anthropic-messages` |
-| `pi` | `openai` | `openai` | `OPENAI_API_KEY` | `openai-completions` |
-| `pi` | `openrouter` | `openrouter` | `OPENROUTER_API_KEY` | `openai-completions` |
-| `pi` | `workers-ai` | `cloudflare-workers-ai` | `CLOUDFLARE_API_KEY` | `openai-completions` |
 
 The credential is only half of it. omp's built-in `cloudflare-ai-gateway`
 provider carries a **placeholder** base URL
@@ -714,57 +712,28 @@ The model flag is provider-qualified for the same reason
 own catalog and may land on a provider nothing here authorised — which is the
 other half of the failure above.
 
-### pi
+### pi-durable — the hosted kind
 
-pi resolves providers by name the same way, but calls Workers AI by its own
-built-in provider, `cloudflare-workers-ai`, whose URL points straight at
-`api.cloudflare.com` with a `{CLOUDFLARE_ACCOUNT_ID}` slot in the path. The
-entrypoint OVERRIDES that built-in in pi's `models.json` (in
-`$PI_CODING_AGENT_DIR`, default `~/.pi/agent`) rather than defining a new
-provider:
+`pi-durable` is not a CLI in this container and never was one here: it names a
+HOSTED worker attempt (epic 43y, tick jhp). A container told `pi-durable` runs
+only the `--boot` and `--finish` halves of the worker contract — the clone,
+the branch, the prompt handoff, then the boundary sweep, the report, the
+commit and the push — while the CONVERSATION runs in the factory's
+WorkerAgent Durable Object, its tools reaching this container through the
+run door. So `boot_phase` skips the three CLI-harness steps for it (there is
+no provider to configure, no CLI to probe), the all-in-one path refuses it
+loudly, and the orchestrator and review boots refuse it too — those exec a
+CLI harness (`omp`, `claude`) or `ticfac` itself.
 
-```json
-{
-  "providers": {
-    "cloudflare-workers-ai": {
-      "baseUrl": "<gateway>/workers-ai/v1",
-      "api": "openai-completions",
-      "apiKey": "$CLOUDFLARE_API_KEY"
-    }
-  }
-}
-```
-
-There is deliberately no `models` array: pi's merge keeps every built-in model
-of an overridden provider, so the model keeps its catalog entry (context
-window, reasoning) and only the address and credential become the run's.
-`"$CLOUDFLARE_API_KEY"` is pi's environment interpolation, so the token stays
-out of the filesystem, as with omp.
-
-Two things pi needs that are not obvious. Its Workers AI auth counts the
-provider as configured only when `CLOUDFLARE_ACCOUNT_ID` is set as well as the
-key, and refuses with `Provider is not configured: cloudflare-workers-ai`
-otherwise, even with the URL overridden; the entrypoint exports a placeholder,
-which is never sent because the gateway URL has no account slot. And the
-model's pi spelling, `cloudflare-workers-ai/@cf/…`, is accepted by the model
-router as an alias of `workers-ai/…`, so a repository whose `[roles.*]` are
-written for pi runs unchanged in a container.
-
-For a model whose catalog entry the upstream refuses, the file also carries a
-`modelOverrides` entry, which pi merges onto the built-in one field by field.
-Today that is GLM 5.3 and GLM 5.3 Flash: pi's catalog gives them `maxTokens`
-1310720, pi asks for nearly all of it, and Workers AI answers HTTP 400
-("supports at most 1048576 completion tokens") — on which `pi -p` prints
-nothing and exits 0. The first pi boot in a real container died on exactly that
-at the harness probe. They get `maxTokens: 65536` and `thinkingFormat:
-"deepseek"`, the values the operator's own pi config runs them with. It is a
-table in `pi_model_overrides`, not a blanket cap, because raising the limit for
-a model whose real one is lower would create the same failure for it.
-
-Verified against a recording stand-in for the gateway: pi 0.85.1 with this
-file sent `POST <gateway>/workers-ai/v1/chat/completions`, `Authorization:
-Bearer <run token>`, `model: @cf/zai-org/glm-5.3`, streaming, and parsed the
-answer.
+The pi CLI that used to sit here — its own provider override in
+`~/.pi/agent/models.json`, the `CLOUDFLARE_ACCOUNT_ID` placeholder, and the
+GLM `modelOverrides` (maxTokens 65536, thinkingFormat "deepseek") — is
+deleted with the CLI. The durable harness's own gateway provider
+(`harness/src/gateway/workers-ai.ts`) owns those corrections now, and the
+model spelling it made normal, `cloudflare-workers-ai/@cf/…`, is still
+accepted by the model router as an alias of `workers-ai/…` — a repository
+whose `[roles.*]` use it runs unchanged in a container on the harnesses that
+remain.
 
 ### Does the harness execute tools, or narrate them?
 

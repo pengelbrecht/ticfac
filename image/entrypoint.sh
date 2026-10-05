@@ -604,12 +604,12 @@ start_harness() {
 		cmd=(omp -p "$prompt" --auto-approve --mode text --model "$harness_model_selector")
 		[[ -z $max_time ]] || cmd+=(--max-time "$max_time")
 		;;
-	pi)
-		# --approve is pi's whole full-auto story: it has no permission gate,
-		# only a trust prompt for project-local files, and this checkout is a
-		# path pi has never seen. pi has no --max-time; the container's own
-		# harness bound is what stops it.
-		cmd=(pi -p "$prompt" --approve --mode text --model "$harness_model_selector")
+	# The hosted kind is not a CLI this container runs (epic 43y, tick jhp):
+	# an orchestrator or review boot that names it is a routing mistake, and
+	# falling through with an empty cmd would exec NOTHING and exit 0 — the
+	# green-start trap again, at the one boot that must never have one.
+	pi-durable)
+		die $EXIT_CONFIG "the pi-durable harness is hosted, not a CLI in this container — an orchestrator runs ticfac (tick hn0) and a review runs omp or claude; a pi-durable conversation is a worker attempt the factory's WorkerAgent hosts (epic 43y, tick jhp)"
 		;;
 	# claude speaks one vendor's API, so its model flag carries the vendor's
 	# own id and the base URL variable selects the route.

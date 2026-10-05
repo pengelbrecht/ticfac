@@ -493,6 +493,13 @@ export class WorkerAttemptHost {
         record.submissionId as SubmissionId,
         BACKGROUND_CONTEXT,
       );
+      // The record names a submission only a previous life made: this host
+      // is a new one, picking the conversation up where the last one died.
+      if (submission !== undefined) {
+        await this.say(
+          `a new host life resumed the conversation from its storage (submission ${record.submissionId})`,
+        );
+      }
     }
     if (submission === undefined) {
       // Idempotent by requestId: a host that died between this submit and the

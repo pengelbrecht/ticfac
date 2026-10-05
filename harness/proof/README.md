@@ -164,3 +164,63 @@ conversation of a further attempt, which settled 0 two seconds after the
 deploy finished, with no restart observable in its log), a harness killed
 mid-tool, a container destroyed mid-turn — epic 43y's [A2], tick jhp's proof
 runs.
+
+# Staging proof: the fault claims of epic 43y's [A2] (tick jhp)
+
+`agent-faults-staging.ts` drives the same staging agent Worker as
+`agent-staging.ts` (deployed and torn down the same way, above) and injects
+the three faults the epic's acceptance names, one attempt each:
+
+1. **Host lost mid-tool** — a `wrangler deploy` of the staging Worker fired
+   at the model's first `tool_execution_start`, a ninety-second bash (a
+   staging deploy takes about twenty seconds). The deploy kills the
+   WorkerAgent Durable Object while the tracked bash keeps running in its
+   container; the next heartbeat's host resumes the conversation from DO
+   SQLite and the tracked bash reattaches by its nonce.
+2. **Workspace lost mid-turn** — `/work/repo` removed once a round's wip
+   checkpoint has landed: the next round's ready check restores from that
+   checkpoint before the model's next request.
+3. **Deploy mid-run** — a deploy fired the moment the boot has handed off
+   and the first model request is in flight.
+
+One stand-in beyond the two `agent-staging.ts` names: the throwaway origin
+lives inside the container, so the mid-turn proof destroys the workspace
+rather than the whole container (a destroyed staging container would take
+its origin with it). The node suite's `workspace-checkpoints.test.ts`
+destroys a whole container against an origin that outlives it.
+
+Tear-down also needs the container application, which `wrangler delete`
+leaves behind: `pnpm exec wrangler containers list`, then
+`pnpm exec wrangler containers delete <id>` for `ticfac-staging-agent-sandbox`.
+
+## Recorded result, 2026-10-05 (pi-ai / pi-durable 1.0.2)
+
+`PROOF HOLDS`, every claim, in 455 s (three attempts, GLM 5.3 on Workers AI):
+
+| Claim | Evidence |
+|---|---|
+| Host lost mid-tool: the attempt settles 0 | `settled`, `exit_code: 0`, "the finish phase exited 0"; the deploy fired at 28 s, at the sleep's start, and finished at 46 s |
+| …a new host life resumed the conversation from its storage | the log line `a new host life resumed the conversation from its storage (submission 8)` right after `tool bash: {"command":"sleep 90 && …"}` |
+| …the tool did not run twice | `tool-runs.txt` on the pushed branch reads exactly `tool-ran-once` — one line |
+| …wip checkpoints kept landing after the resume | four `wip checkpoint … pushed` lines after the resume |
+| Workspace lost mid-turn: the attempt settles 0 | `settled`, `exit_code: 0` |
+| …restored from the last wip commit | `the container was lost between rounds; workspace restored to 12b85249dde1` — the first round's checkpoint; the removal landed under the second write, whose checkpoint failed "not in a git directory" |
+| …the turn completed on the restored tree | the model saw its second write fail, retried it on the restored tree, verified both files and committed; `first-step.txt` = `step one`, `second-step.txt` = `step two` on the pushed branch |
+| Deploy mid-run: the attempt settles 0 | `settled`, `exit_code: 0`; the deploy fired at 7 s into the attempt, as the conversation began |
+| …a new host life resumed the conversation | `a new host life resumed the conversation from its storage (submission 8)` after the first tool call |
+| …the work was delivered | `RESULT-xd3.md` with `STATUS: DONE` on the pushed branch |
+
+What the first staging start FOUND, fixed in this tick with a test
+(`cloudflare/test/staging-agent.test.ts`): since tick hxd the WorkerAgent
+reads its run's substrate row by the run id it parses from the container
+name, and the staging Worker passed the bare proof name — so every start
+fell to the sdk0 door staging does not bind ("binds no container
+namespace"). The staging Worker now names the container `<run>-xd3-1`.
+
+A first full pass (before the resume line existed) also held every claim,
+but its log could not tell a resumed host from one that never died; the
+host now logs the resume (`harness/src/host/worker-attempt.ts`, pinned in
+`test/worker-attempt-host.test.ts`), and the pass recorded above claims it.
+
+The staging Worker, its D1 database and its container application were
+deleted after the proof.

@@ -100,7 +100,7 @@ func (f *workerFixture) lintCalls() []string {
 // reaches origin is a report collect can read.
 func TestWorkerPushesAReportWithNoStatusLineBackToItsOwnSession(t *testing.T) {
 	shorttest.EndToEnd(t) // its fixtures are built inside subtests
-	for _, harness := range []string{"pi", "claude", "omp"} {
+	for _, harness := range []string{"claude", "omp"} {
 		t.Run(harness, func(t *testing.T) {
 			f, runsPath := newPushbackFixture(t, harness)
 			f.env["TICKS_TEST_FIX_ON_PUSHBACK"] = "1"
@@ -151,7 +151,7 @@ func TestWorkerPushesAReportWithNoStatusLineBackToItsOwnSession(t *testing.T) {
 // and collect decides what the report is worth.
 func TestWorkerSpendsItsReportPushbacksThenPushesTheReport(t *testing.T) {
 	shorttest.EndToEnd(t)
-	f, runsPath := newPushbackFixture(t, "pi")
+	f, runsPath := newPushbackFixture(t, "omp")
 
 	out, code := f.run()
 	if code != 0 {
@@ -218,7 +218,7 @@ func TestWorkerChecksTheReportAsTheRoleItsPromptNames(t *testing.T) {
 // and pushes what there is, and collect decides.
 func TestWorkerWhoseCheckerCannotAnswerStillPushes(t *testing.T) {
 	shorttest.EndToEnd(t)
-	f, runsPath := newPushbackFixture(t, "pi")
+	f, runsPath := newPushbackFixture(t, "omp")
 	f.env["TICKS_TEST_LINT_EXIT"] = "2"
 
 	out, code := f.run()
@@ -239,7 +239,7 @@ func TestWorkerWhoseCheckerCannotAnswerStillPushes(t *testing.T) {
 // the text it hands the agent are the real checker's, not a stand-in's.
 func TestWorkerPushesBackWithTheRealChecker(t *testing.T) {
 	shorttest.EndToEnd(t)
-	f, runsPath := newPushbackFixture(t, "pi")
+	f, runsPath := newPushbackFixture(t, "omp")
 	f.env["TICKS_TEST_FIX_ON_PUSHBACK"] = "1"
 	checker := filepath.Join(t.TempDir(), reportCheckerBinary)
 	build := exec.Command("go", "build", "-o", checker, "./cmd/ticfac-exec-subprocess")
