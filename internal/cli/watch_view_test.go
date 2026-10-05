@@ -1179,6 +1179,104 @@ func TestTheFrameMarksChildrenAndAbsorbedRows(t *testing.T) {
 	}
 }
 
+// TestTheFrameAlignsChildRows (tick cg4): a child row's indent ("  └ ")
+// is three cells wider than the mark column its parent carries, and the
+// columns after WHAT must not inherit that width — the child's WHAT gives
+// the indent's extra cells up, truncated where the column runs out, so its
+// TIER, PIPELINE, TIME and ATTEMPTS sit exactly under the header's labels,
+// beside the parent rows'. The 120 golden once pinned them three cells
+// right of every other row.
+func TestTheFrameAlignsChildRows(t *testing.T) {
+	t.Parallel()
+	frontier := "frontier"
+	pipeline := []statusmodel.PipelineStage{
+		{Stage: statusmodel.StageClaim, State: statusmodel.StageStateDone},
+		{Stage: statusmodel.StageWork, State: statusmodel.StageStateDone},
+		{Stage: statusmodel.StageGate, State: statusmodel.StageStateDone},
+		{Stage: statusmodel.StageMerged, State: statusmodel.StageStateDone},
+	}
+	m := statusmodel.Model{
+		RunID:       "epic-rmod",
+		EpicID:      "rmod",
+		Host:        statusmodel.HostLocal,
+		GeneratedAt: "2026-09-28T19:20:00Z",
+		Liveness: statusmodel.Liveness{
+			Alive: true, State: "alive", Reason: "pid 4242", Source: "run.pid",
+		},
+		Health: statusmodel.Health{Verdict: statusmodel.HealthVerdict{
+			State: statusmodel.VerdictHealthy,
+		}},
+		Waves: &[]statusmodel.Wave{{
+			Wave: 1, State: statusmodel.WaveActive, Ticks: []statusmodel.Tick{
+				{
+					TickID: "t1", Title: "alpha", State: "closed", Tier: &frontier,
+					Pipeline: pipeline, DurationSeconds: ptr(int64(2940)),
+				},
+				{
+					TickID: "t1c", Title: "an indented child row", State: "closed",
+					ParentTickID: ptr("t1"), Absorbed: true, Tier: &frontier,
+					Pipeline: pipeline, DurationSeconds: ptr(int64(2070)),
+				},
+			},
+		}},
+	}
+	// cellColumn is the display column at which text starts in a line —
+	// measured in cells, so the rows' glyphs do not shift the reading the
+	// way their multibyte encodings do.
+	cellColumn := func(line, text string) int {
+		i := strings.Index(line, text)
+		if i < 0 {
+			return -1
+		}
+		return ansi.StringWidth(line[:i])
+	}
+	for _, tc := range []struct {
+		width int
+		// One column per entry: the header's label and the cell text that
+		// starts the column in the parent's and the child's row. The three
+		// display columns must agree — the header, the parent and the
+		// indented child seat the same column at the same cell.
+		columns []struct{ label, parent, child string }
+	}{
+		{0, []struct{ label, parent, child string }{
+			{"TIER", "frontier", "frontier"},
+			{"PIPELINE", "claim", "claim"},
+			{"TIME", "49m", "34m"},
+		}},
+		{60, []struct{ label, parent, child string }{
+			{"PIPELINE", "✓ ✓ ✓ ✓", "✓ ✓ ✓ ✓"},
+			{"TIME", "49m", "34m"},
+		}},
+	} {
+		frame := renderWatchFrame(m, plainStyles(), tc.width, 0, "")
+		var head, parent, child string
+		for _, line := range frame {
+			switch {
+			case strings.HasPrefix(line, " TICK"):
+				head = line
+			case strings.HasPrefix(line, " t1 "):
+				parent = line
+			case strings.HasPrefix(line, "  └ +t1c"):
+				child = line
+			}
+		}
+		if head == "" || parent == "" || child == "" {
+			t.Fatalf("the %d-wide frame lost a row (head %q, parent %q, child %q):\n%s",
+				tc.width, head, parent, child, strings.Join(frame, "\n"))
+		}
+		if !strings.Contains(child, "an indented child…") {
+			t.Errorf("the child's WHAT did not give the indent's cells up (width %d):\n%s", tc.width, child)
+		}
+		for _, col := range tc.columns {
+			at := cellColumn(head, col.label)
+			if p, c := cellColumn(parent, col.parent), cellColumn(child, col.child); at != p || at != c {
+				t.Errorf("the %s column does not sit under its label at width %d: header %d, parent %d, child %d\nhead   %s\nparent %s\nchild  %s",
+					col.label, tc.width, at, p, c, head, parent, child)
+			}
+		}
+	}
+}
+
 // TestHumanDurationRoundsForAPerson: the frame's timers are for glancing,
 // so they read like a person reads a clock.
 func TestHumanDurationRoundsForAPerson(t *testing.T) {

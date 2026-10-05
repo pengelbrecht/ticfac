@@ -517,13 +517,21 @@ type dashCells struct {
 
 // render lays the cells out under the sized columns: one space between
 // columns, every cell padded to its column's width. Trailing padding is
-// left for the frame's trim.
+// left for the frame's trim. A child's indent ("  └ ") is three cells wider
+// than the one-cell mark column its parent carries, and the WHAT cell gives
+// those cells up — truncated and padded to what is left of the column — so
+// the columns after it sit under the header's labels beside the parent
+// rows, never three cells right of them (tick cg4).
 func (c dashCells) render(showWhat, showTier bool, idW, whatW, tierW, pipeW, timeW, attemptsW int) string {
+	whatCols := whatW
+	if extra := ansi.StringWidth(c.lead) - 1; extra > 0 {
+		whatCols -= extra
+	}
 	var row strings.Builder
 	row.WriteString(c.lead)
 	row.WriteString(dashPad(c.id, idW))
 	if showWhat {
-		row.WriteString(" " + dashPad(c.what, whatW))
+		row.WriteString(" " + dashPad(dashCell(c.what, whatCols), whatCols))
 	}
 	if showTier {
 		row.WriteString(" " + dashPad(c.tier, tierW))
