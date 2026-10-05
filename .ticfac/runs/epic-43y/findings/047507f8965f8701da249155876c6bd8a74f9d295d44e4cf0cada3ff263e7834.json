@@ -12,8 +12,11 @@
   "attempt": 42,
   "done_item": "A2",
   "demonstrating_check": "harness/proof/agent-faults-staging.ts (scenario 2, container destroyed)",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T18:01:18Z",
+  "triaged_at": "2026-10-05T18:01:30Z",
+  "triaged_by": "ticfac run epic-43y absorbing jpy",
+  "promoted_as": "jpy",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "66a",
