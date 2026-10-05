@@ -1,0 +1,14 @@
+{
+  "id": "ug0",
+  "title": "Stopping a durable runner leaves its detached tool process groups running",
+  "description": "stopTree (stuck stop, wall clock, supervisor signal) and cancel signal only the runner's own process group. pi-durable's NodeExecutionEnv spawns every bash tool detached, so each tool leads its own group and survives the stop, orphaned to init/launchd. A hung tool keeps running forever, and because it can inherit the runner's lock fd it may keep the attempt's liveness lock held. Reproduced: with the l6n interrupt disabled, TestAStuckDurableWorkerInAHungToolIsSteeredThroughIt ends stopped as stuck and leaves 'bash -c …; sleep 3600' plus its sleep alive. The fix is probably to call interruptToolGroups (interrupt.go) on the runner before stopTree, and in cancel.go.\nevidence: internal/exec/subprocess/supervisor.go stopTree; pi-durable dist/env/node.js spawn(..., { detached: true }); ps after the base's stuck stop shows the orphaned group with ppid 1\n\nticfac run epic-43y created this tick by absorbing the finding a021456e45ed5b764e1c0de4dc19d4fe9b79a040b950766b47f15b49cbd8dd3e (reported by run-epic-43y/tick-l6n/attempt-54): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/a021456e45ed5b764e1c0de4dc19d4fe9b79a040b950766b47f15b49cbd8dd3e.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-l6n/attempt-54",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T19:59:21Z",
+  "updated_at": "2026-10-05T19:59:21Z"
+}
