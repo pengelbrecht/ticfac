@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 228,
-  "state": "dispatching",
-  "reason": "dispatching mwt as attempt 34",
-  "updated_at": "2026-10-05T17:29:24Z",
+  "sequence": 229,
+  "state": "running",
+  "reason": "mwt is running as attempt 34",
+  "updated_at": "2026-10-05T17:29:34Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -174,7 +174,8 @@
     },
     {
       "tick_id": "mwt",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 34
     },
     {
       "tick_id": "wvn",
