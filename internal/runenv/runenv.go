@@ -47,7 +47,7 @@
 // binary this machine uses — a fact about the host, like PATH).
 //
 // NOT in the list, and inherited by a gate unchanged: everything a build
-// needs — PATH, HOME, USER, SHELL, TMPDIR (the gate sets its own, #76),
+// needs — PATH (less the host's installed ticfac binaries: path.go), HOME, USER, SHELL, TMPDIR (the gate sets its own, #76),
 // GOPATH/GOCACHE/GOMODCACHE/GOFLAGS/GOTOOLCHAIN, the package-manager caches
 // the image points at (npm_config_*, XDG_CACHE_HOME, UV_CACHE_DIR, MISE_*,
 // BUN_INSTALL_CACHE_DIR), the proxies (HTTP(S)_PROXY, NO_PROXY), locale
@@ -65,7 +65,7 @@
 // # The two layers
 //
 //   - The gate (internal/reconcile/gate.go) starts its command with
-//     [Scrub] applied to its own environment.
+//     [Scrub] and [HidePath] applied to its own environment.
 //   - A test binary sheds the list in this package's init, before any test
 //     or TestMain runs: every package that reads one of these variables
 //     links this one (runconfig, reconcile, cli, forge, runsignal). The
@@ -144,7 +144,8 @@ func init() {
 }
 
 // isolate unsets every control-plane variable in this process except the
-// HERDR_* half (see the package documentation), and marks the process.
+// HERDR_* half (see the package documentation), hides the host's installed
+// ticfac binaries from PATH (path.go), and marks the process.
 func isolate() {
 	for _, entry := range os.Environ() {
 		name, _, ok := strings.Cut(entry, "=")
@@ -152,6 +153,11 @@ func isolate() {
 			continue
 		}
 		_ = os.Unsetenv(name)
+	}
+	// A mirror that cannot be made leaves PATH as it was: the test that then
+	// resolves the host's ticfac is the one to fail, naming what it found.
+	if path, _, err := HideTicfacBinaries(os.Getenv("PATH"), MirrorRoot()); err == nil {
+		_ = os.Setenv("PATH", path)
 	}
 	_ = os.Setenv(isolatedEnv, "1")
 }
