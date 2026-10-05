@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 275,
-  "state": "running",
-  "reason": "66a is closed",
-  "updated_at": "2026-10-05T18:04:59Z",
+  "sequence": 276,
+  "state": "dispatching",
+  "reason": "dispatching 2oa as attempt 43",
+  "updated_at": "2026-10-05T18:05:27Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -185,6 +185,58 @@
       "tick_id": "8em",
       "state": "closed",
       "attempt": 41
+    },
+    {
+      "tick_id": "2oa",
+      "state": "ready"
+    },
+    {
+      "tick_id": "4s2",
+      "state": "ready"
+    },
+    {
+      "tick_id": "7sn",
+      "state": "ready"
+    },
+    {
+      "tick_id": "enb",
+      "state": "ready"
+    },
+    {
+      "tick_id": "ewd",
+      "state": "ready"
+    },
+    {
+      "tick_id": "i5e",
+      "state": "ready"
+    },
+    {
+      "tick_id": "jpy",
+      "state": "ready"
+    },
+    {
+      "tick_id": "l6n",
+      "state": "ready"
+    },
+    {
+      "tick_id": "lmt",
+      "state": "ready"
+    },
+    {
+      "tick_id": "r2m",
+      "state": "ready"
+    },
+    {
+      "tick_id": "umx",
+      "state": "ready"
+    },
+    {
+      "tick_id": "xba",
+      "state": "ready"
+    },
+    {
+      "tick_id": "o68",
+      "state": "ready"
     }
   ],
   "provenance": {
