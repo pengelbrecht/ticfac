@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 394,
-  "state": "running",
-  "reason": "omq is running as attempt 62",
-  "updated_at": "2026-10-05T21:20:05Z",
+  "sequence": 395,
+  "state": "collecting",
+  "reason": "collecting xba attempt 55",
+  "updated_at": "2026-10-05T21:20:11Z",
   "ticks": [
     {
       "tick_id": "92k",
