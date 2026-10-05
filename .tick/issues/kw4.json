@@ -1,0 +1,13 @@
+{
+  "id": "kw4",
+  "title": "Closed fold counts duplicates and swallows the cursor",
+  "description": "In a pane shorter than the plan, the live frame collapses closed rows into '✓ 64 closed' beside a header of '61/62 ticks': the fold counts the three duplicate rows (dvv, log, qrl) that progress excludes. And j/k walk the cursor through the collapsed rows, so after `jjj` no row carries '▸' while enter opens a tick (0rx) the person cannot see they selected. Count the fold as progress counts, and expand (or mark) the row under the cursor.\nevidence: internal/cli/watch_view.go:1184-1205 (fitDashboard), :1260 (dashCollapseClosed), internal/cli/watch_keys.go:95-98 (watchNeighbourTick over watchPlanOrder); live 120x40 frame of epic-hn6\n\nticfac run epic-hn6 filed this backlog tick from the finding d9dfe9daaf604359f8d97dc0c8bf1c22a11df57e1fb3acb535237e18e5f0842f (reported by run-epic-hn6/tick-qjl/attempt-29): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/d9dfe9daaf604359f8d97dc0c8bf1c22a11df57e1fb3acb535237e18e5f0842f.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-qjl/attempt-29",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T15:45:12Z",
+  "updated_at": "2026-10-05T15:45:12Z"
+}
