@@ -288,10 +288,119 @@ func TestAnUndeliverableSteerFallsBackToTheInterruptRePrompt(t *testing.T) {
 	}
 }
 
+// THE TICK l6n LADDER: a durable runner stuck in a HUNG TOOL is steered AND
+// has that tool interrupted, so the round ends, the steer is read, and the
+// worker carries on — recovered, not stopped. Before the fix the steer was
+// placed after a round that never ended, and one StuckAfter later the
+// attempt was stopped as stuck.
+//
+// The stand-in harness runs its tool the way pi-durable's NodeExecutionEnv
+// does — a shell spawned `detached`, leading its own process group — and
+// does what the real harness does when that tool's round ends and a steer is
+// waiting: it carries on, here by writing its report and finishing.
+func TestAStuckSteerInterruptsAHungToolAndTheWorkerRecovers(t *testing.T) {
+	if testing.Short() {
+		t.Skip("short mode: this one runs a real supervisor, a real runner process and a real socket")
+	}
+	shorttest.EndToEnd(t)
+	dir := t.TempDir()
+	fakeHarnessWith(t, dir, hungToolHarnessEntry)
+	t.Setenv("TICFAC_HARNESS_DIR", dir)
+	t.Setenv("TICFAC_STEER_SOCK_DIR", shortSocketDir(t))
+	f := newFixture(t, fixtureOptions{runner: "pi", noFakeRunner: true, stuckAfter: 1200 * time.Millisecond})
+	handle := f.Start(f.spec("run-l6n/tick-hng/attempt-1", "hng"))
+	local, err := handle.Local()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record struct {
+		SteerSock string `json:"steer_sock"`
+	}
+	raw, err := os.ReadFile(filepath.Join(local.State, "attempt.json"))
+	if err != nil {
+		t.Fatalf("read the attempt record: %v", err)
+	}
+	if err := json.Unmarshal(raw, &record); err != nil {
+		t.Fatalf("decode the attempt record: %v", err)
+	}
+	standIn := startSteerStandIn(t, record.SteerSock, true)
+
+	f.waitSettled(handle)
+	status := f.inspect(handle)
+	if status.State != StateSucceeded {
+		if raw, err := os.ReadFile(filepath.Join(local.State, fileRunnerLog)); err == nil {
+			t.Logf("the runner's log:\n%s", raw)
+		}
+		t.Fatalf("state %s, want succeeded: the steer should have reached the worker through its hung tool:\n%s",
+			status.State, formatObservations(status.Observations))
+	}
+	var steered, interrupts, stops int
+	for _, o := range status.Observations {
+		switch {
+		case IsStuckNudge(o):
+			steered++
+			if !strings.Contains(o.Detail, "steered in its own conversation") ||
+				!strings.Contains(o.Detail, "hung tool") {
+				t.Errorf("the stuck nudge does not say it steered and interrupted the hung tool: %s", o.Detail)
+			}
+		case IsStuckStop(o):
+			stops++
+		case o.Kind == ObsStarted && strings.Contains(o.Detail, "re-prompted as stuck"):
+			interrupts++
+		}
+	}
+	if steered != 1 || interrupts != 0 || stops != 0 {
+		t.Fatalf("steers %d, interrupt-restarts %d, stuck stops %d; want 1, 0 and 0:\n%s", steered, interrupts, stops,
+			formatObservations(status.Observations))
+	}
+	select {
+	case request := <-standIn.received:
+		if !strings.Contains(request.Text, "interrupted the command you were running") {
+			t.Errorf("the steer does not tell the worker its command was interrupted: %q", request.Text)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the supervisor never sent the steer")
+	}
+	// The harness itself saw its tool end by the signal pi-durable's own
+	// abort sends — a round that ENDED, which is what lets the steer in.
+	report, err := os.ReadFile(filepath.Join(local.Worktree, "runs", "run-l6n", "tool-exit.txt"))
+	if err != nil || strings.TrimSpace(string(report)) != "SIGKILL" {
+		t.Errorf("the harness saw its tool end as %q (%v), want SIGKILL", string(report), err)
+	}
+}
+
+// hungToolHarnessEntry is a stand-in harness whose one tool hangs: a shell
+// spawned detached, as pi-durable spawns every tool. When the tool ends —
+// only an interrupt ends it — the round is over and the harness carries on:
+// it records how the tool ended, writes its report and finishes.
+const hungToolHarnessEntry = `
+const { spawn } = process.getBuiltinModule("node:child_process");
+const fs = process.getBuiltinModule("node:fs");
+const path = process.getBuiltinModule("node:path");
+const config = JSON.parse(fs.readFileSync(process.argv[process.argv.indexOf("--config") + 1], "utf8"));
+console.log("fake pi-durable harness: running a tool that hangs");
+const tool = spawn("sh", ["-c", "sleep 3600; echo never"], { detached: true, stdio: "ignore" });
+tool.on("exit", (code, signal) => {
+  fs.mkdirSync(path.join(config.worktree, "runs", "run-l6n"), { recursive: true });
+  fs.writeFileSync(path.join(config.worktree, "runs", "run-l6n", "tool-exit.txt"), (signal || String(code)) + "\n");
+  fs.mkdirSync(path.dirname(config.report), { recursive: true });
+  fs.writeFileSync(config.report, "# hng\n\nThe hung tool was interrupted and the worker carried on.\n\nSTATUS: DONE\n");
+  console.log("fake pi-durable harness: the tool ended by " + (signal || code) + "; the steer is read and the work goes on");
+  process.exit(0);
+});
+setInterval(() => {}, 60000);
+`
+
 // fakeHarness writes the stand-in harness a `pi` runner runs from: the
 // register shim the argv imports, and an entry that hangs — the runner this
 // ladder steers is one that is alive, quiet and going nowhere.
 func fakeHarness(t *testing.T, dir string) {
+	t.Helper()
+	fakeHarnessWith(t, dir, "console.log('fake pi-durable harness: hanging');\nsetInterval(() => {}, 60000);\n")
+}
+
+// fakeHarnessWith writes a stand-in harness whose entry is the given script.
+func fakeHarnessWith(t *testing.T, dir, entry string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Join(dir, "runtime"), 0o755); err != nil {
 		t.Fatal(err)
@@ -302,7 +411,6 @@ func fakeHarness(t *testing.T, dir string) {
 	if err := os.WriteFile(filepath.Join(dir, "runtime", "register.mjs"), []byte("// a stand-in: the entry imports nothing\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	entry := "console.log('fake pi-durable harness: hanging');\nsetInterval(() => {}, 60000);\n"
 	if err := os.WriteFile(filepath.Join(dir, "src", "local", "main.ts"), []byte(entry), 0o644); err != nil {
 		t.Fatal(err)
 	}

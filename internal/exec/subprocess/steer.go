@@ -21,6 +21,8 @@ import (
 // So the supervisor's stuck nudge on a durable runner is:
 //
 //	steer once through the socket (this file), the runner LIVES;
+//	a hung tool under it is interrupted, so its round ends and the steer
+//	is read (interrupt.go, tick l6n);
 //	still quiet for the window after that → the stop, as before.
 //
 // A steer that cannot be delivered (the socket missing, the harness gone, no
