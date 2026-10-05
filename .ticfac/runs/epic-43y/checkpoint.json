@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 204,
-  "state": "dispatching",
-  "reason": "dispatching kkt as attempt 33",
-  "updated_at": "2026-10-05T14:48:37Z",
+  "sequence": 205,
+  "state": "running",
+  "reason": "kkt is running as attempt 33",
+  "updated_at": "2026-10-05T14:48:48Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -157,7 +157,8 @@
     },
     {
       "tick_id": "kkt",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 33
     },
     {
       "tick_id": "a2l",
