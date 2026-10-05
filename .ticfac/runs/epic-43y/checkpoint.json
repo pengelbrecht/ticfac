@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 259,
-  "state": "gating",
-  "reason": "running the integrated gate for jiv on 2505d53114c2",
-  "updated_at": "2026-10-05T16:18:03Z",
+  "sequence": 260,
+  "state": "publishing",
+  "reason": "closing jiv behind the integrated gate on 2505d53114c2",
+  "updated_at": "2026-10-05T16:20:26Z",
   "ticks": [
     {
       "tick_id": "92k",
