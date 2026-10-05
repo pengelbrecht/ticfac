@@ -63,7 +63,12 @@ func trackerGitOut(ctx context.Context, repo string, args ...string) (string, er
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	cmd.Env = append(os.Environ(), gitbin.TransportEnv()...)
-	if err := cmd.Run(); err != nil {
+	// It fetches and reads, never pushes; the queue costs nothing for
+	// anything else (tick rlp).
+	done := gitbin.PushQueue(repo, args, nil)
+	err := cmd.Run()
+	done(err)
+	if err != nil {
 		return "", fmt.Errorf("git %s: %v: %s", strings.Join(args, " "), err,
 			strings.TrimSpace(stderr.String()))
 	}
