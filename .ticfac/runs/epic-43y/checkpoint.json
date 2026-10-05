@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 229,
-  "state": "running",
-  "reason": "dbi is running as attempt 38",
-  "updated_at": "2026-10-05T15:08:23Z",
+  "sequence": 230,
+  "state": "collecting",
+  "reason": "collecting twa attempt 37",
+  "updated_at": "2026-10-05T15:13:23Z",
   "ticks": [
     {
       "tick_id": "92k",
