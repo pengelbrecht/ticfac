@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
@@ -24,6 +24,7 @@ import {
   pushWipCheckpoint,
   type RestoreOutcome,
   retireWipSnapshot,
+  salvageUncommittedWork,
   WIP_COMMIT_SUBJECT,
   type WipOutcome,
   type WorkspaceGit,
@@ -487,5 +488,75 @@ describe("workspace checkpoints over real git", () => {
     run("commit", "-q", "-m", "the finish phase's salvage");
     run("push", "-q", "origin", `HEAD:refs/heads/${git.branch}`);
     expect(onOrigin(git.branch)).toBe(run("rev-parse", "HEAD"));
+  });
+
+  // The local host's finish phase (tick nou): a worker that settles with
+  // its work uncommitted — the whole shape the wip snapshots were holding
+  // on the attempt branch — leaves nothing the supervisor's fast-forward
+  // push can land and collect counts. The cloud's finish phase salvages the
+  // tree into its own commit (image/worker.sh, tick 5fg); the salvage is
+  // that half, runtime-neutral, for the local host to run after it retires
+  // the last snapshot. What may ride the salvage is the WORK — never the
+  // report (its owner commits or reads it, and a salvage commit carrying it
+  // makes the work indistinguishable from the account of it) and never
+  // tracker state (.tick/, .ticfac/ — the boundary the guards enforce).
+  it("salvages the uncommitted tree after retiring the snapshot, without the report or tracker state", async () => {
+    // A dirty round, snapshotted: the state a settled worker leaves behind.
+    writeFileSync(join(checkout, "a.txt"), "the worker's uncommitted edit\n");
+    writeFileSync(join(checkout, "RESULT-dwn.md"), "# dwn\n\nSTATUS: DONE\n");
+    mkdirSync(join(checkout, ".tick"));
+    writeFileSync(join(checkout, ".tick", "state"), "a boundary write the guard missed\n");
+    expect((await pushWipCheckpoint(env.hostShell(), git)).kind).toBe("pushed");
+
+    // The finish phase's order: retire first (the branch back on the
+    // agent's own HEAD, so the push after the salvage is a fast-forward),
+    // then the salvage commit on top.
+    expect((await retireWipSnapshot(env.hostShell(), git)).kind).toBe("retired");
+    const salvaged = await salvageUncommittedWork(env.hostShell(), git, {
+      subject: "tick dwn: work in progress salvaged by the test",
+      reportPath: "RESULT-dwn.md",
+    });
+    expect(salvaged).toEqual({
+      kind: "salvaged",
+      sha: expect.stringMatching(/^[0-9a-f]{40}$/),
+    });
+
+    // The salvage carries the WORK. Not the report, not tracker state —
+    // both are still in the working tree, uncommitted, for their owners.
+    const files = execFileSync("git", ["-C", checkout, "ls-tree", "--name-only", "HEAD"], {
+      encoding: "utf8",
+    })
+      .trim()
+      .split("\n");
+    expect(files).toContain("a.txt");
+    expect(files).toContain("README.md");
+    expect(files).not.toContain("RESULT-dwn.md");
+    expect(files).not.toContain(".tick");
+    const subject = execFileSync("git", ["-C", checkout, "log", "-1", "--format=%s"], {
+      encoding: "utf8",
+    }).trim();
+    expect(subject).toBe("tick dwn: work in progress salvaged by the test");
+
+    // The push after the salvage is a fast-forward — the supervisor's final
+    // push lands, where a push over the un-retired snapshot was refused.
+    execFileSync("git", ["-C", checkout, "push", "-q", "origin", `HEAD:refs/heads/${git.branch}`]);
+    const onOrigin = execFileSync("git", ["--git-dir", origin, "log", "--format=%s", git.branch], {
+      encoding: "utf8",
+    }).trim();
+    expect(onOrigin).toBe("tick dwn: work in progress salvaged by the test\nthe base commit");
+
+    // A tree the salvage already carried answers empty: nothing staged,
+    // nothing committed, and the second look changes no commit.
+    expect(
+      await salvageUncommittedWork(env.hostShell(), git, {
+        subject: "twice",
+        reportPath: "RESULT-dwn.md",
+      }),
+    ).toEqual({ kind: "empty" });
+    expect(
+      execFileSync("git", ["-C", checkout, "log", "-1", "--format=%s"], {
+        encoding: "utf8",
+      }).trim(),
+    ).toBe("tick dwn: work in progress salvaged by the test");
   });
 });

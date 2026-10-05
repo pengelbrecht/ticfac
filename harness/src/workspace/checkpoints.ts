@@ -128,6 +128,13 @@ export type RestoreOutcome =
   | { readonly kind: "restored"; readonly sha: string; readonly subject: string }
   | { readonly kind: "failed"; readonly error: string };
 
+/** One end-of-run salvage of the uncommitted tree, after {@link retireWipSnapshot}. */
+export type SalvageOutcome =
+  | { readonly kind: "salvaged"; readonly sha: string }
+  /** The tree was clean (or only the excluded paths were dirty): no commit. */
+  | { readonly kind: "empty" }
+  | { readonly kind: "failed"; readonly error: string };
+
 /**
  * The pre-round ready check's answer (tick 4fs): the workspace's ready marker
  * was there (`ready`), or it was gone and the workspace was rebuilt from the
@@ -244,6 +251,75 @@ export async function retireWipSnapshot(
     return push.exitCode === 0
       ? { kind: "retired" }
       : { kind: "failed", error: said("git push of HEAD", push) };
+  } catch (error) {
+    return { kind: "failed", error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/**
+ * The end-of-run salvage (tick nou): everything the worker wrote and did not
+ * commit, committed as one commit ON the agent's own branch — the cloud
+ * finish phase's own move (image/worker.sh `salvage_uncommitted`, tick 5fg:
+ * run run_2e66e765's containers paid for real work and kept none of it),
+ * written runtime-neutral for the LOCAL host to run after it retires the
+ * last wip snapshot.
+ *
+ * Why the local host needs it: since tick xd3 a wip snapshot is a commit ON
+ * TOP of the agent's HEAD, force-pushed and invisible to the branch's own
+ * history — so a worker that settles without committing leaves the attempt
+ * branch holding nothing its history can count, and the supervisor's
+ * fast-forward push of HEAD is refused over the snapshot (the reflog rescue
+ * cannot apply: the snapshot was never a state the branch held). Retire,
+ * then salvage, and the branch ends at a commit collect can count and the
+ * push can follow.
+ *
+ * What may ride the salvage is the WORK. Never the report (the caller names
+ * its path; the cloud commits it separately with the agent's STATUS line
+ * intact, and a salvage commit carrying it would make the work
+ * indistinguishable from the account of it), and never tracker state
+ * (`.tick/`, `.ticfac/` — the boundary the guards enforce, unstaged here the
+ * way worker.sh's salvage unstages it): a salvage the host authored must not
+ * launder a violation into a commit the boundary would then refuse the whole
+ * attempt over.
+ *
+ * Best effort, never throws: a salvage that cannot be made is the outcome,
+ * for the host to report — it must not stop the exit path that follows it.
+ */
+export async function salvageUncommittedWork(
+  shell: HostShell,
+  git: WorkspaceGit,
+  options: { readonly subject: string; readonly reportPath?: string },
+): Promise<SalvageOutcome> {
+  try {
+    const salvage = await shell.execLine(
+      'git config user.name "$NAME" && git config user.email "$EMAIL" && git add -A && ' +
+        // The never-salvaged paths, each a failure-tolerant segment: a report
+        // that is not there yet, a worktree with no .tick, stage nothing.
+        (options.reportPath === undefined
+          ? ""
+          : '{ git reset -q -- "$REPORT" 2>/dev/null || true; } && ') +
+        '{ git reset -q -- .tick .ticfac 2>/dev/null || true; } && ' +
+        'if git diff --cached --quiet; then git reset -q; exit 3; fi && ' +
+        'git commit -q --no-verify -m "$MSG" >/dev/null && git rev-parse HEAD',
+      varsOf(git, {
+        MSG: options.subject,
+        NAME: git.identity.name,
+        EMAIL: git.identity.email,
+        ...(options.reportPath === undefined ? {} : { REPORT: options.reportPath }),
+      }),
+    );
+    if (salvage.exitCode === EMPTY) return { kind: "empty" };
+    if (salvage.exitCode !== 0) {
+      return { kind: "failed", error: said("the salvage of the uncommitted tree", salvage) };
+    }
+    const sha = salvage.output.trim();
+    if (!/^[0-9a-f]{7,64}$/.test(sha)) {
+      return {
+        kind: "failed",
+        error: `the salvage commit answered oddly: ${brief(salvage.output)}`,
+      };
+    }
+    return { kind: "salvaged", sha };
   } catch (error) {
     return { kind: "failed", error: error instanceof Error ? error.message : String(error) };
   }

@@ -54,6 +54,8 @@ export {
   type RestoreOutcome,
   restoreWorkspace,
   retireWipSnapshot,
+  salvageUncommittedWork,
+  type SalvageOutcome,
   WIP_COMMIT_SUBJECT,
   type WipOutcome,
   type WorkspaceCheckpointOptions,
