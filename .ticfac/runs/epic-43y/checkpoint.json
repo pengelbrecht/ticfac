@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 350,
-  "state": "running",
-  "reason": "h3c is running as attempt 56",
-  "updated_at": "2026-10-05T20:03:48Z",
+  "sequence": 351,
+  "state": "collecting",
+  "reason": "collecting umx attempt 53",
+  "updated_at": "2026-10-05T20:03:53Z",
   "ticks": [
     {
       "tick_id": "92k",
