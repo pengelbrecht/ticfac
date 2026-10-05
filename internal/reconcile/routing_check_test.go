@@ -30,8 +30,9 @@ import (
 // instead of stopping a live run. And in the cloud every one of those jobs,
 // and the review cell at every tier any file declares for it (the common
 // file's claude frontier included), resolves to the durable harness on a
-// Workers AI model, by either of its two names (cloudDurableKinds): nothing
-// in the cloud runs claude.
+// Workers AI model, under the hosted name the sandbox image boots it by
+// (cloudRunnerIsDurable): nothing in the cloud runs claude, and nothing in
+// the cloud is told a kind its container refuses.
 func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 	t.Parallel()
 	root, err := contracts.RepoRoot()
@@ -60,8 +61,8 @@ func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 				continue
 			}
 			if !cloudRunnerIsDurable(job.Profile.Runner) || !strings.HasPrefix(job.Profile.Model, "cloudflare-workers-ai/") {
-				t.Errorf("cloud %s at tier %q routes to %s/%s, want the durable harness (pi or pi-durable) on a Workers AI model",
-					job.Role, job.Tier, job.Profile.Runner, job.Profile.Model)
+				t.Errorf("cloud %s at tier %q routes to %s/%s, want the hosted %s on a Workers AI model",
+					job.Role, job.Tier, job.Profile.Runner, job.Profile.Model, profile.HostedDurableHarness)
 			}
 		}
 		for _, role := range profile.EveryRole() {
@@ -83,51 +84,38 @@ func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 				continue // a tier the cloud does not declare is refused, never run
 			}
 			if !cloudRunnerIsDurable(p.Runner) || !strings.HasPrefix(p.Model, "cloudflare-workers-ai/") {
-				t.Errorf("cloud %s at tier %q resolves to %s/%s: claude (or anything off Workers AI) leaked into the cloud",
+				t.Errorf("cloud %s at tier %q resolves to %s/%s: claude, anything off Workers AI, or a kind the container refuses leaked into the cloud",
 					role, tier, p.Runner, p.Model)
 			}
 		}
 	}
 }
 
-// cloudDurableKinds are the two names of the ONE durable harness a cloud job
-// may finally resolve to (epic 43y, tick twa): `pi` is the local runner
-// table's name for the harness since tick hpk — the spelling this
-// repository's cloud overlay (`.tick/runners.cloud.toml`) still carries —
-// and `pi-durable` is the hosted kind the cloud profile set names (tick qf4)
-// and the sandbox image hosts (tick jhp: a container told any other kind
-// dies at boot with "unknown harness kind"). The repository guard pins the
-// durable harness, not one spelling of it, because the overlay's flip to
-// the hosted kind is the operator's own config change — a dispatched
-// worker's .tick boundary exempts `.tick/runners.toml` and never the
-// overlays — and a pin on the old spelling alone turns the gate red the
-// moment that flip lands: a guard certifying the staleness it exists to
-// catch. Once the overlay names pi-durable, tighten this to the hosted kind
-// alone, together with the local alias in profile.CloudRule.Harnesses.
-var cloudDurableKinds = []string{"pi", "pi-durable"}
-
 // cloudRunnerIsDurable reports whether a resolved cloud profile finally
-// runs the one durable harness, by either of its names (cloudDurableKinds).
+// runs the durable harness under the one name a Cloudflare dispatch can bind
+// (epic 43y, tick twa): profile.HostedDurableHarness, the kind the sandbox
+// image hosts — a container told any other kind dies at boot with "unknown
+// harness kind" (tick jhp). A runner table may spell the harness `pi` (the
+// local executors' name for it since tick hpk, and this repository's cloud
+// overlay's), and the resolution binds the hosted name for every dispatch
+// into Cloudflare, so the guard pins what the container is TOLD rather than
+// what a cell spells: the pin used to accept `pi` here, which certified the
+// very binding that killed every worker container at boot.
 func cloudRunnerIsDurable(kind string) bool {
-	for _, durable := range cloudDurableKinds {
-		if kind == durable {
-			return true
-		}
-	}
-	return false
+	return kind == profile.HostedDurableHarness
 }
 
 // short: writes two small TOML files to a temp directory and resolves profiles
 // in memory; no harness, no git.
 //
-// The operator's flip, in miniature (epic 43y, tick twa): when
-// .tick/runners.cloud.toml's cells name the hosted kind `pi-durable` — the
-// exact change this repository's cloud routing needs, and one a dispatched
-// worker's .tick boundary cannot write — the routing check still routes
-// every job, and the repository guard accepts every one of them. Before
-// twa the guard pinned the old spelling `pi` alone, so this very flip would
-// have turned the gate red the moment it landed: a guard certifying the
-// staleness it exists to catch.
+// Either spelling of the overlay, in miniature (epic 43y, tick twa): when
+// .tick/runners.cloud.toml's cells name the hosted kind `pi-durable` rather
+// than the runner table's `pi` this repository's overlay carries, the
+// routing check still routes every job, and every one of them resolves the
+// hosted kind — the same final runner the `pi` spelling now resolves to
+// (TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate). So the
+// overlay's spelling is the operator's to choose, and neither choice can
+// turn the gate red or tell a container a kind it refuses.
 func TestTheCloudGuardAcceptsTheOverlayNamingTheHostedKind(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -146,9 +134,9 @@ model = "opus"
 kind = "claude"
 model = "opus"
 `)
-	// The flipped overlay: the same cells the repository's own
+	// The other spelling: the same cells the repository's own
 	// .tick/runners.cloud.toml carries today, with every kind cell naming
-	// the hosted kind instead of the local spelling.
+	// the hosted kind instead of the runner table's `pi`.
 	writeTOML(t, filepath.Join(dir, "runners.cloud.toml"), `version = 2
 
 [roles.implement]
@@ -195,17 +183,18 @@ model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 			t.Errorf("%s was never routed by the check", role)
 		}
 	}
-	// The flip's point, stated: the base implement job finally names the
-	// HOSTED kind — a runner the old pin (`Runner != "pi"`) would have failed
-	// the gate on, and the one the sandbox image hosts.
+	// The point, stated: the base implement job names the HOSTED kind — the
+	// one the sandbox image hosts.
 	for _, job := range jobs {
 		if job.Role == "implement-tick" && job.Tier == "" && job.Profile.Runner != "pi-durable" {
-			t.Errorf("implement-tick resolved to %q, want the hosted kind pi-durable the flipped overlay names",
+			t.Errorf("implement-tick resolved to %q, want the hosted kind pi-durable the overlay names",
 				job.Profile.Runner)
 		}
 	}
-	// The pin still refuses every kind that is not the durable harness.
-	for _, kind := range []string{"claude", "codex", "omp", "opencode"} {
+	// The pin refuses every kind a container is not booted on for the durable
+	// harness — the runner table's own `pi` included: that is the name the
+	// image dies on.
+	for _, kind := range []string{"pi", "claude", "codex", "omp", "opencode"} {
 		if cloudRunnerIsDurable(kind) {
 			t.Errorf("the guard accepts kind %q, which is not the durable harness", kind)
 		}

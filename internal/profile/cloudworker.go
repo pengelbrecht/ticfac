@@ -47,11 +47,12 @@ var CloudRule = struct {
 	// served (epic 43y, tick qf4): `pi-durable` is the hosted kind — the
 	// cloud profile set names it, the factory's WorkerAgent runs the
 	// conversation on it whatever harness the dispatch names for the
-	// container its tools run in (tick 4uj) — and `pi` is the local runner
-	// table's name for the same durable harness (tick hpk), which this
-	// repository's own cloud routing (`.tick/runners.cloud.toml`) still
-	// spells and which stays admitted until that overlay names the hosted
-	// kind too.
+	// container its tools run in (tick 4uj) — and `pi` is a runner table's
+	// name for the same durable harness (tick hpk), which this repository's
+	// own cloud routing (`.tick/runners.cloud.toml`) spells too. A profile
+	// that dispatches into Cloudflare never reaches the rule as `pi`: its
+	// resolution binds the hosted name first ([HostedDurableHarness], tick
+	// twa), because that is the kind its container is told.
 	Harnesses []string
 
 	// Executors are the executors that dispatch their workers INTO Cloudflare
@@ -66,6 +67,17 @@ var CloudRule = struct {
 	Harnesses:       []string{"pi", "pi-durable"},
 	Executors:       []string{"cloudflare-sandbox"},
 }
+
+// HostedDurableHarness is the durable harness's name in Cloudflare: the kind
+// the sandbox image hosts (image/common.sh admits omp, claude and this, and
+// dies at boot on any other — tick jhp) and the harness the factory's
+// WorkerAgent runs a hosted attempt's conversation on (tick 4uj).
+const HostedDurableHarness = "pi-durable"
+
+// runnerTableDurableHarness is a runner table's name for the same harness:
+// the local executors host it under `pi` (tick hpk), and every
+// .tick/runners*.toml this repository carries spells it so.
+const runnerTableDurableHarness = "pi"
 
 // ErrNotWorkersAI is the refusal a cloud run gets when a role's FINAL resolved
 // worker is not a Workers AI model on a harness the gateway serves. It is a
@@ -92,6 +104,21 @@ func reachesWorkersAI(kind string) bool {
 		}
 	}
 	return false
+}
+
+// bindHostedHarness names the durable harness by its hosted kind on a
+// profile that dispatches into Cloudflare (epic 43y, tick twa). The resolved
+// runner is what the door binds as the container's TICKS_HARNESS (tick 9iz),
+// and a runner table spells the harness `pi` — the local executors' name for
+// it, which this repository's .tick/runners.cloud.toml carries too — so a
+// Cloudflare dispatch resolved from it told every worker container a kind
+// the image refuses at boot. The translation sits where the runner table's
+// vocabulary meets the image's, after every overlay applied: the profile,
+// its digest and the dispatch record then name what the container runs.
+func bindHostedHarness(p *Profile) {
+	if p.Runner == runnerTableDurableHarness {
+		p.Runner = HostedDurableHarness
+	}
 }
 
 // dispatchesIntoCloudflare reports whether executor boots its workers in a
