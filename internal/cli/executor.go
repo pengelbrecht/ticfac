@@ -45,23 +45,41 @@ func knownExecutors() []reconcile.KnownExecutor {
 			PollInterval: subprocess.PollInterval,
 		},
 		{
-			Name:         herdr.ExecutorName,
+			Name: herdr.ExecutorName,
+			// The kinds this package compiles argv for — and NOTHING else: a
+			// kind pi is not among them, deliberately (epic 43y, tick uxi).
+			// herdr agents are interactive CLIs, and the pi row was the
+			// pi-CLI worker path; the durable harness owns the name now, so
+			// a profile routed to kind pi on herdr is refused HERE, at
+			// construction, naming the kinds herdr launches — and again at
+			// compile, naming where pi workers do run. Runners and the
+			// compiled kinds are the same refusal stated twice and must
+			// never drift.
 			Runners:      runconfig.KnownKinds(),
 			AcceptsModel: func(string) bool { return true },
 			PollInterval: herdr.PollInterval,
 		},
 		{
 			// The cloud executor (tick xev): the runner names a KIND the
-			// sandbox image can run a harness for, and the poll cadence is the
-			// executor's own five minutes, because on that substrate the poll
-			// IS the keepalive. Any MODEL a profile names is accepted: the
-			// dispatch door carries it (tick a08), the worker container boots
-			// on it, and the executor refuses a handle naming any other — so
-			// the recorded model is the one that ran, not the factory's own
-			// default agreeing with it by luck. The profile's RUNNER and PROMPT
-			// ride the same request (tick 9iz), for the same reason.
+			// sandbox image can run a harness for — the DURABLE harness
+			// names of [profile.CloudRule].Harnesses, not runconfig's herdr
+			// kinds (epic 43y, tick uxi): the cloud's routing still spells
+			// kind = "pi" (.tick/runners.cloud.toml, the local runner
+			// table's name for the same durable harness, which applies last
+			// there) and the cloud profile set names the hosted kind
+			// "pi-durable", so both must be admitted — while claude, codex
+			// and opencode never reach a container, per the same rule that
+			// refuses a non-Workers-AI worker in the cloud. The poll cadence
+			// is the executor's own five minutes, because on that substrate
+			// the poll IS the keepalive. Any MODEL a profile names is
+			// accepted: the dispatch door carries it (tick a08), the worker
+			// container boots on it, and the executor refuses a handle
+			// naming any other — so the recorded model is the one that ran,
+			// not the factory's own default agreeing with it by luck. The
+			// profile's RUNNER and PROMPT ride the same request (tick 9iz),
+			// for the same reason.
 			Name:         cloudflaresandbox.ExecutorName,
-			Runners:      runconfig.KnownKinds(),
+			Runners:      profile.CloudRule.Harnesses,
 			AcceptsModel: func(string) bool { return true },
 			PollInterval: cloudflaresandbox.PollInterval,
 			// The account's container ceiling less the orchestrator's own
@@ -292,23 +310,16 @@ func spawnArgv(gate string, d reconcile.Dispatch) (*runconfig.Config, []string, 
 		}
 	}
 	spawn, err := runconfig.Compile(w, cfg.FullAuto(), runconfig.SpawnContext{
-		// The resolvers, not the values: only a kind whose row needs the git
-		// common dir (codex, in a linked worktree) or pi's model catalog pays
-		// for them, and a worker whose kind needs neither never fails on a
-		// probe it would never have used.
+		// The resolver, not the value: only a kind whose row needs the git
+		// common dir (codex, in a linked worktree) pays for it, and a worker
+		// whose kind needs neither never fails on a probe it would never
+		// have used.
 		ResolveGitCommonDir: func() (string, error) {
 			out, err := exec.Command("git", "-C", d.Repo, "rev-parse", "--git-common-dir").Output()
 			if err != nil {
 				return "", fmt.Errorf("resolve the git common dir of %s: %w", d.Repo, err)
 			}
 			return strings.TrimSpace(string(out)), nil
-		},
-		ResolvePiCatalog: func() (*runconfig.PiCatalog, error) {
-			out, err := exec.Command("pi", "--list-models").Output()
-			if err != nil {
-				return nil, fmt.Errorf("read pi's own model catalog (`pi --list-models`): %w", err)
-			}
-			return runconfig.ParsePiCatalog(strings.NewReader(string(out)))
 		},
 	})
 	if err != nil {

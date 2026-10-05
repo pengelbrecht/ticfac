@@ -64,33 +64,27 @@ func writeTranscript(t *testing.T, kind, cwd string, lines ...map[string]any) {
 	}
 }
 
-// The two layouts, as the installed harnesses write them (pi 0.85.1's
-// session-manager.js; Claude Code's ~/.claude/projects), and the event kinds
-// read out of each.
-func TestTranscriptsOfPiAndClaudeAreReadWhereTheHarnessWritesThem(t *testing.T) {
+// The claude layout, as the installed harness writes it (Claude Code's
+// ~/.claude/projects), and the event kinds read out of it. The pi CLI's
+// layout went with the herdr pi kind (epic 43y, tick uxi): the durable
+// runner named "pi" writes no session transcript at all, so kind pi has
+// no transcript dir — nothing under it can be mistaken for the durable
+// host's signal.
+func TestClaudeTranscriptsAreReadWhereTheHarnessWritesThem(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(EnvTranscriptHome, home)
 	cwd := t.TempDir()
-	real, _ := filepath.EvalSymlinks(cwd)
 
-	if got, want := TranscriptDir("pi", cwd), filepath.Join(home, ".pi", "agent", "sessions",
-		"--"+strings.ReplaceAll(strings.TrimPrefix(real, "/"), "/", "-")+"--"); got != want {
-		t.Errorf("pi dir = %s, want %s", got, want)
-	}
 	if got := TranscriptDir("claude", "/Users/x/.herdr/worktrees/a-b"); got != filepath.Join(home, ".claude", "projects", "-Users-x--herdr-worktrees-a-b") {
 		t.Errorf("claude dir = %s", got)
 	}
 	if TranscriptDir("codex", cwd) != "" {
 		t.Error("codex has a transcript dir, but its layout is not read")
 	}
-
-	writeTranscript(t, "pi", cwd,
-		map[string]any{"type": "session", "timestamp": "2026-09-28T06:43:07.734Z"},
-		map[string]any{"type": "message", "timestamp": "2026-09-28T07:01:04.886Z",
-			"message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "thinking"}, map[string]any{"type": "toolCall"}}}})
-	ev, ok := LastTranscriptEvent("pi", cwd)
-	if !ok || ev.Kind != "tool call started" || !ev.ToolInFlight || ev.At.Format(time.RFC3339) != "2026-09-28T07:01:04Z" {
-		t.Errorf("pi last event = %+v (%t), want a tool call started at 07:01:04", ev, ok)
+	// The deleted pi kind's layout is gone with it: the durable runner named
+	// pi must not be answered from session files it never writes.
+	if got := TranscriptDir("pi", cwd); got != "" {
+		t.Errorf("pi transcript dir = %s, want none: the durable pi runner's conversation is its storage, and the pi CLI's layout left with the herdr pi kind", got)
 	}
 
 	writeTranscript(t, "claude", cwd,
@@ -99,7 +93,7 @@ func TestTranscriptsOfPiAndClaudeAreReadWhereTheHarnessWritesThem(t *testing.T) 
 		map[string]any{"type": "user", "timestamp": "2026-09-28T08:39:25.000Z",
 			"message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result"}}}},
 		map[string]any{"type": "bridge-session"})
-	ev, ok = LastTranscriptEvent("claude", cwd)
+	ev, ok := LastTranscriptEvent("claude", cwd)
 	if !ok || ev.Kind != "tool result" || ev.ToolInFlight {
 		t.Errorf("claude last event = %+v (%t), want a tool result, the undated line skipped", ev, ok)
 	}
@@ -108,18 +102,13 @@ func TestTranscriptsOfPiAndClaudeAreReadWhereTheHarnessWritesThem(t *testing.T) 
 // The `pi` runner is the durable Node host (tick hpk), not the pi CLI: it
 // writes no session transcript, its conversation is the attempt's own
 // SQLite storage (workerconfig.go), and the watch's last-event signal for
-// it is the storage file's mtime — never the CLI's session files, which a
-// pi transcript on the host must not be mistaken for (tick bgx).
+// it is the storage file's mtime. The pi CLI session files it must never be
+// mistaken for went with the herdr pi kind (epic 43y, tick uxi): TranscriptDir
+// knows no pi layout any more, so nothing under ~/.pi can be read as the
+// durable runner's evidence (tick bgx).
 func TestTheDurableRunnersTranscriptSignalIsItsStorageNotTheCliSessions(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv(EnvTranscriptHome, home)
 	worktree := t.TempDir()
 	state := t.TempDir()
-	// A pi CLI session transcript exists for the worktree — the old, wrong
-	// signal, still on disk where the CLI keeps it.
-	writeTranscript(t, "pi", worktree,
-		map[string]any{"type": "message", "timestamp": "2026-09-28T07:01:04.886Z",
-			"message": map[string]any{"role": "assistant"}})
 
 	record := &attemptRecord{Runner: "pi", Worktree: worktree, State: state}
 
@@ -147,12 +136,14 @@ func TestTheDurableRunnersTranscriptSignalIsItsStorageNotTheCliSessions(t *testi
 	}
 
 	// An overridden `pi` runner is the CLI escape hatch (TICFAC_RUNNER_ARGV,
-	// the tests' fake runner): it keeps the CLI's session transcript, the
-	// only pi that still writes one.
+	// the tests' fake runner). It keeps no transcript signal at all now:
+	// the pi CLI's layout left with the herdr pi kind, so the watch answers
+	// nothing rather than pointing an operator at a file it no longer knows
+	// how to find — the other signals (the process table, the storage) are
+	// what an overridden runner has.
 	record.RunnerArgv = []string{"pi", "-p"}
-	ev, ok = lastRunnerEvent(record)
-	if !ok || ev.Path != filepath.Join(TranscriptDir("pi", worktree), "s.jsonl") {
-		t.Errorf("overridden runner event = %+v (%t), want the pi CLI session transcript", ev, ok)
+	if ev, ok := lastRunnerEvent(record); ok {
+		t.Errorf("overridden runner event = %+v, want none: the pi CLI session layout is gone with the herdr pi kind", ev)
 	}
 }
 

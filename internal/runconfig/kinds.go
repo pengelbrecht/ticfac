@@ -31,8 +31,7 @@ type kindSpec struct {
 	modelFlag string
 	// effortStyle selects how `effort` compiles.
 	effortStyle effortStyle
-	// effortFlag is used by effortStyleFlag ("--effort") and
-	// effortStyleThinking ("--thinking").
+	// effortFlag is used by effortStyleFlag (for example, "--effort").
 	effortFlag string
 	// effortConfigFlag/effortConfigKey drive effortStyleConfig: codex has no
 	// reasoning-effort flag, so effort is a config override.
@@ -55,16 +54,6 @@ type kindSpec struct {
 	familyNote string
 	// familyHint suggests a fix.
 	familyHint string
-
-	// catalog is the kind's own model oracle — the SECOND rung of model
-	// validation after modelOK's shape check. pi ships one: `pi
-	// --list-models` lists every id `--model` accepts, with a per-model
-	// `thinking` column (which model has no thinking dimension is per model,
-	// not per kind). Nil means the kind ships no oracle and the family check
-	// is all compile time can do — a well-formed but non-existent id is then
-	// the first-round-trip gate's problem, as herdr-kinds.md's green-start
-	// trap section records for codex.
-	catalog *catalogSpec
 
 	// extras are this kind's computed per-spawn argv fragments: elements it
 	// needs that depend on the spawn ENVIRONMENT — the repository — rather
@@ -162,11 +151,15 @@ var gitMetadataAddDir = spawnExtra{
 
 // kindSpecs is the capability matrix. Keys are herdr kinds.
 //
-// The claude, codex, opencode and pi rows are all round-tripped live — the
-// first three in herdr-kinds.md's own sections (claude and codex 2026-08-12,
-// opencode 2026-08-13), pi by tick gjk on 2026-09-10 (pi 0.85.1, herdr
-// protocol 22), whose findings are recorded in the pi row's comments and in
-// herdr-kinds.md's pi section rather than re-derived here.
+// The claude, codex and opencode rows are all round-tripped live — the first
+// three in herdr-kinds.md's own sections (claude and codex 2026-08-12,
+// opencode 2026-08-13). A fourth row, pi, was round-tripped 2026-09-10
+// (tick gjk) and DELETED in epic 43y (tick uxi): a herdr agent template
+// spawns the pi CLI, and the pi CLI is not a worker harness any more —
+// pi-durable is, headless through the local subprocess executor or hosted
+// in a cloud container, never in a herdr pane. The name "pi" survives as
+// the durable harness's runner name, so the refusal Compile gives it is
+// what keeps the one name from re-opening the other path.
 var kindSpecs = map[string]*kindSpec{
 	"claude": {
 		name: "claude",
@@ -241,48 +234,6 @@ var kindSpecs = map[string]*kindSpec{
 			"--model", "-m",
 		},
 	},
-	"pi": {
-		name: "pi",
-		// Verified live 2026-09-10 (tick gjk, pi 0.85.1, herdr protocol 22
-		// (0.9.0)); evidence: .tick/logs/herd/av8/gjk.RESULT.md, recorded in
-		// herdr-kinds.md's pi section. pi has NO permission gate of the kind
-		// claude and codex have: in `-p` mode it ran a write tool unprompted,
-		// with no flag, in a scratch repo OUTSIDE the trusted tree. The only
-		// gate pi does have is trust of project-local files
-		// (AGENTS.md/CLAUDE.md discovery), and `--approve` is its whole
-		// story — `~/.pi/agent/trust.json` records the trusted roots, and
-		// `--approve` is what makes an untrusted path non-interactive. The
-		// template below was round-tripped: the echoed argv answered a live
-		// prompt and the session resumed after a restart.
-		fullAuto:         []string{"--approve"},
-		fullAutoVerified: true,
-		modelFlag:        "--model",
-		effortStyle:      effortStyleSuffix,
-		effortFlag:       "--thinking",
-		efforts:          []Effort{EffortOff, EffortMinimal, EffortLow, EffortMedium, EffortHigh, EffortXHigh, EffortMax},
-		effortsNote:      "pi --thinking accepts off, minimal, low, medium, high, xhigh, max",
-		modelOK:          providerQualified,
-		familyNote:       "pi is cross-provider and takes a provider-qualified <provider>/<model> id",
-		familyHint: "qualify the id with its provider (openai-codex/…, anthropic/…, cloudflare-workers-ai/…) exactly as `pi --list-models` prints it, " +
-			"or use the kind that serves this model directly",
-		// The second rung, and the reason it exists. Verified live (tick
-		// gjk): an unknown id is NOT silently substituted the way
-		// opencode's is — pi passes it through as a "custom model id",
-		// warns on stderr, returns an EMPTY turn and exits 0. So a typo is
-		// invisible to any automation that reads exit codes, and the
-		// first-round-trip gate fails with a misleading diagnosis. The
-		// catalog is the only oracle (`pi auth check --model` validates the
-		// provider only and reports ready for nonsense); compile time is
-		// where the typo dies. Its `thinking` column also carries the
-		// per-model effort dimension, because a `:<effort>` suffix on a
-		// model whose column reads `no` is silently accepted and ignored —
-		// a tier-meaning error, refused here like opencode's missing
-		// effort dimension is.
-		catalog: piCatalog,
-		reservedArgs: []string{
-			"--model", "-m", "--thinking",
-		},
-	},
 }
 
 type effortStyle int
@@ -292,9 +243,6 @@ const (
 	effortStyleFlag effortStyle = iota
 	// effortStyleConfig: a config override, e.g. `-c model_reasoning_effort="high"`.
 	effortStyleConfig
-	// effortStyleSuffix: appended to the model id, e.g. `--model M:high`;
-	// with no model it falls back to the equivalent flag (`--thinking high`).
-	effortStyleSuffix
 	// effortStyleNone: the kind's interactive CLI has NO way to carry a
 	// reasoning-effort level in argv, so the dimension cannot be compiled at
 	// all and any level is refused.
@@ -310,9 +258,11 @@ const (
 )
 
 // KnownKinds lists the kinds this package can compile argv for, sorted. It is
-// NOT the list of kinds herdr knows — the installed herdr binary is the
-// authority there (`herdr agent`). A kind outside this list is refused rather
-// than spawned with a guessed template.
+// deliberately narrower than the kinds the installed herdr advertises: a kind
+// must appear here to be dispatched by ticfac. In particular, herdr still
+// advertises "pi", but that value launches the deleted pi CLI path and is
+// refused. Every other kind outside this list is likewise refused rather than
+// spawned with a guessed template.
 func KnownKinds() []string {
 	out := make([]string, 0, len(kindSpecs))
 	for k := range kindSpecs {
@@ -345,9 +295,9 @@ func claudeFamily(model string) bool {
 // openAIFamily reports whether a model id looks like an OpenAI model the
 // codex CLI could serve. It is a family check, not an entitlement check: a
 // well-formed but non-existent id (`gpt-9-imaginary`) passes here and is
-// caught by the first-round-trip gate instead — that is the green-start trap,
-// and no static check can close it. (pi is the kind that ships the oracle
-// which CAN close it; see the pi row's catalog.)
+// caught by the first-round-trip gate instead — that is the green-start trap.
+// No compiled kind ships a catalog oracle now that the pi-CLI kind and its
+// `pi --list-models` reader are deleted (epic 43y, tick uxi).
 func openAIFamily(model string) bool {
 	if strings.Contains(model, "/") {
 		return false
@@ -363,19 +313,19 @@ func openAIFamily(model string) bool {
 	return false
 }
 
-// providerQualified reports whether a model id carries a provider prefix, as
-// pi's cross-provider namespace requires: a bare id that names no provider is
-// a refusal. This is only the FIRST rung — a shape check, blind to typos. A
-// provider-qualified id that names no real model is caught by the pi row's
-// catalog rung, which validates against `pi --list-models` rather than a
-// slash.
+// providerQualified reports whether a model id carries a provider prefix,
+// as the cross-provider namespaces (opencode's) require: a bare id that names
+// no provider is a refusal. This is the FIRST rung — a shape check, blind to
+// typos; a provider-qualified id that names no real model is the green-start
+// trap herdr-kinds.md documents, caught by the first-round-trip gate because
+// no compiled kind ships an oracle for it any more.
 func providerQualified(model string) bool {
 	i := strings.Index(model, "/")
 	return i > 0 && i < len(model)-1
 }
 
 // opencodeFamily reports whether a model id is one `opencode --model` could
-// resolve: provider-qualified like pi's, and with no `:<variant>` suffix.
+// resolve: provider-qualified, and with no `:<variant>` suffix.
 //
 // The strictness is bought with live evidence, not taste. Observed 2026-08-13
 // (opencode 1.18.18): an id opencode does not recognise produces NO error
@@ -387,8 +337,8 @@ func providerQualified(model string) bool {
 // here the gate that exists to catch model-name failures passes.
 //
 // So every shape that opencode would silently swallow is refused at compile
-// time: a bare id (`gpt-5.6-luna`), a claude alias (`opus`), and pi's
-// `model:thinking` shorthand — which is doubly wrong here, opencode having no
+// time: a bare id (`gpt-5.6-luna`), a claude alias (`opus`), and a
+// `:<variant>` suffix — which is doubly wrong here, opencode having no
 // effort dimension at all.
 func opencodeFamily(model string) bool {
 	if strings.Contains(model, ":") {

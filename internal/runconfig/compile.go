@@ -21,25 +21,6 @@ const (
 	// RefusalEffortLevel: the effort enum is a union across kinds and this
 	// kind does not accept this level — kind = "claude", effort = "minimal".
 	RefusalEffortLevel RefusalReason = "effort-level"
-	// RefusalCatalogUnavailable: a kind that ships its own model oracle
-	// (pi) cannot read it — the oracle command is absent from the spawn
-	// host or its listing failed or would not parse. Refused rather than
-	// degraded to the shape check: the shape check passes every typo, and
-	// (verified live 2026-09-10, tick gjk) a typo'd pi model costs a turn
-	// that returns empty at exit 0 — invisible to anything reading exit
-	// codes. This is the logged pi-absent decision: the catalog is a live
-	// command and a host that cannot run the oracle cannot host the worker
-	// either, since the oracle names the worker's own CLI.
-	RefusalCatalogUnavailable RefusalReason = "catalog-unavailable"
-	// RefusalModelCatalog: a shape-valid, family-valid model id that the
-	// kind's own catalog does not list — a typo that the slash check waved
-	// through.
-	RefusalModelCatalog RefusalReason = "model-catalog"
-	// RefusalModelThinking: an effort level on a model whose catalog column
-	// for that dimension reads no. The level would be silently accepted and
-	// ignored (verified live, tick gjk), which is the same class of error as
-	// opencode's missing effort dimension: a refusal, not a silent drop.
-	RefusalModelThinking RefusalReason = "model-thinking"
 	// RefusalArgsConflict: `args` restates a flag the spawner already
 	// compiles. A config error, not a precedence puzzle.
 	RefusalArgsConflict RefusalReason = "args-conflict"
@@ -126,17 +107,6 @@ type SpawnContext struct {
 	// it: a resolver that errors refuses the spawn, exactly as an empty
 	// GitCommonDir does.
 	ResolveGitCommonDir func() (string, error)
-
-	// ResolvePiCatalog supplies pi's own model catalog on demand, and is
-	// consulted ONLY by a compile for kind "pi" that names a model — the
-	// second rung of model validation (see the pi row in kinds.go).
-	//
-	// The catalog costs a `pi --list-models` on the host that will run the
-	// worker. Nil, or a resolver that errors, is a refusal, not a silent
-	// fall-back to the shape check — see [RefusalCatalogUnavailable] for the
-	// decision and its evidence. A host that cannot run the oracle cannot
-	// host the worker either: pi is the worker's own CLI.
-	ResolvePiCatalog func() (*PiCatalog, error)
 }
 
 // gitCommonDir answers the fragments that need the git common dir: the
@@ -168,30 +138,43 @@ type Spawn struct {
 }
 
 // Compile turns a resolved [Worker] into spawn argv, enforcing the
-// compatibility rules the schema cannot: model family, the kind's own model
-// catalog where it ships one, effort level, unknown kind, and `args`
-// restating a compiled flag. It fails closed — on a mismatch it returns a
-// [*RefusalError] and no argv, never a rerouted kind and never a dropped
-// model.
+// compatibility rules the schema cannot: model family, effort level, unknown
+// kind, and `args` restating a compiled flag. It fails closed — on a mismatch
+// it returns a [*RefusalError] and no argv, never a rerouted kind and never a
+// dropped model.
 //
 // fullAuto mirrors orchestration.full_auto: when false the kind's full-auto
 // template is omitted and every approval prompt becomes a human escalation.
 //
-// env carries the repository facts a kind row may compute argv or validate a
-// model from — today the git common dir codex's sandbox has to be told about,
-// and pi's model catalog. A kind that declares such a dependency and gets
-// nothing to resolve it from is refused, never compiled without it.
+// env carries the repository facts a kind row may compute argv from — today
+// the git common dir codex's sandbox has to be told about. A kind that
+// declares such a dependency and gets nothing to resolve it from is refused,
+// never compiled without it.
 func Compile(w Worker, fullAuto bool, env SpawnContext) (*Spawn, error) {
 	label := w.Label()
 
 	spec, ok := kindSpecs[w.Kind]
 	if !ok {
+		fix := "use a kind the installed herdr reports (`herdr agent`) and that herdr-kinds.md has round-tripped"
+		if w.Kind == "pi" {
+			// The deleted kind, named specifically: herdr's own `herdr agent`
+			// still lists a pi kind, and the generic fix would send an
+			// operator back there to re-open the path this refusal closes.
+			// pi IS a worker harness — pi-durable — but it runs headless
+			// through the local subprocess executor (whose runner table
+			// names it "pi") or hosted in a cloud container, never in a
+			// herdr pane (epic 43y, tick uxi).
+			fix = "kind = \"pi\" names pi-durable, the worker harness — a pi worker runs " +
+				"headless through the local subprocess executor (the local runner table's \"pi\") " +
+				"or hosted in a cloud container, never in a herdr pane; the pi-CLI worker path " +
+				"is deleted (epic 43y)"
+		}
 		return nil, &RefusalError{
 			Label: label, Kind: w.Kind, Model: w.Model, Effort: w.Effort,
 			Reason: RefusalUnknownKind,
 			Detail: fmt.Sprintf("kind = %q has no known spawn template (this package compiles argv for %s)",
 				w.Kind, strings.Join(KnownKinds(), ", ")),
-			Fix: "use a kind the installed herdr reports (`herdr agent`) and that herdr-kinds.md has round-tripped",
+			Fix: fix,
 		}
 	}
 
@@ -226,21 +209,6 @@ func Compile(w Worker, fullAuto bool, env SpawnContext) (*Spawn, error) {
 					w.Kind, string(w.Effort), spec.effortsNote),
 				Fix: "choose a level this kind accepts, or move the role to a kind that has one",
 			}
-		}
-	}
-
-	// The catalog rung: for a kind that ships its own model oracle, the id is
-	// validated against that catalog — pi's `--list-models` — and an effort
-	// level is validated against the per-model dimension the catalog's
-	// column names. A nil spec.catalog (claude, codex, opencode) skips this:
-	// those CLIs ship no oracle, and their well-formed-but-imaginary ids are
-	// the first-round-trip gate's to catch (herdr-kinds.md, the green-start
-	// trap). pi's oracle exists precisely because its own failure mode is
-	// worse than an imaginary id that errors: a typo'd pi id starts green and
-	// returns an EMPTY turn at exit 0 (verified live, tick gjk).
-	if w.Model != "" && spec.catalog != nil {
-		if err := spec.catalog.validate(w, label, env); err != nil {
-			return nil, err
 		}
 	}
 
@@ -312,17 +280,6 @@ func compileExtras(spec *kindSpec, env SpawnContext) ([]string, *extraError) {
 func compileCapability(spec *kindSpec, model string, effort Effort) []string {
 	var out []string
 	switch spec.effortStyle {
-	case effortStyleSuffix:
-		// pi: `--model M:E`, or `--thinking E` when there is no model to
-		// hang the suffix on.
-		switch {
-		case model != "" && effort != "":
-			out = append(out, spec.modelFlag, model+":"+string(effort))
-		case model != "":
-			out = append(out, spec.modelFlag, model)
-		case effort != "":
-			out = append(out, spec.effortFlag, string(effort))
-		}
 	case effortStyleNone:
 		// opencode: the model dimension alone. Effort never reaches here —
 		// Compile refuses it above — and there is no flag to render it into

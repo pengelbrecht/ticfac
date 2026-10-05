@@ -110,10 +110,12 @@
 // migrator, until ticfac tick 4l2 retires it). The spawner's kind/compile
 // machinery — the capability matrix that turns a resolved [Worker] into
 // `herdr agent start` argv — landed here with tick sur (kinds.go, compile.go,
-// picatalog.go, and the herdr-kinds.md reference beside them), because the
-// matrix is execution config and its pi row was written from a live
-// round-trip (tick gjk) rather than re-derived. Adaptations are deliberate
-// and called out in comments: the tracker tables are foreign here (see
+// the then-present picatalog.go, and the herdr-kinds.md reference beside
+// them), because the matrix is execution config. Its pi row was written from
+// a live round-trip (tick gjk), then deleted with its `pi --list-models`
+// oracle in epic 43y, tick uxi: pi-durable is a headless/hosted worker, never
+// a pi-CLI process in a herdr pane. Adaptations are deliberate and called out
+// in comments: the tracker tables are foreign here (see
 // above), and the version gate names ticfac where ticks' named tk. Everything
 // else is byte-faithful, so the two readers of the shared half stay
 // comparable line by line.

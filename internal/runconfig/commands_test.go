@@ -12,12 +12,12 @@ import (
 // the transcription cross-check that used to live in ticks' copy of this
 // package has no upstream to run against any more.
 
-// TestCommandSurfaceParses proves worked example 6 — routing plus all four
+// TestCommandSurfaceParses proves worked example 5 — routing plus all four
 // command tables — loads and exposes what the doc says it does. This is the
 // shape `.tick/config.md`'s structured sections migrate into, so a repo that
 // has migrated must still be loadable by `tk herd spawn`.
 func TestCommandSurfaceParses(t *testing.T) {
-	cfg, err := Parse([]byte(docExample6))
+	cfg, err := Parse([]byte(docExample5))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}

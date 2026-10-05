@@ -15,7 +15,10 @@ import (
 // The interrupt is the harness's own (interrupt.go). epic-6in (2026-09-28):
 // two pi workers ran past their wall clock, the executor re-sent ctrl+c at
 // every poll — which pi reads as "clear the editor" — and 46x attempt 2 was
-// only stopped by the pane close two minutes later.
+// only stopped by the pane close two minutes later. The pi kind itself is
+// deleted (epic 43y, tick uxi); its verified interrupt stays recorded in
+// interrupt.go's history for the day somebody round-trips a kind whose
+// interrupt is not the generic chord.
 
 // TestInterruptKeysPerKind pins the key sequence each verified harness is
 // interrupted with, and the generic chord an unverified kind keeps.
@@ -23,13 +26,17 @@ import (
 // short: a pure table lookup; no harness, no process, no git.
 func TestInterruptKeysPerKind(t *testing.T) {
 	for kind, want := range map[string][]string{
-		"pi":     {"esc"},
 		"claude": {"esc"},
 		"codex":  {"esc"},
 		"":       {"esc"}, // the executor's default kind is claude
-		"Pi":     {"esc"},
+		"Claude": {"esc"},
 		"gemini": {"ctrl+c"},
 		"amp":    {"ctrl+c"},
+		// The deleted pi kind keeps the generic chord, not its verified
+		// Escape: nothing verifies a key for a kind the executor can no
+		// longer be given, and the verified entry must not survive as a
+		// reason to add the kind back (epic 43y, tick uxi).
+		"pi": {"ctrl+c"},
 	} {
 		if got := interruptKeys(kind); !reflect.DeepEqual(got, want) {
 			t.Errorf("interruptKeys(%q) = %v, want %v", kind, got, want)
@@ -37,10 +44,10 @@ func TestInterruptKeysPerKind(t *testing.T) {
 	}
 	// The table is not handed out by reference: a caller that appends to
 	// the keys must not change what the next stop sends.
-	keys := interruptKeys("pi")
+	keys := interruptKeys("claude")
 	keys[0] = "ctrl+c"
-	if got := interruptKeys("pi"); got[0] != "esc" {
-		t.Errorf("mutating a returned sequence changed the table: pi now interrupts with %v", got)
+	if got := interruptKeys("claude"); got[0] != "esc" {
+		t.Errorf("mutating a returned sequence changed the table: claude now interrupts with %v", got)
 	}
 }
 
@@ -52,9 +59,11 @@ func TestCancelSendsEachKindsOwnInterrupt(t *testing.T) {
 		kind string
 		want string
 	}{
-		{"pi", "esc"},
 		{"claude", "esc"},
 		{"codex", "esc"},
+		// The deleted pi kind gets the generic chord like every unverified
+		// kind — its verified Escape went with the kind (epic 43y, uxi).
+		{"pi", "ctrl+c"},
 		{"gemini", "ctrl+c"},
 	} {
 		t.Run(tc.kind, func(t *testing.T) {
@@ -78,14 +87,14 @@ func TestCancelSendsEachKindsOwnInterrupt(t *testing.T) {
 	}
 }
 
-// TestAPiAgentThatOnlyHonoursEscapeStopsWithinOnePoll is epic-6in's 46x
-// attempt 2, repaired: a pi agent past its wall clock is sent Escape — its
-// own interrupt — and, back at its prompt, is closed at the very next poll
-// rather than after the two-minute grace (it will never exit or report on
-// its own). The uncommitted work is snapshotted before the close, as for any
-// close.
-func TestAPiAgentThatOnlyHonoursEscapeStopsWithinOnePoll(t *testing.T) {
-	h := newHarness(t, harnessOptions{kind: "pi", spawnAgent: true, agentMode: "esc_only"})
+// TestAnEscapeOnlyAgentStopsWithinOnePoll is epic-6in's 46x attempt 2,
+// repaired, stated against a kind the executor still runs: a claude agent
+// past its wall clock is sent Escape — its own interrupt — and, back at its
+// prompt, is closed at the very next poll rather than after the two-minute
+// grace (it will never exit or report on its own). The uncommitted work is
+// snapshotted before the close, as for any close.
+func TestAnEscapeOnlyAgentStopsWithinOnePoll(t *testing.T) {
+	h := newHarness(t, harnessOptions{kind: "claude", spawnAgent: true, agentMode: "esc_only"})
 	clock := &wallClock{t: time.Now().UTC()}
 	h.ex.now = clock.now
 	handle, err := h.start("t1")
