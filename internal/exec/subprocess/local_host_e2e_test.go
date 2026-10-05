@@ -438,3 +438,101 @@ func TestAnOperatorWatchesAndSteersALiveDurableWorker(t *testing.T) {
 		t.Errorf("state %s, want succeeded", status.State)
 	}
 }
+
+// THE STUCK LADDER THROUGH A HUNG TOOL, on the real harness (tick l6n): the
+// scripted worker's first tool hangs, the supervisor's stuck watch steers it
+// and interrupts that tool — the round ends, exit 137, the way pi-durable's
+// own abort ends one — and the conversation reads the steer and carries on
+// to its report. Before the fix the steer was placed after a round that
+// never ended, and the attempt was stopped as stuck one window later.
+func TestAStuckDurableWorkerInAHungToolIsSteeredThroughIt(t *testing.T) {
+	shorttest.EndToEnd(t)
+	if testing.Short() {
+		t.Skip("short mode: this one runs a real supervisor and a real Node harness")
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skipf("the pi-durable harness runs on node: %v", err)
+	}
+	root, err := contracts.RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	harnessDir := filepath.Join(root, "harness")
+	if _, err := os.Stat(filepath.Join(harnessDir, "node_modules", "@earendil-works", "pi-durable")); err != nil {
+		t.Skipf("the harness package's dependencies are not installed: %v — run pnpm install in harness/ to run this end-to-end test", err)
+	}
+	t.Setenv("TICFAC_HARNESS_DIR", harnessDir)
+	t.Setenv("TICFAC_STEER_SOCK_DIR", shortSocketDir(t))
+
+	const jobID = "run-l6n/tick-hu6/attempt-1"
+	const tick = "hu6"
+	reportRel := "runs/" + jobID + "/RESULT-" + tick + ".md"
+	writeReport := "mkdir -p runs/run-l6n && printf '# " + tick + "\\n\\nSteered through a hung tool.\\n\\nSTATUS: DONE\\n' > " + reportRel
+	transcript := filepath.Join(t.TempDir(), "transcript.json")
+	script, err := json.Marshal([]map[string]any{
+		{"thinking": "Run the command that will hang.", "toolCalls": []any{map[string]any{
+			"name": "bash",
+			"args": map[string]any{"command": "echo hanging; sleep 3600; echo never"},
+		}}},
+		{"thinking": "The supervisor interrupted the hung command and steered me: report.", "toolCalls": []any{map[string]any{
+			"name": "bash",
+			"args": map[string]any{"command": writeReport},
+		}}},
+		{"text": "steered through the hung tool, reported"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(transcript, script, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	f := newFixture(t, fixtureOptions{
+		runner:         "pi",
+		noFakeRunner:   true,
+		// The window has to outlast the harness's boot — the steer door
+		// must be listening when the watch first knocks, or the ladder
+		// takes its fallback — and that is well under a second here; the
+		// hung tool then holds the worker quiet for the whole window.
+		stuckAfter:     8 * time.Second,
+		fauxTranscript: transcript,
+		model:          "faux/faux-1",
+	})
+	handle := f.Start(f.spec(jobID, tick))
+	f.waitSettled(handle)
+
+	local, err := handle.Local()
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := f.inspect(handle)
+	rawLog, _ := os.ReadFile(filepath.Join(local.State, fileRunnerLog))
+	if status.State != StateSucceeded {
+		t.Fatalf("state %s, want succeeded — recovered through the hung tool, not stopped:\n%s\nthe runner's log:\n%s",
+			status.State, formatObservations(status.Observations), rawLog)
+	}
+	var steered, restarts, stops int
+	for _, o := range status.Observations {
+		switch {
+		case IsStuckNudge(o):
+			steered++
+			if !strings.Contains(o.Detail, "steered in its own conversation") || !strings.Contains(o.Detail, "hung tool") {
+				t.Errorf("the stuck nudge does not say it steered and interrupted the hung tool: %s", o.Detail)
+			}
+		case IsStuckStop(o):
+			stops++
+		case o.Kind == ObsStarted && strings.Contains(o.Detail, "re-prompted as stuck"):
+			restarts++
+		}
+	}
+	if steered != 1 || restarts != 0 || stops != 0 {
+		t.Fatalf("steers %d, interrupt-restarts %d, stuck stops %d; want 1, 0 and 0:\n%s\nthe runner's log:\n%s",
+			steered, restarts, stops, formatObservations(status.Observations), rawLog)
+	}
+	if !strings.Contains(string(rawLog), "steer admitted (stuck-nudge-1)") {
+		t.Errorf("the harness never admitted the stuck steer:\n%s", rawLog)
+	}
+	if _, err := os.Stat(filepath.Join(local.Worktree, reportRel)); err != nil {
+		t.Errorf("the worker did not carry on to its report: %v", err)
+	}
+}
