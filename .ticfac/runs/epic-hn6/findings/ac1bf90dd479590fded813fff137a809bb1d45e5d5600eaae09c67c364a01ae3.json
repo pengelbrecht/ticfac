@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "jmf",
   "attempt": 33,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T17:42:16Z",
+  "triaged_at": "2026-10-05T17:42:27Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing k6q",
+  "promoted_as": "k6q",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "jmf",
