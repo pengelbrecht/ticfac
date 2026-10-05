@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 299,
-  "state": "dispatching",
-  "reason": "dispatching pv7 as attempt 42",
-  "updated_at": "2026-10-05T23:07:25Z",
+  "sequence": 300,
+  "state": "running",
+  "reason": "pv7 is running as attempt 42",
+  "updated_at": "2026-10-05T23:07:36Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -209,7 +209,8 @@
     },
     {
       "tick_id": "pv7",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 42
     }
   ],
   "provenance": {
