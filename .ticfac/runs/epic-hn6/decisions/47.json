@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 47,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The generated gateway override stamps cf-aig-authorization with the account token, but the gateway forwards pi's own Authorization (its stored cloudflare-workers-ai credential) to Workers AI. Live, a bogus Authorization plus a valid cf-aig-authorization logs a failed row with upstream 10000 Authentication error. On a host whose pi stores the cfu_ wallet key (as this one did during dm2), enabling metering turns every Workers AI dispatch into a 401, not just an unmetered one. A headers.Authorization entry in the override does displace pi's stored key (verified locally against a fake server), so the fix is small, but choosing the credential that pays is an operator decision. The dm2 comments in pimeter.go/pimeter_test.go that say the stored key cannot be displaced and is 'used or ignored by the gateway' are wrong on both counts and should be corrected with it.\nevidence: internal/exec/subprocess/pimeter.go: gatewayCredentialCommand doc comment; live probe t648-probe-e (gateway row success=false, response code 10000)\n\nticfac run epic-hn6 created this tick by absorbing the finding 4eb8f61d6412c9858f444744c0b9b470897b68d7fc8f1179bc9c9e10e8a9b222 (reported by run-epic-hn6/tick-648/attempt-39): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/4eb8f61d6412c9858f444744c0b9b470897b68d7fc8f1179bc9c9e10e8a9b222.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "m4t",
+    "title": "metered pi dispatch depends on pi's stored Workers AI key being valid upstream"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.27,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.11,
+      "design": 0.38,
+      "diagnosis": 0.09,
+      "mechanical": 0.41,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1453,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T20:32:31Z",
+  "answered_at": "2026-10-05T20:32:31Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "m4t",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "a9571f84526f80708f0d4cc3a92fa8d61a547882",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
