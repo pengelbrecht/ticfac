@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 135,
-  "state": "running",
-  "reason": "jhp is running as attempt 23",
-  "updated_at": "2026-10-05T10:34:50Z",
+  "sequence": 136,
+  "state": "collecting",
+  "reason": "collecting kjs attempt 19",
+  "updated_at": "2026-10-05T10:34:55Z",
   "ticks": [
     {
       "tick_id": "92k",
