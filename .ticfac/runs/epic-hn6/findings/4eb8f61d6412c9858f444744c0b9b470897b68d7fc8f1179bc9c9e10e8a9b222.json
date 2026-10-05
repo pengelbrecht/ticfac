@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "648",
   "attempt": 39,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T20:27:53Z",
+  "triaged_at": "2026-10-05T20:28:04Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing m4t",
+  "promoted_as": "m4t",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "648",
