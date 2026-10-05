@@ -401,7 +401,17 @@ describe("workspace checkpoints over real git", () => {
   // run AT the checkout, never at whatever directory the door starts in:
   // the xd3 staging run's every wip checkpoint failed "not in a git
   // directory" until they did.
-  it("runs the host shell's git at the env's checkout, whatever the door's own directory", async () => {
+  //
+  // Tick hv3: this test's wall clock is process-bound and grows with host
+  // load (it failed once in a full `pnpm test` on the loaded host, passing
+  // on re-run) — every wip line and the restore are a spawned bash, so a
+  // host running a spawn storm (a live reconcile.test, an Xprotect scan)
+  // multiplies its runtime: 1.4s quiet, 4.6s at synthetic load 200. It
+  // states its own 120s bound, the kjs rule its two Harness-opening
+  // siblings in this file already follow (harness-timeout-discipline).
+  it("runs the host shell's git at the env's checkout, whatever the door's own directory", {
+    timeout: 120_000,
+  }, async () => {
     door = localSandboxDoor({ cwd: root });
     env = new FactorySandboxEnv({
       sandbox: door.sandbox,
