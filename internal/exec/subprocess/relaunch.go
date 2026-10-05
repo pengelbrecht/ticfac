@@ -46,7 +46,7 @@ func IsRelaunch(o Observation) bool {
 // MaxRelaunches, the death, and the recovery — the same sentence every
 // executor-side relaunch takes, so the feed reads one shape.
 func RelaunchDetail(n int, runner, death string) string {
-	return fmt.Sprintf("%srelaunch %d of %d: the %s runner was killed mid-run by %s, and the same argv is "+
+	return fmt.Sprintf("%srelaunch %d of %d: the %s runner died mid-run by %s, and the same argv is "+
 		"replayed so the relaunched process resumes its own conversation from the attempt storage — the killed "+
 		"turn continues, mid-tool, rather than the attempt paying a fresh one",
 		relaunchDetailPrefix, n, MaxRelaunches, runner, death)
@@ -94,7 +94,7 @@ func relaunchDue(st *store, record *attemptRecord, code, relaunched int) (bool, 
 func deathWord(life *runnerLife) string {
 	if life != nil {
 		if sig, ok := life.deathSignal(); ok {
-			return fmt.Sprintf("%s (signal %d)", sig, int(sig))
+			return fmt.Sprintf("signal %d (%s)", int(sig), sig)
 		}
 	}
 	return "a signal"

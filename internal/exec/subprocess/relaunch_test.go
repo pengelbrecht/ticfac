@@ -113,7 +113,7 @@ func nonExistentPath(t *testing.T) string {
 // The relaunch observation is a `started` observation the feed can pick out of
 // the stream — the nudge's own shape, and a prefix the nudge's does not match.
 func TestTheRelaunchObservationSaysWhatHappened(t *testing.T) {
-	detail := RelaunchDetail(1, "pi", "killed (signal 9)")
+	detail := RelaunchDetail(1, "pi", "signal 9 (killed)")
 	o := Observation{Kind: ObsStarted, Detail: detail}
 	if !IsRelaunch(o) {
 		t.Fatalf("a relaunch observation does not read as one: %+v", o)
@@ -123,7 +123,7 @@ func TestTheRelaunchObservationSaysWhatHappened(t *testing.T) {
 	}
 	for _, missing := range []string{
 		fmt.Sprintf("relaunch 1 of %d", MaxRelaunches),
-		"killed (signal 9)",
+		"signal 9 (killed)",
 		"resumes its own conversation from the attempt storage",
 	} {
 		if !strings.Contains(detail, missing) {

@@ -548,7 +548,7 @@ func TestAKilledDurableRunnerIsRelaunchedAndResumesMidTool(t *testing.T) {
 			len(got), formatObservations(status.Observations), rawLog)
 	}
 	if !strings.Contains(got[0].Detail, "relaunch 1 of 2") ||
-		!strings.Contains(got[0].Detail, "killed (signal 9)") {
+		!strings.Contains(got[0].Detail, "signal 9") {
 		t.Errorf("the relaunch observation does not name the death and the recovery: %s", got[0].Detail)
 	}
 	if len(nudges(status.Observations)) != 0 {
