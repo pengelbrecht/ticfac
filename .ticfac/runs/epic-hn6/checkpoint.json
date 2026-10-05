@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 145,
-  "state": "dispatching",
-  "reason": "dispatching 5ba as attempt 21",
-  "updated_at": "2026-10-05T11:30:59Z",
+  "sequence": 146,
+  "state": "running",
+  "reason": "5ba is running as attempt 21",
+  "updated_at": "2026-10-05T11:31:10Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -117,7 +117,8 @@
     },
     {
       "tick_id": "5ba",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 21
     }
   ],
   "provenance": {
