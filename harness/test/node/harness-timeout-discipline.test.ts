@@ -53,24 +53,41 @@ function opensHarness(root: ts.Node): boolean {
 }
 
 /**
- * The timeout declared as an `it(...)` call's third argument: vitest takes
- * either a bare number or `{ timeout: <ms> }`.
+ * The timeout an `it(...)` call declares, wherever vitest accepts it: as the
+ * third argument — a bare number, or `{ timeout: <ms> }` — or as an options
+ * object placed between the title and the test function.
  */
-function declaredTimeout(argument: ts.Expression | undefined): DeclaredTimeout {
-  if (argument && ts.isNumericLiteral(argument)) return Number(argument.text);
-  if (argument && ts.isObjectLiteralExpression(argument)) {
-    for (const property of argument.properties) {
-      if (
-        ts.isPropertyAssignment(property) &&
-        ts.isIdentifier(property.name) &&
-        property.name.text === "timeout" &&
-        ts.isNumericLiteral(property.initializer)
-      ) {
-        return Number(property.initializer.text);
+function declaredTimeout(
+  title: ts.Expression,
+  arguments_: readonly ts.Expression[],
+): DeclaredTimeout {
+  const timeoutOf = (argument: ts.Expression | undefined): DeclaredTimeout => {
+    if (argument && ts.isNumericLiteral(argument)) return Number(argument.text);
+    if (argument && ts.isObjectLiteralExpression(argument)) {
+      for (const property of argument.properties) {
+        if (
+          ts.isPropertyAssignment(property) &&
+          ts.isIdentifier(property.name) &&
+          property.name.text === "timeout" &&
+          ts.isNumericLiteral(property.initializer)
+        ) {
+          return Number(property.initializer.text);
+        }
       }
     }
-  }
-  return undefined;
+    return undefined;
+  };
+
+  // The test function is the one arrow argument after the title; the options
+  // may sit before it (it(name, options, fn)) or after (it(name, fn, N)).
+  const fnIndex = arguments_.findIndex(
+    (argument, index) => index > arguments_.indexOf(title) && ts.isArrowFunction(argument),
+  );
+  if (fnIndex < 0) return undefined;
+  return (
+    timeoutOf(arguments_[fnIndex - 1] !== title ? arguments_[fnIndex - 1] : undefined) ??
+    timeoutOf(arguments_[fnIndex + 1])
+  );
 }
 
 /** Every `it(...)` in the source that opens the Harness in its own body. */
@@ -83,14 +100,15 @@ function harnessOpeningTests(source: string): { title: string; timeout: Declared
       ts.isIdentifier(node.expression) &&
       node.expression.text === "it" &&
       node.arguments.length >= 2 &&
-      ts.isStringLiteralLike(node.arguments[0]) &&
-      ts.isArrowFunction(node.arguments[1]) &&
-      opensHarness(node.arguments[1])
+      ts.isStringLiteralLike(node.arguments[0])
     ) {
-      tests.push({
-        title: node.arguments[0].text,
-        timeout: declaredTimeout(node.arguments[2]),
-      });
+      const title = node.arguments[0];
+      const testFn = node.arguments.find(
+        (argument) => ts.isArrowFunction(argument) && argument.body,
+      );
+      if (testFn && ts.isArrowFunction(testFn) && opensHarness(testFn)) {
+        tests.push({ title: title.text, timeout: declaredTimeout(title, node.arguments) });
+      }
     }
     node.forEachChild(visit);
   };
