@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 173,
-  "state": "integrating",
-  "reason": "integrating 3yx attempt 24 into epic/hn6",
-  "updated_at": "2026-10-05T14:04:16Z",
+  "sequence": 174,
+  "state": "gating",
+  "reason": "running the integrated gate for 3yx on 6fe4d083bb11",
+  "updated_at": "2026-10-05T14:04:31Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -128,7 +128,7 @@
     },
     {
       "tick_id": "3yx",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 24
     },
     {
