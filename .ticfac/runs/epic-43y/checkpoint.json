@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 206,
-  "state": "collecting",
-  "reason": "collecting uxi attempt 30",
-  "updated_at": "2026-10-05T14:48:54Z",
+  "sequence": 207,
+  "state": "dispatching",
+  "reason": "dispatching uxi as attempt 34",
+  "updated_at": "2026-10-05T14:49:32Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -142,7 +142,7 @@
     },
     {
       "tick_id": "uxi",
-      "state": "dispatched",
+      "state": "ready",
       "attempt": 30
     },
     {
