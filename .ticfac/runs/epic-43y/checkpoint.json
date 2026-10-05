@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 136,
-  "state": "collecting",
-  "reason": "collecting kjs attempt 19",
-  "updated_at": "2026-10-05T10:34:55Z",
+  "sequence": 137,
+  "state": "integrating",
+  "reason": "integrating kjs attempt 19 into epic/43y",
+  "updated_at": "2026-10-05T10:35:27Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -97,7 +97,7 @@
     },
     {
       "tick_id": "kjs",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 19
     },
     {
