@@ -1,0 +1,13 @@
+{
+  "id": "hfe",
+  "title": "bubbletea's init queries every terminal: ~5s per call on a silent pty",
+  "description": "The ticfac binary links bubbletea v1.3.5 (via internal/factory/dashboard, the `ticfac factory dashboard` view), and bubbletea's package init calls lipgloss v1 HasDarkBackground: an OSC 11 + CSI 6n query on /dev/tty that runs before any command body, on every invocation. On a terminal that does not answer (script(1), CI ptys, likely Bombadil's pty driver for z7w) it burns ~5s of select timeouts per invocation and leaves query bytes on the wire; measured: `script -q /dev/null ticfac version` = 5.0s where the same call without a pty is 0.006s. Every ticfac call in the cloud sandbox and in CI ptys pays this, watch or not.\nevidence: goroutine dump of a running invocation: github.com/charmbracelet/bubbletea@v1.3.5/tea_init.go:21 -\u003e lipgloss@v1.1.0/renderer.go:132 -\u003e termenv@v0.16.0/termenv_unix.go:275 (termStatusReport on /dev/tty, blocked in unix.Select); command: time script -q /dev/null ticfac version (5.0s) vs time ticfac version (0.006s)\n\nticfac run epic-hn6 filed this backlog tick from the finding c5d95f512978dcb38a4b3aa150aa0246278fdf694c22a8ea24e49b26450ef57e (reported by run-epic-hn6/tick-jmf/attempt-33): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/c5d95f512978dcb38a4b3aa150aa0246278fdf694c22a8ea24e49b26450ef57e.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-jmf/attempt-33",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T17:42:05Z",
+  "updated_at": "2026-10-05T17:42:05Z"
+}
