@@ -2,7 +2,7 @@
   "id": "wvn",
   "title": "Drill-in report summary is the ticks-worker preamble comment, not the report",
   "description": "reportSummary takes the first non-heading paragraph, and cloud worker reports open with '\u003c!-- ticks-worker: container facts, prepended after the harness exited … --\u003e'. So 11 ticks' drill-in report line (0rx 378 3rc 7uv c2u fq0 lh4 ltg oro zl1 u5n) reads the container preamble rather than what the worker did. Skip HTML comment paragraphs.\nevidence: internal/statusmodel/report.go:262-284 (reportSummary); live tick view for 0rx; `ticfac status epic-hn6 --json` .waves[].ticks[].report.summary\n\nticfac run epic-hn6 created this tick by absorbing the finding bce10995fc814c2b0790be7f2df2f61da022047d54551a9d7b36aa3627df1ede (reported by run-epic-hn6/tick-qjl/attempt-29): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/bce10995fc814c2b0790be7f2df2f61da022047d54551a9d7b36aa3627df1ede.json on the run branch.",
-  "notes": "2026-10-05 17:44 - ticfac run epic-hn6: created by absorbing finding bce10995fc814c2b0790be7f2df2f61da022047d54551a9d7b36aa3627df1ede — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-hn6/absorptions/bce10995fc814c2b0790be7f2df2f61da022047d54551a9d7b36aa3627df1ede.json on epic/hn6, and it says: the classifier put 0.87 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A3: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
+  "notes": "2026-10-05 17:44 - ticfac run epic-hn6: created by absorbing finding bce10995fc814c2b0790be7f2df2f61da022047d54551a9d7b36aa3627df1ede — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-hn6/absorptions/bce10995fc814c2b0790be7f2df2f61da022047d54551a9d7b36aa3627df1ede.json on epic/hn6, and it says: the classifier put 0.87 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A3: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side\n2026-10-05 20:15 - ticfac run epic-hn6: wvn try 1 (run dispatch #35) merged into epic/hn6 as c61a03541ee1; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +11,6 @@
   "discovered_from": "run-epic-hn6/tick-qjl/attempt-29",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-05T15:44:48Z",
-  "updated_at": "2026-10-05T17:39:17.522223Z",
+  "updated_at": "2026-10-05T18:15:19.568626Z",
   "started_at": "2026-10-05T17:39:17.522223Z"
 }
