@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 257,
-  "state": "dispatching",
-  "reason": "dispatching 24u as attempt 36",
-  "updated_at": "2026-10-05T19:44:22Z",
+  "sequence": 258,
+  "state": "running",
+  "reason": "24u is running as attempt 36",
+  "updated_at": "2026-10-05T19:44:31Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -184,7 +184,8 @@
     },
     {
       "tick_id": "24u",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 36
     },
     {
       "tick_id": "648",
