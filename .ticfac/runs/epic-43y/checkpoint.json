@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 266,
-  "state": "collecting",
-  "reason": "collecting a2l attempt 36",
-  "updated_at": "2026-10-05T17:44:30Z",
+  "sequence": 267,
+  "state": "integrating",
+  "reason": "integrating a2l attempt 36 into epic/43y",
+  "updated_at": "2026-10-05T17:44:50Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -162,7 +162,7 @@
     },
     {
       "tick_id": "a2l",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 36
     },
     {
