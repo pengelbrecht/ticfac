@@ -2,7 +2,7 @@
   "id": "yp8",
   "title": "Re-review 43y: its tree changed since its NOT READY final review (round 3)",
   "description": "Review the epic 43y again, AS INTEGRATED: its final review (o68, decision 76) judged it NOT READY at 55975b8eeb89, after the 2 review rounds the run makes by itself, and the epic branch has changed since — now at f706e3d199fc, with work that review never saw (a commit closed or pushed since, a person's fix among them perhaps). This is review round 3, and it is made only because the tree changed.\n\nThat review's reasons: regenerate cloudflare/test/fixtures/classify-tick-decision.json with -update-pin (stale after 7sn's profiles/closeout-epic.md edit), then CI on the epic head must be green; its blocking finding(s): \"Epic head CI red: classify-tick pin stale after 7sn changed closeout profile\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY here holds for a person with your reasons unless the tree changes again.",
-  "notes": "2026-10-06 01:20 - ticfac run epic-43y: yp8 try 1 (run dispatch #68) reported a finding the run itself decided — defect \"Close-out PR body: amendments section is never condensed under the body budget\" (key ad7c6da9878fdde2ed2336aaac24d44d5f0ce3b382f9caaa4bbbf29194ca7266, severity low, for this repository) is promoted to a backlog tick with an owner, 8wa; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/ad7c6da9878fdde2ed2336aaac24d44d5f0ce3b382f9caaa4bbbf29194ca7266.json, and the draft is triaged as promoted.",
+  "notes": "2026-10-06 01:20 - ticfac run epic-43y: yp8 try 1 (run dispatch #68) reported a finding the run itself decided — defect \"Close-out PR body: amendments section is never condensed under the body budget\" (key ad7c6da9878fdde2ed2336aaac24d44d5f0ce3b382f9caaa4bbbf29194ca7266, severity low, for this repository) is promoted to a backlog tick with an owner, 8wa; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/ad7c6da9878fdde2ed2336aaac24d44d5f0ce3b382f9caaa4bbbf29194ca7266.json, and the draft is triaged as promoted.\n2026-10-06 01:20 - ticfac run epic-43y: the review-epic job, yp8 try 1 (run dispatch #68), returned a validated ticfac.job-result.review-epic.v1 envelope at c709b6ae32b2 — DONE: DONE (READY)",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -11,6 +11,6 @@
   "role": "review",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T23:14:37Z",
-  "updated_at": "2026-10-05T23:20:46.800548Z",
+  "updated_at": "2026-10-05T23:20:55.189017Z",
   "started_at": "2026-10-05T23:14:54.909361Z"
 }
