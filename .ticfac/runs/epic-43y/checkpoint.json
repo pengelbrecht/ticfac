@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 273,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for 66a",
-  "updated_at": "2026-10-05T18:00:58Z",
+  "sequence": 274,
+  "state": "publishing",
+  "reason": "closing 66a behind its validated review-epic answer",
+  "updated_at": "2026-10-05T18:04:51Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -54,7 +54,7 @@
     },
     {
       "tick_id": "66a",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 42
     },
     {
