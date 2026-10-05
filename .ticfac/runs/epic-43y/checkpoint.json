@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 407,
-  "state": "collecting",
-  "reason": "collecting omq attempt 62",
-  "updated_at": "2026-10-05T21:46:38Z",
+  "sequence": 408,
+  "state": "integrating",
+  "reason": "integrating omq attempt 62 into epic/43y",
+  "updated_at": "2026-10-05T21:47:11Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -282,7 +282,7 @@
     },
     {
       "tick_id": "omq",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 62
     },
     {
