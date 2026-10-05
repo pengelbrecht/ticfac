@@ -115,6 +115,14 @@ func statusRecords(repo, runID, epicID string) (statusmodel.Records, []statusmod
 	// that ref's lock and one would come back degraded.
 	unlock := lockStatusRecords(repo + "\x00" + runID)
 	defer unlock()
+	// A run id that names no epic still belongs to one, and its checkpoint —
+	// on whichever epic branch the repo can read — is what names it (tick
+	// mwt): the branch the fetch below opens is found by looking for the
+	// run's own records, never guessed from the id's shape, and a run
+	// nothing resolves stays on the checkout's own records alone.
+	if epicID == "" {
+		epicID = epicOfUnhintedRun(repo, runID)
+	}
 	if epicID != "" {
 		store, err := runstate.Open(runstate.Options{Repo: repo, Branch: "epic/" + epicID, RunID: runID})
 		if err == nil {

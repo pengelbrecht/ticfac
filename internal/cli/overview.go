@@ -39,6 +39,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/runregistry"
@@ -487,9 +488,14 @@ func cloudCheapEntry(record cloudRunRecord, ours bool) overviewRun {
 // make it history.
 func localCheapEntry(workingRepo, runID string, probe runlife.Status, registeredAt string) overviewRun {
 	entry := overviewRun{
-		RunID:       runID,
-		Host:        statusmodel.HostLocal,
-		EpicID:      epicHintOf(runID),
+		RunID: runID,
+		Host:  statusmodel.HostLocal,
+		// The cheap row's epic is the id's own shape when it names one,
+		// else the run's checkpoint on the epic branches the repo holds
+		// (tick mwt): the history rules read this row BEFORE any full
+		// gather, and a run whose epic they cannot see is a run no later
+		// run can supersede and no closed epic can claim.
+		EpicID:      epicHintOfRunID(workingRepo, runID),
 		StartedAt:   registeredAt,
 		ours:        true,
 		provisional: true,
@@ -618,6 +624,11 @@ func overviewEntryOf(model statusmodel.Model, ours bool) overviewRun {
 		entry.State = overviewStateHeld
 		entry.Reason = primary.What
 		entry.ClearWith = primary.UnblockCommand
+		if entry.ClearWith != nil && *entry.ClearWith == "" {
+			// A command that names nothing is no command (tick mwt): the
+			// hold is named by its reason, never by a line that cannot run.
+			entry.ClearWith = nil
+		}
 		if !ours {
 			// Another project's run: whatever the attention says, the command
 			// that moves it runs against THIS repo's records — not the
@@ -642,8 +653,12 @@ func overviewEntryOf(model statusmodel.Model, ours bool) overviewRun {
 		// local foreground restart.
 		entry.State = overviewStateFailed
 		entry.Reason = lastWordOf(model)
-		clear := statusmodel.ResumeCommand(model.Host, model.EpicID)
-		entry.ClearWith = &clear
+		// An epic the model cannot state names no resume at all (tick mwt):
+		// "ticfac run-epic " with nothing after the verb is a trap, not a
+		// resume. The reason — the run's own last word — stands either way.
+		if clear := statusmodel.ResumeCommand(model.Host, model.EpicID); clear != "" {
+			entry.ClearWith = &clear
+		}
 	case statusmodel.PhaseCancelled:
 		entry.State = overviewStateCancelled
 		entry.Reason = lastWordOf(model)
@@ -661,8 +676,9 @@ func overviewEntryOf(model statusmodel.Model, ours bool) overviewRun {
 	case "failed":
 		entry.State = overviewStateFailed
 		entry.Reason = cloudEndReasonOf(model)
-		clear := statusmodel.ResumeCommand(model.Host, model.EpicID)
-		entry.ClearWith = &clear
+		if clear := statusmodel.ResumeCommand(model.Host, model.EpicID); clear != "" {
+			entry.ClearWith = &clear
+		}
 	case cloudLivenessOrphaned:
 		// A record claiming life with no Workflow instance behind it: dead
 		// without its own last word. The reason is the liveness answer's,
@@ -670,8 +686,9 @@ func overviewEntryOf(model statusmodel.Model, ours bool) overviewRun {
 		// (`ticfac run <epic> --cloud` resumes a frozen run).
 		entry.State = overviewStateFailed
 		entry.Reason = "orphaned: " + model.Liveness.Reason
-		clear := statusmodel.ResumeCommand(model.Host, model.EpicID)
-		entry.ClearWith = &clear
+		if clear := statusmodel.ResumeCommand(model.Host, model.EpicID); clear != "" {
+			entry.ClearWith = &clear
+		}
 	case "stopped":
 		entry.State = overviewStateCancelled
 		entry.Reason = cloudEndReasonOf(model)
@@ -798,10 +815,12 @@ func overviewIdentityStyles() watchStyles {
 	return identityWatchStyles()
 }
 
-// renderOverview draws the prose listing the JSON answers with: one line per
-// run, the state word, the reason, and — for a stop a person clears — the
-// one command that clears it; and, under every run whose model was gathered,
-// the run's dashboard headline (tick 3rc): dashboardHeadline's progress and
+// renderOverview draws the prose listing the JSON answers with: one row per
+// run — the state word, the reason, and, for a stop a person clears, the
+// one command that clears it, the row's first line bounded to the width the
+// screen names (tick mwt: boundOverviewRow) — and, under every run whose
+// model was gathered, the run's dashboard headline (tick 3rc):
+// dashboardHeadline's progress and
 // health verdict, the phase bar and the needs-you answer, and the holds'
 // own lines — indented two spaces, the same functions the watch renders
 // with. A stop with no command (the merge, which is a person's by design
@@ -809,7 +828,57 @@ func overviewIdentityStyles() watchStyles {
 // wanted. The glance is the whole point, so the rows that need nobody —
 // history (markOverviewHistory) — are one summary line naming the flag that
 // lists them, printed exactly as they ever were; with all, they are listed
-// after the rest, each saying why it is history, still one line each.
+// after the rest, each saying why it is history, still one row each.
+// boundOverviewRow bounds one row's first line to the width the screen
+// names (tick mwt). What the bound protects, in order: the row's identity —
+// the run id and the state word, the address a person acts on — is never
+// cut; the trailing group — the clearing command, the history reason —
+// rides the first line, because the row is where a person reads what to
+// do (tick 3rc's rule: the row names the command the headline names
+// again); and the run's own reason is the one part the bound cuts, cut
+// with an ellipsis — the reason is drill-in material, and the full
+// sentence stands in the model, in the watch and in the headline under
+// the row. When even the identity cannot seat beside the trailing group,
+// a history reason cuts like any reason — and a clearing command never
+// does: it wraps whole under the row, hanging-indented two spaces like
+// every wrapped line the dashboard renders (tick 9um's rule: a command a
+// person cannot read whole is no command). A width the screen does not
+// name (zero or less) bounds nothing: one line, everything, as before.
+func boundOverviewRow(identity, reason, suffix string, cutSuffix bool, width int) []string {
+	reasonPart := ""
+	if reason != "" {
+		reasonPart = " — " + reason
+	}
+	full := identity + reasonPart + suffix
+	if width <= 0 || ansi.StringWidth(full) <= width {
+		return []string{full}
+	}
+	if ansi.StringWidth(identity) <= width-ansi.StringWidth(suffix) {
+		// The identity and the trailing group seat together; the reason
+		// takes what room is left, cut at the width.
+		if room := width - ansi.StringWidth(identity+suffix) - 3; reason != "" && room >= 4 {
+			// Four cells is the least a cut reason can say and still be a
+			// reason at all; less than that and it stays off the line.
+			return []string{identity + " — " + ansi.Truncate(reason, room, "…") + suffix}
+		}
+		return []string{identity + suffix}
+	}
+	if cutSuffix {
+		return []string{ansi.Truncate(identity+suffix, width, "…")}
+	}
+	// The clearing command never cuts: the row keeps its identity and as
+	// much of its reason as seats, and the command wraps whole under it.
+	first := identity + reasonPart
+	if ansi.StringWidth(first) > width {
+		first = ansi.Truncate(first, width, "…")
+	}
+	if suffix == "" {
+		return []string{first}
+	}
+	return append([]string{first},
+		dashWrapWords(strings.TrimPrefix(suffix, " — "), dashHoldIndent, width)...)
+}
+
 func renderOverview(stdout io.Writer, doc overviewModel, cloudNote string, all bool) {
 	if len(doc.Runs) == 0 {
 		fmt.Fprintln(stdout, "No runs.")
@@ -832,16 +901,25 @@ func renderOverview(stdout io.Writer, doc overviewModel, cloudNote string, all b
 			hidden++
 			continue
 		}
-		line := fmt.Sprintf("%s: %s", run.RunID, overviewStateWord(run.State))
-		if run.Reason != "" {
-			line += fmt.Sprintf(" — %s", run.Reason)
+		head := fmt.Sprintf("%s: %s", run.RunID, overviewStateWord(run.State))
+		suffix := ""
+		cutSuffix := false
+		switch {
+		case run.History:
+			suffix = fmt.Sprintf(" — history: %s", run.HistoryReason)
+			cutSuffix = true // the history reason is a reason: it may cut
+		case run.ClearWith != nil && *run.ClearWith != "":
+			// A clearing command that carries its operands — the builders
+			// refuse one that cannot (tick mwt), and an empty pointer is
+			// no command at all.
+			suffix = fmt.Sprintf(" — clear with: %s", *run.ClearWith)
 		}
-		if run.History {
-			line += fmt.Sprintf(" — history: %s", run.HistoryReason)
-		} else if run.ClearWith != nil {
-			line += fmt.Sprintf(" — clear with: %s", *run.ClearWith)
+		// The row's first line is bounded to the width (tick mwt): the
+		// run's own last word can run to thousands of characters, and
+		// unbounded it buries every other row.
+		for _, line := range boundOverviewRow(head, run.Reason, suffix, cutSuffix, width) {
+			fmt.Fprintln(stdout, line)
 		}
-		fmt.Fprintln(stdout, line)
 		if !run.History && !run.provisional {
 			// The run's own headline under it (epic hn6, deliverable (c)):
 			// the dashboard's progress and health verdict, the phase bar

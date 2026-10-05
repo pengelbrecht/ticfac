@@ -49,6 +49,22 @@ func TestTheSettleReleaseCommandNamesTheRunItsStoreIsUnder(t *testing.T) {
 	}
 }
 
+// An address the caller cannot state in full names no command at all (tick
+// mwt): the epic or the tick missing leaves "ticfac settle  a1 2" — a
+// sentence with a hole where its operand should be, printed as if a person
+// could run it. The refusal is the builder's own: it is the ONE spelling of
+// the settle command every prose and every surface reads.
+// short: string matching; no repository, no run
+func TestTheSettleReleaseCommandRefusesAnEmptyOperand(t *testing.T) {
+	t.Parallel()
+	if got := SettleReleaseCommand("", "a1", 2, ""); got != "" {
+		t.Errorf("a settle with no epic is %q, want no command at all", got)
+	}
+	if got := SettleReleaseCommand("qeu", "", 2, ""); got != "" {
+		t.Errorf("a settle with no tick is %q, want no command at all", got)
+	}
+}
+
 // No prose in this package spells the settle command's own format any more:
 // every site takes the command from SettleReleaseCommand, so a site that
 // starts spelling it again — without the run's id, the defect tick qxj fixed

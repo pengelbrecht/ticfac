@@ -25,7 +25,16 @@ import (
 // except the factory, and `run-epic` here would restart the epic LOCALLY,
 // in the foreground, on whatever machine happens to be reading: the same
 // stop, a different run.
+//
+// An epic the caller cannot state names no command at all (tick mwt):
+// "ticfac run-epic " with nothing after the verb is not a resume but a
+// trap — a person who types what the line printed loses their shell to a
+// usage message. The empty answer leaves every renderer naming what it
+// knows, the stop and its reason, without a command that cannot run.
 func ResumeCommand(host, epicID string) string {
+	if epicID == "" {
+		return ""
+	}
 	if host == HostCloud {
 		return fmt.Sprintf("ticfac run %s --cloud", epicID)
 	}
@@ -37,8 +46,13 @@ func ResumeCommand(host, epicID string) string {
 // cleared by it, addressed by the epic the findings belong to. It is NOT
 // `ticfac findings`, which lists the drafts and settles nothing, and it is
 // NOT `ticfac settle`, which releases a held ATTEMPT and refuses a hold
-// that holds no attempt.
+// that holds no attempt. An epic the caller cannot state names no command
+// (tick mwt): "ticfac triage " with nothing after the verb is a trap, not
+// a triage.
 func TriageCommand(epicID string) string {
+	if epicID == "" {
+		return ""
+	}
 	return fmt.Sprintf("ticfac triage %s", epicID)
 }
 
@@ -46,8 +60,12 @@ func TriageCommand(epicID string) string {
 // the drafts live in the run's own records, so a hold an earlier run left is
 // cleared by triaging THAT run's store — the run id the bare command's
 // default (epic-<epic-id>) spells is only right when the holding run wrote
-// under that spelling.
+// under that spelling. Either address missing names no command at all
+// (tick mwt): an operand the line cannot state is a command nobody can run.
 func TriageCommandForRun(epicID, runID string) string {
+	if epicID == "" || runID == "" {
+		return ""
+	}
 	return fmt.Sprintf("ticfac triage %s --run-id %s", epicID, runID)
 }
 
@@ -155,6 +173,14 @@ func HoldReason(detail string) string {
 // hold is cleared by commands addressed to THAT run, never the one the
 // model answers for.
 func HoldClearingCommand(epicID, host, storeRunID, runID string, held runfeed.Event) *string {
+	// An epic the model cannot state names no command at all (tick mwt):
+	// every command this decision spells opens with the epic — without it
+	// the line reads "ticfac settle  yjq 12" with a hole where the epic
+	// should be, a sentence a person cannot type. The hold itself still
+	// shows; what clears it is named by its reason until the epic is known.
+	if epicID == "" {
+		return nil
+	}
 	switch HoldReason(held.Detail) {
 	case reconcile.RefusedFindingUntriaged, reconcile.RefusedAbsorptionDepth:
 		command := TriageCommandForCurrentRun(epicID, storeRunID)
@@ -168,4 +194,15 @@ func HoldClearingCommand(epicID, host, storeRunID, runID string, held runfeed.Ev
 		return &command
 	}
 	return nil
+}
+
+// commandOrNil is the pointer a wait's UnblockCommand takes from one of the
+// builders above: the builders refuse an operand they cannot state (tick
+// mwt), and the empty refusal is NO command — nil — never a pointer to a
+// string a renderer would print with its hole in it.
+func commandOrNil(command string) *string {
+	if command == "" {
+		return nil
+	}
+	return &command
 }

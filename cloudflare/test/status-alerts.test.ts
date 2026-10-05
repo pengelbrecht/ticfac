@@ -349,6 +349,35 @@ describe("the stop vocabulary (pure)", () => {
     );
   });
 
+  it("names no command when the document cannot state the epic (tick mwt)", () => {
+    const failed = {
+      liveness: {
+        alive: false,
+        state: "dead",
+        reason: "the gate refused the attempt",
+        source: "run.pid",
+      },
+      lifecycle: { phase: "failed", phases: [], wave: null },
+      waits_on: null,
+    };
+    // A run whose epic nothing resolved — the factory's run_<hex>, pushed
+    // before any record named the epic — must not carry a command with a
+    // hole where the epic should be: "ticfac run-epic " is a sentence
+    // nobody can type, and the stop and the page both say what happened
+    // without suggesting what cannot run. The Go model's own builder
+    // refuses it; this is the same refusal on the page's side of the one
+    // model the two render.
+    for (const host of ["local", "cloud"]) {
+      const unattributed = doc("run_6d88e3de89ca466c8dab3841185931c1", "", {
+        ...failed,
+        host,
+      }) as unknown as StatusDoc;
+      const stop = stopsFromStatusDoc(unattributed).find((s) => s.kind === "failed")!;
+      expect(stop.clear_with).toBeNull();
+      expect(classifyStatusDoc(unattributed).clear_with).toBeNull();
+    }
+  });
+
   it("answers a failed run's resume the same way the phone page does — one model, no disagreement (tick tt6)", () => {
     for (const host of ["local", "cloud"]) {
       const failed = doc("epic-2jn", "2jn", {

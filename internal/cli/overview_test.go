@@ -267,11 +267,14 @@ func TestTheBareOverviewListsEveryRunAttentionFirst(t *testing.T) {
 	}
 
 	// The held run: the reason in one line, and the single settle command.
+	// The reason is the one part the width may cut (tick mwt): the first
+	// line carries its head beside the command, and the full sentence
+	// stands under the row, in the headline the hold renders verbatim.
 	if line := lineOf(out, "epic-hld"); line != "" {
 		if !strings.Contains(line, "held for a person") {
 			t.Errorf("the held run's line does not say what it is: %q", line)
 		}
-		if !strings.Contains(line, "attempt_struck_out: the report names no status") {
+		if !strings.Contains(line, "attempt_struck") {
 			t.Errorf("the held run's line does not name its reason: %q", line)
 		}
 		if !strings.Contains(line, `ticfac settle hld t1 2 --release "<who>"`) {
@@ -280,14 +283,19 @@ func TestTheBareOverviewListsEveryRunAttentionFirst(t *testing.T) {
 	} else {
 		t.Errorf("the held run has no line:\n%s", out)
 	}
+	if _, block := overviewBlock(out, "epic-hld"); !strings.Contains(strings.Join(block, "\n"),
+		"attempt_struck_out: the report names no status") {
+		t.Errorf("the held run's full reason is nowhere under its row:\n%s", out)
+	}
 
 	// The failed run: its own last word is its reason, and the command that
-	// resumes the epic after a fix.
+	// resumes the epic after a fix. The reason is bounded to the width
+	// (tick mwt), its head on the first line beside the command.
 	if line := lineOf(out, "epic-fld"); line != "" {
 		if !strings.Contains(line, "failed") {
 			t.Errorf("the failed run's line does not say what it is: %q", line)
 		}
-		if !strings.Contains(line, "failed: the integrated gate refused attempt 3 of t2: go test failed") {
+		if !strings.Contains(line, "the integrated gate refused attempt 3") {
 			t.Errorf("the failed run's line does not name its reason: %q", line)
 		}
 		if !strings.Contains(line, "ticfac run-epic fld") {
