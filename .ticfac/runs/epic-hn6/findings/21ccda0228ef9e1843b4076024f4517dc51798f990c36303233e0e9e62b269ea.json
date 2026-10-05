@@ -12,8 +12,11 @@
   "attempt": 42,
   "done_item": "A1",
   "demonstrating_check": "go test -run TestATrackerClosedTickIsClosedThoughAnEndedRunLeftItDispatched ./internal/statusmodel/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T23:20:10Z",
+  "triaged_at": "2026-10-05T23:20:24Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing w12",
+  "promoted_as": "w12",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "pv7",
