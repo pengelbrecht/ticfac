@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 412,
-  "state": "collecting",
-  "reason": "collecting 30e attempt 63",
-  "updated_at": "2026-10-05T21:48:50Z",
+  "sequence": 413,
+  "state": "running",
+  "reason": "30e try 1 (run dispatch #63) is rejected (missing-result): the report proposes an edit of the notes of omq the run refuses (it is retried like a report nobody can act on, and nothing of it is applied): omq is closed: a closed record is history, never rewritten by a later attempt",
+  "updated_at": "2026-10-05T21:49:40Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -287,7 +287,7 @@
     },
     {
       "tick_id": "30e",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 63
     }
   ],
