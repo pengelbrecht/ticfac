@@ -1,0 +1,14 @@
+{
+  "id": "cni",
+  "title": "Prove the restore's setup survives a real dependency install on staging",
+  "description": "The restore's setup command runs through the sandbox run door — one RPC that awaits the container exec for the whole command (cloudflare/src/factory-sandbox.ts `run` holds `started.output()`; harness/src/env/factory-sandbox.ts `rawShort` calls it). The prototype's restore took 25.8s with a trivial setup; a real repository's [sandbox] setup (pnpm install, go mod download) runs minutes, and whether that whole exchange fits one Worker→DO RPC plus one container exec await is unproven. The A2 staging run should watch exactly this: if the restore reports 'the setup command: exit …' or the door times out mid-install, switch the restore's setup line to a polled startProcess (the door already has process polling) rather than widening any timeout.\n\nticfac run epic-43y created this tick by absorbing the finding be4be4971ac851baae246bde6913cb4c4c650552f4905b85af21597c96d6fdc6 (reported by run-epic-43y/tick-i3h/attempt-18): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/be4be4971ac851baae246bde6913cb4c4c650552f4905b85af21597c96d6fdc6.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-i3h/attempt-18",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T10:30:58Z",
+  "updated_at": "2026-10-05T10:30:58Z"
+}
