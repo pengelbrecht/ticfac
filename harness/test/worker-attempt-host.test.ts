@@ -370,6 +370,95 @@ describe("a worker attempt driven by the host", () => {
     ).toHaveLength(1);
   });
 
+  // Tick dbi: the first life dies under the model's bash and the CONTAINER
+  // dies with it — the replacement boots EMPTY and knows none of its
+  // predecessor's processes, so the resumed life's replay finds its nonce
+  // nowhere and restores before it re-starts the command. Until the env's
+  // onRestore ear, that restore reached no log anywhere: the operator
+  // watching the run saw only a mysteriously slow tool round.
+  it("says which sha the nonce path rebuilt a fresh container's workspace from", async () => {
+    let freshBox = false;
+    const door = fakeSandboxDoor({
+      runExit: (command) => {
+        if (freshBox && command.includes('test -e "$CWD/.git"')) {
+          freshBox = false;
+          return 1;
+        }
+        return undefined;
+      },
+      // The restore's read-back answers the attempt branch's tip; the wip
+      // snapshot's rev-parse answers the round's sha.
+      runOutput: (command) =>
+        command.includes("git rev-parse HEAD && git log -1 --format=%s")
+          ? "cafef00d\nwip: tool round\n"
+          : command.includes("git rev-parse HEAD")
+            ? "cafef00d\n"
+            : "",
+      processScript: (command) => {
+        if (command === WORKER_BOOT_PROTOCOL.bootCommand) {
+          return { output: bootOutput(), exit: 0, ms: 20 };
+        }
+        if (command.startsWith(WORKER_BOOT_PROTOCOL.finishCommand)) {
+          return { output: "ticks-worker: pushed\n", exit: 0, ms: 20 };
+        }
+        return { output: "bash ran\n", exit: 0, ms: 400 };
+      },
+    });
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("finished on the rebuilt workspace"),
+    ]);
+    const records = memoryRecords();
+    const storage = new MemoryStorage();
+    const lines: string[] = [];
+    const life = () =>
+      new WorkerAttemptHost({
+        door: door.sandbox,
+        storage: async () => storage,
+        models,
+        records,
+        log: async (text) => {
+          lines.push(text);
+        },
+        pollMs: 5,
+        bashPollMs: 5,
+        guardDir: null,
+      });
+
+    const first = life();
+    await first.start(spec());
+    void first.drive();
+    await waitFor("the model's bash to start", () =>
+      door.starts.some((s) => s.command.includes("make test")),
+    );
+    door.die();
+    await waitFor("the dead life to park on a dead call", () => door.deadCalls >= 1);
+    door.thaw();
+    // The container came back EMPTY: its process list starts over, so the
+    // resumed bash's nonce is known by no process anywhere.
+    door.forget();
+    freshBox = true;
+
+    const second = life();
+    const settled = await second.drive();
+    expect(settled.settled).toMatchObject({ exitCode: 0, phase: "finishing" });
+
+    // The resumed bash re-STARTED (no process to reattach to) on the
+    // workspace the nonce path rebuilt — once more, not twice.
+    expect(door.starts.filter((s) => s.command.includes("make test")).length).toBe(2);
+    // And the log names the sha it rebuilt from: the operator watching the
+    // run hears the restore, not a mysteriously slow round.
+    const nonce = lines.filter((l) => l.includes("a tracked bash found a fresh container"));
+    expect(nonce).toHaveLength(1);
+    expect(nonce[0]).toContain("restored to cafef00d");
+    // Not twice, and not as a between-rounds loss: this loss sat mid-tool,
+    // where only the nonce path sees it.
+    expect(lines.some((l) => l.includes("the container was lost between rounds"))).toBe(false);
+  });
+
   it("places an operator's steer after the running tool round", async () => {
     const door = scriptedDoor({ bashMs: 200 });
     const seen: string[][] = [];
