@@ -198,7 +198,6 @@ Tear-down also needs the container application, which `wrangler delete`
 leaves behind: `pnpm exec wrangler containers list`, then
 `pnpm exec wrangler containers delete <id>` for `ticfac-staging-agent-sandbox`.
 
-<<<<<<< HEAD
 Since tick umx the "wip checkpoints kept landing after the resume" claim is
 checked in order, not read by hand: the checkpoint lines must FOLLOW the
 resume line in the log (the proof's log is an append-only stream, so a line's
@@ -207,10 +206,7 @@ longer passes it), the count is recorded in the evidence
 (`checkpoints_after_resume`), and the read itself lives in
 `proof/fault-claims.ts`, pinned by `test/agent-faults-claims.test.ts`.
 
-## Recorded result, 2026-10-05 (pi-ai / pi-durable 1.0.2)
-=======
 ## Recorded result, 2026-10-05, the whole-container destroy (tick jpy, pi-ai / pi-durable 1.0.2)
->>>>>>> 3cecaa75328174fc5fe4eb4dcae759edd0df7e67
 
 `PROOF HOLDS`, every claim, in 493 s (three attempts, GLM 5.3 on Workers
 AI, one pass on a fresh deployment — the second scenario destroys the
@@ -221,7 +217,7 @@ whole CONTAINER between rounds, in its post-a2l shape):
 | Host lost mid-tool: the attempt settles 0 | `settled`, `exit_code: 0`, "the finish phase exited 0"; the deploy fired 13 s into the attempt, at the sleep's start, and finished at 30 s |
 | …a new host life resumed the conversation from its storage | the log line `a new host life resumed the conversation from its storage (submission 8)` right after `tool bash: {"command":"sleep 90 && …"}` |
 | …the tool did not run twice | `tool-runs.txt` on the pushed branch reads exactly `tool-ran-once` — one line |
-| …wip checkpoints kept landing after the resume | three `wip checkpoint … pushed` lines after the resume |
+| …wip checkpoints kept landing after the resume | three `wip checkpoint … pushed` lines after the resume — this pass ran before tick umx's ordered check, so the order was read from the log by hand |
 | Container destroyed mid-turn: the attempt settles 0 | `settled`, `exit_code: 0`; the whole container `run_proof_container_destroyed_mid_turn-xd3-1` destroyed 27 s into the attempt, between rounds, after that round's checkpoint had landed on the origin that outlives the box |
 | …restored from the last wip commit | `the container was lost between rounds; workspace restored to 63195b25f3fe` — the first round's checkpoint; the second write had landed in the dying box ("not in a git directory"), and the replacement box was booted, fetched from the origin and checked out before the model's next request |
 | …the restore's setup ran in the replacement box | `.setup-ran` in the pushed tree — the real apt build-essential + golang install, running only because the restore runs it — committed by the model on the restored tree; the destroy-to-settle span of ~175 s carries it |
