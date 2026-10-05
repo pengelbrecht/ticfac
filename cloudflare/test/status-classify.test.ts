@@ -80,6 +80,39 @@ describe("the listing's classifier never reads a dead mid-run run as done (tick 
     expect(cloudFailed.clear_with).toBe("ticfac run hn6 --cloud");
   });
 
+  it("holds a stopped run's resume the way the overview's held band does — one ending, one row (hn6 5d4)", () => {
+    // A stopped run's model carries the person's resume in attention, as the
+    // Go builder states it (tick jkb) — and unlike the failed run, whose
+    // resume the failed row names in its own colour, the stopped row reads
+    // the held band: the run is neither done nor failed, and the one thing
+    // it holds is the resume. The overview renders this same model in the
+    // held band (TestTheOverviewHoldsAStoppedRunWithItsResume), and the
+    // factory-side composition states the same attention — so the two
+    // renderers answer one ending with one row.
+    const stopped = classifyStatusDoc(
+      doc({
+        host: "cloud",
+        liveness: {
+          alive: false,
+          state: "stopped",
+          reason: "the factory's record says stopped",
+        },
+        lifecycle: { phase: "waves" },
+        attention: [
+          {
+            kind: "dead-run",
+            what: "run run_6in is stopped: the operator stopped the run",
+            needs_person: true,
+            unblock_command: "ticfac run hn6 --cloud",
+          },
+        ],
+      }),
+    );
+    expect(stopped.state).toBe("held");
+    expect(stopped.reason).toBe("run run_6in is stopped: the operator stopped the run");
+    expect(stopped.clear_with).toBe("ticfac run hn6 --cloud");
+  });
+
   it("keeps a run's own phase where the liveness state names no end — the local probe's words", () => {
     // The local probe's states (dead, not_running, unknown) are process
     // talk, not endings: a local run that ended says so in its phase

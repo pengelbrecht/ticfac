@@ -866,7 +866,16 @@ function ageSeconds(doc: StatusDoc, stamp: string): number | null {
  */
 function ciHTML(doc: StatusDoc): string {
   const ci = doc.ci;
-  if (ci === undefined || ci === null || ci.pr === undefined || ci.pr === null) {
+  if (ci === undefined) {
+    // A doc that states no ci field is a composition that never read the
+    // forge — the factory's own cloud composition (hn6 5d4) — and "no PR
+    // yet" is a claim only a model that LOOKED may make. The pushed model
+    // always carries ci (null when it read and found no PR), so the dim
+    // sentence below stays that model's answer, and the composed card
+    // claims nothing about the forge at all.
+    return "";
+  }
+  if (ci === null || ci.pr === undefined || ci.pr === null) {
     return `<p class="ci">CI: no PR yet</p>`;
   }
   const parts = (ci.checks ?? []).map((check) => {

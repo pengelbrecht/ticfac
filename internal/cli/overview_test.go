@@ -1215,3 +1215,36 @@ func TestTheOverviewClassesAStoppedRunByItsOwnDurableWord(t *testing.T) {
 		t.Errorf("a failed cloud run's resume is the cloud submission; got %v", failedRow.ClearWith)
 	}
 }
+
+// TestTheOverviewHoldsAStoppedRunWithItsResume (hn6 5d4): a stopped run's
+// model carries the person's resume in attention (tick jkb) — and unlike the
+// failed run, whose resume the failed row names in its own colour, the
+// stopped row reads the HELD band: the run is neither done nor failed, and
+// the one thing it holds is the resume, a move only a person makes. The
+// phone page's classifier mirrors this read (classifyStatusDoc,
+// cloudflare/src/status.ts — the port of this classification), and the
+// factory-side composition states the same attention (cloudStatusDoc), so
+// the two renderers of one model answer one ending with one row.
+func TestTheOverviewHoldsAStoppedRunWithItsResume(t *testing.T) {
+	stopped := statusModelGoldens(t)["dashboard_stopped"]
+	stopped.Host = statusmodel.HostCloud
+	resume := "ticfac run 6in --cloud"
+	stopped.Attention = []statusmodel.Attention{{
+		Kind:           statusmodel.WaitDeadRun,
+		What:           "run run_6in is stopped: the operator stopped the run",
+		NeedsPerson:    true,
+		Since:          nil,
+		UnblockCommand: &resume,
+	}}
+
+	row := overviewEntryOf(stopped, true)
+	if row.State != overviewStateHeld {
+		t.Errorf("a stopped run holding its resume classes %q, want %q — the resume is a stop a person clears", row.State, overviewStateHeld)
+	}
+	if row.Reason != "run run_6in is stopped: the operator stopped the run" {
+		t.Errorf("the held row's reason reads %q, want the model's own resume sentence", row.Reason)
+	}
+	if row.ClearWith == nil || *row.ClearWith != resume {
+		t.Errorf("the held row's clearing command is %v, want the cloud resume", row.ClearWith)
+	}
+}
