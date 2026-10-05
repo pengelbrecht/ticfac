@@ -2435,3 +2435,4 @@
 {"ts":"2026-10-05T14:02:40.718023Z","tick":"cno","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"Tracker-closed tick reads live '●review' when an older run is the subject"}}
 {"ts":"2026-10-05T14:03:11.707267Z","tick":"g94","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Progress bar vanishes at 120 cols when the verdict summary is long"}}
 {"ts":"2026-10-05T14:10:09.234037Z","tick":"3yx","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-05 16:10 - ticfac run epic-hn6: 3yx try 1 (run dispatch #24) merged into epic/hn6 as 6fe4d083bb11; the integrated gate (go, ts) passed.","title":"watch on a stopped run says 'holding for a person' then 'nothing is held'"}}
+{"ts":"2026-10-05T14:10:12.678328Z","tick":"3yx","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"watch on a stopped run says 'holding for a person' then 'nothing is held'"}}
