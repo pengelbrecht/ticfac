@@ -7,10 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pengelbrecht/ticfac/internal/acceptance"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
-	"github.com/pengelbrecht/ticfac/internal/gating"
-	"github.com/pengelbrecht/ticfac/internal/jev"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
@@ -21,22 +18,30 @@ import (
 // origin, the real run-state store, the real tracker-tree publishing path and
 // the real local subprocess executor.
 //
-// THE CASES, one per acceptance clause:
+// THE CASES, one per acceptance clause, under the absorption policy of
+// 2026-10-06 (absorb_policy.go — no classifier is asked):
 //
-//  1. a finding judged GATING is promoted into the running epic as a tick
-//     with no person triaging, placed before the final review — driven here
-//     by an OBSERVED verdict (the done's own command answers) and by a
-//     PREDICTED one (the classifier's, and the documented fallback's);
-//  2. the absorption decision — item id, verdict, observed or predicted,
-//     confidence — is a decision record on the run branch;
+//  1. a HIGH-severity finding whose reporter names the done item it breaks,
+//     reported while the epic's work is under way, is promoted into the
+//     running epic as a tick with no person triaging, placed before the
+//     final review (basis worker-asserted-high); reported once the work is
+//     done, it is DEFERRED to the reviewer instead — a backlog tick, listed
+//     in the epic PR;
+//  2. the absorption decision — item id, verdict, basis — is a decision
+//     record on the run branch;
 //  3. a cold re-derivation from git reaches the same epic graph as the warm
 //     run, proven by killing the run the moment the absorption is durable
 //     and restarting from a fresh clone;
-//  4. a finding the done is reachable without still becomes a backlog tick
-//     with an owner, and is still reported;
-//  5. an epic whose done is prose decides by the run's rule (epic-6in): a
-//     backlog tick, unless the reporter claims the build or CI is broken,
-//     which is absorbed — never a finding left for a person.
+//  4. every other finding — low severity, or naming no item of the done —
+//     becomes a backlog tick with an owner (basis backlog-default), and is
+//     still reported, early or late;
+//  5. an epic whose done is prose decides by the same policy (epic-6in): a
+//     backlog tick, unless the reporter rates it high and claims the build
+//     or CI is broken, which is absorbed — never a finding left for a
+//     person.
+//
+// The reviewer's own basis — a finding the NOT READY review names blocking
+// is absorbed — is pinned with the review rounds (review_rounds_test.go).
 
 // setEpicAcceptance writes the epic's own definition of done: the [A<n>]-marked
 // items the absorption decision is driven against.
@@ -59,36 +64,6 @@ func localFindingReport() subprocess.Finding {
 	return subprocess.Finding{
 		Kind: "proposed-tick", Title: "A finding the fake runner proposes",
 		Body: "Discovered beside the work, reported mechanically.", Severity: "high", Target: "",
-	}
-}
-
-// fakeGatingClassifier stands in for *jev.Client at the prediction seam: one
-// answer, handed back for whatever question the predictor asks — with the
-// state captured, because the question's inputs are themselves under test
-// (tick wz0: the reporter's claim must reach the classifier as evidence).
-type fakeGatingClassifier struct {
-	result jev.AnswerResult
-	calls  int
-	state  string
-}
-
-func (f *fakeGatingClassifier) Ask(_ context.Context, state string, _ []jev.Question) (jev.AnswerResult, error) {
-	f.calls++
-	f.state = state
-	return f.result, nil
-}
-
-// answerOver builds the classifier's answer over the finding the test's
-// fixture reports, with the given distribution and choice.
-func answerOver(t *testing.T, probabilities map[string]float64, choice string) jev.AnswerResult {
-	t.Helper()
-	return jev.AnswerResult{
-		Answers: map[string]jev.Answer{findingKey(localFindingReport()): {
-			Choice:        choice,
-			Confidence:    0.62,
-			Probabilities: probabilities,
-		}},
-		Model: "jev-2026-09",
 	}
 }
 
@@ -146,11 +121,11 @@ func orderOf(r *Reconciler) firstSeen {
 	return firstSeen{dispatched: dispatched, closed: closed}
 }
 
-// 1a. THE OBSERVED CASE, and the acceptance's own worked example: the done's
-// command is bound to the item, the command answers non-zero while the finding
-// stands, and the run absorbs — observed, no judgement, no person — placing the
-// absorbed tick before the final review and closing the whole epic with nobody
-// having triaged anything.
+// 1a. THE WORKER-ASSERTED CASE, early: a1's report carries a HIGH-severity
+// finding naming done item A1 while the epic's other ticks are still open, and
+// the run absorbs it on the reporter's assertion — no classifier, no person —
+// placing the absorbed tick before the final review and closing the whole epic
+// with nobody having triaged anything.
 func TestAGatingFindingIsAbsorbedIntoTheRunningEpicWithNoPersonTriaging(t *testing.T) {
 	shorttest.EndToEnd(t)
 	t.Parallel()
@@ -175,9 +150,17 @@ func TestAGatingFindingIsAbsorbedIntoTheRunningEpicWithNoPersonTriaging(t *testi
 	if record.ItemID != "A1" {
 		t.Errorf("the decision names item %q, want A1 — the absorption names which acceptance item was unreachable", record.ItemID)
 	}
-	if record.Basis != runstate.AbsorptionObserved {
-		t.Errorf("the decision's basis is %q, want %s: the done's command ran and answered, so the verdict is an observation",
-			record.Basis, runstate.AbsorptionObserved)
+	if record.Basis != runstate.AbsorptionWorkerAssertedHigh {
+		t.Errorf("the decision's basis is %q, want %s: the reporter rated it high and named the item it breaks",
+			record.Basis, runstate.AbsorptionWorkerAssertedHigh)
+	}
+	if record.Confidence != 0 || record.Model != "" || record.Fallback != "" {
+		t.Errorf("the decision carries a classifier's answer (%+v): the policy asks no classifier", record)
+	}
+	for _, named := range []string{"high severity", "A1"} {
+		if !strings.Contains(record.Reason, named) {
+			t.Errorf("the recorded reason does not say what the absorption rests on (%q missing): %q", named, record.Reason)
+		}
 	}
 	if record.Placement != runstate.AbsorptionBeforeReview {
 		t.Errorf("the decision's placement is %q, want %s: the fix must land before the final review, not after it",
@@ -259,19 +242,102 @@ func has(values []string, want string) bool {
 	return false
 }
 
-// 1b. THE PREDICTED CASE, through the documented fallback: the item is not yet
-// runnable — nothing is bound — and no classifier is configured, so the
-// predictor falls back to absorbing, recorded as a PREDICTION with the fallback
-// saying why no model answered. Erring toward absorbing is the stated bias: a
-// false negative closes an epic whose goal is unmet in a factory where nobody
-// is watching.
-func TestAnUnverifiedFindingIsAbsorbedByThePredictedFallback(t *testing.T) {
+// 1b. THE WORKER-ASSERTED CASE, late: the close-out reports a HIGH-severity
+// finding naming done item A1 after every implementation tick closed and the
+// final review ran. It is NOT absorbed on the reporter's word — hn6 kept
+// re-opening after its work was done exactly that way — but deferred to the
+// reviewer: a backlog tick with an owner, outside the epic, listed in the
+// epic PR under "Deferred findings", and the run completes.
+func TestAHighSeverityFindingAfterTheReviewIsDeferredToTheReviewer(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+
+	forge := &fakeForge{}
+	f := newFixture(t, fixtureOptions{mode: "closeout_finding_high", pullRequests: forge})
+	declareCloseoutRule(t, f.Repo)
+	setEpicAcceptance(t, f, "[A1] Every tick closes behind a green gate.")
+
+	r, result, err := f.run(f.Repo, fixtureOptions{mode: "closeout_finding_high", pullRequests: forge})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s — a deferred finding is listed, never held for: %+v",
+			result.State, result.Reason, result.Failure)
+	}
+	record := absorbingAbsorption(t, f.Repo, r)
+	if record.Gating || record.Basis != runstate.AbsorptionWorkerAssertedHigh ||
+		record.Placement != runstate.AbsorptionDeferredToReview {
+		t.Fatalf("the decision is %+v, want a worker-asserted high finding deferred to the reviewer, not absorbed", record)
+	}
+	if !strings.Contains(record.Reason, "review") {
+		t.Errorf("the recorded reason does not say the work was done and the finding is the reviewer's: %q", record.Reason)
+	}
+	assertBacklogTick(t, f, r, record)
+
+	body := forge.body()
+	if !strings.Contains(body, "## Deferred findings") || !strings.Contains(body, record.TickID) {
+		t.Errorf("the epic PR does not list the deferred finding %s under Deferred findings:\n%s", record.TickID, body)
+	}
+}
+
+// 4. THE DEFAULT, early: a1's finding names done item A1 but is LOW severity.
+// A reporter's low-severity claim is backlog work whatever it names — hn6
+// absorbed such findings at confidence 0.44 and grew from 13 ticks to 60+.
+func TestANonGatingFindingBecomesABacklogTickWithAnOwner(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+
+	f := newFixture(t, fixtureOptions{mode: "finding_local_low"})
+	setEpicAcceptance(t, f, "[A1] Every tick closes behind a green gate.")
+
+	r, result, err := f.run(f.Repo, fixtureOptions{mode: "finding_local_low"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s: %+v", result.State, result.Reason, result.Failure)
+	}
+	record := absorbingAbsorption(t, f.Repo, r)
+	if record.Gating || record.Placement != runstate.AbsorptionBacklog || record.Basis != runstate.AbsorptionBacklogDefault {
+		t.Fatalf("the decision is %+v, want a backlog-default backlog tick: a low-severity finding is not absorbed", record)
+	}
+	if !strings.Contains(record.Reason, "low") {
+		t.Errorf("the recorded reason does not name the severity it rests on: %q", record.Reason)
+	}
+	assertBacklogTick(t, f, r, record)
+}
+
+// 4b. THE DEFAULT, late: the close-out's LOW-severity finding naming A1,
+// after the review — backlog, as early, and still reported.
+func TestALowSeverityFindingLateInAnEpicIsBacklogged(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+
+	f := newFixture(t, fixtureOptions{mode: "closeout_finding_low"})
+	setEpicAcceptance(t, f, "[A1] Every tick closes behind a green gate.")
+
+	r, result, err := f.run(f.Repo, fixtureOptions{mode: "closeout_finding_low"})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s: %+v", result.State, result.Reason, result.Failure)
+	}
+	record := absorbingAbsorption(t, f.Repo, r)
+	if record.Gating || record.Placement != runstate.AbsorptionBacklog || record.Basis != runstate.AbsorptionBacklogDefault {
+		t.Fatalf("the decision is %+v, want a backlog-default backlog tick", record)
+	}
+	assertBacklogTick(t, f, r, record)
+}
+
+// 4c. A HIGH-severity finding naming an item the epic's done does not carry
+// names no done item it breaks: backlog-default, not absorbed.
+func TestAHighFindingNamingNoItemOfTheDoneIsBacklogged(t *testing.T) {
 	shorttest.EndToEnd(t)
 	t.Parallel()
 
 	f := newFixture(t, fixtureOptions{mode: "finding_local"})
-	// [A2] is bound to no command: nothing can run, and the item is the
-	// classifier's — which this run does not have.
 	setEpicAcceptance(t, f, "[A2] A cloud run dispatches on the model the gateway names.")
 
 	r, result, err := f.run(f.Repo, fixtureOptions{mode: "finding_local"})
@@ -279,99 +345,22 @@ func TestAnUnverifiedFindingIsAbsorbedByThePredictedFallback(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 	if result.State != runstate.StateCompleted {
-		t.Fatalf("the run ended %s: %s — the fallback absorbs rather than stopping for a person: %+v",
-			result.State, result.Reason, result.Failure)
+		t.Fatalf("the run ended %s: %s: %+v", result.State, result.Reason, result.Failure)
 	}
 	record := absorbingAbsorption(t, f.Repo, r)
-	if !record.Gating {
-		t.Fatalf("the recorded decision is not gating: %+v", record)
+	if record.Gating || record.Basis != runstate.AbsorptionBacklogDefault {
+		t.Fatalf("the decision is %+v, want backlog-default: A1 is not an item of this epic's done", record)
 	}
-	if record.Basis != runstate.AbsorptionPredicted {
-		t.Errorf("the decision's basis is %q, want %s: a fallback is a guess, never a measurement", record.Basis,
-			runstate.AbsorptionPredicted)
-	}
-	if record.Fallback == "" {
-		t.Error("the decision records no fallback: a record that cannot say why no model answered reads as a prediction that was made")
-	}
-	if !strings.Contains(record.Reason, "A2") {
-		t.Errorf("the decision's reason does not name the item at risk: %q", record.Reason)
-	}
-	if record.Placement != runstate.AbsorptionBeforeReview {
-		t.Errorf("the placement is %q, want before the review", record.Placement)
+	if !strings.Contains(record.Reason, "A1") {
+		t.Errorf("the recorded reason does not name the item that is not the done's: %q", record.Reason)
 	}
 }
 
-// 1c. THE CLASSIFIER'S PREDICTION, with the confidence recorded beside it:
-// the item is not yet runnable, the classifier puts its mass on the item above
-// the threshold, and the absorption is PREDICTED gating naming the item and the
-// confidence. The other direction — mass below the threshold — is the backlog
-// case below.
-func TestAClassifiedPredictionAbsorbsWithItsConfidenceRecorded(t *testing.T) {
-	shorttest.EndToEnd(t)
-	t.Parallel()
-
-	f := newFixture(t, fixtureOptions{mode: "finding_local"})
-	setEpicAcceptance(t, f, "[A2] A cloud run dispatches on the model the gateway names.")
-	classifier := &fakeGatingClassifier{result: answerOver(t, map[string]float64{"A2": 0.7, "none": 0.3}, "A2")}
-
-	r, result, err := f.run(f.Repo, fixtureOptions{mode: "finding_local", gatingClassifier: classifier})
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if result.State != runstate.StateCompleted {
-		t.Fatalf("the run ended %s: %s: %+v", result.State, result.Reason, result.Failure)
-	}
-	if classifier.calls == 0 {
-		t.Fatal("the classifier was never asked: a configured classifier is the prediction tier's answer, not a decoration")
-	}
-	record := absorbingAbsorption(t, f.Repo, r)
-	if !record.Gating || record.ItemID != "A2" {
-		t.Fatalf("the recorded decision is %+v, want gating naming item A2", record)
-	}
-	if record.Basis != runstate.AbsorptionPredicted {
-		t.Errorf("the basis is %q, want predicted", record.Basis)
-	}
-	if record.Fallback != "" {
-		t.Errorf("the decision records a fallback (%q) although a model answered", record.Fallback)
-	}
-	if record.Confidence == 0 {
-		t.Error("the decision records no confidence: the acceptance names the confidence of a prediction, and a retro reads it")
-	}
-}
-
-// 4. THE NON-GATING CASE, observed: every item's command passed while the
-// finding stands, so the done is reachable and the finding becomes a backlog
-// tick with an owner — still promoted by the run, still reported, never part of
-// the running epic.
-func TestANonGatingFindingBecomesABacklogTickWithAnOwner(t *testing.T) {
-	shorttest.EndToEnd(t)
-	t.Parallel()
-
-	f := newFixture(t, fixtureOptions{gate: absorbingGate, mode: "finding_local"})
-	setEpicAcceptance(t, f, "[A1] Every tick closes behind a green gate.")
-
-	r, result, err := f.run(f.Repo, fixtureOptions{gate: absorbingGate, mode: "finding_local"})
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if result.State != runstate.StateCompleted {
-		t.Fatalf("the run ended %s: %s: %+v", result.State, result.Reason, result.Failure)
-	}
-
-	record := absorbingAbsorption(t, f.Repo, r)
-	if record.Gating {
-		t.Fatalf("the recorded decision is gating: %+v — the done's command passed while the finding stood", record)
-	}
-	if record.Placement != runstate.AbsorptionBacklog {
-		t.Errorf("the placement is %q, want the backlog", record.Placement)
-	}
-	if record.Basis != runstate.AbsorptionObserved {
-		t.Errorf("the basis is %q, want observed: the command ran", record.Basis)
-	}
-
-	// A BACKLOG TICK WITH AN OWNER: the epic's own owner, a person — and not a
-	// child of the running epic, which is what makes it backlog rather than
-	// the epic's to absorb.
+// assertBacklogTick pins what a backlog decision promised: a backlog tick
+// with the epic's owner, outside the epic, never worked by the run, and the
+// finding promoted to it — still reported, never dropped.
+func assertBacklogTick(t *testing.T, f *fixture, r *Reconciler, record runstate.Absorption) {
+	t.Helper()
 	state, err := f.Tracker.load()
 	if err != nil {
 		t.Fatal(err)
@@ -390,13 +379,10 @@ func TestANonGatingFindingBecomesABacklogTickWithAnOwner(t *testing.T) {
 		t.Errorf("the backlog tick is %s, want open: the run does not work what it does not absorb", tick.Status)
 	}
 	if _, inEpic := epicChildren(t, f)[record.TickID]; inEpic {
-		t.Errorf("the backlog tick %s is inside the epic graph: absorbing it would extend the epic rather than serve it", record.TickID)
+		t.Errorf("the backlog tick %s is inside the epic graph", record.TickID)
 	}
-
-	// The run did not dispatch it, and the finding is promoted to it.
-	order := orderOf(r)
-	if _, dispatched := order.dispatched[record.TickID]; dispatched {
-		t.Errorf("the backlog tick was dispatched by the run: work the epic does not need is a person's, not the run's")
+	if _, dispatched := orderOf(r).dispatched[record.TickID]; dispatched {
+		t.Errorf("the backlog tick was dispatched by the run: work the epic does not need is a person's")
 	}
 	store := openRunStore(t, f.Repo.Dir, r.IntegrationBranch(), r.RunID())
 	finding, ok, err := store.Finding(record.Key)
@@ -404,42 +390,8 @@ func TestANonGatingFindingBecomesABacklogTickWithAnOwner(t *testing.T) {
 		t.Fatalf("read the backlog finding's draft: %v %v", ok, err)
 	}
 	if finding.Status != runstate.FindingPromoted || finding.PromotedAs != record.TickID {
-		t.Fatalf("the finding is %s promoted as %s, want promoted as the backlog tick %s — still reported, never dropped",
-			finding.Status, finding.PromotedAs, record.TickID)
-	}
-}
-
-// 4b. THE NON-GATING CASE, predicted: the classifier puts its mass on 'none'
-// and the finding becomes a backlog tick with the prediction's basis and
-// confidence recorded — a guess the retro can score, never a measurement it
-// would read as one.
-func TestAClassifiedNoneBecomesABacklogTickAsAPrediction(t *testing.T) {
-	shorttest.EndToEnd(t)
-	t.Parallel()
-
-	f := newFixture(t, fixtureOptions{mode: "finding_local"})
-	setEpicAcceptance(t, f, "[A2] A cloud run dispatches on the model the gateway names.")
-	classifier := &fakeGatingClassifier{result: answerOver(t, map[string]float64{"A2": 0.05, "none": 0.95}, "none")}
-
-	r, result, err := f.run(f.Repo, fixtureOptions{mode: "finding_local", gatingClassifier: classifier})
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if result.State != runstate.StateCompleted {
-		t.Fatalf("the run ended %s: %s: %+v", result.State, result.Reason, result.Failure)
-	}
-	record := absorbingAbsorption(t, f.Repo, r)
-	if record.Gating {
-		t.Fatalf("the recorded decision is gating: %+v — the mass sat below the threshold", record)
-	}
-	if record.Basis != runstate.AbsorptionPredicted {
-		t.Errorf("the basis is %q, want predicted", record.Basis)
-	}
-	if record.Placement != runstate.AbsorptionBacklog {
-		t.Errorf("the placement is %q, want the backlog", record.Placement)
-	}
-	if record.ItemID != "" {
-		t.Errorf("a non-gating verdict names item %q: the done is reachable, nothing is unreachable", record.ItemID)
+		t.Fatalf("the finding is %s promoted as %s, want promoted as the backlog tick %s", finding.Status,
+			finding.PromotedAs, record.TickID)
 	}
 }
 
@@ -465,8 +417,8 @@ func TestAProseDoneTurnsAFindingIntoABacklogTickNotAHold(t *testing.T) {
 			result.State, result.Failure)
 	}
 	record := absorbingAbsorption(t, f.Repo, r)
-	if record.Gating || record.Placement != runstate.AbsorptionBacklog || record.Basis != runstate.AbsorptionRule {
-		t.Fatalf("the decision is %+v, want a non-gating backlog decision by the run's rule", record)
+	if record.Gating || record.Placement != runstate.AbsorptionBacklog || record.Basis != runstate.AbsorptionBacklogDefault {
+		t.Fatalf("the decision is %+v, want a non-gating backlog-default decision", record)
 	}
 	if !strings.Contains(record.Reason, "prose") {
 		t.Errorf("the recorded reason does not say the acceptance is prose: %q", record.Reason)
@@ -497,8 +449,8 @@ func TestAProseDoneTurnsAFindingIntoABacklogTickNotAHold(t *testing.T) {
 	}
 }
 
-// 5b. THE EXCEPTION: a finding whose reporter claims it breaks the build or
-// CI gates ANY done, prose or not — a red build is an epic PR nobody can
+// 5b. THE EXCEPTION: a HIGH-severity finding whose reporter claims it breaks
+// the build or CI gates ANY done, prose or not — a red build is an epic PR nobody can
 // merge — so it is absorbed into the running epic as a child the run works
 // before the hand-over. 6in's own close-out filed one ("… dz1 regression; full
 // suite red").
@@ -515,8 +467,8 @@ func TestAProseDoneAbsorbsAFindingThatClaimsTheBuildIsRed(t *testing.T) {
 		t.Fatalf("the run ended %s (%+v)", result.State, result.Failure)
 	}
 	record := absorbingAbsorption(t, f.Repo, r)
-	if !record.Gating || record.Basis != runstate.AbsorptionRule || record.Placement == runstate.AbsorptionBacklog {
-		t.Fatalf("the decision is %+v, want a gating absorption by the run's rule, placed before the hand-over", record)
+	if !record.Gating || record.Basis != runstate.AbsorptionWorkerAssertedHigh || record.Placement == runstate.AbsorptionBacklog {
+		t.Fatalf("the decision is %+v, want a worker-asserted gating absorption, placed before the hand-over", record)
 	}
 	if _, inEpic := epicChildren(t, f)[record.TickID]; !inEpic {
 		t.Errorf("the absorbed tick %s is not a child of the running epic", record.TickID)
@@ -851,169 +803,6 @@ func TestARecordedAbsorptionIsFinishedBeforeTheGatesAreReEvaluated(t *testing.T)
 	}
 }
 
-// 6. THE REPORTER'S CLAIM REACHES THE DECISION (finding c244ce2c, tick wz0):
-// done_item and demonstrating_check — the done evidence the worker prompt
-// has promised the run would weigh since tick nfo — are wired into BOTH
-// tiers as INPUTS, never as verdicts. The fixture's finding claims done
-// item A1 demonstrated by `done`: the oracle that runs A1's command sees
-// the claim and SCORES it in the reason the record keeps, and the predictor
-// the unverified half is handed to carries the same claim into the
-// classifier's question as evidence.
-func TestTheReportersClaimReachesTheAbsorptionDecisionAsAnInput(t *testing.T) {
-	shorttest.EndToEnd(t)
-	t.Parallel()
-
-	// THE ORACLE'S HALF, on the observed path: the claimed item's command is
-	// observed broken while the finding stands, and the recorded reason
-	// scores the claim — confirmed by the run — beside the run's own verdict.
-	// The claim is never the verdict: the observation decided, and the claim
-	// is named as scored evidence on the record a person reads.
-	observed := newFixture(t, fixtureOptions{gate: observedGate, mode: "finding_local"})
-	setEpicAcceptance(t, observed, "[A1] Every tick closes behind a green gate.")
-	r, result, err := observed.run(observed.Repo, fixtureOptions{gate: observedGate, mode: "finding_local"})
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if result.State != runstate.StateCompleted {
-		t.Fatalf("the run ended %s: %s: %+v", result.State, result.Reason, result.Failure)
-	}
-	record := absorbingAbsorption(t, observed.Repo, r)
-	if record.Basis != runstate.AbsorptionObserved {
-		t.Fatalf("the decision's basis is %q, want observed: this case is the oracle's own", record.Basis)
-	}
-	for _, named := range []string{"confirmed", "A1"} {
-		if !strings.Contains(record.Reason, named) {
-			t.Errorf("the recorded reason does not score the reporter's claim (%q missing): %q — the claim must "+
-				"reach the decision as an input, and the reason is where the score is kept", named, record.Reason)
-		}
-	}
-
-	// THE PREDICTOR'S HALF, on the predicted path: A1's command passes, A2 is
-	// unverified, and the classifier is asked — with the reporter's claim in
-	// front of it, done_item and demonstrating_check both, so the answer is
-	// made WITH the reporter's evidence rather than beside it.
-	predicted := newFixture(t, fixtureOptions{gate: absorbingGate, mode: "finding_local"})
-	setEpicAcceptance(t, predicted, "[A1] Every tick closes behind a green gate.\n"+
-		"[A2] A cloud run dispatches on the model the gateway names.")
-	classifier := &fakeGatingClassifier{result: answerOver(t, map[string]float64{"A2": 0.9, "none": 0.1}, "A2")}
-	_, result, err = predicted.run(predicted.Repo, fixtureOptions{gate: absorbingGate, mode: "finding_local", gatingClassifier: classifier})
-	if err != nil {
-		t.Fatalf("run: %v", err)
-	}
-	if result.State != runstate.StateCompleted {
-		t.Fatalf("the run ended %s: %s: %+v", result.State, result.Reason, result.Failure)
-	}
-	if classifier.calls == 0 {
-		t.Fatal("the classifier was never asked, so nothing can be said about what reached it")
-	}
-	for _, named := range []string{"A1", "\"done\""} {
-		if !strings.Contains(classifier.state, named) {
-			t.Errorf("the classifier's state does not carry %q, the reporter's done evidence the decision "+
-				"must take as an input: %q", named, classifier.state)
-		}
-	}
-}
-
-// The pure half of the two-tier meeting point, so every branch of the
-// combination is pinned without a fixture: an observation wins, an unresolved
-// runnable item is never read as demonstrated, and where neither tier can
-// answer the decision errs toward absorbing — recorded as a prediction.
-//
-// short: combineGating over verdicts already in memory
-func TestCombineGatingAnswersEveryTierState(t *testing.T) {
-	t.Parallel()
-
-	done := acceptance.Done{Items: []acceptance.Resolved{
-		{Item: acceptance.Item{ID: "A1"}, State: acceptance.Runnable, Command: "done"},
-		{Item: acceptance.Item{ID: "A2"}, State: acceptance.Unverified},
-	}}
-	observedGating := &gating.Observed{Verdict: gating.Verdict{
-		FindingID: "k", Gating: true, ItemID: "A1", Basis: gating.BasisObserved}, Commit: "abc123"}
-	observedFine := &gating.Observed{Verdict: gating.Verdict{
-		FindingID: "k", Gating: false, Basis: gating.BasisObserved}, Commit: "abc123"}
-	predictedGating := &gating.Verdict{FindingID: "k", Gating: true, ItemID: "A2", Basis: gating.BasisPredicted}
-	predictedFine := &gating.Verdict{FindingID: "k", Gating: false, Basis: gating.BasisPredicted}
-
-	// An observation wins, and nothing is asked beside it.
-	verdict, _ := combineGating("k", done, observedGating, "", nil, "")
-	if !verdict.Gating || verdict.Basis != gating.BasisObserved {
-		t.Errorf("observed gating combined to %+v, want the observation untouched", verdict)
-	}
-
-	// Observed fine + a predicted break: the prediction decides the half the
-	// observation does not reach.
-	verdict, _ = combineGating("k", done, observedFine, "", predictedGating, "")
-	if !verdict.Gating || verdict.ItemID != "A2" || verdict.Basis != gating.BasisPredicted {
-		t.Errorf("observed fine with a predicted break combined to %+v, want the predicted break of A2", verdict)
-	}
-
-	// Observed fine + nothing left to decide: the observation stands.
-	verdict, _ = combineGating("k", done, observedFine, "", predictedFine, "")
-	if verdict.Gating {
-		t.Errorf("observed fine with a predicted none combined to gating %+v", verdict)
-	}
-
-	// Observed fine but a RUNNABLE item produced no evidence: never read as
-	// demonstrated — the fallback, naming the item.
-	observedFine.Unresolved = []gating.Unresolved{{
-		ItemID: "A1", Reason: "the command answered error, which produced no evidence about the item"}}
-	verdict, _ = combineGating("k", done, observedFine, "", nil, "every acceptance item is bound to a command")
-	if !verdict.Gating || verdict.Basis != gating.BasisPredicted || verdict.Fallback == "" {
-		t.Errorf("a runnable item with no evidence combined to %+v, want the absorb fallback saying why no verdict was reached", verdict)
-	}
-	if !strings.Contains(verdict.Reason, "A1") {
-		t.Errorf("the fallback reason does not name the item with no evidence: %q", verdict.Reason)
-	}
-
-	// Nothing observed, nothing predicted: the combined fallback.
-	verdict, _ = combineGating("k", done, nil, "no runner is configured", nil, "every item is the oracle's")
-	if !verdict.Gating || verdict.Fallback == "" {
-		t.Errorf("neither tier answering combined to %+v, want the absorb fallback — deferring would stop an unattended run", verdict)
-	}
-
-	// Nothing observed, every item the prediction's own: the prediction is the
-	// answer — no runnable item exists for an absent observation to leave
-	// undecided.
-	unverifiedOnly := acceptance.Done{Items: []acceptance.Resolved{
-		{Item: acceptance.Item{ID: "A2"}, State: acceptance.Unverified},
-	}}
-	verdict, _ = combineGating("k", unverifiedOnly, nil, "every acceptance item is unverified", predictedFine, "")
-	if verdict.Gating {
-		t.Errorf("a predicted none over the prediction's own items combined to gating %+v", verdict)
-	}
-
-	// Nothing observed while the done carries a RUNNABLE item (finding
-	// 88ea36a8, tick wz0): the oracle observed nothing — no runner, or no
-	// command produced evidence — and the prediction answered only the
-	// UNVERIFIED half. A runnable item with no evidence is unresolved, never
-	// demonstrated: an absence of observation is not an observation, so a
-	// non-gating prediction cannot carry the decision, and the combined
-	// fallback absorbs naming the runnable item.
-	verdict, _ = combineGating("k", done, nil, "no command produced evidence about any runnable item", predictedFine, "")
-	if !verdict.Gating || verdict.Basis != gating.BasisPredicted || verdict.Fallback == "" {
-		t.Errorf("a predicted none over an unobserved runnable item combined to %+v, want the absorb fallback — "+
-			"an absence of observation is not an observation", verdict)
-	}
-	if !strings.Contains(verdict.Reason, "A1") {
-		t.Errorf("the fallback reason does not name the unobserved runnable item: %q", verdict.Reason)
-	}
-
-	// The same state with no prediction at all: the fallback absorbs naming
-	// the runnable items, never the whole done as if nothing was answered.
-	verdict, _ = combineGating("k", done, nil, "no runner is configured", nil, "every item is the oracle's")
-	if !verdict.Gating || !strings.Contains(verdict.Reason, "A1") {
-		t.Errorf("neither tier answering over a runnable item combined to %+v, want the absorb fallback naming the runnable item", verdict)
-	}
-
-	// Nothing observed, the prediction GATING: the prediction stands — the
-	// decision absorbs either way, and the prediction is the tier that
-	// answered.
-	verdict, _ = combineGating("k", done, nil, "no command produced evidence about any runnable item", predictedGating, "")
-	if !verdict.Gating || verdict.ItemID != "A2" || verdict.Basis != gating.BasisPredicted {
-		t.Errorf("a predicted break over an unobserved runnable item combined to %+v, want the prediction to stand", verdict)
-	}
-}
-
 // A tracker record this layer writes must be the record the pinned layout
 // describes, because the file is what tk reads back: the required fields set,
 // two-space indented, no invented shape. (The pure half of the write path;
@@ -1027,7 +816,7 @@ func TestAWrittenTrackerRecordCarriesThePinnedLayout(t *testing.T) {
 		Body: "Discovered beside the work.", DiscoveredFrom: "run-r-1/tick-a1/attempt-1",
 	}, runstate.Absorption{
 		Key: "dc02fb31", TickID: "n9x", Gating: true, ItemID: "A1",
-		Basis: runstate.AbsorptionObserved, Reason: "observed broken", Placement: runstate.AbsorptionBeforeReview,
+		Basis: runstate.AbsorptionWorkerAssertedHigh, Reason: "asserted broken", Placement: runstate.AbsorptionBeforeReview,
 	}, "ticfac-test", "qeu")
 
 	var fields map[string]json.RawMessage
@@ -1047,8 +836,8 @@ func TestAWrittenTrackerRecordCarriesThePinnedLayout(t *testing.T) {
 	}
 	// A backlog record omits parent entirely — omitted rather than nulled.
 	backlog := absorbedTickRecord("r-1", runstate.Finding{Key: "k", Title: "t", DiscoveredFrom: "d"},
-		runstate.Absorption{Key: "k", TickID: "b01", Gating: false, Basis: runstate.AbsorptionObserved,
-			Reason: "fine", Placement: runstate.AbsorptionBacklog}, "operator@example.com", "")
+		runstate.Absorption{Key: "k", TickID: "b01", Gating: false, Basis: runstate.AbsorptionBacklogDefault,
+			Reason: "low severity", Placement: runstate.AbsorptionBacklog}, "operator@example.com", "")
 	fields = map[string]json.RawMessage{}
 	if err := json.Unmarshal([]byte(mustMarshal(backlog)), &fields); err != nil {
 		t.Fatal(err)

@@ -17,7 +17,6 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/forge"
-	"github.com/pengelbrecht/ticfac/internal/gating"
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -1034,12 +1033,6 @@ type fixtureOptions struct {
 	// field.
 	absorptionDepth int
 
-	// gatingClassifier is the classifier the absorption decision asks where
-	// the epic's done cannot yet be run (tick npq): a fake standing in for
-	// *jev.Client at the seam, exactly as the work-type tests fake theirs. Nil
-	// — the default — is the documented fallback: no classifier configured,
-	// every prediction falls back to absorbing.
-	gatingClassifier gating.Classifier
 	// proseFindingsForAPerson keeps a finding against the fixture's prose
 	// acceptance untriaged (Options.proseFindingsForAPerson): for the tests of
 	// the untriaged-findings hold and the PR body that carries such findings.
@@ -1159,7 +1152,6 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		NewExecutor:             f.newExecutor,
 		NewSweeper:              f.newSweeper,
 		Substrate:               opts.substrate,
-		GatingClassifier:        opts.gatingClassifier,
 		proseFindingsForAPerson: opts.proseFindingsForAPerson,
 		notReadyForAPerson:      opts.notReadyForAPerson,
 		ClaimHolder:             opts.claimHolder,

@@ -14,7 +14,6 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/forge"
-	"github.com/pengelbrecht/ticfac/internal/gating"
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
@@ -678,14 +677,8 @@ type Options struct {
 	// answer, not the capability to ask.
 	Classifier Classifier
 
-	// GatingClassifier is the classifier the absorption decision asks where
-	// the epic's done cannot yet be run (tick bse, wired by tick npq): the
-	// same *jev.Client the work-type exchange uses, asked a different
-	// question. Nil — the default — is not a stop: every prediction falls
-	// back to the documented absorb-anyway decision, recorded as a fallback,
-	// because deferring would stop an unattended run on the one actor only a
-	// person can play — the exact stop this tick exists to remove.
-	GatingClassifier gating.Classifier
+	// (The GatingClassifier the absorption decision used to ask is gone: the
+	// absorption policy of 2026-10-06 asks no classifier, absorb_policy.go.)
 
 	// AbsorptionDepthBound bounds the absorption recursion (tick qjj): how
 	// many absorptions ONE chain may carry — a gating finding discovered by

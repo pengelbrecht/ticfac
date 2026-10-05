@@ -23,7 +23,9 @@ func TestARunClosesALaterTickAFindingWasPromotedToTwiceBeforeScheduling(t *testi
 	t.Parallel()
 	shorttest.EndToEnd(t)
 	f := newFixture(t, fixtureOptions{mode: "finding_local"})
-	setEpicAcceptance(t, f, "[A2] A cloud run dispatches on the model the gateway names.")
+	// The item the finding names, at high severity, while the work is under
+	// way: the absorption policy absorbs it (worker-asserted-high).
+	setEpicAcceptance(t, f, "[A1] Every tick closes behind a green gate.")
 	_, _, err := f.run(f.Repo, fixtureOptions{mode: "finding_local", stopAfter: stopAt("a1", StageAbsorbed)})
 	killedAfter(t, err, "a1", StageAbsorbed)
 	f.stopEverything()
