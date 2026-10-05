@@ -582,6 +582,104 @@ func TestReportSummaryIsBoundedToOneLineOfRunes(t *testing.T) {
 	}
 }
 
+// TestReportSummaryQuotesTheAgentNotTheContainer (tick wvn): every report
+// a per-tick container pushes carries a preamble ticks-worker prepended
+// after the harness exited — its HTML comment, its italic facts lines
+// naming the branch, base and exit status, and, when they happened, the
+// boundary and cancellation sections — ABOVE the agent's words, stacked
+// double when a resolve job annotated a report the first container had
+// already annotated. The drill-in's one line is what the WORKER did, so
+// the first-paragraph rule skips the whole preamble and quotes the
+// report's own opening. The bodies below are copied from real archived
+// reports — container spelling and all — so the reader is tested against
+// the shape the container writes, not a paraphrase of it.
+func TestReportSummaryQuotesTheAgentNotTheContainer(t *testing.T) {
+	// The container's own comment, exactly as prepend_container_facts
+	// prints it: two lines, one paragraph.
+	const factsComment = "<!-- ticks-worker: container facts, prepended after the harness exited. The\n" +
+		"agent's report, including its STATUS line, is unchanged below. -->\n"
+	// The italic facts lines, spelled the way the container spells them.
+	const factsLine = "_ticks-worker: branch `tick/hn6/attempt-1/0rx`, base `709813e32bc71f84e398305f77054db0cc1c2537`, harness `pi` exited 0, 1 work commit(s), 0 uncommitted path(s)._\n"
+	const carriedLine = "_ticks-worker: a carried attempt — its base `709813e32bc71f84e398305f77054db0cc1c2537` is the head of the work it continued, which was cut from `ddf3cec1f5096fd8da9886f573a3c15a910c316c`; its work commits are counted from the carried head._\n"
+	// The boundary section, quoted the way boundary_section prints it.
+	const boundarySection = "> **BOUNDARY VIOLATION ATTEMPTED.** This agent tried to write tracker state, which the\n" +
+		"> orchestrator owns. The container refused it, so nothing under `.tick/`\n" +
+		"> should have reached this branch — but the attempt is reported rather than\n" +
+		"> silently cleaned, because a model that ignored an explicit instruction is\n" +
+		"> something a human has to see. What it did:\n" +
+		">\n" +
+		"> - the agent ran `tk --json list`\n"
+	// The cancellation section, the way cancel_section prints it.
+	const cancelSection = "> **CANCELLED BY THE SUPERVISOR** (`budget:cost`). The wave was cancelled while this container was\n" +
+		"> still working. Its gateway credential was revoked first, so it could no\n" +
+		"> longer make a model call; what it had was salvaged, committed and pushed\n" +
+		"> inside the window the supervisor held open before the container was\n" +
+		"> destroyed. Whatever is on this branch is therefore PARTIAL by\n" +
+		"> construction — the agent did not decide to stop.\n"
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			name: "the container's comment alone before the report",
+			body: factsComment + "\n# RESULT-3rc\n\nThe agent's own opening paragraph, which is what a person reads to decide\nwhether to open the whole report.\n\nSTATUS: DONE\n",
+			want: "The agent's own opening paragraph, which is what a person reads to decide whether to open the whole report.",
+		},
+		{
+			name: "the facts lines and a boundary section",
+			body: factsComment + "\n" + factsLine + "\n" + carriedLine + "\n" + boundarySection + "\n" +
+				"# Phone page renders the dashboard model (tick 0rx, hn6/attempt-1)\n\n" +
+				"This attempt's base (709813e) is the salvage commit ticks-worker made from\n" +
+				"attempt-3 of this same tick: a cancelled container's uncommitted tree,\n" +
+				"committed whole.\n\nSTATUS: DONE\n",
+			want: "This attempt's base (709813e) is the salvage commit ticks-worker made from attempt-3 of this same tick: a cancelled container's uncommitted tree, committed whole.",
+		},
+		{
+			name: "a cancellation section",
+			body: factsComment + "\n" + factsLine + "\n" + cancelSection + "\n" +
+				"# RESULT-c2u\n\nThe agent's own opening paragraph still answers.\n\nSTATUS: DONE\n",
+			want: "The agent's own opening paragraph still answers.",
+		},
+		{
+			name: "the resolve job's second preamble on an annotated report",
+			body: factsComment + "\n" + factsLine + "\n" + factsComment + "\n" +
+				"_ticks-worker: branch `tick/hn6/attempt-2-resolve-2-0d576fa2/7uv`, base `f393155b0c96359a1fd4953fc6924c35a53f5b89`, harness `pi` exited 0, 1 work commit(s), 0 uncommitted path(s)._\n\n" +
+				boundarySection + "\n" +
+				"# RESULT-7uv\n\nThe agent's own opening paragraph, under two preambles.\n\nSTATUS: DONE\n",
+			want: "The agent's own opening paragraph, under two preambles.",
+		},
+		{
+			name: "a report the container wrote itself, no agent words at all",
+			body: factsComment + "\n" + factsLine + "\n" +
+				"The harness exited 0 and 1 work commit(s) landed on `tick/hn6/attempt-1/5qj`. The work is\n" +
+				"there and reviewable on its own merits; what is missing is the agent's account\n" +
+				"of it.\n\nSTATUS: DONE_WITH_CONCERNS — the harness exited 0 and 1 work commit(s) landed, but no agent report exists\n",
+			want: "The harness exited 0 and 1 work commit(s) landed on `tick/hn6/attempt-1/5qj`. The work is there and reviewable on its own merits; what is missing is the agent's account of it.",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := reportRepo(t, "branch", "epic/2jn")
+			stateRoot := t.TempDir()
+			t.Setenv("TICFAC_EXEC_STATE_DIR", stateRoot)
+			archiveReport(t, stateRoot, "epic-2jn", "nwj", 1, tc.body)
+
+			input := AttemptReports(repo)("epic-2jn", "nwj", 1)
+			if input == nil {
+				t.Fatal("the report is archived and the branch stands, and the reader answered nothing")
+			}
+			if input.Summary != tc.want {
+				t.Errorf("the summary is\n  %q\nwant the report's own first paragraph, not the container's preamble:\n  %q",
+					input.Summary, tc.want)
+			}
+			if !input.DiffRead {
+				t.Error("the branch stands and its diff was not read: the preamble skip must not disturb the diff half")
+			}
+		})
+	}
+}
+
 // TestReportsDecorateTheSettledTicks: the model carries the drill-in on
 // every tick with a current attempt whose state is not dispatched — the
 // settled and the reported ones, never the one still in flight — and leaves
