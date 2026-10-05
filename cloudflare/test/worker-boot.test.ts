@@ -24,6 +24,8 @@ import {
   WORKER_PROBE_COMMAND,
   WORKER_PROBE_MARKER,
   WORKER_ROLE_PROMPT_ENV,
+  WORKER_SETUP_ARG,
+  WORKER_SETUP_COMMAND,
   WORKER_WORK_BASE_ENV,
   workerBootEnv,
   workerBranch,
@@ -77,6 +79,12 @@ describe("the worker boot contract", () => {
     expect(WORKER_BOOT_PROMPT_END).toBe(contract.boot_prompt_end);
     expect(WORKER_FINISH_ARG).toBe(contract.finish_arg);
     expect(WORKER_FINISH_COMMAND).toBe(contract.finish_command);
+    // The restore's setup entry (epic 43y, tick i3h): the host rebuilds a lost
+    // container's workspace and runs this command in it, so a restored box
+    // carries the repository's dependency installs. Same three readers, same
+    // reason as the phases above.
+    expect(WORKER_SETUP_ARG).toBe(contract.setup_arg);
+    expect(WORKER_SETUP_COMMAND).toBe(contract.setup_command);
     expect(WORKER_ACTOR).toBe(contract.worker_actor);
     expect(WORKER_BRANCH_PREFIX).toBe(contract.branch_prefix);
     // The boundary guard's two strings (tick dxk). The refusal is the

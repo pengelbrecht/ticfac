@@ -122,6 +122,20 @@ export const WORKER_FINISH_ARG = "--finish";
  */
 export const WORKER_FINISH_COMMAND = `${WORKER_COMMAND} ${WORKER_FINISH_ARG}`;
 
+/** The argument that runs the RESTORE's setup entry (epic 43y, tick i3h). */
+export const WORKER_SETUP_ARG = "--setup";
+
+/**
+ * The setup entry, as the pi-durable host's restore runs it after rebuilding a
+ * lost container's workspace from the last wip snapshot: the repository's own
+ * `[sandbox]` setup — the dependency installs that died with the container —
+ * and nothing else around it. No clone, no harness, no push, none of the
+ * boot's inputs; the wave's `TICKS_WORKER_SETUP` lever still holds, so a wave
+ * that skipped the install at boot keeps skipping it in a restored box. Its
+ * faults are the boot's own classes (2, 3, 6).
+ */
+export const WORKER_SETUP_COMMAND = `${WORKER_COMMAND} ${WORKER_SETUP_ARG}`;
+
 /** Where the container keeps the harness pid the door needs to find. */
 export const WORKER_STATE_DIR_ENV = "TICKS_WORKER_STATE_DIR";
 

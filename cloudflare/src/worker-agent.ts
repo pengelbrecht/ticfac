@@ -95,6 +95,7 @@ import {
   WORKER_BOOT_PROMPT_BEGIN,
   WORKER_BOOT_PROMPT_END,
   WORKER_FINISH_COMMAND,
+  WORKER_SETUP_COMMAND,
 } from "./worker-boot";
 
 // ------------------------------------------------------------ constants ---
@@ -580,6 +581,7 @@ export class WorkerAgent extends DurableObject<Env> {
       protocol: {
         bootCommand: WORKER_BOOT_COMMAND,
         finishCommand: WORKER_FINISH_COMMAND,
+        setupCommand: WORKER_SETUP_COMMAND,
         bootMarker: WORKER_BOOT_MARKER,
         promptBegin: WORKER_BOOT_PROMPT_BEGIN,
         promptEnd: WORKER_BOOT_PROMPT_END,

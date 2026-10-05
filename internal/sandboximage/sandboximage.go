@@ -607,6 +607,27 @@ func WorkerBootCommand() string { return WorkerCommand + " " + WorkerBootArg }
 // settles. The outcome rides as the command's one argument.
 func WorkerFinishCommand() string { return WorkerCommand + " " + WorkerFinishArg }
 
+// The setup entry (epic 43y, tick i3h).
+//
+// A container lost mid-turn is restored from the last wip snapshot by the
+// host's own git plumbing (harness/src/workspace/checkpoints.ts
+// `restoreWorkspace`), which rebuilds the tree but cannot re-run the one boot
+// step the restored conversation still needs: the repository's own
+// [sandbox] setup, whose dependency installs died with the container.
+// [WorkerSetupArg] is that step as one command — the restore runs it at the
+// workspace root after the checkout — so a restored workspace is a
+// provisioned one, not a tree whose tests cannot run.
+const (
+	// WorkerSetupArg turns [WorkerCommand] into the restore's setup entry:
+	// the repository's [sandbox] setup, and nothing else around it — no
+	// clone, no harness, no push, and none of the boot's inputs.
+	WorkerSetupArg = "--setup"
+)
+
+// WorkerSetupCommand is what the host's restore runs after it checks the
+// last wip snapshot out into the rebuilt container.
+func WorkerSetupCommand() string { return WorkerCommand + " " + WorkerSetupArg }
+
 // The boundary guard (tick dxk).
 //
 // A worker agent may not run `tk` and may not write under `.tick/`: the

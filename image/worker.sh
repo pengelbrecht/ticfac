@@ -126,6 +126,20 @@ readonly WORKER_CANCEL_REPORT_MARKER="CANCELLED BY THE SUPERVISOR"
 #                            facts, the commit, the push, and the same exit
 #                            codes 9/10/11 from the same git facts.
 #
+#   `ticks-worker --setup`    is run by the host's RESTORE (epic 43y, tick i3h)
+#                            after it rebuilt a lost container's workspace
+#                            from the last wip snapshot. The restore's own git
+#                            plumbing can clone and check out but cannot
+#                            re-run the one boot step the restored tree still
+#                            needs: the repository's `[sandbox]` setup, whose
+#                            dependency installs died with the container. This
+#                            entry is that step alone — no clone, no harness,
+#                            no push, and none of the boot's inputs (a
+#                            restored box has no TICKS_TICK of its own). The
+#                            wave's TICKS_WORKER_SETUP lever still holds:
+#                            a wave that skipped the install at boot keeps
+#                            skipping it in the box a loss restored into.
+#
 # The markers are pinned in contracts/worker-boot-contract.json beside the
 # probe and cancel markers, for the same reason: a word one half prints and
 # another half greps for is a contract, and a drift between them fails CI
@@ -1492,6 +1506,35 @@ restore_finish_state() {
 	boundary_ledger="$guard_dir/attempts"
 }
 
+# The setup entry (epic 43y, tick i3h): the repository's own `[sandbox]`
+# setup, re-run by the host's RESTORE in a container it just rebuilt from the
+# last wip snapshot. The restore's git plumbing (harness/src/workspace/
+# checkpoints.ts `restoreWorkspace`) clones and checks out; the dependency
+# installs the boot ran died with the container, and a workspace without them
+# is a tree whose tests cannot run — so the restore runs this entry as its
+# `setup` command, at the workspace root, and a failure is the restore's to
+# report.
+#
+# It takes NONE of the boot's inputs: the checkout is already there (a
+# container booted by hand, or restored, may have nothing else), so there is
+# no TICKS_TICK to require and no clone to make — only the one step it exists
+# for, with the wave's setup lever still honoured.
+run_setup_entry() {
+	[[ -d $workdir ]] ||
+		die $EXIT_CLONE "no checkout at ${workdir} — the setup entry re-runs a repository's [sandbox] setup in a box a boot or a restore built, and this one holds no workspace"
+	case "$setup_mode" in
+	always | skip) ;;
+	*) die $EXIT_CONFIG "unknown TICKS_WORKER_SETUP '$setup_mode' — expected always or skip" ;;
+	esac
+	# The caches the boot's install warmed died with the container. The same
+	# locations, freshly created — so a wave that pinned a persistent
+	# TICKS_CACHE_DIR restores warm, and the restore's install lands where the
+	# boot's always did.
+	configure_caches
+	cd "$workdir" || die $EXIT_CLONE "cannot enter $workdir"
+	worker_repo_setup
+}
+
 main() {
 	if [[ ${1:-} == "--probe" ]]; then
 		harness="${TICKS_HARNESS:-pi}"
@@ -1511,6 +1554,13 @@ main() {
 	# boot phase as the env's first command, the finish phase as the host's
 	# last. The all-in-one default below stays the default — the CLI harness
 	# path runs unchanged until jhp deletes it.
+	# The setup entry (epic 43y, tick i3h): answered before `require_inputs`,
+	# like `--cancel`, because the box a restore hands it may hold nothing the
+	# boot resolved — only the workspace the restore just rebuilt.
+	if [[ ${1:-} == "--setup" ]]; then
+		run_setup_entry
+		exit $?
+	fi
 	if [[ ${1:-} == "--boot" ]]; then
 		boot_phase
 		# Booted: the conversation owns the rest, and a boot-stopped marker
