@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 207,
+  "sequence": 208,
   "state": "gating",
-  "reason": "running the integrated gate for qjl on 0e530b69cea7",
-  "updated_at": "2026-10-05T15:45:56Z",
+  "reason": "running the integrated gate for qjl on aadd768b55e3",
+  "updated_at": "2026-10-05T16:12:26Z",
   "ticks": [
     {
       "tick_id": "v16",
