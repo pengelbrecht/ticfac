@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 248,
-  "state": "integrating",
-  "reason": "integrating mwt attempt 34 into epic/hn6",
-  "updated_at": "2026-10-05T19:23:20Z",
+  "sequence": 249,
+  "state": "gating",
+  "reason": "running the integrated gate for mwt on 31da0c6ab3ab",
+  "updated_at": "2026-10-05T19:23:36Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -174,7 +174,7 @@
     },
     {
       "tick_id": "mwt",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 34
     },
     {
