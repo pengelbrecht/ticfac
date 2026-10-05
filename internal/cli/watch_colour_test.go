@@ -389,4 +389,12 @@ func TestWatchDrillAndFeedUseThePalette(t *testing.T) {
 	assertGridAttr(t, gridCells(feed, "t2#1"), "t2#1", "cyan", false, false)
 	assertGridAttr(t, gridCells(feed, "rejected"), "rejected", "red", false, false)
 	assertGridAttr(t, gridCells(feed, "dispatched"), "dispatched", "", false, false)
+
+	// The plain-lines mode stays uncoloured: the one-line form the stream
+	// path prints — the words a log or a pipe reads — carries no SGR at all.
+	for _, event := range events {
+		if line := watchEventLine(event, &tries); strings.Contains(line, "\x1b[") {
+			t.Errorf("the stream's one-line form carries an SGR sequence: %q", line)
+		}
+	}
 }
