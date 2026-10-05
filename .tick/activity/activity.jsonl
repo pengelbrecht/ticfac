@@ -2282,3 +2282,4 @@
 {"ts":"2026-10-05T18:06:13.737752Z","tick":"7sn","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Cloud PR-review omp exception to A1 was recorded by a worker, not the operator"}}
 {"ts":"2026-10-05T18:06:34.714652Z","tick":"enb","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Full Go suite red: 7 reconcile e2e fixtures still declare cloud runner pi"}}
 {"ts":"2026-10-05T18:20:35.886458Z","tick":"enb","action":"note","actor":"ticfac","epic":"43y","data":{"note":"\n2026-10-05 20:20 - ticfac run epic-43y: enb try 1 (run dispatch #46) merged into epic/43y as 2e06b7dda565; the integrated gate (go, ts) passed.","title":"Full Go suite red: 7 reconcile e2e fixtures still declare cloud runner pi"}}
+{"ts":"2026-10-05T18:20:38.808742Z","tick":"enb","action":"close","actor":"ticfac","epic":"43y","data":{"title":"Full Go suite red: 7 reconcile e2e fixtures still declare cloud runner pi"}}

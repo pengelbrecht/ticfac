@@ -3,7 +3,7 @@
   "title": "Full Go suite red: 7 reconcile e2e fixtures still declare cloud runner pi",
   "description": "twa (540910e09) binds runner pi-durable for every profile dispatching into Cloudflare, but the e2e fixtures still declare the cloudflare-sandbox KnownExecutor with Runners [\"pi\"], so usableProfile refuses every run ('profile implement-tick names runner \"pi-durable\" for executor cloudflare-sandbox, which launches pi'). The tests call shorttest.EndToEnd, so the per-tick integrated gate skipped them; CI on epic/43y has been red on reconcile shards 1-3 since 15:25 UTC (runs 37332698366..37340930478; last green d7ca3e572). Reproduced locally at HEAD. Fix: fixtures use profile.CloudRule.Harnesses (as internal/cli/executor.go:82 does) or include pi-durable; then CI on the epic head must be green.\nevidence: internal/reconcile/sandbox_adoption_test.go:625 and substrate_routing_test.go:183 (Runners: []string{\"pi\"}); internal/reconcile/profiles.go:516; gh run view 37340930478 --log-failed\n\nticfac run epic-43y created this tick by absorbing the finding 90b1f843fec3abd1734da5fa17a4166417709f952d856d904d6a2cc534c8904a (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/90b1f843fec3abd1734da5fa17a4166417709f952d856d904d6a2cc534c8904a.json on the run branch.",
   "notes": "2026-10-05 20:01 - ticfac run epic-43y: created by absorbing finding 90b1f843fec3abd1734da5fa17a4166417709f952d856d904d6a2cc534c8904a — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-43y/absorptions/90b1f843fec3abd1734da5fa17a4166417709f952d856d904d6a2cc534c8904a.json on epic/43y, and it says: the classifier put 0.97 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A5: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side\n2026-10-05 20:20 - ticfac run epic-43y: enb try 1 (run dispatch #46) merged into epic/43y as 2e06b7dda565; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "discovered_from": "run-epic-43y/tick-66a/attempt-42",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T18:01:07Z",
-  "updated_at": "2026-10-05T18:20:35.886149Z",
-  "started_at": "2026-10-05T18:06:34.711569Z"
+  "updated_at": "2026-10-05T18:20:38.808184Z",
+  "closed_at": "2026-10-05T18:20:38.808184Z"
 }
