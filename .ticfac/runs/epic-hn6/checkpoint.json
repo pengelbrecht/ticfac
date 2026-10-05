@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 180,
-  "state": "integrating",
-  "reason": "integrating cg4 attempt 25 into epic/hn6",
-  "updated_at": "2026-10-05T14:25:30Z",
+  "sequence": 181,
+  "state": "gating",
+  "reason": "running the integrated gate for cg4 on 2e24558d89d6",
+  "updated_at": "2026-10-05T14:25:44Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -133,7 +133,7 @@
     },
     {
       "tick_id": "cg4",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 25
     },
     {
