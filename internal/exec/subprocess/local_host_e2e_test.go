@@ -131,12 +131,27 @@ func TestTheDurableRunnerRunsAWholeWorkerOnTheHarness(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(local.State, fileWorkerStorage)); err != nil {
 		t.Errorf("the conversation's SQLite storage is missing: %v", err)
 	}
-	// The wip checkpoints really reached the attempt branch — the
-	// carried-work mechanism, at tool-round granularity, on the origin the
-	// run reads.
+	// The wip checkpoints reached the attempt branch DURING the run (the
+	// runner log says every push), and the finish phase retired them and
+	// salvaged the uncommitted tree (tick nou): the branch the run reads
+	// ends at the salvage commit the supervisor's final push landed — never
+	// at a snapshot a fast-forward push would be refused over, and never
+	// empty for a worker that settled without committing.
+	rawLog, err := os.ReadFile(filepath.Join(local.State, fileRunnerLog))
+	if err != nil {
+		t.Errorf("the runner log could not be read: %v", err)
+	} else if !strings.Contains(string(rawLog), "wip checkpoint pushed") {
+		t.Errorf("no wip checkpoint reached the attempt branch during the run:\n%s", rawLog)
+	}
 	log := runGit(f.t, f.Repo.Origin, "log", "--format=%s", "tick/"+tick)
-	if got := strings.Split(log, "\n"); len(got) < 2 || !strings.Contains(log, "wip: tool round") {
-		t.Errorf("the attempt branch carries no wip checkpoint:\n%s", log)
+	if !strings.Contains(log, "work in progress salvaged") {
+		t.Errorf("the attempt branch carries no salvage commit:\n%s", log)
+	}
+	if strings.Contains(log, "wip: tool round") {
+		t.Errorf("the attempt branch still carries a wip snapshot the finish never retired:\n%s", log)
+	}
+	if got := runGit(f.t, f.Repo.Origin, "show", "tick/"+tick+":harness-ran.txt"); got != "the harness ran" {
+		t.Errorf("the salvaged work is not on the origin the run reads: %q", got)
 	}
 }
 
