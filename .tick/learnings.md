@@ -5,9 +5,8 @@ Seeded from ticks' learnings 2026-09-02; last compacted at the hn6 close-out, 20
 
 ## Planning an epic
 
-**Problem:** FOUR epics closed without the run their acceptance names (Phase 4, xte, yoh; 2jn's A1
-was traced with a stand-in child); hn6's A1 names `ticfac watch epic-<id>` and nothing watched the
-live run until its close-out, which found three defects only a live run shows. **Rule:** When an
+**Problem:** FOUR epics closed without the run their acceptance names; hn6's A1 names
+`ticfac watch epic-<id>` and nothing watched the live run until its close-out. **Rule:** When an
 epic's gate is a run or a view, the FIRST tick wires the thinnest end-to-end path through the
 PRODUCTION entry point, and a named tick INSIDE the epic runs it live before the review.
 
@@ -22,8 +21,8 @@ model merging them was specified for one live run. **Rule:** An epic that render
 the state matrix at planning (running, held, stopped, failed, cancelled, awaiting merge, prior run,
 cloud, local) × every surface, with ONE precedence table (chronology, then authority) tested over it.
 
-**Problem:** 2jn's NOT READY became one tick per finding; three rewrote exit codes, one collision went
-silent (7o5). **Rule:** Fold a NOT READY review's findings by SEAM, not one tick per finding.
+**Problem:** 2jn's NOT READY became one tick per finding; one collision went silent (7o5). **Rule:**
+Fold a NOT READY review's findings by SEAM, not one tick per finding.
 
 **Problem:** A policy held per layer and failed in the whole (xte's tier overlay replaced the model;
 yoh keyed Workers AI on the substrate, 78v). **Rule:** Check a policy on the FINAL resolved value,
@@ -35,20 +34,18 @@ fq0 lh4 lkq) removed values wave 2's derivation could never produce. **Rule:** A
 vocabulary and one that CONSUMES it are different waves, and the declaring wave's fixtures are
 checked against the builder from day one (TestEveryGoldenAgreesWithThePipelineDerivation's shape).
 
-**Problem:** l6t deleted the wave path and four things only it produced; four of 6in's findings were
-docs naming deleted verbs. **Rule:** A deletion tick first LISTS every effect and pointer of the
-deleted path in BOTH repos, naming each one's new owner or "dropped"; that list is its acceptance.
+**Problem:** l6t deleted the wave path and four things only it produced; 6in findings named
+deleted verbs. **Rule:** A deletion tick first LISTS every effect and pointer of the deleted path
+in BOTH repos, naming each one's new owner or "dropped"; that is its acceptance.
 
 **Problem:** dz1's re-run held on the claim its STOPPED predecessor left. **Rule:** An enforcement
-moving into this repo brings its exemptions; test the resume and re-run paths, not only the refusal.
+moving into this repo brings its exemptions; test resume and re-run, not only the refusal.
 
 ## Orchestration
 
-**Problem:** Wave-2 branched from a base missing wave-1. **Rule:** Name the SHA; check `--is-ancestor`.
-
-**Problem:** Two additions to one file were cut by two same-wave ticks. **Rule:** Two additions to one
-file are a union in INTENT, not in text — hand the resolve to a worker holding the context. A
-versioned artifact has ONE owner per wave.
+**Problem:** Wave-2 branched from a base missing wave-1; two same-wave ticks cut additions to one
+file. **Rule:** Name the SHA; check `--is-ancestor`. Two additions to one file are a union in
+INTENT, not in text — hand the resolve to a worker holding the context. ONE owner per artifact.
 
 **Problem:** A worker committed tracker state its prompt forbade. **Rule:** A boundary the substrate
 can enforce must not rest on instruction-following — make it impossible and REPORT every attempt.
@@ -59,7 +56,7 @@ in-flight state from durable evidence, never by trusting the claimer.
 
 **Problem:** ncv stopped EIGHT times for untriaged findings; yoh needed a person ~20 times. **Rule:**
 A hold that fires when the system does its job (finding things) makes "unattended" impossible; put
-it where a person already is (the PR). A resume replays a recorded decision, never buys it again.
+it where a person already is (the PR). A resume replays a recorded decision, never re-buys one.
 
 **Problem:** 6in's close-out took four attempts past its committed retro: a BLOCKED left work no
 rule disposed of (#117), and a re-verify that committed nothing was rejected "no-commits". **Rule:**
@@ -96,25 +93,23 @@ every terminal state; no `tail`/`head` in a watcher pipeline.
 **Problem:** A regression test "failed before the fix" only on an unrelated assertion. **Rule:**
 REPRODUCE a reported defect at the base, and read WHICH assertion fails there.
 
-**Problem:** A defect that is a SHAPE was repaired one site at a time (dyo Go, 94u TS, herdr open; 4lv
-then 0ye); nine hn6 repairs (ulw qxj q8m v2f gf0 fub quz bd5 l1t) fixed a printed "clear with"
-command that could not clear its hold. **Rule:** A repair names EVERY implementation of the seam (grep
-Go, TS, every executor), leaves a guard test, and reproduces on the old code. A command printed for
-a person comes from ONE builder and a test PARSES it with the real CLI against the hold it names.
+**Problem:** A defect that is a SHAPE was repaired one site at a time (dyo Go, 94u TS); nine hn6
+repairs fixed a printed "clear with" command that could not clear its hold. **Rule:** A repair
+names EVERY implementation of the seam, leaves a guard test, and reproduces on the old code; a
+command printed for a person comes from ONE builder and a test PARSES it with the real CLI.
 
 **Problem:** 06t deleted the stray RESULT-*.md reports and passed its gate; the integration merge
 (keepReportsOut) restored all seven, and only round two's `git ls-tree epic/hn6` saw it (obk).
 **Rule:** A repair whose effect is a TREE state is accepted on the INTEGRATED head, never the branch.
 
-**Problem:** A boot step past its retries escaped supervisePass. **Rule:** In the Run Workflow every
-ending is finalize's: catch a throwing step AT ITS STEP; a test fails each step past its retries.
+**Problem:** A boot step past its retries escaped supervisePass. **Rule:** Every ending is
+finalize's: catch a throwing step AT ITS STEP; a test fails each step past its retries.
 
 **Problem:** Gate evidence keyed by commit was wrong both ways: the run writes `.ticfac/` to the
 branch it gates. **Rule:** Key evidence by the SOURCE (tree minus the run's own path).
 
 **Problem:** Wall-clock tests refused innocent work six times; ONE host SIGTERM defect (8d6) failed
-at base in 18 ticks. **Rule:** A gate verdict is about the tree only if the host is bounded (guard
-shared state by a per-process temp root); before filing "fails at base", grep `.tick/issues/`.
+at base in 18 ticks. **Rule:** A gate verdict is about the tree only if the host is bounded; before filing "fails at base", grep `.tick/issues/`.
 
 **Problem:** wne's gates went green with 7 of 10 relevant tests skipped under `-short`; dz1's red
 EndToEnd sat unread until the close-out. **Rule:** A test the gate does not run is not evidence; a
@@ -139,7 +134,7 @@ strings from a real record (`.ticfac/runs/*/attempts/*.json`), never type them.
 ## Boundaries this repo pays to learn
 
 **Problem:** A new `factory_*` key in ~/.ticfacrc broke the pinned contract. **Rule:** The config
-FILE's keys are the bundle's; the $TICFAC_* ENVIRONMENT is this repo's operator-preference surface.
+FILE's keys are the bundle's; $TICFAC_* is the operator-preference surface.
 
 **Problem:** A login-route test read the login page's own 401: `SELF.fetch` FOLLOWS a 303. **Rule:**
 A redirect-asserting route test passes `redirect: "manual"`.
@@ -147,3 +142,10 @@ A redirect-asserting route test passes `redirect: "manual"`.
 **Problem:** A 1,000,000 max-output drew a bodyless 400 pi read as context overflow; 8,192 truncated
 GLM; GLM via `cloudflare-workers-ai` leaked `<think>` tags. **Rule:** A bodyless 4xx is REQUEST SHAPE
 until proven otherwise; change one variable at a time. Off-vendor, set `compat.thinkingFormat`.
+
+**Problem:** dm2's gateway join: pi's streamed Workers AI calls left NO gateway log row while curl
+to the same route logged instantly — the row is written only when the client DRAINS the stream
+(pi stops after `finish_reason`); the gateway also refuses pi's stored `cfu_…` wallet key
+(needs `cf-aig-authorization` with the account token; a provider-config `apiKey` override
+cannot displace a stored credential) and the route needs `/workers-ai/v1` (else 7003).
+**Rule:** a gateway route is verified by reading the LOG ROW back, not by the call answering 200.
