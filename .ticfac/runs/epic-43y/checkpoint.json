@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 421,
+  "sequence": 422,
   "state": "failed",
-  "reason": "4ao try 1 (run dispatch #58) is no-commits: the attempt branch carries no commit beyond the base it was cut from (f9d637c855da)",
-  "updated_at": "2026-10-05T22:00:44Z",
+  "reason": "4ao is held on collect_failed (4ao try 1 (run dispatch #58) is no-commits: the attempt branch carries no commit beyond the base it was cut from (f9d637c855da)). Nothing of a held tick reached epic/43y, so the run did not stop at the hold: every tick that does not wait behind it was worked to the end, and the run ends on the hold because nothing else can progress — j2k, o68 waits behind it and was not dispatched. Running the epic again under this run id resumes it — a held attempt that left nothing is redispatched, an attempt held holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone",
+  "updated_at": "2026-10-05T22:00:51Z",
   "ticks": [
     {
       "tick_id": "92k",
