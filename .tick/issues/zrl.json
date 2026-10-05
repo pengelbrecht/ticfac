@@ -2,6 +2,7 @@
   "id": "zrl",
   "title": "below 48 cells a child row's columns still shift by its indent",
   "description": "The cg4 fix lets the WHAT column absorb a child row's 3-cell indent. When the pane is narrower than watchWhatFrom (48) the WHAT column drops, and the child's PIPELINE/TIME still sit 3 cells right of the parent rows — there is no WHAT cell to give the cells up, and the indent cannot come out of the identity column without cutting the id itself (lead 4 cells, id '+823' already 4 wide). Worth a deliberate decision: accept the shift at extreme narrowness, or shrink the child's lead to ' └ ' there. Not in cg4's scope: both goldens (120, 60) show WHAT, and the tick names the WHAT truncation as the fix.\nevidence: internal/cli/watch_view.go dashCells.render: renderWatchFrame on a model with an indented child at width 40 gives ' t1    ✓ ✓ ✓ ✓  49m' beside '  └ +t1c  ✓ ✓ ✓ ✓  34m' — pipeline and time 3 cells right\n\nticfac run epic-hn6 filed this backlog tick from the finding c932748c671a7ce13bf46fa3398acd0fdcfcf6ed85dbceeafa4bcc4fa9598dc9 (reported by run-epic-hn6/tick-cg4/attempt-25): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/c932748c671a7ce13bf46fa3398acd0fdcfcf6ed85dbceeafa4bcc4fa9598dc9.json on the run branch.",
+  "notes": "2026-10-05 16:25 - ticfac run epic-hn6: created by absorbing finding c932748c671a7ce13bf46fa3398acd0fdcfcf6ed85dbceeafa4bcc4fa9598dc9 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-hn6/absorptions/c932748c671a7ce13bf46fa3398acd0fdcfcf6ed85dbceeafa4bcc4fa9598dc9.json on epic/hn6, and it says: the classifier put 0.05 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-hn6/tick-cg4/attempt-25",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-05T14:25:11Z",
-  "updated_at": "2026-10-05T14:25:11Z"
+  "updated_at": "2026-10-05T14:25:17.280783Z"
 }
