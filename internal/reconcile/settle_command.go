@@ -20,7 +20,16 @@ import "fmt"
 // on when this host holds none of its state (tick bd5). The empty run id
 // says the caller does not know it; either way the flag is left off and the
 // spelling every local run's prose has always carried stands.
+//
+// An address the caller cannot state in full names no command at all (tick
+// mwt): "ticfac settle  a1 2" with the epic's space left in is a sentence
+// a person cannot type, and the empty answer leaves every renderer saying
+// what it knows — the hold and its reason — without a command that cannot
+// clear it.
 func SettleReleaseCommand(epicID, tickID string, attempt int, runID string) string {
+	if epicID == "" || tickID == "" {
+		return ""
+	}
 	if runID == "" || runID == "epic-"+epicID {
 		return fmt.Sprintf("ticfac settle %s %s %d --release \"<who>\"", epicID, tickID, attempt)
 	}

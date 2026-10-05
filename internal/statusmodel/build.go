@@ -1018,9 +1018,9 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 		// The resume is named by the host the run lives on (tick gtk): a
 		// cloud run's is a new submission to its factory — run --cloud —
 		// because run-epic here would restart the epic LOCALLY, in the
-		// foreground, on the machine that happens to be reading.
-		unblock := ResumeCommand(m.Host, m.EpicID)
-		w.UnblockCommand = &unblock
+		// foreground, on the machine that happens to be reading. An epic
+		// the model cannot state names no command (tick mwt).
+		w.UnblockCommand = commandOrNil(ResumeCommand(m.Host, m.EpicID))
 		claim(w)
 	}
 
@@ -1124,9 +1124,9 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 			}
 			// The resume is named by the host the run lives on (tick gtk): a
 			// cloud run's is a new submission to its factory, because
-			// run-epic here would restart the epic LOCALLY.
-			unblock := ResumeCommand(m.Host, m.EpicID)
-			w.UnblockCommand = &unblock
+			// run-epic here would restart the epic LOCALLY. An epic the
+			// model cannot state names no command (tick mwt).
+			w.UnblockCommand = commandOrNil(ResumeCommand(m.Host, m.EpicID))
 			claim(w)
 		}
 	}
@@ -1210,9 +1210,9 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 			// lists them (tick gtk): `ticfac findings` walks away having
 			// changed nothing, and a person following it finds the close-out
 			// still held. Addressed to the run's own store (tick q8m): the
-			// drafts live where the run's records were written.
-			unblock := TriageCommandForCurrentRun(m.EpicID, ownRunID)
-			w.UnblockCommand = &unblock
+			// drafts live where the run's records were written. An epic the
+			// model cannot state names no command (tick mwt).
+			w.UnblockCommand = commandOrNil(TriageCommandForCurrentRun(m.EpicID, ownRunID))
 			attention = append(attention, Attention(w))
 		}
 	}
@@ -1250,9 +1250,9 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 			// The triage addressed to the holding run's own store: the
 			// drafts are that run's records, and the bare command's default
 			// spells this run's — the same address rule the prior holds
-			// keep (z3p).
-			unblock := TriageCommandForRun(m.EpicID, prior.Checkpoint.RunID)
-			w.UnblockCommand = &unblock
+			// keep (z3p). An epic the model cannot state names no command
+			// (tick mwt).
+			w.UnblockCommand = commandOrNil(TriageCommandForRun(m.EpicID, prior.Checkpoint.RunID))
 			attention = append(attention, Attention(w))
 		}
 		for _, f := range prior.Findings {
