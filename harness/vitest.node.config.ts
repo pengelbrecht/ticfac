@@ -19,7 +19,16 @@ export default defineConfig({
   test: {
     include: ["test/node/**/*.test.ts"],
     environment: "node",
-    testTimeout: 30_000,
-    hookTimeout: 30_000,
+    // Load-sized defaults (tick fim): this suite drives real bash, real git
+    // and real child processes on a shared host whose observed steady load
+    // is 23-47, and under synthetic 12x oversubscription 24 of its tests
+    // failed at the quiet-host 30s testTimeout while beforeEach hooks —
+    // real git fixtures — timed out at the 30s hookTimeout. 120s is 4x that
+    // default: room for a loaded host, still a bound a genuinely hung test
+    // fails inside. The tests whose runtime is process-bound state their
+    // own 300s bounds on top (harness-timeout-discipline.test.ts), so this
+    // default is the floor, never the discipline.
+    testTimeout: 120_000,
+    hookTimeout: 120_000,
   },
 });
