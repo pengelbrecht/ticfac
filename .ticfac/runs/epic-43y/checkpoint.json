@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 156,
-  "state": "running",
-  "reason": "hv3 is running as attempt 26",
-  "updated_at": "2026-10-05T11:31:38Z",
+  "sequence": 157,
+  "state": "collecting",
+  "reason": "collecting qf4 attempt 22",
+  "updated_at": "2026-10-05T11:31:43Z",
   "ticks": [
     {
       "tick_id": "92k",
