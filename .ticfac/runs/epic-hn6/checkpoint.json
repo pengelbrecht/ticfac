@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 286,
-  "state": "collecting",
-  "reason": "collecting m4t attempt 41",
-  "updated_at": "2026-10-05T20:52:14Z",
+  "sequence": 287,
+  "state": "integrating",
+  "reason": "integrating m4t attempt 41 into epic/hn6",
+  "updated_at": "2026-10-05T20:52:25Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -204,7 +204,7 @@
     },
     {
       "tick_id": "m4t",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 41
     }
   ],
