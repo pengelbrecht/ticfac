@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 267,
-  "state": "integrating",
-  "reason": "integrating a2l attempt 36 into epic/43y",
-  "updated_at": "2026-10-05T17:44:50Z",
+  "sequence": 268,
+  "state": "gating",
+  "reason": "running the integrated gate for a2l on 4fdb71505290",
+  "updated_at": "2026-10-05T17:45:08Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -162,7 +162,7 @@
     },
     {
       "tick_id": "a2l",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 36
     },
     {
