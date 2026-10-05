@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 24,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Tick 4uj's description says the cloud profiles' runner and the boot env's TICKS_HARNESS should say pi-durable once the pi-CLI path is deleted (jhp), but jhp's own description names only 'the herdr/subprocess pi-CLI profiles' — no open tick's text owns flipping profiles-cloudflare-sandbox's runner from \"pi\" to \"pi-durable\", and that flip must also admit the name in profile.CloudRule.Harnesses (internal/profile/cloudworker.go, today [\"pi\"]) or every cloud role is refused at start as not reaching Workers AI. Worth a tick (or a line in jhp) so the end state 4uj's description names is not left to whoever notices next.\nevidence: profiles-cloudflare-sandbox/implement-tick.json:6 (runner \"pi\"); internal/profile/cloudworker.go:58 (Harnesses [\"pi\"]); image/common.sh:210 (unknown harness kind dies — why it cannot flip before jhp); .tick/issues/jhp.json description names herdr/subprocess profiles only\n\nticfac run epic-43y created this tick by absorbing the finding 1184d081f9b64334edc6ab6adc486f3d8456c69c3a9910574d3c7257be7a968c (reported by run-epic-43y/tick-4uj/attempt-15): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/1184d081f9b64334edc6ab6adc486f3d8456c69c3a9910574d3c7257be7a968c.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "qf4",
+    "title": "After jhp lands, name pi-durable in the cloud profiles and CloudRule.Harnesses"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.72,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.18,
+      "design": 0.02,
+      "diagnosis": 0.01,
+      "mechanical": 0.78,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1455,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T10:34:02Z",
+  "answered_at": "2026-10-05T10:34:02Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "qf4",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "14320c32ca07808c2808855adc06e8d229995ae1",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
