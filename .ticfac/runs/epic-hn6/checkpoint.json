@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 189,
-  "state": "collecting",
-  "reason": "collecting 2xk attempt 23",
-  "updated_at": "2026-10-05T14:49:17Z",
+  "sequence": 190,
+  "state": "integrating",
+  "reason": "integrating 2xk attempt 23 into epic/hn6",
+  "updated_at": "2026-10-05T14:49:37Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -123,7 +123,7 @@
     },
     {
       "tick_id": "2xk",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 23
     },
     {
