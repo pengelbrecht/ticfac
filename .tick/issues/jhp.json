@@ -3,7 +3,7 @@
   "title": "Delete the pi-CLI worker path; prove on staging and in real local + cloud runs",
   "gloss": "delete pi CLI path + proof",
   "description": "Step 9 without the A/B: on staging kill the host mid-tool, destroy the container mid-turn, deploy mid-run; then one real cloud epic run and one local epic run on pi-durable; delete image/worker.sh's pi-CLI harness path, the pi CLI in the image and the herdr/subprocess pi-CLI profiles.",
-  "notes": "2026-10-05 13:17 - ticfac run epic-43y: jhp try 2 (run dispatch #23) reported a finding the run itself decided — proposed-tick \"Run [A4]'s real cloud and local epic runs on the integrated pi-durable epic\" (key d19446063b8031908fbb1eb3aad2a91da2c3e72be52a1e38b400912f2274ac4a, severity high, for this repository) is absorbed into the running epic as tick qdg, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/d19446063b8031908fbb1eb3aad2a91da2c3e72be52a1e38b400912f2274ac4a.json, and the draft is triaged as promoted.",
+  "notes": "2026-10-05 13:17 - ticfac run epic-43y: jhp try 2 (run dispatch #23) reported a finding the run itself decided — proposed-tick \"Run [A4]'s real cloud and local epic runs on the integrated pi-durable epic\" (key d19446063b8031908fbb1eb3aad2a91da2c3e72be52a1e38b400912f2274ac4a, severity high, for this repository) is absorbed into the running epic as tick qdg, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/d19446063b8031908fbb1eb3aad2a91da2c3e72be52a1e38b400912f2274ac4a.json, and the draft is triaged as promoted.\n2026-10-05 13:17 - ticfac run epic-43y: jhp try 2 (run dispatch #23) reported a finding the run itself decided — proposed-tick \"Delete herdr's pi agent kind and its `pi --list-models` catalog reads\" (key 74e6c3d63b8610ca5fe70a908304ad91873d078648680f999d57d076c0517726, severity low, for this repository) is absorbed into the running epic as tick uxi, with nobody triaging; the decision record is on the run branch at .ticfac/runs/epic-43y/absorptions/74e6c3d63b8610ca5fe70a908304ad91873d078648680f999d57d076c0517726.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -15,6 +15,6 @@
   "acceptance_criteria": "[A2]/[A4] evidence in RESULT; make gate passes with the CLI path removed",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-04T11:59:00.637011Z",
-  "updated_at": "2026-10-05T11:17:07.824472Z",
+  "updated_at": "2026-10-05T11:17:30.636952Z",
   "started_at": "2026-10-04T21:17:20.541376Z"
 }
