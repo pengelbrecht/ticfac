@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 150,
-  "state": "publishing",
-  "reason": "closing 5ba behind the integrated gate on 49e525e052eb",
-  "updated_at": "2026-10-05T13:01:12Z",
+  "sequence": 151,
+  "state": "running",
+  "reason": "5ba is closed",
+  "updated_at": "2026-10-05T13:01:20Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -117,7 +117,7 @@
     },
     {
       "tick_id": "5ba",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 21
     }
   ],
