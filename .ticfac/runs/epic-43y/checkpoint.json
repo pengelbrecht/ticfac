@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 234,
-  "state": "running",
-  "reason": "twa is closed",
-  "updated_at": "2026-10-05T15:24:58Z",
+  "sequence": 235,
+  "state": "dispatching",
+  "reason": "dispatching fim as attempt 39",
+  "updated_at": "2026-10-05T15:25:12Z",
   "ticks": [
     {
       "tick_id": "92k",
