@@ -1,0 +1,14 @@
+{
+  "id": "j6o",
+  "title": "Local review and closeout cells still route role jobs on the claude CLI",
+  "description": "The common runners.toml's [roles.review] and [roles.closeout] cells name kind = \"claude\", and runners.local.toml declares no override for either role cell, so a local run (herdr or harness) dispatches review-epic and closeout-epic — role jobs, at their base values, no tier — on the claude CLI. The operator's 2026-10-04 decision keeps the claude CLI 'for the frontier tier only' and says 'every other local and all cloud workers run on pi-durable'; strictly read, the role cells are outside the frontier-rung exception. It may be intended (the file's own Phase-2 comments reserve opus 'for review and closeout'), so it needs an explicit operator routing decision before the final review scores A1: either bless the cells as part of the exception, or re-route them to pi and extend the 7ml guard from the implement role to every role.\nevidence: .tick/runners.toml [roles.review] and [roles.closeout] (kind = \"claude\", model = \"opus\"); .tick/runners.local.toml declares no [roles.review]/[roles.closeout]; internal/reconcile/profiles.go derivableTiersFor: a role job without a policy route runs at base values\n\nticfac run epic-43y created this tick by absorbing the finding 251d0d596467afc8703ae308baf41496bad2c5950dabc3aec1a64cdeb4e526fb (reported by run-epic-43y/tick-7ml/attempt-24): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/251d0d596467afc8703ae308baf41496bad2c5950dabc3aec1a64cdeb4e526fb.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-7ml/attempt-24",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T11:35:26Z",
+  "updated_at": "2026-10-05T11:35:26Z"
+}
