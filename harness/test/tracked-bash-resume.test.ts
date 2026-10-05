@@ -45,7 +45,13 @@ function textOf(message: Message): string[] {
 }
 
 describe("the tracked bash survives a harness killed mid-bash", () => {
-  it("resumes in a new process, reattaches, and runs the command exactly once", async () => {
+  // A full-Harness test (tick fim): the opens sit in this body, but the old
+  // guard never saw the file — it scanned test/node only. The workerd pool
+  // runs its files beside each other, so the wall clock grows with pool
+  // contention: the kjs 120s bound, not the 30s quiet-host default.
+  it("resumes in a new process, reattaches, and runs the command exactly once", {
+    timeout: 120_000,
+  }, async () => {
     const context = BACKGROUND_CONTEXT;
 
     // The container command, as the stand-in door times it: it prints its

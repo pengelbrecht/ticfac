@@ -154,7 +154,15 @@ describe("the boot handoff", () => {
 });
 
 describe("a worker attempt driven by the host", () => {
-  it("boots, converses on the boot's prompt, finishes and settles with the finish phase's exit code", async () => {
+  // Tick fim: every test here drives a whole attempt — boot, conversation,
+  // finish — on a whole Harness opened INSIDE the host (src/host/
+  // worker-attempt.ts), so no `Harness.open` ever appears in this file and
+  // the old guard (in-body opens, test/node only) could not see them. These
+  // are full-Harness tests of the workerd pool: the 120s bound, not the
+  // 30s quiet-host default.
+  it("boots, converses on the boot's prompt, finishes and settles with the finish phase's exit code", {
+    timeout: 120_000,
+  }, async () => {
     const door = scriptedDoor({ finishExit: 10 });
     const { faux, models } = gatewayFaux([
       () =>
@@ -212,7 +220,9 @@ describe("a worker attempt driven by the host", () => {
     expect(log.join("")).toContain("tool bash");
   });
 
-  it("settles with the boot's own exit code when the boot stops, and never converses", async () => {
+  it("settles with the boot's own exit code when the boot stops, and never converses", {
+    timeout: 120_000,
+  }, async () => {
     const door = scriptedDoor({ boot: { output: "ticks-worker: no model route\n", exit: 5 } });
     const { faux, models } = gatewayFaux([]);
     const host = new WorkerAttemptHost({
@@ -231,7 +241,9 @@ describe("a worker attempt driven by the host", () => {
     expect(door.starts.map((s) => s.command)).toEqual([WORKER_BOOT_PROTOCOL.bootCommand]);
   });
 
-  it("refuses a boot that exits 0 without its handoff", async () => {
+  it("refuses a boot that exits 0 without its handoff", {
+    timeout: 120_000,
+  }, async () => {
     const door = scriptedDoor({ boot: { output: "ticks-worker: booted?\n", exit: 0 } });
     const { models } = gatewayFaux([]);
     const host = new WorkerAttemptHost({
@@ -249,7 +261,9 @@ describe("a worker attempt driven by the host", () => {
     expect(settled.settled?.detail).toContain("without its handoff");
   });
 
-  it("boots again on a container lost under the boot phase", async () => {
+  it("boots again on a container lost under the boot phase", {
+    timeout: 120_000,
+  }, async () => {
     let boots = 0;
     const door = fakeSandboxDoor({
       processScript: (command) => {
@@ -279,7 +293,9 @@ describe("a worker attempt driven by the host", () => {
     expect(settled.settled).toMatchObject({ exitCode: 0, phase: "finishing" });
   });
 
-  it("refuses a model that is not Workers AI before it records anything", async () => {
+  it("refuses a model that is not Workers AI before it records anything", {
+    timeout: 120_000,
+  }, async () => {
     const records = memoryRecords();
     const host = new WorkerAttemptHost({
       door: scriptedDoor().sandbox,
@@ -294,7 +310,9 @@ describe("a worker attempt driven by the host", () => {
     expect(records.saves.length).toBe(0);
   });
 
-  it("starts an attempt once: a second start answers the record already there", async () => {
+  it("starts an attempt once: a second start answers the record already there", {
+    timeout: 120_000,
+  }, async () => {
     const records = memoryRecords();
     const host = new WorkerAttemptHost({
       door: scriptedDoor().sandbox,
@@ -310,7 +328,9 @@ describe("a worker attempt driven by the host", () => {
     expect(second.record.spec.tick).toBe("abc");
   });
 
-  it("resumes in a new host life: the prompt is submitted once, the tool runs once", async () => {
+  it("resumes in a new host life: the prompt is submitted once, the tool runs once", {
+    timeout: 120_000,
+  }, async () => {
     // The model's bash is slow enough for the first life to die under it.
     const door = scriptedDoor({ bashMs: 400 });
     const users: number[] = [];
@@ -370,6 +390,7 @@ describe("a worker attempt driven by the host", () => {
     ).toHaveLength(1);
   });
 
+<<<<<<< HEAD
   // Tick dbi: the first life dies under the model's bash and the CONTAINER
   // dies with it — the replacement boots EMPTY and knows none of its
   // predecessor's processes, so the resumed life's replay finds its nonce
@@ -460,6 +481,11 @@ describe("a worker attempt driven by the host", () => {
   });
 
   it("places an operator's steer after the running tool round", async () => {
+=======
+  it("places an operator's steer after the running tool round", {
+    timeout: 120_000,
+  }, async () => {
+>>>>>>> cdc4f5d0a7aaf9d56e34b128c226979a5301fca7
     const door = scriptedDoor({ bashMs: 200 });
     const seen: string[][] = [];
     const { models } = gatewayFaux([
@@ -496,7 +522,9 @@ describe("a worker attempt driven by the host", () => {
     expect(seen[0]).toEqual([PROMPT, "also add a docstring"]);
   });
 
-  it("restores a lost workspace with the repository's setup: the contract's setup entry rides the restore", async () => {
+  it("restores a lost workspace with the repository's setup: the contract's setup entry rides the restore", {
+    timeout: 120_000,
+  }, async () => {
     // The ready check fails ONCE: the box a between-rounds loss booted is
     // empty, and the pre-round check (tick 4fs) is what sees it.
     let lostOnce = false;
@@ -566,7 +594,9 @@ describe("a worker attempt driven by the host", () => {
     );
   });
 
-  it("aborts the conversation at the wall and finishes with the timeout status", async () => {
+  it("aborts the conversation at the wall and finishes with the timeout status", {
+    timeout: 120_000,
+  }, async () => {
     const door = scriptedDoor({ bashMs: 300 });
     const { models } = gatewayFaux([
       () =>
@@ -593,7 +623,9 @@ describe("a worker attempt driven by the host", () => {
     );
   });
 
-  it("is reclaimed where it stands: settled, no finish phase, and a later drive changes nothing", async () => {
+  it("is reclaimed where it stands: settled, no finish phase, and a later drive changes nothing", {
+    timeout: 120_000,
+  }, async () => {
     const door = scriptedDoor({ boot: { output: bootOutput(), exit: 0, ms: 5_000 } });
     const { models } = gatewayFaux([]);
     const records = memoryRecords();

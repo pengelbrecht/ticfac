@@ -23,6 +23,10 @@ import { localSandboxDoor } from "./local-sandbox-door.js";
 const CONTEXT = BACKGROUND_CONTEXT;
 
 describe("FactorySandboxEnv's file operations over real bash", () => {
+  // Tick fim: every operation below drives the door — a spawned bash per
+  // command — so under synthetic 12x oversubscription these failed at the
+  // quiet-host 30s default. A process-driving test states its own 300s
+  // bound (harness-timeout-discipline), the 7wg rule.
   let root: string;
   let checkout: string;
   let env: FactorySandboxEnv;
@@ -45,7 +49,9 @@ describe("FactorySandboxEnv's file operations over real bash", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("writes and reads text back, with a path that is a value, not shell text", async () => {
+  it("writes and reads text back, with a path that is a value, not shell text", {
+    timeout: 300_000,
+  }, async () => {
     const odd = 'notes "quoted" name.txt';
     const content = "first line\nsecond line with ünicode 🚀\n";
     const wrote = await env.writeFile(join(checkout, odd), content, CONTEXT);
@@ -57,7 +63,9 @@ describe("FactorySandboxEnv's file operations over real bash", () => {
     expect(relative.ok && relative.value).toBe(content);
   });
 
-  it("round-trips binary bytes untouched", async () => {
+  it("round-trips binary bytes untouched", {
+    timeout: 300_000,
+  }, async () => {
     const bytes = new Uint8Array([0, 1, 2, 255, 254, 0, 10, 13, 26, 200, 0, 0]);
     const path = join(checkout, "blob.bin");
     await env.writeFile(path, bytes, CONTEXT);
@@ -67,7 +75,9 @@ describe("FactorySandboxEnv's file operations over real bash", () => {
     expect(Array.from(read.value)).toEqual(Array.from(bytes));
   });
 
-  it("appends, renames, truncates and removes", async () => {
+  it("appends, renames, truncates and removes", {
+    timeout: 300_000,
+  }, async () => {
     const path = join(checkout, "a.txt");
     await env.writeFile(path, "one\n", CONTEXT);
     expect((await env.appendFile(path, "two\n", CONTEXT)).ok).toBe(true);
@@ -80,7 +90,9 @@ describe("FactorySandboxEnv's file operations over real bash", () => {
     expect(gone.ok ? gone.value : "err").toBe(false);
   });
 
-  it("lists a directory with kinds and dotfiles, and stats a file", async () => {
+  it("lists a directory with kinds and dotfiles, and stats a file", {
+    timeout: 300_000,
+  }, async () => {
     mkdirSync(join(checkout, "sub"));
     writeFileSync(join(checkout, "x.md"), "hello\n");
     writeFileSync(join(checkout, ".hidden"), "x");
@@ -109,7 +121,9 @@ describe("FactorySandboxEnv's file operations over real bash", () => {
     expect(info.value.mtimeMs).toBeGreaterThan(0);
   });
 
-  it("reads lines and answers the failure sentinels the tools classify by", async () => {
+  it("reads lines and answers the failure sentinels the tools classify by", {
+    timeout: 300_000,
+  }, async () => {
     writeFileSync(join(checkout, "lines.txt"), "a\nb\nc");
     const lines = await env.readTextLines(join(checkout, "lines.txt"), { maxLines: 2 }, CONTEXT);
     expect(lines.ok ? lines.value : lines.error).toEqual(["a", "b"]);
@@ -137,7 +151,9 @@ describe("FactorySandboxEnv's file operations over real bash", () => {
     expect(canonicalDir.ok && canonicalDir.value.endsWith("worktree")).toBe(true);
   });
 
-  it("creates directories, recursively and not, and makes temp files", async () => {
+  it("creates directories, recursively and not, and makes temp files", {
+    timeout: 300_000,
+  }, async () => {
     expect((await env.createDir(join(checkout, "a/b"), {}, CONTEXT)).ok).toBe(true);
     const shallow = await env.createDir(join(checkout, "c/d"), { recursive: false }, CONTEXT);
     expect(shallow.ok ? "ok" : shallow.error.code).toBe("unknown");
@@ -153,7 +169,9 @@ describe("FactorySandboxEnv's file operations over real bash", () => {
     expect(joined.ok ? joined.value : joined.error).toBe(`${checkout}/sub/file.txt`);
   });
 
-  it("refuses a tracker write through the sandbox env's bash, with the pinned refusal", async () => {
+  it("refuses a tracker write through the sandbox env's bash, with the pinned refusal", {
+    timeout: 300_000,
+  }, async () => {
     // The guard the container installs (image/worker.sh) refuses `tk` for the
     // pi-CLI worker; this is the same refusal through the pi-durable env's
     // own bash — the tick's second acceptance test, on the sandbox path.

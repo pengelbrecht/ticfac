@@ -133,8 +133,15 @@ describe("workspace checkpoints over real git", () => {
     }
   }
 
+  // Tick fim: every test in this describe drives real processes — the
+  // door's spawned bash for every git line, real git through execFileSync —
+  // so its wall clock grows with host load: under synthetic 12x
+  // oversubscription one of the 120s-bounded git-heavy tests crossed its
+  // bound at 138s. The process-driving bound is 300s (harness-timeout-
+  // discipline, the 7wg rule), the room a loaded host needs and still a
+  // bound a genuinely hung test fails inside.
   it("destroys the container mid-turn, and the next turn sees both edits", {
-    timeout: 120_000,
+    timeout: 300_000,
   }, async () => {
     const context = BACKGROUND_CONTEXT;
     const faux = fauxProvider();
@@ -278,7 +285,7 @@ describe("workspace checkpoints over real git", () => {
     'printf "%s\\n" "$count" > .setup-bytes && printf ticfac-setup-ok > .setup-marker';
 
   it("a restore's setup that prints past the run door's bound survives it", {
-    timeout: 120_000,
+    timeout: 300_000,
   }, async () => {
     const installEnv = new FactorySandboxEnv({
       sandbox: door.sandbox,
@@ -340,7 +347,7 @@ describe("workspace checkpoints over real git", () => {
   };
 
   it("destroys the container BETWEEN tool rounds, and the ready check restores before each next round", {
-    timeout: 120_000,
+    timeout: 300_000,
   }, async () => {
     const context = BACKGROUND_CONTEXT;
     const faux = fauxProvider();
@@ -439,6 +446,7 @@ describe("workspace checkpoints over real git", () => {
     await harness.close(context);
   });
 
+<<<<<<< HEAD
   // Tick dbi: the nonce path — a tracked bash whose nonce no container
   // knows — restored the workspace with no log line anywhere (the cni
   // staging proof's 139s round was exactly this). The env now hands the
@@ -491,6 +499,11 @@ describe("workspace checkpoints over real git", () => {
   });
 
   it("pushes nothing for a round that changed no file, and the changed round's wip lands on origin", async () => {
+=======
+  it("pushes nothing for a round that changed no file, and the changed round's wip lands on origin", {
+    timeout: 300_000,
+  }, async () => {
+>>>>>>> cdc4f5d0a7aaf9d56e34b128c226979a5301fca7
     // A clean clone: the round changed nothing, so nothing commits and
     // nothing pushes — an empty wip would be noise on the attempt branch.
     const empty = await pushWipCheckpoint(env.hostShell(), git);
@@ -523,11 +536,11 @@ describe("workspace checkpoints over real git", () => {
   // load (it failed once in a full `pnpm test` on the loaded host, passing
   // on re-run) — every wip line and the restore are a spawned bash, so a
   // host running a spawn storm (a live reconcile.test, an Xprotect scan)
-  // multiplies its runtime: 1.4s quiet, 4.6s at synthetic load 200. It
-  // states its own 120s bound, the kjs rule its two Harness-opening
-  // siblings in this file already follow (harness-timeout-discipline).
+  // multiplies its runtime: 1.4s quiet, 4.6s at synthetic load 200. Tick fim
+  // raised its old 120s bound to the process-driving 300s: under synthetic
+  // 12x oversubscription a sibling of this shape crossed 120s at 138s.
   it("runs the host shell's git at the env's checkout, whatever the door's own directory", {
-    timeout: 120_000,
+    timeout: 300_000,
   }, async () => {
     door = localSandboxDoor({ cwd: root });
     env = new FactorySandboxEnv({
@@ -559,7 +572,9 @@ describe("workspace checkpoints over real git", () => {
   // the history it could not explain, and every push after that — the finish
   // phase's fast-forward-only one included — was refused. A checkpoint must
   // be invisible to the work it checkpoints.
-  it("snapshots without touching the agent's branch: its commits land, and the finish's fast-forward push holds", async () => {
+  it("snapshots without touching the agent's branch: its commits land, and the finish's fast-forward push holds", {
+    timeout: 300_000,
+  }, async () => {
     const run = (...args: string[]) =>
       execFileSync(
         "git",
@@ -631,7 +646,9 @@ describe("workspace checkpoints over real git", () => {
   // report (its owner commits or reads it, and a salvage commit carrying it
   // makes the work indistinguishable from the account of it) and never
   // tracker state (.tick/, .ticfac/ — the boundary the guards enforce).
-  it("salvages the uncommitted tree after retiring the snapshot, without the report or tracker state", async () => {
+  it("salvages the uncommitted tree after retiring the snapshot, without the report or tracker state", {
+    timeout: 300_000,
+  }, async () => {
     // A dirty round, snapshotted: the state a settled worker leaves behind.
     writeFileSync(join(checkout, "a.txt"), "the worker's uncommitted edit\n");
     writeFileSync(join(checkout, "RESULT-dwn.md"), "# dwn\n\nSTATUS: DONE\n");

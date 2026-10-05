@@ -236,8 +236,8 @@ function textOf(message: Message): string {
 describe("the local worker host", () => {
   let f: Fixture;
   // The fixture itself is real git — init, clone, push — under the same
-  // loaded host the tests run on, so the hooks get the same room as the
-  // tests instead of the config's quiet-host 30s hookTimeout.
+  // loaded host the tests run on, so the hooks state their own bound too,
+  // keeping the room they need explicit whatever the config default is.
   beforeEach(() => {
     f = makeFixture();
   }, 120_000);

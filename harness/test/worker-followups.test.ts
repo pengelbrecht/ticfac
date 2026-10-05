@@ -116,7 +116,13 @@ function requestCarriesUser(request: Message[] | undefined, needle: string): boo
 }
 
 describe("the worker's onYield follow-ups", () => {
-  it("nudges a yield that wrote no report, and the report the next turn writes settles the run", async () => {
+  // Tick fim: every test in this describe opens the whole Harness through the
+  // workerHarness helper above, so the old guard (in-body opens only) never
+  // saw them. Full-Harness tests of the workerd pool: the 120s bound, not
+  // the 30s quiet-host default.
+  it("nudges a yield that wrote no report, and the report the next turn writes settles the run", {
+    timeout: 120_000,
+  }, async () => {
     // The one check the third yield runs: the tool-written report passes.
     const env = new FakeWorkerEnv({
       cwd: repoDir,
@@ -175,7 +181,9 @@ describe("the worker's onYield follow-ups", () => {
     await harness.close(context);
   });
 
-  it("pushes a failing report back with the checker's own message, at most twice", async () => {
+  it("pushes a failing report back with the checker's own message, at most twice", {
+    timeout: 120_000,
+  }, async () => {
     // The agent wrote its report before yielding — badly — and keeps being
     // unable to fix it: every check refuses.
     const refusal =
@@ -212,7 +220,9 @@ describe("the worker's onYield follow-ups", () => {
     await harness.close(context);
   });
 
-  it("bounds the nudge itself: a report that never appears settles after the last one", async () => {
+  it("bounds the nudge itself: a report that never appears settles after the last one", {
+    timeout: 120_000,
+  }, async () => {
     // No tool writes the report; every check would be skipped because the
     // hook only checks a report that EXISTS.
     const env = new FakeWorkerEnv({ cwd: repoDir, execScript: [] });
@@ -255,7 +265,9 @@ describe("the wall deadline as abort()", () => {
       },
     });
 
-  it("aborts the conversation at the deadline, and no model call follows", async () => {
+  it("aborts the conversation at the deadline, and no model call follows", {
+    timeout: 120_000,
+  }, async () => {
     const env = new FakeWorkerEnv({ cwd: repoDir, execScript: [] });
     const { harness, root, faux } = await workerHarness(env, [slowTool(400)]);
     recordResponses(faux, [
@@ -275,7 +287,9 @@ describe("the wall deadline as abort()", () => {
     await harness.close(context);
   });
 
-  it("a deadline canceled after a settled run never aborts the next submission", async () => {
+  it("a deadline canceled after a settled run never aborts the next submission", {
+    timeout: 120_000,
+  }, async () => {
     const env = new FakeWorkerEnv({
       cwd: repoDir,
       execScript: [{ exitCode: 0, output: "ok: the report passes the check\n" }],
