@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 178,
-  "state": "collecting",
-  "reason": "collecting 7wg attempt 27",
-  "updated_at": "2026-10-05T12:26:11Z",
+  "sequence": 179,
+  "state": "integrating",
+  "reason": "integrating 7wg attempt 27 into epic/43y",
+  "updated_at": "2026-10-05T12:27:08Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -127,7 +127,7 @@
     },
     {
       "tick_id": "7wg",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 27
     },
     {
