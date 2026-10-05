@@ -62,8 +62,7 @@ it where a person already is (the PR). A resume replays a recorded decision, nev
 rule disposed of (#117), and a re-verify that committed nothing was rejected "no-commits". **Rule:**
 Every honest answer needs a terminal verdict, "nothing new" included; a verifier commits its evidence.
 
-**Problem:** `tk close` usage prints; promotions pointed at uncommitted ticks. **Rule:** Usage is a
-REFUSAL; a promotion is finished when the tick is COMMITTED.
+**Problem:** `tk close` usage prints; promotions pointed at uncommitted ticks. **Rule:** Usage is a REFUSAL; a promotion is finished when the tick is COMMITTED.
 
 **Problem:** Ticks changing the ticks repo were undispatchable (ha9: SEVEN dispatches). **Rule:** A
 tick lives where its CODE is AND its worker can write; another repo's change is an `upstream-tick`.
