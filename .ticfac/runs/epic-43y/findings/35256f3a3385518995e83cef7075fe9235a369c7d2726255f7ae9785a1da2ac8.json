@@ -12,8 +12,11 @@
   "attempt": 33,
   "done_item": "A1",
   "demonstrating_check": "ticfac run hn6 --cloud",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T15:42:49Z",
+  "triaged_at": "2026-10-05T15:43:15Z",
+  "triaged_by": "ticfac run epic-43y absorbing 8em",
+  "promoted_as": "8em",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "kkt",
