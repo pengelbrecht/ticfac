@@ -2,6 +2,7 @@
   "id": "07h",
   "title": "Timed push fights wip snapshots; benign non-FF reads like a lost origin",
   "description": "While a durable local run's snapshots hold the attempt branch, the supervisor's timed push of HEAD is refused as non-fast-forward every half-interval (push.last is not advanced on push_failed), so a clean run logs 'the timed push of \u003cbranch\u003e failed' for its whole life — the same log line a genuinely unreachable origin produces. The snapshots are the durability mechanism during a run, so the push is correctly refused; what is missing is the distinction. A small tick could let pushBranch recognise 'origin holds this attempt's own wip snapshot' (the checkout's ticfac-wip-pushed record names it) and read it as up-to-date, leaving real failures visible.\nevidence: internal/exec/subprocess/supervisor.go maybePush (push.last unchanged on push_failed) and pushBranch's non-FF refusal; harness/src/workspace/checkpoints.ts pushWipCheckpoint writes the ticfac-wip-pushed record\n\nticfac run epic-43y filed this backlog tick from the finding 7b6506af3d518dd36a6f25f03e10ce23ed18a9bd2d9cbbe8f94c620053f21f5a (reported by run-epic-43y/tick-nou/attempt-21): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/7b6506af3d518dd36a6f25f03e10ce23ed18a9bd2d9cbbe8f94c620053f21f5a.json on the run branch.",
+  "notes": "2026-10-05 13:06 - ticfac run epic-43y: created by absorbing finding 7b6506af3d518dd36a6f25f03e10ce23ed18a9bd2d9cbbe8f94c620053f21f5a — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-43y/absorptions/7b6506af3d518dd36a6f25f03e10ce23ed18a9bd2d9cbbe8f94c620053f21f5a.json on epic/43y, and it says: the classifier put 0.11 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-43y/tick-nou/attempt-21",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T11:06:05Z",
-  "updated_at": "2026-10-05T11:06:05Z"
+  "updated_at": "2026-10-05T11:06:11.28347Z"
 }
