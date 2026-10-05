@@ -12,8 +12,11 @@
   "attempt": 31,
   "done_item": "A4",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T15:02:02Z",
+  "triaged_at": "2026-10-05T15:02:27Z",
+  "triaged_by": "ticfac run epic-43y absorbing 7vp",
+  "promoted_as": "7vp",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "twa",
