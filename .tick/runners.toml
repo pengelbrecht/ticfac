@@ -42,9 +42,10 @@ effort = "high"
 # 2026-10-04 decision keeps. No ladder ever derives balanced (the local
 # ladder climbs strong -> frontier, the cloud's economy -> strong), and in
 # the cloud this cell never reached a container anyway (the cloud's own role
-# cell applied last). With the cell gone, a pin of balanced resolves the
-# role's own values — pi-durable on GLM 5.3 — exactly as the cloud already
-# behaved, and internal/reconcile's routing guard resolves every tier name
+# cell applied last). With the cell gone, a pin of balanced is REFUSED
+# naming the tier — the profile layer's fail-closed rule (a tier that
+# silently falls back to the role is a tier an operator paid for and did not
+# get) — and internal/reconcile's routing guard resolves every tier name
 # a pin can reach on every substrate, so a cell like the old one cannot come
 # back unnoticed.
 
