@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 429,
-  "state": "publishing",
-  "reason": "closing 4ao behind the integrated gate on 567e203a2506",
-  "updated_at": "2026-10-05T22:10:04Z",
+  "sequence": 430,
+  "state": "running",
+  "reason": "4ao is closed",
+  "updated_at": "2026-10-05T22:10:13Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -262,7 +262,7 @@
     },
     {
       "tick_id": "4ao",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 65
     },
     {
