@@ -686,7 +686,8 @@ export class WorkerAttemptHost {
       // container knows restores before it re-starts — until this wiring
       // that restore reached no log anywhere, and the operator watching the
       // run saw only a mysteriously slow tool round. The between-rounds
-      // loss keeps its own line above (the checkpoint extension's onRestore).
+      // loss keeps its own line (the checkpoint extension's onRestore in
+      // registryFor), so one restore says one line.
       onRestore: (outcome) =>
         void this.say(
           outcome.kind === "restored"
