@@ -1,4 +1,4 @@
-# The cloud half of [A4], post-merge: the owned runbook (tick kkt, epic 43y)
+# The cloud half of [A4] and the real-run half of [A2], post-merge: the owned runbook (ticks kkt and ewd, epic 43y)
 
 Epic 43y's [A4] asks for "a real hn6-style cloud epic run and a local epic run
 complete on pi-durable". The local half ran on 2026-10-05 and is recorded in
@@ -14,8 +14,15 @@ the ownership.
 worker: starting a cloud run spends money on the operator's Cloudflare
 account and touches a live external system, and `.tick/config.md`'s standing
 orders put both in the *always ask* column. A tick inside this run can only
-ship what makes the runbook mechanically safe — the harness preflight below —
-and write the runbook down.
+ship what makes the runbook mechanically safe — the harness preflight below,
+and the evidence-parity guard that pins this runbook's [A2] fault lines to the
+host that prints them — and write the runbook down.
+
+Since tick ewd this document owns one more thing: [A2]'s "proven … in a real
+run" clause. It has the same shape as [A4]'s cloud half — proven on staging
+already (`harness/proof/`, tick jhp), with no real run on record — and the
+section "What 'observed' means for [A2]'s real-run half" below is its
+ownership.
 
 ## Preconditions, in the order they unblock
 
@@ -77,6 +84,104 @@ Record the result beside qdg's local-half record (a doc under `docs/`, plus
 the run's artifact space), and note in the epic's tracker record that [A4]'s
 cloud half moved from *predicted* to *observed*.
 
+## What "observed" means for [A2]'s real-run half (tick ewd)
+
+[A2]'s letter: "A harness process killed mid-tool resumes in a new process
+without re-running the tool; a container destroyed mid-turn is restored from
+the last wip commit and the turn completes — proven on staging and in a real
+run." The staging half is on record (`harness/proof/agent-faults-staging.ts`,
+tick jhp: `PROOF HOLDS`, every claim, 2026-10-05). The real-run half was not:
+qdg's local run record explicitly disclaims both faults, and until this
+section nothing recorded a harness kill or a container loss inside a real
+epic run. Until the run below observes both faults, the close-out scores
+[A2]'s real-run clause *predicted* — visibly, with this runbook as its owner,
+the same posture as [A4]'s cloud half above.
+
+**Why the cloud run, not another local one.** The tick that added this
+section could instead have injected a harness kill into a real *local* run,
+and the reason it did not is mechanical, not a preference. Locally, a harness
+process killed mid-tool settles its attempt — a non-zero exit is never
+nudged (`internal/exec/subprocess/nudge.go`: "the runner failed"), the
+supervisor relaunches only a runner that exited 0 or that it stopped itself —
+and the run's recovery is the redispatch ladder starting the successor from
+the killed attempt's carried wip commits (tick dwn's afterTools checkpoint:
+"what a stopped attempt's successor starts from"). That is the
+restored-from-wip fault at run granularity, but it is not "resumes in a new
+process without re-running the tool": the mid-tool conversation resume is
+the WorkerAgent host's, and the real run that exercises it is the cloud one
+this document owns. The local rung's own resume paths — the nudge, the
+report pushback, the stuck re-prompt — are supervisor relaunches of a
+runner that is still an attempt, never recoveries from a kill.
+
+The two faults are injected into the run above, once each, during one hosted
+worker dispatch's turn (implement or closeout — the review's omp boot is the
+recorded [A1] exception, not a hosted dispatch):
+
+1. **The host's life lost mid-tool.** While the worker's tool call is in
+   flight — watch it live on `ticfac watch`, or `ticfac cloud logs <run-id>
+   --tick <tick> --follow` — trigger a factory deploy: `gh workflow run
+   deploy-factory.yml`, the runbook's own retry door (AGENTS.md; no console,
+   no code change). A long tool call (a test suite, a build) is the easy
+   window; a deploy that lands between tool calls proves nothing. The deploy
+   ends the WorkerAgent Durable Object's life mid-tool while the tracked bash
+   keeps running in its container — the staging proof fired one at the
+   model's first `tool_execution_start` — and the next heartbeat's host life
+   resumes the conversation from the Durable Object's SQLite and the tracked
+   bash reattaches by its nonce.
+
+   Observed when all three hold:
+
+   - the attempt's log carries `ticfac-harness: a new host life resumed the
+     conversation from its storage (submission …)` after the in-flight
+     tool's start;
+   - the in-flight tool ran ONCE — one start and one completion in the log,
+     its effect once on the branch: a reattach, not a re-run;
+   - the attempt settles 0 and its work collects like any other dispatch.
+
+2. **The container destroyed mid-turn.** While the turn is in flight, delete
+   that attempt's container by its exact name
+   `<run>-<tick>-<attempt>[-<slot>]` (`attemptSandboxNameForSlot`,
+   `cloudflare/src/sandbox-executor.ts`): `pnpm exec wrangler containers
+   list` names the account's container instances, `pnpm exec wrangler
+   containers delete <instance>` removes the one whose name matches. The
+   origin outlives the box (tick a2l: the repository lives in the `GIT_ORIGINS`
+   Durable Objects, reached over the network), so the next round's ready
+   check boots a replacement, fetches from that origin and checks out the
+   last wip checkpoint before the model's next request.
+
+   Observed when all three hold:
+
+   - the attempt's log carries `ticfac-harness: the container was lost
+     between rounds; workspace restored to <sha>` — or, when the loss lands
+     under a tracked bash, `ticfac-harness: a tracked bash found a fresh
+     container; the workspace was restored to <sha> (<subject>)`;
+   - the restored `<sha>` is the last `wip checkpoint … pushed` line the lost
+     life's own log shows;
+   - the turn completed on the restored tree: the attempt settles 0, its
+     commits and report on its branch.
+
+Where the log is read: live on `ticfac watch` (the conversation and its log
+as they land), and durably from the run's R2 worker stream — the dispatch
+door drains a hosted attempt's log out by cursor on every state read, so
+`ticfac cloud logs <run-id> --tick <tick>` serves the whole thing after the
+attempt settles, container or no container.
+
+**Bounds.** Once each, and only this run's own dispatches. The container
+name carries the run id — match it exactly, and never a container of
+another run: this account hosts other runs' containers, and this host's rule
+is exact identity or nothing (AGENTS.md). The deploy is designed to be safe
+for live runs — `rollout_active_grace_period` keeps the new rollout off
+their containers, and the resume is the recovery the staging proof already
+held, not damage. The destroy is the fault: not designed-safe, but
+designed-recoverable, with the run's own redispatch-from-carried-wip ladder
+behind it if the restore itself fails. Never the orchestrator's container —
+it is the run, not a worker dispatch.
+
+**Recording** — the same shape as [A4]'s: write the result beside qdg's
+local-half record (a doc under `docs/`, plus the run's artifact space), and
+note in the epic's tracker record that [A2]'s real-run half moved from
+*predicted* to *observed*.
+
 ## The guard this tick shipped: the harness preflight
 
 `ticfac run <epic> --cloud` refuses, **at the knee, before anything is pushed
@@ -110,3 +215,16 @@ branch could flip names a kind an older image ships instead, so the fix is
 the merge that ships the kind and `ticfac factory wait-deployed <merge sha>`
 for its deploy. The trap the runbook exists for cannot be executed by
 accident.
+
+## The guard ewd shipped: the fault evidence pinned to the host
+
+The [A2] observation criteria above cite the attempt's log by exact line
+text, and those lines are strings in `harness/src/host/worker-attempt.ts` —
+a host that rewords one leaves the runbook's operator hunting a line that
+no longer prints, with nothing failing anywhere. The container name the
+mid-turn destroy matches is a template in `cloudflare/src/sandbox-executor.ts`.
+`internal/cli/runbook_fault_evidence_test.go` pins every string the criteria
+name against the source that prints or formats it — the same cross-tree
+parity pattern as `internal/factory`'s payload checks — so the runbook
+cannot drift from the code and the code cannot drift from the runbook,
+silently.
