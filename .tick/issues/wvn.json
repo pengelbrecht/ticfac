@@ -1,0 +1,14 @@
+{
+  "id": "wvn",
+  "title": "Drill-in report summary is the ticks-worker preamble comment, not the report",
+  "description": "reportSummary takes the first non-heading paragraph, and cloud worker reports open with '\u003c!-- ticks-worker: container facts, prepended after the harness exited … --\u003e'. So 11 ticks' drill-in report line (0rx 378 3rc 7uv c2u fq0 lh4 ltg oro zl1 u5n) reads the container preamble rather than what the worker did. Skip HTML comment paragraphs.\nevidence: internal/statusmodel/report.go:262-284 (reportSummary); live tick view for 0rx; `ticfac status epic-hn6 --json` .waves[].ticks[].report.summary\n\nticfac run epic-hn6 created this tick by absorbing the finding bce10995fc814c2b0790be7f2df2f61da022047d54551a9d7b36aa3627df1ede (reported by run-epic-hn6/tick-qjl/attempt-29): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/bce10995fc814c2b0790be7f2df2f61da022047d54551a9d7b36aa3627df1ede.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-qjl/attempt-29",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T15:44:48Z",
+  "updated_at": "2026-10-05T15:44:48Z"
+}
