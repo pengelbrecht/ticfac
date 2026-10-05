@@ -64,11 +64,11 @@ export {
   workspaceCheckpointExtension,
 } from "./workspace/checkpoints.js";
 export {
-  type DumbGitOriginOptions,
   DumbGitOrigin,
+  type DumbGitOriginOptions,
   MemoryOriginStore,
-  type OriginStore,
   ORIGIN_HEAD_REF,
+  type OriginStore,
 } from "./workspace/dumb-git-origin.js";
 
 // ------------------------------------------------- worker contract hooks ---

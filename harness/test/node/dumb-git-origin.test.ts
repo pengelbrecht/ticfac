@@ -17,20 +17,20 @@
  * behaviour no workerd test can.
  */
 import { execFile } from "node:child_process";
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DumbGitOrigin, MemoryOriginStore } from "../../src/workspace/dumb-git-origin.js";
+import { FactorySandboxEnv } from "../../src/env/factory-sandbox.js";
 import {
   pushWipCheckpoint,
   restoreWorkspace,
   WIP_COMMIT_SUBJECT,
   type WorkspaceGit,
 } from "../../src/workspace/checkpoints.js";
-import { FactorySandboxEnv } from "../../src/env/factory-sandbox.js";
+import { DumbGitOrigin, MemoryOriginStore } from "../../src/workspace/dumb-git-origin.js";
 import { localSandboxDoor } from "./local-sandbox-door.js";
 
 const execFileAsync = promisify(execFile);
@@ -45,15 +45,7 @@ const execFileAsync = promisify(execFile);
 async function git(dir: string, args: string[]): Promise<string> {
   const out = await execFileAsync(
     "git",
-    [
-      "-C",
-      dir,
-      "-c",
-      "user.name=ticfac worker",
-      "-c",
-      "user.email=worker@example.com",
-      ...args,
-    ],
+    ["-C", dir, "-c", "user.name=ticfac worker", "-c", "user.email=worker@example.com", ...args],
     { encoding: "utf8" },
   );
   return out.stdout;
@@ -104,7 +96,9 @@ describe("a dumb-HTTP origin, over real git", () => {
             new Request(`http://${incoming.headers.host}${incoming.url}`, init),
           );
           const bytes = new Uint8Array(await answer.arrayBuffer());
-          const headers = [...answer.headers].map(([name, value]) => [name, value] as [string, string]);
+          const headers = [...answer.headers].map(
+            ([name, value]) => [name, value] as [string, string],
+          );
           res.writeHead(answer.status, headers);
           res.end(bytes);
         })().catch((error: unknown) => {
@@ -153,11 +147,15 @@ describe("a dumb-HTTP origin, over real git", () => {
     //    warning is the boot's own first-time case), seed, push main and the
     //    attempt branch — the branch is what the restore fetches, so even a
     //    container lost before the first wip restores to the boot state.
-    const cloneEmpty = await execFileAsync("git", ["clone", url, checkout], {
+    const cloneEmpty = (await execFileAsync("git", ["clone", url, checkout], {
       encoding: "utf8",
-    }).catch((error: unknown) => error as { code?: number; stderr?: string });
+    }).catch((error: unknown) => error as { code?: number; stderr?: string; stdout?: string })) as {
+      code?: number;
+      stderr?: string;
+      stdout?: string;
+    };
     expect(cloneEmpty.code).toBeUndefined();
-    expect(cloneEmpty.stderr ?? "").toContain("empty repository");
+    expect(`${cloneEmpty.stderr ?? ""}${cloneEmpty.stdout ?? ""}`).toContain("empty repository");
     writeFileSync(join(checkout, "greet.sh"), '#!/bin/sh\necho "Helo, world"\n');
     await git(checkout, ["add", "-A"]);
     await git(checkout, ["commit", "-q", "-m", "seed"]);
@@ -215,7 +213,7 @@ describe("a dumb-HTTP origin, over real git", () => {
     // own marker untracked beside it.
     expect((await git(checkout, ["log", "--format=%s", "-1"])).trim()).toBe("seed");
     expect(readFileSync(join(checkout, "greet.sh"), "utf8")).toContain("Hello, world");
-    expect((await git(checkout, ["status", "--porcelain"]))).toContain("M  greet.sh");
+    expect(await git(checkout, ["status", "--porcelain"])).toContain("M  greet.sh");
     expect(readFileSync(join(checkout, ".setup-marker"), "utf8")).toBe("ticfac-setup-ok");
 
     // 5. THE TURN CONTINUES: the agent commits on the restored tree, makes a

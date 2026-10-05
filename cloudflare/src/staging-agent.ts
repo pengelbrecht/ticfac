@@ -15,11 +15,17 @@
  *   this host holds can open an AI Gateway over HTTPS.
  * - **The container's half of the contract** is a stand-in `ticks-worker`
  *   (staging/agent.Dockerfile) that honours the pinned `--boot`/`--finish`
- *   contract on a throwaway repository inside the container: the factory
- *   image needs a deploy pipeline, a GitHub repository and the tk toolchain
- *   that staging does not carry (spike n0b round 2, pre-existing problem 1).
+ *   contract on a throwaway repository: the factory image needs a deploy
+ *   pipeline, a GitHub repository and tk, which staging does not carry. Since
+ *   tick a2l the repository lives on this Worker's own git origin (the
+ *   `GIT_ORIGINS` Durable Objects, src/staging-git-origin.ts) so it survives
+ *   the container the proof can destroy mid-turn; the URL the attempt gets
+ *   carries its run token (`/proof/git/<attempt>/<token>`), possession of it
+ *   being the credential — the git routes are the only ones the bearer token
+ *   does not gate.
  *
- * Routes, all behind `PROOF_TOKEN` (no token configured is a closed door):
+ * Routes, all behind `PROOF_TOKEN` (no token configured is a closed door),
+ * except the git origin's, whose own credential is named above:
  * - `POST /proof/start?name=<attempt>` `{prompt, model?, tick?, wall_s?}` — a
  *   run row, its worker token, and the attempt started on its WorkerAgent;
  * - `GET  /proof/state?name=` / `GET /proof/log?name=&offset=`;
@@ -40,11 +46,15 @@ import type { ProxyOptions } from "./gateway";
 import { issueWorkerRunToken } from "./gateway";
 import { DO_V1, recordRunSubstrate } from "./run-substrate";
 import { bindingUpstream, type StagingGatewayEnv } from "./staging-gateway";
+import { StagingGitOrigin, type StagingGitOriginNamespace } from "./staging-git-origin";
 import { WorkerAgent as BaseWorkerAgent, type WorkerAgentNamespace } from "./worker-agent";
 
-type StagingAgentEnv = StagingGatewayEnv & {
+export type StagingAgentEnv = StagingGatewayEnv & {
   WORKER_AGENTS?: WorkerAgentNamespace;
+  GIT_ORIGINS?: StagingGitOriginNamespace;
 };
+
+export { StagingGitOrigin };
 
 /** The WorkerAgent, its last model hop through the AI binding. */
 export class StagingWorkerAgent extends BaseWorkerAgent {
@@ -61,6 +71,17 @@ function sameToken(a: string, b: string): boolean {
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
+}
+
+/**
+ * The attempt's own git origin URL (tick a2l): the staging Worker's own
+ * repository door, with the attempt's run token as the credential in the
+ * path — the same `tkr_` credential the gateway takes, and the URL is the
+ * whole of what git needs: the origin never challenges, so no credential
+ * helper, and the production checkpoint and restore git lines run unchanged.
+ */
+export function proofOriginUrl(origin: string, name: string, token: string): string {
+  return `${origin.replace(/\/+$/, "")}/proof/git/${name}/${token}`;
 }
 
 /**
@@ -93,6 +114,17 @@ async function body(request: Request): Promise<Record<string, unknown>> {
 
 export async function stagingAgentFetch(request: Request, env: StagingAgentEnv): Promise<Response> {
   const url = new URL(request.url);
+  // The git origin's routes come BEFORE the bearer gate: a git client cannot
+  // carry it, and the origin's own credential is the run token in the path
+  // (checked in the object, stagingGitOriginFetch).
+  const git = /^\/proof\/git\/([a-z0-9-]{1,63})(?:\/.*)?$/.exec(url.pathname);
+  if (git !== null) {
+    const origins = env.GIT_ORIGINS;
+    if (origins === undefined) return new Response("no GIT_ORIGINS", { status: 503 });
+    // The path's attempt names the object it routes to, so a URL cannot ask
+    // for one attempt's origin under another attempt's name.
+    return origins.get(origins.idFromName(git[1])).fetch(request);
+  }
   const token = env.PROOF_TOKEN ?? "";
   const given = (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
   if (token === "" || !sameToken(given, token))
@@ -142,6 +174,13 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
         await recordRunSubstrate(env.DB, runId, DO_V1);
       }
       const issued = await issueWorkerRunToken(env, { run_id: runId, tick_id: tick, attempt: 1 });
+      // The attempt's origin is created BEFORE it starts, holding the token
+      // this URL carries: the container's very first git command — the boot's
+      // clone — is against an origin that already answers (tick a2l).
+      const origins = env.GIT_ORIGINS;
+      if (origins === undefined) return new Response("no GIT_ORIGINS", { status: 503 });
+      await origins.get(origins.idFromName(name)).init(issued.token);
+      const repoUrl = proofOriginUrl(url.origin, name, issued.token);
       const state = await agent.start({
         name: sandbox,
         tick,
@@ -152,11 +191,12 @@ export async function stagingAgentFetch(request: Request, env: StagingAgentEnv):
           TICKS_WORKDIR: "/work/repo",
           TICKS_WORKER_STATE_DIR: "/tmp/ticks-worker",
           TICKS_ROLE_PROMPT: prompt,
+          TICKS_REPO_URL: repoUrl,
           AI_GATEWAY_BASE_URL: `${url.origin}/api/gateway`,
           AI_GATEWAY_TOKEN: issued.token,
         },
         model,
-        repoUrl: "/srv/origin.git",
+        repoUrl,
         baseSha: "0000000000000000000000000000000000000000",
         ...(typeof input.wall_s === "number" ? { wallMs: input.wall_s * 1000 } : {}),
         boot: { keepAlive: true, instance: "standard-1" },

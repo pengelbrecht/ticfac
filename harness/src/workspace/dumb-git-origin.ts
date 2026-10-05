@@ -180,7 +180,10 @@ export class DumbGitOrigin {
     const answer = (status: number, body: Uint8Array | string, type: string): Response =>
       new Response(headOnly ? null : body, {
         status,
-        headers: { "content-type": type, "content-length": String(typeof body === "string" ? body.length : body.length) },
+        headers: {
+          "content-type": type,
+          "content-length": String(typeof body === "string" ? body.length : body.length),
+        },
       });
     if (path === "info/refs") {
       // Synthesized on every read: the store cannot go stale the way a
@@ -198,9 +201,7 @@ export class DumbGitOrigin {
     const entries = path === "" ? [] : await this.store.list(`${path}/`);
     if (entries.length > 0) {
       const repo = this.repoPrefix.replace(/^\//, "");
-      const lines = entries.map(
-        (key) => `<a href="${this.repoPrefix}/${key}">${repo}/${key}</a>`,
-      );
+      const lines = entries.map((key) => `<a href="${this.repoPrefix}/${key}">${repo}/${key}</a>`);
       return answer(200, `<html><body>\n${lines.join("\n")}\n</body></html>\n`, "text/html");
     }
     return notFound();
@@ -264,7 +265,10 @@ export class DumbGitOrigin {
       entries.length === 0
         ? [propfindResponse(`${this.repoPrefix}/${path}`)]
         : entries.map((key) => propfindResponse(`${this.repoPrefix}/${key}`));
-    return xml(207, `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:">${responses.join("")}</D:multistatus>`);
+    return xml(
+      207,
+      `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:">${responses.join("")}</D:multistatus>`,
+    );
   }
 }
 
@@ -287,8 +291,6 @@ export class MemoryOriginStore implements OriginStore {
   }
 
   list(prefix: string): Promise<string[]> {
-    return Promise.resolve(
-      [...this.files.keys()].filter((key) => key.startsWith(prefix)).sort(),
-    );
+    return Promise.resolve([...this.files.keys()].filter((key) => key.startsWith(prefix)).sort());
   }
 }

@@ -18,9 +18,22 @@ class_name = "StagingWorkerAgent"
 name = "SANDBOXES_V1"
 class_name = "FactorySandbox"
 
+# One git origin per proof attempt (tick a2l): the throwaway repository the
+# stand-in works against, in Durable Object storage — an origin that
+# outlives the container, so the [A2] destroy-and-restore proof can run.
+# The container has no volumes to put it in (the platform's container config
+# carries none), so the box reaches it over the network instead.
+[[durable_objects.bindings]]
+name = "GIT_ORIGINS"
+class_name = "StagingGitOrigin"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["StagingWorkerAgent", "FactorySandbox"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["StagingGitOrigin"]
 
 [[containers]]
 class_name = "FactorySandbox"
