@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 239,
-  "state": "gating",
-  "reason": "running the integrated gate for jmf on 8d915de2352a",
-  "updated_at": "2026-10-05T17:42:55Z",
+  "sequence": 240,
+  "state": "publishing",
+  "reason": "closing jmf behind the integrated gate on 8d915de2352a",
+  "updated_at": "2026-10-05T17:44:53Z",
   "ticks": [
     {
       "tick_id": "v16",
