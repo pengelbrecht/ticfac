@@ -53,7 +53,42 @@ loud.
 
 ---
 
-<<<<<<< HEAD
+## 1.7.0
+
+MINOR: the fold of main into epic/hn6 — two parallel cuts become one again,
+for the reason 1.2.0 states. Main cut its own 1.2.0 over the 1.1.0 it shared
+with the epic (#218, ticks rlp and gy9 — full text below): `health` gains
+`pushes`, `peak_pushes_per_minute` and the closed `github_errors` object.
+The epic had already cut 1.2.0 through 1.6.1 with different bytes, so main's
+half cannot keep its number — a version string must never mean two different
+sets of bytes — and the union re-cuts here, at the next MINOR over the
+epic's 1.6.1. `version_digests` keeps the epic's binding of 1.2.0
+(dbe3ab82e4d3f8980adb55b1dcad1389066664a6807881a7a2f1090419b2a964), the
+entry the fold's surviving line had already written; main's own cut of the
+same version,
+d243e5d275b815ff8e613e2862365ca1ee21288eaaaab1ba256c1a9e2dc85187, is
+recorded here instead, as is main's cut of 1.1.0, which 1.2.0 below already
+names. In the union `health` requires both halves — the three push counts
+beside the epic's `verdict` — and every golden and negative document now
+carries the push counts at zero (no document's tail states a `pushed` or
+`github_error_<class>` line), so every negative is still refused for the
+reason it pins. Consumers: an unchanged reader is still correct but no
+longer complete; a consumer pinned to main's 1.2.0 adopts the epic's
+1.2.1–1.6.1 by moving here. The cloudflare pin bumps in the same commit.
+
+### main's 1.2.0, re-cut here
+
+MINOR: three health counts added to the status model. `status-model.json`'s
+`health` gains `pushes`, `peak_pushes_per_minute` and `github_errors` (a
+closed object counting `network`, `ref_update_failed`, `server_fault`,
+`auth_refused` and `cross_repo_refused`), counted from the run feed's new
+`pushed` and `github_error_<class>` lines (ticks rlp and gy9;
+docs/analysis/github-failures.md). The model's producer is ticfac, which
+always emits them; a reader that ignores them (the factory's status page) is
+still correct.
+
+---
+
 ## 1.6.1
 
 PATCH: `status-model.json`'s `remaining` description names the second
@@ -300,18 +335,6 @@ stage's `failed`), and a superseded try carried a `next_step` while a later
 try stood (a next step is stated on the last try of a refusal only). The
 schema, the rules and every other byte are unchanged, and both corrected
 values remain schema-admitted. No consumer has anything to do.
-=======
-## 1.2.0
-
-MINOR: three health counts added to the status model. `status-model.json`'s
-`health` gains `pushes`, `peak_pushes_per_minute` and `github_errors` (a
-closed object counting `network`, `ref_update_failed`, `server_fault`,
-`auth_refused` and `cross_repo_refused`), counted from the run feed's new
-`pushed` and `github_error_<class>` lines (ticks rlp and gy9;
-docs/analysis/github-failures.md). The model's producer is ticfac, which
-always emits them; a reader that ignores them (the factory's status page) is
-still correct.
->>>>>>> 382cffa2908ec5c27dc8689b5c386aca211858dc
 
 ---
 
