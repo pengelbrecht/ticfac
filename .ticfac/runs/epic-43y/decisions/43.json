@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 43,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The extension's ready-check restore announces itself (onRestore -> 'the container was lost between rounds; workspace restored to <sha>'), but the other live path — a tracked bash whose nonce no container knows, FactorySandboxEnv.execAttempt's ensureWorkspaceRestored -> restoreLostWorkspace — restores with no log line anywhere: the operator watching a run sees only a mysteriously slow tool round. tick cni's staging proof hit exactly this (a 139 s round whose restore was invisible). The host should hear the nonce-path restore too, or the nonce path should report which sha it rebuilt from.\nevidence: harness/src/env/factory-sandbox.ts ensureWorkspaceRestored (the restore's only caller with no onRestore wiring), against harness/src/workspace/checkpoints.ts WorkspaceCheckpointOptions.onRestore\n\nticfac run epic-43y created this tick by absorbing the finding 71c6783fce9ab0f9c9eb91e98c285f638195ab6f3873222708b417aa71059e3b (reported by run-epic-43y/tick-cni/attempt-25): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/71c6783fce9ab0f9c9eb91e98c285f638195ab6f3873222708b417aa71059e3b.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "dbi",
+    "title": "A restore fired through the nonce path is invisible in the log"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.39,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.05,
+      "design": 0.22,
+      "diagnosis": 0.51,
+      "mechanical": 0.1,
+      "translation": 0.12
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1396,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T15:07:54Z",
+  "answered_at": "2026-10-05T15:07:54Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "dbi",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "ff1fc948e6387dd57cf214b2da89243a4c4dd1f4",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
