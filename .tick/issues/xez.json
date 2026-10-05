@@ -1,0 +1,13 @@
+{
+  "id": "xez",
+  "title": "Tick omq duplicates the fixed defect; its record should say so",
+  "description": "Tick omq, like 4ao, names the first dumb-git-origin test's 120s bound, fixed by 2405782ec and green at base. It is still in_progress and will hit the same already-done wall. A note on its record is the whole fix.\nevidence: commit 2405782ec; harness/test/node/dumb-git-origin.test.ts declares { timeout: 300_000 } at the first test; full node suite green at base 40284aa76\n\nticfac run epic-43y filed this backlog tick from the finding 1bdcbf42a3b621f29754b05eeba9f555dd77f3a3d422d6fc14f7c2835b7faad6 (reported by run-epic-43y/tick-30e/attempt-63): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/1bdcbf42a3b621f29754b05eeba9f555dd77f3a3d422d6fc14f7c2835b7faad6.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-30e/attempt-63",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T21:49:24Z",
+  "updated_at": "2026-10-05T21:49:24Z"
+}
