@@ -1138,6 +1138,12 @@ func startShell(dir, command string, timeout time.Duration, now time.Time, hold 
 	// run's factory token, and this repository's own tests switched into
 	// cloud mode under it. A gate answers the same wherever the run lives.
 	env, _ := runenv.Scrub(os.Environ())
+	// Nor is the host's installed ticfac the tree's (runenv/path.go): epic
+	// hn6's gate passed two tests on the operator's Mac only because
+	// ~/.local/bin's ticfac-exec-subprocess answered a lookup the tests made
+	// without building one, and CI failed both. A mirror that cannot be made
+	// leaves PATH as it was; the gate still runs.
+	env, _, _ = runenv.HidePath(env)
 	cmd.Env = append(env, "TICFAC_GATE=1", "GIT_TERMINAL_PROMPT=0",
 		"TICFAC_GATE_COMMAND="+command, "TICFAC_GATE_DONE="+s.donePath, "TMPDIR="+tmp)
 	cmd.SysProcAttr = gateProcessGroup()
