@@ -182,7 +182,7 @@ export class DumbGitOrigin {
         status,
         headers: {
           "content-type": type,
-          "content-length": String(typeof body === "string" ? body.length : body.length),
+          "content-length": String(body.length),
         },
       });
     if (path === "info/refs") {
