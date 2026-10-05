@@ -12,8 +12,11 @@
   "attempt": 42,
   "done_item": "A5",
   "demonstrating_check": "go test -count=1 -timeout 20m -run 'TestAKilledOrchestratorAdoptsTheRunningSandboxByIdentity|TestALocalRunOnTheSandboxExecutorRefusesAtStartOverATierThatLeavesWorkersAI|TestALostCloudAttemptIsReAskedNotHandedToAPerson' ./internal/reconcile/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T18:01:00Z",
+  "triaged_at": "2026-10-05T18:01:11Z",
+  "triaged_by": "ticfac run epic-43y absorbing enb",
+  "promoted_as": "enb",
   "provenance": {
     "run_id": "epic-43y",
     "tick_id": "66a",
