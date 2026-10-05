@@ -155,6 +155,151 @@ func TestTheDurableRunnerRunsAWholeWorkerOnTheHarness(t *testing.T) {
 	}
 }
 
+// THE READ-ONLY HALF (tick x8e): a dispatched read-only attempt — the
+// review grade — on the local pi runner runs the same harness with the
+// workspace checkpoints OFF, because its grade pins every push to refusal
+// (grade.go) and there is no ref to checkpoint to. Before the fix the
+// config carried the remote unconditionally, so every tool round's wip
+// push was refused, threw into onReport and logged a failed checkpoint, and
+// the finish phase went on to salvage — `git add -A && git commit` — a tree
+// onto an attempt whose grade granted no ref to advance: a dispatched review
+// ran visibly broken at its first tool round.
+//
+// The same shape of guards as the write-grade test above: the model is
+// scripted, everything else is real — the supervisor, the harness, the tools
+// in the attempt worktree, and the REAL report checker on every yield.
+func TestAReadOnlyLocalDurableRunHasNoWorkspaceCheckpoints(t *testing.T) {
+	shorttest.EndToEnd(t)
+	if testing.Short() {
+		t.Skip("short mode: this one runs a real supervisor and a real Node harness")
+	}
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Skipf("the pi-durable harness runs on node: %v", err)
+	}
+	root, err := contracts.RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	harnessDir := filepath.Join(root, "harness")
+	if _, err := os.Stat(filepath.Join(harnessDir, "node_modules", "@earendil-works", "pi-durable")); err != nil {
+		t.Skipf("the harness package's dependencies are not installed: %v — run pnpm install in harness/ to run this end-to-end test", err)
+	}
+	_ = node
+
+	// The socket the harness listens on has to live somewhere a Unix socket
+	// can be bound; this suite's own TMPDIR is deeper than that bound.
+	t.Setenv("TICFAC_HARNESS_DIR", harnessDir)
+	t.Setenv("TICFAC_STEER_SOCK_DIR", shortSocketDir(t))
+
+	const jobID = "run-x8e/tick-hro/attempt-1"
+	const tick = "hro"
+
+	// A dispatched REVIEW: the role whose grade is read-only. One tool round
+	// of reading, the report with the review's own verdict, a final answer.
+	reportRel := "runs/" + jobID + "/RESULT-" + tick + ".md"
+	writeReport := "mkdir -p runs/run-x8e && printf '# " + tick + "\\n\\nThe review read the epic.\\n\\nREVIEW-VERDICT: READY\\n\\nSTATUS: DONE\\n' > " + reportRel
+	transcript := filepath.Join(t.TempDir(), "transcript.json")
+	script, err := json.Marshal([]map[string]any{
+		{"toolCalls": []any{map[string]any{
+			"name": "bash",
+			"args": map[string]any{"command": "echo the read-only round ran > review-ran.txt"},
+		}}},
+		{"toolCalls": []any{map[string]any{
+			"name": "bash",
+			"args": map[string]any{"command": writeReport},
+		}}},
+		{"text": "the review is done and reported"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(transcript, script, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	f := newFixture(t, fixtureOptions{
+		runner:         "pi",
+		noFakeRunner:   true,
+		stuckAfter:     time.Minute,
+		fauxTranscript: transcript,
+		model:          "faux/faux-1",
+	})
+	spec := f.spec(jobID, tick)
+	// The review grade, exactly as the reconciler issues it
+	// (internal/reconcile/dispatch.go sourceCredentialFor): read-only, no
+	// write_ref_prefix — the contract refuses one, and the point is that
+	// the issuer hands out no push credential at all.
+	spec.Role = "review-epic"
+	spec.OutputSchema = "ticfac.job-result.review-epic.v1"
+	spec.Credentials.Source = SourceCredential{Grant: &SourceGrant{Issuer: "host", Grade: gradeReadOnly}}
+	handle := f.Start(spec)
+	f.waitSettled(handle)
+
+	status := f.inspect(handle)
+	if status.State != StateSucceeded {
+		local, logErr := handle.Local()
+		if logErr == nil {
+			if raw, err := os.ReadFile(filepath.Join(local.State, fileRunnerLog)); err == nil {
+				t.Logf("the runner's log:\n%s", raw)
+			}
+		}
+		t.Fatalf("state %s, want succeeded:\n%s",
+			status.State, formatObservations(status.Observations))
+	}
+	local, err := handle.Local()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The config the harness reads carries NO remote: the checkpoints, the
+	// restore and the finish phase all key on it (worker-host.ts), and a
+	// read-only grade pins every push to refusal — there is nothing to
+	// checkpoint to.
+	rawConfig, err := os.ReadFile(filepath.Join(local.State, fileWorkerConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config workerConfig
+	if err := json.Unmarshal(rawConfig, &config); err != nil {
+		t.Fatal(err)
+	}
+	if config.Remote != "" {
+		t.Errorf("the read-only attempt's worker.json carries remote %q: the harness installs the wip checkpoints on it", config.Remote)
+	}
+
+	// And the run shows it: no checkpoint was attempted (a failed one is a
+	// push the pins refused — the broken behaviour this tick fixes — and a
+	// pushed one would be a push the grade forbids), no salvage was committed
+	// onto the attempt, and the attempt's own branch never reached the origin.
+	rawLog, err := os.ReadFile(filepath.Join(local.State, fileRunnerLog))
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := string(rawLog)
+	for _, noise := range []string{"wip checkpoint", "salvaged", "harness report"} {
+		if strings.Contains(log, noise) {
+			t.Errorf("the read-only run's log mentions %q:\n%s", noise, log)
+		}
+	}
+	if ran, err := os.ReadFile(filepath.Join(local.Worktree, "review-ran.txt")); err != nil || strings.TrimSpace(string(ran)) != "the read-only round ran" {
+		t.Errorf("the tool round's file = %q, %v: a read-only run still reads and works", string(ran), err)
+	}
+	if refs := runGit(f.t, f.Repo.Origin, "for-each-ref", "--format=%(refname)", "refs/heads/tick/"+tick); refs != "" {
+		t.Errorf("the read-only attempt advanced a ref on the origin:\n%s", refs)
+	}
+
+	// The review collects by its own rule: the deliverable is the answer, so
+	// an empty branch is what a correct attempt looks like.
+	collected := f.collect(handle)
+	if collected.Verdict != VerdictReadyToMerge {
+		t.Fatalf("verdict %s, want ready-to-merge:\n%s", collected.Verdict, collected.Message)
+	}
+	if collected.Result.Source.Commits != 0 {
+		t.Errorf("the review collected %d commits; a read-only attempt pushed nothing", collected.Result.Source.Commits)
+	}
+}
+
 // THE OPERATOR'S HALF (tick y03): a person watches a live durable worker
 // and steers it, through the Go clients `ticfac watch <run> <tick>` and
 // `ticfac steer` are made of, against the REAL harness the real supervisor

@@ -92,6 +92,7 @@ func TestWorkerConfigCarriesTheWholeInterface(t *testing.T) {
 		TickID:      "hpk",
 		Model:       "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
 		Remote:      "origin",
+		SourceGrade: gradeWrite,
 		State:       dir,
 		IssuedAt:    "2026-10-04T12:00:00Z",
 		WallSeconds: 28800,
@@ -129,6 +130,12 @@ func TestWorkerConfigCarriesTheWholeInterface(t *testing.T) {
 	if config.Model != record.Model {
 		t.Errorf("model = %q", config.Model)
 	}
+	// A WRITE grade carries the remote: the wip checkpoints after every tool
+	// round are the local rung's durability, and the harness installs them on
+	// exactly this field being non-empty.
+	if config.Remote != "origin" {
+		t.Errorf("a write grade's remote = %q, want origin", config.Remote)
+	}
 	// The wall is ABSOLUTE: issued-at plus the wall seconds, so a relaunched
 	// runner arms the wall the attempt already runs under.
 	issued, err := time.Parse(time.RFC3339, record.IssuedAt)
@@ -153,6 +160,67 @@ func TestWorkerConfigCarriesTheWholeInterface(t *testing.T) {
 	_ = json.Unmarshal(raw, &config)
 	if config.FauxTranscript != "/tmp/transcript.json" {
 		t.Errorf("the test seam did not travel: %+v", config)
+	}
+}
+
+// A READ-ONLY attempt's worker.json carries no remote (tick x8e): its runner
+// is launched pinned so that every push fails at the transport (grade.go),
+// so a config that named the remote would install the wip checkpoints whose
+// every push the pins refuse — one failed checkpoint a tool round, thrown
+// into onReport — and a finish phase whose salvage commits a tree onto a ref
+// the grade granted no write to. Empty is the harness's own "the
+// checkpoints are off" (worker-host.ts), which is what a read-only local run
+// must run with: it has no push, so there is nothing to checkpoint to.
+func TestAReadOnlyWorkersConfigCarriesNoRemote(t *testing.T) {
+	record := &attemptRecord{
+		Branch:      "ticfac/run-43y/tick-hpk/attempt-9",
+		ResultPath:  "/abs/RESULT.md",
+		TickID:      "hpk",
+		Model:       "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+		Remote:      "origin",
+		SourceGrade: gradeReadOnly,
+	}
+	dir := t.TempDir()
+	if err := writeWorkerConfig(func(path string, data []byte, perm os.FileMode) error {
+		return os.WriteFile(path, data, perm)
+	}, dir, record, &Options{SupervisorArgv: []string{"x"}}); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, fileWorkerConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config workerConfig
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	if config.Remote != "" {
+		t.Errorf("a read-only grade's config carries remote %q: the harness would install the wip checkpoints on it", config.Remote)
+	}
+	// The branch still travels: it is the worktree's own checked-out branch,
+	// what the report's collector and the boundary diff read — a grade that
+	// refuses a push does not refuse a name.
+	if config.Branch != record.Branch {
+		t.Errorf("branch = %q, want %q", config.Branch, record.Branch)
+	}
+
+	// And it fails CLOSED, the same sentence the grade itself is: a grade
+	// this build does not recognise is not a write grant, so it gets no
+	// remote either.
+	record.SourceGrade = "a grade this build does not know"
+	closed := t.TempDir()
+	if err := writeWorkerConfig(func(path string, data []byte, perm os.FileMode) error {
+		return os.WriteFile(path, data, perm)
+	}, closed, record, &Options{SupervisorArgv: []string{"x"}}); err != nil {
+		t.Fatal(err)
+	}
+	closedRaw, err := os.ReadFile(filepath.Join(closed, fileWorkerConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = json.Unmarshal(closedRaw, &config)
+	if config.Remote != "" {
+		t.Errorf("an unrecognised grade's config carries remote %q: the gate must fail closed", config.Remote)
 	}
 }
 

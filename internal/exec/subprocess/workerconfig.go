@@ -65,6 +65,13 @@ type workerConfig struct {
 	Worktree string `json:"worktree"`
 	// Remote is the remote the attempt branch pushes to (and the wip
 	// checkpoints after every tool round); empty disables the checkpoints.
+	// A READ-ONLY grade is always written empty: its runner is pinned so that
+	// every push fails at the transport (grade.go), so a non-empty remote would
+	// install checkpoints whose every push the pins refuse — one failed
+	// checkpoint a tool round — and a finish phase that salvages onto a ref the
+	// grade granted no write to. The harness keys the checkpoints, the restore
+	// and the finish phase on exactly this field (worker-host.ts), so empty is
+	// the whole difference for a read-only local run.
 	Remote string `json:"remote"`
 	// Branch is the attempt branch — the run's write ref.
 	Branch string `json:"branch"`
@@ -101,13 +108,20 @@ func writeWorkerConfig(write func(path string, data []byte, perm fs.FileMode) er
 		Storage:   filepath.Join(dir, fileWorkerStorage),
 		SteerSock: steerSockPath(dir),
 		Worktree:  record.Worktree,
-		Remote:    record.Remote,
 		Branch:    record.Branch,
 		Base:      record.BaseSHA,
 		Report:    record.ResultPath,
 		Checker:   opts.SupervisorArgv[0],
 		Tick:      record.TickID,
 		Model:     record.Model,
+	}
+	// The remote is a WRITE grade's alone (tick x8e): a read-only attempt's
+	// runner cannot push anywhere — the grade pins every push to refusal — so
+	// its config carries none and the harness runs it without the workspace
+	// checkpoints. The grade fails CLOSED, the same sentence grade.go states:
+	// a grade this build does not recognise is not a write grant.
+	if !record.readOnly() {
+		config.Remote = record.Remote
 	}
 	if record.Spec != nil {
 		config.Role = record.Spec.Role
