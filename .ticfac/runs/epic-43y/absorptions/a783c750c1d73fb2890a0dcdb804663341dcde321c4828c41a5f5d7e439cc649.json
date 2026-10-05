@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "key": "a783c750c1d73fb2890a0dcdb804663341dcde321c4828c41a5f5d7e439cc649",
+  "tick_id": "7vp",
+  "gating": false,
+  "basis": "rule",
+  "reason": "absorbing it would be the 4th absorption of ONE chain that already carries 3 and the bound is 3 (tick qjj), so it is deferred past the absorption bound: a backlog tick with an owner, outside the epic, and the run carries on rather than recurse past the bound or halt for a person. Its verdict was that it gates done item A4 (basis predicted) — the bound wins, and the close-out and the final review see the deferral and can judge it. The chain: tick xd3 reported finding 270d4285800544591c8e0355a6fa723a7b0b7be030f568b1acf346e2e3d88a1f (\"Name pi-durable in a hosted attempt's handle and the cloud profiles\"), gates done item A1 and became tick 4uj; tick 4uj reported finding 1184d081f9b64334edc6ab6adc486f3d8456c69c3a9910574d3c7257be7a968c (\"After jhp lands, name pi-durable in the cloud profiles and CloudRule.Harnesses\"), gates done item A1 and became tick qf4; tick qf4 reported finding 0d02f47761197473c64809b5c88a0fea68f935562a62a2d21d49cd60973d61b9 (\".tick/runners.cloud.toml still routes every cloud role to kind \\\"pi\\\"\"), gates done item A4 and became tick twa",
+  "placement": "past-bound",
+  "decided_at": "2026-10-05T15:02:06Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "twa",
+    "attempt": 31,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "b1e4688a54132f8dbb2d7009a988c4ef36146c07",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:4863fa24ea2a0a6bf379e6f9bf234b6d931e19998ea12f23a15da4314eb3ea94",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}
