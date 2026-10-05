@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 278,
-  "state": "running",
-  "reason": "648 is closed",
-  "updated_at": "2026-10-05T20:32:23Z",
+  "sequence": 279,
+  "state": "dispatching",
+  "reason": "dispatching m4t as attempt 41",
+  "updated_at": "2026-10-05T20:32:35Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -201,6 +201,10 @@
       "tick_id": "lfm",
       "state": "dispatched",
       "attempt": 40
+    },
+    {
+      "tick_id": "m4t",
+      "state": "ready"
     }
   ],
   "provenance": {
