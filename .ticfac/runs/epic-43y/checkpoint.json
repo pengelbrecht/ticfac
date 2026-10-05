@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 134,
-  "state": "dispatching",
-  "reason": "dispatching jhp as attempt 23",
-  "updated_at": "2026-10-05T10:34:39Z",
+  "sequence": 135,
+  "state": "running",
+  "reason": "jhp is running as attempt 23",
+  "updated_at": "2026-10-05T10:34:50Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -49,8 +49,8 @@
     },
     {
       "tick_id": "jhp",
-      "state": "ready",
-      "attempt": 20
+      "state": "dispatched",
+      "attempt": 23
     },
     {
       "tick_id": "66a",
