@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 158,
-  "state": "integrating",
-  "reason": "integrating qf4 attempt 22 into epic/43y",
-  "updated_at": "2026-10-05T11:32:14Z",
+  "sequence": 159,
+  "state": "gating",
+  "reason": "running the integrated gate for qf4 on c3f98f6709c1",
+  "updated_at": "2026-10-05T11:32:26Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -107,7 +107,7 @@
     },
     {
       "tick_id": "qf4",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 22
     },
     {
