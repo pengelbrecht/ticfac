@@ -21,7 +21,8 @@
     "cni",
     "hv3",
     "7wg",
-    "x8e"
+    "x8e",
+    "qdg"
   ],
   "parent": "43y",
   "role": "review",
