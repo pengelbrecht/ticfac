@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 308,
-  "state": "running",
-  "reason": "3wq is running as attempt 43",
-  "updated_at": "2026-10-05T23:59:44Z",
+  "sequence": 309,
+  "state": "dispatching",
+  "reason": "dispatching frr as attempt 44",
+  "updated_at": "2026-10-05T23:59:53Z",
   "ticks": [
     {
       "tick_id": "v16",
