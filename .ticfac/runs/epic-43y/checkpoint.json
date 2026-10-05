@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 246,
+  "sequence": 247,
   "state": "gating",
-  "reason": "running the integrated gate for kkt on c5222dee168a",
-  "updated_at": "2026-10-05T15:43:57Z",
+  "reason": "running the integrated gate for kkt on 52880e9fbb38",
+  "updated_at": "2026-10-05T15:58:45Z",
   "ticks": [
     {
       "tick_id": "92k",
