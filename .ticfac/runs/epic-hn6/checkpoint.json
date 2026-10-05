@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 158,
-  "state": "running",
-  "reason": "2xk is running as attempt 23",
-  "updated_at": "2026-10-05T13:12:05Z",
+  "sequence": 159,
+  "state": "dispatching",
+  "reason": "dispatching 3yx as attempt 24",
+  "updated_at": "2026-10-05T13:12:16Z",
   "ticks": [
     {
       "tick_id": "v16",
