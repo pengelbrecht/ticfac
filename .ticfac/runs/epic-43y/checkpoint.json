@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 308,
-  "state": "publishing",
-  "reason": "closing i5e behind the integrated gate on 3ca7906c848e",
-  "updated_at": "2026-10-05T19:07:16Z",
+  "sequence": 309,
+  "state": "running",
+  "reason": "i5e is closed",
+  "updated_at": "2026-10-05T19:07:26Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -213,7 +213,7 @@
     },
     {
       "tick_id": "i5e",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 48
     },
     {
