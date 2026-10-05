@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 245,
-  "state": "integrating",
-  "reason": "integrating kkt attempt 33 into epic/43y",
-  "updated_at": "2026-10-05T15:43:37Z",
+  "sequence": 246,
+  "state": "gating",
+  "reason": "running the integrated gate for kkt on c5222dee168a",
+  "updated_at": "2026-10-05T15:43:57Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -157,7 +157,7 @@
     },
     {
       "tick_id": "kkt",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 33
     },
     {
