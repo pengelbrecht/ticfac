@@ -83,11 +83,21 @@ type GuardedTest = {
  * drives it over a scripted door), so it is not on this list; a test binds
  * through the door it is handed, which the fixture-variable analysis below
  * resolves.
+ *
+ * `execFile` is listed in BOTH spellings because this suite writes it
+ * promisified (`const execFileAsync = promisify(execFile)`, dumb-git-origin,
+ * standin-worker-entry-env, stuck-watch-command) more often than plain —
+ * and the promisified name is exactly the one tick 30e's defect hid behind:
+ * dumb-git-origin's second test drove real git over a live socket at a
+ * 60s bound the guard never saw, because the vocabulary knew `exec` but
+ * not the `execFileAsync` every git call in that file goes through.
  */
 const PROCESS_ENTRY_POINTS = new Set([
   "exec",
   "execSync",
   "execFileSync",
+  "execFile",
+  "execFileAsync",
   "spawn",
   "spawnSync",
   "fork",
@@ -457,18 +467,21 @@ describe("the load-dependent tests of both suites state their own wall clock", (
         "pushes nothing for a round that changed no file, and the changed round's wip lands on origin",
       ),
     ).toBe(true);
-    // The omq seam (tick umx found it red at the epic base; the fix raised
-    // it to 300_000): dumb-git-origin's whole-container story drives real
-    // git through the real local door, and it binds through the door
-    // fixture variable rather than a direct entry-point call. A
-    // classification that loses it is a bound no longer enforced there and
-    // a guard that still reads green — named for the same reason the fim
+    // Both of dumb-git-origin's tests are named, not just counted. The first
+    // is the omq seam (tick umx found it red at the epic base; the fix raised
+    // it to 300_000): its whole-container story drives real git through the
+    // real local door, and it binds through the door fixture variable rather
+    // than a direct entry-point call. The second (tick 30e) hid behind the
+    // promisified spelling until the vocabulary learned execFileAsync. A
+    // classification that loses either is a bound no longer enforced there
+    // and a guard that still reads green — named for the same reason the fim
     // titles above are named.
     expect(
       processTitles.has(
         "an origin that outlives the box carries the boot, the wip and the restore",
       ),
     ).toBe(true);
+    expect(processTitles.has("keeps the fast-forward-only push a dumb origin must")).toBe(true);
     // The two spellings fim added the harness criterion for: the helper that
     // opens (the gateway tests) and the whole host whose open is in src.
     const workerdHarnessTitles = new Set(

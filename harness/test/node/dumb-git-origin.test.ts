@@ -242,7 +242,14 @@ describe("a dumb-HTTP origin, over real git", () => {
   });
 
   /** The finish phase's push is not forced: the origin must hold that line. */
-  it("keeps the fast-forward-only push a dumb origin must", { timeout: 60_000 }, async () => {
+  it("keeps the fast-forward-only push a dumb origin must", {
+    // A process-driving test (harness-timeout-discipline.test.ts), same as
+    // its sibling above: every git call here reaches the origin over the
+    // live socket in this process, so it states the same 300s bound — the
+    // 60s it declared was a quiet-host number the guard could not see,
+    // because the suite writes its git calls promisified (execFileAsync).
+    timeout: 300_000,
+  }, async () => {
     const branch = "tick/proof/a2l";
     const checkout = join(root, "repo");
     mkdirSync(checkout);
