@@ -420,7 +420,12 @@ func git(dir string, args ...string) (string, error) {
 	var out, errBuf strings.Builder
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
+	// A measurement never pushes; the queue costs nothing for anything else
+	// (tick rlp).
+	done := gitbin.PushQueue(dir, args, nil)
+	err := cmd.Run()
+	done(err)
+	if err != nil {
 		return out.String(), fmt.Errorf("git %s (in %s): %w: %s",
 			strings.Join(args, " "), dir, err, strings.TrimSpace(errBuf.String()))
 	}

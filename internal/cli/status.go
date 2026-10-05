@@ -290,6 +290,35 @@ func feedTries(repo, runID string) *runfeed.Tries {
 	return tries
 }
 
+// pushHealthLine is the run's pushes to its hosted repository and its GitHub
+// errors by class, counted from its local feed (tick rlp): empty when the feed
+// has none of either, or cannot be read.
+func pushHealthLine(repo, runID string) string {
+	events, err := runfeed.Read(runfeed.Path(repo, runID))
+	if err != nil {
+		return ""
+	}
+	pushes, peak, errs := statusmodel.PushHealth(events)
+	return formatPushHealth(pushes, peak, errs)
+}
+
+func formatPushHealth(pushes, peak int, errs statusmodel.GitHubErrors) string {
+	if pushes == 0 && errs.Total() == 0 {
+		return ""
+	}
+	line := fmt.Sprintf("github: %d push(es), peak %d in a minute", pushes, peak)
+	if errs.Total() == 0 {
+		return line + "; no GitHub errors"
+	}
+	var classes []string
+	for _, c := range errs.Classes() {
+		if c.N > 0 {
+			classes = append(classes, fmt.Sprintf("%s %d", c.Class, c.N))
+		}
+	}
+	return line + "; GitHub errors: " + strings.Join(classes, ", ")
+}
+
 // ageOf says how long ago a stamp was, as a person reads it. A stamp that
 // does not parse is "?" rather than a guess — the writer's clock is the only
 // clock there is, and a number nobody measured is a number that lies.
@@ -489,6 +518,9 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 				}
 			}
 			fmt.Fprintf(stdout, "%s\n", line)
+		}
+		if line := pushHealthLine(*repo, runID); line != "" {
+			fmt.Fprintln(stdout, line)
 		}
 		if orchestratedHere {
 			fmt.Fprintln(stdout, factoryWorkersLine(ctx, runID))

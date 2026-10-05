@@ -405,7 +405,10 @@ func (s *ghDeployWaitSource) git(ctx context.Context, args ...string) (string, i
 	cmd.Env = append(os.Environ(), gitbin.TransportEnv()...)
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
+	// It never pushes; the queue costs nothing for anything else (tick rlp).
+	done := gitbin.PushQueue("", args, nil)
 	err := cmd.Run()
+	done(err)
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
 		return strings.TrimSpace(out.String()), exitErr.ExitCode(), fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(errOut.String()))
