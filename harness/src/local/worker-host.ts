@@ -88,9 +88,9 @@ import { GATEWAY_MODEL_OVERRIDES, gatewayModelRef } from "../gateway/workers-ai.
 import { armWallDeadline, type WorkerContractOptions, workerOnYield } from "../worker-contract.js";
 import {
   type HostShell,
-  type WorkspaceGit,
   retireWipSnapshot,
   salvageUncommittedWork,
+  type WorkspaceGit,
   workspaceCheckpointExtension,
 } from "../workspace/checkpoints.js";
 import { piAuthStore } from "./pi-auth-store.js";
@@ -511,7 +511,9 @@ export async function runLocalWorker(options: LocalWorkerOptions): Promise<Local
   if (finish !== undefined) {
     const retired = await retireWipSnapshot(finish.shell, finish.workspace);
     if (retired.kind === "retired") {
-      log(`the attempt branch is back on the agent's own HEAD (the last round's wip snapshot retired)`);
+      log(
+        `the attempt branch is back on the agent's own HEAD (the last round's wip snapshot retired)`,
+      );
     } else {
       log(`could not put the attempt branch back on the agent's own HEAD: ${retired.error}`);
     }
@@ -520,13 +522,13 @@ export async function runLocalWorker(options: LocalWorkerOptions): Promise<Local
       subject: `tick ${config.tick}: work in progress salvaged by the local worker host (the conversation settled ${settled.status})`,
       // The report's exclusion is only meaningful inside the worktree; one
       // placed outside it is nothing `git add -A` could stage anyway.
-      ...(isAbsolute(reportRel) || reportRel.startsWith("..")
-        ? {}
-        : { reportPath: reportRel }),
+      ...(isAbsolute(reportRel) || reportRel.startsWith("..") ? {} : { reportPath: reportRel }),
     });
     switch (salvaged.kind) {
       case "salvaged":
-        log(`salvaged the worker's uncommitted work into its own commit on ${config.branch}: ${salvaged.sha}`);
+        log(
+          `salvaged the worker's uncommitted work into its own commit on ${config.branch}: ${salvaged.sha}`,
+        );
         break;
       case "failed":
         log(`could not salvage the worker's uncommitted work: ${salvaged.error}`);

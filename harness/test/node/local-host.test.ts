@@ -258,9 +258,7 @@ describe("the local worker host", () => {
     expect(child.output()).toContain(
       "the attempt branch is back on the agent's own HEAD (the last round's wip snapshot retired)",
     );
-    expect(child.output()).toContain(
-      "salvaged the worker's uncommitted work into its own commit",
-    );
+    expect(child.output()).toContain("salvaged the worker's uncommitted work into its own commit");
     const onOrigin = execFileSync(
       "git",
       ["--git-dir", f.origin, "log", "--format=%s", config.branch],
@@ -277,22 +275,18 @@ describe("the local worker host", () => {
     // the report is read from its own path (or committed by its own owner
     // on the cloud), and a salvage commit carrying it would make the work
     // indistinguishable from the account of it.
-    const subjects = execFileSync(
-      "git",
-      ["-C", config.worktree, "log", "--format=%s"],
-      { encoding: "utf8" },
-    )
+    const subjects = execFileSync("git", ["-C", config.worktree, "log", "--format=%s"], {
+      encoding: "utf8",
+    })
       .trim()
       .split("\n");
     expect(subjects).toEqual([
       "tick hpk: work in progress salvaged by the local worker host (the conversation settled done)",
       "the base commit",
     ]);
-    const files = execFileSync(
-      "git",
-      ["-C", config.worktree, "ls-tree", "--name-only", "HEAD"],
-      { encoding: "utf8" },
-    )
+    const files = execFileSync("git", ["-C", config.worktree, "ls-tree", "--name-only", "HEAD"], {
+      encoding: "utf8",
+    })
       .trim()
       .split("\n");
     expect(files).toEqual(expect.arrayContaining(["work.txt", "README.md"]));

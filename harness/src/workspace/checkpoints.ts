@@ -298,8 +298,8 @@ export async function salvageUncommittedWork(
         (options.reportPath === undefined
           ? ""
           : '{ git reset -q -- "$REPORT" 2>/dev/null || true; } && ') +
-        '{ git reset -q -- .tick .ticfac 2>/dev/null || true; } && ' +
-        'if git diff --cached --quiet; then git reset -q; exit 3; fi && ' +
+        "{ git reset -q -- .tick .ticfac 2>/dev/null || true; } && " +
+        "if git diff --cached --quiet; then git reset -q; exit 3; fi && " +
         'git commit -q --no-verify -m "$MSG" >/dev/null && git rev-parse HEAD',
       varsOf(git, {
         MSG: options.subject,
