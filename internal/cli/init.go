@@ -557,7 +557,7 @@ func initWrites(repo string, answers initAnswers, gates []guessedGate) []initWri
 	writes := []initWrite{{
 		name: runconfig.FileName,
 		body: runnersTOML(substrateDeclared, answers.runner, answers.model, gates),
-		note: fmt.Sprintf("every dispatch resolves against it; runs %s on %s", answers.runner, answers.model),
+		note: runnersNote(substrateDeclared, answers.runner, answers.model),
 	}}
 	if answers.substrate != initSubstrateLocal {
 		writes = append(writes, initWrite{
@@ -583,10 +583,34 @@ func initConfigNote(closeout bool) string {
 	return "no close-out rule declared — a run integrates this repository locally"
 }
 
+// runnersNote is the one-line note beside the routing write: what the
+// written routing runs, and — when the answer's harness is not what every
+// substrate can launch for every role — the split the cells carry (tick jiv).
+func runnersNote(substrate, kind, model string) string {
+	if kind != initRunnerPi || substrate == "cloud" {
+		return fmt.Sprintf("every dispatch resolves against it; runs %s on %s", kind, model)
+	}
+	return fmt.Sprintf("every dispatch resolves against it; implement runs pi on %s, review and closeout run claude — the cells every substrate can launch", model)
+}
+
 // runnersTOML is the base routing. The shape is the one this repository's own
 // .tick/runners.toml settled (which the vendored contract documents), with
 // only the parts init can answer: substrate, the three role cells' kind and
 // model, and the gate.
+//
+// The runner answer is the IMPLEMENT harness's answer, and when it is pi the
+// review and closeout cells are written as claude (tick jiv): those two roles
+// run through the herdr profile set whenever a run's substrate resolves to
+// herdr, and herdr launches claude, codex and opencode only — the pi kind is
+// the local subprocess executor's harness and the cloud's, never a herdr
+// pane's (tick uxi deleted it) — so kind = "pi" in those cells is a run that
+// refuses at construction on any machine where herdr answers, three ticks
+// into an epic or before it starts. claude is the one harness every substrate
+// launches for those two roles; the model is left to the shipped profiles'
+// own pairing (claude is their harness as shipped), which the answer was
+// never about. A cloud-only routing keeps the answer's pi in all three
+// cells: the base file routes the cloud there, the cloud file applies last,
+// and what runs in Cloudflare runs Workers AI models only.
 func runnersTOML(substrate, kind, model string, gates []guessedGate) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `# Worker routing for epic runs, written by `+"`ticfac init`"+`.
@@ -611,11 +635,26 @@ version = 2
 		{"review", "the epic review"},
 		{"closeout", "the close-out"},
 	} {
+		cellKind, cellModel := kind, model
+		split := role.name != "implement" && kind == initRunnerPi && substrate != "cloud"
+		if split {
+			cellKind, cellModel = initRunnerClaude, ""
+		}
 		fmt.Fprintf(&b, "[roles.%s]\n# %s.\n", role.name, role.what)
-		fmt.Fprintf(&b, "kind = %q\n", kind)
-		fmt.Fprintf(&b, "model = %q\n", model)
+		if split {
+			b.WriteString("# claude, not the answer's pi: this role runs through the herdr\n" +
+				"# profile set when a run's substrate resolves to herdr, and herdr launches\n" +
+				"# claude, codex and opencode only — pi is the local subprocess executor's\n" +
+				"# harness and the cloud's, never a herdr pane's. claude is the one harness\n" +
+				"# every substrate launches for this role. No model here: the shipped\n" +
+				"# profile pairs the claude harness with its own.\n")
+		}
+		fmt.Fprintf(&b, "kind = %q\n", cellKind)
+		if cellModel != "" {
+			fmt.Fprintf(&b, "model = %q\n", cellModel)
+		}
 		b.WriteString("effort = \"high\"\n")
-		if kind == initRunnerPi {
+		if cellKind == initRunnerPi {
 			// pi needs no permission-bypass flag (verified live in this
 			// repository's own routing, tick gjk): `--approve` covers
 			// project-local file trust, and that is the whole of its
