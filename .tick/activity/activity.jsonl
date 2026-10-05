@@ -2306,3 +2306,4 @@
 {"ts":"2026-10-05T19:11:30.764427Z","tick":"ewd","action":"close","actor":"ticfac","epic":"43y","data":{"title":"A2's 'proven in a real run' has no evidence for either fault"}}
 {"ts":"2026-10-05T19:11:50.427486Z","tick":"lmt","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Durable runner activity reads worker.sqlite mtime, but pi-durable writes WAL"}}
 {"ts":"2026-10-05T19:25:49.248471Z","tick":"lmt","action":"note","actor":"ticfac","epic":"43y","data":{"note":"\n2026-10-05 21:25 - ticfac run epic-43y: lmt try 1 (run dispatch #51) merged into epic/43y as f4da3736f145; the integrated gate (go, ts) passed.","title":"Durable runner activity reads worker.sqlite mtime, but pi-durable writes WAL"}}
+{"ts":"2026-10-05T19:25:52.38771Z","tick":"lmt","action":"close","actor":"ticfac","epic":"43y","data":{"title":"Durable runner activity reads worker.sqlite mtime, but pi-durable writes WAL"}}
