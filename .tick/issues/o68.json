@@ -1,0 +1,14 @@
+{
+  "id": "o68",
+  "title": "Re-review 43y after its NOT READY review's blocking findings (round 2)",
+  "description": "Review the epic 43y again, AS INTEGRATED, now that the blocking findings of its NOT READY review are fixed. This is review round 2 of at most 2.\n\nThe previous review (66a, decision 50) judged it NOT READY: make the full Go suite green on the epic head (update the reconcile e2e fixtures to twa's pi-durable cloud binding) and record a real whole-container-destroy run of agent-faults-staging.ts for A2; its blocking finding(s): \"Full Go suite red: 7 reconcile e2e fixtures still declare cloud runner pi\"; \"A2's container-destroyed-mid-turn proof was never run on staging after a2l\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY at this round is not reviewed again by the run: it holds for a person with your reasons.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "role": "review",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T18:05:06Z",
+  "updated_at": "2026-10-05T18:05:06Z"
+}
