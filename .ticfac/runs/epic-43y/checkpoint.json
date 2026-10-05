@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 334,
-  "state": "running",
-  "reason": "l6n try 1 (run dispatch #50) is rejected (missing-result): it was stopped as stuck: it showed no activity — no transcript event, no tool-process CPU, no worktree or branch change — for the stuck window, was nudged, and showed none for as long again; there is no report at /Users/peterengelbrecht/.herdr/worktrees/ticfac/ticfac-run-epic-43y-tick-l6n-attempt-50/runs/epic-43y/l6n/RESULT-l6n.md. Its work was not lost: the work it had not committed is preserved at refs/ticfac/wip/run-epic-43y/tick-l6n/attempt-50 (commit edd24a732a88): a work-in-progress snapshot of an interrupted worktree — not evidence of completion, never merged — and `git diff refs/ticfac/wip/run-epic-43y/tick-l6n/attempt-50^ refs/ticfac/wip/run-epic-43y/tick-l6n/attempt-50` is everything the stop interrupted. A re-dispatch of this tick is still cut from the integration branch, not from this snapshot; what the next attempt gets is its prompt pointed at this ref",
-  "updated_at": "2026-10-05T19:43:38Z",
+  "sequence": 335,
+  "state": "dispatching",
+  "reason": "dispatching l6n as attempt 54",
+  "updated_at": "2026-10-05T19:43:45Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -223,7 +223,7 @@
     },
     {
       "tick_id": "l6n",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 50
     },
     {
