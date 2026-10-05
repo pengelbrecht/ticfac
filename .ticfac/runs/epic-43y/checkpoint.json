@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 295,
-  "state": "running",
-  "reason": "2oa is closed",
-  "updated_at": "2026-10-05T18:35:55Z",
+  "sequence": 296,
+  "state": "dispatching",
+  "reason": "dispatching i5e as attempt 48",
+  "updated_at": "2026-10-05T18:36:06Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -241,6 +241,10 @@
     },
     {
       "tick_id": "o68",
+      "state": "ready"
+    },
+    {
+      "tick_id": "h3c",
       "state": "ready"
     }
   ],
