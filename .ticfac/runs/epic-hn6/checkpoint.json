@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 293,
-  "state": "gating",
-  "reason": "running the integrated gate for gzv on 46d47ebc5020",
-  "updated_at": "2026-10-05T21:51:59Z",
+  "sequence": 294,
+  "state": "publishing",
+  "reason": "closing gzv behind the integrated gate on 46d47ebc5020",
+  "updated_at": "2026-10-05T21:54:53Z",
   "ticks": [
     {
       "tick_id": "v16",
