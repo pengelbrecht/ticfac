@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 369,
-  "state": "running",
-  "reason": "7oy is closed",
-  "updated_at": "2026-10-05T20:23:02Z",
+  "sequence": 370,
+  "state": "dispatching",
+  "reason": "dispatching 3c2 as attempt 59",
+  "updated_at": "2026-10-05T20:23:18Z",
   "ticks": [
     {
       "tick_id": "92k",
