@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 174,
-  "state": "gating",
-  "reason": "running the integrated gate for 3yx on 6fe4d083bb11",
-  "updated_at": "2026-10-05T14:04:31Z",
+  "sequence": 175,
+  "state": "publishing",
+  "reason": "closing 3yx behind the integrated gate on 6fe4d083bb11",
+  "updated_at": "2026-10-05T14:10:05Z",
   "ticks": [
     {
       "tick_id": "v16",
