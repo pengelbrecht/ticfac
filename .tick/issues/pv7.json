@@ -2,7 +2,7 @@
   "id": "pv7",
   "title": "Re-review hn6: its tree changed since its NOT READY final review (round 3)",
   "description": "Review the epic hn6 again, AS INTEGRATED: its final review (435, decision 26) judged it NOT READY at 36a5e925dc8f, after the 2 review rounds the run makes by itself, and the epic branch has changed since — now at 86a56135b8ea, with work that review never saw (a commit closed or pushed since, a person's fix among them perhaps). This is review round 3, and it is made only because the tree changed.\n\nThat review's reasons: the seven worker RESULT-*.md reports are still at epic/hn6's root because the integration merge's keepReportsOut undid 06t's deletion; land the removal (let keepReportsOut honour a report deletion, or commit it directly to epic/hn6) and test that the integrated head carries none; its blocking finding(s): \"Integration merge resurrects RESULT-*.md: 06t's removal never landed\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY here holds for a person with your reasons unless the tree changes again.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -10,5 +10,6 @@
   "role": "review",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-05T23:07:17Z",
-  "updated_at": "2026-10-05T23:07:17Z"
+  "updated_at": "2026-10-05T23:07:28.668732Z",
+  "started_at": "2026-10-05T23:07:28.668731Z"
 }

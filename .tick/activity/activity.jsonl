@@ -2529,3 +2529,4 @@
 {"ts":"2026-10-05T20:56:30.992501Z","tick":"m4t","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"metered pi dispatch depends on pi's stored Workers AI key being valid upstream"}}
 {"ts":"2026-10-05T21:54:55.629218Z","tick":"gzv","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-05 23:54 - ticfac run epic-hn6: gzv try 1 (run dispatch #38) merged into epic/hn6 as 46d47ebc5020; the integrated gate (go, ts) passed.","title":"the subprocess executor's pi runner has no gateway metering wiring"}}
 {"ts":"2026-10-05T21:54:55.900544Z","tick":"gzv","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"the subprocess executor's pi runner has no gateway metering wiring"}}
+{"ts":"2026-10-05T23:07:28.669048Z","tick":"pv7","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Re-review hn6: its tree changed since its NOT READY final review (round 3)"}}
