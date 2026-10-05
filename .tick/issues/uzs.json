@@ -1,0 +1,14 @@
+{
+  "id": "uzs",
+  "title": "Pipeline next step prints an empty command when the run's epic is unresolved",
+  "description": "mwt made the command builders refuse an empty operand, but two drill-in next-step sentences still concatenate the command unconditionally. For a run whose epic cannot be resolved they read '… —  takes it up', with the command missing. TestNoClearingCommandCarriesAnEmptyOperand does not cover them.\nevidence: internal/statusmodel/pipeline.go:620,636\n\nticfac run epic-hn6 created this tick by absorbing the finding aabcb9eb59c61590692b55f20f4e606a6fa1903d44c40b9801b470dd87a4d259 (reported by run-epic-hn6/tick-pv7/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/aabcb9eb59c61590692b55f20f4e606a6fa1903d44c40b9801b470dd87a4d259.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-pv7/attempt-42",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T23:22:21Z",
+  "updated_at": "2026-10-05T23:22:21Z"
+}
