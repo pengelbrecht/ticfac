@@ -26,15 +26,15 @@ func testAmendment(key string) Amendment {
 	return Amendment{
 		SchemaVersion: SchemaVersion,
 		Key:           key,
-		Source:         "ticfac-worker",
-		EpicID:         "qeu",
-		Field:          AmendmentFieldNotes,
-		Value:          "tick b1: the PR-review boot is excepted from A1 on this record",
-		ProposedBy:     "b1",
-		Attempt:        1,
-		ProposedAt:     "2026-10-05T18:25:00Z",
-		Status:         AmendmentPending,
-		Provenance:     p,
+		Source:        "ticfac-worker",
+		EpicID:        "qeu",
+		Field:         AmendmentFieldNotes,
+		Value:         "tick b1: the PR-review boot is excepted from A1 on this record",
+		ProposedBy:    "b1",
+		Attempt:       1,
+		ProposedAt:    "2026-10-05T18:25:00Z",
+		Status:        AmendmentPending,
+		Provenance:    p,
 	}
 }
 

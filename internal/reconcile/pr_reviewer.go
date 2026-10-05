@@ -46,7 +46,7 @@ func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, finding
 	if len(undecided) > 0 {
 		items = append(items, fmt.Sprintf("%d worker-proposed amendment(s) to the epic's own record are %s — "+
 			"the operator's word on what a worker wrote to the record the acceptance is scored from, listed with "+
-				"their full text under the amendments below.", len(undecided), strings.Join(undecided, ", ")))
+			"their full text under the amendments below.", len(undecided), strings.Join(undecided, ", ")))
 	}
 	if final >= 0 && reviewVerdictOf(decisions[final].Response) == subprocess.ReviewVerdictNotReady {
 		items = append(items, "**The final review judged the epic NOT READY.** Read its verdict below before the "+

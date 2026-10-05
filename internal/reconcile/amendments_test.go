@@ -284,7 +284,7 @@ func TestThePRBodyCarriesTheAmendments(t *testing.T) {
 		"never the operator's word",
 	} {
 		if !strings.Contains(body, want) {
-			t.Errorf("the PR body does not carry %q — the PR is where the operator decides, and a section " +
+			t.Errorf("the PR body does not carry %q — the PR is where the operator decides, and a section "+
 				"that omits the worker's words sends the decision against prose nobody scored", want)
 		}
 	}

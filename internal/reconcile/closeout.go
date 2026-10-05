@@ -834,8 +834,8 @@ func (r *Reconciler) gateCloseoutOnAmendments(tick string, prNumber int) (*Refus
 		"%d amendment(s) a worker proposed to the epic %s's own record are still waiting for the operator's word, "+
 			"and the close-out does not hand over behind one (tick 7sn): a worker's words on the record the acceptance "+
 			"is scored from are a claim, never the operator's word — %s. Decide each with `ticfac amendments %s` (the "+
-			"listing carries each one's key and full text) and `ticfac amendment %s <key> --confirm|--reject --by <who>`: "+
-			"confirm lets the amendment stand as the operator's own, reject disowns it. Then run the epic again under "+
+			"listing carries each one's key and full text) and `ticfac amendment %s <key> --confirm --by <who>` — or the "+
+			"same command with --reject to disown it. Then run the epic again under "+
 			"this run id: the close gate re-reads the record, it does not trust the admission's answer. The records "+
 			"are keys %s under .ticfac/runs/%s/amendments/ on %s%s",
 		len(undecided), r.opts.EpicID, strings.Join(named, "; "), r.opts.EpicID, r.opts.EpicID,

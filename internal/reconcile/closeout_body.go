@@ -265,9 +265,9 @@ func (r *Reconciler) composePRBody(readinessSection string) (string, int, error)
 	if len(amendments) == 0 {
 		body.WriteString("No worker proposed an amendment to the epic's own record.\n")
 	} else {
-		body.WriteString("Every note a worker proposed to the epic's own record — the one the acceptance is scored "+
-			"from — applied by the run, and waiting for or carrying the operator's decision. A worker's words on "+
-			"it are a claim, never the operator's word: the close-out does not hand over while one is undecided "+
+		body.WriteString("Every note a worker proposed to the epic's own record — the one the acceptance is scored " +
+			"from — applied by the run, and waiting for or carrying the operator's decision. A worker's words on " +
+			"it are a claim, never the operator's word: the close-out does not hand over while one is undecided " +
 			"(confirm lets it stand as the operator's own, reject disowns it).\n")
 		for _, amendment := range amendments {
 			switch amendment.Status {

@@ -40,6 +40,7 @@ func TestARunThatStoppedHoldingForAPersonExitsHeld(t *testing.T) {
 		reconcile.RefusedLandReviewNotReady,
 		reconcile.RefusedUnaddressed,
 		reconcile.RefusedRejectedWork,
+		reconcile.RefusedEpicAmendmentUnconfirmed,
 	} {
 		stopped := &reconcile.Result{
 			State: runstate.StateFailed,
