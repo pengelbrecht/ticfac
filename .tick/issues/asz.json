@@ -1,0 +1,13 @@
+{
+  "id": "asz",
+  "title": "A worker can still embed an exception in an acceptance item's wording",
+  "description": "The amendment record covers only notes on the epic (the 8em channel). A worker-proposed acceptance_criteria or description edit on the epic passes the drop rule as long as it keeps every [A\u003cn\u003e] mark, so an exception can be smuggled into an item's own words (\"... runs on pi-durable (the PR review is excepted)\") without filing a confirmation. Widening AmendmentFields and the filing to the epic's other prose fields would close that channel; it was left out of this tick deliberately, to keep the delivered mechanism the tick's exact shape.\nevidence: internal/exec/subprocess/tracker_edits.go DroppedAcceptanceItems (guards dropped items only); internal/runstate/amendments.go AmendmentFields (notes only)\n\nticfac run epic-43y filed this backlog tick from the finding a5fa1d295368f4fd6dc9f937c80296da6cb25251be8f398a721132dd6383b640 (reported by run-epic-43y/tick-7sn/attempt-45): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/a5fa1d295368f4fd6dc9f937c80296da6cb25251be8f398a721132dd6383b640.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-7sn/attempt-45",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T19:39:08Z",
+  "updated_at": "2026-10-05T19:39:08Z"
+}
