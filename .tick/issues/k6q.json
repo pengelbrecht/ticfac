@@ -2,6 +2,7 @@
   "id": "k6q",
   "title": "fang's help path still queries the terminal: --help ~9s on a silent pty",
   "description": "fang@v1.0.0's helpFunc (fang.go:132) calls mustColorscheme -\u003e lipgloss.HasDarkBackground before rendering any help, so every `--help`/`help` invocation pays the OSC 11/DA1 query pair on a terminal (~2s of timeout each way on one that does not answer), stacked on finding 1's init cost: `script -q /dev/null ticfac --help` = 9.0s. Not a stall — no key reader holds stdin on the help path — but the same query machinery, out of tick jmf's named scope (the exit path), so it is reported rather than folded in.\nevidence: fang@v1.0.0/fang.go:132 (helpFunc -\u003e mustColorscheme, same call as fang.go:175); command: time script -q /dev/null ticfac --help = 9.0s, OSC 11 bytes visible on the wire\n\nticfac run epic-hn6 filed this backlog tick from the finding ac1bf90dd479590fded813fff137a809bb1d45e5d5600eaae09c67c364a01ae3 (reported by run-epic-hn6/tick-jmf/attempt-33): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/ac1bf90dd479590fded813fff137a809bb1d45e5d5600eaae09c67c364a01ae3.json on the run branch.",
+  "notes": "2026-10-05 19:42 - ticfac run epic-hn6: created by absorbing finding ac1bf90dd479590fded813fff137a809bb1d45e5d5600eaae09c67c364a01ae3 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-hn6/absorptions/ac1bf90dd479590fded813fff137a809bb1d45e5d5600eaae09c67c364a01ae3.json on epic/hn6, and it says: the classifier put 0.00 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-hn6/tick-jmf/attempt-33",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-05T17:42:24Z",
-  "updated_at": "2026-10-05T17:42:24Z"
+  "updated_at": "2026-10-05T17:42:29.877914Z"
 }
