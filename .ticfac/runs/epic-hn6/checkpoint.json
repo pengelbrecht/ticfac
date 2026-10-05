@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 209,
-  "state": "running",
-  "reason": "CI on the epic PR #219 is pending on the head that includes the close-out's own commits; the close-out of hn6 is held",
-  "updated_at": "2026-10-05T16:15:28Z",
+  "sequence": 210,
+  "state": "publishing",
+  "reason": "closing qjl behind the integrated gate on aadd768b55e3",
+  "updated_at": "2026-10-05T16:20:39Z",
   "ticks": [
     {
       "tick_id": "v16",
