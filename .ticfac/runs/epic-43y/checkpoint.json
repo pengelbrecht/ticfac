@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 444,
-  "state": "failed",
-  "reason": "j2k did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: no PR exists for epic/43y (→ main) and opening one failed, so the close-out's precondition is unmet and cannot be satisfied by this run: GitHub answered 422 for POST /repos/pengelbrecht/ticfac/pulls: Validation Failed. The rule the repository declares is: - Epic integration goes through a PR + CI gate: the orchestrator pushes the epic branch and opens a PR; the epic close-out may not complete until CI is green on that PR. No direct merges of epic branches to the default branch other than the run's own: **the run merges its own PR** once it is ready — the base branch folded in with tk's merge drivers, the integrated gate green on the fold, CI green on the PR head — as a merge commit, then verifies CI on the default branch. This repository opts in for development velocity (decided 2026-09-28; reversible by deleting this sentence): ticfac has no users yet and moves faster when an epic lands the moment it is ready. The product default — the rule `ticfac init` writes for every other repository — is the opposite: the run keeps the PR ready (re-folding, re-gating and re-running CI whenever the base moves) and a person, with their own agent, reviews and merges it.. This incarnation was reached after 1 AUTOMATIC CONTINUATION(S) of this run, each one an intervention nobody typed: the run did not reach here unattended",
-  "updated_at": "2026-10-05T22:26:22Z",
+  "sequence": 445,
+  "state": "gating",
+  "reason": "running the integrated gate for 4w7 on 8d11e21d70b1",
+  "updated_at": "2026-10-05T23:12:16Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -302,7 +302,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/43y",
-    "source_sha": "9e924ef811dbb448f32ae4c495a0998fac951723",
+    "source_sha": "8d11e21d70b134e75586646fd06e56841b8c1791",
     "integration_ref": "refs/heads/epic/43y",
     "phase": "worker",
     "executor": null,
