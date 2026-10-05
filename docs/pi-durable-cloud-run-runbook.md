@@ -43,10 +43,14 @@ ticfac run hn6 --cloud        # hn6 is the operator's named candidate, or the ne
 
 The command pushes the current branch, submits to the factory, attaches the
 live view (Ctrl-C detaches without stopping; run it again to re-attach or,
-once finished, to resume). Every worker of the run boots a factory sandbox
-container on pi-durable: its conversation runs in the factory's WorkerAgent
-Durable Object, its tools in the container, its substrate recorded per
-dispatch on the run branch.
+once finished, to resume). The run's implement and closeout workers boot
+factory sandbox containers as hosted WorkerAgents on pi-durable: the
+conversation in the factory's Durable Object, the tools in the container,
+the substrate recorded per dispatch on the run branch. Two boots are not
+hosted, by design: the orchestrator container execs `ticfac run-epic`
+itself, and the review — "the one cloud boot that still runs a CLI harness
+in its container" (run-workflow.ts, tick jhp) — runs omp on GLM through
+its own floor (`reviewHarness`), whatever the overlay's review cell names.
 
 ## What "observed" means for [A4]'s cloud half
 
@@ -57,9 +61,15 @@ The cloud half is **observed** — not predicted — when all three hold:
    the branch's cloud routing resolved to shipped kinds.
 2. The run completed: `run_state: completed` in its `ticfac.run-epic.v1`
    document, every tick closed behind the integrated gate.
-3. Every dispatch of the run records its workers on `pi-durable` containers
-   (`harness: pi-durable` in the attempt records) — a cloud run whose workers
-   ran `omp` or `claude` completes fine and observes nothing about [A4].
+3. The run's implement (and closeout) dispatches record their workers on
+   `pi-durable` containers (`harness: pi-durable` in the attempt records) —
+   a cloud run whose workers ran `omp` or `claude` completes fine and
+   observes nothing about [A4]. The review's omp boot is the designed
+   exception above, not a gap in the observation: what [A4] must show is
+   the WORKERS hosted. (Whether the review's CLI boot satisfies [A1]'s
+   "every worker … runs on pi-durable" is a question for the epic's
+   close-out, not for this runbook — the review's floor is a recorded
+   design decision inside the epic, tick jhp.)
 
 Record the result beside qdg's local-half record (a doc under `docs/`, plus
 the run's artifact space), and note in the epic's tracker record that [A4]'s
