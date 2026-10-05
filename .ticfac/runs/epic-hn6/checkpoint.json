@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 186,
-  "state": "gating",
-  "reason": "running the integrated gate for g94 on 1427be6fc608",
-  "updated_at": "2026-10-05T14:30:15Z",
+  "sequence": 187,
+  "state": "publishing",
+  "reason": "closing g94 behind the integrated gate on 1427be6fc608",
+  "updated_at": "2026-10-05T14:32:52Z",
   "ticks": [
     {
       "tick_id": "v16",
