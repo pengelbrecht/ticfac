@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "key": "856a28cb7cf53213290459d6ba92624e2267a6325e76ea0f78bacb5076f59fe9",
+  "tick_id": "qzg",
+  "gating": false,
+  "basis": "rule",
+  "reason": "absorbing it would be the 4th absorption of ONE chain that already carries 3 and the bound is 3 (tick qjj), so it is deferred past the absorption bound: a backlog tick with an owner, outside the epic, and the run carries on rather than recurse past the bound or halt for a person. Its verdict was that it gates done item A2 (basis predicted) — the bound wins, and the close-out and the final review see the deferral and can judge it. The chain: tick xd3 reported finding b3f0b2e963560987fceb76e329d0aa7b93a8e47fa9a5b9dcdccb5ecacd899c46 (\"A restored cloud workspace re-runs the repository's setup\"), gates done item A1 and became tick i3h; tick i3h reported finding be4be4971ac851baae246bde6913cb4c4c650552f4905b85af21597c96d6fdc6 (\"Prove the restore's setup survives a real dependency install on staging\"), gates done item A2 and became tick cni; tick cni reported finding 71c6783fce9ab0f9c9eb91e98c285f638195ab6f3873222708b417aa71059e3b (\"A restore fired through the nonce path is invisible in the log\"), gates done item A2 and became tick dbi",
+  "placement": "past-bound",
+  "decided_at": "2026-10-05T15:37:38Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "dbi",
+    "attempt": 38,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "694f635163fda2e9d881d81ca1204ada877ad0c5",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:4863fa24ea2a0a6bf379e6f9bf234b6d931e19998ea12f23a15da4314eb3ea94",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}
