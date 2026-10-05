@@ -5,6 +5,7 @@ import contract from "../../contracts/status-model.json";
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
 import { insertRun } from "../src/db";
 import { issueRunToken } from "../src/gateway";
+import { epicCompleted, publishRunEvents } from "../src/run-events";
 import { MAX_SNAPSHOT_BYTES } from "../src/status";
 import { STATUS_RELAY_PATH } from "../src/status-relay";
 
@@ -812,5 +813,131 @@ describe("a cloud run renders the model its own orchestrator pushed (hn6 h7w)", 
     );
     // The CI line, per check on the PR head, with the running check's age.
     expect(body).toContain("CI #98 go ◐ 6m · ts ✓");
+  });
+});
+
+describe("the composed row answers why from the run's own last word (hn6 3qg)", () => {
+  // Each test gets a project of its own, so the room's forwarded tail holds
+  // only what that test publishes: the room DO is named by the project, its
+  // run_event rows outlive the D1 rows afterEach clears, and a test's last
+  // word published for one run must not answer another test's row.
+  const STOP_WORDS = "the operator stopped the run: stop requested";
+
+  /** One cloud run row, its own project so the room's tail can be matched. */
+  async function whyRun(
+    project: string,
+    runID: string,
+    epic: string,
+    state: string,
+  ): Promise<void> {
+    await insertRun(env.DB, {
+      run_id: runID,
+      project,
+      epic,
+      base_sha: "5".repeat(40),
+      requested_by: "operator@example.com",
+      state,
+      started_at: new Date().toISOString(),
+      ended_at: state === "running" ? null : new Date().toISOString(),
+      cost_usd: 0,
+      cost_source: null,
+      trace_id: null,
+      credential_grade: "write",
+    });
+  }
+
+  /** The run_progress row finalize stamps beside a terminal state. */
+  async function branchVerdict(runID: string): Promise<void> {
+    await env.DB.prepare(
+      "INSERT INTO run_progress (run_id, progress, detail, recorded_at) VALUES (?, ?, ?, ?)",
+    )
+      .bind(
+        runID,
+        "none",
+        "no branch on origin changed while the run was alive: nothing was committed, pushed, or recorded on the tracker",
+        new Date().toISOString(),
+      )
+      .run();
+  }
+
+  /** The run's own last word, published the way finalize publishes it. */
+  async function lastWord(
+    project: string,
+    runID: string,
+    epic: string,
+    state: "completed" | "stopped" | "failed",
+    detail: string,
+  ): Promise<void> {
+    await publishRunEvents(env, project, [
+      epicCompleted({
+        epic,
+        run_id: runID,
+        state,
+        detail,
+        spend: { ok: true, cost_usd: 0, requests: 1 },
+      }),
+    ]);
+  }
+
+  it("reads a stopped run's why from its own last word in the room's tail, not the progress verdict", async () => {
+    // The two honest records disagreed (tick 3qg): the watch frame read the
+    // run's own last word from its feed while the composed row read
+    // run_progress's durable-evidence branch verdict. The run's terminal
+    // line — what finalize publishes to the room and to the feed — is the
+    // truer why: the same sentence both renderers must now spell.
+    const project = "ticks-test/phone-why-own";
+    const runID = "run_why_stopped";
+    await whyRun(project, runID, "3qg", "stopped");
+    await branchVerdict(runID);
+    await lastWord(project, runID, "3qg", "stopped", STOP_WORDS);
+
+    const body = await (await page(await login())).text();
+    // The verdict: the state word and the run's own why, the same sentence
+    // the watch frame's stopped summary reads.
+    expect(body).toContain(`<span class="dot"></span>stopped: ${STOP_WORDS}</span>`);
+    // Not the branch comparison — that stays run_progress's own verdict,
+    // not this run's why.
+    expect(body).not.toContain("stopped: no branch on origin changed");
+    // The needs-you sentence carries the same why, with the person's resume.
+    expect(body).toContain(
+      `needs you: run ${runID} is stopped: ${STOP_WORDS} — ticfac run 3qg --cloud`,
+    );
+  });
+
+  it("never answers an older row's why with a NEWER run's words", async () => {
+    // A stopped run and a completed re-run of the same epic in one project:
+    // the room's tail holds both epics' events, newest first, and only the
+    // event whose terminal state matches the row's own may answer it.
+    const project = "ticks-test/phone-why-newer";
+    const stoppedID = "run_why_older_stopped";
+    await whyRun(project, stoppedID, "3qg", "stopped");
+    const newerID = "run_why_newer_completed";
+    await whyRun(project, newerID, "3qg", "completed");
+    // The newer run's last word lands AFTER the stopped one, so it is the
+    // first event in the room's newest-first tail.
+    await lastWord(project, stoppedID, "3qg", "stopped", STOP_WORDS);
+    await lastWord(project, newerID, "3qg", "completed", "the epic is ready to merge");
+
+    const body = await (await page(await login())).text();
+    // The stopped row keeps its own why...
+    expect(body).toContain(`stopped: ${STOP_WORDS}`);
+    // ...and never the completed re-run's words.
+    expect(body).not.toContain("stopped: the epic is ready to merge");
+  });
+
+  it("keeps run_progress's verdict where the room holds nothing the run said", async () => {
+    // A stop the endpoint recorded directly — no finalize, so no last word
+    // anywhere: the room's tail has nothing, and the honest why is the
+    // one the factory's own records state.
+    const project = "ticks-test/phone-why-silent";
+    const runID = "run_why_silent_stopped";
+    await whyRun(project, runID, "3qg", "stopped");
+    await branchVerdict(runID);
+
+    const body = await (await page(await login())).text();
+    expect(body).toContain(
+      "stopped: no branch on origin changed while the run was alive: nothing was committed, pushed, or recorded on the tracker",
+    );
+    expect(body).not.toContain(`stopped: ${STOP_WORDS}`);
   });
 });
