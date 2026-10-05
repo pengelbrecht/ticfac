@@ -2280,3 +2280,4 @@
 {"ts":"2026-10-05T18:05:32.028667Z","tick":"2oa","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Nonce replay relies on ensureGuard marking FactorySandbox ready first"}}
 {"ts":"2026-10-05T18:05:52.441109Z","tick":"4s2","action":"start","actor":"ticfac","epic":"43y","data":{"title":"First clean wip round is recorded as pushed without a push; commits can be lost"}}
 {"ts":"2026-10-05T18:06:13.737752Z","tick":"7sn","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Cloud PR-review omp exception to A1 was recorded by a worker, not the operator"}}
+{"ts":"2026-10-05T18:06:34.714652Z","tick":"enb","action":"start","actor":"ticfac","epic":"43y","data":{"title":"Full Go suite red: 7 reconcile e2e fixtures still declare cloud runner pi"}}
