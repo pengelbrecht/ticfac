@@ -105,6 +105,15 @@ export {
   watchAttemptEvents,
 } from "./host/cloud.js";
 export {
+  CONTAINER_CPU_COMMAND,
+  checkEveryMs,
+  DEFAULT_STUCK_MS,
+  parseContainerCpuMs,
+  type StuckSignals,
+  type StuckWatchState,
+  stuckPrompt,
+} from "./host/stuck-watch.js";
+export {
   type BootHandoff,
   HARNESS_STATUS_DONE,
   HARNESS_STATUS_UNANSWERED,

@@ -74,6 +74,19 @@ import {
   type WorkspaceGit,
   workspaceCheckpointExtension,
 } from "../workspace/checkpoints.js";
+import {
+  CONTAINER_CPU_COMMAND,
+  checkEveryMs,
+  DEFAULT_STUCK_MS,
+  decideStuck,
+  observeCpu,
+  parseContainerCpuMs,
+  type StuckSignals,
+  type StuckStep,
+  type StuckWatchState,
+  stuckEvidence,
+  stuckPrompt,
+} from "./stuck-watch.js";
 
 // ------------------------------------------------------------ constants ---
 
@@ -148,6 +161,15 @@ export type WorkerAttemptSpec = {
   readonly baseSha: string;
   /** The dispatch's harness budget, in ms; absent is unbounded. */
   readonly wallMs?: number;
+  /**
+   * The stuck watch's window, in ms (tick xba): how long the attempt may
+   * show no activity — no log line, no container CPU — before the watch
+   * nudges it with a steer, and again before it stops it. Absent is the
+   * default window (stuck-watch.ts `DEFAULT_STUCK_MS`, the local watch's
+   * own); zero turns the watch off (the run's negative `StuckAfter`, which
+   * the dispatch door spells as zero because it refuses negatives).
+   */
+  readonly stuckMs?: number;
   /** How the container is booted (lifetime, size, the run's image pin). */
   readonly boot?: SandboxBootOptions;
 };
@@ -289,6 +311,9 @@ export class WorkerAttemptHost {
   private driving: Promise<WorkerAttemptRecord> | undefined;
   private reclaimed = false;
   private wallFired = false;
+  /** When this life's log last grew — the stuck watch's transcript signal. */
+  private lastLogAt: number | null = null;
+  private stuckStopped = false;
 
   constructor(private readonly deps: WorkerAttemptDeps) {
     this.protocol = deps.protocol ?? WORKER_BOOT_PROTOCOL;
@@ -530,6 +555,13 @@ export class WorkerAttemptHost {
             Math.max(0, record.deadlineAt - this.now()),
             BACKGROUND_CONTEXT,
           );
+    // The stuck watch (tick xba), armed beside the wall for the
+    // conversation's life in THIS host: quiet for the window on every
+    // signal → one nudge, a steer; still quiet a window past it → the
+    // stop, which is the wall's own mechanism — the conversation aborted,
+    // the finish phase run with the unanswered status, the run's retry
+    // ladder (not the wall clock) taking it from there.
+    const stuck = this.armStuckWatch(live, record);
     let settled: Awaited<ReturnType<Submission["wait"]>>;
     try {
       settled = await submission.wait(BACKGROUND_CONTEXT);
@@ -537,6 +569,7 @@ export class WorkerAttemptHost {
       // the run is over only when the conversation is idle.
       await live.conversation.waitForIdle(BACKGROUND_CONTEXT);
     } finally {
+      stuck.cancel();
       wall?.cancel();
     }
     if (this.reclaimed) return (await this.deps.records.load()) ?? record;
@@ -549,7 +582,9 @@ export class WorkerAttemptHost {
     await this.say(
       settled.status === "done"
         ? "the conversation settled done"
-        : `the conversation settled unanswered (${settled.reason ?? "no reason"}); finishing with status ${status}`,
+        : this.stuckStopped
+          ? `the conversation was stopped as stuck and settled unanswered; finishing with status ${status}`
+          : `the conversation settled unanswered (${settled.reason ?? "no reason"}); finishing with status ${status}`,
     );
     await this.close();
     return this.save({
@@ -771,6 +806,111 @@ export class WorkerAttemptHost {
     return registry;
   }
 
+  // ----------------------------------------------- the stuck watch ---
+
+  /**
+   * Arms this conversation's stuck watch (tick xba; the policy and the
+   * signals are stuck-watch.ts). The look cadence is a tenth of the
+   * window; one look at a time, so a slow door call cannot stack looks;
+   * the watch dies with the conversation it watches, and a host life that
+   * opens the conversation again arms a fresh one — the same reset the
+   * local supervisor's watch takes with its process.
+   */
+  private armStuckWatch(
+    live: { conversation: Conversation },
+    record: WorkerAttemptRecord,
+  ): { cancel: () => void } {
+    const windowMs = record.spec.stuckMs ?? DEFAULT_STUCK_MS;
+    if (!(windowMs > 0)) return { cancel: () => {} };
+    const startedAt = Date.parse(record.startedAt);
+    const state: StuckWatchState = {
+      // The baseline is the attempt's start, the local watch's own rule
+      // (activity.go): nothing the attempt did can be older, so a host
+      // life that opens a long-quiet conversation does not reset the
+      // window — and its own "a new host life resumed" line is activity
+      // that says the conversation is alive.
+      firstSeenAt: Number.isFinite(startedAt) ? Math.min(startedAt, this.now()) : this.now(),
+      cpuMarkMs: 0,
+      cpuMarkAt: null,
+      nudgedAt: null,
+      steers: 0,
+    };
+    let looking = false;
+    let stopped = false;
+    const timer = setInterval(() => {
+      if (looking || stopped) return;
+      looking = true;
+      void this.stuckLook(live, state, windowMs)
+        .then((step: StuckStep) => {
+          // The stop is terminal for the watch as for the attempt: no look
+          // past it, so a stopped attempt is neither nudged nor stopped twice.
+          if (step === "stop") {
+            stopped = true;
+            clearInterval(timer);
+          }
+        })
+        .catch((error: unknown) => {
+          this.report(error);
+        })
+        .finally(() => {
+          looking = false;
+        });
+    }, checkEveryMs(windowMs));
+    return {
+      cancel: () => {
+        stopped = true;
+        clearInterval(timer);
+      },
+    };
+  }
+
+  /** One look: the signals, the decision, and what the decision does. */
+  private async stuckLook(
+    live: { conversation: Conversation },
+    state: StuckWatchState,
+    windowMs: number,
+  ): Promise<StuckStep> {
+    let cpuMs: number | null = null;
+    try {
+      const out = await this.deps.door.run(CONTAINER_CPU_COMMAND, {}, { maxBytes: 4096 });
+      if (out.ready) cpuMs = parseContainerCpuMs(out.output);
+    } catch (error) {
+      // A container that cannot be asked is a signal that cannot be read —
+      // named in the evidence, never decided on.
+      this.report(error);
+    }
+    if (cpuMs !== null) observeCpu(state, cpuMs, this.now(), windowMs);
+    const signals: StuckSignals = { lastLogAt: this.lastLogAt, cpuRead: cpuMs !== null };
+    const step = decideStuck(state, signals, this.now(), windowMs);
+    if (step === "none") return step;
+    const evidence = stuckEvidence(state, signals, this.now());
+    if (step === "nudge") {
+      state.steers += 1;
+      // The nudge is a STEER (the local watch's durable-runner rule, tick
+      // hpk): placed after the running tool round, joining the running
+      // work — and each is its own idempotent submission, so a retry of an
+      // unacknowledged nudge cannot place the message twice. A nudge that
+      // could not be delivered is not counted: the next look re-attempts
+      // it, exactly as the local watch re-delivers through herdr.
+      try {
+        await this.steer(stuckPrompt(evidence, windowMs), `ticfac-stuck-nudge-${state.steers}`);
+        state.nudgedAt = this.now();
+      } catch (error) {
+        this.report(error);
+      }
+      return "nudge";
+    }
+    // The stop: the wall's own mechanism, so the finish phase still runs —
+    // the ledger, the salvage, the report, the push — and the attempt
+    // settles failed as the run's retry ladder expects, never as a reclaim.
+    this.stuckStopped = true;
+    await this.say(`the attempt appears stuck and is being stopped: ${evidence}`);
+    await live.conversation.abort(BACKGROUND_CONTEXT).catch((error: unknown) => {
+      this.report(error);
+    });
+    return "stop";
+  }
+
   // ------------------------------------------------------------- helpers ---
 
   /**
@@ -854,6 +994,7 @@ export class WorkerAttemptHost {
   }
 
   private async say(line: string): Promise<void> {
+    this.lastLogAt = this.now();
     try {
       await this.deps.log(`ticfac-harness: ${line}\n`);
     } catch (error) {
