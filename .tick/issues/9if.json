@@ -2,6 +2,7 @@
   "id": "9if",
   "title": "Inject [A2]'s two faults into that cloud run and record them",
   "description": "[A2] says 'proven on staging and in a real run'. Staging is observed (harness/proof/README.md, the jpy pass, 493 s). The real-run half has never been recorded: the epic note from ewd (2026-10-05 21:08) scores it predicted, with the runbook as owner. In the post-merge cloud run, fire one factory deploy mid-tool and delete one attempt container by exact name mid-turn, then check the ticfac-harness log lines the runbook pins (internal/cli/runbook_fault_evidence_test.go). This is the operator's to start: it touches the live factory.\nevidence: docs/pi-durable-cloud-run-runbook.md:87-192 (the two faults, their observation criteria, the recording step)\n\nticfac run epic-43y created this tick by absorbing the finding 3dad09f7eef3925c20df07e055e54b68582258af2c25dab9d09ba33aaf295e14 (reported by run-epic-43y/tick-j2k/attempt-69): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/3dad09f7eef3925c20df07e055e54b68582258af2c25dab9d09ba33aaf295e14.json on the run branch.",
+  "notes": "2026-10-06 01:34 - ticfac run epic-43y: created by absorbing finding 3dad09f7eef3925c20df07e055e54b68582258af2c25dab9d09ba33aaf295e14 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-43y/absorptions/3dad09f7eef3925c20df07e055e54b68582258af2c25dab9d09ba33aaf295e14.json on epic/43y, and it says: the classifier put 0.83 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A2: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -10,5 +11,5 @@
   "discovered_from": "run-epic-43y/tick-j2k/attempt-69",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T23:34:37Z",
-  "updated_at": "2026-10-05T23:34:37Z"
+  "updated_at": "2026-10-05T23:34:44.724076Z"
 }
