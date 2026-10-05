@@ -29,8 +29,10 @@ import (
 // run of it executes on, routes every job — so a config PR like #146 fails CI
 // instead of stopping a live run. And in the cloud every one of those jobs,
 // and the review cell at every tier any file declares for it (the common
-// file's claude frontier included), resolves to pi on a Workers AI model:
-// nothing in the cloud runs claude.
+// file's claude frontier included), resolves to the durable harness on a
+// Workers AI model, under the hosted name the sandbox image boots it by
+// (cloudRunnerIsDurable): nothing in the cloud runs claude, and nothing in
+// the cloud is told a kind its container refuses.
 func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 	t.Parallel()
 	root, err := contracts.RepoRoot()
@@ -58,9 +60,9 @@ func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 			if tc.substrate != runconfig.SubstrateCloud {
 				continue
 			}
-			if job.Profile.Runner != "pi" || !strings.HasPrefix(job.Profile.Model, "cloudflare-workers-ai/") {
-				t.Errorf("cloud %s at tier %q routes to %s/%s, want pi on a Workers AI model",
-					job.Role, job.Tier, job.Profile.Runner, job.Profile.Model)
+			if !cloudRunnerIsDurable(job.Profile.Runner) || !strings.HasPrefix(job.Profile.Model, "cloudflare-workers-ai/") {
+				t.Errorf("cloud %s at tier %q routes to %s/%s, want the hosted %s on a Workers AI model",
+					job.Role, job.Tier, job.Profile.Runner, job.Profile.Model, profile.HostedDurableHarness)
 			}
 		}
 		for _, role := range profile.EveryRole() {
@@ -81,10 +83,120 @@ func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 			if err != nil {
 				continue // a tier the cloud does not declare is refused, never run
 			}
-			if p.Runner != "pi" || !strings.HasPrefix(p.Model, "cloudflare-workers-ai/") {
-				t.Errorf("cloud %s at tier %q resolves to %s/%s: claude (or anything off Workers AI) leaked into the cloud",
+			if !cloudRunnerIsDurable(p.Runner) || !strings.HasPrefix(p.Model, "cloudflare-workers-ai/") {
+				t.Errorf("cloud %s at tier %q resolves to %s/%s: claude, anything off Workers AI, or a kind the container refuses leaked into the cloud",
 					role, tier, p.Runner, p.Model)
 			}
+		}
+	}
+}
+
+// cloudRunnerIsDurable reports whether a resolved cloud profile finally
+// runs the durable harness under the one name a Cloudflare dispatch can bind
+// (epic 43y, tick twa): profile.HostedDurableHarness, the kind the sandbox
+// image hosts — a container told any other kind dies at boot with "unknown
+// harness kind" (tick jhp). A runner table may spell the harness `pi` (the
+// local executors' name for it since tick hpk, and this repository's cloud
+// overlay's), and the resolution binds the hosted name for every dispatch
+// into Cloudflare, so the guard pins what the container is TOLD rather than
+// what a cell spells: the pin used to accept `pi` here, which certified the
+// very binding that killed every worker container at boot.
+func cloudRunnerIsDurable(kind string) bool {
+	return kind == profile.HostedDurableHarness
+}
+
+// short: writes two small TOML files to a temp directory and resolves profiles
+// in memory; no harness, no git.
+//
+// Either spelling of the overlay, in miniature (epic 43y, tick twa): when
+// .tick/runners.cloud.toml's cells name the hosted kind `pi-durable` rather
+// than the runner table's `pi` this repository's overlay carries, the
+// routing check still routes every job, and every one of them resolves the
+// hosted kind — the same final runner the `pi` spelling now resolves to
+// (TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate). So the
+// overlay's spelling is the operator's to choose, and neither choice can
+// turn the gate red or tell a container a kind it refuses.
+func TestTheCloudGuardAcceptsTheOverlayNamingTheHostedKind(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	config := filepath.Join(dir, "runners.toml")
+	writeTOML(t, config, `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.review]
+kind = "claude"
+model = "opus"
+
+[roles.closeout]
+kind = "claude"
+model = "opus"
+`)
+	// The other spelling: the same cells the repository's own
+	// .tick/runners.cloud.toml carries today, with every kind cell naming
+	// the hosted kind instead of the runner table's `pi`.
+	writeTOML(t, filepath.Join(dir, "runners.cloud.toml"), `version = 2
+
+[roles.implement]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.implement.tiers.economy]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
+
+[roles.implement.tiers.strong]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[tier_policy]
+default = "economy"
+ceiling = "strong"
+step = 2
+
+[roles.review]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.review.tiers.strong]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.closeout]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+`)
+	jobs, err := CheckRouting(profile.EmbeddedCloud, config, runconfig.SubstrateCloud)
+	if err != nil {
+		t.Fatalf("the flipped cloud routing does not route: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, job := range jobs {
+		seen[job.Role] = true
+		if !cloudRunnerIsDurable(job.Profile.Runner) || !strings.HasPrefix(job.Profile.Model, "cloudflare-workers-ai/") {
+			t.Errorf("cloud %s at tier %q routes to %s/%s: the guard refused the overlay's own naming of the durable harness",
+				job.Role, job.Tier, job.Profile.Runner, job.Profile.Model)
+		}
+	}
+	for _, role := range profile.EveryRole() {
+		if !seen[role] {
+			t.Errorf("%s was never routed by the check", role)
+		}
+	}
+	// The point, stated: the base implement job names the HOSTED kind — the
+	// one the sandbox image hosts.
+	for _, job := range jobs {
+		if job.Role == "implement-tick" && job.Tier == "" && job.Profile.Runner != "pi-durable" {
+			t.Errorf("implement-tick resolved to %q, want the hosted kind pi-durable the overlay names",
+				job.Profile.Runner)
+		}
+	}
+	// The pin refuses every kind a container is not booted on for the durable
+	// harness — the runner table's own `pi` included: that is the name the
+	// image dies on.
+	for _, kind := range []string{"pi", "claude", "codex", "omp", "opencode"} {
+		if cloudRunnerIsDurable(kind) {
+			t.Errorf("the guard accepts kind %q, which is not the durable harness", kind)
 		}
 	}
 }

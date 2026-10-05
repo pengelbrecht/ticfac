@@ -326,8 +326,10 @@ model = "opus"
 		if err != nil {
 			t.Fatalf("the sandbox executor on %q refused pi on a Workers AI model: %v", sub, err)
 		}
-		if p.Runner != "pi" || p.Model != glm53 {
-			t.Errorf("the %q base resolution is %s/%s, want pi/%s", sub, p.Runner, p.Model, glm53)
+		// …and binds the hosted name of the durable harness: the worker boots
+		// in a sandbox container whatever the substrate (tick twa).
+		if p.Runner != HostedDurableHarness || p.Model != glm53 {
+			t.Errorf("the %q base resolution is %s/%s, want %s/%s", sub, p.Runner, p.Model, HostedDurableHarness, glm53)
 		}
 	}
 
@@ -425,6 +427,68 @@ func TestIsWorkersAIModel(t *testing.T) {
 	} {
 		if IsWorkersAIModel(model) {
 			t.Errorf("%q passed as a Workers AI model", model)
+		}
+	}
+}
+
+// A dispatch INTO Cloudflare binds the hosted name of the durable harness
+// (epic 43y, tick twa). A runner table names that harness `pi` — the common
+// file since tick hpk, and this repository's cloud overlay too — but the
+// sandbox image a cloudflare-sandbox dispatch boots hosts it as `pi-durable`
+// and dies at boot on any other kind ("unknown harness kind 'pi'", tick
+// jhp). The resolved runner is what the door binds as TICKS_HARNESS, so a
+// resolution that left `pi` standing for a Cloudflare dispatch was a run
+// that started and lost every worker container at boot. On every substrate
+// that can select the executor — the cloud's, and a local one pointing
+// --profiles at the cloud set (tick 78v) — the final runner is the hosted
+// kind; a profile that dispatches nothing into Cloudflare keeps the runner
+// table's own name, which is the local executors' kind for the harness.
+func TestACloudflareDispatchBindsTheHostedNameOfTheDurableHarness(t *testing.T) {
+	config := cloudRuleConfig(t, `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "`+glm53+`"
+
+[roles.implement.tiers.economy]
+model = "`+glm53Flash+`"
+
+[roles.review]
+kind = "pi"
+model = "`+glm53+`"
+
+[roles.closeout]
+kind = "pi"
+model = "`+glm53+`"
+`)
+	cloud := cloudProfileDir(t)
+	for _, sub := range []string{"cloud", "herdr", "harness", ""} {
+		for _, tc := range []struct{ role, tier string }{
+			{"implement-tick", ""}, {"implement-tick", "economy"}, {"review-epic", ""}, {"closeout-epic", ""},
+		} {
+			if sub != "cloud" && (tc.role != "implement-tick" || tc.tier != "") {
+				continue // the other cells are the cloud overlay's: a local substrate reads the common file's
+			}
+			p, err := Resolve(tc.role, Options{Dir: cloud, RunnersConfig: config, Substrate: sub, Tier: tc.tier})
+			if err != nil {
+				t.Fatalf("substrate %q: %s at tier %q did not resolve: %v", sub, tc.role, tc.tier, err)
+			}
+			if p.Runner != HostedDurableHarness {
+				t.Errorf("substrate %q: %s at tier %q dispatches into Cloudflare on runner %q, want the hosted %q: "+
+					"the sandbox image refuses any other kind at boot", sub, tc.role, tc.tier, p.Runner, HostedDurableHarness)
+			}
+		}
+	}
+
+	// Nothing dispatched into Cloudflare: the local set keeps the runner
+	// table's name, the kind the local executors host the harness under.
+	for _, sub := range []string{"herdr", "harness", ""} {
+		p, err := Resolve("implement-tick", Options{RunnersConfig: config, Substrate: sub})
+		if err != nil {
+			t.Fatalf("substrate %q: the local implement-tick did not resolve: %v", sub, err)
+		}
+		if p.Runner != "pi" {
+			t.Errorf("substrate %q: the local implement-tick resolved runner %q, want the runner table's own pi", sub, p.Runner)
 		}
 	}
 }

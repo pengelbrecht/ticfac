@@ -227,9 +227,9 @@ func TestNoRoleOfACloudRunResolvesToTheLocalSubprocessExecutor(t *testing.T) {
 			t.Errorf("%s (tier %q) resolved to executor %q, want %s: the cloud set pairs every role with the executor that boots one worker container per attempt through the factory's door",
 				c.role, c.tier, p.Executor, cloudflaresandbox.ExecutorName)
 		}
-		if p.Runner != "pi" {
-			t.Errorf("%s (tier %q) resolved to runner %q, want pi: the cloud's workers run GLM through pi, and a role that resolved another harness after every overlay would be one the overlays moved",
-				c.role, c.tier, p.Runner)
+		if p.Runner != profile.HostedDurableHarness {
+			t.Errorf("%s (tier %q) resolved to runner %q, want %s: the cloud's workers run GLM on the durable harness under the name the sandbox image boots it by (tick twa), and a role that resolved another harness after every overlay would be one the overlays moved",
+				c.role, c.tier, p.Runner, profile.HostedDurableHarness)
 		}
 	}
 
