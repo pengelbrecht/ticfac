@@ -198,6 +198,7 @@ Tear-down also needs the container application, which `wrangler delete`
 leaves behind: `pnpm exec wrangler containers list`, then
 `pnpm exec wrangler containers delete <id>` for `ticfac-staging-agent-sandbox`.
 
+<<<<<<< HEAD
 Since tick umx the "wip checkpoints kept landing after the resume" claim is
 checked in order, not read by hand: the checkpoint lines must FOLLOW the
 resume line in the log (the proof's log is an append-only stream, so a line's
@@ -207,23 +208,48 @@ longer passes it), the count is recorded in the evidence
 `proof/fault-claims.ts`, pinned by `test/agent-faults-claims.test.ts`.
 
 ## Recorded result, 2026-10-05 (pi-ai / pi-durable 1.0.2)
+=======
+## Recorded result, 2026-10-05, the whole-container destroy (tick jpy, pi-ai / pi-durable 1.0.2)
+>>>>>>> 3cecaa75328174fc5fe4eb4dcae759edd0df7e67
 
-`PROOF HOLDS`, every claim, in 455 s (three attempts, GLM 5.3 on Workers AI):
+`PROOF HOLDS`, every claim, in 493 s (three attempts, GLM 5.3 on Workers
+AI, one pass on a fresh deployment — the second scenario destroys the
+whole CONTAINER between rounds, in its post-a2l shape):
 
 | Claim | Evidence |
 |---|---|
-| Host lost mid-tool: the attempt settles 0 | `settled`, `exit_code: 0`, "the finish phase exited 0"; the deploy fired at 28 s, at the sleep's start, and finished at 46 s |
+| Host lost mid-tool: the attempt settles 0 | `settled`, `exit_code: 0`, "the finish phase exited 0"; the deploy fired 13 s into the attempt, at the sleep's start, and finished at 30 s |
 | …a new host life resumed the conversation from its storage | the log line `a new host life resumed the conversation from its storage (submission 8)` right after `tool bash: {"command":"sleep 90 && …"}` |
 | …the tool did not run twice | `tool-runs.txt` on the pushed branch reads exactly `tool-ran-once` — one line |
-| …wip checkpoints kept landing after the resume | four `wip checkpoint … pushed` lines after the resume |
-| Workspace lost mid-turn: the attempt settles 0 | `settled`, `exit_code: 0` |
-| …restored from the last wip commit | `the container was lost between rounds; workspace restored to 12b85249dde1` — the first round's checkpoint; the removal landed under the second write, whose checkpoint failed "not in a git directory" |
-| …the turn completed on the restored tree | the model saw its second write fail, retried it on the restored tree, verified both files and committed; `first-step.txt` = `step one`, `second-step.txt` = `step two` on the pushed branch |
-| Deploy mid-run: the attempt settles 0 | `settled`, `exit_code: 0`; the deploy fired at 7 s into the attempt, as the conversation began |
+| …wip checkpoints kept landing after the resume | three `wip checkpoint … pushed` lines after the resume |
+| Container destroyed mid-turn: the attempt settles 0 | `settled`, `exit_code: 0`; the whole container `run_proof_container_destroyed_mid_turn-xd3-1` destroyed 27 s into the attempt, between rounds, after that round's checkpoint had landed on the origin that outlives the box |
+| …restored from the last wip commit | `the container was lost between rounds; workspace restored to 63195b25f3fe` — the first round's checkpoint; the second write had landed in the dying box ("not in a git directory"), and the replacement box was booted, fetched from the origin and checked out before the model's next request |
+| …the restore's setup ran in the replacement box | `.setup-ran` in the pushed tree — the real apt build-essential + golang install, running only because the restore runs it — committed by the model on the restored tree; the destroy-to-settle span of ~175 s carries it |
+| …the turn completed on the restored tree | the model saw its second write fail, retried it on the restored tree, verified both files and committed; `first-step.txt` = `step one`, `second-step.txt` = `step two` on the pushed branch, which the finish pushed (`ab57305`) through the origin that had outlived the destroyed box |
+| Deploy mid-run: the attempt settles 0 | `settled`, `exit_code: 0`; the deploy fired 12 s into the attempt, with the first model request in flight, and finished 25 s later |
 | …a new host life resumed the conversation | `a new host life resumed the conversation from its storage (submission 8)` after the first tool call |
 | …the work was delivered | `RESULT-xd3.md` with `STATUS: DONE` on the pushed branch |
 
-What the first staging start FOUND, fixed in this tick with a test
+What this pass FOUND, fixed in this tick (jpy) with a test
+(`harness/test/node/standin-worker-entry-env.test.ts`): the stand-in's
+`ticks-worker` demanded `TICKS_REPO_URL` at source time, so the first
+whole-container destroy failed one claim — the restore's git had already
+fetched and checked out the replacement box, but its `--setup` refused
+("TICKS_REPO_URL unset"), because the restore's env carries none of the
+boot's inputs (`restoreEnv`, `harness/src/host/worker-attempt.ts`) and the
+production setup entry takes none either (`image/worker.sh`
+`run_setup_entry`). The stand-in now requires the origin URL in `--boot`
+only, refusing legibly with the boot's config exit (2).
+
+Run the proof ONCE per deployment: the attempt origins live in Durable
+Object storage and outlive a pass, so a second run against the same
+Worker inherits the first's pushed branches — an intermediate second run
+of this pass failed "the tool did not run twice" on a doubled
+`tool-runs.txt` line that the first run's branch carried into the second
+run's boot; the reattach itself was sound. The recorded pass above ran on
+a fresh deployment.
+
+What the first staging start FOUND, fixed in tick jhp with a test
 (`cloudflare/test/staging-agent.test.ts`): since tick hxd the WorkerAgent
 reads its run's substrate row by the run id it parses from the container
 name, and the staging Worker passed the bare proof name — so every start
@@ -236,12 +262,13 @@ but its log could not tell a resumed host from one that never died; the
 host now logs the resume (`harness/src/host/worker-attempt.ts`, pinned in
 `test/worker-attempt-host.test.ts`), and the pass recorded above claims it.
 
-The second scenario above was recorded in its pre-a2l shape: the
-WORKSPACE was lost, because the throwaway origin then lived inside the
-container and a destroyed box could not fetch anything back. Since tick
-a2l the origin outlives the box (the staging Worker's own
-`/proof/git` door), and the proof destroys the whole container —
-recorded result to be re-run at the next staging pass.
+The first full pass (tick jhp, 455 s, before a2l) held the host-lost and
+deploy-mid-run claims with the same evidence shapes, and its second
+scenario was then the WORKSPACE loss — the throwaway origin lived inside
+the container, so a destroyed box could fetch nothing back. Since tick
+a2l the origin outlives the box (the staging Worker's own `/proof/git`
+door) and the proof destroys the whole container, as the recorded pass
+above does.
 
 The staging Worker, its D1 database and its container application were
 deleted after the proof.
