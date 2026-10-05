@@ -35,7 +35,16 @@ func feedReader(t *testing.T, retry runstate.RemoteRetry) (*Reconciler, func() [
 		if err != nil {
 			t.Fatalf("read the run feed: %v", err)
 		}
-		return events
+		// The per-class counting lines (tick rlp) ride beside every failure;
+		// these tests are about the retry story, and pushfeed_test.go is
+		// about the counts.
+		kept := events[:0]
+		for _, e := range events {
+			if !strings.HasPrefix(e.Stage, StageGitHubErrorPrefix) {
+				kept = append(kept, e)
+			}
+		}
+		return kept
 	}
 }
 

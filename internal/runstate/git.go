@@ -130,7 +130,11 @@ func (g *git) once(stdin []byte, extraEnv []string, args ...string) (stdout, std
 	var out, errBuf bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &errBuf
+	// Every push — each attempt of it — waits its slot in the repository's
+	// host-wide push queue (tick rlp), and the queue tells the run.
+	done := gitbin.PushQueue(g.dir, args, g.retry.Pushed)
 	runErr := cmd.Run()
+	done(runErr)
 	stdout, stderr = strings.TrimRight(out.String(), "\n"), strings.TrimSpace(errBuf.String())
 	if runErr != nil {
 		return stdout, stderr, fmt.Errorf("git %s: %w: %s", strings.Join(args, " "), runErr, stderr)

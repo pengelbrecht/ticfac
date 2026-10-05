@@ -381,9 +381,10 @@ func (r *Reconciler) readyPass(ctx context.Context, co *landingCloseout, pass in
 	}
 
 	// 5. The merge (the opt-in). The merge must be of the tree CI passed: the
-	// branch may since carry the run's own state, and nothing else.
-	if ciSHA != epicNow && !r.onlyRunState(ciSHA, epicNow) {
-		r.record(tick, StageLandBaseMoved, "%s moved from %s, the commit CI passed, to %s with more than run state: "+
+	// branch may since carry the run's own state and tracker records - the
+	// writes CI starts no run for (ciIgnoredPrefixes) - and nothing else.
+	if ciSHA != epicNow && !r.onlyCIIgnored(ciSHA, epicNow) {
+		r.record(tick, StageLandBaseMoved, "%s moved from %s, the commit CI passed, to %s with more than run state and tracker records: "+
 			"the next pass waits for CI on what the branch holds now", r.branch, short(ciSHA), short(epicNow))
 		return readiness{}, false, nil
 	}
@@ -397,7 +398,7 @@ func (r *Reconciler) readyPass(ctx context.Context, co *landingCloseout, pass in
 	if err != nil {
 		return readiness{}, false, err
 	}
-	if ciSHA != epicNow && !r.onlyRunState(ciSHA, epicNow) {
+	if ciSHA != epicNow && !r.onlyCIIgnored(ciSHA, epicNow) {
 		return readiness{}, false, nil
 	}
 	merged, moved, err := r.mergeEpicInto(tick, base, baseHead, epicNow, pr)

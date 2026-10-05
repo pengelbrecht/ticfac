@@ -550,7 +550,26 @@ func (r *Reconciler) recordDecision(entry planEntry, marker attemptHandle, answe
 // There is no integrated gate here because there is nothing integrated to gate:
 // the job produced no commit, and the thing that stands behind this close is
 // the validated envelope recorded as a decision immediately before it.
+//
+// The close itself is ONE step (tick f61), for closeTick's reason; acting on
+// a NOT READY review is a step of its own after it.
 func (r *Reconciler) closeRoleTick(ctx context.Context, marker attemptHandle, answer *subprocess.RoleResult) error {
+	if err := r.heldStep(func() error { return r.closeRoleTickHeld(ctx, marker, answer) }); err != nil {
+		return err
+	}
+	// A review that judged the epic NOT READY is the run's to act on
+	// (review_rounds.go): its blocking findings become the epic's work, and a
+	// re-review is placed behind them and before the close-out — which the
+	// close-out's open-children gate then works first.
+	if answer.Role == "review-epic" {
+		if _, err := r.answerNotReadyReview(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Reconciler) closeRoleTickHeld(ctx context.Context, marker attemptHandle, answer *subprocess.RoleResult) error {
 	tick := marker.TickID
 	if _, err := r.checkpoint(runstate.StatePublishing,
 		fmt.Sprintf("closing %s behind its validated %s answer", tick, answer.Role)); err != nil {
@@ -588,15 +607,6 @@ func (r *Reconciler) closeRoleTick(ctx context.Context, marker attemptHandle, an
 	r.record(tick, StageClosed, "closed behind a validated %s answer (%s)", answer.Role, answer.Status)
 	if _, err := r.checkpoint(runstate.StateRunning, fmt.Sprintf("%s is closed", tick)); err != nil {
 		return err
-	}
-	// A review that judged the epic NOT READY is the run's to act on
-	// (review_rounds.go): its blocking findings become the epic's work, and a
-	// re-review is placed behind them and before the close-out — which the
-	// close-out's open-children gate then works first.
-	if answer.Role == "review-epic" {
-		if _, err := r.answerNotReadyReview(ctx); err != nil {
-			return err
-		}
 	}
 	return nil
 }

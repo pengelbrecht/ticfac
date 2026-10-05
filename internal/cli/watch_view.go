@@ -226,6 +226,8 @@ func watchHealthLine(m statusmodel.Model, st watchStyles) string {
 			{h.Interventions, "intervention"},
 			{h.StallWarnings, "stall warning"},
 			{h.WallClocksFired, "wall clock"},
+			{h.Pushes, "push"},
+			{h.GitHubErrors.Total(), "GitHub error"},
 		} {
 			if c.n > 0 {
 				counts = append(counts, watchPlural(c.n, c.what))
@@ -561,6 +563,9 @@ func humanDuration(seconds int64) string {
 func watchPlural(n int, what string) string {
 	if n == 1 {
 		return fmt.Sprintf("1 %s", what)
+	}
+	if strings.HasSuffix(what, "sh") {
+		return fmt.Sprintf("%d %ses", n, what)
 	}
 	return fmt.Sprintf("%d %ss", n, what)
 }

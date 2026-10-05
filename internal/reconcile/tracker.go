@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -42,6 +43,9 @@ import (
 //     applied onto origin's current head with plumbing. A writer that pushed a
 //     whole subtree would clobber what a closeout wrote into `.tick/` between
 //     its own read and its own write.
+//   - inside a HELD step (step.go, tick f61) the commit is chained into the
+//     run state's step instead and lands in the step's one push; a claim
+//     still lands at once, before the work it claims starts.
 //
 // The worktree is detached for integrate.go's reason as well as this one: the
 // integration branch must not be CHECKED OUT anywhere, because the run-state
@@ -87,6 +91,15 @@ type trackerTree struct {
 	// pushes counts the tracker writes that reached origin. Durable means
 	// pushed, so this is the number of tracker records that exist.
 	pushes int
+
+	// local says the worktree stands on a commit of this run's own that is
+	// not on origin yet: a held step's records (tick f61), chained into the
+	// run state's push. keepLocal says whether that step is still held; while
+	// it is, sync leaves the worktree where it is, so what the tracker reads
+	// is what this run has written. Nil keeps nothing (a tracker outside a
+	// run).
+	local     bool
+	keepLocal func() bool
 }
 
 // openTrackerTree prepares the tracker's worktree at the integration branch's
@@ -142,6 +155,17 @@ func (t *trackerTree) originHead() (string, error) {
 // in this package, and losing a close to it silently is the failure this whole
 // file exists to remove.
 func (t *trackerTree) sync() error {
+	if t.local {
+		if t.keepLocal != nil && t.keepLocal() {
+			// A held step's records are in this worktree and not yet on
+			// origin: moving to origin would read them away. The step lands
+			// them before anything outside the run acts.
+			return nil
+		}
+		// Landed (or the step was dropped on an error the run stops for):
+		// origin is the truth again, and the clean worktree moves to it.
+		t.local = false
+	}
 	head, err := t.originHead()
 	if err != nil {
 		return err
@@ -250,32 +274,77 @@ func (t *trackerTree) landed(commit string) error {
 // index of its own, and a writer that rewrote it would be a writer that leaves
 // its own checkout in a state nobody asked for.
 func (t *trackerTree) staged() ([]change, error) {
+	changes, _, err := t.stagedTree()
+	return changes, err
+}
+
+// stagedTree is staged, also answering the tree the worktree's `.tick/`
+// makes over the synced commit.
+func (t *trackerTree) stagedTree() ([]change, string, error) {
 	if _, err := os.Stat(filepath.Join(t.dir, trackerRoot)); err != nil {
 		// No `.tick/` at all: nothing the tracker could have written.
-		return nil, nil
+		return nil, "", nil
 	}
 	index, done, err := tempIndex()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	defer done()
 
 	env := []string{"GIT_INDEX_FILE=" + index}
 	if _, _, err := t.git.tryEnv(t.dir, env, "read-tree", t.base); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if _, _, err := t.git.tryEnv(t.dir, env, "add", "-A", "--", trackerRoot); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	tree, _, err := t.git.tryEnv(t.dir, env, "write-tree")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	raw, _, err := t.git.tryEnv(t.dir, env, "diff-tree", "-r", "-z", t.base, tree)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return parseRawDiff(raw)
+	changes, err := parseRawDiff(raw)
+	return changes, tree, err
+}
+
+// stage is publish for a HELD step (tick f61): what the tracker wrote is
+// committed in this worktree — so the next write's change set is its own and
+// what tk reads next includes it — and chained into the run state's step,
+// which lands it in the step's one push. held=false lands it at once, with
+// everything the step held before it: a claim, which must be on origin
+// before the work it claims starts. landed is told the commit that carries
+// the record on origin, once it does.
+func (t *trackerTree) stage(store *runstate.Store, reason string, held bool, landed func(commit string)) error {
+	changes, tree, err := t.stagedTree()
+	if err != nil {
+		return err
+	}
+	if len(changes) == 0 {
+		return nil
+	}
+	message := fmt.Sprintf("ticfac run %s: %s", t.runID, reason)
+	local, err := t.git.run("", "commit-tree", tree, "-p", t.base, "-m", message)
+	if err != nil {
+		return err
+	}
+	if _, err := t.git.run(t.dir, "reset", "--hard", "--quiet", local); err != nil {
+		return err
+	}
+	t.base, t.local = local, true
+	set := make([]runstate.TreeChange, 0, len(changes))
+	for _, c := range changes {
+		set = append(set, runstate.TreeChange{Path: c.Path, Mode: c.Mode, Blob: c.Blob, Removed: c.Removed})
+	}
+	_, err = store.StageChanges(message, set, held, func(commit string) {
+		t.pushes++
+		if landed != nil {
+			landed(commit)
+		}
+	})
+	return err
 }
 
 // treeOn applies a change set onto another commit's tree and returns the tree
@@ -399,8 +468,11 @@ func (d *durableTracker) Show(ctx context.Context, tickID string) (tk.Tick, erro
 	return d.inner.Show(ctx, tickID)
 }
 
+// Claim is never held in a step (tick f61): the claim must be on origin
+// before the work it claims starts, so it lands at once — carrying whatever
+// the step held before it.
 func (d *durableTracker) Claim(ctx context.Context, tickID, owner string) (tk.Tick, error) {
-	return d.write(tickID, "claim "+tickID+" for "+owner, func() (tk.Tick, error) {
+	return d.writeLanding(tickID, "claim "+tickID+" for "+owner, true, func() (tk.Tick, error) {
 		return d.inner.Claim(ctx, tickID, owner)
 	})
 }
@@ -420,6 +492,10 @@ func (d *durableTracker) Close(ctx context.Context, tickID string) (tk.Tick, err
 // write is the one shape every tracker write has: read origin, make the write,
 // and push it — in that order, and with nothing between the write and the push.
 func (d *durableTracker) write(tickID, reason string, apply func() (tk.Tick, error)) (tk.Tick, error) {
+	return d.writeLanding(tickID, reason, false, apply)
+}
+
+func (d *durableTracker) writeLanding(tickID, reason string, immediate bool, apply func() (tk.Tick, error)) (tk.Tick, error) {
 	if err := d.tree.sync(); err != nil {
 		return tk.Tick{}, err
 	}
@@ -427,15 +503,35 @@ func (d *durableTracker) write(tickID, reason string, apply func() (tk.Tick, err
 	if err != nil {
 		return tick, err
 	}
-	commit, err := d.tree.publish(reason)
-	if err != nil {
+	if err := d.land(reason, immediate, func(commit string) {
+		d.r.record(tickID, StagePublished, "%s is on %s as %s", reason, d.tree.branch, short(commit))
+	}); err != nil {
 		return tick, fmt.Errorf("%s reached the tracker and not %s: a tracker record that is not pushed is a record "+
 			"the next wave's worker cannot read: %w", reason, d.tree.remote, err)
 	}
-	if commit != "" && d.r != nil {
-		d.r.record(tickID, StagePublished, "%s is on %s as %s", reason, d.tree.branch, short(commit))
-	}
 	return tick, nil
+}
+
+// land makes what a write left in the worktree a record: pushed now, or —
+// while the run holds a step (tick f61) and the write may wait — chained into
+// the step's one push. published is told the commit the record landed as, and
+// only when one did.
+func (d *durableTracker) land(reason string, immediate bool, published func(commit string)) error {
+	if d.r == nil {
+		_, err := d.tree.publish(reason)
+		return err
+	}
+	if store := d.r.store; store != nil && store.Holding() {
+		return d.tree.stage(store, reason, !immediate, published)
+	}
+	commit, err := d.tree.publish(reason)
+	if err != nil {
+		return err
+	}
+	if commit != "" {
+		published(commit)
+	}
+	return nil
 }
 
 // relocate points a tracker at another checkout of the same repository.
@@ -591,13 +687,11 @@ func (d *durableTracker) CreateTick(ctx context.Context, tick tk.Tick) (tk.Tick,
 		tick = filed
 	}
 	reason := "create tick " + tick.ID
-	commit, err := d.tree.publish(reason)
-	if err != nil {
+	if err := d.land(reason, false, func(commit string) {
+		d.r.record(tick.ID, StagePublished, "%s is on %s as %s", reason, d.tree.branch, short(commit))
+	}); err != nil {
 		return tick, fmt.Errorf("%s reached the tracker and not %s: a tracker record that is not pushed is a record "+
 			"the next wave's worker cannot read: %w", reason, d.tree.remote, err)
-	}
-	if commit != "" && d.r != nil {
-		d.r.record(tick.ID, StagePublished, "%s is on %s as %s", reason, d.tree.branch, short(commit))
 	}
 	return tick, nil
 }
@@ -619,14 +713,12 @@ func (d *durableTracker) BlockOn(ctx context.Context, tickID, blocker string) er
 		return err
 	}
 	reason := "place " + tickID + " behind " + blocker
-	commit, err := d.tree.publish(reason)
-	if err != nil {
-		return fmt.Errorf("%s reached the tracker and not %s: an edge that is not pushed is an edge the next "+
-			"wave's worker cannot read: %w", reason, d.tree.remote, err)
-	}
-	if commit != "" && d.r != nil {
+	if err := d.land(reason, false, func(commit string) {
 		d.r.record(tickID, StagePublished, "%s is blocked-by %s on %s as %s",
 			tickID, blocker, d.tree.branch, short(commit))
+	}); err != nil {
+		return fmt.Errorf("%s reached the tracker and not %s: an edge that is not pushed is an edge the next "+
+			"wave's worker cannot read: %w", reason, d.tree.remote, err)
 	}
 	return nil
 }
@@ -655,13 +747,11 @@ func (d *durableTracker) Adopt(ctx context.Context, tickID, parent string) error
 		return err
 	}
 	reason := "adopt " + tickID + " into " + parent
-	commit, err := d.tree.publish(reason)
-	if err != nil {
+	if err := d.land(reason, false, func(commit string) {
+		d.r.record(tickID, StagePublished, "%s is a child of %s on %s as %s", tickID, parent, d.tree.branch, short(commit))
+	}); err != nil {
 		return fmt.Errorf("%s reached the tracker and not %s: a parent that is not pushed is an epic the next "+
 			"wave's worker cannot read: %w", reason, d.tree.remote, err)
-	}
-	if commit != "" && d.r != nil {
-		d.r.record(tickID, StagePublished, "%s is a child of %s on %s as %s", tickID, parent, d.tree.branch, short(commit))
 	}
 	return nil
 }

@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
 
 // A remote git failure is two different events wearing one exit status, and
@@ -353,6 +355,31 @@ type RemoteRetry struct {
 	// write to — but inside a run it is always set, because a retry nobody
 	// can see is the failure mode this whole file is guarding against.
 	Report func(RemoteRetryNotice)
+	// Pushed is told what each push did in the repository's host-wide push
+	// queue (tick rlp, gitbin.PushQueue): a wait long enough to see, a wait
+	// past its bound, and every paced push's outcome. Nil is valid.
+	Pushed gitbin.PushNotify
+	// Failed is told about every attempt that failed with a GitHub error,
+	// classed (GitHubErrorClass) — retried or not — so a run can count
+	// them by class. Nil is valid.
+	Failed func(RemoteFailure)
+	// OwnRepository answers the repository (owner/name) the run's credential
+	// was minted for, asked only when a credential is refused (tick gy9). A
+	// refusal by any OTHER repository is not retried. Nil, or "", means
+	// unknown, and every refusal is retried as before.
+	OwnRepository func() string
+	// Jitter spreads the wait before retrying a push the remote took and did
+	// not apply ("(failed)"): those tracked the other run's push to the same
+	// repository, and two runs retrying on the same fixed schedule collide
+	// again. Nil is gitbin.FullJitter; a test pins it.
+	Jitter func(time.Duration) time.Duration
+}
+
+// RemoteFailure is one failed attempt of a remote git command, classed.
+type RemoteFailure struct {
+	What  string
+	Class string
+	Err   error
 }
 
 // DefaultRemoteAttempts and DefaultRemoteBackoff are the bound: four tries,
@@ -383,7 +410,21 @@ func (rr RemoteRetry) normalized() RemoteRetry {
 	if rr.Report == nil {
 		rr.Report = func(RemoteRetryNotice) {}
 	}
+	if rr.Failed == nil {
+		rr.Failed = func(RemoteFailure) {}
+	}
+	if rr.Jitter == nil {
+		rr.Jitter = gitbin.FullJitter
+	}
 	return rr
+}
+
+// own is the repository the run's credential is for, or "".
+func (rr RemoteRetry) own() string {
+	if rr.OwnRepository == nil {
+		return ""
+	}
+	return rr.OwnRepository()
 }
 
 // Do runs op, waiting through transient remote failures up to the bound.
@@ -410,9 +451,23 @@ func (rr RemoteRetry) Do(what string, op func() error) error {
 			return nil
 		}
 		notice := RemoteRetryNotice{What: what, Attempt: attempt, Of: rr.Attempts, Err: err, Class: RemoteTransient}
-		switch ClassifyRemote(err) {
+		class := ClassifyRemote(err)
+		var own string
+		if class == RemoteAuthRefused {
+			own = rr.own()
+		}
+		if counted := GitHubErrorClass(err, own); counted != "" {
+			rr.Failed(RemoteFailure{What: what, Class: counted, Err: err})
+		}
+		switch class {
 		case RemoteTransient:
 		case RemoteAuthRefused:
+			// Tick gy9: a credential refused by a repository it was never
+			// minted for is an answer, not a blip. It is refused at once,
+			// under its own name, with the repository in it.
+			if repo, cross := CrossRepoRefusal(err, own); cross {
+				return &RemoteCrossRepoRefusedError{What: what, Repo: repo, Own: own, Err: err}
+			}
 			// Waited through a SMALL bound of its own, inside the transient
 			// one: a blip gets its retries, and a key that is really wrong is
 			// refused seconds later under its own name with what to check.
@@ -430,6 +485,12 @@ func (rr RemoteRetry) Do(what string, op func() error) error {
 			break
 		}
 		notice.Wait = rr.Backoff << (attempt - 1)
+		if IsRefUpdateFailed(err) {
+			// Tick rlp: full jitter, so two runs that collided do not
+			// collide again on the same schedule. The push queue still
+			// paces the retry itself.
+			notice.Wait = rr.Jitter(notice.Wait)
+		}
 		rr.Report(notice)
 		rr.Sleep(notice.Wait)
 		waited += notice.Wait
