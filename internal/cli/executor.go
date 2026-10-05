@@ -198,6 +198,11 @@ func sandboxExecutor(d reconcile.Dispatch) (reconcile.Executor, reconcile.Substr
 		Model:   d.Profile.Model,
 		Harness: d.Profile.Runner,
 		Prompt:  d.Profile.Prompt,
+		// The run's stuck window (tick xba): the dispatch's StuckAfter — the
+		// same window every other executor is handed — so the cloud worker's
+		// own watch nudges at the same quiet the local watch would, and a run
+		// that turned the watch off turns it off here too.
+		StuckAfter: d.StuckAfter,
 		// A carried dispatch's work base (epic hn6, run_3f034e68): the
 		// container measures the carried work from it, so a worker that found
 		// it complete and added nothing settles succeeded, not no-work.

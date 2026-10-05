@@ -110,6 +110,12 @@ type startRequest struct {
 	// worker's harness just under it, so the container stops and pushes
 	// before the reconciler's wall fires. Omitted when unbounded.
 	WallSeconds int `json:"wall_seconds,omitempty"`
+	// StuckSeconds is the run's stuck window (tick xba): how long the
+	// hosted worker may show no activity before its own watch nudges it
+	// with a steer, and again before it stops it. A pointer because the
+	// door's zero is meaningful: nil is the door's default window (the
+	// local watch's own), and 0 is the run that turned the watch off.
+	StuckSeconds *int `json:"stuck_seconds,omitempty"`
 	// WorkBaseSHA is, for a CARRIED attempt, the commit the carried work was
 	// cut from (epic hn6, run_3f034e68): BaseSHA is then the released
 	// attempt's head, and the container measures the carried work from this,
@@ -117,6 +123,27 @@ type startRequest struct {
 	// Omitted for an attempt that carries nothing; a door that predates the
 	// field ignores it.
 	WorkBaseSHA string `json:"work_base_sha,omitempty"`
+}
+
+// stuckSecondsFor spells the run's stuck window (Options.StuckAfter) the way
+// the door reads it (tick xba): the window in whole seconds; 0 for the run
+// that turned the watch off — the door refuses negatives like any other
+// malformed bound, so the off switch crosses as zero; nil when the caller
+// said nothing, which the door answers with its own default window, the
+// local watch's (subprocess.DefaultStuckAfter). The reconciler defaults a
+// dispatch's window before any executor sees it, so nil is only a caller
+// that was never told.
+func stuckSecondsFor(after time.Duration) *int {
+	switch {
+	case after > 0:
+		seconds := int(after / time.Second)
+		return &seconds
+	case after < 0:
+		off := 0
+		return &off
+	default:
+		return nil
+	}
 }
 
 // startResponse is the door's answer to a start: the handle, and whether the

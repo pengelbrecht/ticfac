@@ -72,6 +72,7 @@
  * | `prompt` | the RENDERED role prompt the caller's profile resolved (tick 9iz) — the profile's own prompt text, not a filename and not a reference. The worker container's entrypoint renders its worker prompt from the checkout's tracker and never sees the factory's prompt otherwise; the door delivers it into the container's boot environment (`TICKS_ROLE_PROMPT`, beside the harness and the model the same boot carries), so the worker runs on the prompt the run's records digest into `prompt_digest`. Required: PROSE — any UTF-8 text with no control character but tab, LF and CR, at most 64 KiB (65536 UTF-8 bytes) — a start with no prompt would boot a worker on a prompt nobody chose. |
  * | `work_base_sha` | OPTIONAL: for a CARRIED attempt, the FULL 40-hex commit the carried work was cut from (epic hn6, run_3f034e68). `base_sha` is then the released attempt's head; the container (`TICKS_WORK_BASE_SHA`) measures the carried work from this, so a worker that finds it complete and adds nothing settles succeeded rather than no-work. Absent for every attempt that carries nothing. |
  * | `wall_seconds` | OPTIONAL: the dispatch's wall clock in whole seconds (tick 86y). The worker's harness is bounded just under it (`TICKS_WORKER_TIMEOUT`, the wall less the push margin — worker-boot.ts `workerHarnessBudgetMs`), so the container stops its harness, commits, reports and pushes before the reconciler's wall fires. Absent boots an unbounded harness. |
+ * | `stuck_seconds` | OPTIONAL: the stuck watch's window in whole seconds (tick xba) — how long the hosted worker may show no activity before the watch nudges it with a steer, and again before it stops it. Carried to the attempt's WorkerAgent beside the wall; zero turns the watch off (the run's negative `StuckAfter`); absent is the default window the host states, so every hosted attempt is watched. |
  *
  * The response NEVER blocks until the attempt finishes — nothing waits. What
  * returns is a HANDLE, once the dispatch is confirmed (the green-start probe
@@ -492,6 +493,25 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     );
   }
 
+  // The stuck watch's window (tick xba), optional: how long the hosted
+  // worker may show no activity before the watch nudges it with a steer, and
+  // again before it stops it. Zero turns the watch off — the run's negative
+  // StuckAfter, spelled as zero because a negative window is refused here
+  // like any other malformed bound — and absent is the default window the
+  // attempt's host states, so an older client that sends none still gets the
+  // watch.
+  const stuckSeconds = raw.stuck_seconds;
+  if (
+    stuckSeconds !== undefined &&
+    (typeof stuckSeconds !== "number" || !Number.isInteger(stuckSeconds) || stuckSeconds < 0)
+  ) {
+    return refuse(
+      400,
+      "invalid_request",
+      "stuck_seconds, when present, must be the stuck watch's window as a whole number of seconds (0 turns the watch off)",
+    );
+  }
+
   const text = (name: string, field: unknown): string | SandboxDispatchResult => {
     if (typeof field !== "string" || !PLAIN_FIELD_PATTERN.test(field)) {
       return refuse(
@@ -649,6 +669,7 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     harness,
     prompt,
     ...(wallSeconds === undefined ? {} : { wall_seconds: wallSeconds }),
+    ...(stuckSeconds === undefined ? {} : { stuck_seconds: stuckSeconds }),
     ...(workBaseSHA === undefined ? {} : { work_base_sha: workBaseSHA }),
   };
 

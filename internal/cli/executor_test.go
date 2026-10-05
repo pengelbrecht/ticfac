@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
@@ -127,6 +128,9 @@ func cloudDispatch(t *testing.T) reconcile.Dispatch {
 		BaseSHA:  "0123456789abcdef0123456789abcdef01234567",
 		BaseRef:  "epic/yoh",
 		Title:    "Register cloudflare-sandbox as an honoured executor",
+		// The run's stuck window (tick xba), the way the reconciler hands
+		// every dispatch one: defaulted to the watch's own.
+		StuckAfter: 15 * time.Minute,
 		Profile: &profile.Profile{
 			Role: "implement-tick", Executor: cloudflaresandbox.ExecutorName,
 			Runner: "pi", Model: "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
@@ -310,5 +314,12 @@ func TestTheProfilesModelRidesTheDispatchToTheDoor(t *testing.T) {
 	}
 	if got, _ := asked["prompt"].(string); got != d.Profile.Prompt {
 		t.Errorf("the door was asked to deliver a prompt of %d bytes, want the profile's %d", len(got), len(d.Profile.Prompt))
+	}
+	// The run's stuck window rides the same request (tick xba): the cloud
+	// worker's own watch nudges at the window this dispatch was issued, and a
+	// window that never crossed would leave the factory's default standing in
+	// for the run's own.
+	if got, ok := asked["stuck_seconds"].(float64); !ok || int(got) != int(d.StuckAfter/time.Second) {
+		t.Errorf("the door was asked for a stuck window of %v, want the dispatch's %s", asked["stuck_seconds"], d.StuckAfter)
 	}
 }

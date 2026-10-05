@@ -73,6 +73,16 @@ export type AttemptSpec = {
    */
   wall_seconds?: number;
   /**
+   * The stuck watch's window, in seconds (tick xba): how long the hosted
+   * worker may show no activity before the watch nudges it with a steer,
+   * and again before it stops it — the run's own stuck window
+   * (reconcile's `StuckAfter`), carried to the attempt's WorkerAgent the
+   * way the wall is. Zero turns the watch off (the run's negative
+   * `StuckAfter`, spelled as zero because the door refuses negatives);
+   * absent is the default window the host states.
+   */
+  stuck_seconds?: number;
+  /**
    * For a CARRIED attempt, the full commit the carried work was cut from
    * (epic hn6, run_3f034e68): `base_sha` is then the released attempt's
    * head, and the worker's container needs this to see that a worker which

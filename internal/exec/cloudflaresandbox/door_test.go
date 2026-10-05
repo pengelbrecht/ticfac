@@ -504,6 +504,9 @@ func (h *harness) newExecutor(state string) *Executor {
 		Prompt:     testPrompt,
 		Attempt:    1,
 		StateDir:   state,
+		// The run's stuck window (tick xba), the way the reconciler hands
+		// every executor one: the dispatch's StuckAfter, defaulted.
+		StuckAfter: 15 * time.Minute,
 		Now:        func() time.Time { return time.Date(2026, 9, 22, 18, 0, 0, 0, time.UTC) },
 	})
 	if err != nil {

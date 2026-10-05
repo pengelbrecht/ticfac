@@ -203,7 +203,7 @@ function sdkOverDoor(door: SandboxDoor): SdkSandbox & { destroyedCount: () => nu
   };
 }
 
-function postStart(): Promise<Response> {
+function postStart(extra: Record<string, unknown> = {}): Promise<Response> {
   return SELF.fetch(`${BASE}/api/sandbox/attempts`, {
     method: "POST",
     headers: { authorization: `Bearer ${runToken}`, "content-type": "application/json" },
@@ -219,6 +219,7 @@ function postStart(): Promise<Response> {
       model: "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
       harness: "pi-durable",
       prompt: PROMPT,
+      ...extra,
     }),
   });
 }
@@ -413,6 +414,45 @@ describe("a cloud worker attempt on its WorkerAgent", () => {
     expect(frames.some((f) => f.type === "log")).toBe(true);
     expect(frames.some((f) => f.type === "events" && f !== frames[1])).toBe(true);
     socket.close();
+  });
+
+  it("nudges a worker stuck on a hung tool with a steer, then stops it (tick xba)", async () => {
+    // The tick's own case: a cloud attempt hung on a bash that never comes
+    // back used to run to its wall. The stuck window rides the dispatch
+    // (stuck_seconds), the agent's host watches, the nudge is a STEER — the
+    // same route the operator's steer took — and the stop is the wall's
+    // mechanism: the finish phase runs with the unanswered status, so the
+    // attempt settles failed and the run's retry ladder takes it from
+    // there, never the wall clock's full spend.
+    const container = scriptedContainer(30_000, 9);
+    const { stub } = await seededAgent(container, [
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("steered"),
+    ]);
+
+    const started = await postStart({ stuck_seconds: 1 });
+    expect(started.status).toBe(201);
+
+    let status = await doorState();
+    const deadline = Date.now() + 30_000;
+    while (status.state === "running" && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      status = await doorState();
+    }
+    expect(status.state).toBe("failed");
+
+    // The ladder, in the agent's own log: the nudge first, the stop a
+    // window later, the finish with the unanswered status.
+    const log = (await stub.readLog(0)).text;
+    expect(log).toContain("steer: You appear stuck");
+    expect(log).toContain("the attempt appears stuck and is being stopped");
+    const finish = container.starts.at(-1)?.command;
+    expect(finish).toBe(`${contract.finish_command} 1`);
+    const state = (await stub.state()) as WorkerAgentState;
+    expect(state).toMatchObject({ phase: "settled", exit_code: 9 });
   });
 
   it("starts afresh under a settled name: a new conversation, a new log, a new settlement", async () => {

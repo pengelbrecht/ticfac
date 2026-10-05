@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import contract from "../../contracts/worker-boot-contract.json";
 import { GATEWAY_PROVIDER_ID } from "../src/gateway/workers-ai.js";
 import {
+  HARNESS_STATUS_UNANSWERED,
   HARNESS_STATUS_WALL,
   parseBootHandoff,
   WORKER_BOOT_PROTOCOL,
@@ -619,6 +620,139 @@ describe("a worker attempt driven by the host", () => {
     expect(door.starts.at(-1)?.command).toBe(
       `${WORKER_BOOT_PROTOCOL.finishCommand} ${HARNESS_STATUS_WALL}`,
     );
+  });
+
+  it("nudges a stuck worker with a steer, then stops it when nothing moves (tick xba)", {
+    timeout: 120_000,
+  }, async () => {
+    // A bash that never comes back — pi-durable's own hung-tool case, the
+    // one the tick exists for: no log line past the tool's start, no CPU
+    // in the container, so the watch nudges at the window and stops a
+    // window later. The stop is the wall's mechanism, never a reclaim: the
+    // finish phase still runs, with the UNANSWERED status, so the attempt
+    // settles failed and the run's retry ladder takes it from there.
+    const door = scriptedDoor({ bashMs: 60_000, finishExit: 9 });
+    const log: string[] = [];
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("steered"),
+    ]);
+    const host = new WorkerAttemptHost({
+      door: door.sandbox,
+      storage: async () => new MemoryStorage(),
+      models,
+      records: memoryRecords(),
+      log: (text) => {
+        log.push(text);
+      },
+      pollMs: 5,
+      bashPollMs: 5,
+      guardDir: null,
+    });
+    await host.start(spec({ stuckMs: 400 }));
+    const settled = await host.drive();
+    const lines = log.join("");
+    // The nudge: a STEER carrying the evidence, placed after the hung round.
+    expect(lines).toContain("steer: You appear stuck");
+    expect(lines).toContain("its harness log last grew");
+    // The stop, a window later — and the finish phase with the unanswered
+    // status, so the attempt settles failed with the finish's own exit.
+    expect(lines).toContain("the attempt appears stuck and is being stopped");
+    expect(settled.harnessStatus).toBe(HARNESS_STATUS_UNANSWERED);
+    expect(door.starts.at(-1)?.command).toBe(
+      `${WORKER_BOOT_PROTOCOL.finishCommand} ${HARNESS_STATUS_UNANSWERED}`,
+    );
+    expect(settled.settled?.exitCode).toBe(9);
+    // The watch sampled the container's CPU: the busy-tool signal is the
+    // one thing separating a hung tool from a slow one.
+    expect(door.runs.some((r) => r.command.includes("/proc/"))).toBe(true);
+  });
+
+  it("does not nudge a worker whose tool is only busy: the container's CPU is activity", {
+    timeout: 120_000,
+  }, async () => {
+    // The tool outlives the window, but the container is BURNING CPU the
+    // whole time — the 25-minute test suite of activity.go's calibration,
+    // which the CPU signal exists to keep: a busy worker is never nudged,
+    // and certainly never stopped.
+    let ticks = 0;
+    const door = fakeSandboxDoor({
+      runOutput: (command) => {
+        if (command.includes("/proc/")) {
+          ticks += 1000;
+          return `${ticks}\n`;
+        }
+        return command.includes("git rev-parse HEAD") ? "cafef00d\n" : "";
+      },
+      processScript: (command) => {
+        if (command === WORKER_BOOT_PROTOCOL.bootCommand) {
+          return { output: bootOutput(), exit: 0, ms: 20 };
+        }
+        if (command.startsWith(WORKER_BOOT_PROTOCOL.finishCommand)) {
+          return { output: "ticks-worker: pushed\n", exit: 0, ms: 20 };
+        }
+        return { output: "tests pass\n", exit: 0, ms: 1_500 };
+      },
+    });
+    const log: string[] = [];
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("done: the long suite passed"),
+    ]);
+    const host = new WorkerAttemptHost({
+      door: door.sandbox,
+      storage: async () => new MemoryStorage(),
+      models,
+      records: memoryRecords(),
+      log: (text) => {
+        log.push(text);
+      },
+      pollMs: 5,
+      bashPollMs: 5,
+      guardDir: null,
+    });
+    await host.start(spec({ stuckMs: 300 }));
+    const settled = await host.drive();
+    expect(settled.settled?.exitCode).toBe(0);
+    expect(log.join("")).not.toContain("You appear stuck");
+  });
+
+  it("turns the stuck watch off when the dispatch spells zero", {
+    timeout: 120_000,
+  }, async () => {
+    const door = scriptedDoor({ bashMs: 300 });
+    const log: string[] = [];
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("done"),
+    ]);
+    const host = new WorkerAttemptHost({
+      door: door.sandbox,
+      storage: async () => new MemoryStorage(),
+      models,
+      records: memoryRecords(),
+      log: (text) => {
+        log.push(text);
+      },
+      pollMs: 5,
+      bashPollMs: 5,
+      guardDir: null,
+    });
+    await host.start(spec({ stuckMs: 0 }));
+    const settled = await host.drive();
+    expect(settled.settled?.exitCode).toBe(0);
+    // Off means off: not even a look, so not one container command spent.
+    expect(door.runs.some((r) => r.command.includes("/proc/"))).toBe(false);
+    expect(log.join("")).not.toContain("You appear stuck");
   });
 
   it("is reclaimed where it stands: settled, no finish phase, and a later drive changes nothing", {

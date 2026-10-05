@@ -145,6 +145,20 @@ type Options struct {
 	// RequestTimeout bounds one door call. Zero is DefaultRequestTimeout.
 	RequestTimeout time.Duration
 
+	// StuckAfter is the run's stuck window (tick wv2) — how long the hosted
+	// worker may show no activity before its own watch nudges it with a
+	// steer, and again before it stops it — carried to the door as
+	// stuck_seconds (tick xba) and by the door to the attempt's
+	// WorkerAgent, whose host runs the cloud half of the local watch. The
+	// mapping is the local one: positive is the window; negative turns the
+	// watch off (the door spells that as stuck_seconds 0, refusing
+	// negatives like any other malformed bound); zero says nothing and the
+	// door answers with its own default window, which is the local watch's
+	// (subprocess.DefaultStuckAfter). The reconciler defaults a dispatch's
+	// window before any executor sees it, so zero is only a constructor
+	// that was never told.
+	StuckAfter time.Duration
+
 	Now func() time.Time
 
 	// writeFile is the state writer, so a test can inject a write that
@@ -309,20 +323,23 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	attempt := e.opts.Attempt
 	tickID := tickOf(spec)
 	req := &startRequest{
-		Epic:        e.opts.EpicID,
-		TickID:      tickID,
-		Attempt:     attempt,
-		JobID:       spec.JobID,
-		Role:        spec.Role,
-		WriteRef:    spec.Source.WriteRef,
-		BaseRef:     e.opts.BaseRef,
-		Title:       e.opts.Title,
-		BaseSHA:     spec.Source.BaseSHA,
-		Model:       e.opts.Model,
-		Harness:     e.opts.Harness,
-		Prompt:      e.opts.Prompt,
-		WallSeconds: spec.Limits.WallSeconds,
-		WorkBaseSHA: e.opts.WorkBaseSHA,
+		Epic:     e.opts.EpicID,
+		TickID:   tickID,
+		Attempt:  attempt,
+		JobID:    spec.JobID,
+		Role:     spec.Role,
+		WriteRef: spec.Source.WriteRef,
+		BaseRef:  e.opts.BaseRef,
+		Title:    e.opts.Title,
+		BaseSHA:  spec.Source.BaseSHA,
+		Model:    e.opts.Model,
+		Harness:  e.opts.Harness,
+		Prompt:   e.opts.Prompt,
+		// The run's stuck window (tick xba), spelled the way the door reads
+		// it: see startRequest.StuckSeconds.
+		StuckSeconds: stuckSecondsFor(e.opts.StuckAfter),
+		WallSeconds:  spec.Limits.WallSeconds,
+		WorkBaseSHA:  e.opts.WorkBaseSHA,
 	}
 	if err := validateDoorFields(req); err != nil {
 		return nil, err

@@ -913,6 +913,7 @@ async function startHostedAttempt(
     repoUrl: boot.repo_url,
     baseSha: boot.base_sha,
     ...(boot.harness_budget_ms === undefined ? {} : { wallMs: boot.harness_budget_ms }),
+    ...(spec.stuck_seconds === undefined ? {} : { stuckMs: spec.stuck_seconds * 1000 }),
     boot: hosting.boot(ids.name),
   });
   return {
