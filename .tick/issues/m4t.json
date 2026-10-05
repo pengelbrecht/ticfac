@@ -1,0 +1,14 @@
+{
+  "id": "m4t",
+  "title": "metered pi dispatch depends on pi's stored Workers AI key being valid upstream",
+  "description": "The generated gateway override stamps cf-aig-authorization with the account token, but the gateway forwards pi's own Authorization (its stored cloudflare-workers-ai credential) to Workers AI. Live, a bogus Authorization plus a valid cf-aig-authorization logs a failed row with upstream 10000 Authentication error. On a host whose pi stores the cfu_ wallet key (as this one did during dm2), enabling metering turns every Workers AI dispatch into a 401, not just an unmetered one. A headers.Authorization entry in the override does displace pi's stored key (verified locally against a fake server), so the fix is small, but choosing the credential that pays is an operator decision. The dm2 comments in pimeter.go/pimeter_test.go that say the stored key cannot be displaced and is 'used or ignored by the gateway' are wrong on both counts and should be corrected with it.\nevidence: internal/exec/subprocess/pimeter.go: gatewayCredentialCommand doc comment; live probe t648-probe-e (gateway row success=false, response code 10000)\n\nticfac run epic-hn6 created this tick by absorbing the finding 4eb8f61d6412c9858f444744c0b9b470897b68d7fc8f1179bc9c9e10e8a9b222 (reported by run-epic-hn6/tick-648/attempt-39): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/4eb8f61d6412c9858f444744c0b9b470897b68d7fc8f1179bc9c9e10e8a9b222.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-648/attempt-39",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T20:28:00Z",
+  "updated_at": "2026-10-05T20:28:00Z"
+}
