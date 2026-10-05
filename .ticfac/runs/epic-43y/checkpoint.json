@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 248,
-  "state": "publishing",
-  "reason": "closing kkt behind the integrated gate on 52880e9fbb38",
-  "updated_at": "2026-10-05T16:01:53Z",
+  "sequence": 249,
+  "state": "running",
+  "reason": "kkt is closed",
+  "updated_at": "2026-10-05T16:02:15Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -157,7 +157,7 @@
     },
     {
       "tick_id": "kkt",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 33
     },
     {
