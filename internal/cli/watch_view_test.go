@@ -1069,6 +1069,29 @@ func TestTheFrameCILine(t *testing.T) {
 	}
 }
 
+// TestTheFrameCountsTheRunsPushesAndGitHubErrors (tick rlp, folded into
+// the hn6 frame): beside the CI line, the run's pushes, dim, and its failed
+// GitHub attempts, amber; a run that neither pushed nor failed says nothing.
+//
+// short: renders one hand-made model
+func TestTheFrameCountsTheRunsPushesAndGitHubErrors(t *testing.T) {
+	t.Parallel()
+	m := dashboardFixture()
+	if joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n"); strings.Contains(joined, "push") {
+		t.Errorf("a run with no pushes counts them:\n%s", joined)
+	}
+	m.Health.Pushes = 12
+	joined := strings.Join(renderWatchFrame(m, ansiWatchStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(joined, " · \x1b[2m12 pushes\x1b[0m") {
+		t.Errorf("the run's pushes are not counted dimly beside the CI line:\n%s", joined)
+	}
+	m.Health.GitHubErrors = statusmodel.GitHubErrors{RefUpdateFailed: 2, CrossRepoRefused: 1}
+	joined = strings.Join(renderWatchFrame(m, ansiWatchStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(joined, "12 pushes, \x1b[33m3 GitHub errors\x1b[0m") {
+		t.Errorf("the run's GitHub errors are not counted in amber:\n%s", joined)
+	}
+}
+
 // TestTheFrameTailIsTheFeedOwnWords: the tail is the feed's last two lines
 // through the same one-line form the stream path prints — the same words on
 // both paths — under the "─ recent" rule, with the key hint at the right.
@@ -1403,6 +1426,8 @@ func TestWatchPluralRetries(t *testing.T) {
 		{2, "party", "2 parties"},
 		{3, "day", "3 days"},
 		{2, "attempt", "2 attempts"},
+		{2, "push", "2 pushes"},
+		{1, "push", "1 push"},
 	} {
 		if got := watchPlural(tc.n, tc.what); got != tc.want {
 			t.Errorf("watchPlural(%d, %q) = %q, want %q", tc.n, tc.what, got, tc.want)
