@@ -70,6 +70,12 @@ func TestMain(m *testing.M) {
 		fmt.Fprintf(os.Stderr, "build the executor under test: %v\n", err)
 		os.Exit(1)
 	}
+	// The binary's first exec is paid here, not inside a test's clock: macOS
+	// assesses a freshly linked executable the first time it runs (0.2-0.4s
+	// on an idle host, measured 2026-10-05, nothing on the second run), and a
+	// gate execs dozens of fresh test binaries at once. The first test to
+	// start a supervisor used to pay it (activity_test.go sorts first).
+	_ = exec.Command(executorBin, "--help").Run()
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -435,8 +441,31 @@ func waitFor(t *testing.T, what string, timeout time.Duration, cond func() bool)
 func (f *fixture) waitSettled(handle *JobHandle) {
 	f.t.Helper()
 	st := f.store(handle)
-	waitFor(f.t, "the attempt to settle", 30*time.Second, st.settled)
+	deadline := time.Now().Add(settleWait)
+	for time.Now().Before(deadline) {
+		if st.settled() {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	// A timeout says what the attempt did, or it is a flake nobody can
+	// reproduce: its observations and the supervisor's own log.
+	observations, _ := st.observationsFrom("")
+	log, _ := os.ReadFile(st.path(fileRunnerLog))
+	f.t.Fatalf("timed out after %s waiting for the attempt to settle\nobservations:\n%s\nrunner.log:\n%s",
+		settleWait, formatObservations(observations), log)
 }
+
+// settleWait is how long an attempt may take to settle before the harness
+// calls it hung: the bound the attempt itself carries, spec()'s 60s wall
+// clock, plus a stop's worst case (stopTree: 5s of SIGTERM, then 10s of
+// SIGKILL) and a margin. A correct supervisor settles inside it whatever the
+// host is doing; a shorter wait asserts a speed nobody specified. It was 30s,
+// half the attempt's own bound, and tick qjl's gate timed out on
+// TestALocalRunnerIsNotStuckWhileItsToolIsBusyAndIsRepromptedWhenItHangs on a
+// host loaded 3-7x (statusmodel 52s against 7s), where 75 runs of it beside a
+// full short suite all settled in 5-9s.
+const settleWait = 90 * time.Second
 
 func (f *fixture) inspect(handle *JobHandle) *JobStatus {
 	f.t.Helper()
