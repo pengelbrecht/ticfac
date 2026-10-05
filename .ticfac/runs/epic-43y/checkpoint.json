@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 428,
-  "state": "gating",
-  "reason": "running the integrated gate for 4ao on 567e203a2506",
-  "updated_at": "2026-10-05T22:08:51Z",
+  "sequence": 429,
+  "state": "publishing",
+  "reason": "closing 4ao behind the integrated gate on 567e203a2506",
+  "updated_at": "2026-10-05T22:10:04Z",
   "ticks": [
     {
       "tick_id": "92k",
