@@ -38,6 +38,16 @@ import {
  * whole point of the local SQLite rung — and the steer socket: a live
  * conversation steered from outside the process that owns it. Nothing in
  * the workerd pool can spawn.
+ *
+ * The wall clock (tick 7wg): a full-worker test's runtime is load-dependent —
+ * it waits on the child's own progress, a boot, a socket, a file a running
+ * tool writes — and on a shared host at load average 23-47 one of these
+ * starved past every quiet-host bound and failed 'waiting for the tool to
+ * be running' after 1040s, twice in one night. No full-worker test borrows
+ * the node config's 30s default: each declares its own 300s bound and the
+ * fixture waits below it carry a 120s default — enforced by
+ * harness-timeout-discipline.test.ts, the same guard kjs pointed at the
+ * full-Harness tests.
  */
 
 /** The harness package root, from this test's own place in it. */
@@ -161,8 +171,17 @@ function makeFixture(): Fixture {
   return { root, origin, worktree, configPath, config, transcript, run };
 }
 
-/** Waits for a live condition, polling briefly — never a blind sleep. */
-async function waitFor(what: string, check: () => boolean, timeoutMs = 30_000): Promise<void> {
+/**
+ * Waits for a live condition, polling briefly — never a blind sleep.
+ *
+ * The default bound is a loaded-host number (tick 7wg): what it waits on is
+ * the worker CHILD's own progress, and the old 30s quiet-host default was
+ * the bound a shared host at load average 23-47 starved twice in one night
+ * ('timed out waiting for the tool to be running'). Room for a loaded
+ * host, still a bound a genuinely stuck worker fails inside — and always
+ * below the 300s per-test bound the discipline test enforces.
+ */
+async function waitFor(what: string, check: () => boolean, timeoutMs = 120_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (!check()) {
     if (Date.now() > deadline) throw new Error(`timed out waiting for ${what}`);
@@ -201,14 +220,19 @@ function textOf(message: Message): string {
 
 describe("the local worker host", () => {
   let f: Fixture;
+  // The fixture itself is real git — init, clone, push — under the same
+  // loaded host the tests run on, so the hooks get the same room as the
+  // tests instead of the config's quiet-host 30s hookTimeout.
   beforeEach(() => {
     f = makeFixture();
-  });
+  }, 120_000);
   afterEach(() => {
     rmSync(f.root, { recursive: true, force: true });
-  });
+  }, 120_000);
 
-  it("runs a whole worker to settlement: tools in the worktree, wip on the branch, report written", async () => {
+  it("runs a whole worker to settlement: tools in the worktree, wip on the branch, report written", {
+    timeout: 300_000,
+  }, async () => {
     const transcript = f.transcript([
       {
         toolCalls: [
@@ -297,7 +321,9 @@ describe("the local worker host", () => {
     expect(textOf(messages.at(-1) as Message)).toBe("the work is done and reported");
   });
 
-  it("delivers the stuck nudge as a STEER: live socket, placed after the current tool round", async () => {
+  it("delivers the stuck nudge as a STEER: live socket, placed after the current tool round", {
+    timeout: 300_000,
+  }, async () => {
     const transcript = f.transcript([
       {
         toolCalls: [
@@ -340,7 +366,9 @@ describe("the local worker host", () => {
     expect(textOf(messages.at(-1) as Message)).toBe("the steer joined the run");
   });
 
-  it("serves the live conversation to a watcher, and a steer round-trips through what it watches", async () => {
+  it("serves the live conversation to a watcher, and a steer round-trips through what it watches", {
+    timeout: 300_000,
+  }, async () => {
     // Tick y03: `ticfac watch <run> <tick>` reads a local worker through
     // the same door the stuck nudge steers through. The watcher sees the
     // snapshot, then every commit — thinking, tool calls, live tool output,
@@ -444,7 +472,9 @@ describe("the local worker host", () => {
     }
   });
 
-  it("refuses a request that is neither a steer nor a watch, by name", async () => {
+  it("refuses a request that is neither a steer nor a watch, by name", {
+    timeout: 300_000,
+  }, async () => {
     const transcript = f.transcript([
       {
         toolCalls: [
@@ -476,7 +506,9 @@ describe("the local worker host", () => {
     expect(await exitOf(child)).toBe(0);
   });
 
-  it("resumes from the storage after the harness is killed mid-tool, without re-running the tool", async () => {
+  it("resumes from the storage after the harness is killed mid-tool, without re-running the tool", {
+    timeout: 300_000,
+  }, async () => {
     // The transcript file is the FAUX provider's script, and the faux
     // provider is stateless per process — so the second process's script
     // starts where the conversation picks up again: its first request is
@@ -519,7 +551,9 @@ describe("the local worker host", () => {
     expect(textOf(messages.at(-1) as Message)).toBe("recovered after the kill");
   });
 
-  it("continues the SAME conversation when relaunched with a follow-up message", async () => {
+  it("continues the SAME conversation when relaunched with a follow-up message", {
+    timeout: 300_000,
+  }, async () => {
     // The first process finishes its prompt without a report. The
     // contract's onYield nudges it twice IN the conversation (each nudge
     // consumes a scripted response); with the bound spent the yield stands,

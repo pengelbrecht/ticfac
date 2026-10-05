@@ -204,7 +204,9 @@ describe("the full-Harness and full-worker tests of this suite state their own w
     expect(workerTests.length).toBeGreaterThanOrEqual(6);
     const titles = new Set(workerTests.map((test) => test.title));
     expect(
-      titles.has("resumes from the storage after the harness is killed mid-tool, without re-running the tool"),
+      titles.has(
+        "resumes from the storage after the harness is killed mid-tool, without re-running the tool",
+      ),
     ).toBe(true);
     expect(
       titles.has("continues the SAME conversation when relaunched with a follow-up message"),
