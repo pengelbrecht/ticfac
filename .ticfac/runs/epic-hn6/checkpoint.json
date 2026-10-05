@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 133,
-  "state": "dispatching",
-  "reason": "dispatching 3qg as attempt 20",
-  "updated_at": "2026-10-05T10:58:02Z",
+  "sequence": 134,
+  "state": "running",
+  "reason": "3qg is running as attempt 20",
+  "updated_at": "2026-10-05T10:58:13Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -112,7 +112,8 @@
     },
     {
       "tick_id": "3qg",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 20
     }
   ],
   "provenance": {
