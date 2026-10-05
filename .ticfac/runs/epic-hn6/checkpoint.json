@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 223,
-  "state": "collecting",
-  "reason": "collecting 7l6 attempt 31",
-  "updated_at": "2026-10-05T17:26:24Z",
+  "sequence": 224,
+  "state": "integrating",
+  "reason": "integrating 7l6 attempt 31 into epic/hn6",
+  "updated_at": "2026-10-05T17:26:34Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -159,7 +159,7 @@
     },
     {
       "tick_id": "7l6",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 31
     },
     {
