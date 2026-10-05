@@ -1,0 +1,14 @@
+{
+  "id": "rpw",
+  "title": "Stuck watch never reads durable storage activity (durableResume gets full argv)",
+  "description": "activityWatch.look and lastRunnerEvent call durableResume(record.Runner, record.RunnerArgv). But executor.go stores the RESOLVED argv in record.RunnerArgv, which is never empty, so durableResume always returns false in the supervisor. The durable runner's conversation storage mtime (tick bgx) is therefore never read as activity, and the evidence says 'no session transcript could be read'. A durable worker in a long, quiet model generation is judged only on tool CPU, worktree and branch, so it can be nudged and stopped while it is working.\nevidence: internal/exec/subprocess/activity.go:353 and :696; executor.go:444 (record.RunnerArgv = argv); the runner log of TestAStuckDurableWorkerInAHungToolIsSteeredThroughIt reads 'no session transcript could be read' for the pi runner\n\nticfac run epic-43y created this tick by absorbing the finding 623504776f93b74bf0bf2e28d7e2a0d8d6b56d6a955455a491b6253c880d2d46 (reported by run-epic-43y/tick-l6n/attempt-54): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/623504776f93b74bf0bf2e28d7e2a0d8d6b56d6a955455a491b6253c880d2d46.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-l6n/attempt-54",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T19:59:46Z",
+  "updated_at": "2026-10-05T19:59:46Z"
+}
