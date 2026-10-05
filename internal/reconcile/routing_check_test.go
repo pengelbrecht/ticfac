@@ -1,6 +1,7 @@
 package reconcile
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,6 +84,67 @@ func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 			if p.Runner != "pi" || !strings.HasPrefix(p.Model, "cloudflare-workers-ai/") {
 				t.Errorf("cloud %s at tier %q resolves to %s/%s: claude (or anything off Workers AI) leaked into the cloud",
 					role, tier, p.Runner, p.Model)
+			}
+		}
+	}
+}
+
+// short: reads this repository's .tick/runners*.toml and resolves profiles in
+// memory; no harness, no git, milliseconds.
+//
+// The one-harness rule, on the LOCAL half (epic 43y, tick 7ml). The common
+// runners.toml's [roles.implement.tiers.balanced] named kind = "codex" — a
+// Phase-2 leftover — and runners.local.toml declares no [roles.implement]
+// role cell to overlay it away, so a local run (herdr or harness substrate)
+// pinning --tier balanced dispatched an implement worker on the codex CLI:
+// a harness that is neither pi-durable nor the claude-CLI frontier rung the
+// operator's 2026-10-04 decision allows. Balanced is a rung no ladder ever
+// derives — the local ladder climbs strong -> frontier, the cloud's economy
+// -> strong — so the ladder check above never resolved it; only a pin
+// reaches it, and this guard resolves every tier name a pin can, exactly as
+// a pin does. Since hpk the `pi` kind IS the pi-durable Node harness, so
+// every implement tier but frontier must resolve to pi, and frontier — the
+// operator's kept claude-CLI rung — to claude. A tier no file declares must
+// REFUSE naming the tier (the profile layer's fail-closed rule: a tier that
+// silently falls back to the role is a tier an operator paid for and did
+// not get) — never resolve onto some other harness.
+func TestThisRepositorysLocalImplementTiersRouteOnTheOneHarness(t *testing.T) {
+	t.Parallel()
+	root, err := contracts.RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := filepath.Join(root, ".tick", "runners.toml")
+	for _, tc := range []struct {
+		substrate runconfig.Substrate
+		dir       string
+	}{
+		{runconfig.SubstrateHerdr, ""},
+		{runconfig.SubstrateHerdr, profile.EmbeddedHerdr},
+		{runconfig.SubstrateHarness, ""},
+	} {
+		for _, tier := range runconfig.TierNames {
+			p, err := profile.Resolve("implement-tick", profile.Options{
+				Dir: tc.dir, RunnersConfig: config, Tier: string(tier), Substrate: string(tc.substrate),
+			})
+			if err != nil {
+				// Fail-closed or fail-loud, never fail-wrong: a tier no local
+				// file declares is refused naming it. Any other refusal is a
+				// routing defect in its own right.
+				if !strings.Contains(err.Error(), fmt.Sprintf("declares no tier %q", tier)) {
+					t.Errorf("substrate %s (profiles %q): implement at tier %q refuses for the wrong reason: %v",
+						tc.substrate, tc.dir, tier, err)
+				}
+				continue
+			}
+			want := "pi"
+			if tier == runconfig.TierFrontier {
+				want = "claude" // the operator's kept claude-CLI frontier rung (2026-10-04)
+			}
+			if p.Runner != want {
+				t.Errorf("substrate %s (profiles %q): implement at tier %q routes to %s/%s, want the %s harness — "+
+					"pi-durable everywhere, claude only as the frontier rung: no tier a pin can reach may name another CLI",
+					tc.substrate, tc.dir, tier, p.Runner, p.Model, want)
 			}
 		}
 	}
