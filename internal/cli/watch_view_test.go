@@ -244,7 +244,7 @@ func dashboardFixture() statusmodel.Model {
 			},
 		},
 		Cost: statusmodel.Cost{
-			RecordedUSD: 0.41, Attempts: 6,
+			RecordedUSD: ptr(0.41), Attempts: 6,
 			Basis: "usage recorded on decision records",
 			Lines: []statusmodel.CostLine{
 				{Source: statusmodel.CostSourceWorkersAI, Metered: true, USD: ptr(0.41), Attempts: 4,

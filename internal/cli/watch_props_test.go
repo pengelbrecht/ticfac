@@ -349,7 +349,7 @@ func genModel(r *rand.Rand) statusmodel.Model {
 	r.Shuffle(len(rivers), func(i, j int) { rivers[i], rivers[j] = rivers[j], rivers[i] })
 	amounts := []float64{0.08, 0.37, 0.41, 0.99, 1.24, 3.02, 12.5}
 	lines := make([]statusmodel.CostLine, 0, 3)
-	recorded := 0.0
+	recorded, anyMetered := 0.0, false
 	host := statusmodel.HostLocal
 	for i, n := 0, 1+r.IntN(3); i < n; i++ {
 		line := statusmodel.CostLine{Source: rivers[i], Attempts: 1 + r.IntN(6)}
@@ -358,10 +358,12 @@ func genModel(r *rand.Rand) statusmodel.Model {
 			switch roll := r.IntN(3); {
 			case roll == 0: // a measured zero: stated by the records, so it prints
 				line.Metered, line.USD = true, ptr(0.0)
+				recorded, anyMetered = recorded+0.0, true
 				line.Basis = "usage recorded on decision records"
 			case roll == 1: // a stated price
 				usd := amounts[r.IntN(len(amounts))]
 				line.Metered, line.USD, recorded = true, ptr(usd), recorded+usd
+				anyMetered = true
 				line.Basis = "usage recorded on decision records"
 			default: // decision records with no usage block, or no price on it
 				line.Basis = "not metered: the decision records carry no measured cost"
@@ -371,6 +373,7 @@ func genModel(r *rand.Rand) statusmodel.Model {
 			case roll == 0: // the gateway's measured number
 				usd := amounts[r.IntN(len(amounts))]
 				line.Metered, line.USD, recorded = true, ptr(usd), recorded+usd
+				anyMetered = true
 				line.Basis = "AI Gateway logs"
 			case roll == 1: // the unsynced cloud record: telemetry not answered
 				line.Basis = "not metered: the gateway's cost telemetry has not answered for this run"
@@ -481,10 +484,17 @@ func genModel(r *rand.Rand) statusmodel.Model {
 		Attention: attention,
 		Health:    statusmodel.Health{Verdict: verdict, RemoteRetries: r.IntN(5)},
 		Cost: statusmodel.Cost{
-			RecordedUSD: recorded,
-			Attempts:    total,
-			Basis:       "usage recorded on decision records",
-			Lines:       lines,
+			// The roll-up mirrors the builder (tick dm2): the sum of the
+			// metered lines, null when none is metered.
+			RecordedUSD: func() *float64 {
+				if !anyMetered {
+					return nil
+				}
+				return ptr(recorded)
+			}(),
+			Attempts: total,
+			Basis:    "usage recorded on decision records",
+			Lines:    lines,
 		},
 	}
 	if r.IntN(2) == 0 {
