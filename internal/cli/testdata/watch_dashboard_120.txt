@@ -4,7 +4,7 @@
 
  TICK  WHAT                           TIER     PIPELINE                       TIME ATTEMPTS
  060   cloud worker early-exit nudge  strong   claim ▸ work ▸ gate ▸ merged ✓ 49m  1
-  └ +823  re-run holds the stopped claim frontier claim ▸ work ▸ gate ▸ merged ✓ 34m  2
+  └ +823  re-run holds the stopped c… frontier claim ▸ work ▸ gate ▸ merged ✓ 34m  2
  46x   port sandbox verbs to ticfac   frontier claim ▸ work ▸ ●gate ▸ …       1h   2 ⤴
  v7z   close out phase 7              closeout claim ▸ work ▸ ✗ci ▸ …         40m  1
 
