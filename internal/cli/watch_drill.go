@@ -34,7 +34,7 @@ import (
 // silently dropped.
 func renderTickView(m statusmodel.Model, tickID string, st watchStyles, width, height int) []string {
 	content := renderTickContent(m, tickID, st, width)
-	footer := st.dim("[esc] back")
+	footer := st.cyan("[esc] back")
 	switch {
 	case height == 1:
 		return []string{footer}
@@ -76,7 +76,7 @@ func renderTickContent(m statusmodel.Model, tickID string, st watchStyles, width
 	if name == "" {
 		name = tick.Title
 	}
-	lines = append(lines, tickID+"  "+name)
+	lines = append(lines, st.cyan(tickID)+"  "+name)
 	if tick.DuplicateOf != nil && *tick.DuplicateOf != "" {
 		lines = append(lines, st.dim("duplicate of "+*tick.DuplicateOf+": the same finding was promoted twice, and the earlier one stands — the work is "+*tick.DuplicateOf+"'s"))
 	}
@@ -84,7 +84,7 @@ func renderTickContent(m statusmodel.Model, tickID string, st watchStyles, width
 	lines = append(lines, dashPipeline(tick.Pipeline, st, words))
 
 	for i, try := range tick.Tries {
-		line := fmt.Sprintf("try %d  %-9s %-11s", try.Try, dashCell(tryTier(try), 9), try.Outcome)
+		line := fmt.Sprintf("try %d  %-9s %s", try.Try, dashCell(tryTier(try), 9), dashPad(watchTryOutcome(try.Outcome, st), 11))
 		if try.Reason != nil && *try.Reason != "" {
 			line += "  " + *try.Reason
 		}
@@ -158,6 +158,22 @@ func tryTier(try statusmodel.Try) string {
 	return *try.Tier
 }
 
+// watchTryOutcome is a try's outcome word carrying its own state's hue
+// (tick 5ba): green for the outcomes that passed or closed, red for the
+// refusals, amber for the ones still in flight — the palette the pipeline
+// cell and the verdict already speak.
+func watchTryOutcome(outcome string, st watchStyles) string {
+	switch outcome {
+	case statusmodel.TryClosed, statusmodel.TryReported:
+		return st.green(outcome)
+	case statusmodel.TryRejected, statusmodel.TryGateFailed:
+		return st.red(outcome)
+	case statusmodel.TryInFlight, statusmodel.TryDispatched:
+		return st.amber(outcome)
+	}
+	return outcome
+}
+
 // watchFindingGating is a finding's gating verdict as the tri-state the
 // model carries: gated, explicitly not, or a draft nobody triaged yet.
 func watchFindingGating(gating *bool) string {
@@ -190,7 +206,7 @@ func watchTickGates(m statusmodel.Model, tickID string) []statusmodel.Gate {
 // is the window: how many lines fit the pane, the last of them the feed's
 // newest not yet scrolled away. Height 0 means unknown: everything, and the
 // terminal scrolls.
-func renderFeedView(events []runfeed.Event, tries *runfeed.Tries, model *statusmodel.Model, scroll, width, height int) []string {
+func renderFeedView(events []runfeed.Event, tries *runfeed.Tries, model *statusmodel.Model, scroll, width, height int, st watchStyles) []string {
 	window := height
 	if window <= 0 {
 		// Unknown height: everything, and nothing scrolled away.
@@ -207,7 +223,7 @@ func renderFeedView(events []runfeed.Event, tries *runfeed.Tries, model *statusm
 	}
 	lines := make([]string, 0, end-start)
 	for _, event := range events[start:end] {
-		lines = append(lines, watchEventLineWith(event, tries, model))
+		lines = append(lines, watchEventLineWith(event, tries, model, st))
 	}
 	for i, line := range lines {
 		line = strings.TrimRight(line, " ")
@@ -223,8 +239,10 @@ func renderFeedView(events []runfeed.Event, tries *runfeed.Tries, model *statusm
 // model: a refusal's line names its reason — the run's own detail, cut to
 // its first clause — and, when the event's own try carries a next step, the
 // run's answer to "and then what" for THAT attempt, never a later try's.
-// The old watchEventLine stays the stream's full-detail line, byte for byte.
-func watchEventLineWith(event runfeed.Event, tries *runfeed.Tries, model *statusmodel.Model) string {
+// The palette rides the same words (tick 5ba): the timestamp dim, the
+// tick's id cyan, a refusal's stage red — and the identity style set renders
+// it byte for byte as the stream's full-detail line.
+func watchEventLineWith(event runfeed.Event, tries *runfeed.Tries, model *statusmodel.Model, st watchStyles) string {
 	t := nilTries(tries)
 	detail := event.Detail
 	isRefusal := false
@@ -235,7 +253,15 @@ func watchEventLineWith(event runfeed.Event, tries *runfeed.Tries, model *status
 			detail = clause
 		}
 	}
-	line := fmt.Sprintf("%s %-12s %s: %s", clockOf(event.At), watchEventWho(event, t), event.Stage, detail)
+	who := dashPad(watchEventWho(event, t), 12)
+	if event.TickID != nil && *event.TickID != "" {
+		who = st.cyan(who)
+	}
+	stage := event.Stage
+	if isRefusal {
+		stage = st.red(stage)
+	}
+	line := fmt.Sprintf("%s %s %s: %s", st.dim(clockOf(event.At)), who, stage, detail)
 	if isRefusal && model != nil && event.TickID != nil && *event.TickID != "" {
 		if tick := watchTickOf(*model, *event.TickID); tick != nil {
 			if try := watchTryOfAttempt(tick, event.Attempt); try != nil && try.NextStep != nil && *try.NextStep != "" {

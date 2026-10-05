@@ -122,7 +122,11 @@ func watchOnAPty(t *testing.T, width, height int) {
 	// so the watch's own seams — IsTerminal, the size, raw mode — answer for
 	// a real terminal, which is the fact the staircase hid behind.
 	cmd := exec.Command(os.Args[0], "-test.run=TestWatchPtyHelperProcess$")
+	// NO_COLOR: this test pins the pane's mechanics — carriage returns, line
+	// widths, the words — and the palette has its own grid tests
+	// (watch_colour_test.go); a plain frame is the layout assertion.
 	cmd.Env = append(os.Environ(),
+		"NO_COLOR=1",
 		"TICFAC_WATCH_PTY_HELPER=1",
 		"TICFAC_WATCH_PTY_REPO="+repo,
 		"TICFAC_WATCH_PTY_HOME="+home,
@@ -222,6 +226,20 @@ func watchOnAPty(t *testing.T, width, height int) {
 		if w := ansi.StringWidth(ansi.Strip(line)); w > width {
 			t.Errorf("line %d is %d cells wide in a %d-column pane: %q", i, w, width, ansi.Strip(line))
 		}
+	}
+
+	// NO_COLOR held on a REAL terminal: the frames carry their cursor
+	// codes — the redraw really happened — but no SGR style at all, because
+	// a terminal that cannot show a hue still shows every word (tick 5ba).
+	// The cursor codes are letters (A, J, L), so no SGR sequence ever
+	// matches one of these.
+	for _, code := range []string{"\x1b[1m", "\x1b[2m", "\x1b[31m", "\x1b[32m", "\x1b[33m", "\x1b[36m"} {
+		if strings.Contains(got, code) {
+			t.Errorf("the watch drew an SGR style under NO_COLOR (%q):\n%s", code, ansi.Strip(got))
+		}
+	}
+	if !strings.Contains(got, "\x1b[J") {
+		t.Errorf("the redraw's own cursor codes vanished with the colour:\n%s", ansi.Strip(got))
 	}
 }
 

@@ -24,6 +24,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -64,21 +65,36 @@ const (
 
 // watchStyles is the frame's small style set, injected so a test reads the
 // words with the identity set and the colours with the ANSI one — the frame
-// must be as assertable as it is readable. Five styles cover the frame: dim
-// for what is far from now or quiet by design, amber for what wants a look,
-// red for what is wrong, green for the healthy verdict, bold for what leads.
+// must be as assertable as it is readable. Six styles cover the frame: dim
+// for what is far from now or quiet by design (closed groups, provenance,
+// secondary text), amber for what is in flight or wants a look, red for
+// what is wrong or held for a person (with bold, the most prominent thing
+// on screen when it stands), green for what passed or finished healthy,
+// cyan for the identities and key hints a person scans for, bold for what
+// leads (the section headers). Four hues, no background fills: colour
+// carries meaning, never decoration (tick 5ba).
 type watchStyles struct {
 	dim   func(string) string
 	amber func(string) string
 	red   func(string) string
 	green func(string) string
+	cyan  func(string) string
 	bold  func(string) string
 }
 
-// ansiWatchStyles is the terminal's style set: plain ANSI, no colorprofile
-// detection, because the live view is only ever drawn on a TTY (the pipe
-// path streams plain lines instead), and these are the codes every terminal
-// a watch runs on answers.
+// identityWatchStyles is the identity style set: every string comes back
+// exactly as it was, the frame's words with no escape codes — the set a
+// pipe, a log, a NO_COLOR terminal or a dumb one gets.
+func identityWatchStyles() watchStyles {
+	id := func(s string) string { return s }
+	return watchStyles{dim: id, amber: id, red: id, green: id, cyan: id, bold: id}
+}
+
+// ansiWatchStyles is the terminal's style set: plain ANSI 16-colour codes,
+// no colorprofile detection, because the live view is only ever drawn on a
+// TTY (the pipe path streams plain lines instead), and these are the codes
+// every terminal a watch runs on answers — the names a terminal theme
+// maps to its own hues.
 func ansiWatchStyles() watchStyles {
 	wrap := func(code string) func(string) string {
 		return func(s string) string {
@@ -93,8 +109,22 @@ func ansiWatchStyles() watchStyles {
 		amber: wrap("33"),
 		red:   wrap("31"),
 		green: wrap("32"),
+		cyan:  wrap("36"),
 		bold:  wrap("1"),
 	}
+}
+
+// watchStylesForTerminal is the style set the live view draws with: the
+// ANSI set, unless the environment said the terminal shows no colour —
+// NO_COLOR set to anything (the convention: any non-empty value), or a
+// TERM=dumb terminal — in which case the identity set, because a terminal
+// that cannot show a hue still shows every word, in the same layout:
+// colour never changes widths (tick 5ba).
+func watchStylesForTerminal() watchStyles {
+	if os.Getenv("NO_COLOR") != "" || os.Getenv("TERM") == "dumb" {
+		return identityWatchStyles()
+	}
+	return ansiWatchStyles()
 }
 
 // renderWatchFrame renders one frame of the dashboard: the headline (the
@@ -153,7 +183,9 @@ func dashboardHeadline(m statusmodel.Model, st watchStyles, width int) []string 
 		life = m.Lifecycle.Phase
 	}
 	head := []string{
-		dashSeat(identity, m.Host+" · "+life, width),
+		// The provenance at the pane's right — the host, the executor, the
+		// liveness word — is secondary text: dim, never decoration.
+		dashSeat(identity, st.dim(m.Host+" · "+life), width),
 		dashProgressLine(m, st, width),
 	}
 	return append(head, dashPhaseLine(m, st, width)...)
@@ -297,9 +329,12 @@ func dashPhaseLine(m statusmodel.Model, st watchStyles, width int) []string {
 		}
 		switch state {
 		case statusmodel.PhaseStateDone:
-			segments = append(segments, "✓ "+name)
+			// A phase that finished says so in the hue of finished things —
+			// the mark carries the colour, the name stays plain: colour
+			// carries meaning, sparingly.
+			segments = append(segments, st.green("✓")+" "+name)
 		case statusmodel.PhaseStateActive:
-			segments = append(segments, st.bold("◐ "+name))
+			segments = append(segments, st.amber("◐ "+name))
 		default:
 			segments = append(segments, st.dim("○ "+name))
 		}
@@ -337,10 +372,11 @@ func dashboardNeedsSomebody(m statusmodel.Model) bool {
 }
 
 // dashboardAttentionLines is the first question — does anything need me —
-// asked in the header, one amber line per hold, each naming the one command
-// that moves it on. Nothing needs a person and there is no line at all: the
-// phase bar's quiet right side is the whole answer. A line the pane cannot
-// seat is wrapped under its announcement, never truncated (tick 9um).
+// asked in the header, one red+bold line per hold, each naming the one command
+// that moves it on: the most prominent thing on screen while it stands.
+// Nothing needs a person and there is no line at all: the phase bar's quiet
+// right side is the whole answer. A line the pane cannot seat is wrapped
+// under its announcement, never truncated (tick 9um).
 func dashboardAttentionLines(m statusmodel.Model, st watchStyles, width int) []string {
 	lines := []string{}
 	for _, a := range m.Attention {
@@ -376,14 +412,16 @@ const dashHoldIndent = "  "
 // not, wrapped under the announcement instead of truncated (tick 9um): the
 // what flows on with a hanging indent, and the command that clears the hold
 // keeps every one of its words on lines of its own, because a clearing
-// command a person cannot read whole is no command.
+// command a person cannot read whole is no command. The whole line is red
+// and bold — needs-you is the most prominent thing on screen when
+// non-empty (tick 5ba), never one accent among others.
 func dashboardHoldLines(a statusmodel.Attention, st watchStyles, width int) []string {
 	line := "needs you: " + a.What
 	if a.UnblockCommand != nil && *a.UnblockCommand != "" {
 		line += " — " + *a.UnblockCommand
 	}
 	if width <= 0 || ansi.StringWidth(line) <= width {
-		return []string{st.amber(line)}
+		return []string{st.red(st.bold(line))}
 	}
 	wrapped := dashWrapWords(a.What, "needs you: ", width)
 	if a.UnblockCommand != nil && *a.UnblockCommand != "" {
@@ -391,7 +429,7 @@ func dashboardHoldLines(a statusmodel.Attention, st watchStyles, width int) []st
 	}
 	lines := make([]string, 0, len(wrapped))
 	for _, l := range wrapped {
-		lines = append(lines, st.amber(l))
+		lines = append(lines, st.red(st.bold(l)))
 	}
 	return lines
 }
@@ -541,6 +579,10 @@ func dashboardTable(m statusmodel.Model, st watchStyles, width int, selected str
 	if showTier {
 		head += " " + dashPad("ATTEMPTS", attemptsW)
 	}
+	// The section header leads in bold (tick 5ba) — trimmed first, so the
+	// padding a column nobody fills ends in is not sealed inside the bold
+	// span the frame's trailing-space trim then cannot see.
+	head = st.bold(strings.TrimRight(head, " "))
 
 	if m.Waves == nil {
 		return []string{"", head}, []dashRow{{
@@ -552,8 +594,11 @@ func dashboardTable(m statusmodel.Model, st watchStyles, width int, selected str
 		line := c.render(showWhat, showTier, idW, whatW, tierW, pipeW, timeW, attemptsW)
 		if c.duplicate {
 			// Dimmed whole: the row keeps its place (rows never move) and its
-			// history, but nothing about it is the frontier's business.
-			line = st.dim(line)
+			// history, but nothing about it is the frontier's business — the
+			// accents it carried are stripped before the dim covers it, so the
+			// dim is one span over the whole row and never an accent's reset
+			// away from the rest of it.
+			line = st.dim(ansi.Strip(line))
 		}
 		rows = append(rows, dashRow{
 			line:   line,
@@ -649,7 +694,7 @@ func dashTickCells(tick statusmodel.Tick, st watchStyles, showWhat, showTier, wo
 		attempts = dashAttempts(tick)
 	}
 	return dashCells{
-		lead: lead, id: id, what: what, tier: tier, pipe: pipe,
+		lead: lead, id: st.cyan(id), what: what, tier: tier, pipe: pipe,
 		time: timeCell, attempts: attempts, tickID: tick.TickID,
 		closed:    tick.State == "closed",
 		duplicate: tick.DuplicateOf != nil,
@@ -657,11 +702,12 @@ func dashTickCells(tick statusmodel.Tick, st watchStyles, showWhat, showTier, wo
 }
 
 // dashPipeline is the row's pipeline cell (hn6 rule 1): the stops one tick
-// passes through, filling left to right — done stages plain, the live one
-// bold with "●", a refusal red with "✗", and every stage behind the live
-// one folded into one dim "…". A pane narrower than the words (below
-// watchWordsFrom) gets one glyph per stage instead; the stage list is the
-// tick's own, so a review or close-out row shows its own stops.
+// passes through, filling left to right — done stages plain (the last one's
+// ✓ green), the live one amber with "●", a refusal red with "✗", and every
+// stage behind the live one folded into one dim "…". A pane narrower than
+// the words (below watchWordsFrom) gets one glyph per stage instead; the
+// stage list is the tick's own, so a review or close-out row shows its own
+// stops.
 func dashPipeline(stages []statusmodel.PipelineStage, st watchStyles, words bool) string {
 	if len(stages) == 0 {
 		return ""
@@ -684,13 +730,15 @@ func dashPipelineWords(stages []statusmodel.PipelineStage, st watchStyles) strin
 			name := stage.Stage
 			if i == len(stages)-1 {
 				// A tick that finished its last stage says so at the
-				// cell's end: "merged ✓" / "closed ✓".
-				name += " ✓"
+				// cell's end, in the hue of finished things:
+				// "merged ✓" / "closed ✓".
+				name += " " + st.green("✓")
 			}
 			parts = append(parts, name)
 		case statusmodel.StageStateActive:
+			// The live stage is amber — in flight, the one thing to watch.
 			live = true
-			parts = append(parts, st.bold("●"+stage.Stage))
+			parts = append(parts, st.amber("●"+stage.Stage))
 			if i < len(stages)-1 {
 				parts = append(parts, st.dim("…"))
 			}
@@ -713,9 +761,9 @@ func dashPipelineGlyphs(stages []statusmodel.PipelineStage, st watchStyles) stri
 	for _, stage := range stages {
 		switch stage.State {
 		case statusmodel.StageStateDone:
-			parts = append(parts, "✓")
+			parts = append(parts, st.green("✓"))
 		case statusmodel.StageStateActive:
-			parts = append(parts, st.bold("●"))
+			parts = append(parts, st.amber("●"))
 		case statusmodel.StageStateFailed:
 			parts = append(parts, st.red("✗"))
 		default:
@@ -773,11 +821,13 @@ func dashboardWorkers(m statusmodel.Model, st watchStyles, width int) []string {
 	if lastInline {
 		head += "LAST"
 	}
-	lines := []string{"", head}
+	// The panel's own section header leads in bold, like the table's —
+	// trimmed first, so no padding is sealed inside the span.
+	lines := []string{"", st.bold(strings.TrimRight(head, " "))}
 	for i := range workers {
 		w := &workers[i]
 		tick := dashWorkerTick(m, *w)
-		row := dashPad(dashCell(dashWorkerIdentity(tick, w, slim), dashWorkerCols), dashWorkerCols)
+		row := dashPad(dashCell(dashWorkerIdentity(tick, w, slim, st), dashWorkerCols), dashWorkerCols)
 		spark := ""
 		if w.Activity != nil {
 			spark = dashSparkline(w.Activity.Buckets)
@@ -800,11 +850,12 @@ func dashboardWorkers(m statusmodel.Model, st watchStyles, width int) []string {
 	return lines
 }
 
-// dashWorkerIdentity is the worker row's first cell: the model, the executor
-// and the handle, from the worker's own tick, joined with " · ". A slim pane
-// keeps only the word a person uses to FIND the worker on the machine — the
-// handle — because that is the one a glance is for.
-func dashWorkerIdentity(tick *statusmodel.Tick, w *statusmodel.Worker, slim bool) string {
+// dashWorkerIdentity is the worker row's first cell: the tick id — cyan,
+// the identity a person scans for — then the model, the executor and the
+// handle, joined with " · ": provenance, dim. A slim pane keeps only the
+// word a person uses to FIND the worker on the machine — the handle —
+// because that is the one a glance is for.
+func dashWorkerIdentity(tick *statusmodel.Tick, w *statusmodel.Worker, slim bool, st watchStyles) string {
 	handle := ""
 	if w.Handle != nil {
 		handle = *w.Handle
@@ -812,13 +863,13 @@ func dashWorkerIdentity(tick *statusmodel.Tick, w *statusmodel.Worker, slim bool
 	if slim {
 		switch {
 		case handle != "":
-			return w.TickID + "  " + handle
+			return st.cyan(w.TickID) + "  " + handle
 		case tick != nil && tick.Executor != nil:
-			return w.TickID + "  " + *tick.Executor
+			return st.cyan(w.TickID) + "  " + st.dim(*tick.Executor)
 		case tick != nil && tick.Model != nil:
-			return w.TickID + "  " + shortModel(*tick.Model)
+			return st.cyan(w.TickID) + "  " + st.dim(shortModel(*tick.Model))
 		}
-		return w.TickID
+		return st.cyan(w.TickID)
 	}
 	parts := []string{}
 	if tick != nil && tick.Model != nil {
@@ -831,9 +882,9 @@ func dashWorkerIdentity(tick *statusmodel.Tick, w *statusmodel.Worker, slim bool
 		parts = append(parts, handle)
 	}
 	if len(parts) == 0 {
-		return w.TickID
+		return st.cyan(w.TickID)
 	}
-	return w.TickID + "  " + strings.Join(parts, " · ")
+	return st.cyan(w.TickID) + "  " + st.dim(strings.Join(parts, " · "))
 }
 
 // dashWorkerTick is the worker's own tick — matched by the attempt identity
@@ -919,7 +970,7 @@ func dashSparkline(buckets []int) string {
 // about what nothing measured.
 func dashboardCICost(m statusmodel.Model, st watchStyles, width int) []string {
 	ci := dashCI(m, st)
-	cost := dashCost(m)
+	cost := dashCost(m, st)
 	if width <= 0 {
 		return []string{"", ci + "    " + cost}
 	}
@@ -930,9 +981,9 @@ func dashboardCICost(m statusmodel.Model, st watchStyles, width int) []string {
 }
 
 // dashCI is the forge's answer on the epic PR's head, per check: ✓ a check
-// that completed green, ✗ red (in red), ◐ with its age a check still
-// running (in amber). No PR yet and the line says so, dimly — a run that has
-// not opened its PR is a fact, not a silence.
+// that completed green (in green), ✗ red (in red), ◐ with its age a check
+// still running (in amber). No PR yet and the line says so, dimly — a run
+// that has not opened its PR is a fact, not a silence.
 func dashCI(m statusmodel.Model, st watchStyles) string {
 	if m.CI == nil || m.CI.PR == nil {
 		return st.dim("CI: no PR yet")
@@ -941,7 +992,7 @@ func dashCI(m statusmodel.Model, st watchStyles) string {
 	for _, c := range m.CI.Checks {
 		switch {
 		case c.Status == "completed" && c.Conclusion == "success":
-			parts = append(parts, c.Name+" ✓")
+			parts = append(parts, c.Name+" "+st.green("✓"))
 		case c.Status == "completed" && c.Conclusion == "failure":
 			parts = append(parts, c.Name+" "+st.red("✗"))
 		case c.Status == "completed":
@@ -962,19 +1013,20 @@ func dashCI(m statusmodel.Model, st watchStyles) string {
 }
 
 // dashCost is the run's spend per source (hn6 rule 7): a metered line's
-// measured number, and "not metered" where nothing measured — never a
-// fabricated $0.00, because an unmetered line wearing a number is a lie with
-// a decimal point. No lines at all and the whole cost says so.
-func dashCost(m statusmodel.Model) string {
+// measured number, and "not metered" — dim, secondary text — where nothing
+// measured, never a fabricated $0.00, because an unmetered line wearing a
+// number is a lie with a decimal point. No lines at all and the whole cost
+// says so.
+func dashCost(m statusmodel.Model, st watchStyles) string {
 	if len(m.Cost.Lines) == 0 {
-		return "cost not metered"
+		return st.dim("cost not metered")
 	}
 	parts := make([]string, 0, len(m.Cost.Lines))
 	for _, line := range m.Cost.Lines {
 		if line.Metered && line.USD != nil {
 			parts = append(parts, fmt.Sprintf("%s $%.2f", dashCostLabel(line.Source), *line.USD))
 		} else {
-			parts = append(parts, dashCostLabel(line.Source)+" not metered")
+			parts = append(parts, dashCostLabel(line.Source)+" "+st.dim("not metered"))
 		}
 	}
 	return "cost " + strings.Join(parts, " · ")
@@ -1027,9 +1079,10 @@ func modelTries(m statusmodel.Model) *runfeed.Tries {
 }
 
 // dashboardTail is the feed shrunk to the two-line tail the spec names (hn6
-// rule 6), under a "─ recent" rule, with the key hint at the pane's right:
-// [e] opens the full feed, [enter] the tick under the cursor. The lines are
-// the feed's own words — the same one-line form the stream path prints — and
+// rule 6), under a bold "─ recent" rule, with the key hint at the pane's
+// right in cyan. The lines are the feed's own words — the same one-line form
+// the stream path prints, through the styled variant that carries the
+// palette: the timestamp dim, the tick's own id cyan, a refusal red — and
 // the try a line's "<tick>#<n>" prefix names is counted from the model's own
 // whole try histories (modelTries, tick s71), the same number the rows and
 // the [e] feed say — never from the five-line window the tail itself is.
@@ -1038,7 +1091,7 @@ func dashboardTail(m statusmodel.Model, st watchStyles, width int) []string {
 	if ruleWidth <= 0 {
 		ruleWidth = dashRecentRule
 	}
-	hint := "[e] events  [enter] tick"
+	hint := st.cyan("[e] events  [enter] tick")
 	tries := modelTries(m)
 	start := len(m.Recent) - dashRecentEvents
 	if start < 0 {
@@ -1046,15 +1099,15 @@ func dashboardTail(m statusmodel.Model, st watchStyles, width int) []string {
 	}
 	events := make([]string, 0, dashRecentEvents)
 	for _, e := range m.Recent[start:] {
-		events = append(events, watchEventLine(e, tries))
+		events = append(events, watchEventLineStyled(e, tries, st))
 	}
 	if len(events) == 0 {
-		return []string{dashRule(ruleWidth, hint)}
+		return []string{st.bold(dashRule(ruleWidth, hint))}
 	}
 	last := len(events) - 1
 	if placed, ok := dashTailSeat(events[last], hint, width); ok {
 		events[last] = placed
-		return append([]string{dashRule(ruleWidth, "")}, events...)
+		return append([]string{st.bold(dashRule(ruleWidth, ""))}, events...)
 	}
 	// The line and the hint cannot share the pane: the hint keeps its own
 	// line rather than eating the event's words.
@@ -1063,7 +1116,7 @@ func dashboardTail(m statusmodel.Model, st watchStyles, width int) []string {
 	} else {
 		events = append(events, hint)
 	}
-	return append([]string{dashRule(ruleWidth, "")}, events...)
+	return append([]string{st.bold(dashRule(ruleWidth, ""))}, events...)
 }
 
 // dashRule is the tail's section rule: "─ recent" run to the pane's edge,

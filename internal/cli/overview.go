@@ -795,8 +795,7 @@ const overviewHeadlineFallbackWidth = 100
 // codes — for a stdout that is not a terminal (a pipe, a log): a reader of
 // a listing must not find ANSI codes in it.
 func overviewIdentityStyles() watchStyles {
-	identity := func(s string) string { return s }
-	return watchStyles{dim: identity, amber: identity, red: identity, green: identity, bold: identity}
+	return identityWatchStyles()
 }
 
 // renderOverview draws the prose listing the JSON answers with: one line per
@@ -821,7 +820,7 @@ func renderOverview(stdout io.Writer, doc overviewModel, cloudNote string, all b
 	styles := overviewIdentityStyles()
 	width := overviewHeadlineFallbackWidth
 	if watchIsTerminal(stdout) {
-		styles = ansiWatchStyles()
+		styles = watchStylesForTerminal()
 		if w, _, ok := watchTerminalSize(stdout); ok && w > 0 {
 			width = w
 		}

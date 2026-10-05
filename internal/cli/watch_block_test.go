@@ -35,9 +35,14 @@ import (
 
 // fakeTerminal makes every writer a 100x30 terminal for one test — and the
 // keyboard keyless, because a test has none whatever the host's stdin is
-// attached to.
+// attached to. The terminal it fakes shows no colour (NO_COLOR): these
+// tests assert the frame's layout byte for byte, and the palette has its
+// own grid tests (watch_colour_test.go) — colour never changes widths, so
+// the plain frame is the layout assertion, and the coloured one is the
+// colour assertion.
 func fakeTerminal(t *testing.T) {
 	t.Helper()
+	t.Setenv("NO_COLOR", "1")
 	realTTY, realSize := watchIsTerminal, watchTerminalSize
 	t.Cleanup(func() { watchIsTerminal, watchTerminalSize = realTTY, realSize })
 	watchIsTerminal = func(io.Writer) bool { return true }
