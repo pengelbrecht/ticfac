@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 311,
-  "state": "running",
-  "reason": "l6n is running as attempt 50",
-  "updated_at": "2026-10-05T19:07:49Z",
+  "sequence": 312,
+  "state": "collecting",
+  "reason": "collecting ewd attempt 47",
+  "updated_at": "2026-10-05T19:07:54Z",
   "ticks": [
     {
       "tick_id": "92k",
