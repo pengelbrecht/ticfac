@@ -26,7 +26,7 @@ workdir="${TICKS_WORKDIR:-/work/repo}"
 state_dir="${TICKS_WORKER_STATE_DIR:-/tmp/ticks-worker}"
 tick="${TICKS_TICK:-xd3}"
 branch="tick/proof/${tick}"
-origin="${TICKS_REPO_URL:?TICKS_REPO_URL unset: the stand-in works on the staging Worker's own git origin (tick a2l)}"
+origin="${TICKS_REPO_URL:?TICKS_REPO_URL unset: the stand-in works on the git origin the staging Worker holds (tick a2l)}"
 say() { printf 'ticks-worker: %s\n' "$*"; }
 git config --global user.name "ticks sandbox"
 git config --global user.email "ticks-sandbox@ticks.invalid"
