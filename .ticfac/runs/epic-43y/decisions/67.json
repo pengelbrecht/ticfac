@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 67,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "A locally killed pi-durable runner settles its attempt failed: nudgeDue refuses every non-zero exit ('the runner failed'), so the attempt's durable storage — which runLocalWorker's harness.resume() is built to continue from — is abandoned on a kill, and the run pays a full redispatch with a fresh conversation. A bounded in-attempt relaunch of a durable runner after a signal death (the storage and the same requestId make it idempotent, 'the same argv replayed after a crash must find the same one again', harness/src/local/worker-host.ts) would give the local rung the mid-tool kill recovery the WorkerAgent host already has, and would make this tick's other delivery branch — a local harness kill that resumes in a new process without re-running the tool — provable in a real local run.\nevidence: internal/exec/subprocess/nudge.go:216 (code != 0 -> \"the runner failed\"); internal/exec/subprocess/supervisor.go runTurn (a signal death settles runner.exit, no relaunch); harness/src/local/worker-host.ts:419 (harness.resume())\n\nticfac run epic-43y created this tick by absorbing the finding 6158cad045d30378de56a1b8dce3162b4f2bc75f7c0f76938cd0d952f8b5f12e (reported by run-epic-43y/tick-ewd/attempt-47): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/6158cad045d30378de56a1b8dce3162b4f2bc75f7c0f76938cd0d952f8b5f12e.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "3c2",
+    "title": "The local supervisor could relaunch a killed durable runner"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.44,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.25,
+      "design": 0.56,
+      "diagnosis": 0.01,
+      "mechanical": 0.15,
+      "translation": 0.03
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1454,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T20:23:13Z",
+  "answered_at": "2026-10-05T20:23:13Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "3c2",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "7581c142ab1e60f30335efad0a2819ac95cbc0bf",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
