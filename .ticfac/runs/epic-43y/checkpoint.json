@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 301,
-  "state": "publishing",
-  "reason": "closing 4s2 behind the integrated gate on 473796a917db",
-  "updated_at": "2026-10-05T18:46:15Z",
+  "sequence": 302,
+  "state": "running",
+  "reason": "4s2 is closed",
+  "updated_at": "2026-10-05T18:46:23Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -193,7 +193,7 @@
     },
     {
       "tick_id": "4s2",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 44
     },
     {
