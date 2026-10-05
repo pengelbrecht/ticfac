@@ -1,0 +1,13 @@
+{
+  "id": "lur",
+  "title": "watch can hang standing open after its key reader has died",
+  "description": "2xk's stay-open view is entered when keyed \u0026\u0026 stayOnEnd. If the key reader died before the run ended, keys is set to nil but keyed stays true, so the standing select waits on a nil channel. The 'keyboard is gone' exit can never fire, and watch waits until a signal arrives. Fix: also require keys != nil.\nevidence: internal/cli/watch.go:969-990,1062-1070,1090\n\nticfac run epic-hn6 filed this backlog tick from the finding 91c2cea9f4a4b9d53c7d2b51297de9c4a84bf1c68cb29fae621c9652450bdbd1 (reported by run-epic-hn6/tick-pv7/attempt-42): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/91c2cea9f4a4b9d53c7d2b51297de9c4a84bf1c68cb29fae621c9652450bdbd1.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-pv7/attempt-42",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T23:22:47Z",
+  "updated_at": "2026-10-05T23:22:47Z"
+}
