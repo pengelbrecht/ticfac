@@ -19,10 +19,12 @@ import (
 // RESULT-378.md)". A model was dispatched to resolve a conflict in a report,
 // three resolve jobs failed, and the run stopped for a person.
 //
-// The integration merge now keeps every report path exactly as the
-// integration branch has it: a new report does not land, a rewritten one
-// does not conflict, and a conflict elsewhere is handed on without the
-// report in it.
+// The integration merge now drops every report: a new report does not land,
+// a rewritten one does not conflict, a removed one does not come back, a
+// report an older merge left on the branch leaves it with the next merge, and
+// a conflict elsewhere is handed on without the report in it (obk: keeping
+// each report "as the integration branch has it" undid 06t's removal of
+// seven of them, because the removal arrived as the incoming side of a merge).
 
 // reportMergeReconciler is the reconciler's merge over a mergeConflictRepo:
 // `side` is the attempt, `main` the integration branch.
@@ -88,9 +90,8 @@ func TestARewrittenReportIsNotAConflict(t *testing.T) {
 	if err != nil || conflict != nil {
 		t.Fatalf("a conflict only in the report stopped the merge: conflict %+v, err %v", conflict, err)
 	}
-	got, _ := showAt(dir, merged, "RESULT-378.md")
-	if got != "try 1, as the resolve left it\nSTATUS: DONE\n" {
-		t.Errorf("the integration branch's report changed to %q", got)
+	if pathsAt(t, dir, merged)["RESULT-378.md"] {
+		t.Errorf("the report is still on the integration branch after the merge")
 	}
 	if !pathsAt(t, dir, merged)["work.txt"] {
 		t.Errorf("the attempt's work did not merge")
@@ -154,9 +155,8 @@ func TestAConflictBesideAReportConflictNamesOnlyTheCode(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	report, _ := showAt(dir, conflicted, "RESULT-t1.md")
-	if report != "landed\n" {
-		t.Errorf("the resolve job's tree carries the report as %q, want the integration branch's", report)
+	if pathsAt(t, dir, conflicted)["RESULT-t1.md"] {
+		t.Errorf("the resolve job's tree carries a report")
 	}
 	code, _ := showAt(dir, conflicted, "shared.txt")
 	if !conflictMarkersIn(code) {
@@ -210,8 +210,8 @@ func TestAResolveJobsReportIsNotMintedIntoTheMerge(t *testing.T) {
 // commits a report of its own on its branch. The merge minted from the
 // job's whole tree landed a REWRITTEN RESULT-hn6.md on epic/hn6 through
 // exactly this path, after the reports guard was already on the branch.
-// The mint keeps every report as the epic head the job resolved against
-// has it (report_merge.go).
+// The mint drops every report, the integration branch's included, like
+// every merge into it (report_merge.go).
 //
 // short: one small git repository, one conflicted tree and one mint, no harness, no runner
 func TestTheBaseFoldMintKeepsTheResolveJobsReportOut(t *testing.T) {
@@ -250,9 +250,8 @@ func TestTheBaseFoldMintKeepsTheResolveJobsReportOut(t *testing.T) {
 	if paths["RESULT-bf.md"] {
 		t.Errorf("the resolve job's report was minted into the base-fold merge")
 	}
-	got, _ := showAt(dir, merged, "RESULT-t1.md")
-	if got != "the integration branch's report\n" {
-		t.Errorf("the integration branch's report was rewritten by the base-fold mint: %q", got)
+	if paths["RESULT-t1.md"] {
+		t.Errorf("the integration branch's report survived the base-fold mint")
 	}
 	code, _ := showAt(dir, merged, "shared.txt")
 	if code != "main and side\n" {
@@ -260,6 +259,63 @@ func TestTheBaseFoldMintKeepsTheResolveJobsReportOut(t *testing.T) {
 	}
 	if !paths["work.txt"] {
 		t.Errorf("the base branch's work did not reach the minted fold")
+	}
+}
+
+// obk: 06t's commit removed the seven reports epic/hn6 carried, and the
+// integration merge of that commit restored all seven, because each report
+// was kept "as the integration branch has it". A removal the incoming side
+// makes sticks.
+//
+// short: one small git repository and a single merge, no harness, no runner
+func TestAReportRemovalSticksThroughTheIntegrationMerge(t *testing.T) {
+	t.Parallel()
+	dir, g := mergeConflictRepo(t,
+		map[string]string{"RESULT-378.md": "landed\n", "RESULT-hn6.md": "landed\n", "README.md": "base\n"},
+		map[string]string{"other.txt": "another tick's work\n"},
+		map[string]string{"work.txt": "06t's work\n"},
+		[]string{"RESULT-378.md", "RESULT-hn6.md"})
+	r, epicHead, head := reportMergeReconciler(t, dir, g)
+
+	merged, conflict, err := r.mergeInWorktree("06t", 1, "side", head, epicHead)
+	if err != nil || conflict != nil {
+		t.Fatalf("a clean merge failed: conflict %+v, err %v", conflict, err)
+	}
+	paths := pathsAt(t, dir, merged)
+	for path := range paths {
+		if isWorkerReport(path) {
+			t.Errorf("the integration merge restored %s, which the merged branch removed", path)
+		}
+	}
+	if !paths["work.txt"] || !paths["other.txt"] {
+		t.Errorf("the merge lost work: %v", paths)
+	}
+}
+
+// A report an older merge left on the integration branch leaves it with the
+// next merge, whatever that merge is about: no report reaches main through
+// the epic's PR.
+//
+// short: one small git repository and a single merge, no harness, no runner
+func TestAReportAlreadyOnTheBranchLeavesWithTheNextMerge(t *testing.T) {
+	t.Parallel()
+	dir, g := mergeConflictRepo(t,
+		map[string]string{"README.md": "base\n"},
+		map[string]string{"RESULT-old.md": "landed before reports were kept out\n"},
+		map[string]string{"work.txt": "the tick's work\n"},
+		nil)
+	r, epicHead, head := reportMergeReconciler(t, dir, g)
+
+	merged, conflict, err := r.mergeInWorktree("t1", 1, "side", head, epicHead)
+	if err != nil || conflict != nil {
+		t.Fatalf("a clean merge failed: conflict %+v, err %v", conflict, err)
+	}
+	paths := pathsAt(t, dir, merged)
+	if paths["RESULT-old.md"] {
+		t.Errorf("the old report is still on the integration branch")
+	}
+	if !paths["work.txt"] || !paths["README.md"] {
+		t.Errorf("the merge lost work: %v", paths)
 	}
 }
 

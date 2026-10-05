@@ -1002,6 +1002,9 @@ func dashSparkline(buckets []int) string {
 // about what nothing measured.
 func dashboardCICost(m statusmodel.Model, st watchStyles, width int) []string {
 	ci := dashCI(m, st)
+	if github := dashGitHub(m, st); github != "" {
+		ci += " · " + github
+	}
 	cost := dashCost(m, st)
 	if width <= 0 {
 		return []string{"", ci + "    " + cost}
@@ -1042,6 +1045,22 @@ func dashCI(m statusmodel.Model, st watchStyles) string {
 		line += " " + strings.Join(parts, " · ")
 	}
 	return line
+}
+
+// dashGitHub is the run's traffic with its forge beside the CI it reads
+// (tick rlp): its pushes and its failed GitHub attempts, counted from the
+// run's own typed lines, dim when nothing failed. A run that neither pushed
+// nor failed says nothing — a zero is not news.
+func dashGitHub(m statusmodel.Model, st watchStyles) string {
+	h := m.Health
+	var counts []string
+	if h.Pushes > 0 {
+		counts = append(counts, watchPlural(h.Pushes, "push"))
+	}
+	if n := h.GitHubErrors.Total(); n > 0 {
+		return strings.Join(append(counts, st.amber(watchPlural(n, "GitHub error"))), ", ")
+	}
+	return st.dim(strings.Join(counts, ", "))
 }
 
 // dashCost is the run's spend per source (hn6 rule 7): a metered line's
@@ -1381,16 +1400,17 @@ func humanDuration(seconds int64) string {
 
 // watchPlural is the one-word plural the frame's counts read naturally with.
 // A word ending in consonant+y pluralizes as "ies" — "remote retry" reads
-// "remote retries", never the first-use bug's "remote retrys".
+// "remote retries", never the first-use bug's "remote retrys" — and one
+// ending in "sh" as "es": "pushes", never "pushs".
 func watchPlural(n int, what string) string {
 	if n == 1 {
 		return fmt.Sprintf("1 %s", what)
 	}
-	word := what
-	if strings.HasSuffix(what, "y") && len(what) >= 2 && !strings.ContainsAny(what[len(what)-2:len(what)-1], "aeiouy") {
-		word = what[:len(what)-1] + "ies"
-	} else {
-		word = what + "s"
+	switch {
+	case strings.HasSuffix(what, "sh"):
+		return fmt.Sprintf("%d %ses", n, what)
+	case strings.HasSuffix(what, "y") && len(what) >= 2 && !strings.ContainsAny(what[len(what)-2:len(what)-1], "aeiouy"):
+		return fmt.Sprintf("%d %sies", n, what[:len(what)-1])
 	}
-	return fmt.Sprintf("%d %s", n, word)
+	return fmt.Sprintf("%d %ss", n, what)
 }

@@ -116,7 +116,11 @@ func runGit(dir string, args ...string) (string, error) {
 	cmd := exec.Command(gitbin.Path(), args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), gitbin.TransportEnv()...)
+	// It is handed its argv, so it goes through the push queue like every
+	// such runner; for anything but a push the queue costs nothing (tick rlp).
+	done := gitbin.PushQueue(dir, args, nil)
 	out, err := cmd.Output()
+	done(err)
 	if err != nil {
 		return "", err
 	}

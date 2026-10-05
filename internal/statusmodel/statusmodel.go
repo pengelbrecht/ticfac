@@ -36,6 +36,7 @@ package statusmodel
 
 import (
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
 // SchemaVersion is the model's version. A reader that meets a value it does
@@ -573,11 +574,20 @@ type Attention Wait
 // answer itself — a word a person reads, grown by its own wave-2 tick from
 // the counts and the run's own words.
 type Health struct {
-	RemoteRetries   int           `json:"remote_retries"`
-	Interventions   int           `json:"interventions"`
-	StallWarnings   int           `json:"stall_warnings"`
-	WallClocksFired int           `json:"wall_clocks_fired"`
-	Verdict         HealthVerdict `json:"verdict"`
+	RemoteRetries   int `json:"remote_retries"`
+	Interventions   int `json:"interventions"`
+	StallWarnings   int `json:"stall_warnings"`
+	WallClocksFired int `json:"wall_clocks_fired"`
+	// Pushes is the run's pushes to its hosted repository, counted from the
+	// push queue's pushed lines, and PeakPushesPerMinute the most of
+	// them in any sixty seconds — the number GitHub's six-a-minute guidance
+	// is about (tick rlp).
+	Pushes              int `json:"pushes"`
+	PeakPushesPerMinute int `json:"peak_pushes_per_minute"`
+	// GitHubErrors is the run's failed remote attempts by class, from its
+	// github_error_<class> lines.
+	GitHubErrors GitHubErrors  `json:"github_errors"`
+	Verdict      HealthVerdict `json:"verdict"`
 }
 
 // HealthVerdict is the headline: a state a person reads, the one-line why
@@ -597,6 +607,37 @@ type Recovery struct {
 	What    string `json:"what"`
 	Count   int    `json:"count"`
 	Seconds *int64 `json:"seconds"`
+}
+
+// GitHubErrors counts a run's GitHub errors by class (runstate.GitHubErrorClasses).
+type GitHubErrors struct {
+	Network          int `json:"network"`
+	RefUpdateFailed  int `json:"ref_update_failed"`
+	ServerFault      int `json:"server_fault"`
+	AuthRefused      int `json:"auth_refused"`
+	CrossRepoRefused int `json:"cross_repo_refused"`
+}
+
+// Total is every class together.
+func (g GitHubErrors) Total() int {
+	return g.Network + g.RefUpdateFailed + g.ServerFault + g.AuthRefused + g.CrossRepoRefused
+}
+
+// Classes is each class with its count, in runstate.GitHubErrorClasses order.
+func (g GitHubErrors) Classes() []ClassCount {
+	return []ClassCount{
+		{runstate.GitHubErrorNetwork, g.Network},
+		{runstate.GitHubErrorRefUpdateFailed, g.RefUpdateFailed},
+		{runstate.GitHubErrorServerFault, g.ServerFault},
+		{runstate.GitHubErrorAuthRefused, g.AuthRefused},
+		{runstate.GitHubErrorCrossRepoRefused, g.CrossRepoRefused},
+	}
+}
+
+// ClassCount is one class's count.
+type ClassCount struct {
+	Class string
+	N     int
 }
 
 // Gate is one gate evidence record, per check per head, exactly as the run

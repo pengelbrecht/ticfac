@@ -1,0 +1,16 @@
+{
+  "id": "gy9",
+  "title": "A run's token pushes only to the repository it was minted for: a routed finding in another repository is not pushed with it",
+  "gloss": "cross-repo token 403",
+  "description": "docs/analysis/github-failures.md: cloud run run_5c7c (hn6, 2026-10-04 02:18) pushed a finding routed to the ticks repository straight to that repository's main with the run's GitHub App installation token. The factory mints that token for the run's ONE repository (cloudflare/src/github-app.ts: repositories: [repo]), so GitHub's 'Permission to \u003cowner\u003e/ticks.git denied to ticfac[bot]' / 403 was certain, not a blip. runstate classified it RemoteAuthRefused and retried it four times, then the finding was backlogged. A refusal the run could have predicted spent four pushes and ~16s, and reads in the feed as a token problem the operator should go and check.\n\nWork: decide per rung. On the App rung either ask the token door for a token scoped to the target repository (the App must be installed there; if not, say so by name) or do not push cross-repository at all and backlog/route the finding without a push. In every case a cross-repository write is never attempted with a token minted for another repository, and a 403 whose target repository differs from the token's repository is classified terminal at once with a remedy naming the repository, never retried as a blip.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A finding routed to another repository on a cloud run either lands there with a token minted for that repository or is backlogged without a push attempt; a cross-repository 403 is never retried; test covers both.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-05T12:37:28.038732Z",
+  "updated_at": "2026-10-05T14:14:49.286644Z",
+  "closed_at": "2026-10-05T14:14:49.286644Z",
+  "closed_reason": "PR #218: cross-repo 403 is an immediate named stop (remote_cross_repo_refused); cloud routes cross-repo findings to the local backlog"
+}

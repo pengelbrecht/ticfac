@@ -9,11 +9,13 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/gating"
+	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
@@ -832,6 +834,18 @@ type Reconciler struct {
 	runID  string
 	branch string
 
+	// pushes, ownRepo and feedMu serve the push queue's feed lines and the
+	// cross-repository refusal (pushfeed.go; ticks rlp, gy9).
+	pushes     pushTally
+	pushMu     sync.Mutex
+	failedPush *gitbin.PushEvent
+	ownRepoMu  sync.Mutex
+	ownRepo    string
+	feedMu     sync.Mutex
+	// feedEnded is set once run_finished is in the feed: the terminal line
+	// stays the last, so transport exhaust after it is not written.
+	feedEnded atomic.Bool
+
 	base    string
 	baseRef string
 	// folded is the merge commit the last refreshFrom pushed, "" when the
@@ -1580,6 +1594,9 @@ func New(opts Options) (*Reconciler, error) {
 		runID:  opts.RunID,
 		branch: opts.IntegrationBranch,
 	}
+	// The host's push log names this process's pushes by the run (tick rlp),
+	// so a failed push can be told whether ANOTHER run pushed beside it.
+	gitbin.SetPushOwner(opts.RunID)
 	r.pinnedTier = opts.Tier
 	r.substrate = substrate
 	if opts.Tier == "" {
@@ -1698,6 +1715,12 @@ func (r *Reconciler) FeedError() error { return r.feedErr }
 // attempts must be readable as that, not as a run that failed once.
 func (r *Reconciler) remoteRetry() runstate.RemoteRetry {
 	retry := r.opts.RemoteRetry
+	// Tick rlp: the push queue's waits and every paced push, and every GitHub
+	// error by class, in the feed. Tick gy9: a refusal by a repository other
+	// than the run's own is not retried.
+	retry.Pushed = r.pushNotify()
+	retry.Failed = r.remoteFailed
+	retry.OwnRepository = r.ownRepository
 	retry.Report = func(n runstate.RemoteRetryNotice) {
 		if n.Class == runstate.RemoteAuthRefused {
 			// Tick jsz: a refused key is retried a small bound because the
@@ -1763,6 +1786,9 @@ func (r *Reconciler) emit(event Event) {
 		if _, err := runstate.EnsureGitignore(r.opts.Repo); err != nil && r.feedErr == nil {
 			r.feedErr = fmt.Errorf("prepare the run feed's repository: %w", err)
 		}
+	}
+	if event.Stage == StageRunFinished {
+		r.feedEnded.Store(true)
 	}
 	line := runfeed.NewEvent(event.At, r.runID, event.Tick, r.attemptOf(event.Tick), event.Stage, event.Detail)
 	if err := r.feed.Append(line); err != nil && r.feedErr == nil {
@@ -1919,6 +1945,9 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	}
 	r.trackerTree = tree
 	r.tracker = &durableTracker{inner: relocated, tree: tree, r: r}
+	// A held step's tracker records stay in the worktree until the step's
+	// push lands them (step.go, tick f61).
+	tree.keepLocal = func() bool { return r.store != nil && r.store.Pending() > 0 }
 
 	store, err := runstate.Open(runstate.Options{
 		Repo: r.opts.Repo, Remote: r.opts.Remote, Branch: r.branch, RunID: r.runID, Now: r.now,

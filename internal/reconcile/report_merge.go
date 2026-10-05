@@ -21,13 +21,20 @@ import (
 // dispatched to resolve a report, three resolve jobs failed, and the run
 // stopped for a person over a file no reader needed.
 //
-// So every merge INTO the integration branch keeps each report path exactly
-// as the integration branch already has it: a new report does not land, a
-// rewritten one does not conflict, and a dropped one does not come back. It
-// is mechanical — no model is asked about a report — and it leaves the
-// merge's parentage alone, so an attempt's head is still contained in the
-// branch it merged into. The reports already on a branch stay until somebody
-// removes them; this only stops new ones landing.
+// So every merge INTO the integration branch drops every report: a new
+// report does not land, a rewritten one does not conflict, a dropped one does
+// not come back, and one an older merge left on the branch leaves with the
+// next merge, so none reaches main through the epic's PR. It is mechanical —
+// no model is asked about a report — and it leaves the merge's parentage
+// alone, so an attempt's head is still contained in the branch it merged
+// into.
+//
+// It once kept each report "exactly as the integration branch already has
+// it" instead (obk). That undid a removal: 06t's commit removed the seven
+// reports epic/hn6 carried, and its integration merge restored all seven,
+// because the removal arrived as the incoming side and the epic head still
+// had them. Dropping them all needs no merge base to tell a removal from a
+// report the incoming side never had.
 
 // workerReport is the spelling sandboximage.WorkerResultFile writes: a root
 // RESULT-<tick>.md.
@@ -36,39 +43,20 @@ var workerReport = regexp.MustCompile(`^RESULT-[A-Za-z0-9][A-Za-z0-9_-]*\.md$`)
 // isWorkerReport says whether a repository path is a worker's report.
 func isWorkerReport(path string) bool { return workerReport.MatchString(path) }
 
-// keepReportsOut sets every worker report in the worktree `dir` — mid-merge,
-// conflicted or not — to what `keep` has: its content where `keep` carries
-// the path, absent where it does not. Reports live at the root, so the
-// candidates are the root entries of the index and of `keep`.
-func (r *Reconciler) keepReportsOut(dir, keep string) error {
-	candidates := map[string]bool{}
+// keepReportsOut removes every worker report from the worktree `dir` —
+// mid-merge, conflicted or not — so the tree it commits carries none.
+func (r *Reconciler) keepReportsOut(dir string) error {
 	indexed, err := r.git.run(dir, "ls-files")
 	if err != nil {
 		return fmt.Errorf("list the merge's paths: %w", err)
 	}
+	seen := map[string]bool{}
 	for _, path := range strings.Split(indexed, "\n") {
-		if isWorkerReport(path) {
-			candidates[path] = true
-		}
-	}
-	kept := map[string]bool{}
-	rooted, err := r.git.run(dir, "ls-tree", "--name-only", keep)
-	if err != nil {
-		return fmt.Errorf("list the root of %s: %w", short(keep), err)
-	}
-	for _, path := range strings.Split(rooted, "\n") {
-		if isWorkerReport(path) {
-			candidates[path] = true
-			kept[path] = true
-		}
-	}
-	for path := range candidates {
-		if kept[path] {
-			if _, _, err := r.git.try(dir, "checkout", keep, "--", path); err != nil {
-				return fmt.Errorf("keep %s as %s has it: %w", path, short(keep), err)
-			}
+		// An unmerged path is listed once per stage.
+		if !isWorkerReport(path) || seen[path] {
 			continue
 		}
+		seen[path] = true
 		if _, _, err := r.git.try(dir, "rm", "--quiet", "-f", "--ignore-unmatch", "--", path); err != nil {
 			return fmt.Errorf("keep %s out of the merge: %w", path, err)
 		}
@@ -77,13 +65,13 @@ func (r *Reconciler) keepReportsOut(dir, keep string) error {
 }
 
 // mergeKeepingReportsOut is `git merge --no-ff -m message head` in `dir`
-// (checked out at `epicHead`) with the worker reports kept out: the merge is
-// made without committing, the reports are set to the epic head's, and the
+// (checked out at the epic head) with the worker reports kept out: the merge
+// is made without committing, every report is removed, and the
 // merge is committed when nothing else is left unmerged. When something is,
 // the merge is aborted and git's output comes back with the reports' own
 // conflict lines removed, for describeMergeFailure and classifyMergeFailure
 // to read as they always have; `unmerged` then names what is left.
-func (r *Reconciler) mergeKeepingReportsOut(dir, epicHead, message, head string) (stdout, stderr, unmerged string, err error) {
+func (r *Reconciler) mergeKeepingReportsOut(dir, message, head string) (stdout, stderr, unmerged string, err error) {
 	// Changelogs merge as a union (union_merge.go).
 	union, removeUnion, uerr := unionMergeConfig()
 	if uerr != nil {
@@ -99,7 +87,7 @@ func (r *Reconciler) mergeKeepingReportsOut(dir, epicHead, message, head string)
 			return stdout, stderr, unmerged, err
 		}
 	}
-	if kerr := r.keepReportsOut(dir, epicHead); kerr != nil {
+	if kerr := r.keepReportsOut(dir); kerr != nil {
 		_, _, _ = r.git.try(dir, "merge", "--abort")
 		return stdout, stderr, "", kerr
 	}
@@ -141,16 +129,16 @@ func namesWorkerReport(line string) bool {
 	return false
 }
 
-// treeWithoutReports is the tree of `commit` with every worker report set to
-// what `keep` has — the resolve job's tree, minted into the integration
-// merge without the report its container committed.
-func (r *Reconciler) treeWithoutReports(commit, keep string) (string, error) {
+// treeWithoutReports is the tree of `commit` with every worker report
+// removed — the resolve job's tree, minted into the integration merge without
+// the report its container committed or any report it carried.
+func (r *Reconciler) treeWithoutReports(commit string) (string, error) {
 	dir, remove, err := r.git.tempWorktree("ticfac-mint-", commit)
 	if err != nil {
 		return "", fmt.Errorf("prepare a worktree at %s: %w", short(commit), err)
 	}
 	defer remove()
-	if err := r.keepReportsOut(dir, keep); err != nil {
+	if err := r.keepReportsOut(dir); err != nil {
 		return "", err
 	}
 	return r.git.run(dir, "write-tree")

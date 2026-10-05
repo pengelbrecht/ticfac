@@ -723,7 +723,17 @@ func gateSubstrateServerVersionPtr(marker attemptHandle) *string {
 // gate. The tracker is re-read first: it is the authority on whether a tick is
 // closed, so reading it is the compare-and-swap that proves the close has not
 // already happened.
+//
+// The close is ONE step (tick f61): the publishing checkpoint, the note, the
+// close and the closed checkpoint land as one push. Nothing between them acts
+// outside the run, and a kill inside the step leaves origin where the gate's
+// evidence left it — the state a kill just before the close already left.
 func (r *Reconciler) closeTick(ctx context.Context, entry planEntry, marker attemptHandle,
+	collected *subprocess.Collection, merged merge) error {
+	return r.heldStep(func() error { return r.closeTickHeld(ctx, entry, marker, collected, merged) })
+}
+
+func (r *Reconciler) closeTickHeld(ctx context.Context, entry planEntry, marker attemptHandle,
 	collected *subprocess.Collection, merged merge) error {
 
 	tick := marker.TickID

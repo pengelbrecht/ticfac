@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -97,6 +98,11 @@ func Supervise(stateDir string) error {
 	if len(record.RunnerArgv) == 0 {
 		return fmt.Errorf("supervise %s: the attempt record names no runner argv", stateDir)
 	}
+
+	// The host's push log names this supervisor's timed pushes by the run its
+	// attempt belongs to (tick rlp): a run's own worker pushing beside its
+	// tracker write is not "another run".
+	gitbin.SetPushOwner(runOfAttemptBranch(record.Branch))
 
 	// This process's liveness, for as long as it lives (tick rmc, lock.go).
 	// Nothing below may run before it is held: a supervisor nobody can see is
@@ -543,4 +549,18 @@ func asExitError(err error, target **exec.ExitError) bool {
 		return true
 	}
 	return false
+}
+
+// runOfAttemptBranch is the run id an attempt branch names
+// (ticfac/run-<run>/tick-<tick>/attempt-<n>), or "" for any other branch.
+func runOfAttemptBranch(branch string) string {
+	rest, ok := strings.CutPrefix(strings.TrimPrefix(branch, "refs/heads/"), "ticfac/run-")
+	if !ok {
+		return ""
+	}
+	run, _, ok := strings.Cut(rest, "/tick-")
+	if !ok {
+		return ""
+	}
+	return run
 }

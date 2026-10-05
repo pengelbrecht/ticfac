@@ -233,7 +233,7 @@ func (r *Reconciler) mergeInWorktree(tick string, attempt int, branch, head, epi
 	// them. They are the index's answer to "which files", and they back up
 	// git's printed CONFLICT lines rather than replace them (see
 	// describeMergeFailure).
-	if stdout, stderr, unmerged, err := r.mergeKeepingReportsOut(dir, epicHead, message, head); err != nil {
+	if stdout, stderr, unmerged, err := r.mergeKeepingReportsOut(dir, message, head); err != nil {
 		if conflict := classifyMergeFailure(stdout, stderr, unmerged, err); conflict != nil && conflict.resolvable() {
 			// Two same-wave intents (content, add/add): the resolve-conflict
 			// job's kinds, decided by integrate — not here, where the refusal

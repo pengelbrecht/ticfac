@@ -446,13 +446,16 @@
     },
     "health": {
       "type": "object",
-      "required": ["remote_retries", "interventions", "stall_warnings", "wall_clocks_fired", "verdict"],
+      "required": ["remote_retries", "interventions", "stall_warnings", "wall_clocks_fired", "pushes", "peak_pushes_per_minute", "github_errors", "verdict"],
       "additionalProperties": false,
       "properties": {
         "remote_retries": { "type": "integer", "description": "The run's own typed remote_retried lines, counted." },
         "interventions": { "type": "integer", "description": "The interventions the run resumed by itself (resumed_automatically), counted." },
         "stall_warnings": { "type": "integer" },
         "wall_clocks_fired": { "type": "integer" },
+        "pushes": { "type": "integer", "description": "The run's pushes to its hosted repository, counted from the push queue's pushed lines (tick rlp)." },
+        "peak_pushes_per_minute": { "type": "integer", "description": "The most pushed lines in any sixty seconds: the number GitHub's recommended maximum of six pushes a minute per repository is about." },
+        "github_errors": { "$ref": "#/$defs/github_errors" },
         "verdict": { "$ref": "#/$defs/health_verdict", "description": "The headline a dashboard answers \"is it healthy\" with — a word a person reads, not four counters they have to interpret. The raw counts stay beside it as the drill-in." }
       }
     },
@@ -474,6 +477,19 @@
         "what": { "type": "string", "description": "The thing recovered from, named the way the run's own line names it." },
         "count": { "type": "integer", "description": "How many times." },
         "seconds": { "$ref": "#/$defs/nullable_integer", "description": "How long the last one took, where anything measured it. Null when nothing did." }
+      }
+    },
+    "github_errors": {
+      "type": "object",
+      "description": "The run's failed remote attempts by class, counted from its github_error_<class> lines (tick rlp): the categories of docs/analysis/github-failures.md. An answer about the request (a missing ref, a refused lease) is not a GitHub error and is not counted.",
+      "required": ["network", "ref_update_failed", "server_fault", "auth_refused", "cross_repo_refused"],
+      "additionalProperties": false,
+      "properties": {
+        "network": { "type": "integer", "description": "The pipe: DNS, unreachable, reset, timed out." },
+        "ref_update_failed": { "type": "integer", "description": "The remote took a push and did not move the ref: a bare `[remote rejected] ... (failed)`." },
+        "server_fault": { "type": "integer", "description": "The remote's own storage or a 5xx." },
+        "auth_refused": { "type": "integer", "description": "A credential refused by the run's own repository." },
+        "cross_repo_refused": { "type": "integer", "description": "A credential refused by a repository it was not minted for (tick gy9)." }
       }
     },
     "gate": {
@@ -822,6 +838,9 @@
         "interventions": 0,
         "stall_warnings": 2,
         "wall_clocks_fired": 0,
+        "pushes": 0,
+        "peak_pushes_per_minute": 0,
+        "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 },
         "verdict": { "state": "healthy", "summary": "", "recovered": [] }
       },
       "gates": [
@@ -959,6 +978,9 @@
         "interventions": 1,
         "stall_warnings": 0,
         "wall_clocks_fired": 0,
+        "pushes": 0,
+        "peak_pushes_per_minute": 0,
+        "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 },
         "verdict": { "state": "healthy", "summary": "", "recovered": [] }
       },
       "gates": [],
@@ -1252,6 +1274,9 @@
         "interventions": 0,
         "stall_warnings": 1,
         "wall_clocks_fired": 0,
+        "pushes": 0,
+        "peak_pushes_per_minute": 0,
+        "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 },
         "verdict": {
           "state": "healthy",
           "summary": "the run needs nobody — it recovered 14 network retries on its own",
@@ -1750,6 +1775,9 @@
         "interventions": 0,
         "stall_warnings": 1,
         "wall_clocks_fired": 0,
+        "pushes": 0,
+        "peak_pushes_per_minute": 0,
+        "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 },
         "verdict": {
           "state": "degraded",
           "summary": "degraded: the remote exhausted its retries",
@@ -2235,6 +2263,9 @@
         "interventions": 0,
         "stall_warnings": 1,
         "wall_clocks_fired": 0,
+        "pushes": 0,
+        "peak_pushes_per_minute": 0,
+        "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 },
         "verdict": {
           "state": "stopped",
           "summary": "",
@@ -2503,6 +2534,9 @@
         "interventions": 0,
         "stall_warnings": 0,
         "wall_clocks_fired": 0,
+        "pushes": 0,
+        "peak_pushes_per_minute": 0,
+        "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 },
         "verdict": { "state": "healthy", "summary": "healthy", "recovered": [] }
       },
       "gates": [
@@ -2553,7 +2587,7 @@
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
         "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
@@ -2580,7 +2614,7 @@
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
         "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
@@ -2606,7 +2640,7 @@
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
         "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
@@ -2633,7 +2667,7 @@
         "workers": null,
         "waits_on": { "kind": "waiting-for-godot", "what": "a person", "since": null, "needs_person": true, "unblock_command": null },
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
         "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
@@ -2660,7 +2694,7 @@
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
         "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
@@ -2688,7 +2722,7 @@
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
         "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
@@ -2745,7 +2779,7 @@
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
         "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
@@ -2802,7 +2836,7 @@
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
         "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
@@ -2829,7 +2863,7 @@
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
         "cost": {
@@ -2863,7 +2897,7 @@
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "verdict": { "state": "paused", "summary": "", "recovered": [] } },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "paused", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
         "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
