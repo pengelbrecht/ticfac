@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 289,
-  "state": "dispatching",
-  "reason": "dispatching ewd as attempt 47",
-  "updated_at": "2026-10-05T18:20:53Z",
+  "sequence": 290,
+  "state": "running",
+  "reason": "ewd is running as attempt 47",
+  "updated_at": "2026-10-05T18:21:05Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -208,7 +208,8 @@
     },
     {
       "tick_id": "ewd",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 47
     },
     {
       "tick_id": "i5e",
