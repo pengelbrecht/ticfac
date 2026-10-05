@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 260,
-  "state": "publishing",
-  "reason": "closing jiv behind the integrated gate on 2505d53114c2",
-  "updated_at": "2026-10-05T16:20:26Z",
+  "sequence": 261,
+  "state": "running",
+  "reason": "jiv is closed",
+  "updated_at": "2026-10-05T16:20:35Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -177,7 +177,7 @@
     },
     {
       "tick_id": "jiv",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 40
     },
     {
