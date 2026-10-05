@@ -488,8 +488,8 @@ func TestAStuckDurableWorkerInAHungToolIsSteeredThroughIt(t *testing.T) {
 	}
 
 	f := newFixture(t, fixtureOptions{
-		runner:         "pi",
-		noFakeRunner:   true,
+		runner:       "pi",
+		noFakeRunner: true,
 		// The window has to outlast the harness's boot — the steer door
 		// must be listening when the watch first knocks, or the ladder
 		// takes its fallback — and that is well under a second here; the
