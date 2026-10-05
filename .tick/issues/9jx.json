@@ -1,0 +1,13 @@
+{
+  "id": "9jx",
+  "title": "A pinned --tier is validated at first dispatch, not at run start",
+  "description": "When Options.Tier is set, the reconciler skips its construction-time pre-resolution loop and resolves the pinned tier lazily at the first dispatch (profileForTier), and CheckRouting — the doctor/CI start check — has no pin dimension at all. A run pinning a tier that cannot route (balanced on any substrate, as of 7ml) therefore starts and stops at its first dispatch instead of refusing at start, the way the on-demand-jobs check refuses. Fail-loud, not fail-wrong, so it breaks no done item; but the start-time refusal is the pattern this repository already prefers for routing defects.\nevidence: internal/reconcile/reconcile.go:1533-1566 (the pre-resolution loop runs only when opts.Tier == \"\"), internal/reconcile/profiles.go:91-121 (profileForTier resolves lazily), internal/reconcile/profiles.go CheckRouting (no pinned tier)\n\nticfac run epic-43y filed this backlog tick from the finding 06290f9cc47512ddf29a0b040598aa7880ea2f13677c29fd72c64dd203252250 (reported by run-epic-43y/tick-7ml/attempt-24): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/06290f9cc47512ddf29a0b040598aa7880ea2f13677c29fd72c64dd203252250.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-7ml/attempt-24",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T11:35:48Z",
+  "updated_at": "2026-10-05T11:35:48Z"
+}
