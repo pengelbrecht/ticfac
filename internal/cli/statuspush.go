@@ -302,7 +302,7 @@ func statusSnapshotFor(ctx context.Context, repo, runID, host string) statusSnap
 	if host == "" {
 		host = statusmodel.HostLocal
 	}
-	model := localStatusModelHosted(ctx, repo, runID, runlifeProbeOf(repo, runID, time.Now()), modelGatherers{graph: epicGraph, ci: statusCI}, host)
+	model := localStatusModelHosted(ctx, repo, runID, runlifeProbeOf(repo, runID, time.Now()), modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost}, host)
 	return statusSnapshotEnvelope{
 		SchemaVersion: statusPushEnvelopeVersion,
 		RunID:         model.RunID,
