@@ -682,6 +682,15 @@ export function verdictWord(state: string, summary: string | null | undefined): 
  * different run.
  */
 export function resumeCommand(host: string, epicID: string): string {
+  // An epic the document cannot state names no command (tick mwt): a
+  // command with an empty operand — "ticfac run-epic " with nothing after
+  // the verb — is one nobody can run, printed as if they could. The Go
+  // model's own builder (statusmodel.ResumeCommand) refuses it, and this
+  // port answers with the same refusal so the phone page and the terminal
+  // cannot disagree about what a stop is cleared by.
+  if (epicID === "") {
+    return "";
+  }
   if (host === "cloud") {
     return `ticfac run ${epicID} --cloud`;
   }
@@ -739,7 +748,7 @@ export function classifyStatusDoc(doc: StatusDoc): {
         // The resume is the host's, not always the local foreground form: a
         // failed cloud run's page must not send the person to restart the
         // epic on their own machine (tick tt6).
-        clear_with: resumeCommand(doc.host, doc.epic_id),
+        clear_with: resumeCommand(doc.host, doc.epic_id) || null, /* an epic the doc cannot state names no command (tick mwt) */
       };
       break;
     case "cancelled":
@@ -767,7 +776,7 @@ export function classifyStatusDoc(doc: StatusDoc): {
       answer = {
         state: "failed",
         reason: doc.liveness.reason,
-        clear_with: resumeCommand(doc.host, doc.epic_id),
+        clear_with: resumeCommand(doc.host, doc.epic_id) || null, /* an epic the doc cannot state names no command (tick mwt) */
       };
       break;
     case "stopped":
