@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 179,
-  "state": "collecting",
-  "reason": "collecting cg4 attempt 25",
-  "updated_at": "2026-10-05T14:24:35Z",
+  "sequence": 180,
+  "state": "integrating",
+  "reason": "integrating cg4 attempt 25 into epic/hn6",
+  "updated_at": "2026-10-05T14:25:30Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -133,7 +133,7 @@
     },
     {
       "tick_id": "cg4",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 25
     },
     {
