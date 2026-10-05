@@ -11,10 +11,13 @@ package statusmodel
 // The rules, stated once:
 //
 //   - A tick's STATE is the newest non-"ready" row any run checkpointed for
-//     it. A fresh run seeds its plan "ready" before it settles the tracker's
-//     answer, so a "ready" row is not evidence of openness — the tracker's
-//     own status is what a "ready" row falls back to. A tick no run ever
-//     touched is the tracker's closed status, else ready.
+//     it — except a row from a run that has ENDED, which is that run's last
+//     word, and a last word can be stale: it does not override a tick the
+//     tracker closed (tick cno). A fresh run seeds its plan "ready" before
+//     it settles the tracker's answer, so a "ready" row is not evidence of
+//     openness — the tracker's own status is what a "ready" row falls back
+//     to. A tick no run ever touched is the tracker's closed status, else
+//     ready.
 //   - A tick's ROW (its dispatch markers, gate evidence, provenance, tries)
 //     is the LAST run that has records for it: the newest run with dispatch
 //     markers for the tick, else the run whose row the state came from.
@@ -164,17 +167,39 @@ func newMergedRuns(current Records, prior []Records) *mergedRuns {
 }
 
 // stateOf is a tick's merged state: the newest non-ready row any run wrote,
-// else the tracker's own closed status, else ready. The second return is the
-// run whose row won (-1 when no run did, i.e. the answer came from the
-// tracker or from nothing).
+// else the tracker's own closed status, else ready. One row cannot win:
+// a row from a run that has ENDED does not override a tracker-closed tick
+// (tick cno) — an ended run's last row can be stale (the run stopped
+// mid-flight and the tick was closed after it, by a later run or by the
+// person), and a stale "dispatched" read as live work over a close nobody
+// can dispute. The row from a LIVE run is that run's present tense and
+// still wins, and a tick the tracker has not closed keeps an ended run's
+// row too: that row is the history the holds and the resume read. The
+// second return names the attempt the winning row carries; the third is
+// the run whose row won (-1 when no run did, i.e. the answer came from
+// the tracker or from nothing).
 func (m *mergedRuns) stateOf(task tk.GraphTask) (string, *int, int) {
 	if row, ok := m.rows[task.ID]; ok {
-		return row.state, row.attempt, row.run
+		if task.Status != "closed" || !m.runEnded(row.run) {
+			return row.state, row.attempt, row.run
+		}
+		return tickClosed, row.attempt, row.run
 	}
 	if task.Status == "closed" {
 		return tickClosed, nil, -1
 	}
 	return tickReady, nil, -1
+}
+
+// runEnded says whether the run whose records sit at index i ended by its
+// own word: a terminal checkpoint state — the same word runEndedAt and the
+// lifecycle read. A run with no checkpoint never answered, and no row of a
+// run without a checkpoint exists to demote.
+func (m *mergedRuns) runEnded(i int) bool {
+	if i < 0 || i >= len(m.runs) {
+		return false
+	}
+	return m.runs[i].Checkpoint != nil && m.runs[i].Checkpoint.State.Terminal()
 }
 
 // newestRun is the index of the newest run's records — the run section's
