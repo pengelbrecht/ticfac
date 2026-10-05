@@ -8,7 +8,8 @@
   "owner": "ticfac",
   "blocked_by": [
     "enb",
-    "jpy"
+    "jpy",
+    "h3c"
   ],
   "parent": "43y",
   "role": "review",
