@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 200,
-  "state": "integrating",
-  "reason": "integrating hv3 attempt 26 into epic/43y",
-  "updated_at": "2026-10-05T14:37:39Z",
+  "sequence": 201,
+  "state": "gating",
+  "reason": "running the integrated gate for hv3 on 4be586ba10c8",
+  "updated_at": "2026-10-05T14:47:07Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -122,7 +122,7 @@
     },
     {
       "tick_id": "hv3",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 26
     },
     {
