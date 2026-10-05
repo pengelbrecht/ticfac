@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "5d4",
   "attempt": 19,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-05T10:55:04Z",
+  "triaged_at": "2026-10-05T10:55:15Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing pug",
+  "promoted_as": "pug",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "5d4",
