@@ -2408,3 +2408,4 @@
 {"ts":"2026-10-05T11:31:03.575452Z","tick":"5ba","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"watch dashboard uses discrete colour accents"}}
 {"ts":"2026-10-05T13:01:15.434878Z","tick":"5ba","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"2026-10-05 15:01 - ticfac run epic-hn6: 5ba try 1 (run dispatch #21) merged into epic/hn6 as 49e525e052eb; the integrated gate (go, ts) passed.","title":"watch dashboard uses discrete colour accents"}}
 {"ts":"2026-10-05T13:01:18.479233Z","tick":"5ba","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"watch dashboard uses discrete colour accents"}}
+{"ts":"2026-10-05T13:01:44.998519Z","tick":"435","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Re-review hn6 after its NOT READY review's blocking findings (round 2)"}}
