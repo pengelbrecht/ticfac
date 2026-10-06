@@ -39,6 +39,13 @@ func gatewayLogsServer(t *testing.T, rows []map[string]any) *httptest.Server {
 }
 
 func gatewayCostRow(cost float64, runID string) map[string]any {
+	return gatewayCostRowMetadata(cost, map[string]string{"run_id": runID})
+}
+
+// gatewayCostRowMetadata is one log row with the metadata the caller
+// states — the shape the metering join and the classifier stamp, and the
+// pre-kf4 rows carry only the run id of.
+func gatewayCostRowMetadata(cost float64, metadata map[string]string) map[string]any {
 	return map[string]any{
 		"id":         "call-1",
 		"created_at": "2026-10-05T18:17:31.133Z",
@@ -47,7 +54,7 @@ func gatewayCostRow(cost float64, runID string) map[string]any {
 		"success":    true,
 		"cost":       cost,
 		"tokens_in":  700, "tokens_out": 4, "duration": 631,
-		"metadata": map[string]string{"run_id": runID},
+		"metadata": metadata,
 	}
 }
 
@@ -107,6 +114,45 @@ func TestStatusWorkerCostMetersTheRunsJoinedCalls(t *testing.T) {
 	}
 	if cost != nil {
 		t.Errorf("no joined call metered a worker cost (%+v): unmeasured is null, never a zero", *cost)
+	}
+}
+
+// TestStatusWorkerCostNamesWhatItsNumberCovers (tick kf4): the sum alone
+// is not an honest meter — the model must be able to say WHICH attempts the
+// number measured, so the reader hands the coverage beside the money: the
+// rows that name an attempt (the metering join's own key), the rows that
+// name the run itself (the classifier's caller tag), and the rows that name
+// nothing — the window before the join named its attempts.
+//
+// short: a pure read over an httptest server and a temp HOME, no repository is built
+func TestStatusWorkerCostNamesWhatItsNumberCovers(t *testing.T) {
+	rc := isolateGatewayHost(t)
+	server := gatewayLogsServer(t, []map[string]any{
+		gatewayCostRowMetadata(0.0001, map[string]string{"run_id": "epic-hn6", "tick_id": "kf4", "attempt": "3"}),
+		gatewayCostRowMetadata(0.0001, map[string]string{"run_id": "epic-hn6", "tick_id": "kf4", "attempt": "3"}),
+		gatewayCostRowMetadata(0.0002, map[string]string{"run_id": "epic-hn6", "tick_id": "7uv", "attempt": "7"}),
+		gatewayCostRowMetadata(0.0003, map[string]string{"run_id": "epic-hn6", "caller": "jev"}),
+		gatewayCostRowMetadata(0.0004, map[string]string{"run_id": "epic-hn6"}),
+	})
+	t.Setenv(jev.OperatorBaseEnv, server.URL)
+	if err := os.WriteFile(rc, []byte("factory_gateway_url=https://gateway.ai.cloudflare.com/v1/acct/gw\n"+
+		"factory_cloudflare_api_token=cft_test_token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cost, err := statusWorkerCost(context.Background(), "epic-hn6")
+	if err != nil {
+		t.Fatalf("the gateway read failed: %v", err)
+	}
+	if cost == nil {
+		t.Fatal("the run's joined calls answered no worker cost: the gateway's own measured number is the meter")
+	}
+	want := statusmodel.WorkerCostInput{
+		USD: 0.0011, Source: "gateway",
+		Calls: 5, Attempts: 2, OwnCalls: 1, UnnamedCalls: 1,
+	}
+	if *cost != want {
+		t.Errorf("the worker cost is %+v, want the joined calls' sum with the coverage that names what it measured %+v", *cost, want)
 	}
 }
 

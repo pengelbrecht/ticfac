@@ -1,6 +1,7 @@
 package statusmodel
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -21,11 +22,29 @@ import (
 // claude and pi/GLM spend went uncounted.
 
 // WorkerCostInput is what the run's host states about what the workers
-// spent: the number and the river it was measured on (the factory names
-// "gateway"). Nil from any host that states nothing.
+// spent: the number, the river it was measured on (the factory names
+// "gateway"), and — since tick kf4 — what the number COVERS: a gateway
+// number is a sum over CALLS, and the status line may claim only the
+// attempts those calls join. Nil from any host that states nothing.
 type WorkerCostInput struct {
 	USD    float64
 	Source string
+	// Calls is how many gateway rows the number sums, whichever owner they
+	// name — the unit the gateway actually measures, one row per model
+	// exchange.
+	Calls int
+	// Attempts is how many DISTINCT dispatches those rows name, through the
+	// attempt key the metering join stamps (the factory's own
+	// gatewayMetadata vocabulary). Zero when no row names one.
+	Attempts int
+	// OwnCalls is how many rows name the run ITSELF — the classifier's
+	// calls stamp a caller — measured money that belongs to no worker
+	// attempt.
+	OwnCalls int
+	// UnnamedCalls is how many rows name neither an attempt nor a caller:
+	// rows from before the join named its attempts, whose owner no
+	// per-attempt claim can be made from.
+	UnnamedCalls int
 }
 
 // cloudflareSandbox is the executor that dispatches its workers into
@@ -68,7 +87,15 @@ var claudeModelAliases = map[string]bool{"opus": true, "sonnet": true, "haiku": 
 //     cost_usd is NOT NULL DEFAULT 0, so before the first cost sync or
 //     with telemetry unavailable the row's zero is a default, not a
 //     measurement — and its basis names that, not the local unjoined
-//     case.
+//     case. A LOCAL run's number (tick kf4) is a sum over the CALLS the
+//     gateway logged, and the line claims only the attempts those calls
+//     join: a resumed run whose metering began mid-run — or a host that
+//     configured its gateway mid-run — has attempts the join never
+//     reached, and they are called "not metered" on their own line, never
+//     covered by a number that did not measure them. The run's own model
+//     calls (the classifier's, tick 24u) are measured money belonging to
+//     no worker attempt, and the basis names them wherever they are in
+//     the number.
 //   - claude: never metered — a subscription is the only way this repository
 //     runs claude, and the subscription states no per-run number.
 //   - pi-local and other: never metered — no reader this repository has
@@ -129,16 +156,93 @@ func buildCost(src Sources, recs Records) Cost {
 	}
 	if n := perSource[CostSourceWorkersAI]; n > 0 || src.WorkerCost != nil {
 		line := CostLine{Source: CostSourceWorkersAI, Attempts: n}
-		if src.WorkerCost != nil {
+		if src.WorkerCost == nil {
+			if src.Host == HostCloud {
+				// The unsynced cloud record: the row's number is a default until
+				// the gateway's telemetry answers (tick 1tm), so the line names
+				// the telemetry, not the local unjoined case.
+				line.Basis = "not metered: the gateway's cost telemetry has not answered for this run"
+			} else {
+				line.Basis = "not metered: this run's Workers AI calls are not joined to gateway logs"
+			}
+		} else if src.Host == HostCloud {
+			// The cloud run's factory proxy stamps EVERY call the containers
+			// make with the run's own token, so the number covers the whole
+			// river: the plain basis, the one shape the goldens carry.
 			usd := src.WorkerCost.USD
 			line.Metered, line.USD, line.Basis = true, &usd, "AI Gateway logs"
-		} else if src.Host == HostCloud {
-			// The unsynced cloud record: the row's number is a default until
-			// the gateway's telemetry answers (tick 1tm), so the line names
-			// the telemetry, not the local unjoined case.
-			line.Basis = "not metered: the gateway's cost telemetry has not answered for this run"
 		} else {
-			line.Basis = "not metered: this run's Workers AI calls are not joined to gateway logs"
+			// The LOCAL join (tick kf4): the number covers the CALLS the
+			// gateway logged, and the attempts those calls name — never the
+			// whole river by default, because a resumed run (or a host that
+			// configured its gateway mid-run) has attempts the join never
+			// reached, and a number claimed over them is a lie with a
+			// decimal point. The unmeasured ones are called "not metered",
+			// on their own line, exactly like every other unmeasured spend.
+			usd := src.WorkerCost.USD
+			switch joined := src.WorkerCost; {
+			case n == 0:
+				// Rows answered for a run with no workers-ai dispatch at all:
+				// the run's own model calls (the classifier's carry the run
+				// tag, tick 24u) — measured money belonging to no worker.
+				line.Metered, line.USD = true, &usd
+				line.Basis = "AI Gateway logs: gateway-joined calls of no worker dispatch this run made " +
+					"(the classifier's own calls carry the run tag)"
+			case joined.Calls == 0 || (joined.UnnamedCalls == 0 && joined.Attempts >= n):
+				// Full coverage: every row names an attempt the river counts —
+				// or the host stated a bare number with no coverage at all
+				// (Calls 0, the pre-kf4 input shape) — so the number and the
+				// attempts it covers agree, the cloud shape. The run's own
+				// calls beside them are named, because their money is in the
+				// number.
+				line.Metered, line.USD = true, &usd
+				if joined.OwnCalls > 0 {
+					line.Basis = "AI Gateway logs: every attempt's calls joined the gateway, beside the run's own model calls"
+				} else {
+					line.Basis = "AI Gateway logs"
+				}
+			case joined.UnnamedCalls == 0 && joined.Attempts > 0:
+				// Every row is named — some by an attempt, some as the run's
+				// own — but not every attempt joined: the number covers
+				// the named attempts alone, and the rest are not metered.
+				line.Attempts = joined.Attempts
+				line.Metered, line.USD = true, &usd
+				line.Basis = fmt.Sprintf("AI Gateway logs: the calls of %d of %d attempts joined the gateway", joined.Attempts, n)
+				if joined.OwnCalls > 0 {
+					line.Basis += ", beside the run's own model calls"
+				}
+				lines = append(lines, line)
+				line = CostLine{Source: CostSourceWorkersAI, Attempts: n - joined.Attempts,
+					Basis: "not metered: dispatched without the gateway metering join, their calls never reached the gateway logs"}
+			case joined.UnnamedCalls == 0:
+				// Every row is the run's own call, no attempt's: the river's
+				// dispatches never joined, so they keep their honest line
+				// while the measured own-call money keeps its number —
+				// over no attempt, because it measured none.
+				line.Attempts = 0
+				line.Metered, line.USD = true, &usd
+				line.Basis = "AI Gateway logs: the run's own model calls, no worker attempt joined"
+				lines = append(lines, line)
+				line = CostLine{Source: CostSourceWorkersAI, Attempts: n,
+					Basis: "not metered: dispatched without the gateway metering join, their calls never reached the gateway logs"}
+			default:
+				// Rows that name no attempt and no caller — the window before
+				// the join named anything (every dispatch between dm2 and
+				// kf4): no per-attempt claim can be made from them, so the
+				// one line states the calls the number sums, the attempts
+				// the rows do name, and that the never-joined attempts are
+				// not metered.
+				line.Metered, line.USD = true, &usd
+				line.Basis = fmt.Sprintf("AI Gateway logs: the sum of %d gateway-joined calls", joined.Calls)
+				if joined.Attempts > 0 {
+					line.Basis += fmt.Sprintf("; attempts whose calls are named by them: %d of %d", joined.Attempts, n)
+				}
+				if joined.OwnCalls > 0 {
+					line.Basis += fmt.Sprintf("; run-own model calls: %d", joined.OwnCalls)
+				}
+				line.Basis += fmt.Sprintf("; rows carrying no attempt name (from before the join named its attempts): %d", joined.UnnamedCalls)
+				line.Basis += "; attempts whose calls never reached the gateway are not metered"
+			}
 		}
 		lines = append(lines, line)
 	}

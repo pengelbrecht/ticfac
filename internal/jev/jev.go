@@ -93,10 +93,19 @@ const MetadataHeader = "cf-aig-metadata"
 // gatewayMetadata is the metadata a tagged request carries: the one key the
 // per-run join is made on, spelled as the logs API's filter expects — a JSON
 // object of string values, exactly the shape the factory's proxy stamps and
-// dm2's metering join writes.
+// dm2's metering join writes — and, since tick kf4, the caller that names
+// these rows as the run's OWN calls rather than any worker attempt's, so a
+// gateway cost read attributes measured money to what made it.
 type gatewayMetadata struct {
-	RunID string `json:"run_id"`
+	RunID  string `json:"run_id"`
+	Caller string `json:"caller,omitempty"`
 }
+
+// CallerTag names the classifier in the metadata its requests stamp (tick
+// kf4): the value the status model's cost reader reads back as money that
+// belongs to no worker attempt. It is the harness's own name, not a role —
+// every call jev makes is the run's own, whichever role asked for it.
+const CallerTag = "jev"
 
 // Config is everything needed to reach the classifier.
 type Config struct {
@@ -393,9 +402,11 @@ func (c *Client) post(ctx context.Context, built request) ([]byte, string) {
 	// proxy stamps and dm2's metering join writes, so the gateway's logs carry
 	// the run id a per-run read — gatewaytrace, the status model's cost line —
 	// joins this call's spend by. A request that carries it and one that does
-	// not answer the same; only the log row differs.
+	// not answer the same; only the log row differs. The caller name (tick
+	// kf4) marks the row as the run's OWN call, so the cost read never counts
+	// a classifier's measured spend as a worker attempt's.
 	if c.config.RunID != "" {
-		metadata, err := json.Marshal(gatewayMetadata{RunID: c.config.RunID})
+		metadata, err := json.Marshal(gatewayMetadata{RunID: c.config.RunID, Caller: CallerTag})
 		if err != nil {
 			return nil, fmt.Sprintf("the classifier's gateway metadata could not be encoded: %v", err)
 		}

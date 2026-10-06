@@ -157,6 +157,19 @@ type Call struct {
 	DurationMS   int     `json:"duration_ms"`
 	RunID        string  `json:"run_id"`
 	TickID       string  `json:"tick_id,omitempty"`
+	// Attempt is the dispatch the row's metadata names as the call's owner
+	// (tick kf4): the number the metering join stamps — the same key the
+	// factory's own gatewayMetadata stamps for a cloud run's token — so a
+	// gateway cost number can say WHICH attempts it measured rather than
+	// claiming the whole run. Zero when the row names no attempt: a call of
+	// the run itself (the classifier's rows name a caller instead) or a row
+	// from before the join named anything.
+	Attempt int `json:"attempt,omitempty"`
+	// Caller names the row's owner when it is no dispatch: the classifier's
+	// own calls stamp "jev" (the same run tag mechanism, tick 24u), so the
+	// cost line can name measured money that belongs to no worker attempt.
+	// Empty for every row that names an attempt or nothing.
+	Caller string `json:"caller,omitempty"`
 	// TraceID is the identifier that joins this call to the message that
 	// caused the run and to the container that made it (D20, tick hyi). It is
 	// stamped on every proxied request by the factory's gateway proxy, out of
@@ -285,6 +298,8 @@ func (c *Client) Calls(ctx context.Context, runID string) ([]Call, error) {
 				DurationMS:   row.Duration,
 				RunID:        row.Metadata["run_id"],
 				TickID:       row.Metadata["tick_id"],
+				Attempt:      attemptNumberOf(row.Metadata),
+				Caller:       row.Metadata["caller"],
 				TraceID:      row.Metadata["trace_id"],
 				Raw:          append(json.RawMessage(nil), raw...),
 			}

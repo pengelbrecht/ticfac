@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
@@ -178,8 +179,18 @@ const affinityHeader = "x-session-affinity"
 // means the host states no gateway, and a worker launched with nil Metering
 // runs exactly as it did before this tick — its calls unattributed, the cost
 // line honestly unmetered.
+//
+// TickID and Attempt (tick kf4) name the dispatch whose calls the join tags:
+// the same keys the factory's own gatewayMetadata stamps for a cloud run, so
+// a gateway number read back can say WHICH attempts it measured — the
+// status line's workers-ai river never again claims the whole run. Both are
+// omitted from the stamped metadata when the dispatch states none, so a row
+// from before the join named anything stays distinguishable from one that
+// did.
 type GatewayMetering struct {
 	RunID      string
+	TickID     string
+	Attempt    int
 	GatewayURL string
 }
 
@@ -201,12 +212,21 @@ func (m *GatewayMetering) Applies(model string) bool {
 	return false
 }
 
-// gatewayMetadata is the metadata every metered request carries. It is the
-// one key the reader joins on, spelled as the logs API's filter expects: a
-// JSON object of string values, exactly the shape the factory's proxy stamps
-// (gatewayMetadata in cloudflare/src/gateway.ts) and gatewaytrace filters by.
+// gatewayMetadata is the metadata every metered request carries. The run id
+// is the one key the reader joins on, spelled as the logs API's filter
+// expects: a JSON object of string values, exactly the shape the factory's
+// proxy stamps (gatewayMetadata in cloudflare/src/gateway.ts) and
+// gatewaytrace filters by. The tick and attempt (tick kf4) name the dispatch
+// the call belongs to — keys of the factory's own vocabulary — and are
+// omitted when the dispatch states none, so a row that predates per-attempt
+// names is not dressed up as one that carries them.
 type gatewayMetadata struct {
-	RunID string `json:"run_id"`
+	RunID  string `json:"run_id"`
+	TickID string `json:"tick_id,omitempty"`
+	// Attempt is the dispatch's own attempt number, stamped as the string
+	// the logs store every metadata value in — the same shape the factory's
+	// proxy stamps (String(token.attempt)).
+	Attempt string `json:"attempt,omitempty"`
 }
 
 // WriteExtension renders the override into dir and returns its path. The
@@ -217,7 +237,11 @@ func (m *GatewayMetering) WriteExtension(dir string) (string, error) {
 	if m == nil || m.RunID == "" || strings.TrimSpace(m.GatewayURL) == "" {
 		return "", fmt.Errorf("gateway metering is not configured: a run id and a gateway URL are both required")
 	}
-	metadata, err := json.Marshal(gatewayMetadata{RunID: m.RunID})
+	attempt := ""
+	if m.Attempt > 0 {
+		attempt = strconv.Itoa(m.Attempt)
+	}
+	metadata, err := json.Marshal(gatewayMetadata{RunID: m.RunID, TickID: m.TickID, Attempt: attempt})
 	if err != nil {
 		return "", fmt.Errorf("encode the gateway metadata: %w", err)
 	}

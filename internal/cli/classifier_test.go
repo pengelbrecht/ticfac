@@ -88,12 +88,14 @@ func TestRunEpicBuildsItsClassifierFromTheCredentialSource(t *testing.T) {
 	}
 }
 
-// The run's own classifier calls are TAGGED with the run id (tick 24u): the
-// classifier run-epic hands the reconciler stamps cf-aig-metadata with the
-// run id on every request, so the gateway's logs attribute the decisions
-// river's spend to the run — the same join dm2's metering makes for the
-// workers' calls — and the startup note says so beside the credential it
-// names. The proof is end to end: the real client, over a real round trip
+// The run's own classifier calls are TAGGED with the run id (tick 24u) and
+// NAMED as the run's own (tick kf4): the classifier run-epic hands the
+// reconciler stamps cf-aig-metadata with the run id on every request, so
+// the gateway's logs attribute the decisions river's spend to the run —
+// the same join dm2's metering makes for the workers' calls — and a caller
+// key naming jev, so a gateway cost read can tell the run's own measured
+// spend from a worker attempt's and never state a classifier call as a
+// worker's. The proof is end to end: the real client, over a real round trip
 // against a stub of the Workers AI run endpoint, recording the header.
 //
 // short: resolves against a temp HOME; the one request goes to a loopback stub
@@ -142,8 +144,8 @@ func TestRunEpicsClassifierTagsItsCallsWithTheRunID(t *testing.T) {
 	mu.Lock()
 	got := strings.Join(metadata, ";")
 	mu.Unlock()
-	if got != `{"run_id":"epic-hn6"}` {
-		t.Errorf("the run's classifier call carried cf-aig-metadata %q, want the run id exactly as the metering join stamps it", got)
+	if got != `{"run_id":"epic-hn6","caller":"jev"}` {
+		t.Errorf("the run's classifier call carried cf-aig-metadata %q, want the run id and the classifier's own name", got)
 	}
 }
 

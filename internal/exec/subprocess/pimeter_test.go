@@ -52,7 +52,12 @@ func TestGatewayMeteringAppliesOnlyToWorkersAIModels(t *testing.T) {
 
 func TestGatewayMeteringWritesTheOverrideTheReaderJoins(t *testing.T) {
 	t.Parallel()
-	metering := &GatewayMetering{RunID: "epic-hn6", GatewayURL: "https://gateway.ai.cloudflare.com/v1/acct/gw/"}
+	metering := &GatewayMetering{
+		RunID:      "epic-hn6",
+		TickID:     "kf4",
+		Attempt:    45,
+		GatewayURL: "https://gateway.ai.cloudflare.com/v1/acct/gw/",
+	}
 
 	path, err := metering.WriteExtension(t.TempDir())
 	if err != nil {
@@ -80,8 +85,11 @@ func TestGatewayMeteringWritesTheOverrideTheReaderJoins(t *testing.T) {
 		t.Errorf("the override does not keep the OpenAI-completions wire the route serves:\n%s", body)
 	}
 	// The metadata, the key and value the reader filters by: cf-aig-metadata
-	// with run_id, spelled as the JSON object the factory's proxy stamps.
-	if !strings.Contains(body, `"cf-aig-metadata": "{\"run_id\":\"epic-hn6\"}"`) {
+	// with run_id, spelled as the JSON object the factory's proxy stamps —
+	// and (tick kf4) with the attempt the dispatch carried, the same key the
+	// factory's own gatewayMetadata stamps, so a gateway number can name
+	// WHICH attempts it measured instead of claiming the whole run.
+	if !strings.Contains(body, `"cf-aig-metadata": "{\"run_id\":\"epic-hn6\",\"tick_id\":\"kf4\",\"attempt\":\"45\"}"`) {
 		t.Errorf("the override does not stamp the metadata the reader joins on:\n%s", body)
 	}
 	// The cache affinity, the run id as the instance key (D24).
@@ -190,6 +198,27 @@ func TestTheGeneratedCredentialCommandReadsWhatGetReads(t *testing.T) {
 		if got, want := strings.TrimSuffix(stdout.String(), "\n"), "Bearer "+file.Get(credentials.KeyCloudflareAPIToken); got != want {
 			t.Errorf("%s: the generated command sent %q, want the ~/.ticfacrc credential %q: the two readers of the file must not drift (tick frr)", name, got, want)
 		}
+	}
+}
+
+// TestGatewayMeteringOmitsTheNamesADispatchDidNotState: the attempt and
+// tick keys are omitempty — a join that names no attempt (the dm2-era
+// shape, and every attempt this repository dispatched before tick kf4)
+// stamps exactly the run id, so a row from before the join named anything
+// stays distinguishable from one that did.
+func TestGatewayMeteringOmitsTheNamesADispatchDidNotState(t *testing.T) {
+	t.Parallel()
+	metering := &GatewayMetering{RunID: "epic-hn6", GatewayURL: "https://gateway.ai.cloudflare.com/v1/acct/gw"}
+	path, err := metering.WriteExtension(t.TempDir())
+	if err != nil {
+		t.Fatalf("write the metering extension: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read the metering extension back: %v", err)
+	}
+	if !strings.Contains(string(raw), `"cf-aig-metadata": "{\"run_id\":\"epic-hn6\"}"`) {
+		t.Errorf("a join that names no attempt stamped more than the run id:\n%s", raw)
 	}
 }
 

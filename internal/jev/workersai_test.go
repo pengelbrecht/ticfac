@@ -205,15 +205,19 @@ func TestALocalClassificationIsAWorkersAIRunOnTheOperatorsAccount(t *testing.T) 
 }
 
 // A RUN'S OWN CLASSIFIER CALLS ARE TAGGED (tick 24u, absorbing run-epic-hn6's
-// finding 4c30b9f3): the local run's classification and gating calls are the
-// operator's Workers AI spend, and they were unattributable in the gateway's
-// logs — the rows existed, the run id did not — so they could never be joined
-// per run the way dm2's metering join joins the workers' calls. The join is
-// the same header everywhere else: cf-aig-metadata, the header the factory's
-// proxy stamps (cloudflare/src/gateway.ts) and dm2's provider override writes
+// finding 4c30b9f3) and NAMED (tick kf4): the local run's classification and
+// gating calls are the operator's Workers AI spend, and they were
+// unattributable in the gateway's logs — the rows existed, the run id did not
+// — so they could never be joined per run the way dm2's metering join joins
+// the workers' calls. The join is the same header everywhere else:
+// cf-aig-metadata, the header the factory's proxy stamps
+// (cloudflare/src/gateway.ts) and dm2's provider override writes
 // (internal/exec/subprocess/pimeter.go) and gatewaytrace — the status model's
 // reader — filters its log query by. A classifier built with a run id stamps
-// exactly that header with exactly that key.
+// exactly that header with exactly that key — and, since tick kf4, a caller
+// key naming itself, so a gateway cost read can tell the run's own measured
+// spend from a worker attempt's and never state a classifier call as a
+// worker's.
 func TestARunsClassifierCallsAreTaggedWithTheRunID(t *testing.T) {
 	t.Parallel()
 	fake := newFakeWorkersAI(t)
@@ -230,8 +234,8 @@ func TestARunsClassifierCallsAreTaggedWithTheRunID(t *testing.T) {
 	if len(metas) != 1 {
 		t.Fatalf("%d calls for one batch, want one run", len(metas))
 	}
-	if metas[0] != `{"run_id":"epic-hn6"}` {
-		t.Errorf("the call carried cf-aig-metadata %s, want the run id exactly as the metering join stamps it", metas[0])
+	if metas[0] != `{"run_id":"epic-hn6","caller":"jev"}` {
+		t.Errorf("the call carried cf-aig-metadata %s, want the run id and the classifier's own name", metas[0])
 	}
 
 	// The tag is the REQUEST's statement, not the environment's honouring of
@@ -248,7 +252,7 @@ func TestARunsClassifierCallsAreTaggedWithTheRunID(t *testing.T) {
 	if _, err := New(source.Config, fake.server.Client()).Classify(context.Background(), ticks(1)); err != nil {
 		t.Fatalf("the tagged classification on the gateway route: %v", err)
 	}
-	if metas := fake.metadata(); len(metas) != 1 || metas[0] != `{"run_id":"epic-hn6"}` {
+	if metas := fake.metadata(); len(metas) != 1 || metas[0] != `{"run_id":"epic-hn6","caller":"jev"}` {
 		t.Errorf("the gateway route's call carried cf-aig-metadata %v, want the same tag the local call carries", metas)
 	}
 }
