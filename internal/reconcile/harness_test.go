@@ -644,6 +644,15 @@ func (f *fakeTracker) Close(_ context.Context, tickID string) (tk.Tick, error) {
 // reason naming the PR and the merge (land_close.go).
 func (f *fakeTracker) CloseWithReason(_ context.Context, tickID, reason string) (tk.Tick, error) {
 	f.tally("close:" + tickID)
+	// tk refuses to close an epic with open children (epic 43y on main: its
+	// post-merge follow-ups are its children).
+	if state, err := f.load(); err == nil {
+		for id, child := range state.Ticks {
+			if child.Parent == tickID && child.Status != "closed" {
+				return tk.Tick{}, fmt.Errorf("cannot close epic %s: has open children (%s)", tickID, id)
+			}
+		}
+	}
 	return f.mutate(tickID, func(tick *tk.Tick) {
 		tick.Status, tick.ClosedReason = "closed", reason
 	})

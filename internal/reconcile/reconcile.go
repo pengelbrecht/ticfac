@@ -1285,6 +1285,9 @@ const (
 	// StageEpicClosed is the landed epic's own tick closed ON THE BASE, its
 	// reason naming the PR and the merge (land_close.go).
 	StageEpicClosed = "epic_closed"
+	// StageEpicCloseRefused is tk refusing that close — an epic with open
+	// children stays open — which does not fail the landed run.
+	StageEpicCloseRefused = "epic_close_refused"
 
 	// StageCIRestarted: the code the epic PR would merge had no executed CI
 	// verdict — its runs were cancelled by a later push that changed only
