@@ -9,10 +9,10 @@
   "type": "task",
   "owner": "ticks-sandbox@ticks.invalid",
   "after": [
-    "jvj"
+    "6fv"
   ],
   "acceptance_criteria": "[1] Two named cloud configs in .tick/runners.cloud.toml; an epic declaring config: claude runs its workers on the claude-sub rung, another epic runs on the default GLM config; status/PR name the config. [2] --config overrides the epic's choice. [3] doctor/preflight refuse an unroutable config. [4] Tests + make gate.",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-06T13:36:06.799427Z",
-  "updated_at": "2026-10-06T13:57:08.116449Z"
+  "updated_at": "2026-10-06T17:13:15.406686Z"
 }
