@@ -926,16 +926,28 @@ export class WorkerAttemptHost {
     conversation: Conversation,
     record: WorkerAttemptRecord,
   ): Promise<void> {
-    this.lastCommitAt = record.watch?.lastCommitAt ?? null;
     let stream: AgentEventStream;
     try {
       stream = await watchEvents(harness, conversation.id, BACKGROUND_CONTEXT);
     } catch (error) {
-      // The watch is blinder without it, never the attempt's failure.
+      // The watch is blinder without it, never the attempt's failure — and
+      // a watch that cannot see commits must not read the attempt as silent.
+      this.lastCommitAt = record.watch?.lastCommitAt ?? this.now();
       this.report(error);
       return;
     }
     this.lastEntryId = newestEntry(stream.snapshot.entries, undefined);
+    // A new life dates the conversation's last progress from what it can
+    // see, not from nothing: the record's last commit, or the newest dated
+    // entry in the snapshot — whichever is newer. An attempt whose record
+    // predates the watch's memory (a live attempt across the deploy that
+    // brought it) and whose entries carry no date is given the benefit of
+    // the doubt, dated now, rather than read as silent since its start.
+    this.lastCommitAt = seedCommitAt(
+      record.watch?.lastCommitAt,
+      stream.snapshot.entries,
+      record.watch === undefined ? this.now() : undefined,
+    );
     this.commits = stream;
     stream.start(async (events) => {
       let entry = this.lastEntryId;
@@ -1346,6 +1358,26 @@ function entriesOf(event: AgentEvent): readonly { id: unknown }[] {
     default:
       return [];
   }
+}
+
+/**
+ * When a new life dates the conversation's last progress (see
+ * `watchCommits`): the newer of the recorded commit and the newest message
+ * timestamp among the snapshot's entries; `fallback` when neither is known.
+ */
+export function seedCommitAt(
+  recorded: number | undefined,
+  entries: readonly { model?: readonly unknown[] }[],
+  fallback: number | undefined,
+): number | null {
+  let at = recorded ?? null;
+  for (const entry of entries) {
+    for (const message of entry.model ?? []) {
+      const ts = (message as { timestamp?: unknown }).timestamp;
+      if (typeof ts === "number" && Number.isFinite(ts) && (at === null || ts > at)) at = ts;
+    }
+  }
+  return at ?? fallback ?? null;
 }
 
 /** The newest numeric entry id among `entries`, or `current`. */
