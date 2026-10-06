@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
   "epic_id": "umq",
-  "sequence": 8,
-  "state": "publishing",
-  "reason": "closing dax behind the integrated gate on 41553f3957fe",
-  "updated_at": "2026-10-06T13:00:29Z",
+  "sequence": 9,
+  "state": "running",
+  "reason": "dax is closed",
+  "updated_at": "2026-10-06T13:00:32Z",
   "ticks": [
     {
       "tick_id": "dax",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
