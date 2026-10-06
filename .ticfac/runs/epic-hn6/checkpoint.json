@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 328,
-  "state": "integrating",
-  "reason": "integrating frr attempt 44 into epic/hn6",
-  "updated_at": "2026-10-06T00:20:17Z",
+  "sequence": 329,
+  "state": "gating",
+  "reason": "running the integrated gate for frr on d5c72a7d8de1",
+  "updated_at": "2026-10-06T00:20:30Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -219,7 +219,7 @@
     },
     {
       "tick_id": "frr",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 44
     },
     {
