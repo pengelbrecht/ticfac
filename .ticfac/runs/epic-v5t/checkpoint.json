@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 10,
-  "state": "running",
-  "reason": "tda is running as attempt 2",
-  "updated_at": "2026-10-06T21:22:40Z",
+  "sequence": 11,
+  "state": "gating",
+  "reason": "running the integrated gate for 6fv on 791d93810752",
+  "updated_at": "2026-10-06T23:17:48Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -31,7 +31,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/v5t",
-    "source_sha": "24ba50a408c7b439c4715146d12a2ab62c325d53",
+    "source_sha": "791d93810752c824dce4955b710684025a0b4e9f",
     "integration_ref": "refs/heads/epic/v5t",
     "phase": "worker",
     "executor": null,
