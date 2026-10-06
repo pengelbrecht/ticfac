@@ -952,3 +952,102 @@ func TestANotGoingRunsRefusedTryNamesTheResume(t *testing.T) {
 		})
 	}
 }
+
+// TestTheDrillInNamesNoResumeItCannotState: the two next-step sentences
+// that word a resume (ticks gmo and jkb) concatenated the command
+// unconditionally — a run whose epic the model cannot state read
+// "… —  takes it up", the command missing from its own sentence (tick
+// uzs) — because the builders' refusal (tick mwt) came back empty and the
+// clause kept its place anyway. The header answers with its reason alone
+// when the epic is unknown; the drill-in's next step keeps the same rule:
+// the reason stands, the clause a command would carry is dropped, and the
+// header's needs-you entry names no command either — one answer, two
+// wordings (tick eli's rule), neither with a hole in it.
+func TestTheDrillInNamesNoResumeItCannotState(t *testing.T) {
+	t.Parallel()
+
+	// The epic the model cannot state: no caller word for it, no
+	// checkpoint word, and a run id that spells no epic — the same
+	// emptiness the command builders read (tick mwt).
+	unstatable := func(src *Sources) {
+		src.EpicID = ""
+		if src.Records.Checkpoint != nil {
+			src.Records.Checkpoint.EpicID = ""
+		}
+	}
+
+	t.Run("a not-going run", func(t *testing.T) {
+		t.Parallel()
+		src := pipelineCase{
+			tasks: []tk.GraphTask{{ID: "zzz", Title: "Z", Status: "open"}},
+			rows:  []runstate.TickState{{TickID: "zzz", State: "rejected", Attempt: 1}},
+			markers: []runstate.Attempt{
+				attemptMarker(1, "zzz", "2026-09-27T03:00:00Z", "strong", "@cf/zai-org/glm-5.3", "local-subprocess"),
+			},
+			feed: []runfeed.Event{
+				line(testNow.Add(-90*time.Minute), "zzz", 1, reconcile.StageCollected, "attempt 1 of zzz collected"),
+				line(testNow.Add(-80*time.Minute), "zzz", 1, reconcile.StageRejected,
+					reconcile.RefusedRejectedWork+": attempt 1 of zzz was rejected with commits nothing merged"),
+			},
+		}.sources()
+		src.Records.Checkpoint.State = "failed"
+		src.Records.Checkpoint.Reason = "the integrated gate refused attempt 1 of zzz"
+		src.Liveness = LivenessInput{
+			Alive: false, State: "dead",
+			Reason: "pid 4242 is gone and never released the run: it died",
+			Source: "run.pid",
+		}
+		unstatable(&src)
+		model := Build(src)
+		tick := pipelineTick(t, model, "zzz")
+		if len(tick.Tries) != 1 || tick.Tries[0].NextStep == nil {
+			t.Fatalf("zzz's tries read %+v, want the one refused try carrying a next step", tick.Tries)
+		}
+		if got, want := *tick.Tries[0].NextStep, "the run is not going"; got != want {
+			t.Errorf("the refused try's next step is %q, want %q: the reason stands alone when the epic is not stated",
+				got, want)
+		}
+		// The header words the same answer (tick eli): the run is still
+		// named as needing a person, with no command at all.
+		var unblock *string
+		for i := range model.Attention {
+			if model.Attention[i].Kind == WaitDeadRun {
+				unblock = model.Attention[i].UnblockCommand
+			}
+		}
+		if unblock != nil {
+			t.Errorf("the header's needs-you names the command %q, want none: the epic is not stated", *unblock)
+		}
+		validatesAgainstContract(t, model)
+	})
+
+	t.Run("a parked tick of another run", func(t *testing.T) {
+		t.Parallel()
+		src := priorHoldSources(func(src *Sources) {
+			prior := src.PriorRecords[0]
+			prior.Checkpoint.EpicID = ""
+			prior.Checkpoint.Ticks = []runstate.TickState{{TickID: "at1", State: "rejected", Attempt: 7}}
+			prior.Attempts = []runstate.Attempt{attemptMarker(7, "at1",
+				testNow.Add(-47*time.Hour).UTC().Format(time.RFC3339), "strong", "claude-opus-5", "local-subprocess")}
+			src.PriorRecords[0] = prior
+			// A hold a resume settled is history, so the parked sentence
+			// is the next step that stands — the same settled-hold shape
+			// the prior-hold suite pins.
+			src.PriorFeeds["run_old"] = append(src.PriorFeeds["run_old"], runfeed.Event{
+				SchemaVersion: 1, At: testNow.Add(-40 * time.Hour).UTC().Format(time.RFC3339), RunID: "run_old",
+				Stage: reconcile.StageResumed, Detail: "resumed after the person released the attempt",
+			})
+			unstatable(src)
+		})
+		model := Build(src)
+		parked := epicTick(t, model, "at1")
+		if len(parked.Tries) != 1 || parked.Tries[0].NextStep == nil {
+			t.Fatalf("the parked tick's tries read %+v, want a next step", parked.Tries)
+		}
+		if got, want := *parked.Tries[0].NextStep, "nothing of that run is working"; got != want {
+			t.Errorf("the parked tick's next step is %q, want %q: the reason stands alone when the epic is not stated",
+				got, want)
+		}
+		validatesAgainstContract(t, model)
+	})
+}
