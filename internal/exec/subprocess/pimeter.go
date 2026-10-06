@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
 )
 
 // LOCAL GATEWAY METERING (tick dm2, epic hn6 — rule 7's metered half): how
@@ -127,6 +129,18 @@ const upstreamAuthHeader = "Authorization"
 // opens the gateway, and Authorization, which the gateway forwards to
 // Workers AI.
 //
+// The command's READER is not spelled here (tick frr): it is built by
+// credentials.ShellGetCommand, the same builder the Go side's File.Get is
+// pinned to by its drift guard, so the two worlds that read ~/.ticfacrc —
+// this process through Get, pi's shell through this command — cannot read
+// the file differently again. They did once, and the difference was not
+// cosmetic: the hand-written grep demanded an exact `^key=` line and
+// returned EVERY match, so a hand-edited `factory_cloudflare_api_token = …`
+// (spaces around the '=', which Get reads fine) sent pi an EMPTY credential
+// — every Workers AI dispatch refused instead of merely going unmetered —
+// and a duplicated key produced a two-line header value. Only the Bearer
+// scheme, a fact of the HTTP header and not of the file, is composed here.
+//
 // WHY THE OVERRIDE MUST SUPPLY A CREDENTIAL AT ALL, on both headers: pi's
 // own stored auth for the cloudflare-workers-ai provider is the Workers AI
 // wallet key (the cfu_… token of the unified billing rung), which the
@@ -149,7 +163,9 @@ const upstreamAuthHeader = "Authorization"
 // generated file names the KEY, never the token, and only on a host whose
 // ~/.ticfacrc holds both halves — the caller refuses to build the join when
 // either is missing, so the command never runs where it would find nothing.
-const gatewayCredentialCommand = "!grep '^factory_cloudflare_api_token=' \"$HOME/.ticfacrc\" | cut -d= -f2- | sed 's/^/Bearer /'"
+var gatewayCredentialCommand = "!" +
+	credentials.ShellGetCommand(credentials.KeyCloudflareAPIToken) +
+	" | sed 's/^/Bearer /'"
 
 // affinityHeader is Workers AI's prefix-cache routing header (D24): the value
 // is the run id, exactly as the factory stamps it for a cloud run.

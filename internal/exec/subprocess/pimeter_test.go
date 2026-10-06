@@ -1,11 +1,17 @@
 package subprocess
 
 import (
+	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
 )
 
 // The gateway metering suite (tick dm2): the generated pi override is the
@@ -90,34 +96,100 @@ func TestGatewayMeteringWritesTheOverrideTheReaderJoins(t *testing.T) {
 	if secret := regexp.MustCompile(`"(cfut|cf)_[A-Za-z0-9_-]{20,}"`).FindString(body); secret != "" {
 		t.Errorf("the override carries a credential value %s: the token is read at request time from ~/.ticfacrc, and a copy baked into per-attempt state is one nobody asked for", secret)
 	}
-	// The gateway's own credential, resolved at request time: the SAME key
-	// the factory itself authenticates this exact route with, stamped as the
-	// gateway's cf-aig-authorization header — the header that OPENS the
-	// gateway (pi's stored wallet key does not, live: 401 code 2009). It is
-	// not, on its own, the credential the call authenticates upstream with:
-	// the gateway forwards the caller's Authorization to Workers AI (live,
-	// tick 648 probe e), which is why the next entry exists.
-	if !strings.Contains(body, `"cf-aig-authorization": "!grep '^factory_cloudflare_api_token=' `) {
-		t.Errorf("the override does not name the credential the gateway route authenticates:\n%s", body)
-	}
-	// The upstream credential, DISPLACED: the gateway forwards the
-	// caller's Authorization to Workers AI, which authenticates that header
-	// and not the gateway's own (live, tick 648 probe e: a valid
+	// The credential the join rides, on BOTH headers: the gateway's own
+	// cf-aig-authorization — the header that OPENS the gateway (pi's stored
+	// wallet key does not, live: 401 code 2009) — and the plain
+	// Authorization the gateway forwards to Workers AI, which authenticates
+	// that header and not the gateway's own (live, tick 648 probe e: a valid
 	// cf-aig-authorization beside a bogus Authorization logs a failed row,
-	// upstream code 10000 Authentication error) — so a host whose pi
-	// stores a key Workers AI refuses turns every metered dispatch into a
-	// 401, exactly the dm2 host's state. A headers.Authorization entry in
-	// the override DOES displace pi's stored key (tick m4t, verified
+	// upstream code 10000 Authentication error). A headers.Authorization
+	// entry in the override DOES displace pi's stored key (tick m4t, verified
 	// against a fake gateway — the drain test pins it end to end), so the
 	// SAME request-time account token rides both headers. Which credential
 	// pays is the operator's decision, stated by the ~/.ticfacrc key they
 	// configure: the account token the factory's own cloud runs ride.
-	if !strings.Contains(body, `"Authorization": "!grep '^factory_cloudflare_api_token=' `) {
-		t.Errorf("the override does not displace pi's stored key in Authorization:\n%s", body)
+	//
+	// The command that reads it is the credentials package's own builder —
+	// the same one File.Get is pinned to (tick frr) — so the expected bytes
+	// are BUILT here too, not re-spelled: an assertion that quoted the
+	// command by hand would only test that two hand-writings agree.
+	credentialCommand := "!" +
+		credentials.ShellGetCommand(credentials.KeyCloudflareAPIToken) +
+		" | sed 's/^/Bearer /'"
+	for _, header := range []string{gatewayAuthHeader, upstreamAuthHeader} {
+		if !strings.Contains(body, jsonWord(header)+": "+jsonWord(credentialCommand)) {
+			t.Errorf("the override does not stamp %s with the credentials package's own reader of %s:\n%s",
+				header, credentials.KeyCloudflareAPIToken, body)
+		}
 	}
 	// The argv that loads it.
 	if args := metering.ExtensionArgs(path); len(args) != 2 || args[0] != "--extension" || args[1] != path {
 		t.Errorf("the extension args are %v, want --extension <path>", args)
+	}
+}
+
+func TestTheGeneratedCredentialCommandReadsWhatGetReads(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the credential command runs where pi runs: a POSIX shell")
+	}
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("no sh on PATH: the credential command runs where pi runs")
+	}
+	for name, rc := range map[string]string{
+		// The tick's failing inputs, verbatim: a hand-edited line the Go side
+		// reads fine, and a duplicated key that once produced a two-line
+		// header value.
+		"hand-edited spaces around the =": "factory_cloudflare_api_token = cf_spaced_token\n",
+		"a duplicated key":                "factory_cloudflare_api_token=cf_first\nfactory_cloudflare_api_token=cf_second\n",
+	} {
+		home := t.TempDir()
+		if err := os.WriteFile(filepath.Join(home, credentials.FileName), []byte(rc), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		// The real artifact, not a constant re-quoted: the command is PARSED
+		// out of the extension the executor actually writes, so a
+		// hand-written command in pimeter.go fails here on the very bytes a
+		// pane would execute.
+		metering := &GatewayMetering{RunID: "run-frr", GatewayURL: "https://gateway.ai.cloudflare.com/v1/acct/gw"}
+		path, err := metering.WriteExtension(t.TempDir())
+		if err != nil {
+			t.Fatalf("%s: write the metering extension: %v", name, err)
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("%s: read the metering extension back: %v", name, err)
+		}
+		quoted := regexp.MustCompile(`"` + upstreamAuthHeader + `": "((?:[^"\\]|\\.)*)"`).FindStringSubmatch(string(raw))
+		if quoted == nil {
+			t.Fatalf("%s: the override carries no %s command to parse:\n%s", name, upstreamAuthHeader, raw)
+		}
+		command, err := strconv.Unquote(`"` + quoted[1] + `"`)
+		if err != nil {
+			t.Fatalf("%s: unquote the credential command: %v", name, err)
+		}
+
+		// The command runs the way pi runs it: in a shell, against the
+		// operator's ~/.ticfacrc — here the fixture HOME.
+		var stdout bytes.Buffer
+		cmd := exec.Command(sh, "-c", strings.TrimPrefix(command, "!"))
+		cmd.Dir = home
+		cmd.Env = append(os.Environ(), "HOME="+home)
+		cmd.Stdout = &stdout
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("%s: run the credential command: %v", name, err)
+		}
+
+		// The verdict is the credential the GO side reads, from the file
+		// format's own package — not a second hand-spelling of the value.
+		file, err := credentials.LoadFrom(filepath.Join(home, credentials.FileName))
+		if err != nil {
+			t.Fatalf("%s: load the fixture ~/.ticfacrc: %v", name, err)
+		}
+		if got, want := strings.TrimSuffix(stdout.String(), "\n"), "Bearer "+file.Get(credentials.KeyCloudflareAPIToken); got != want {
+			t.Errorf("%s: the generated command sent %q, want the ~/.ticfacrc credential %q: the two readers of the file must not drift (tick frr)", name, got, want)
+		}
 	}
 }
 
