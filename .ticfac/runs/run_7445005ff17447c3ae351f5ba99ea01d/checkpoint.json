@@ -1,0 +1,42 @@
+{
+  "schema_version": 3,
+  "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
+  "epic_id": "umq",
+  "sequence": 1,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-10-06T04:38:48Z",
+  "ticks": [
+    {
+      "tick_id": "dax",
+      "state": "ready"
+    },
+    {
+      "tick_id": "l76",
+      "state": "ready"
+    },
+    {
+      "tick_id": "rlx",
+      "state": "ready"
+    }
+  ],
+  "provenance": {
+    "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/umq",
+    "source_sha": "44ce1b4078d5f25e03d377445c90eceae9719e40",
+    "integration_ref": "refs/heads/epic/umq",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:0fd84feaa6def26de94fef1a4da33b194dfa9b1fa1c66cc1c31a8a555019f2a4",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
