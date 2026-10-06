@@ -2,6 +2,7 @@
   "id": "2zi",
   "title": "cloud cost_usd includes the factory's own jev rows, unnamed in the line's basis",
   "description": "The factory's /jev route stamps the run's full gatewayMetadata on the classifier's calls, so the run-scoped cost sync (rows summed by run_id) folds the classifier's measured spend into the run's cost_usd. The cloud workers-ai line renders that number over the worker attempts with the plain 'AI Gateway logs' basis, never naming the run-own money inside it — the same shape kf4 named for local runs, in the milder form where worker coverage is total. The basis (both renderers' wording, Go and status.ts, per rule 8) could name it, or the sync could separate it.\nevidence: cloudflare/src/gateway.ts:1015 (the jev route stamps gatewayMetadata(token, run)); internal/statusmodel/cost.go cloud branch\n\nticfac run epic-hn6 filed this backlog tick from the finding 9eac223b22fdd50cbfd7bfe400b5ac89023150769ffef259bec26c6041684139 (reported by run-epic-hn6/tick-kf4/attempt-45) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-hn6/absorptions/9eac223b22fdd50cbfd7bfe400b5ac89023150769ffef259bec26c6041684139.json on the run branch.",
+  "notes": "2026-10-06 02:42 - ticfac run epic-hn6: created by absorbing finding 9eac223b22fdd50cbfd7bfe400b5ac89023150769ffef259bec26c6041684139 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-hn6/absorptions/9eac223b22fdd50cbfd7bfe400b5ac89023150769ffef259bec26c6041684139.json on epic/hn6, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-hn6/tick-kf4/attempt-45",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-06T00:42:37Z",
-  "updated_at": "2026-10-06T00:42:37Z"
+  "updated_at": "2026-10-06T00:42:42.789109Z"
 }
