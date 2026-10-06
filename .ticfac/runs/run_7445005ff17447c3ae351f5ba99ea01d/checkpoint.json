@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
   "epic_id": "umq",
-  "sequence": 9,
-  "state": "running",
-  "reason": "dax is closed",
-  "updated_at": "2026-10-06T13:00:32Z",
+  "sequence": 10,
+  "state": "dispatching",
+  "reason": "dispatching l76 as attempt 2",
+  "updated_at": "2026-10-06T13:00:43Z",
   "ticks": [
     {
       "tick_id": "dax",
