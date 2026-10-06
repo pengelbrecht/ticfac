@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
   "epic_id": "umq",
-  "sequence": 28,
-  "state": "publishing",
-  "reason": "closing a6b behind its validated review-epic answer",
-  "updated_at": "2026-10-06T17:02:18Z",
+  "sequence": 29,
+  "state": "running",
+  "reason": "a6b is closed",
+  "updated_at": "2026-10-06T17:02:20Z",
   "ticks": [
     {
       "tick_id": "dax",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "a6b",
-      "state": "reported",
+      "state": "closed",
       "attempt": 4
     }
   ],
