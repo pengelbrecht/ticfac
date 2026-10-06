@@ -1,0 +1,14 @@
+{
+  "id": "9cp",
+  "title": "The contracts bundle merges mechanically: versions and digests are derived, not cut by hand",
+  "gloss": "mechanical contracts bundle",
+  "description": "Every fold of main into a long-lived epic conflicts in contracts/bundle.json, CHANGELOG.md and cloudflare/contracts.pin.json because each side cuts versions by hand and both used the same numbers for different bytes (hn6 fold 2026-10-06 had to cut 2.1.0 above both). Make the bundle's version/digest ledger derivable (e.g. computed from the contract files at build/check time, or a merge driver that re-cuts) so two sides' contract changes merge without a person.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "Two branches that each change a different contract file merge with no conflict in the bundle/pin; contracts check passes; tests.",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-06T01:21:00.033959Z",
+  "updated_at": "2026-10-06T01:21:00.033959Z"
+}

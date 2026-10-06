@@ -1,0 +1,14 @@
+{
+  "id": "3d9",
+  "title": "Runs fold main as main moves, not only at start and land",
+  "gloss": "fold main continuously",
+  "description": "hn6 (2026-10-05/06) twice failed to land because main moved a lot under a long-lived epic branch (dozens of agent PRs touching watch.go, the contracts bundle, CI scripts) and the land fold conflicted in a dozen files at once; it took a hand merge to recover. Fold main into the integration branch periodically during a run (e.g. after each wave or when main gains N commits) so conflicts stay small and are resolved while the context is fresh.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "A run folds main when main has moved (bounded cadence) and resolves small conflicts through the existing resolve path; tests.",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-06T01:21:00.005174Z",
+  "updated_at": "2026-10-06T01:21:00.005174Z"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "dfb",
+  "title": "watch's hold alert dereferences a nil clearing command",
+  "gloss": "watch hold alert nil deref",
+  "description": "internal/cli/watch.go: the hold alert dereferences *clearing without a nil check; HoldClearingCommand returns nil when the epic id is empty, so watch can panic. Found folding main into epic/hn6 (2026-10-06); came from hn6's code.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "No panic with an empty epic id; a test covers it.",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-06T01:20:59.982188Z",
+  "updated_at": "2026-10-06T01:20:59.982188Z"
+}
