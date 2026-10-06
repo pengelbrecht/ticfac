@@ -1,6 +1,7 @@
 {
   "id": "l76",
   "title": "Final review of the SDK 1.0 migration diff",
+  "notes": "2026-10-06 14:16 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: l76 try 1 (run dispatch #2) reported a finding the run itself decided — defect \"run_image stamp names the deployment's image, not the image the run pinned\" (key 1cab71b78ffeb441c7043bb7c3323e662f264d79eb145cfd966a7085fef4ebab, severity low, for this repository) is promoted to a backlog tick with an owner, xtd; the decision record is on the run branch at .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/1cab71b78ffeb441c7043bb7c3323e662f264d79eb145cfd966a7085fef4ebab.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -12,6 +13,6 @@
   "role": "review",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-01T08:24:24.739238Z",
-  "updated_at": "2026-10-06T13:00:46.21738783Z",
+  "updated_at": "2026-10-06T14:16:41.778066357Z",
   "started_at": "2026-10-06T13:00:46.21738716Z"
 }
