@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
   "epic_id": "umq",
-  "sequence": 30,
-  "state": "gating",
-  "reason": "running the integrated gate for rlx on f2c322ffb827",
-  "updated_at": "2026-10-06T17:02:44Z",
+  "sequence": 31,
+  "state": "completed",
+  "reason": "every tick of umq is closed behind the integrated gate; the epic is merged into main as d7dd9ac7e308",
+  "updated_at": "2026-10-06T17:20:15Z",
   "ticks": [
     {
       "tick_id": "dax",
