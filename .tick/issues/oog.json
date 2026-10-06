@@ -2,6 +2,7 @@
   "id": "oog",
   "title": "Declared-image check still names the deleted 0.x application",
   "description": "DEFAULT_SANDBOX_IMAGE ('ticks-orchestrator') and the declared-image machinery it feeds (acquireContext's resolveSandboxImage, the TICKS_SANDBOX_IMAGE the container self-checks with exit 6) describe an application tick dax deleted. The check runs for do_v1 runs too, so a repository declaring [sandbox].image would be judged against an image no deployment serves, and a declaration matching the old name passes while the run actually boots the FactorySandbox image. The seam needs its own durable_object answer (what a declared image means when a run pins its own); it was out of a deletion tick's scope and no current repository declares one.\nevidence: cloudflare/src/sandbox.ts:57 (DEFAULT_SANDBOX_IMAGE), cloudflare/src/run-workflow.ts:1007 (resolveSandboxImage in acquireContext), phase0-compat 'names the 0.x image the resolved-image machinery still compares against'\n\nticfac run run_7445005ff17447c3ae351f5ba99ea01d filed this backlog tick from the finding 9ec9061eb8256b025121362a4e60ba5fc87a514c07dadb9454e99045264a8fa3 (reported by run-run_7445005ff17447c3ae351f5ba99ea01d/tick-dax/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/9ec9061eb8256b025121362a4e60ba5fc87a514c07dadb9454e99045264a8fa3.json on the run branch.",
+  "notes": "2026-10-06 11:41 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: created by absorbing finding 9ec9061eb8256b025121362a4e60ba5fc87a514c07dadb9454e99045264a8fa3 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/9ec9061eb8256b025121362a4e60ba5fc87a514c07dadb9454e99045264a8fa3.json on epic/umq, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_7445005ff17447c3ae351f5ba99ea01d/tick-dax/attempt-1",
   "created_by": "ticfac run run_7445005ff17447c3ae351f5ba99ea01d",
   "created_at": "2026-10-06T11:41:13Z",
-  "updated_at": "2026-10-06T11:41:13Z"
+  "updated_at": "2026-10-06T11:41:18.277820341Z"
 }
