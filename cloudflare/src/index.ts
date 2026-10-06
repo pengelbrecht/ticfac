@@ -139,6 +139,7 @@ import { postReviewFindings, REVIEW_PATH } from "./pr-review";
 import { RepoRoom } from "./repo-room";
 import { signalRunDone } from "./run-done";
 import { FEED_PAGE_MAX_BYTES, type FeedPageRequest, readRunFeedPage } from "./run-feed";
+import { sweepOrphanedRuns } from "./run-orphans";
 import {
   type MessageRef,
   type Outcome,
@@ -1924,6 +1925,28 @@ export default {
         } catch (error) {
           console.error(
             `factory sweep: the ${controller.cron} trigger at ${at.toISOString()} failed: ${String(error)}`,
+          );
+        }
+        // The orphaned-record sweep (tick gbg): a live record whose Workflow
+        // instance has ended or is gone is finished here, with its reason —
+        // BEFORE the reclaim below, so a finished orphan's leftover workers
+        // are reclaimed in the same pass. Its own try, like everything here.
+        try {
+          for (const outcome of await sweepOrphanedRuns(env, at)) {
+            if (outcome.outcome === "finished") {
+              console.log(
+                `factory orphans: ${outcome.run_id} (${outcome.project}) finished as ${outcome.state} — ` +
+                  `${outcome.reason}; lease: ${outcome.lease}`,
+              );
+            } else if (outcome.undecided) {
+              console.error(
+                `factory orphans: ${outcome.run_id} left undecided — ${outcome.reason}`,
+              );
+            }
+          }
+        } catch (error) {
+          console.error(
+            `factory orphans: the ${controller.cron} trigger at ${at.toISOString()} threw: ${String(error)}`,
           );
         }
         // The container reclaim (hn6's cloud run): any worker container whose

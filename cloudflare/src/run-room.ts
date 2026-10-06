@@ -743,6 +743,42 @@ export class RunRoom extends DurableObject<Env> {
     return { outcome: reclaimed.reclaimed ? "reclaimed" : "held", detail: reclaimed.detail };
   }
 
+  /**
+   * Releases whatever dispatch lease an ENDED run still holds, without its
+   * token (tick gbg). The caller has proven the run is over — its Workflow
+   * instance is complete, errored, terminated or absent on Cloudflare — so
+   * the token that lived in its params is gone with it, and nothing will ever
+   * release the lease the ordinary way. The token is read from the room's own
+   * row instead, and the release then goes through `releaseDispatchLease`, so
+   * a parked submission ignites exactly as on a normal finish.
+   *
+   * A lease held by ANOTHER run is never touched; a lapse this run left in
+   * memory is forgotten, so the dispatch door cannot reclaim it later.
+   */
+  async releaseLeaseOfEndedRun(
+    runID: string,
+  ): Promise<{ released: boolean; detail: string; ignited: QueuedSubmission | null }> {
+    this.#forgetLapsed(runID);
+    const row = this.#lease.read();
+    if (row === null) {
+      return { released: false, detail: "no dispatch lease is held", ignited: null };
+    }
+    if (row.run_id !== runID) {
+      return {
+        released: false,
+        detail: `the dispatch lease is held by run ${row.run_id}, not ${runID}`,
+        ignited: null,
+      };
+    }
+    const result = await this.releaseDispatchLease({ run_id: runID, token: row.token });
+    if (!result.ok) return { released: false, detail: result.detail, ignited: null };
+    return {
+      released: true,
+      detail: `released run ${runID}'s dispatch lease`,
+      ignited: result.ignited,
+    };
+  }
+
   #rememberLapsed(record: LeaseRecord): void {
     // One row per run, and only recent ones: a lapse older than a day is no
     // live run's, and the table must not grow with the project's history.
