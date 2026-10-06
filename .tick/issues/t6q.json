@@ -2,7 +2,7 @@
   "id": "t6q",
   "title": "Re-review hn6: its tree changed since its READY final review (round 4)",
   "description": "Review the epic hn6 again, AS INTEGRATED, before the run lands it: its final review (pv7, decision 48) judged it READY at fbce6fc37f64, and the epic branch has changed since — now at e361821014b8, with work that review never saw (a tick closed or a commit pushed after it). This is review round 4, made only because the tree changed; the run lands on YOUR verdict, not the earlier one.\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what blocks it.",
-  "notes": "2026-10-06 02:57 - ticfac run epic-hn6: t6q try 1 (run dispatch #48) reported a finding the run itself decided — defect \"Stream FAILED ending names no resume when the cloud model gather fails\" (key 9edbcc83294055721949fe5401f8d155b0351944c7972c54a290584b1bce9ea7, severity low, for this repository) is promoted to a backlog tick with an owner, gbl; the decision record is on the run branch at .ticfac/runs/epic-hn6/absorptions/9edbcc83294055721949fe5401f8d155b0351944c7972c54a290584b1bce9ea7.json, and the draft is triaged as promoted.",
+  "notes": "2026-10-06 02:57 - ticfac run epic-hn6: t6q try 1 (run dispatch #48) reported a finding the run itself decided — defect \"Stream FAILED ending names no resume when the cloud model gather fails\" (key 9edbcc83294055721949fe5401f8d155b0351944c7972c54a290584b1bce9ea7, severity low, for this repository) is promoted to a backlog tick with an owner, gbl; the decision record is on the run branch at .ticfac/runs/epic-hn6/absorptions/9edbcc83294055721949fe5401f8d155b0351944c7972c54a290584b1bce9ea7.json, and the draft is triaged as promoted.\n2026-10-06 02:58 - ticfac run epic-hn6: t6q try 1 (run dispatch #48) reported a finding the run itself decided — defect \"TestTriageDiscardAndFixedByShortPrefix flakes on TempDir cleanup under -race\" (key bb1e5923f32f42ef45d6d3f4d0db82908de36f20148b498ddaad796fcddd12ac, severity low, for this repository) is promoted to a backlog tick with an owner, cmw; the decision record is on the run branch at .ticfac/runs/epic-hn6/absorptions/bb1e5923f32f42ef45d6d3f4d0db82908de36f20148b498ddaad796fcddd12ac.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -18,6 +18,6 @@
   "role": "review",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-05T23:58:58Z",
-  "updated_at": "2026-10-06T00:57:45.506615Z",
+  "updated_at": "2026-10-06T00:58:01.78941Z",
   "started_at": "2026-10-06T00:48:39.2435Z"
 }
