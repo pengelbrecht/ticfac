@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 321,
-  "state": "running",
-  "reason": "ziy is running as attempt 47",
-  "updated_at": "2026-10-06T00:15:36Z",
+  "sequence": 322,
+  "state": "collecting",
+  "reason": "collecting 3wq attempt 43",
+  "updated_at": "2026-10-06T00:15:41Z",
   "ticks": [
     {
       "tick_id": "v16",
