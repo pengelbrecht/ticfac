@@ -1,0 +1,71 @@
+{
+  "schema_version": 3,
+  "decision": 4,
+  "role": "closeout-epic",
+  "request": {
+    "epic_id": "umq",
+    "job_id": "run-run_7445005ff17447c3ae351f5ba99ea01d/tick-rlx/attempt-3",
+    "output_schema": "ticfac.job-result.closeout-epic.v1",
+    "profile": "closeout-epic@1.0.0 (cloudflare-sandbox/pi-durable, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:f083fe6b9410166a3480b4a729d1ba6272f1f7bcf1e97fb5f5e5f3e926c72124",
+    "role": "closeout-epic",
+    "source_grade": "write",
+    "source_sha": "07f4d74de006b005a9e90010f05977674dfc312f",
+    "tick_id": "rlx"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "The cutover keeps TICFAC_CLOUD_SUBSTRATE=sdk0 as an explicit opt-out, and the 0.x Sandbox class with its SANDBOXES binding for pre-cutover records — both meaningful only while the 0.x application exists. The first post-merge deploy deletes ticks-orchestrator (behind the live-run guard), after which a run that asks for sdk0 is still accepted at submit but its containers can no longer boot, and the failure lands at ignition, after the boundary is pushed. A tick should refuse sdk0 submissions once the application is gone, and later drop the residual class and binding once no pre-cutover run can exist; dax's report named both halves as the next tick's business.\nevidence: internal/cli/run_cloud.go:244 (the opt-out documented as \"while a deployment still serves it\"); cloudflare/src/run-substrate.ts:27 (sdk0 routing to the legacy binding); cloudflare/wrangler.toml:60,110 (the Sandbox class and SANDBOXES binding stay for pre-cutover records); RESULT-dax.md, \"What the next tick has to know\" and \"Residual seams\"",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Retire the sdk0 opt-out and the residual Sandbox class once the 0.x app is gone"
+      },
+      {
+        "body": "The write boundary exempts .tick/learnings.md and the close-out's own contract names the learnings it compacts as its write deliverable, but a cloud attempt can reach the file by no route: worker.sh's pre-commit hook refuses any commit that stages a .tick/ path, and sweep_boundary_state restores the directory before the salvage, so an uncommitted compaction is discarded with the container. A close-out that then delivered only its report would be rejected as no-commits — the exemption the boundary declares is not one the cloud substrate can deliver, and this run's close-out had to carry its compaction in a docs file instead (docs/umq-closeout-retro-2026-10-06.md).\nevidence: image/worker.sh:531 (the hook refuses every staged .tick/ path) and image/worker.sh:596 (sweep_boundary_state restores .tick/ before the salvage); internal/exec/subprocess/report.go:190 (the boundary exempts .tick/learnings.md); internal/reconcile/rolejob.go:365 (a close-out's empty branch is rejected: its learnings are its write deliverable); this attempt's refused staging is recorded in the container's guard ledger, which the finish phase's report header surfaces",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "A cloud close-out cannot write .tick/learnings.md: the guard refuses the file"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/umq/attempt-3/rlx",
+      "commits": 2,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/umq/attempt-3/rlx:RESULT-rlx.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "closeout-epic",
+    "schema_id": "ticfac.job-result.closeout-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "the epic's five items hold on the integration branch and CI is green on PR #242; the concerns are the two reads the first post-merge deploy owes ([A3]'s deletion line, and whether real wrangler names the FactorySandbox image), the two filed findings (the 0.x residue, the learnings destination a cloud close-out cannot reach), and the five backlog ticks"
+  },
+  "validated": true,
+  "requested_at": "2026-10-06T15:59:19Z",
+  "answered_at": "2026-10-06T15:59:19Z",
+  "provenance": {
+    "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
+    "tick_id": "rlx",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/umq",
+    "source_sha": "07f4d74de006b005a9e90010f05977674dfc312f",
+    "integration_ref": "refs/heads/epic/umq",
+    "phase": "closeout",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:f083fe6b9410166a3480b4a729d1ba6272f1f7bcf1e97fb5f5e5f3e926c72124",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
