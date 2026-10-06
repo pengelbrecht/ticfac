@@ -109,6 +109,7 @@ func (r *Reconciler) profileForTier(role, tier string) (*profile.Profile, error)
 	// caller — which knows the tick and the label — makes it loud.
 	p, err := profile.Resolve(role, profile.Options{
 		Dir: r.opts.ProfileDir, RunnersConfig: r.opts.GateConfig, Tier: tier, Substrate: string(r.substrate),
+		Config: r.runConfig.Name,
 	})
 	if err != nil {
 		return nil, err
@@ -159,6 +160,7 @@ func (r *Reconciler) profileForRecordedExecutor(role, tier, executor string) (*p
 			seen[key] = true
 			p, err := profile.Resolve(role, profile.Options{
 				Dir: dir, RunnersConfig: r.opts.GateConfig, Tier: tier, Substrate: substrate,
+				Config: r.runConfig.Name,
 			})
 			if err != nil || p == nil {
 				continue
@@ -719,12 +721,13 @@ func ceilingTierFor(p *runconfig.TierPolicy) string {
 // routeOnDemandJob resolves one on-demand role at the ceiling, exactly as
 // resolve.go and gate_repair.go resolve it when the run meets a conflict or a
 // failed gate. executors nil skips the executor check (a check with no build
-// to honour it).
+// to honour it). config is the run's selected named run config (tick tda), so
+// the on-demand jobs route under the same cells every dispatch does.
 func routeOnDemandJob(role, profileDir, runnersConfig string, substrate runconfig.Substrate,
-	policy *runconfig.TierPolicy, executors []KnownExecutor) (*profile.Profile, error) {
+	policy *runconfig.TierPolicy, executors []KnownExecutor, config string) (*profile.Profile, error) {
 	tier := ceilingTierFor(policy)
 	resolved, err := profile.Resolve(role, profile.Options{
-		Dir: profileDir, RunnersConfig: runnersConfig, Tier: tier, Substrate: string(substrate),
+		Dir: profileDir, RunnersConfig: runnersConfig, Tier: tier, Substrate: string(substrate), Config: config,
 	})
 	if err == nil && executors != nil {
 		err = usableProfile(executors, resolved)
@@ -747,6 +750,11 @@ type RoutedJob struct {
 	Role    string
 	Tier    string
 	Profile *profile.Profile
+	// Config is the named run config the job was resolved under (tick tda),
+	// "" for the merged document's own cells — the field a caller
+	// resolving EVERY config (doctor, the cloud submission preflight) reads
+	// to say which config routed which job.
+	Config string
 }
 
 // CheckRouting resolves every job a run on this substrate can dispatch —
@@ -754,18 +762,30 @@ type RoutedJob struct {
 // it, and the on-demand resolve-conflict and plan-repair jobs at the ceiling —
 // exactly as a run's construction does, without a build's executors. It is
 // what `ticfac doctor` and this repository's own guard ask; a run asks the
-// same questions in [New] and refuses to start on the first failure.
+// same questions in [New] and refuses to start on the first failure. It is
+// the no-selection view: the merged document's own cells, the answer every
+// run before tick tda routed on. A named config's view is
+// [CheckRoutingConfig].
 func CheckRouting(profileDir, runnersConfig string, substrate runconfig.Substrate) ([]RoutedJob, error) {
+	return CheckRoutingConfig(profileDir, runnersConfig, substrate, "")
+}
+
+// CheckRoutingConfig is [CheckRouting] with one named run config selected
+// (tick tda): the same questions, answered under the config's cells — a
+// config that cannot route is a config doctor and the cloud submission
+// preflight refuse, naming the config, before a run ever starts on it.
+// config "" is the no-selection view [CheckRouting] always answered.
+func CheckRoutingConfig(profileDir, runnersConfig string, substrate runconfig.Substrate, config string) ([]RoutedJob, error) {
 	var jobs []RoutedJob
-	opts := profile.Options{Dir: profileDir, RunnersConfig: runnersConfig, Substrate: string(substrate)}
+	opts := profile.Options{Dir: profileDir, RunnersConfig: runnersConfig, Substrate: string(substrate), Config: config}
 	base, err := profile.ResolveAll(opts)
 	if err != nil {
 		return nil, err
 	}
 	for _, role := range profile.Roles {
-		jobs = append(jobs, RoutedJob{Role: role, Profile: base[role]})
+		jobs = append(jobs, RoutedJob{Role: role, Profile: base[role], Config: config})
 	}
-	cfg, err := runconfig.LoadFor(runnersConfig, substrate)
+	cfg, err := runconfig.LoadForConfig(runnersConfig, substrate, config)
 	if err != nil {
 		return nil, err
 	}
@@ -786,15 +806,42 @@ func CheckRouting(profileDir, runnersConfig string, substrate runconfig.Substrat
 			if err != nil {
 				return nil, err
 			}
-			jobs = append(jobs, RoutedJob{Role: role, Tier: tier, Profile: resolved})
+			jobs = append(jobs, RoutedJob{Role: role, Tier: tier, Profile: resolved, Config: config})
 		}
 	}
 	for _, role := range profile.OnDemandRoles {
-		resolved, err := routeOnDemandJob(role, profileDir, runnersConfig, substrate, cfg.TierPolicy, nil)
+		resolved, err := routeOnDemandJob(role, profileDir, runnersConfig, substrate, cfg.TierPolicy, nil, config)
 		if err != nil {
 			return nil, err
 		}
-		jobs = append(jobs, RoutedJob{Role: role, Tier: ceilingTierFor(cfg.TierPolicy), Profile: resolved})
+		jobs = append(jobs, RoutedJob{Role: role, Tier: ceilingTierFor(cfg.TierPolicy), Profile: resolved, Config: config})
 	}
 	return jobs, nil
+}
+
+// CheckEveryNamedConfig resolves EVERY named config the runners files
+// declare for one substrate, and returns the per-config job counts and the
+// union of the jobs. It is the "resolve every named config" half of tick
+// tda's preflight — doctor's and the cloud submission preflight's question:
+// a config that cannot route refuses the whole call naming the config, so a
+// broken config is a missing line in the report rather than a run that
+// stops on it three ticks in. A repository that declares none answers with
+// empty counts and no jobs: the no-selection view is doctor's own other
+// line, unchanged.
+func CheckEveryNamedConfig(profileDir, runnersConfig string, substrate runconfig.Substrate) (map[string]int, []RoutedJob, error) {
+	merged, err := runconfig.LoadFor(runnersConfig, substrate)
+	if err != nil {
+		return nil, nil, err
+	}
+	counts := map[string]int{}
+	var all []RoutedJob
+	for _, name := range merged.NamedConfigNames() {
+		jobs, err := CheckRoutingConfig(profileDir, runnersConfig, substrate, name)
+		if err != nil {
+			return nil, nil, fmt.Errorf("the named run config %q cannot route: %w", name, err)
+		}
+		counts[name] = len(jobs)
+		all = append(all, jobs...)
+	}
+	return counts, all, nil
 }
