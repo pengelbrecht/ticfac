@@ -100,12 +100,23 @@ type trackerTree struct {
 	// run).
 	local     bool
 	keepLocal func() bool
+
+	// peekKey names this tree's private fetch ref when it is not the run's
+	// integration tree (the base's, land_close.go): two trees of one run
+	// sharing one peek ref would read each other's branch. Empty is runID.
+	peekKey string
 }
 
 // openTrackerTree prepares the tracker's worktree at the integration branch's
 // head as origin has it.
 func openTrackerTree(g *repoGit, remote, branch, runID string) (*trackerTree, error) {
-	t := &trackerTree{git: g, remote: remote, branch: branch, runID: runID}
+	return openTrackerTreeAs(g, remote, branch, runID, "")
+}
+
+// openTrackerTreeAs is openTrackerTree under a peek key of its own (see
+// trackerTree.peekKey).
+func openTrackerTreeAs(g *repoGit, remote, branch, runID, peekKey string) (*trackerTree, error) {
+	t := &trackerTree{git: g, remote: remote, branch: branch, runID: runID, peekKey: peekKey}
 	head, err := t.originHead()
 	if err != nil {
 		return nil, err
@@ -139,7 +150,11 @@ func (t *trackerTree) originHead() (string, error) {
 	// closes against the wrong base. sync() refuses to move over UNCOMMITTED
 	// records, but a clean worktree — the normal state between publishes — moves
 	// silently. See ticfac tick wdb.
-	ref := refFor("refs/ticfac/peek/tracker/" + t.git.fetch1D() + "/" + t.runID)
+	key := t.runID
+	if t.peekKey != "" {
+		key = t.peekKey
+	}
+	ref := refFor("refs/ticfac/peek/tracker/" + t.git.fetch1D() + "/" + key)
 	if _, err := t.git.run("", "fetch", "--quiet", "--no-write-fetch-head", "--refmap=", t.remote,
 		"+"+refFor(t.branch)+":"+ref); err != nil {
 		return "", fmt.Errorf("fetch %s from %s: %w", t.branch, t.remote, err)
@@ -255,6 +270,47 @@ func (t *trackerTree) publish(reason string) (string, error) {
 	}
 	return "", fmt.Errorf("%s moved under the tracker's writer %d times running while publishing %q; "+
 		"that is an operational problem, not a conflict to spin on", t.branch, maxTrackerPushes, reason)
+}
+
+// publishOnce is publish with no rebuild: one push, leased on the commit the
+// tracker read. A lost lease answers moved, and the caller discards the write
+// and makes it again on the moved branch. It is the writer for a branch other
+// writers append to — the base, where `.tick/activity/` gains lines from every
+// merge — on which publish's rebuild (last writer wins per path) would drop
+// theirs.
+func (t *trackerTree) publishOnce(reason string) (commit string, moved bool, err error) {
+	changes, tree, err := t.stagedTree()
+	if err != nil {
+		return "", false, err
+	}
+	if len(changes) == 0 {
+		return "", false, nil
+	}
+	commit, err = t.git.run("", "commit-tree", tree, "-p", t.base, "-m", fmt.Sprintf("ticfac run %s: %s", t.runID, reason))
+	if err != nil {
+		return "", false, err
+	}
+	_, stderr, pushErr := t.git.try("", "push",
+		"--force-with-lease="+refFor(t.branch)+":"+t.base,
+		t.remote, commit+":"+refFor(t.branch))
+	if pushErr == nil {
+		t.pushes++
+		return commit, false, t.landed(commit)
+	}
+	if leaseRefused(stderr) {
+		return "", true, nil
+	}
+	return "", false, pushErr
+}
+
+// discard drops what the tracker wrote and nobody pushed, back to the commit
+// the worktree was synced to.
+func (t *trackerTree) discard() error {
+	if _, err := t.git.run(t.dir, "reset", "--hard", "--quiet", t.base); err != nil {
+		return err
+	}
+	_, err := t.git.run(t.dir, "clean", "-fdq", "--", trackerRoot)
+	return err
 }
 
 // landed moves the worktree onto the commit that now carries its records, so

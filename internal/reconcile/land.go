@@ -305,10 +305,16 @@ func (r *Reconciler) readyPass(ctx context.Context, co *landingCloseout, pass in
 		rd.Landed = at
 		r.record(tick, StageLanded, "%s already carries the epic branch %s (at %s): nothing is kept ready or "+
 			"merged twice", base, r.branch, short(at))
+		ci := ""
 		if lands {
-			return rd, true, r.verifyBaseCI(ctx, tick, pr, base, at)
+			verdict, err := r.verifyBaseCI(ctx, tick, pr, base, at)
+			if err != nil {
+				return rd, true, err
+			}
+			ci = verdict
 		}
-		return rd, true, nil
+		// The epic has landed: its own tick closes, on the base (land_close.go).
+		return rd, true, r.closeLandedEpic(ctx, tick, base, at, pr, false, ci)
 	}
 	if pr == nil {
 		if lands {
@@ -415,8 +421,12 @@ func (r *Reconciler) readyPass(ctx context.Context, co *landingCloseout, pass in
 		"merged into %s as %s, and the epic PR #%d with it", r.opts.EpicID, r.closeoutRule.MergeStated, r.branch,
 		short(epicNow), base, short(merged), pr.Number)
 
-	// 6. CI on the base.
-	return rd, true, r.verifyBaseCI(ctx, tick, pr, base, merged)
+	// 6. CI on the base, and 7. the epic's own close, on the base.
+	verdict, err := r.verifyBaseCI(ctx, tick, pr, base, merged)
+	if err != nil {
+		return rd, true, err
+	}
+	return rd, true, r.closeLandedEpic(ctx, tick, base, merged, pr, true, verdict)
 }
 
 // carryReadiness rewrites the PR body for its reviewer, with this readying's
@@ -762,8 +772,9 @@ func (r *Reconciler) mergeEpicInto(tick, base, baseHead, epicHead string, pr *fo
 // failure naming the jobs, since the base the next epic is cut from is red. A
 // CI that has not concluded within the run's bound is recorded as UNVERIFIED
 // rather than failed: the merge's tree is the tree CI already passed on the
-// epic PR, so the base's run is confirmation, not the gate.
-func (r *Reconciler) verifyBaseCI(ctx context.Context, tick string, pr *forge.PullRequest, base, sha string) error {
+// epic PR, so the base's run is confirmation, not the gate. The verdict is
+// that confirmation as the epic's close reason states it.
+func (r *Reconciler) verifyBaseCI(ctx context.Context, tick string, pr *forge.PullRequest, base, sha string) (string, error) {
 	target := forge.PullRequest{HeadRef: base, BaseRef: base, HeadSHA: sha}
 	if pr != nil {
 		target.Number, target.URL = pr.Number, pr.URL
@@ -781,9 +792,9 @@ func (r *Reconciler) verifyBaseCI(ctx context.Context, tick string, pr *forge.Pu
 		switch report.State {
 		case forge.CIGreen:
 			r.record(tick, StageLandVerified, "CI is green on %s at %s, the merge that carries the epic", base, short(sha))
-			return nil
+			return fmt.Sprintf("CI on %s is green at %s", base, short(sha)), nil
 		case forge.CIRed:
-			return r.refuse(RefusedLandBaseCI, tick,
+			return "", r.refuse(RefusedLandBaseCI, tick,
 				"the epic %s is merged into %s as %s, and CI is RED there: %s failed. The epic PR's CI was green on "+
 					"the same tree, so the difference is the base's own workflow or a flaky job; the base the next "+
 					"epic is cut from is red, and that is what to fix first",
@@ -793,7 +804,8 @@ func (r *Reconciler) verifyBaseCI(ctx context.Context, tick string, pr *forge.Pu
 				r.record(tick, StageLandVerified, "CI on %s at %s was still %s %s after the merge: the base's CI is "+
 					"UNVERIFIED by this run, and the merge's tree is the tree CI passed on the epic PR", base, short(sha),
 					report.State, r.opts.GateTimeout)
-				return nil
+				return fmt.Sprintf("CI on %s at %s was still %s after %s: unverified by the run", base, short(sha),
+					report.State, r.opts.GateTimeout), nil
 			}
 			r.record(tick, StageLandHeld, "CI on %s at %s is %s; the run waits to verify it", base, short(sha),
 				report.State)

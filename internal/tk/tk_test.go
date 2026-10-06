@@ -382,3 +382,26 @@ func TestGraphAllAppendsAllAfterTheManifestArgv(t *testing.T) {
 		t.Errorf("the closed task did not ride: %+v", graph.Waves)
 	}
 }
+
+// CloseWithReason appends --reason to the manifest's close argv — the epic's
+// close once it has landed carries the PR and the merge it landed as — and
+// its answer is still validated against the close schema.
+func TestCloseWithReasonAppendsTheReasonAfterTheManifestArgv(t *testing.T) {
+	const tick = `{"id":"e1","title":"epic","status":"closed","priority":1,"type":"epic","owner":"","created_by":"fixture","created_at":"2026-09-02T00:00:00Z","updated_at":"2026-09-02T00:00:00Z","closed_reason":"landed"}`
+	runner := &recordingRunner{results: []Result{{Stdout: []byte(versionJSON())}, {Stdout: []byte(tick)}}}
+	client, err := New(Options{Runner: runner, Dir: "/fixture"})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	closed, err := client.CloseWithReason(context.Background(), "e1", "landed")
+	if err != nil {
+		t.Fatalf("CloseWithReason: %v", err)
+	}
+	want := []string{"close", "e1", "--json", "--reason", "landed"}
+	if got := runner.requests[1].Args; strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Errorf("close args = %v, want %v", got, want)
+	}
+	if closed.Status != "closed" || closed.ClosedReason != "landed" {
+		t.Errorf("the closed tick did not ride: %+v", closed)
+	}
+}

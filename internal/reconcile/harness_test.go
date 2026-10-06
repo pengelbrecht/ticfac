@@ -640,6 +640,15 @@ func (f *fakeTracker) Close(_ context.Context, tickID string) (tk.Tick, error) {
 	})
 }
 
+// CloseWithReason is `tk close --reason`: the close a landed epic gets, its
+// reason naming the PR and the merge (land_close.go).
+func (f *fakeTracker) CloseWithReason(_ context.Context, tickID, reason string) (tk.Tick, error) {
+	f.tally("close:" + tickID)
+	return f.mutate(tickID, func(tick *tk.Tick) {
+		tick.Status, tick.ClosedReason = "closed", reason
+	})
+}
+
 func (f *fakeTracker) mutate(tickID string, apply func(*tk.Tick)) (tk.Tick, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

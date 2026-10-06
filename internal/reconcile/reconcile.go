@@ -1282,6 +1282,9 @@ const (
 	StageLanded        = "landed"
 	StageLandVerified  = "land_verified"
 	StageLandSkipped   = "land_skipped"
+	// StageEpicClosed is the landed epic's own tick closed ON THE BASE, its
+	// reason naming the PR and the merge (land_close.go).
+	StageEpicClosed = "epic_closed"
 
 	// StageCIRestarted: the code the epic PR would merge had no executed CI
 	// verdict — its runs were cancelled by a later push that changed only
@@ -3045,6 +3048,7 @@ const (
 	RefusedLandPush           = "land_push_refused"     // the remote declined the merge's push (opt-in)
 	RefusedLandBaseCI         = "land_base_ci_failed"   // CI red on the base's merge commit (opt-in)
 	RefusedLandReviewNotReady = "land_review_not_ready" // the final review said NOT READY; the merge is a person's
+	RefusedLandEpicClose      = "land_epic_close"       // the landed epic's tick could not be closed on the base
 
 	// The two a RUNNING epic's own liveness adds (tick 3h0). A run is not
 	// working a snapshot: a person absorbs a finding into the epic as a new

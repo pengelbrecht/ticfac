@@ -2,6 +2,8 @@ package reconcile
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -419,7 +421,17 @@ func TestAnOptInRepoMergesTheReadyPRAfterTheBaseMovesTwice(t *testing.T) {
 			t.Errorf("the stages %v do not record %s", stages, want)
 		}
 	}
-	main := originHead(t, f, "main")
+	// main's head is the epic's close (land_close.go): a tracker-only commit
+	// on the merge. The merge is its parent.
+	closing := originHead(t, f, "main")
+	main := strings.TrimSpace(mustRun(t, f.Repo.Origin, "git", "rev-parse", closing+"^"))
+	if changed := mustRun(t, f.Repo.Origin, "git", "diff", "--name-only", main, closing); !allUnder(changed, ".tick/") {
+		t.Errorf("main's head after the merge carries more than the epic's close:\n%s", changed)
+	}
+	if !contains(stages, StageEpicClosed) {
+		t.Errorf("the stages %v do not record the epic's close", stages)
+	}
+	assertEpicClosedOnMain(t, f, 7, main)
 	parents := strings.Fields(mustRun(t, f.Repo.Origin, "git", "rev-list", "--parents", "-n", "1", main))
 	if len(parents) != 3 {
 		t.Fatalf("main's head %s is not a merge commit (parents %v): the epic must land as a merge, never a "+
@@ -448,6 +460,78 @@ func TestAnOptInRepoMergesTheReadyPRAfterTheBaseMovesTwice(t *testing.T) {
 	}
 	if !strings.Contains(result.Reason, "merged into main") {
 		t.Errorf("the terminal reason does not say the epic is merged: %q", result.Reason)
+	}
+}
+
+// assertEpicClosedOnMain is the epic's close as main carries it: the epic
+// record on origin's main is closed, with a reason naming the PR and the
+// merge commit that landed it.
+func assertEpicClosedOnMain(t *testing.T, f *fixture, pr int, merge string) {
+	t.Helper()
+	var epic tk.Tick
+	if err := json.Unmarshal([]byte(showOnOrigin(t, f, "main", ".tick/issues/qeu.json")), &epic); err != nil {
+		t.Fatalf("main's epic record does not parse: %v", err)
+	}
+	if epic.Status != "closed" {
+		t.Fatalf("the epic is %s on main after it landed: a landed epic is closed where the tracker is read",
+			epic.Status)
+	}
+	for _, want := range []string{fmt.Sprintf("#%d", pr), short(merge)} {
+		if !strings.Contains(epic.ClosedReason, want) {
+			t.Errorf("the epic's close reason %q does not name %s", epic.ClosedReason, want)
+		}
+	}
+}
+
+// THE DEFAULT, MERGED BY A PERSON (epics hn6 and 43y): the run leaves the
+// ready PR to its reviewer, the reviewer merges it, and the next time the run
+// looks — a re-entry — it finds the epic merged and closes the epic tick ON
+// MAIN, naming the PR and the merge. Before, nothing ever closed it: tk, the
+// roadmap and the ref sweep all read a landed epic as open.
+func TestAnEpicAPersonMergedIsClosedOnMainWhenTheRunSeesItMerged(t *testing.T) {
+	t.Parallel()
+	pr := &landingForge{}
+	f := newFixture(t, fixtureOptions{pullRequests: pr})
+	pr.origin = f.Repo.Origin
+	declareCloseoutRule(t, f.Repo)
+	if _, result, err := f.run(f.Repo, fixtureOptions{pullRequests: pr}); err != nil ||
+		result.State != runstate.StateCompleted {
+		t.Fatalf("the first run did not complete: %v %+v", err, result)
+	}
+	if state, err := f.Tracker.load(); err != nil || state.Ticks["qeu"].Status != "open" {
+		t.Fatalf("the epic closed before anybody merged it: %+v %v", state.Ticks["qeu"], err)
+	}
+
+	// The reviewer merges the PR, the way GitHub's merge button does.
+	dir := filepath.Join(f.Root, "reviewer")
+	cloneRepo(t, f.Repo.Origin, dir)
+	mustRun(t, dir, "git", "fetch", "--quiet", "origin", "main", "epic/qeu")
+	mustRun(t, dir, "git", "checkout", "--quiet", "-B", "main", "origin/main")
+	mustRun(t, dir, "git", "merge", "--quiet", "--no-ff", "-m", "Merge pull request #7 from example/epic/qeu",
+		"origin/epic/qeu")
+	mustRun(t, dir, "git", "push", "--quiet", "origin", "main")
+	merge := strings.TrimSpace(mustRun(t, dir, "git", "rev-parse", "HEAD"))
+
+	r, result, err := f.run(f.Repo, fixtureOptions{pullRequests: pr})
+	if err != nil {
+		t.Fatalf("the re-entry: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the re-entered run ended %s (%+v)", result.State, result.Failure)
+	}
+	if !contains(r.Stages("co"), StageEpicClosed) {
+		t.Errorf("the stages %v do not record the epic's close", r.Stages("co"))
+	}
+	assertEpicClosedOnMain(t, f, 7, merge)
+
+	// A second look closes nothing twice.
+	before := originHead(t, f, "main")
+	if _, result, err := f.run(f.Repo, fixtureOptions{pullRequests: pr}); err != nil ||
+		result.State != runstate.StateCompleted {
+		t.Fatalf("the second re-entry: %v %+v", err, result)
+	}
+	if after := originHead(t, f, "main"); after != before {
+		t.Errorf("a second look at a closed, landed epic moved main from %s to %s", short(before), short(after))
 	}
 }
 
