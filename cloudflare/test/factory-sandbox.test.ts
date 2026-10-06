@@ -844,3 +844,81 @@ describe("FactorySandbox: the run door", () => {
     expect(out).toEqual({ ready: true, exitCode: 0, output: "late", truncated: false });
   });
 });
+
+describe("FactorySandbox: a claude-sub job (tick jvj)", () => {
+  const sub = { label: "MAX1", jobId: "job-1" };
+
+  function subSandbox(c: ReturnType<typeof fakeContainer>, withInterceptor = true) {
+    const s = fakeState(c.container);
+    const bound: { label: string; jobId: string; running: boolean }[] = [];
+    const object = new FactorySandboxCore(
+      s.state,
+      Date.now,
+      withInterceptor
+        ? async (container, which) => {
+            bound.push({ ...which, running: container.running });
+          }
+        : undefined,
+    );
+    return { object, state: s, bound };
+  }
+
+  it("installs the job's interception BEFORE the container starts, and records it", async () => {
+    const c = fakeContainer();
+    const { object, bound } = subSandbox(c);
+
+    await object.startProcess("claude -p x", {}, { claudeSub: sub });
+
+    expect(bound).toEqual([{ ...sub, running: false }]);
+    expect(c.starts).toHaveLength(1);
+    expect(await object.boundClaudeSub()).toEqual(sub);
+  });
+
+  it("never switches a running job's subscription", async () => {
+    const c = fakeContainer();
+    const { object, bound } = subSandbox(c);
+    await object.startProcess("claude -p x", {}, { claudeSub: sub });
+
+    await expect(
+      object.startProcess("claude -p y", {}, { claudeSub: { label: "MAX2", jobId: "job-1" } }),
+    ).rejects.toThrow(/never switches tokens/);
+    // The same job asking again is the same binding, not a second install.
+    await object.startProcess("claude -p z", {}, { claudeSub: sub });
+    expect(bound).toHaveLength(1);
+  });
+
+  it("refuses a claude-sub boot where nothing can intercept, before starting a container", async () => {
+    const c = fakeContainer();
+    const { object } = subSandbox(c, false);
+
+    await expect(object.startProcess("claude -p x", {}, { claudeSub: sub })).rejects.toThrow(
+      /wires no interception/,
+    );
+    expect(c.starts).toHaveLength(0);
+  });
+
+  it("forgets the binding on destroy, so the next container starts unbound", async () => {
+    const c = fakeContainer();
+    const { object, bound } = subSandbox(c);
+    await object.startProcess("claude -p x", {}, { claudeSub: sub });
+    await object.destroy();
+
+    expect(await object.boundClaudeSub()).toBeNull();
+    await object.startProcess("echo plain", {});
+    expect(await object.boundClaudeSub()).toBeNull();
+    expect(bound).toHaveLength(1);
+  });
+
+  it("re-installs the binding when the object restarts under a running container", async () => {
+    const c = fakeContainer();
+    const first = subSandbox(c);
+    await first.object.startProcess("claude -p x", {}, { claudeSub: sub });
+
+    const rebound: { label: string; jobId: string }[] = [];
+    new FactorySandboxCore(first.state.state, Date.now, async (_c, which) => {
+      rebound.push(which);
+    });
+    await first.state.settled();
+    expect(rebound).toEqual([sub]);
+  });
+});

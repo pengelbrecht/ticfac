@@ -13,9 +13,23 @@ workers_dev = true
 name = "SANDBOXES_V1"
 class_name = "FactorySandbox"
 
+# claude-sub (spike tick jvj, src/claude-sub.ts): the one pool of claude
+# subscriptions — leases (the per-subscription cap) and quota benches. The
+# tokens are secrets, one per subscription: CLAUDE_SUB_TOKEN_<LABEL>.
+[[durable_objects.bindings]]
+name = "CLAUDE_SUB_POOL"
+class_name = "ClaudeSubPool"
+
+[vars]
+CLAUDE_SUB_MAX_CONCURRENT = "4"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["FactorySandbox"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["ClaudeSubPool"]
 
 [[containers]]
 class_name = "FactorySandbox"
