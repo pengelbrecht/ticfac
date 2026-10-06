@@ -384,6 +384,70 @@ func TestWatchOnATerminalEndsFailed(t *testing.T) {
 	}
 }
 
+// The live view's failed end names the resume the frame names (tick ziy,
+// the failed sibling of 3yx's cancelled fix): a run whose terminal line
+// says it FAILED is a dead-run RESUME in the model's attention, so the
+// frame's needs-you line and the alert kept above the block both name the
+// command that moves it on. The ending under that block must not answer
+// the same failure with the opposite — "nothing is held for a person",
+// beside a frame that says otherwise — or one failed run gives two
+// answers. A failed run the model is deliberately quiet about (the tests
+// above) keeps the plain ending; this one names the same resume the frame
+// named.
+func TestWatchOnATerminalEndsFailedNamingTheResume(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+	runID := "epic-rmod"
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+	fakeTerminal(t)
+
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	// The run's own failed word: the terminal line the model reads as the
+	// dead-run wait whose unblock command is the resume.
+	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "t2", nil,
+		reconcile.StageRunFinished, "failed: t2 did not pass: the integrated gate refused the work"))
+
+	var stdout, stderr syncBuffer
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
+	}()
+
+	life.Release("ended failed")
+	var got int
+	select {
+	case got = <-code:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the watch never returned after the run ended")
+	}
+	if got != exitGeneric {
+		t.Fatalf("exit code %d, want %d (the failed class) for a run that ended failed; stderr:\n%s", got, exitGeneric, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended FAILED") {
+		t.Errorf("the failed end is not said to the person reading the block:\n%s", stderr.String())
+	}
+	// The premise of the contradiction, pinned: the alert above the block
+	// said the run is holding for a person and named the command — and the
+	// ending must name the SAME command, never "nothing is held".
+	resume := statusmodel.ResumeCommand(statusmodel.HostLocal, "rmod")
+	if !strings.Contains(stdout.String(), "move it on: "+resume) {
+		t.Errorf("the alert never named the resume %q (the premise of this test):\n%s", resume, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), resume) {
+		t.Errorf("the failed end does not name the resume %q the frame named:\n%s", resume, stderr.String())
+	}
+	if strings.Contains(strings.ToLower(stderr.String()), "nothing is held for a person") {
+		t.Errorf("the end said nothing is held below a frame and alert that named the resume:\n%s", stderr.String())
+	}
+}
+
 // The live view's cancelled end (tick rix): the same block a failed run
 // ends with must answer a deliberately stopped run with the cancelled class
 // (7), classified from the run's own durable words — the checkpoint's

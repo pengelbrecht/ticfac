@@ -874,13 +874,21 @@ func TestWatchExitsFailedWhenTheRunEndedFailed(t *testing.T) {
 		t.Errorf("a run that failed holding nothing raised the hold alert: %q", stderr.String())
 	}
 	// The resume it names is a command a person can paste (tick gtk): the
-	// one statusmodel spells for the run's host, addressed by a real id —
-	// never a `<epic-id>` placeholder.
+	// one statusmodel spells, addressed by a real id — never a `<epic-id>`
+	// placeholder. And an id nothing RESOLVES names no command at all (tick
+	// ziy): the ending used to build it from epicOf(), whose fallback IS the
+	// run id, so this run printed `ticfac run-epic r-1` — a command that
+	// names a run id where an epic belongs. The plain sentence is the
+	// honest answer for a run nothing resolves (tick mwt's rule, applied to
+	// the stream path).
 	if strings.Contains(stderr.String(), "<epic-id>") {
 		t.Errorf("the failed end names a placeholder, not a command: %q", stderr.String())
 	}
-	if want := statusmodel.ResumeCommand(statusmodel.HostLocal, "r-1"); !strings.Contains(stderr.String(), want) {
-		t.Errorf("the failed end does not name the resume %q: %q", want, stderr.String())
+	if bad := statusmodel.ResumeCommand(statusmodel.HostLocal, "r-1"); strings.Contains(stderr.String(), bad) {
+		t.Errorf("the failed end names the resume %q by the run id itself, which nothing resolved:\n%s", bad, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Nothing is held for a person") {
+		t.Errorf("the failed end does not say nothing is held for the person reading the stream: %q", stderr.String())
 	}
 	// The terminal line still prints — the last line says why, and the exit
 	// code says which class of ending it was.
@@ -1072,6 +1080,40 @@ func TestWatchStreamEndsCancelledNamingTheResume(t *testing.T) {
 		t.Errorf("the cancelled end does not name the resume %q the model's attention holds: %q", resume, stderr.String())
 	}
 	if strings.Contains(stderr.String(), "nothing is held for a person") {
+		t.Errorf("the end said nothing is held while the model's attention holds the resume: %q", stderr.String())
+	}
+}
+
+// The stream's failed end names the resume the model's needs-you line
+// names (tick ziy, the failed sibling of 3yx's cancelled fix): a run whose
+// terminal line says it FAILED is a dead-run RESUME in the model's
+// attention, the same attention a frame renders as "needs you" and the
+// alert prints "is holding for a person … move it on" — so the pipe's
+// ending must not answer the same failure with "nothing is held for a
+// person" and no command. One failed run, one answer, on both watch paths.
+func TestWatchStreamEndsFailedNamingTheResume(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+
+	writeFeedEvent(t, repo, "epic-rmod", runfeed.NewEvent(now, "epic-rmod", "t2", nil,
+		reconcile.StageRunFinished, "failed: t2 did not pass: the integrated gate refused the work"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-rmod"}, &stdout, &stderr)
+	if code != exitGeneric {
+		t.Fatalf("exit code %d, want %d (the failed class) for a run whose own last line says failed; stderr %q", code, exitGeneric, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended FAILED") {
+		t.Errorf("the failed end is not said to the person reading the stream: %q", stderr.String())
+	}
+	resume := statusmodel.ResumeCommand(statusmodel.HostLocal, "rmod")
+	if !strings.Contains(stderr.String(), resume) {
+		t.Errorf("the failed end does not name the resume %q the model's attention holds: %q", resume, stderr.String())
+	}
+	if strings.Contains(strings.ToLower(stderr.String()), "nothing is held for a person") {
 		t.Errorf("the end said nothing is held while the model's attention holds the resume: %q", stderr.String())
 	}
 }
