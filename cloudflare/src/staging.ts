@@ -16,6 +16,8 @@ import {
   ClaudeSubProxy,
   claudeSubPool,
   claudeSubProcessEnv,
+  subscriptionLabels,
+  TOKEN_SECRET_PREFIX,
 } from "./claude-sub";
 import { FactorySandbox, type FactorySandboxNamespace } from "./factory-sandbox";
 import type { Env } from "./index";
@@ -41,6 +43,27 @@ export async function stagingFetch(request: Request, env: StagingEnv): Promise<R
   if (namespace === undefined) return new Response("no SANDBOXES_V1", { status: 503 });
 
   const url = new URL(request.url);
+  // /pool/shape: what each subscription secret LOOKS like — its length, its
+  // public `sk-ant-oatNN-` prefix and stray characters — never its value.
+  // For telling a mis-pasted secret from a refused one.
+  if (url.pathname === "/pool/shape") {
+    const shapes = subscriptionLabels(env as unknown as Record<string, unknown>).map((label) => {
+      const raw = String(
+        (env as unknown as Record<string, unknown>)[`${TOKEN_SECRET_PREFIX}${label}`],
+      );
+      const prefix = /^sk-ant-oat\d\d-/.exec(raw.trim())?.[0] ?? null;
+      return {
+        label,
+        length: raw.length,
+        trimmed_length: raw.trim().length,
+        prefix,
+        whitespace_inside: /\s/.test(raw.trim()),
+        quotes: /["']/.test(raw),
+        equals_sign: raw.includes("="),
+      };
+    });
+    return Response.json(shapes);
+  }
   // /pool[/<verb>/<arg>]: the claude-sub pool (tick jvj) — never a token.
   const poolMatch = /^\/pool(?:\/(unbench|release)\/([A-Za-z0-9_-]{1,64}))?$/.exec(url.pathname);
   if (poolMatch !== null) {

@@ -121,9 +121,23 @@ export function subscriptionLabels(env: Record<string, unknown>): string[] {
   for (const [key, value] of Object.entries(env)) {
     if (!key.startsWith(TOKEN_SECRET_PREFIX)) continue;
     const label = key.slice(TOKEN_SECRET_PREFIX.length);
-    if (LABEL.test(label) && typeof value === "string" && value.trim() !== "") labels.push(label);
+    if (LABEL.test(label) && normalizeToken(value) !== null) labels.push(label);
   }
   return labels.sort();
+}
+
+/**
+ * A token secret as it is used: every whitespace character removed, or null
+ * when nothing is left. `claude setup-token` prints the token wrapped across
+ * terminal lines, and a paste into `wrangler secret put` keeps the break
+ * INSIDE the token — the first real secret on staging was 109 characters with
+ * one newline in it, and Anthropic answered "401 OAuth access token is
+ * invalid". A token never contains whitespace, so none is ever meant.
+ */
+export function normalizeToken(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const token = raw.replace(/\s+/g, "");
+  return token === "" ? null : token;
 }
 
 /** The cap per subscription: CLAUDE_SUB_MAX_CONCURRENT when it is a positive integer. */
@@ -162,7 +176,17 @@ export function classifyAnswer(status: number, headers: Headers, now: number): B
   const retryAfter = Number(headers.get("retry-after"));
   const retryAt = Number.isFinite(retryAfter) && retryAfter > 0 ? now + retryAfter * 1000 : null;
   const reset = parseReset(resetRaw);
-  if (unified === "rejected" || reset !== null) {
+  // EVERY answer carries the unified headers (status "allowed", a reset), so a
+  // reset alone proves nothing: only a rejection — overall or of one window
+  // (`-5h-status`, `-7d-status`) — is the quota. A 429 the limiter allowed is
+  // throttling.
+  let windowRejected = false;
+  headers.forEach((value, key) => {
+    if (/^anthropic-ratelimit-unified-[a-z0-9_]+-status$/i.test(key) && /^rejected$/i.test(value)) {
+      if (!/overage/i.test(key)) windowRejected = true;
+    }
+  });
+  if (unified === "rejected" || windowRejected || (unified === "" && reset !== null)) {
     const until = reset ?? retryAt ?? now + THROTTLE_COOLDOWN_MS;
     const claim = headers.get("anthropic-ratelimit-unified-representative-claim");
     return {
@@ -427,11 +451,13 @@ export class ClaudeSubProxy extends WorkerEntrypoint<ClaudeSubEnv, ClaudeSubProp
     if (host !== CLAUDE_SUB_HOST) {
       return new Response(`claude-sub proxies ${CLAUDE_SUB_HOST} only`, { status: 403 });
     }
-    const token = (this.env as Record<string, unknown>)[`${TOKEN_SECRET_PREFIX}${label}`];
-    if (typeof token !== "string" || token.trim() === "") {
+    const token = normalizeToken(
+      (this.env as Record<string, unknown>)[`${TOKEN_SECRET_PREFIX}${label}`],
+    );
+    if (token === null) {
       return new Response(`claude-sub: no token for subscription ${label}`, { status: 503 });
     }
-    const response = await fetch(upstreamRequest(request, token.trim()));
+    const response = await fetch(upstreamRequest(request, token));
     const pool = claudeSubPool(this.env);
     const bench = classifyAnswer(response.status, response.headers, Date.now());
     const limits = limitHeaders(response.headers);

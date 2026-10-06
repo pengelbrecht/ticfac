@@ -10,6 +10,7 @@ import {
   LEASE_TTL_MS,
   limitHeaders,
   maxConcurrent,
+  normalizeToken,
   OAUTH_BETA,
   type PoolStorage,
   parseReset,
@@ -54,6 +55,12 @@ describe("claude-sub: which subscriptions exist", () => {
     ).toEqual(["MAX1", "MAX2"]);
   });
 
+  it("uses a token with the line breaks a wrapped paste left inside it removed", () => {
+    expect(normalizeToken("sk-ant-oat01-abc\ndef \r\n")).toBe("sk-ant-oat01-abcdef");
+    expect(normalizeToken(" \n")).toBeNull();
+    expect(normalizeToken(undefined)).toBeNull();
+  });
+
   it("caps per subscription at CLAUDE_SUB_MAX_CONCURRENT, else the default", () => {
     expect(maxConcurrent({ CLAUDE_SUB_MAX_CONCURRENT: "1" })).toBe(1);
     expect(maxConcurrent({ CLAUDE_SUB_MAX_CONCURRENT: "zero" })).toBe(DEFAULT_MAX_CONCURRENT);
@@ -72,6 +79,23 @@ describe("claude-sub: what an answer says about the subscription", () => {
       until: NOW + 3600_000,
       reason: "quota",
       detail: "HTTP 429, unified rejected, claim five_hour",
+    });
+  });
+
+  it("reads a 429 the limiter ALLOWED as throttling, though every answer carries a reset", () => {
+    // The shape of a real 200 on staging (2026-10-06): status allowed, a
+    // reset, and overage rejected because overage is disabled for the org.
+    const headers = new Headers({
+      "anthropic-ratelimit-unified-status": "allowed",
+      "anthropic-ratelimit-unified-reset": String(NOW / 1000 + 3600),
+      "anthropic-ratelimit-unified-5h-status": "allowed",
+      "anthropic-ratelimit-unified-overage-status": "rejected",
+    });
+    expect(classifyAnswer(429, headers, NOW)).toMatchObject({ reason: "throttle" });
+    headers.set("anthropic-ratelimit-unified-7d-status", "rejected");
+    expect(classifyAnswer(429, headers, NOW)).toMatchObject({
+      reason: "quota",
+      until: NOW + 3600_000,
     });
   });
 
