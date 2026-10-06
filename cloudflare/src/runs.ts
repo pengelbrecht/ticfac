@@ -68,6 +68,7 @@ import type {
   StopRequest,
 } from "./run-room";
 import {
+  DEFAULT_RUN_SUBSTRATE,
   DO_V1,
   deploymentImageRef,
   isRunSubstrate,
@@ -294,9 +295,9 @@ export type RunSubmission = {
   orchestrator?: OrchestratorKind;
   /**
    * The container substrate the run's containers run on (epic umq,
-   * migration 0023). Absent is the Sandbox SDK 0.x class, which is every run
-   * before the field existed; `do_v1` is FactorySandbox on the
-   * durable_object policy. Recorded once, at submit, and never changed.
+   * migration 0023). Absent means the deployment's default substrate — the
+   * durable_object policy (`do_v1`) since tick dax's cutover, the Sandbox SDK
+   * 0.x class before it. Recorded once, at submit, and never changed.
    */
   substrate?: RunSubstrate;
 };
@@ -490,10 +491,10 @@ export function parseSubmission(body: unknown): SubmissionParse {
     }
   }
 
-  // The container substrate (epic umq). Refused rather than defaulted: a run
-  // that asked for the new substrate and silently got the old one would prove
-  // nothing about it. Not queueable, because the parked record (D22) is
-  // shape-frozen and would ignite the run on the default substrate.
+  // The container substrate (epic umq). A name the factory does not know is
+  // refused; the values pass through and the submit-time default (tick dax:
+  // `do_v1`) is applied at ignition, so the substrate a run got is recorded
+  // with the run, not decided per boot.
   let substrate: RunSubstrate | undefined;
   if (raw.substrate !== undefined && raw.substrate !== null) {
     if (!isRunSubstrate(raw.substrate)) {
@@ -503,12 +504,13 @@ export function parseSubmission(body: unknown): SubmissionParse {
       };
     }
     substrate = raw.substrate;
-    if (substrate === DO_V1 && raw.queue === true) {
+    if (substrate !== DO_V1 && raw.queue === true) {
       return {
         ok: false,
         detail:
-          "a run on the do_v1 substrate cannot be queued: the parked submission does not carry " +
-          "its substrate, and it would ignite on the default one",
+          "a queued run ignites on this deployment's default substrate (do_v1): the parked " +
+          "submission does not carry a substrate, so it cannot carry the 0.x one either. " +
+          "Submit it without --queue when the lease is free, or let it ride the default",
       };
     }
   }
@@ -533,7 +535,12 @@ export function parseSubmission(body: unknown): SubmissionParse {
       ...(origin === undefined ? {} : { origin }),
       ...(grade === undefined ? {} : { credential_grade: grade }),
       ...(orchestrator === undefined || orchestrator === "container" ? {} : { orchestrator }),
-      ...(substrate === undefined || substrate === "sdk0" ? {} : { substrate }),
+      // An explicit substrate is carried either way (tick dax): "do_v1" is
+      // also the default, but an explicit "sdk0" must survive to ignition as
+      // the run's OWN choice — the submit-time default must never overwrite
+      // it, or a run that asked for the 0.x application would silently ride
+      // the new one.
+      ...(substrate === undefined ? {} : { substrate }),
     },
   };
 }
@@ -609,7 +616,7 @@ export type StartRunInput = {
   credential_grade?: RunCredentialGrade;
   /** See {@link RunSubmission.orchestrator}. Absent means the factory's container. */
   orchestrator?: OrchestratorKind;
-  /** See {@link RunSubmission.substrate}. Absent means the 0.x Sandbox class. */
+  /** See {@link RunSubmission.substrate}. Absent means the deployment's default substrate. */
   substrate?: RunSubstrate;
 };
 
@@ -758,6 +765,12 @@ export async function startRun(env: Env, input: StartRunInput): Promise<StartedR
  * orchestrator runs (0022) and which substrate its containers run on (0023).
  * Both are read by the Workflow's first step and by every container boot,
  * so neither may land after the instance does.
+ *
+ * The substrate is recorded for EVERY container run now (tick dax): the
+ * submit-time default is the durable_object application, so a run that did
+ * not ask still gets a row — which is what makes "this run is on the new
+ * path" a fact about the run rather than a guess from its age. Only an
+ * explicitly requested 0.x run (and every pre-cutover run) has no row.
  */
 function runMarks(
   env: Env,
@@ -765,7 +778,8 @@ function runMarks(
   input: { orchestrator?: OrchestratorKind; substrate?: RunSubstrate },
 ): (() => Promise<void>) | undefined {
   const local = input.orchestrator === "local";
-  const v1 = input.substrate === DO_V1;
+  const substrate = input.substrate ?? DEFAULT_RUN_SUBSTRATE;
+  const v1 = substrate === DO_V1;
   if (!local && !v1) return undefined;
   return async () => {
     if (local) await recordLocalOrchestrator(env.DB, runID);

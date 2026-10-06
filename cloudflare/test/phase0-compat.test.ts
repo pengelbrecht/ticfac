@@ -615,72 +615,41 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     else env.SANDBOX_IMAGE = originalImage;
   });
 
-  // `[[containers]] max_instances`, read out of wrangler.toml rather than
-  // restated here. It is the account-level ceiling Cloudflare enforces on
-  // concurrent containers AND the one number the dispatch width's `[vars]`
-  // mirror has to equal, so a literal here would be a third copy of the same
-  // number to maintain (tick 7fl).
-  const declaredMaxInstances = () => {
-    const declared = /^\s*max_instances\s*=\s*(\d+)\s*$/m.exec(WRANGLER_TOML);
-    if (declared === null) {
-      throw new Error("wrangler.toml declares no [[containers]] max_instances");
-    }
-    return declared[1];
-  };
-
-  it("never lets a container rollout take a live run's container", () => {
-    // Epic hn6's cloud run: a rollout still in progress when the run started
-    // advanced to 100% and replaced the run's orchestrator. The platform may
-    // replace an instance only once it has been connected for
-    // rollout_active_grace_period seconds, so that grace must outlast the
-    // longest a run may live (RUN_MAX_WALL_CLOCK_MS).
-    const grace = /^\s*rollout_active_grace_period\s*=\s*(\d+)\s*$/m.exec(WRANGLER_TOML);
+  // `[[containers]] max_instances` is gone (tick dax): the durable_object
+  // scheduling policy refuses one, so there is no platform ceiling to read
+  // and no deploy-side mirror check to pin. What remains is the deployment's
+  // own ceiling — `[vars] FACTORY_MAX_INSTANCES`, the single declaration
+  // container-capacity.ts's count is bounded by — pinned here against the
+  // Worker's compiled fallback so the two cannot drift apart (tick 7fl's
+  // rule, kept where its subject moved).
+  it("states the deployment's container ceiling once, in wrangler.toml", () => {
     expect(
-      grace,
-      "wrangler.toml declares no [[containers]] rollout_active_grace_period",
-    ).not.toBeNull();
-    const wall = /^\s*RUN_MAX_WALL_CLOCK_MS\s*=\s*"(\d+)"\s*$/m.exec(WRANGLER_TOML);
-    expect(wall, "wrangler.toml declares no [vars] RUN_MAX_WALL_CLOCK_MS").not.toBeNull();
+      WRANGLER_TOML,
+      "[[containers]] max_instances is not a thing the durable_object " + "policy accepts",
+    ).not.toMatch(/^\s*max_instances\s*=/m);
+    const ceiling = /^\s*FACTORY_MAX_INSTANCES\s*=\s*"(\d+)"\s*$/m.exec(WRANGLER_TOML);
     expect(
-      Number(grace![1]) * 1000,
-      "a rollout could replace a container a run within its wall is still using",
-    ).toBeGreaterThanOrEqual(Number(wall![1]));
-  });
-
-  it("keeps the sandbox capacity and its [vars] mirror one number, not two", () => {
-    // `[[containers]] max_instances` is the ceiling Cloudflare actually
-    // enforces on concurrent containers — worker containers dispatched through
-    // the per-tick sandbox door included. `[vars] FACTORY_MAX_INSTANCES` is
-    // the copy `ticfac factory deploy` checks it against, because wrangler
-    // does not hand a container application's own config back at runtime.
-    // Two numbers that must agree and are maintained separately drift
-    // (tick 7fl). This is the suite's half of the mechanical check; the
-    // deploy refuses to ship a config whose two numbers disagree.
-    const ceiling = declaredMaxInstances();
-    const mirror = /^\s*FACTORY_MAX_INSTANCES\s*=\s*"(\d+)"\s*$/m.exec(WRANGLER_TOML);
-    expect(mirror, "wrangler.toml declares no [vars] FACTORY_MAX_INSTANCES mirror").not.toBeNull();
-
-    expect(mirror![1], "the [vars] copy of the container ceiling disagrees").toBe(ceiling);
-    // And the Worker's compiled fallback, used only when the var is missing
-    // (container-capacity.ts): a third copy that must not drift either.
-    expect(String(DEFAULT_FACTORY_MAX_INSTANCES), "the compiled default ceiling disagrees").toBe(
       ceiling,
+      "wrangler.toml declares no [vars] FACTORY_MAX_INSTANCES ceiling",
+    ).not.toBeNull();
+
+    // And the Worker's compiled fallback, used only when the var is missing
+    // (container-capacity.ts): a second copy that must not drift either.
+    expect(String(DEFAULT_FACTORY_MAX_INSTANCES), "the compiled default ceiling disagrees").toBe(
+      ceiling![1],
     );
-    expect(factoryMaxInstances(env)).toBe(Number(ceiling));
+    expect(factoryMaxInstances(env)).toBe(Number(ceiling![1]));
   });
 
-  it("names the container application wrangler.toml declares", () => {
-    // `[[containers]] name` in wrangler.toml, READ OUT OF wrangler.toml. The
-    // image is fixed by the deploy on this substrate, so this string is what a
-    // run's boot asks for and what its `run_image` stamp records — and the
-    // only thing that makes DEFAULT_SANDBOX_IMAGE true is that it equals what
-    // the deployable config declares. Comparing it to a literal here pins the
-    // constant against a copy of itself.
-    const containers = WRANGLER_TOML.slice(WRANGLER_TOML.indexOf("[[containers]]"));
-    const declared = /^name\s*=\s*"([^"]+)"/m.exec(containers);
-    expect(declared, "wrangler.toml has no [[containers]] name").not.toBeNull();
-
-    expect(DEFAULT_SANDBOX_IMAGE).toBe(declared![1]);
+  it("names the 0.x image the resolved-image machinery still compares against", () => {
+    // The 0.x application is deleted (tick dax), and with it the wrangler.toml
+    // block this test used to read its name from. What remains is the
+    // resolution machinery (acquireContext's declared-image check, the
+    // TICKS_SANDBOX_IMAGE the container verifies itself against), whose base
+    // value is this constant. It is pinned as a literal now — the one copy
+    // left — and `deploymentImage` must keep answering it unless the
+    // deployment says otherwise.
+    expect(DEFAULT_SANDBOX_IMAGE).toBe("ticks-orchestrator");
     expect(deploymentImage(env)).toBe(DEFAULT_SANDBOX_IMAGE);
   });
 
@@ -722,8 +691,9 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
       image_ref: "ticks-orchestrator:abc",
       image_digest: "sha256:abc",
     });
-    // The deployment row is written only once a rollout is CONFIRMED, so an
-    // empty one is a factory that has not proven which image it serves.
+    // The deployment row is written only once the deploy knows which image it
+    // serves, so an empty one is a factory that has not proven which image it
+    // serves.
     await expect(getDeploymentImage(env.DB)).resolves.toBeNull();
   });
 
@@ -731,10 +701,10 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     // These are read from the real `env` inside workerd, so this is the
     // deployable config rather than a copy of it. They are the numbers that
     // govern a run: change one and every future run changes with it.
-    // FACTORY_MAX_INSTANCES is the one value NOT restated as a literal: it is
-    // `[[containers]] max_instances declared a second time (tick 7fl), so
-    // the pin for it is the ceiling itself and the two can no longer be
-    // raised apart.
+    // FACTORY_MAX_INSTANCES is the deployment's own container ceiling, the
+    // single declaration since tick dax (there is no platform max_instances
+    // for it to mirror) — so its value is pinned as a literal here, and the
+    // test above pins it against the Worker's compiled fallback.
     const vars = env as unknown as Record<string, unknown>;
     const declared = Object.fromEntries(
       Object.keys(vars)
@@ -743,7 +713,7 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
         .map((name) => [name, vars[name]]),
     );
     expect(declared).toEqual({
-      FACTORY_MAX_INSTANCES: declaredMaxInstances(),
+      FACTORY_MAX_INSTANCES: "12",
       GITHUB_CONSENT_LABEL: "tk",
       RUN_HARNESS: "omp",
       RUN_MAX_COST_USD: "250",

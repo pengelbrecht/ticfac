@@ -69,36 +69,13 @@ type Options struct {
 	verifyAttempts int
 	verifyDelay    time.Duration
 
-	// SkipRolloutWait accepts an unconfirmed container rollout instead of
-	// failing. It is the deliberate escape hatch for an account or a wrangler
-	// whose container listing this build cannot read: the deploy still says,
-	// in its output, that nothing was confirmed.
-	SkipRolloutWait bool
-
-	// SkipImagePrune leaves old ticks-orchestrator images in the managed
-	// registry. By default a deploy prunes all but the newest ImageKeep (and
-	// the served image) before it pushes and after a confirmed rollout, so
-	// the account's 50 GB image storage limit is never what stops a rollout
-	// (prune.go).
+	// SkipImagePrune leaves old FactorySandbox images in the managed
+	// registry. By default a deploy prunes all but the newest few after it
+	// pushes, keeping every digest a live run pins, so the account's 50 GB
+	// image storage limit is never what stops a push (prune.go).
 	SkipImagePrune bool
-	// ImageKeep is how many of the newest orchestrator images a prune keeps
-	// besides the protected ones. Zero means imageKeepNewest.
-	ImageKeep int
 	// registryBaseURL replaces https://<registry host> (tests).
 	registryBaseURL string
-
-	// rolloutTimeout/rolloutPoll bound the wait for the container application
-	// to report the expected image (tests).
-	rolloutTimeout time.Duration
-	rolloutPoll    time.Duration
-	// rolloutExtension overrides the extension (rollout.go) a wait gets
-	// while the platform still reports the rollout in progress (tests).
-	rolloutExtension time.Duration
-	// cloudflareAPIBase replaces https://api.cloudflare.com/client/v4 for the
-	// rollouts API the held-rollout check reads (tests).
-	cloudflareAPIBase string
-	// heldCheckEvery spaces the held-rollout check (tests).
-	heldCheckEvery time.Duration
 
 	// onSecretPut runs after `wrangler secret put` returns, so the test
 	// harness can propagate the secret into its fake worker the way
@@ -142,23 +119,14 @@ type Result struct {
 	WranglerVersion string
 	// ConfigPath is the file the credentials were written to.
 	ConfigPath string
-	// ImageRef is the digest-pinned orchestrator image this deploy confirmed,
-	// resolved from the application record when an idempotent deploy skipped
-	// the image push.
+	// ImageRef is the digest-pinned image this deployment starts FactorySandbox
+	// containers on, resolved from the application record when an idempotent
+	// deploy skipped the image push.
 	ImageRef string
-	// ImageDigest is the confirmed image's digest — the identity a run's
-	// container boots, and the one thing that tells a fix that did not work from
-	// a fix that was never running.
+	// ImageDigest is the image's digest — the identity a run's container
+	// boots, and the one thing that tells a fix that did not work from a fix
+	// that was never running.
 	ImageDigest string
-	// RolloutConfirmed reports whether the container application was actually
-	// observed serving ImageDigest. False means the deploy is not claiming a
-	// run started now boots this image.
-	RolloutConfirmed bool
-	// RolloutHeldBy are the live runs still holding instances on an older
-	// image when the rollout was confirmed: under rollout_active_grace_period
-	// the platform replaces those once each run lets go. Empty when the
-	// rollout had completed.
-	RolloutHeldBy []string
 	// WorkerVersionID is the Worker version `wrangler deploy` created
 	// ("Current Version ID"), the identity Cloudflare's own dashboard and
 	// `wrangler versions` name. Empty when wrangler did not print one.
@@ -210,21 +178,11 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 		}
 	}
 
-	// The bundle's two declarations of the sandbox capacity — the account's
-	// real container ceiling and the `[vars]` mirror a cloud wave's dispatch
-	// width is bounded by — are checked before anything is probed, staged or
-	// created (tick 7fl): a disagreement is a property of this binary's
-	// payload, not of the account, and shipping one anyway is a wave that
-	// books more containers than the account can host — discovered as sandbox
-	// creation failures attributed to whichever tick happened to be fourth,
-	// never as a capacity message.
-	config, err := ReadBundleFile(WranglerConfigFile)
-	if err != nil {
-		return nil, err
-	}
-	if err := VerifyContainerCapacity(config); err != nil {
-		return nil, fmt.Errorf("factory deploy: %w", err)
-	}
+	// The bundle's deployment states its own container ceiling, and nothing
+	// checks a mirror of it anymore (tick dax): the durable_object scheduling
+	// policy accepts no `[[containers]] max_instances`, so
+	// `[vars] FACTORY_MAX_INSTANCES` is the single declaration of the cap the
+	// dispatch width is bounded by.
 
 	// Preconditions first: a missing prerequisite is a stop, and settling them
 	// before the first `create` keeps a half-provisioned account impossible.
@@ -409,28 +367,15 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 		return nil, fmt.Errorf("applying D1 migrations: %w", err)
 	}
 
-	// Make room for the image this deploy pushes, before it pushes it. The
-	// served image is protected; with no application (a first install) or a
-	// listing that cannot be read there is nothing known to protect, so
-	// nothing is pruned.
-	var servedBefore string
-	if apps, err := w.listContainerApps(ctx); err == nil {
-		if app, ok := findContainerApp(apps, ContainerAppName); ok {
-			servedBefore = app.digest()
-		}
-	}
-	if servedBefore != "" {
-		pruneOrchestratorImages(ctx, w, out, opts, servedBefore)
-	}
-
 	deployOut, err := w.deploy(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("deploying the factory worker: %w", err)
 	}
-	// FactorySandbox's images (epic umq): no rollout to wait for — a running
-	// container keeps its startup image — so they are bounded right away,
-	// never touching a digest a live run pins.
-	pruneFactorySandboxImages(ctx, w, out, opts, DatabaseName)
+	// The image the deployment starts FactorySandbox containers on (tick dax):
+	// there is no rollout to wait for — a running container keeps its startup
+	// image — but the digest is what gets recorded for the run stamps and
+	// `factory status` to read.
+	imageRef, imageDigest := resolveDeploymentImage(ctx, w, out, deployOut)
 
 	url := strings.TrimSuffix(opts.URL, "/")
 	if url == "" {
@@ -503,31 +448,31 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 	}
 	fmt.Fprintf(out, "verified %s/health and one authenticated request\n", url)
 
-	// The Worker is live at this point; the container application is not
-	// necessarily. `wrangler deploy` creates the container rollout and returns
-	// without waiting for it, so this is where the deploy stops being allowed
-	// to claim readiness on the strength of an exit code (see rollout.go).
-	rollout, rolloutErr := confirmContainerRollout(
-		ctx, w, out, deployOut, opts.rolloutTimeout, opts.rolloutPoll, opts.rolloutExtension, opts.SkipRolloutWait,
-		rolloutAPI{base: opts.cloudflareAPIBase, client: opts.HTTPClient, every: opts.heldCheckEvery})
-	result.ImageRef = rollout.Ref
-	result.ImageDigest = rollout.Digest
-	result.RolloutConfirmed = rollout.Confirmed
-	result.RolloutHeldBy = rollout.HeldBy
-	if rolloutErr != nil {
-		return result, rolloutErr
-	}
-
-	// Recorded only once the application actually reports it, so the row a run
-	// stamps itself with is the image the deployment was PROVEN to serve
-	// rather than the one the deploy hoped for.
-	if rollout.Confirmed {
-		if err := recordDeploymentImage(ctx, w, rollout.Ref, rollout.Digest); err != nil {
+	// The Worker is live, and so is the container application: on the
+	// durable_object policy there is no application-wide rollout for wrangler
+	// to return ahead of — a running container keeps the image it started on,
+	// and a new one boots the image this deploy pushed. This is where the
+	// deploy may claim readiness (see containers.go).
+	result.ImageRef = imageRef
+	result.ImageDigest = imageDigest
+	if imageDigest != "" {
+		// Recorded now the deployment actually serves it, so the row a run
+		// stamps itself with is the image the deployment serves rather than
+		// the one the deploy hoped for.
+		if err := recordDeploymentImage(ctx, w, imageRef, imageDigest); err != nil {
 			return result, err
 		}
-		// The new image serves; the one it replaced stays as the rollback.
-		pruneOrchestratorImages(ctx, w, out, opts, rollout.Digest, servedBefore)
 	}
+
+	// The 0.x container application: deleted once no live run is still on it
+	// (legacyapp.go). Reported either way; a deletion it had to hold back is
+	// the next deploy's work.
+	deleteLegacyContainerApp(ctx, w, out, opts, DatabaseName)
+
+	// FactorySandbox's images are bounded after the deploy: the new image is
+	// in use, every digest a live run pins is protected, and the rest goes
+	// (prune.go).
+	pruneFactorySandboxImages(ctx, w, out, opts, DatabaseName)
 
 	return result, nil
 }
@@ -599,11 +544,11 @@ func recordDeployment(ctx context.Context, w *wrangler, version string) error {
 	return nil
 }
 
-// recordDeploymentImage stores the orchestrator image the container
-// application was confirmed to serve, so the Worker can stamp each run it
-// starts with the image that run boots — which is what makes `tk cloud status`
-// able to answer "was my fix even running?" without the operator having to
-// hold two deploys in their head.
+// recordDeploymentImage stores the image this deployment starts FactorySandbox
+// containers on, so the Worker can stamp each run it starts with the image
+// that run boots — which is what makes `tk cloud status` able to answer "was
+// my fix even running?" without the operator having to hold two deploys in
+// their head.
 func recordDeploymentImage(ctx context.Context, w *wrangler, ref, digest string) error {
 	stamp := time.Now().UTC().Format(time.RFC3339)
 	for _, v := range []string{ref, digest, stamp} {
@@ -618,7 +563,7 @@ func recordDeploymentImage(ctx context.Context, w *wrangler, ref, digest string)
 			"image_digest=excluded.image_digest, confirmed_at=excluded.confirmed_at",
 		ref, digest, stamp)
 	if err := w.execute(ctx, DatabaseName, sql); err != nil {
-		return fmt.Errorf("recording the rolled-out orchestrator image in D1: %w", err)
+		return fmt.Errorf("recording the deployment's container image in D1: %w", err)
 	}
 	return nil
 }

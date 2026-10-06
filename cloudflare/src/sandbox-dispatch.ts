@@ -148,7 +148,8 @@
  * container being addressed, and a settled job answers from its recorded
  * settlement (migration 0019). The first terminal observation is recorded
  * and the worker's container destroyed: its work is on its branch, and a
- * settled container left up held one of max_instances until it idled out.
+ * settled container left up held one of the factory's container slots until
+ * it idled out.
  *
  * ### Where each of the other operations lives (DECIDED, tick xev)
  *

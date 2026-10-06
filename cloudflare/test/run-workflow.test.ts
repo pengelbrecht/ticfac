@@ -604,6 +604,12 @@ afterEach(async () => {
 beforeEach(() => {
   sandboxes = new FakeSandboxes();
   set("SANDBOXES", sandboxes);
+  // Every run is on the durable_object substrate by default now (tick dax),
+  // so the routed binding hands its gets to the v1 binding. Both names point
+  // at the same fake: these tests are about orchestration, not about which DO
+  // class a container boots in, and the routed options (instance size, pinned
+  // image) are extra keys the fake ignores.
+  set("SANDBOXES_V1", sandboxes);
   // The remote a run's progress is proved against. It starts where the
   // submission did, so a run that pushes nothing has moved nothing.
   repo = new FakeRepo();
@@ -1376,6 +1382,7 @@ describe("exit 0 is not completion (tick ehy)", () => {
 
     sandboxes = new FakeSandboxes();
     set("SANDBOXES", sandboxes);
+    set("SANDBOXES_V1", sandboxes);
     repo = new FakeRepo();
     set("REPO_REFS", repo);
 
@@ -2635,6 +2642,8 @@ describe("an unprovisioned deployment fails closed", () => {
   it("fails the run naming the missing sandbox binding", async () => {
     set("SANDBOXES", undefined);
     delete (env as unknown as Record<string, unknown>).SANDBOXES;
+    set("SANDBOXES_V1", undefined);
+    delete (env as unknown as Record<string, unknown>).SANDBOXES_V1;
     const { runID, project } = await ignite();
 
     const run = await settled(runID);

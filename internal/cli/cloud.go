@@ -303,13 +303,11 @@ type cloudSubmissionResponse struct {
 	Budget *cloudEffectiveBudget `json:"budget"`
 }
 
-// cloudRunImage is the orchestrator container image a run booted.
+// cloudRunImage is the container image a run booted.
 //
-// It is reported because a container rollout is asynchronous: the Worker
-// updates promptly, the container application does not, and a run started in
-// that window executes the previous image. Without this line two runs with
-// identical output across a deploy read as "the fix did not work" when the fix
-// was simply never running.
+// It is reported so two runs with identical output across a deploy can be
+// told apart from a fix that never ran: without this line both read as "the
+// fix did not work" when the fix was simply not in the image.
 type cloudRunImage struct {
 	Ref    string `json:"image_ref"`
 	Digest string `json:"image_digest"`
@@ -782,10 +780,10 @@ func printCloudRunStatus(out io.Writer, response cloudStatusResponse) {
 	case response.Image != nil && response.Image.Digest != "":
 		fmt.Fprintf(out, "  image: %s\n", response.Image.Digest)
 	default:
-		// Said rather than omitted: "unrecorded" is what a run that started
-		// before a deploy confirmed a rollout looks like, and silence there
-		// reads as "same image as everything else".
-		fmt.Fprintf(out, "  image: unrecorded (no deploy has confirmed a container rollout for this factory)\n")
+		// Said rather than omitted: "unrecorded" is what a run whose deploy
+		// could not determine an image looks like, and silence there reads as
+		// "same image as everything else".
+		fmt.Fprintf(out, "  image: unrecorded (no deploy has recorded a container image for this factory)\n")
 	}
 	if response.Lease != nil && response.Lease.RunID != "" {
 		fmt.Fprintf(out, "  lease: %s\n", response.Lease.RunID)

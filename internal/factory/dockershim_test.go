@@ -30,7 +30,7 @@ func readDeployDockerEnv(t *testing.T, h *harness) map[string]string {
 // than wrangler's 15-minute one (deploy-factory run 36735949343).
 func TestDeployRunsWranglersDockerThroughTheBundlesShim(t *testing.T) {
 	h := newHarness(t)
-	if _, err := Deploy(context.Background(), h.rolloutOptions()); err != nil {
+	if _, err := Deploy(context.Background(), h.options()); err != nil {
 		t.Fatalf("Deploy: %v\n%s", err, h.log())
 	}
 	env := readDeployDockerEnv(t, h)
@@ -56,7 +56,7 @@ func TestTheDockerShimWrapsTheOperatorsDocker(t *testing.T) {
 	custom := filepath.Join(t.TempDir(), "my-docker")
 	linkFake(t, filepath.Dir(custom), "my-docker", "fake-docker.sh")
 	t.Setenv(dockerEnvVar, custom)
-	if _, err := Deploy(context.Background(), h.rolloutOptions()); err != nil {
+	if _, err := Deploy(context.Background(), h.options()); err != nil {
 		t.Fatalf("Deploy: %v\n%s", err, h.log())
 	}
 	if got := readDeployDockerEnv(t, h)["TICFAC_DOCKER_BIN"]; got != custom {

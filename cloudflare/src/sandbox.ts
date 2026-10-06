@@ -59,10 +59,13 @@ export const DEFAULT_SANDBOX_IMAGE = "ticks-orchestrator";
 /**
  * The image this deployment's container application serves.
  *
- * A deployment-level fact, and on this substrate a deploy-time one: an image
- * belongs to the `[[containers]]` application a Durable Object class is bound
- * to, built and digest-pinned by `tk factory deploy` (internal/factory/
- * rollout.go). Nothing at run time can make a container run something else.
+ * A deployment-level fact on the 0.x substrate, and a deploy-time one: an
+ * image belongs to the `[[containers]]` application a Durable Object class is
+ * bound to, built and digest-pinned by `tk factory deploy`. Nothing at run
+ * time can make a container run something else. The 0.x application is
+ * deleted (tick dax), so this name is the 0.x constant the declared-image
+ * resolution compares against; on the durable_object substrate a run's image
+ * is its own pin (src/run-substrate.ts).
  *
  * `SANDBOX_IMAGE` is therefore how a deployment SAYS which image it serves,
  * for an operator who pushed their own into their own registry — and since

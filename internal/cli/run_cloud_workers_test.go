@@ -295,14 +295,15 @@ func TestRunCloudWorkersRefusesFlagsThatDoNotApply(t *testing.T) {
 	}
 }
 
-// The substrate opt-in (epic umq): TICFAC_CLOUD_SUBSTRATE rides the one
-// submission, and an unset variable sends no field at all — so the factory's
-// default, and every run already going, is untouched.
+// The substrate override: TICFAC_CLOUD_SUBSTRATE rides the one submission,
+// and an unset variable sends no field at all — the deployment's default
+// substrate (the durable_object class since tick dax) applies, and a run
+// already going is untouched.
 func TestRunCloudWorkersCarriesTheSubstrateOptIn(t *testing.T) {
 	for _, tc := range []struct {
 		env  string
 		want any
-	}{{"", nil}, {"do_v1", "do_v1"}} {
+	}{{"", nil}, {"do_v1", "do_v1"}, {"sdk0", "sdk0"}} {
 		t.Run("substrate="+tc.env, func(t *testing.T) {
 			t.Setenv(CloudSubstrateEnv, tc.env)
 			stubCloudTk(t)

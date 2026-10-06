@@ -282,15 +282,12 @@ declare namespace Cloudflare {
      */
     RUN_WORKER_MODEL_BY_WORK_TYPE?: string;
     /**
-     * The `[[containers]] max_instances` ceiling from this file (tick b6e) —
-     * a second declaration of the same number, because wrangler does not
-     * expose a container application's own config back to the Worker at
-     * runtime. A cloud wave's dispatch width is bounded by it, so raising the
-     * ceiling without raising this would reintroduce exactly the silent
-     * serialization wave 3 measured, just one layer up — which is why the two
-     * are not kept in step by hand (tick 7fl): `ticfac factory deploy` refuses
-     * to ship a config where they disagree, and the suite pins them together.
-     * The default and the capacity count live in src/container-capacity.ts.
+     * The deployment's container ceiling (tick b6e; its single declaration in
+     * wrangler.toml since tick dax, the `durable_object` policy refusing a
+     * `[[containers]] max_instances`). A cloud wave's dispatch width is
+     * bounded by it, and the suite pins this number to the Worker's compiled
+     * fallback so the two cannot drift apart. The default and the capacity
+     * count live in src/container-capacity.ts.
      */
     FACTORY_MAX_INSTANCES?: string;
     /**

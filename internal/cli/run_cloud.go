@@ -241,11 +241,12 @@ func cloudRunsForEpic(ctx context.Context, client *cloudClient, project, epicID 
 	return newest, nil
 }
 
-// CloudSubstrateEnv opts a cloud run's containers into the factory's
-// durable_object-policy class (epic umq): TICFAC_CLOUD_SUBSTRATE=do_v1. Unset
-// is the factory's default substrate. Read at submit only — the factory
-// records it with the run and never moves a run between substrates — so a
-// run already going is unaffected by setting or clearing it.
+// CloudSubstrateEnv opts a cloud run's containers into a specific substrate:
+// TICFAC_CLOUD_SUBSTRATE=sdk0 keeps a run on the 0.x class while a deployment
+// still serves it. Unset means the deployment's default substrate — the
+// durable_object class since tick dax's cutover. Read at submit only — the
+// factory records the substrate with the run and never moves a run between
+// substrates — so a run already going is unaffected by setting or clearing it.
 const CloudSubstrateEnv = "TICFAC_CLOUD_SUBSTRATE"
 
 func cloudSubstrate() string { return strings.TrimSpace(os.Getenv(CloudSubstrateEnv)) }

@@ -179,12 +179,13 @@ attempt settles, container or no container.
 name carries the run id — match it exactly, and never a container of
 another run: this account hosts other runs' containers, and this host's rule
 is exact identity or nothing (AGENTS.md). The deploy is designed to be safe
-for live runs — `rollout_active_grace_period` keeps the new rollout off
-their containers, and the resume is the recovery the staging proof already
-held, not damage. The destroy is the fault: not designed-safe, but
-designed-recoverable, with the run's own redispatch-from-carried-wip ladder
-behind it if the restore itself fails. Never the orchestrator's container —
-it is the run, not a worker dispatch.
+for live runs — on the durable_object scheduling policy a deploy cannot take
+a running container (each keeps the image it started on; there is no
+application-wide rollout since tick dax), and the resume is the recovery the
+staging proof already held, not damage. The destroy is the fault: not
+designed-safe, but designed-recoverable, with the run's own
+redispatch-from-carried-wip ladder behind it if the restore itself fails.
+Never the orchestrator's container — it is the run, not a worker dispatch.
 
 **Recording** — the same shape as [A4]'s: write the result beside qdg's
 local-half record (a doc under `docs/`, plus the run's artifact space), and
