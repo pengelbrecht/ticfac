@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"errors"
 	"io"
 	"net/http"
@@ -1160,5 +1161,108 @@ func TestDeployDeletesNothingWhenTheLegacyApplicationIsAbsent(t *testing.T) {
 	}
 	if countLines(h.logLines(), "containers delete") != 0 {
 		t.Errorf("a delete was issued without an application to delete:\n%s", h.log())
+	}
+}
+
+// The deploy reports which claude-sub subscription labels the deployed
+// Worker has a token secret for — LABELS only, never values (tick 6fv): the
+// operator just rotated or added a secret, and the deploy's own verified
+// endpoint is the one party that can say what the deployment actually holds.
+func TestDeployReportsTheClaudeSubLabels(t *testing.T) {
+	h := newHarness(t)
+	route := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path != "/api/deployment" {
+			return false
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"version":           "1.2.3",
+			"claude_sub_labels": []string{"MAX1", "MAX2"},
+			"harness_kinds":     []string{"omp", "claude", "pi-durable"},
+			"worker_version_id": "v1",
+			"image_digest":      "sha256:abc",
+		})
+		return true
+	}
+	h.routes.Store(&route)
+	var out bytes.Buffer
+	opts := h.options()
+	opts.Out = &out
+
+	result, err := Deploy(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Deploy: %v\n%s", err, h.log())
+	}
+	if !strings.Contains(out.String(), "claude-sub subscriptions: MAX1, MAX2") {
+		t.Errorf("the deploy does not report the subscription labels:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "sk-ant") {
+		t.Errorf("the deploy printed something shaped like a token:\n%s", out.String())
+	}
+	if fmt.Sprint(result.ClaudeSubLabels) != "[MAX1 MAX2]" {
+		t.Errorf("Result.ClaudeSubLabels = %v, want the labels the Worker reported", result.ClaudeSubLabels)
+	}
+}
+
+// A deployment with no subscription token secret is a working claude-sub
+// wiring with nothing to lease — the deploy says so with the command that
+// adds one, so the next step is a thing an operator can read rather than a
+// run that silently steps down to Workers AI.
+func TestDeployReportsNoClaudeSubLabelsWithTheFix(t *testing.T) {
+	h := newHarness(t)
+	route := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path != "/api/deployment" {
+			return false
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"version":           "1.2.3",
+			"claude_sub_labels": []string{},
+		})
+		return true
+	}
+	h.routes.Store(&route)
+	var out bytes.Buffer
+	opts := h.options()
+	opts.Out = &out
+
+	result, err := Deploy(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Deploy: %v\n%s", err, h.log())
+	}
+	if !strings.Contains(out.String(), "none configured") || !strings.Contains(out.String(), "CLAUDE_SUB_TOKEN_") {
+		t.Errorf("the deploy does not name the none-configured state with its fix:\n%s", out.String())
+	}
+	if len(result.ClaudeSubLabels) != 0 {
+		t.Errorf("Result.ClaudeSubLabels = %v, want empty", result.ClaudeSubLabels)
+	}
+}
+
+// A Worker that predates the labels field still deployed fine; the labels are
+// a report, never a gate. An absent field reads as an empty list, which is
+// the truthful capability statement either way — a deployment with no labels
+// runs no claude-sub job — and the deploy answers with the same
+// none-configured line the empty case gets.
+func TestDeployToleratesAWorkerThatPredatesTheLabels(t *testing.T) {
+	h := newHarness(t)
+	route := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.URL.Path != "/api/deployment" {
+			return false
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"version": "1.2.3"})
+		return true
+	}
+	h.routes.Store(&route)
+	var out bytes.Buffer
+	opts := h.options()
+	opts.Out = &out
+
+	result, err := Deploy(context.Background(), opts)
+	if err != nil {
+		t.Fatalf("Deploy: %v\n%s", err, h.log())
+	}
+	if len(result.ClaudeSubLabels) != 0 {
+		t.Errorf("Result.ClaudeSubLabels = %v, want empty for a pre-labels Worker", result.ClaudeSubLabels)
+	}
+	if !strings.Contains(out.String(), "none configured") {
+		t.Errorf("the deploy did not answer the empty labels with the none-configured line:\n%s", out.String())
 	}
 }

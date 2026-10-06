@@ -584,6 +584,16 @@ func describeDeployed(facts *factory.DeployedFacts, localVersion string, err err
 	}
 	out := fmt.Sprintf("runs %s (worker %s, image %s)",
 		unknown(facts.Version), unknown(facts.WorkerVersionID), unknown(short(facts.ImageDigest, 19)))
+	// The claude-sub subscriptions (tick 6fv): labels only, never values —
+	// the same report the factory status prints, in the one sentence a
+	// doctor line has. The empty state says so plainly, because a run that
+	// silently steps down to Workers AI is exactly the thing doctor exists
+	// to name.
+	if len(facts.ClaudeSubLabels) == 0 {
+		out += "; claude-sub: none configured"
+	} else {
+		out += "; claude-sub: " + strings.Join(facts.ClaudeSubLabels, ", ")
+	}
 	if note := facts.LocalDisagreement(localVersion); note != "" {
 		out += "; " + note
 	}

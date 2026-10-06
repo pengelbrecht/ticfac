@@ -55,6 +55,13 @@ type DeployedFacts struct {
 	// and ticfac's cloud preflight (tick kkt) treats it as "cannot preflight",
 	// never as "shipped nothing".
 	HarnessKinds []string `json:"harness_kinds"`
+	// ClaudeSubLabels is the LABELS of the claude-sub subscription tokens
+	// this deployment has Worker secrets for (CLAUDE_SUB_TOKEN_<LABEL>, tick
+	// 6fv) — never the values, which nothing may print. Empty when none is
+	// configured (the rung is off: every lease falls back to Workers AI) and
+	// for a factory that predates the field, which a caller cannot tell apart
+	// — the pool's own /api/claude-sub answers the difference live.
+	ClaudeSubLabels []string `json:"claude_sub_labels"`
 }
 
 // deployedCommitPattern reads the commit out of a `git describe` version:

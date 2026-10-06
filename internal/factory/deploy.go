@@ -131,6 +131,10 @@ type Result struct {
 	// ("Current Version ID"), the identity Cloudflare's own dashboard and
 	// `wrangler versions` name. Empty when wrangler did not print one.
 	WorkerVersionID string
+	// ClaudeSubLabels is the LABELS of the claude-sub subscription tokens the
+	// deployed Worker reports (tick 6fv) — never the values. Empty when none
+	// is configured or the Worker predates the field.
+	ClaudeSubLabels []string
 }
 
 // DefaultBundleDir is where the bundle is materialized: under the ticks home
@@ -447,6 +451,24 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 		return result, err
 	}
 	fmt.Fprintf(out, "verified %s/health and one authenticated request\n", url)
+
+	// Which claude-sub subscriptions the deployed Worker holds (tick 6fv):
+	// LABELS only, never values — asked of the endpoint this deploy just
+	// verified, because the Worker is the only party that knows its own
+	// secrets. A report, never a gate: a Worker that cannot answer (or
+	// predates the field) deployed fine either way.
+	labelsClient := opts.HTTPClient
+	if labelsClient == nil {
+		labelsClient = httpnet.Client(15 * time.Second)
+	}
+	if facts, err := FetchDeployed(ctx, labelsClient, url, token); err == nil && facts != nil {
+		result.ClaudeSubLabels = facts.ClaudeSubLabels
+		if len(facts.ClaudeSubLabels) == 0 {
+			fmt.Fprintf(out, "claude-sub subscriptions: none configured — wrangler secret put CLAUDE_SUB_TOKEN_<LABEL> puts the rung on\n")
+		} else {
+			fmt.Fprintf(out, "claude-sub subscriptions: %s\n", strings.Join(facts.ClaudeSubLabels, ", "))
+		}
+	}
 
 	// The Worker is live, and so is the container application: on the
 	// durable_object policy there is no application-wide rollout for wrangler

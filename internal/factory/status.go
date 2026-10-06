@@ -479,6 +479,15 @@ func (r *StatusReport) writeDeployed(w io.Writer) {
 		image = "unrecorded — no deploy has recorded a container image"
 	}
 	fmt.Fprintf(w, "  image         %s\n", image)
+	// The claude-sub subscriptions (tick 6fv): LABELS only, never values —
+	// and the empty state names its fix, because "the rung is off" is a
+	// thing an operator can act on (`wrangler secret put
+	// CLAUDE_SUB_TOKEN_<LABEL>`) rather than a mystery.
+	if len(d.ClaudeSubLabels) == 0 {
+		fmt.Fprintf(w, "  claude-sub    none configured — set a CLAUDE_SUB_TOKEN_<LABEL> secret to put the rung on\n")
+	} else {
+		fmt.Fprintf(w, "  claude-sub    subscriptions %s\n", strings.Join(d.ClaudeSubLabels, ", "))
+	}
 }
 
 func orUnknown(s string) string {
