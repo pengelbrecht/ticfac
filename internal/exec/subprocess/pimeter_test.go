@@ -136,7 +136,6 @@ func TestGatewayMeteringWritesTheOverrideTheReaderJoins(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 func TestTheGeneratedCredentialCommandReadsWhatGetReads(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("the credential command runs where pi runs: a POSIX shell")
@@ -199,7 +198,9 @@ func TestTheGeneratedCredentialCommandReadsWhatGetReads(t *testing.T) {
 		if got, want := strings.TrimSuffix(stdout.String(), "\n"), "Bearer "+file.Get(credentials.KeyCloudflareAPIToken); got != want {
 			t.Errorf("%s: the generated command sent %q, want the ~/.ticfacrc credential %q: the two readers of the file must not drift (tick frr)", name, got, want)
 		}
-=======
+	}
+}
+
 // TestGatewayMeteringOmitsTheNamesADispatchDidNotState: the attempt and
 // tick keys are omitempty — a join that names no attempt (the dm2-era
 // shape, and every attempt this repository dispatched before tick kf4)
@@ -218,7 +219,6 @@ func TestGatewayMeteringOmitsTheNamesADispatchDidNotState(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), `"cf-aig-metadata": "{\"run_id\":\"epic-hn6\"}"`) {
 		t.Errorf("a join that names no attempt stamped more than the run id:\n%s", raw)
->>>>>>> 759e8c33935a2517d60fcf99b42386bfc58fd47c
 	}
 }
 
