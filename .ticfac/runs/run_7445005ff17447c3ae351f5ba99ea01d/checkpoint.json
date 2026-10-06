@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
   "epic_id": "umq",
-  "sequence": 18,
-  "state": "running",
-  "reason": "rlx is running as attempt 3",
-  "updated_at": "2026-10-06T14:18:10Z",
+  "sequence": 19,
+  "state": "collecting",
+  "reason": "collecting the closeout-epic job for rlx",
+  "updated_at": "2026-10-06T15:58:41Z",
   "ticks": [
     {
       "tick_id": "dax",
