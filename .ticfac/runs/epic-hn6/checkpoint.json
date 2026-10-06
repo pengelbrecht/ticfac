@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 333,
-  "state": "integrating",
-  "reason": "integrating ziy attempt 47 into epic/hn6",
-  "updated_at": "2026-10-06T00:28:47Z",
+  "sequence": 334,
+  "state": "gating",
+  "reason": "running the integrated gate for ziy on b1a9d07b58c5",
+  "updated_at": "2026-10-06T00:28:58Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -234,7 +234,7 @@
     },
     {
       "tick_id": "ziy",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 47
     },
     {
