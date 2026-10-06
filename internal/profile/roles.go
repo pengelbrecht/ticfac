@@ -54,6 +54,11 @@ type Role struct {
 	SubstrateTiers map[string]map[string]Role
 	// OverrideFile is the override the roles were read with, "" for none.
 	OverrideFile string
+	// SelectedConfig is the named run config the roles were read under
+	// (tick tda): [configs.<name>] was applied as the last overlay over these
+	// cells, so the provenance a resolution records points at the config's
+	// own cells. "" when no selection applied.
+	SelectedConfig string
 }
 
 // ReadRoles reads `[roles.*]` from a runners.toml file. A missing file is NOT
@@ -67,13 +72,23 @@ func ReadRoles(path string) (map[string]Role, error) {
 // ReadRolesFor is [ReadRoles] with the substrate's override file merged over
 // the common one (tick 5uo): the roles a run on sub actually routes on.
 func ReadRolesFor(path string, sub runconfig.Substrate) (map[string]Role, error) {
+	return ReadRolesForConfig(path, sub, "")
+}
+
+// ReadRolesForConfig is [ReadRolesFor] with one named run config selected
+// (tick tda): the config's cells are applied as the last overlay before the
+// roles are adapted, so a profile resolved with a config routes exactly the
+// way the run that selected the config routes. config "" reads the same
+// roles [ReadRolesFor] reads; a name the runners files do not declare is
+// the config reader's refusal, never a fall back.
+func ReadRolesForConfig(path string, sub runconfig.Substrate, config string) (map[string]Role, error) {
 	if _, err := os.Stat(path); err != nil {
 		if os.IsNotExist(err) {
 			return map[string]Role{}, nil
 		}
 		return nil, fmt.Errorf("read the runner routing: %w", err)
 	}
-	cfg, err := runconfig.LoadFor(path, sub)
+	cfg, err := runconfig.LoadForConfig(path, sub, config)
 	if err != nil {
 		return nil, fmt.Errorf("read the runner routing: %w", err)
 	}
@@ -101,7 +116,8 @@ func rolesFrom(cfg *runconfig.Config) map[string]Role {
 		if role == nil {
 			continue
 		}
-		entry := Role{Name: name, Kind: role.Kind, Model: role.Model, OverrideFile: cfg.OverrideFile}
+		entry := Role{Name: name, Kind: role.Kind, Model: role.Model,
+			OverrideFile: cfg.OverrideFile, SelectedConfig: cfg.SelectedConfig}
 		if len(role.Tiers) > 0 {
 			entry.Tiers = make(map[string]Role, len(role.Tiers))
 			for tier, variant := range role.Tiers {
