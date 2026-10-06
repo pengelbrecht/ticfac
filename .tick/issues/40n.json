@@ -1,0 +1,13 @@
+{
+  "id": "40n",
+  "title": "wrangler.toml keeps the deleted 0.x application's comment above the new block",
+  "description": "Tick dax deleted the `[[containers]]` block for the Sandbox class but left its comment paragraph in place, so the FactorySandbox block's comment now opens with \"The container application the Sandbox class runs\" and describes an `image =` key no block carries, directly above text saying it is the ONLY container application — internally contradictory, in the file a deploy operator edits first. Delete or rewrite the orphaned paragraph (the image path it explains lives on in the `[containers.images.factory]` comment).\nevidence: cloudflare/wrangler.toml:92-98 (the orphaned head of the deleted block, now merged into the FactorySandbox comment)\n\nticfac run run_7445005ff17447c3ae351f5ba99ea01d filed this backlog tick from the finding 4fc470a63e736dde329b0ce8a8c2e56db34eaaef02c671bc50ac321172eb486f (reported by run-run_7445005ff17447c3ae351f5ba99ea01d/tick-a6b/attempt-4) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/4fc470a63e736dde329b0ce8a8c2e56db34eaaef02c671bc50ac321172eb486f.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-run_7445005ff17447c3ae351f5ba99ea01d/tick-a6b/attempt-4",
+  "created_by": "ticfac run run_7445005ff17447c3ae351f5ba99ea01d",
+  "created_at": "2026-10-06T17:01:49Z",
+  "updated_at": "2026-10-06T17:01:49Z"
+}
