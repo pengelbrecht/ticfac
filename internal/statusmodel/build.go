@@ -223,6 +223,16 @@ func Build(src Sources) Model {
 		title := src.Graph.Epic.Title
 		m.EpicTitle = &title
 	}
+	// The named run config the run routes under (tick tda), derived from the
+	// LAST config_selected feed line: the selection is a construction fact,
+	// the line is its durable writer, and a resume states it again — so a
+	// fresh clone's model says what the run runs on from its own feed, and
+	// null is the honest answer for a repository whose runners files declare
+	// no named configs at all (every repository until tick tda) or a feed
+	// that could not be read.
+	if name := selectedRunConfig(src.Feed); name != "" {
+		m.RunConfig = &name
+	}
 	m.Recent = append([]runfeed.Event{}, src.Feed[max(0, len(src.Feed)-5):]...)
 	merged := newMergedRuns(recs, src.PriorRecords)
 	absorbed := merged.absorbed

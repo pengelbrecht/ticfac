@@ -528,6 +528,13 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 		if line := localEscalationLine(*repo, runID); line != "" {
 			fmt.Fprintln(stdout, line)
 		}
+		// The named config every dispatch of this run resolved under (tick
+		// tda) — the line the escalation line above is read against, so two
+		// epics on two configs can be compared on the numbers status already
+		// reports.
+		if line := localRunConfigLine(*repo, runID); line != "" {
+			fmt.Fprintln(stdout, line)
+		}
 	}
 	if status.State == runlife.Alive {
 		return 0
@@ -660,11 +667,49 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 	}
 	if client, err := newCloudClient(); err == nil {
 		fmt.Fprintln(stdout, sourceEscalationLine(ctx, &cloudFeedSource{client: client, runID: runID, warn: stderr}))
+		fmt.Fprintln(stdout, sourceRunConfigLine(ctx, &cloudFeedSource{client: client, runID: runID, warn: stderr}))
 	}
 	if answer.Alive {
 		return 0
 	}
 	return 1
+}
+
+// localRunConfigLine is the run's own named-config line (tick tda): the LAST
+// config_selected line its feed holds — the config every dispatch resolved
+// against, and who chose it. A run whose feed holds none says nothing: a
+// repository that declares no named configs at all (every repository until
+// tick tda) is not a fact worth a line, and a feed that cannot be read is
+// exhaust, not a refusal.
+func localRunConfigLine(repo, runID string) string {
+	path := runfeed.Path(repo, runID)
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return sourceRunConfigLine(context.Background(), runfeed.FileSource(path))
+}
+
+// sourceRunConfigLine reads a whole feed from source and renders the run's
+// named-config line. The whole feed, deliberately: the selection line is
+// written once at the start of every incarnation, so a tail that holds only
+// the run's last words would miss it — and a resume's restatement is the
+// line that names the config the CURRENT incarnation runs on.
+func sourceRunConfigLine(ctx context.Context, source runfeed.Source) string {
+	located, _, err := feedStanding(ctx, source)
+	if err != nil {
+		return ""
+	}
+	var last *runfeed.Event
+	for i := range located {
+		if located[i].Event.Stage == reconcile.StageConfigSelected {
+			e := located[i].Event
+			last = &e
+		}
+	}
+	if last == nil {
+		return ""
+	}
+	return "run config: " + last.Detail
 }
 
 // localEscalationLine is the run's escalation record (internal/escalation),
