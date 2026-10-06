@@ -2,6 +2,7 @@
   "id": "4mr",
   "title": "run-id-only join: a re-run or same-id epic in another repo sums into this run",
   "description": "statusWorkerCost joins gateway rows by run_id=epic-\u003cid\u003e alone. A later re-run of the same epic (same records tree, same run id), or the same epic id running in another repo on the same gateway, has its rows summed into this run's measured number. kf4's per-attempt coverage cannot detect it: a prior incarnation's rows are attempt-tagged with numbers that overlap the current one's, and the classifier rows of both incarnations carry the same caller tag. Fixing it needs an incarnation discriminator stamped at dispatch and readable by the status read — its own tick, likely touching the run-state contract if the checkpoint is where the discriminator lives.\nevidence: internal/gatewaytrace/trace.go Calls() filters only row.Metadata[\"run_id\"]; internal/cli/status_model.go statusWorkerCost passes no incarnation bound\n\nticfac run epic-hn6 filed this backlog tick from the finding f56269dbb0fd7a7ffd21fb5ba737fcad1461a052b73df607e4347df70249ec32 (reported by run-epic-hn6/tick-kf4/attempt-45) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-hn6/absorptions/f56269dbb0fd7a7ffd21fb5ba737fcad1461a052b73df607e4347df70249ec32.json on the run branch.",
+  "notes": "2026-10-06 02:42 - ticfac run epic-hn6: created by absorbing finding f56269dbb0fd7a7ffd21fb5ba737fcad1461a052b73df607e4347df70249ec32 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-hn6/absorptions/f56269dbb0fd7a7ffd21fb5ba737fcad1461a052b73df607e4347df70249ec32.json on epic/hn6, and it says: its severity is medium, not high. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-hn6/tick-kf4/attempt-45",
   "created_by": "ticfac run epic-hn6",
   "created_at": "2026-10-06T00:42:20Z",
-  "updated_at": "2026-10-06T00:42:20Z"
+  "updated_at": "2026-10-06T00:42:25.947542Z"
 }
