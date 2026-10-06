@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/umq/attempt-2/l76`, base `c6b0d67c17f9bed5ed8f1e31e11188871137b813`, harness `pi-durable` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
 # Final review — epic umq (SDK 1.0 / durable_object), as integrated
 
 Reviewed the epic's ticks (fsy, x9d, nmd, 1hq, v1d, dax — all closed; l76 is this
