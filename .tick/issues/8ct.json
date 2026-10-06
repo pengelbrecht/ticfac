@@ -2,6 +2,7 @@
   "id": "8ct",
   "title": "Subprocess interrupt tests fail at base in Linux containers",
   "description": "Three tests in internal/exec/subprocess fail on this Linux container with and without this branch: TestInterruptingAHungToolKillsItsGroupAndSaresTheRunner ('the tool's own child outlived the interrupt'), TestAStoppedSupervisorInterruptsTheRunnersDetachedTools and TestACancelInterruptsTheRunnersDetachedTools. They are process-group/pty behavior tests the tick never touches; they fail at HEAD before the change, so the gate on this host carries a pre-existing red. Related open tick fuf (detached tools whose runner was reaped) covers a neighbor case, not these.\nevidence: go test -short -run 'TestInterruptingAHungToolKillsItsGroupAndSaresTheRunner' ./internal/exec/subprocess/ → interrupt_test.go:144 'the tool's own child outlived the interrupt'; reproduced with the branch stashed (base HEAD 37a686d)\n\nticfac run run_7445005ff17447c3ae351f5ba99ea01d filed this backlog tick from the finding 94a4781f1164ab36fe444229aa76ed97d22abebc70738d60b58af3221a06bb79 (reported by run-run_7445005ff17447c3ae351f5ba99ea01d/tick-dax/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/94a4781f1164ab36fe444229aa76ed97d22abebc70738d60b58af3221a06bb79.json on the run branch.",
+  "notes": "2026-10-06 11:41 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: created by absorbing finding 94a4781f1164ab36fe444229aa76ed97d22abebc70738d60b58af3221a06bb79 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/94a4781f1164ab36fe444229aa76ed97d22abebc70738d60b58af3221a06bb79.json on epic/umq, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_7445005ff17447c3ae351f5ba99ea01d/tick-dax/attempt-1",
   "created_by": "ticfac run run_7445005ff17447c3ae351f5ba99ea01d",
   "created_at": "2026-10-06T11:40:55Z",
-  "updated_at": "2026-10-06T11:40:55Z"
+  "updated_at": "2026-10-06T11:41:01.315941512Z"
 }
