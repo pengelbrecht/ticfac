@@ -986,6 +986,60 @@ describe("a worker attempt driven by the host", () => {
     expect(door.kills).toContain(tools[0]?.id);
   });
 
+  it("does not read a working attempt from before the watch's memory as silent since its start", {
+    timeout: 120_000,
+  }, async () => {
+    // A live attempt across the deploy that brings the commit-silence bound:
+    // its record has no `watch`, it started hours ago, and its conversation
+    // committed seconds ago. A new life dates its progress from the
+    // snapshot's entries, never from the attempt's start.
+    const door = scriptedDoor({ bashMs: 400 });
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("finished after the deploy"),
+    ]);
+    const records = memoryRecords();
+    const storage = new MemoryStorage();
+    const lines: string[] = [];
+    const life = () =>
+      new WorkerAttemptHost({
+        door: door.sandbox,
+        storage: async () => storage,
+        models,
+        records,
+        log: (text) => {
+          lines.push(text);
+        },
+        pollMs: 5,
+        bashPollMs: 5,
+        guardDir: null,
+      });
+    const first = life();
+    await first.start(spec({ stuckMs: 2_000 }));
+    void first.drive();
+    await waitFor("the model's bash to start", () =>
+      door.starts.some((s) => s.command.includes("make test")),
+    );
+    door.die();
+    await waitFor("the dead life to park on a dead call", () => door.deadCalls >= 1);
+    door.thaw();
+    // The record as the previous deploy left it: started five hours ago, no watch.
+    const old = (await records.load()) as WorkerAttemptRecord;
+    const { watch: _watch, ...legacy } = old;
+    await records.save({
+      ...legacy,
+      startedAt: new Date(Date.now() - 5 * 3_600_000).toISOString(),
+    });
+
+    const settled = await life().drive();
+    expect(lines.join("")).not.toContain("appears stuck");
+    expect(settled.settled).toMatchObject({ exitCode: 0, phase: "finishing" });
+    expect(settled.harnessStatus).toBe(0);
+  });
+
   it("is reclaimed where it stands: settled, no finish phase, and a later drive changes nothing", {
     timeout: 120_000,
   }, async () => {
