@@ -221,6 +221,7 @@ inside it, so an agent never parses prose.`,
 		newHerdCommand(stdout, stderr),
 		newCloudCommand(stdout, stderr),
 		newSandboxCommand(stdout, stderr),
+		newSweepCommand(stdout, stderr),
 	)
 	return root
 }

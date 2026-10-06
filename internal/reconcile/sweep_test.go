@@ -255,6 +255,55 @@ func plantWip(t *testing.T, repo, ref string) {
 	mustRun(t, repo, "git", "push", "--quiet", "origin", ref+":"+ref)
 }
 
+// TestACompletedRunRetiresItsMergedRefsOnOrigin is tick 6is's run-end half:
+// the job branches a completed run left on origin go when the integration
+// branch holds them (an empty one included), by exact name; one holding
+// commits nothing merged stays, and another run's refs are never this run's.
+func TestACompletedRunRetiresItsMergedRefsOnOrigin(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	repo := f.Repo.Dir
+	push := func(sha, ref string) {
+		mustRun(t, repo, "git", "push", "--quiet", "origin", sha+":"+ref)
+	}
+	head := strings.TrimSpace(mustRun(t, repo, "git", "rev-parse", "HEAD"))
+	empty := "refs/heads/ticfac/run-r-fixture/tick-a1/repair-9"
+	push(head, empty)
+	unmerged := "refs/heads/ticfac/run-r-fixture/tick-a1/attempt-9"
+	push(strings.TrimSpace(mustRun(t, repo, "git", "commit-tree", "-m", "work nothing merged", "HEAD^{tree}", "-p", "HEAD")), unmerged)
+	other := "refs/heads/ticfac/run-r-other/tick-a1/attempt-1"
+	push(head, other)
+
+	r, result, err := f.run(f.Repo, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.Failure != nil {
+		t.Fatalf("the run did not complete: %+v", result.Failure)
+	}
+	onOrigin := func(ref string) bool {
+		return mustRunAllowingFailure(f.Repo.Origin, "git", "show-ref", "--verify", "--quiet", ref)
+	}
+	if onOrigin(empty) {
+		t.Errorf("%s carries nothing and outlived the completed run on origin", empty)
+	}
+	if !onOrigin(unmerged) {
+		t.Errorf("%s holds commits nothing merged and was deleted from origin", unmerged)
+	}
+	if !onOrigin(other) {
+		t.Errorf("%s is another run's and was deleted at this run's end", other)
+	}
+	said := false
+	for _, event := range r.Journal() {
+		if event.Stage == StageCleanedUp && strings.Contains(event.Detail, empty) && strings.Contains(event.Detail, "origin") {
+			said = true
+		}
+	}
+	if !said {
+		t.Error("the feed does not name the ref the run end deleted from origin")
+	}
+}
+
 // TestClosingATickPrunesItsWipRefsLocallyAndOnOrigin is tick tyv: an
 // evacuation's and a wall-clock stop's snapshots are pushed to origin under
 // refs/ticfac/wip/run-<run>/tick-<t>/, and nothing retired them there. The
