@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 313,
-  "state": "dispatching",
-  "reason": "dispatching uzs as attempt 46",
-  "updated_at": "2026-10-06T00:00:47Z",
+  "sequence": 314,
+  "state": "running",
+  "reason": "uzs is running as attempt 46",
+  "updated_at": "2026-10-06T00:00:56Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -229,7 +229,8 @@
     },
     {
       "tick_id": "uzs",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 46
     },
     {
       "tick_id": "ziy",
