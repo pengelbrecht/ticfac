@@ -1,0 +1,13 @@
+{
+  "id": "oyn",
+  "title": "the deploy's Go SQL restates the Worker's run states with nothing pinning them",
+  "description": "liveLegacyRunsSQL (internal/factory/legacyapp.go) and livePinsSQL (internal/factory/prune.go) each hard-code ('starting','running','stopping'), the states ACTIVE_RUN_STATES names in cloudflare/src/runs.ts. Nothing ties the Go copies to the TypeScript one — the same shape of drift the deleted capacity mirror was refused for (tick 7fl). If the Worker ever grows a live state, the deploy's legacy-app guard and its pin protection silently stop seeing those runs, and the prune could delete a digest a live run pins.\nevidence: internal/factory/legacyapp.go (liveLegacyRunsSQL) and internal/factory/prune.go (livePinsSQL) vs cloudflare/src/runs.ts:119 (ACTIVE_RUN_STATES)\n\nticfac run run_7445005ff17447c3ae351f5ba99ea01d filed this backlog tick from the finding 8f1b1e0d3f700a3846f6b54ce9b8ccf469100c978585c0a616b158a4a5be903a (reported by run-run_7445005ff17447c3ae351f5ba99ea01d/tick-l76/attempt-2) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/8f1b1e0d3f700a3846f6b54ce9b8ccf469100c978585c0a616b158a4a5be903a.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-run_7445005ff17447c3ae351f5ba99ea01d/tick-l76/attempt-2",
+  "created_by": "ticfac run run_7445005ff17447c3ae351f5ba99ea01d",
+  "created_at": "2026-10-06T14:16:51Z",
+  "updated_at": "2026-10-06T14:16:51Z"
+}
