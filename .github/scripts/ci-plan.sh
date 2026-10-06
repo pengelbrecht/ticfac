@@ -140,14 +140,22 @@ matrix='[]'
 if [ "$has_reconcile" = true ]; then
 	for ((s = 1; s <= shards; s++)); do
 		matrix="$(jq -c --arg s "$s" --arg n "$shards" \
-			'. + [{name: "reconcile \($s)/\($n)", pkgs: "./internal/reconcile", shard: ($s|tonumber), of: ($n|tonumber), node: false}]' <<<"$matrix")"
+			'. + [{name: "reconcile \($s)/\($n)", pkgs: "./internal/reconcile", shard: ($s|tonumber), of: ($n|tonumber), node: false, pi: false}]' <<<"$matrix")"
 	done
 fi
 if [ "${#rest[@]}" -gt 0 ]; then
 	node=false
 	case " ${rest[*]} " in *" ./internal/exec/cloudflaresandbox "*) node=true ;; esac
-	matrix="$(jq -c --arg p "${rest[*]}" --argjson node "$node" \
-		'. + [{name: "packages", pkgs: $p, shard: 0, of: 0, node: $node}]' <<<"$matrix")"
+	# The real-pi metering suite (tick 3wq): pi on PATH is what separates
+	# internal/exec/subprocess's drain test — the only end-to-end check that
+	# pi resolves the generated !command and that the account token displaces
+	# pi's stored key (m4t) — from a skip, and no CI runner had one. The
+	# go-test job installs the image-pinned pi behind this flag; a text match
+	# on the generated extension was CI's whole word on the join before it.
+	pi=false
+	case " ${rest[*]} " in *" ./internal/exec/subprocess "*) pi=true ;; esac
+	matrix="$(jq -c --arg p "${rest[*]}" --argjson node "$node" --argjson pi "$pi" \
+		'. + [{name: "packages", pkgs: $p, shard: 0, of: 0, node: $node, pi: $pi}]' <<<"$matrix")"
 fi
 
 race_pkgs="./..."
