@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 342,
-  "state": "dispatching",
-  "reason": "dispatching t6q as attempt 48",
-  "updated_at": "2026-10-06T00:48:36Z",
+  "sequence": 343,
+  "state": "running",
+  "reason": "t6q is running as attempt 48",
+  "updated_at": "2026-10-06T00:48:46Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -239,7 +239,8 @@
     },
     {
       "tick_id": "t6q",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 48
     }
   ],
   "provenance": {
