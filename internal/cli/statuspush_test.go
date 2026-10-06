@@ -19,11 +19,14 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -297,12 +300,13 @@ func TestStatusSnapshotForCarriesTheLabelMap(t *testing.T) {
 	quietForge(t)
 	previousLabels := tickLabels
 	tickLabels = func(context.Context, string) map[string]string {
-		return map[string]string{"i1r": "Follow ticfac from a phone"}
+		// The run's own epic is a tick the model names; the label rides.
+		return map[string]string{"2jn": "Follow ticfac from a phone"}
 	}
 	t.Cleanup(func() { tickLabels = previousLabels })
 
 	envelope := statusSnapshotFor(context.Background(), t.TempDir(), "epic-2jn", statusmodel.HostLocal)
-	if envelope.TickLabels["i1r"] != "Follow ticfac from a phone" {
+	if envelope.TickLabels["2jn"] != "Follow ticfac from a phone" {
 		t.Errorf("envelope tick_labels = %v, want the label map the page names ticks by", envelope.TickLabels)
 	}
 	raw, err := json.Marshal(envelope)
@@ -461,5 +465,52 @@ func TestCloudPusherSendsTheEnvelopeTheRelayDoorPins(t *testing.T) {
 	pusher.Stop()
 	if final := door.next(); final.path != statusRelayPath {
 		t.Errorf("the ending push path = %q, want %q", final.path, statusRelayPath)
+	}
+}
+
+// run_7445005f: a repository whose tracker holds more ticks than the factory's
+// label bound sent its whole tracker's labels with every push, and every push
+// was refused — 400, "tick_labels is bounded at 64 entries" — for the run's
+// life. The map is now the ticks the model names, at most the bound.
+func TestLabelsForModelCarriesOnlyNamedTicksWithinTheBound(t *testing.T) {
+	all := map[string]string{}
+	for i := 0; i < 500; i++ {
+		all[fmt.Sprintf("t%03d", i)] = fmt.Sprintf("tick %d", i)
+	}
+	all["dax"] = "cutover"
+	model := statusmodel.Model{RunID: "run_1", EpicID: "umq"}
+	model.Degraded = []string{"dax is running; t001 and t002 wait on it"}
+	labels, dropped := labelsForModel(model, all)
+	if len(labels) != 3 || labels["dax"] != "cutover" || labels["t001"] == "" || labels["t002"] == "" || dropped != 0 {
+		t.Fatalf("labels = %v (dropped %d), want exactly the three ticks the model names", labels, dropped)
+	}
+
+	var names []string
+	for i := 0; i < 100; i++ {
+		names = append(names, fmt.Sprintf("t%03d", i))
+	}
+	model.Degraded = []string{strings.Join(names, " ")}
+	labels, dropped = labelsForModel(model, all)
+	if len(labels) != statusLabelsMax || dropped != 100-statusLabelsMax {
+		t.Fatalf("%d labels, %d dropped; want the bound %d and the rest counted", len(labels), dropped, statusLabelsMax)
+	}
+	if labels["t000"] == "" || labels[fmt.Sprintf("t%03d", statusLabelsMax-1)] == "" {
+		t.Errorf("the earliest-named ticks are not the ones kept: %v", labels)
+	}
+}
+
+// The sender's bound is the door's: a drift in either direction is either a
+// refused push or a label thrown away for nothing.
+func TestStatusLabelsMaxIsTheFactoryDoorsBound(t *testing.T) {
+	src, err := os.ReadFile(filepath.Join("..", "..", "cloudflare", "src", "status.ts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`tick_labels is bounded at (\d+) entries`).FindSubmatch(src)
+	if m == nil {
+		t.Fatal("cloudflare/src/status.ts no longer states its tick_labels bound")
+	}
+	if n, _ := strconv.Atoi(string(m[1])); n != statusLabelsMax {
+		t.Errorf("the factory door bounds tick_labels at %d; the sender at %d", n, statusLabelsMax)
 	}
 }
