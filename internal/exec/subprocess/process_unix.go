@@ -29,20 +29,26 @@ func newProcessGroup() *syscall.SysProcAttr {
 // attempt with a locks directory never asks it, and see lock.go for what it
 // asks instead. It remains for an attempt started before that, and nothing
 // else.
+//
+// Existence is not life. Signal 0 asks whether the pid exists, and a ZOMBIE
+// answers — a process whose exit the kernel has read and nobody has
+// collected, which inside the factory container is every exit, because its
+// PID 1 is the sandbox control server and never reaps (zombie_linux.go, tick
+// 8ct). So the answer is dead the moment the kernel has read the exit,
+// whether or not anyone ever collects it — and answering dead for a corpse
+// is the one safe dead answer: a zombie's number is still taken by the corpse
+// itself, so nobody else can be holding it yet.
 func processAlive(pid int) bool {
 	if pid <= 0 {
 		return false
 	}
 	err := syscall.Kill(pid, 0)
-	switch err {
-	case nil:
-		return true
-	case syscall.EPERM:
-		// Alive, and not ours to signal.
-		return true
-	default:
+	if err != nil && err != syscall.EPERM {
 		return false
 	}
+	// Alive, or alive and not ours to signal — unless it is a corpse nobody
+	// reaped: a zombie answers signal 0, and is neither.
+	return !processZombie(pid)
 }
 
 // signalGroup sends a signal to a whole process group. A runner that spawned
@@ -60,13 +66,25 @@ func processGroupOf(pid int) (int, error) {
 	return syscall.Getpgid(pid)
 }
 
-// groupAlive asks whether any process is still in the group.
+// groupAlive asks whether any process in the group is still RUNNING, not
+// merely still in it. A group signal ends the members and leaves them
+// zombies until somebody reaps them, and inside the factory container nobody
+// ever does (zombie_linux.go): the corpses a stop leaves behind answered
+// signal 0 forever, killUntilGone ground its whole persistence window out
+// against groups it had already killed, and the proof that an interrupted
+// tool group is dead — which is what both detached-tool stop tests ask —
+// could not be asked inside the container at all (tick 8ct). A member is
+// alive only while the kernel still has it running or stopped; a group of
+// corpses is as gone as a group with no member.
 func groupAlive(pgid int) bool {
 	if pgid <= 0 {
 		return false
 	}
 	err := syscall.Kill(-pgid, 0)
-	return err == nil || err == syscall.EPERM
+	if err != nil && err != syscall.EPERM {
+		return false
+	}
+	return !groupZombie(pgid)
 }
 
 // holdLock takes f's lock exclusively. It blocks, because the only thing it
