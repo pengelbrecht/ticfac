@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "6fv",
   "attempt": 1,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-06T21:18:53Z",
+  "triaged_at": "2026-10-06T21:19:07Z",
+  "triaged_by": "ticfac run epic-v5t absorbing k20",
+  "promoted_as": "k20",
   "provenance": {
     "run_id": "epic-v5t",
     "tick_id": "6fv",
