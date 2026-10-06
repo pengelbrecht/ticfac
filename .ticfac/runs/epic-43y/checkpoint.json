@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-43y",
   "epic_id": "43y",
-  "sequence": 467,
+  "sequence": 468,
   "state": "gating",
-  "reason": "running the integrated gate for j2k on da9396c02617",
-  "updated_at": "2026-10-06T00:21:49Z",
+  "reason": "running the integrated gate for j2k on 54a8652a2f55",
+  "updated_at": "2026-10-06T00:28:53Z",
   "ticks": [
     {
       "tick_id": "92k",
@@ -308,7 +308,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/43y",
-    "source_sha": "da9396c026171789783821bdda21e237d4fca89c",
+    "source_sha": "54a8652a2f554cfb5d360f3ec5b71d5f68d16f29",
     "integration_ref": "refs/heads/epic/43y",
     "phase": "worker",
     "executor": null,
