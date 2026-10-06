@@ -126,8 +126,17 @@ func (r *Reconciler) closeLandedEpic(ctx context.Context, tick, base, landed str
 			return nil
 		}
 		if _, err := closeWithReason(ctx, tracker, epic, reason); err != nil {
-			_ = tree.discard()
-			return refuse("tk refused the close: %v", err)
+			// tk's refusal is the tracker's judgement, not a failure of the
+			// landing: an epic with open children (follow-ups filed under it
+			// after the merge, as on epic 43y) stays open, and forcing it would
+			// close real work. The run that landed the epic still completes.
+			if err := tree.discard(); err != nil {
+				return refuse("%v", err)
+			}
+			r.record(tick, StageEpicCloseRefused, "the epic %s landed on %s as %s, and tk refused to close it: %v. "+
+				"It stays open until its remaining children close; then `tk close %s` (or a re-run) closes it",
+				epic, base, short(landed), firstLine(err.Error()), epic)
+			return nil
 		}
 		commit, moved, err := tree.publishOnce("close epic " + epic + ", landed as " + short(landed))
 		if err != nil {

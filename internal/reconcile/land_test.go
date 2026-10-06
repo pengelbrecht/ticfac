@@ -535,6 +535,42 @@ func TestAnEpicAPersonMergedIsClosedOnMainWhenTheRunSeesItMerged(t *testing.T) {
 	}
 }
 
+// A LANDED EPIC WITH OPEN FOLLOW-UPS (epic 43y on main: five post-merge
+// follow-up ticks are its children) is not closed — tk refuses, and forcing
+// it would close real work — and that refusal does not fail a run whose epic
+// landed: the run completes, and the feed says why the epic is still open.
+func TestALandedEpicWithOpenFollowUpsStaysOpenAndTheRunStillCompletes(t *testing.T) {
+	t.Parallel()
+	pr := &landingForge{}
+	f := newFixture(t, fixtureOptions{pullRequests: pr})
+	pr.origin = f.Repo.Origin
+	declareRule(t, f.Repo, landingRule)
+	state, err := f.Tracker.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A follow-up filed under the epic, outside the run's plan.
+	state.Ticks["fu"] = tk.Tick{ID: "fu", Title: "a follow-up", Status: "open", Type: "task", Parent: "qeu",
+		Priority: 2}
+	f.Tracker.write(t, state)
+
+	r, result, err := f.run(f.Repo, fixtureOptions{pullRequests: pr})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%+v): an epic that landed is a completed run, open follow-ups or not",
+			result.State, result.Failure)
+	}
+	if !contains(r.Stages("co"), StageLanded) || !contains(r.Stages("co"), StageEpicCloseRefused) {
+		t.Errorf("the stages %v do not record the landing and the refused close", r.Stages("co"))
+	}
+	if state, _ := f.Tracker.load(); state.Ticks["qeu"].Status != "open" || state.Ticks["fu"].Status != "open" {
+		t.Errorf("the epic (%s) or its follow-up (%s) was closed over tk's refusal", state.Ticks["qeu"].Status,
+			state.Ticks["fu"].Status)
+	}
+}
+
 // A CONFLICTING FOLD at the merge is the resolve job's: main edits the same
 // file the epic did after the run reached its close-out, the fold conflicts,
 // the resolve-conflict job makes the union, and the epic still lands.
