@@ -178,7 +178,23 @@ func Parse(data []byte) (*Config, error) {
 		// are stops, reported with the parser's own message.
 		return nil, ValidationErrors{{Msg: err.Error()}}
 	}
-	if errs := validate(&cfg, md, presentForeignTables(data), false); len(errs) > 0 {
+	// The named run configs (tick tda): parsed and validated beside the
+	// top-level tables, so a config's cells answer to the same shape rules.
+	// The whole-document rules — default names a declared config, a config
+	// exists — are checked here, on the document a run actually reads.
+	table, named, configErrs := parseNamedConfigs(data, false)
+	if table != nil {
+		cfg.Configs = table
+		cfg.namedConfigs = named
+		configErrs = append(configErrs, wholeDocumentConfigsRules(table, named)...)
+	}
+	errs := validate(&cfg, md, presentForeignTables(data), false)
+	if len(errs) == 0 {
+		errs = configErrs
+	} else {
+		errs = append(errs, configErrs...)
+	}
+	if len(errs) > 0 {
 		return nil, errs
 	}
 	return &cfg, nil
@@ -188,7 +204,11 @@ func Parse(data []byte) (*Config, error) {
 // schema and the same per-key rules, minus the whole-file requirements an
 // override cannot meet by itself — [roles.implement], a role's kind, and the
 // cross-table command references, which may resolve in the common file.
-// Those are checked again on the merged document, where they can.
+// Those are checked again on the merged document, where they can. The named
+// configs follow the same stance (tick tda): an override's [configs.<name>]
+// cells are shape-checked here, and the whole-document rules — a default
+// naming a config that exists — wait for the merged document, where the
+// other file may declare the other half of the table.
 func parsePartial(data []byte) (*Config, toml.MetaData, error) {
 	if err := checkVersion(data); err != nil {
 		return nil, toml.MetaData{}, err
@@ -198,7 +218,14 @@ func parsePartial(data []byte) (*Config, toml.MetaData, error) {
 	if err != nil {
 		return nil, md, ValidationErrors{{Msg: err.Error()}}
 	}
-	if errs := validate(&cfg, md, presentForeignTables(data), true); len(errs) > 0 {
+	_, _, configErrs := parseNamedConfigs(data, true)
+	errs := validate(&cfg, md, presentForeignTables(data), true)
+	if len(errs) == 0 {
+		errs = configErrs
+	} else {
+		errs = append(errs, configErrs...)
+	}
+	if len(errs) > 0 {
 		return nil, md, errs
 	}
 	return &cfg, md, nil
@@ -947,8 +974,20 @@ func undecodedKeys(md toml.MetaData, foreign map[string]bool) []string {
 	keys := md.Undecoded()
 	out := make([]string, 0, len(keys))
 	for _, k := range keys {
-		if len(k) > 0 && foreign[k[0]] {
-			continue
+		if len(k) > 0 {
+			// The [configs] subtree (tick tda) is claimed by parseNamedConfigs,
+			// which reports its own unknown keys with the config's name in the
+			// path — a `[configs.glm.orchestration]` the main decode cannot see
+			// into is refused there, not silently skipped here. A scalar
+			// squatting on the table's name (`configs = 3`) never reaches this
+			// filter: the main decode refuses it as a type mismatch before
+			// validate runs.
+			if k[0] == "configs" {
+				continue
+			}
+			if foreign[k[0]] {
+				continue
+			}
 		}
 		out = append(out, k.String())
 	}

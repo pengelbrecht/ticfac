@@ -170,11 +170,29 @@ type Config struct {
 	// Findings is the declared [findings] table: what a run does with a
 	// finding a worker routed to ANOTHER repository (see [Findings]).
 	Findings *Findings `toml:"findings"`
+	// Configs is the declared [configs] table (tick tda): the named run
+	// configs a repository offers — one epic on GLM, another on claude —
+	// and the `default` naming the one used when nothing selects. Nil when
+	// the file declares none, which is every file until tick tda: a single
+	// routing needs no name. The configs themselves are parsed by
+	// [parseNamedConfigs] and live in the unexported namedConfigs; reach
+	// them through [NamedConfigNames], [NamedConfig] and [Select].
+	Configs *ConfigsTable `toml:"configs"`
+
+	// namedConfigs is every [configs.<name>] entry, keyed by name. Filled by
+	// the parser, read through the accessors.
+	namedConfigs map[string]*NamedConfig
 
 	// OverrideFile is the override [LoadFor] merged over the common file
 	// (tick 5uo), or "" when the run read runners.toml alone. It is
 	// provenance: what a run says it loaded.
 	OverrideFile string `toml:"-"`
+
+	// SelectedConfig is the named config this config was selected with
+	// ([Config.Select]), or "" when no selection applied. Like OverrideFile
+	// it is provenance — the answer to "which routing did this run run on"
+	// — and it is never a TOML field: a config selects nothing; a run does.
+	SelectedConfig string `toml:"-"`
 
 	// The tracker tables — [signals] and [sweeps] — are deliberately NOT
 	// fields of this struct. They are ticks' half of the split (see doc.go):
