@@ -130,12 +130,13 @@ func TestACloudRunRefusesAtStartOverARoleWithNoCloudRouting(t *testing.T) {
 // The same refusal, keyed on the EXECUTOR rather than the substrate (tick
 // 78v): a run on a LOCAL substrate (herdr) whose profiles name the
 // cloudflare-sandbox executor boots its workers in a Cloudflare container
-// under local routing — and the local ladder's claude tier
-// (.tick/runners.local.toml's frontier, the file a laptop declares) is
-// exactly the model that must not run there. The run is refused AT START,
-// at construction, before anything is dispatched, naming the role, the tier
-// and the resolved kind and model — whatever its substrate.
-func TestALocalRunOnTheSandboxExecutorRefusesAtStartOverATierThatLeavesWorkersAI(t *testing.T) {
+// under local routing — and the local ladder's claude tier on a PINNED model
+// id (.tick/runners.local.toml's frontier, the file a laptop declares) is
+// per-token spend, which must not run there wherever the config lives. The
+// run is refused AT START, at construction, before anything is dispatched,
+// naming the role, the tier and the resolved kind and model — whatever its
+// substrate.
+func TestALocalRunOnTheSandboxExecutorRefusesAtStartOverATierThatBillsPerToken(t *testing.T) {
 	t.Parallel()
 	shorttest.EndToEnd(t)
 	const localGate = `version = 2
@@ -158,7 +159,7 @@ tree = { command = "test -f README.md", description = "the merge carries the wor
 
 [roles.implement.tiers.frontier]
 kind = "claude"
-model = "opus"
+model = "claude-opus-5-5"
 `
 	f := newFixture(t, fixtureOptions{gate: localGate})
 	if err := os.WriteFile(filepath.Join(f.Repo.Dir, ".tick", "runners.local.toml"), []byte(localCells), 0o644); err != nil {
@@ -193,10 +194,10 @@ model = "opus"
 	if err == nil {
 		t.Fatal("a herdr-substrate run on the sandbox executor, whose frontier tier resolves to claude, was constructed")
 	}
-	if !errors.Is(err, profile.ErrNotWorkersAI) {
-		t.Errorf("the refusal is not recognisable as ErrNotWorkersAI: %v", err)
+	if !errors.Is(err, profile.ErrCloudBilling) {
+		t.Errorf("the refusal is not recognisable as ErrCloudBilling: %v", err)
 	}
-	for _, want := range []string{"implement", `tier "frontier"`, `"claude"`, `"opus"`, "runners.local.toml"} {
+	for _, want := range []string{"implement", `tier "frontier"`, `"claude"`, `"claude-opus-5-5"`, "runners.local.toml"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not name %q: %v", want, err)
 		}
@@ -278,7 +279,7 @@ model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 // file's own tier cell for the tier the policy starts at routes claude. The
 // run is refused at construction — before anything is dispatched — naming the
 // role, the tier and the resolved kind and model.
-func TestACloudRunRefusesAtStartOverATierThatLeavesWorkersAI(t *testing.T) {
+func TestACloudRunRefusesAtStartOverATierThatBillsPerToken(t *testing.T) {
 	t.Parallel()
 	shorttest.EndToEnd(t)
 	const cloudCells = `version = 2
@@ -308,12 +309,72 @@ model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 	if err == nil {
 		t.Fatal("a cloud run whose economy tier resolves to claude was constructed")
 	}
-	if !errors.Is(err, profile.ErrNotWorkersAI) {
-		t.Errorf("the refusal is not recognisable as ErrNotWorkersAI: %v", err)
+	if !errors.Is(err, profile.ErrCloudBilling) {
+		t.Errorf("the refusal is not recognisable as ErrCloudBilling: %v", err)
 	}
 	for _, want := range []string{"implement", `tier "economy"`, `"claude"`, `"haiku"`} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not name %s: %v", want, err)
+		}
+	}
+}
+
+// The subscription rung's positive half (tick 6fv): a cloud run whose overlay
+// routes the role jobs on claude/opus — the claude-sub rung the cloud billing
+// rule admits — CONSTRUCTS and dispatches them on that pairing, exactly as a
+// Workers AI overlay does. The rung is a routing choice, not an exception a
+// layer grants: construction resolves every role at every tier through the
+// one predicate, and nothing about the rung is special past it.
+func TestACloudRunOnTheClaudeSubRungConstructsAndDispatches(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	const cloudGate = `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[testing.commands]
+tree = { command = "test -f README.md && ls work-*.txt >/dev/null", description = "the merge carries the work" }
+`
+	const rungCells = `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[roles.review]
+kind = "claude"
+model = "opus"
+
+[roles.closeout]
+kind = "claude"
+model = "opus"
+`
+	f := newFixture(t, fixtureOptions{gate: cloudGate})
+	if err := os.WriteFile(filepath.Join(f.Repo.Dir, ".tick", "runners.cloud.toml"), []byte(rungCells), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, result, err := f.run(f.Repo, fixtureOptions{gate: cloudGate, substrate: "cloud"})
+	if err != nil {
+		t.Fatalf("a cloud run on the claude-sub rung did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s", result.State, result.Reason)
+	}
+	for tick, want := range map[string][2]string{
+		"a1": {"pi", "cloudflare-workers-ai/@cf/zai-org/glm-5.3"},
+		"a2": {"pi", "cloudflare-workers-ai/@cf/zai-org/glm-5.3"},
+		"rv": {"claude", "opus"},
+		"co": {"claude", "opus"},
+	} {
+		dispatch := f.dispatch(tick)
+		if dispatch.Profile == nil {
+			t.Fatalf("%s was dispatched under no profile", tick)
+		}
+		if dispatch.Profile.Runner != want[0] || dispatch.Profile.Model != want[1] {
+			t.Errorf("%s was dispatched on %s/%s, want the overlay's %s/%s",
+				tick, dispatch.Profile.Runner, dispatch.Profile.Model, want[0], want[1])
 		}
 	}
 }

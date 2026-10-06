@@ -352,18 +352,19 @@ func Resolve(role string, opts Options) (*Profile, error) {
 	if err := route(resolved, opts); err != nil {
 		return nil, err
 	}
-	// The cloud rule on the FINAL resolved worker (tick nwn), after every
-	// overlay route applied — never on one input layer. It keys on WHAT RUNS
-	// IN CLOUDFLARE (tick 78v), not on the substrate alone: the cloud
-	// substrate, and any executor that dispatches its workers into Cloudflare
-	// — a run whose substrate is local, selecting the cloudflare-sandbox
-	// executor by its --profiles, boots its workers in a Cloudflare container
-	// under local routing, and the rule is about what runs in Cloudflare.
+	// The cloud billing rule on the FINAL resolved worker (ticks nwn, 6fv),
+	// after every overlay route applied — never on one input layer. It keys on
+	// WHAT RUNS IN CLOUDFLARE (tick 78v), not on the substrate alone: the
+	// cloud substrate, and any executor that dispatches its workers into
+	// Cloudflare — a run whose substrate is local, selecting the
+	// cloudflare-sandbox executor by its --profiles, boots its workers in a
+	// Cloudflare container under local routing, and the rule is about what
+	// bills where the container runs.
 	if dispatchesIntoCloudflare(resolved.Executor) {
 		bindHostedHarness(resolved)
 	}
 	if opts.Substrate == string(runconfig.SubstrateCloud) || dispatchesIntoCloudflare(resolved.Executor) {
-		if err := enforceWorkersAI(resolved, opts.Tier); err != nil {
+		if err := enforceCloudBilling(resolved, opts.Tier); err != nil {
 			return nil, fmt.Errorf("profile %s: %w", role, err)
 		}
 	}

@@ -55,9 +55,10 @@ import (
 //
 //   - The job routes at the POLICY'S CEILING TIER: the strongest worker the
 //     declared ladder allows, which is the operator's stated routing
-//     (locally claude; in the cloud a Workers AI model — the CloudRule guard
-//     refuses anything else, so the resolve job never runs claude in the
-//     cloud). It is resolved ON DEMAND rather than at construction: a role
+//     (locally claude; in the cloud a Workers AI model or a subscription
+//     rung's versionless alias — the cloud billing guard refuses anything
+//     that bills per token, so the resolve job never runs per-token claude
+//     in the cloud). It is resolved ON DEMAND rather than at construction: a role
 //     that exists for the rare conflict must not make every cloud run refuse
 //     at start over a cell nobody was asked to declare.
 //

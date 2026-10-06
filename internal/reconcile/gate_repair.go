@@ -44,8 +44,9 @@ import (
 //
 //   - The job routes at the POLICY'S CEILING TIER, resolved on demand
 //     exactly as the resolve-conflict job's is (locally claude; in the cloud
-//     a Workers AI model — the CloudRule guard refuses anything else, so
-//     the repair never runs claude in the cloud).
+//     a Workers AI model or a subscription rung's versionless alias — the
+//     cloud billing guard refuses anything that bills per token, so the
+//     repair never runs per-token claude in the cloud).
 //
 //   - Its commits are MERGED AND GATED AS USUAL: an ordinary merge onto the
 //     integration branch under the same lease the attempt's merge pushed

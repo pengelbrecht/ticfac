@@ -64,14 +64,17 @@ func knownExecutors() []reconcile.KnownExecutor {
 		{
 			// The cloud executor (tick xev): the runner names a KIND the
 			// sandbox image can run a harness for — the DURABLE harness
-			// names of [profile.CloudRule].Harnesses, not runconfig's herdr
-			// kinds (epic 43y, tick uxi): the cloud's routing still spells
-			// kind = "pi" (.tick/runners.cloud.toml, the local runner
-			// table's name for the same durable harness, which applies last
-			// there) and the cloud profile set names the hosted kind
-			// "pi-durable", so both must be admitted — while claude, codex
-			// and opencode never reach a container, per the same rule that
-			// refuses a non-Workers-AI worker in the cloud. The poll cadence
+			// names of [profile.CloudRule].Harnesses plus the subscription
+			// rungs' own harnesses (profile.CloudAllowedHarnesses, tick 6fv),
+			// not runconfig's herdr kinds (epic 43y, tick uxi): the cloud's
+			// routing still spells kind = "pi" (.tick/runners.cloud.toml, the
+			// local runner table's name for the same durable harness, which
+			// applies last there) and the cloud profile set names the hosted
+			// kind "pi-durable", so both must be admitted — and a claude-sub
+			// config resolves kind = "claude" on a versionless alias, a pair
+			// the image runs and the cloud billing rule admits (codex and
+			// opencode still never reach a container; the rule refuses their
+			// pairings at resolution). The poll cadence
 			// is the executor's own five minutes, because on that substrate
 			// the poll IS the keepalive. Any MODEL a profile names is
 			// accepted: the dispatch door carries it (tick a08), the worker
@@ -81,7 +84,7 @@ func knownExecutors() []reconcile.KnownExecutor {
 			// profile's RUNNER and PROMPT ride the same request (tick 9iz),
 			// for the same reason.
 			Name:         cloudflaresandbox.ExecutorName,
-			Runners:      profile.CloudRule.Harnesses,
+			Runners:      profile.CloudAllowedHarnesses(),
 			AcceptsModel: func(string) bool { return true },
 			PollInterval: cloudflaresandbox.PollInterval,
 			// The account's container ceiling less the orchestrator's own

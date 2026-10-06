@@ -74,9 +74,10 @@ const (
 )
 
 // The harness answers init accepts. Cloud is not among the choices because
-// the cloud is not one: what runs in Cloudflare runs Workers AI models only,
-// through the factory's gateway ([profile.CloudRule]), so a cloud routing is
-// pi on a Workers AI model whatever the local answer is.
+// the cloud is not one: init routes cloud work on pi, on a Workers AI model
+// — the pairing the cloud billing rule admits on that harness
+// ([profile.CloudRule]; the claude-sub rung is a config's to select, never a
+// question init asks).
 const (
 	initRunnerClaude = "claude"
 	initRunnerPi     = "pi"
@@ -146,7 +147,7 @@ repository can guess for itself, from its origin remote — then writes:
                             repository (go test ./..., pnpm test, make test)
                             and shown for confirmation
   .tick/runners.cloud.toml  the cloud's role cells, when the answer names
-                            the cloud — the cloud runs Workers AI models only
+                            the cloud — init routes it on pi, on Workers AI
   .tick/config.md           the close-out rule the close-out holds on — the
                             PR + CI one when the answer names it, no rule
                             when it does not
@@ -389,15 +390,18 @@ func resolveInitAnswers(fl *initFlags, stdin io.Reader, stdout, stderr io.Writer
 	// model is the LOCAL half's, and the cloud's is derived below (the
 	// default Workers AI pairing when the local runner is not pi) — refusing
 	// the local model there would be refusing an answer nobody gave. A
-	// cloud-only routing whose model is not a Workers AI model is one the
-	// run refuses at construction, three ticks into an epic (tick 78v keys
-	// the check on the final resolved value) — so init refuses it here,
-	// naming the rule and the fix.
-	if cloudOnly && !profile.IsWorkersAIModel(answers.model) {
-		fmt.Fprintf(stderr, "ticfac init: %q is not a Workers AI model, and what runs in Cloudflare runs "+
-			"Workers AI models only, through the factory's gateway (provider namespaces %s) — name a model "+
-			"from one of them, or keep the cloud out of the substrate\n",
-			answers.model, strings.Join(profile.CloudRule.ModelNamespaces, ", "))
+	// cloud-only routing whose model satisfies neither half of the rule —
+	// not a Workers AI model, and not a subscription rung's alias (which
+	// init does not write: it routes cloud work on pi only) — is one the
+	// run refuses at construction, three ticks into an epic (tick 78v
+	// keys the check on the final resolved value) — so init refuses it
+	// here, naming the rule and the fix. The rule's sentence is the
+	// sentinel's own, so init cannot drift from the one place the rule
+	// lives.
+	if cloudOnly && !profile.CloudBillingAllows(initRunnerPi, answers.model) {
+		fmt.Fprintf(stderr, "ticfac init: %q is not a model the cloud billing rule admits, and %v — "+
+			"name a Workers AI model (provider namespaces %s), or keep the cloud out of the substrate\n",
+			answers.model, profile.ErrCloudBilling, strings.Join(profile.CloudRule.ModelNamespaces, ", "))
 		return answers, exitUsage
 	}
 
@@ -563,7 +567,7 @@ func initWrites(repo string, answers initAnswers, gates []guessedGate) []initWri
 		writes = append(writes, initWrite{
 			name: initCloudName,
 			body: cloudTOML(cloudModel),
-			note: "cloud role cells: what runs in Cloudflare runs Workers AI models only",
+			note: "cloud role cells: pi on a Workers AI model, the pairing the cloud billing rule admits",
 		})
 	}
 	writes = append(writes, initWrite{
@@ -610,7 +614,8 @@ func runnersNote(substrate, kind, model string) string {
 // own pairing (claude is their harness as shipped), which the answer was
 // never about. A cloud-only routing keeps the answer's pi in all three
 // cells: the base file routes the cloud there, the cloud file applies last,
-// and what runs in Cloudflare runs Workers AI models only.
+// and pi on a Workers AI model is the pairing the cloud billing rule
+// admits.
 func runnersTOML(substrate, kind, model string, gates []guessedGate) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `# Worker routing for epic runs, written by `+"`ticfac init`"+`.

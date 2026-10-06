@@ -421,19 +421,22 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	if err != nil {
 		return nil, err
 	}
-	// nwn's rule, applied to the model the door reports the container is ON —
-	// which, since the door records its boots and an adoption reads the record
-	// (tick dyo), is the RUNNING container's model for an adopted attempt too,
-	// not an echo of what this dispatch asked for. The rule is the profile
-	// package's one copy (profile.CloudRule): the cloud substrate runs Workers
-	// AI models only, and an adopted container — one a previous incarnation
-	// booted, before the rule or against it — is not exempt from the check a
-	// fresh boot answers to.
-	if !profile.IsWorkersAIModel(payload.Model) {
-		return nil, fmt.Errorf("the door reports attempt %d of %s running on model %q, which is not "+
-			"a Workers AI model (%s): the cloud substrate runs Workers AI models only, and a start that "+
-			"recorded it would name a model this run cannot have dispatched",
-			attempt, spec.JobID, payload.Model, strings.Join(profile.CloudRule.ModelNamespaces, ", "))
+	// The cloud billing rule (ticks nwn, 6fv), applied to the pair the door
+	// reports the container is ON — which, since the door records its boots
+	// and an adoption reads the record (tick dyo), is the RUNNING container's
+	// pairing for an adopted attempt too, not an echo of what this dispatch
+	// asked for. The rule is the profile package's one copy
+	// (profile.CloudBillingAllows): a Workers AI worker through the factory's
+	// gateway, or a subscription rung (claude on a versionless alias, whose
+	// token the factory's claude-sub wiring injects) — and an adopted
+	// container, one a previous incarnation booted before the rule or against
+	// it, is not exempt from the check a fresh boot answers to.
+	if !profile.CloudBillingAllows(payload.Harness, payload.Model) {
+		return nil, fmt.Errorf("the door reports attempt %d of %s running on %s/%s, which the cloud "+
+			"billing rule refuses — a Workers AI model (%s) on a harness the factory's gateway serves, "+
+			"or a subscription rung on its versionless aliases: a start that "+
+			"recorded it would name a pairing this run cannot have dispatched",
+			attempt, spec.JobID, payload.Harness, payload.Model, strings.Join(profile.CloudRule.ModelNamespaces, ", "))
 	}
 	// The door names the model it booted the worker on. Anything but the one
 	// asked for — an adoption of a container some other start booted, a door
