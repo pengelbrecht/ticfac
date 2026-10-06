@@ -12,8 +12,11 @@
   "attempt": 45,
   "done_item": "A4",
   "demonstrating_check": "go test ./internal/cli/ -run TestStatusWorkerCost",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-06T00:42:15Z",
+  "triaged_at": "2026-10-06T00:42:23Z",
+  "triaged_by": "ticfac run epic-hn6 absorbing 4mr",
+  "promoted_as": "4mr",
   "provenance": {
     "run_id": "epic-hn6",
     "tick_id": "kf4",
