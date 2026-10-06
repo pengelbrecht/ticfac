@@ -2551,3 +2551,4 @@
 {"ts":"2026-10-05T23:24:19.072074Z","tick":"pv7","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-06 01:24 - ticfac run epic-hn6: the review-epic job, pv7 try 1 (run dispatch #42), returned a validated ticfac.job-result.review-epic.v1 envelope at fbce6fc37f64 — DONE: DONE (READY)","title":"Re-review hn6: its tree changed since its NOT READY final review (round 3)"}}
 {"ts":"2026-10-05T23:24:19.218484Z","tick":"pv7","action":"close","actor":"ticfac","epic":"hn6","data":{"title":"Re-review hn6: its tree changed since its NOT READY final review (round 3)"}}
 {"ts":"2026-10-05T23:59:38.088627Z","tick":"3wq","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Run the real-pi metering tests in CI (m4t displacement, 648 stream drain)"}}
+{"ts":"2026-10-06T00:00:02.476094Z","tick":"frr","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"pi's credential grep and credentials.Get read ~/.ticfacrc differently"}}
