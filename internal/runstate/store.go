@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -131,7 +132,27 @@ func Open(o Options) (*Store, error) {
 	if _, err := s.git.run("rev-parse", "--git-dir"); err != nil {
 		return nil, fmt.Errorf("runstate: %s is not a git repository: %w", o.Repo, err)
 	}
+	// The backstop for a store nobody closes: once it is unreachable, its
+	// batch process is stopped and REAPED. Without this, the collector closed
+	// the batch's stdin pipe, git exited on the EOF, and nothing ever waited
+	// for it — one zombie per dropped store, 4641 of them in a `ticfac watch`
+	// left up for an afternoon (2026-10-06), until the host could not fork and
+	// the live run beside it halted. Close is still the contract: this only
+	// bounds the damage of forgetting it to "until the next GC".
+	runtime.AddCleanup(s, func(r *objectReader) { r.close() }, s.git.reader)
 	return s, nil
+}
+
+// Close stops the store's held-open `git cat-file --batch` and reaps it.
+// Every caller that is done with a store calls it; a long-lived process that
+// opens a store per refresh MUST, or it holds one git process per refresh. It
+// is safe to call more than once, and on a nil store. A store read after
+// Close starts a fresh batch.
+func (s *Store) Close() {
+	if s == nil || s.git == nil || s.git.reader == nil {
+		return
+	}
+	s.git.reader.close()
 }
 
 // RunID is the run this store reads and writes.

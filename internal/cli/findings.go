@@ -146,8 +146,10 @@ func openFindingsStore(epicID, repo, remote, branch, runID string) (*runstate.St
 		return nil, "", err
 	}
 	if _, err := store.Fetch(); err != nil {
+		store.Close()
 		return nil, "", fmt.Errorf("read the findings of run %s: %w", runID, err)
 	}
+	// The caller closes it: see runstate.Store.Close.
 	return store, epicID, nil
 }
 
@@ -173,6 +175,7 @@ func findingsCommand(args []string, repo, remote, branch, runID *string, asJSON 
 		fmt.Fprintf(stderr, "ticfac findings %s: %v\n", epicID, err)
 		return 1
 	}
+	defer store.Close()
 	findings, err := store.Findings()
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac findings %s: %v\n", epicID, err)
@@ -379,6 +382,7 @@ func findingCommand(args []string, repo, remote, branch, runID, promoteAs *strin
 		fmt.Fprintf(stderr, "ticfac finding %s %s: %v\n", epicID, key, err)
 		return 1
 	}
+	defer store.Close()
 	finding, ok, err := store.Finding(key)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac finding %s %s: %v\n", epicID, key, err)

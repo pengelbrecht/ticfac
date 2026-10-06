@@ -129,6 +129,11 @@ func statusRecords(repo, runID, epicID string) (statusmodel.Records, []statusmod
 	if epicID != "" {
 		store, err := runstate.Open(runstate.Options{Repo: repo, Branch: "epic/" + epicID, RunID: runID})
 		if err == nil {
+			// A watch reads this on every refresh, for hours: an unclosed
+			// store here was one leaked git process per refresh, and on
+			// 2026-10-06 4641 zombies took the host's process limit and
+			// the live run beside the watch with it.
+			defer store.Close()
 			if _, fetchErr := store.Fetch(); fetchErr == nil {
 				// The run the surface names first — the id every other
 				// surface addresses the run by. A run dir with no checkpoint

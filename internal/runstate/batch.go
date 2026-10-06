@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
 )
@@ -71,8 +72,46 @@ func (r *objectReader) start() error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	liveReaders.Add(1)
 	r.cmd, r.stdin, r.stdout = cmd, stdin, bufio.NewReader(stdout)
 	return nil
+}
+
+// liveReaders counts batch processes started and not yet waited for. A
+// process that has exited and has not been waited for is a zombie: it holds a
+// slot in the process table until its parent reaps it or dies. See
+// LiveObjectReaders.
+var liveReaders atomic.Int64
+
+// LiveObjectReaders is how many `git cat-file --batch` processes this process
+// has started and not yet reaped. A long-lived caller — `ticfac watch`, the
+// run-epic orchestrator — that opens a store per refresh must see this stay
+// flat. On 2026-10-06 it grew without bound in a watch, to 4641 zombies, and
+// the host's per-user process limit took the live run beside it down.
+func LiveObjectReaders() int { return int(liveReaders.Load()) }
+
+// stop ends the batch process and reaps it. kill is for a process that may
+// not exit on EOF: a broken stream can leave git blocked writing an answer
+// nobody will read, and Wait would wait for it forever. The caller holds mu.
+func (r *objectReader) stop(kill bool) {
+	if r.cmd == nil {
+		return
+	}
+	_ = r.stdin.Close()
+	if kill && r.cmd.Process != nil {
+		_ = r.cmd.Process.Kill()
+	}
+	_ = r.cmd.Wait()
+	liveReaders.Add(-1)
+	r.cmd, r.stdin, r.stdout = nil, nil, nil
+}
+
+// fail marks the reader broken and reaps its process on the spot. A broken
+// reader is never used again, so its process has nothing left to do; left
+// unwaited it would become a zombie the moment it exited. The caller holds mu.
+func (r *objectReader) fail() {
+	r.broken = true
+	r.stop(true)
 }
 
 // blob returns one object's bytes.
@@ -89,16 +128,16 @@ func (r *objectReader) blob(sha string) ([]byte, error) {
 		return nil, errReaderBroken
 	}
 	if err := r.start(); err != nil {
-		r.broken = true
+		r.fail()
 		return nil, err
 	}
 	if _, err := io.WriteString(r.stdin, sha+"\n"); err != nil {
-		r.broken = true
+		r.fail()
 		return nil, fmt.Errorf("git cat-file --batch: ask for %s: %w", sha, err)
 	}
 	header, err := r.stdout.ReadString('\n')
 	if err != nil {
-		r.broken = true
+		r.fail()
 		return nil, fmt.Errorf("git cat-file --batch: read the header for %s: %w", sha, err)
 	}
 	fields := strings.Fields(strings.TrimRight(header, "\n"))
@@ -106,40 +145,35 @@ func (r *objectReader) blob(sha string) ([]byte, error) {
 		return nil, fmt.Errorf("git cat-file --batch: %s is missing", sha)
 	}
 	if len(fields) != 3 {
-		r.broken = true
+		r.fail()
 		return nil, fmt.Errorf("git cat-file --batch: unparseable header %q for %s", header, sha)
 	}
 	size, err := strconv.Atoi(fields[2])
 	if err != nil {
-		r.broken = true
+		r.fail()
 		return nil, fmt.Errorf("git cat-file --batch: unparseable size in %q: %w", header, err)
 	}
 	// size bytes, then the newline git writes after them. Both are read, or
 	// the stream is left mid-object for the next caller.
 	content := make([]byte, size)
 	if _, err := io.ReadFull(r.stdout, content); err != nil {
-		r.broken = true
+		r.fail()
 		return nil, fmt.Errorf("git cat-file --batch: read %d bytes of %s: %w", size, sha, err)
 	}
 	if _, err := r.stdout.Discard(1); err != nil {
-		r.broken = true
+		r.fail()
 		return nil, fmt.Errorf("git cat-file --batch: read the separator after %s: %w", sha, err)
 	}
 	return content, nil
 }
 
-// close stops the batch process. A store that is done with it should say so;
-// leaving it running would hold a git process per store for the life of the
-// run.
+// close stops the batch process and reaps it. Store.Close calls it, and so
+// does the cleanup Open registers for a store nobody closed. It is safe to
+// call more than once, and a later read starts a fresh batch.
 func (r *objectReader) close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.cmd == nil {
-		return
-	}
-	_ = r.stdin.Close()
-	_ = r.cmd.Wait()
-	r.cmd, r.stdin, r.stdout = nil, nil, nil
+	r.stop(false)
 }
 
 var errReaderBroken = fmt.Errorf("the cat-file batch is broken and will not be reused")
