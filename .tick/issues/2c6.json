@@ -2,6 +2,7 @@
   "id": "2c6",
   "title": "runningImage()'s doc comment sits above lastStop() and is orphaned",
   "description": "Two consecutive doc comments precede lastStop() in factory-sandbox.ts; the closer one wins, so runningImage() — the method umq [A2] names as the deploy-did-not-move-it proof — carries no doc, and a reader of lastStop() first sees an image doc that does not describe it. Move the five-line comment down to runningImage().\nevidence: cloudflare/src/factory-sandbox.ts:688-704 (the runningImage doc block immediately above lastStop's own)\n\nticfac run run_7445005ff17447c3ae351f5ba99ea01d filed this backlog tick from the finding e83b7ea29dabb3613744768aa9c4c6ae53c15c991a4e52837b8e286cdc365475 (reported by run-run_7445005ff17447c3ae351f5ba99ea01d/tick-a6b/attempt-4) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/e83b7ea29dabb3613744768aa9c4c6ae53c15c991a4e52837b8e286cdc365475.json on the run branch.",
+  "notes": "2026-10-06 17:02 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: created by absorbing finding e83b7ea29dabb3613744768aa9c4c6ae53c15c991a4e52837b8e286cdc365475 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/e83b7ea29dabb3613744768aa9c4c6ae53c15c991a4e52837b8e286cdc365475.json on epic/umq, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_7445005ff17447c3ae351f5ba99ea01d/tick-a6b/attempt-4",
   "created_by": "ticfac run run_7445005ff17447c3ae351f5ba99ea01d",
   "created_at": "2026-10-06T17:02:06Z",
-  "updated_at": "2026-10-06T17:02:06Z"
+  "updated_at": "2026-10-06T17:02:11.370906098Z"
 }
