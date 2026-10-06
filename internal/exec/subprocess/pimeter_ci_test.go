@@ -195,7 +195,7 @@ func TestTheCIPlanPutsPiOnTheJobThatCarriesTheDrainSuite(t *testing.T) {
 				Include []struct {
 					Name string `json:"name"`
 					Pkgs string `json:"pkgs"`
-					Pi   *bool `json:"pi"`
+					Pi   *bool  `json:"pi"`
 				} `json:"include"`
 			}
 			if err := json.Unmarshal([]byte(matrix), &parsed); err != nil {
