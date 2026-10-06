@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 309,
-  "state": "dispatching",
-  "reason": "dispatching frr as attempt 44",
-  "updated_at": "2026-10-05T23:59:53Z",
+  "sequence": 310,
+  "state": "running",
+  "reason": "frr is running as attempt 44",
+  "updated_at": "2026-10-06T00:00:13Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -219,7 +219,8 @@
     },
     {
       "tick_id": "frr",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 44
     },
     {
       "tick_id": "kf4",
