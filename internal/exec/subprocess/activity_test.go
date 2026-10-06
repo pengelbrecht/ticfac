@@ -330,6 +330,39 @@ func TestDecideStuck(t *testing.T) {
 	}
 }
 
+// A durable runner whose tool spins without committing (run_7445005f): the
+// CPU keeps moving, the conversation storage does not — stopped at the
+// silence bound, while a CLI runner (no storage signal) keeps the CPU rule.
+func TestDecideStuckStopsADurableRunnerSilentPastTheBound(t *testing.T) {
+	t0 := time.Date(2026, 10, 6, 4, 39, 0, 0, time.UTC)
+	after := 15 * time.Minute
+	spinning := Activity{
+		FirstSeenAt:      t0,
+		TranscriptSource: sourceStorage,
+		HasTranscript:    true,
+		Transcript:       TranscriptEvent{At: t0.Add(time.Minute)},
+		CPUMeasured:      true,
+	}
+	at := t0.Add(time.Minute + CommitSilenceWindows*after)
+	spinning.CPUAt = at.Add(-time.Second)
+	if step := DecideStuck(&ActivityState{FirstSeenAt: t0}, spinning, at.Add(-time.Second), after); step != StuckNone {
+		t.Fatalf("busy, just under the bound = %v, want none", step)
+	}
+	if step := DecideStuck(&ActivityState{FirstSeenAt: t0}, spinning, at, after); step != StuckStop {
+		t.Fatalf("busy, silent for the bound = %v, want stop", step)
+	}
+	moving := spinning
+	moving.WorktreeAt = at.Add(-time.Minute)
+	if step := DecideStuck(&ActivityState{FirstSeenAt: t0}, moving, at, after); step != StuckNone {
+		t.Fatalf("a worktree that changed a minute ago = %v, want none", step)
+	}
+	cli := spinning
+	cli.TranscriptSource = sourceTranscript
+	if step := DecideStuck(&ActivityState{FirstSeenAt: t0}, cli, at, after); step != StuckNone {
+		t.Fatalf("a CLI runner with busy tools = %v, want none (the CPU rule)", step)
+	}
+}
+
 func TestTheCPUMarkMovesOnlyOnRealUse(t *testing.T) {
 	t0 := time.Date(2026, 9, 28, 8, 0, 0, 0, time.UTC)
 	window := 15 * time.Minute
