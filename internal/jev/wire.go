@@ -33,9 +33,9 @@ import (
 // question is a question over ANY closed enum — the enum is whatever set of
 // labels the question offers criteria for, and the reader validates every
 // answer against THAT question's own labels. The work-type classification
-// (tick 0ju, epic wne) is this core's first user, and the gating prediction
-// (internal/gating, tick bse, epic gvc) — a Choice over a run's acceptance
-// items plus 'none' — is its second. Neither user's vocabulary lives here:
+// (tick 0ju, epic wne) is this core's user; the gating prediction (tick bse),
+// a Choice over a run's acceptance items plus 'none', was its second until the
+// absorption policy of 2026-10-06 removed it. No user's vocabulary lives here:
 // this package knows the WIRE, and each question carries its own enum in.
 
 // Criterion is one choice's entry in a Choice question's criteria: the object

@@ -843,11 +843,10 @@ func startupLine(runID string) string {
 // tum): the run's own gateway route inside a cloud sandbox, the operator's
 // Cloudflare API token and account from ~/.ticfacrc locally, and nil — with
 // the note saying what the run does without one — when neither resolves,
-// which is the documented degradation to [tier_policy.start]. The one client
-// is handed to BOTH exchanges that ask it: the work-type classification
-// (reconcile.Classifier) and the gating prediction the absorption decision
-// drives (gating.Classifier, tick npq) — the same credential, the same client,
-// two different questions. It is a function of its own so the wiring is the
+// which is the documented degradation to [tier_policy.start]. The client is
+// handed to the work-type classification (reconcile.Classifier); the gating
+// prediction that once asked it too is gone with the absorption policy of
+// 2026-10-06, which asks no classifier. It is a function of its own so the wiring is the
 // same under test as in production: what run-epic hands the reconciler is
 // exactly what these tests build.
 func classifierForRun() (classifier *jev.Client, note string) {
