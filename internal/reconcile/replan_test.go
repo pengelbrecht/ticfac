@@ -305,6 +305,12 @@ func TestTheIncidentsOwnShapeACloseoutMadeBlockedByAbsorbedTicksMidRun(t *testin
 		t.Errorf("the second review %s was dispatched at %d (seen %v), not after n9 closed at %d: it must judge a tree "+
 			"carrying n9", extra[0], at, ok, closed["n9"])
 	}
+	// And it is placed the moment n9 closes, so it runs BEFORE the close-out:
+	// the close-out's retro and the epic PR are about the reviewed tree.
+	if at, ok := closed[extra[0]]; !ok || dispatched["co"] < at {
+		t.Errorf("the close-out was dispatched at %d, before the second review %s closed at %d (seen %v): the review "+
+			"of the tree n9 changed comes first", dispatched["co"], extra[0], at, ok)
+	}
 }
 
 // TestABlockerClosingMidRunAdmitsItsDependentWithoutARestart is the acceptance

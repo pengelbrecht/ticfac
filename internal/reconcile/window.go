@@ -534,6 +534,20 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 				// to poll is still the whole finish.
 				r.excuseWindow(window.live, r.now().Sub(polledAt))
 
+				// A WORK tick that closes after a READY final review changed
+				// the tree that review judged: one more review is placed now,
+				// behind any open work and before the close-out, so the
+				// close-out — its retro, the epic PR — is about a reviewed
+				// tree (review_rounds.go). The replan below admits it. Run's
+				// post-plan check stays the backstop for a change nothing
+				// here sees (a commit pushed from outside the run).
+				if role := f.fl.entry.Role; role != "review-epic" && role != "closeout-epic" {
+					if _, err := r.reviewOverChangedTree(ctx); err != nil {
+						return nil, fmt.Errorf("reconcile: review the tree %s changed after the final review: %w",
+							f.fl.entry.TickID, err)
+					}
+				}
+
 				// An attempt has closed, which is the only moment the
 				// readiness of any OTHER tick of this epic can have changed —
 				// so it is the moment the plan is asked whether it still
