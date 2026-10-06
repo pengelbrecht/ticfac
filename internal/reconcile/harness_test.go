@@ -923,6 +923,9 @@ type fixture struct {
 	Tracker   *fakeTracker
 	StateRoot string
 	Runner    []string
+	// mode is the fake runner's mode the fixture was built with: the one a
+	// run may pass unchanged over a custom runner (applyMode).
+	mode string
 
 	// starts counts what the executor was asked to START, per job id. It is
 	// the number "the live attempt was redispatched" is, rather than an
@@ -1071,6 +1074,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		Tracker:   newTracker(t, root),
 		StateRoot: filepath.Join(root, "exec-state"),
 		Runner:    fakeRunnerArgv(t, opts.mode),
+		mode:      opts.mode,
 	}
 	t.Cleanup(f.teardown)
 	return f
@@ -1092,10 +1096,65 @@ func fakeRunnerArgv(t *testing.T, mode string) []string {
 	return []string{"/usr/bin/env", "FAKE_RUNNER_MODE=" + mode, "/bin/sh", script, "{{prompt}}"}
 }
 
+// The fixture's mode trap, closed.
+//
+// The fake runner's mode used to be fixed when newFixture built the runner,
+// so a mode passed to a later f.run was silently ignored: a test that asked
+// for a different behaviour on its second run got the first run's, and read
+// the result as the code's answer (PR #223's re-run tests met exactly that,
+// and only noticed because a verdict came out wrong). Now a mode
+// passed to a run is the runner that run gets:
+//
+//   - the fixture's own fake runner (fakeRunnerArgv, whichever mode) is
+//     rebuilt in the mode asked for, and stays in it for the runs after;
+//   - a CUSTOM runner (askingRunner and its kin, built with more than a mode)
+//     cannot take a mode, so a run asking for one other than the mode the
+//     fixture was built with fails the test, loudly. The fixture's own mode
+//     is let through: it is the same options reused, not a request.
+
+// fakeRunnerModeOf is the mode a plain fake-runner argv runs in, and whether
+// the argv is one fakeRunnerArgv builds.
+func fakeRunnerModeOf(argv []string) (string, bool) {
+	if len(argv) != 5 || argv[0] != "/usr/bin/env" || argv[2] != "/bin/sh" ||
+		!strings.HasSuffix(argv[3], filepath.Join("testdata", "fake-runner.sh")) || argv[4] != "{{prompt}}" {
+		return "", false
+	}
+	mode, ok := strings.CutPrefix(argv[1], "FAKE_RUNNER_MODE=")
+	return mode, ok
+}
+
+// applyMode makes the runner the next run gets the one `mode` asks for, or
+// fails the test when it cannot.
+func (f *fixture) applyMode(mode string) {
+	f.t.Helper()
+	if err := f.modeError(mode); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+// modeError is applyMode's work: the runner rebuilt in `mode` where it can
+// be, and the reason it cannot be where it cannot.
+func (f *fixture) modeError(mode string) error {
+	if mode == "" {
+		return nil
+	}
+	current, plain := fakeRunnerModeOf(f.Runner)
+	switch {
+	case plain && current != mode:
+		f.Runner = fakeRunnerArgv(f.t, mode)
+	case !plain && mode != f.mode:
+		return fmt.Errorf("a run asks for the fake runner's mode %q, but the fixture's runner is a custom one (%v) "+
+			"that no mode applies to: set f.Runner for that run instead of passing a mode it would ignore",
+			mode, f.Runner)
+	}
+	return nil
+}
+
 // options builds a reconciler's options against this fixture. `repo` is the
 // checkout the reconciler works in, which a restart replaces with a fresh
 // clone while everything else stays where it was.
 func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
+	f.applyMode(opts.mode)
 	gateTimeout := 2 * time.Minute
 	if opts.gateTimeout > 0 {
 		gateTimeout = opts.gateTimeout

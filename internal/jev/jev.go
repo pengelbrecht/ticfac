@@ -10,9 +10,9 @@
 // question per thing asked, one call per batch, and every answer validated
 // against its own question's enum. The package was born with one question —
 // which WORK TYPE a tick is (tick 0ju, epic wne), over
-// [runconfig.WorkTypeNames] — and that remains its first user; the second is
-// the gating prediction (internal/gating, tick bse, epic gvc), which asks a
-// Choice over a run's acceptance items plus 'none'. The work-type call is
+// [runconfig.WorkTypeNames] — and that remains its user; the gating
+// prediction that was its second (tick bse) was removed with the absorption
+// policy of 2026-10-06. The work-type call is
 // [Client.Classify]; any other closed enum goes through [Client.Ask]. Neither
 // user's vocabulary lives here: this package knows the WIRE, and each question
 // carries its own enum in.
