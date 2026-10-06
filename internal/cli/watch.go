@@ -540,17 +540,11 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 		// not done — an agent that branched on 0 here read a failed run as a
 		// finished epic. The hold branch above keeps precedence: a run that
 		// failed while holding an attempt is the held class, because a
-		// person can release that before anything else matters.
+		// person can release that before anything else matters. The words
+		// are the one builder both watch paths share (tick ziy): a person
+		// reading the stream and a person reading the block read one answer.
 		if !*asJSON {
-			host := statusmodel.HostLocal
-			if kind == "cloud" {
-				host = statusmodel.HostCloud
-			}
-			fmt.Fprintf(stderr, "\nticfac watch: run %s ended FAILED:\n%s\n"+
-				"Nothing is held for a person: the work has to be fixed and the epic run again — "+
-				"`%s` resumes it under this run id, without redoing what "+
-				"already passed. The evidence is on the integration branch, not in this line.\n\n",
-				runID, terminalDetail, statusmodel.ResumeCommand(host, epicOf()))
+			sayWatchFailedEnd(runID, terminalDetail, model, stderr)
 		}
 		return finish(agentStateFailed, nil)
 	}
@@ -1357,7 +1351,9 @@ func watchHoldAttention(m statusmodel.Model) *statusmodel.Attention {
 // cancelled run is deliberately quiet in the model (its own terminal
 // answer stands), and a run whose records this checkout cannot read is not
 // this checkout's to resume — the same boundary the builder holds for the
-// wait itself (tick 3yx).
+// wait itself (tick 3yx). The FAILED ending reads the same attention
+// (tick ziy): a run whose checkpoint says it failed is the same dead-run
+// wait, so both endings name the one command the frame named.
 func watchDeadRunResume(m statusmodel.Model) string {
 	for _, a := range m.Attention {
 		if a.Kind != statusmodel.WaitDeadRun {
@@ -1385,19 +1381,7 @@ func watchEndHolding(model statusmodel.Model, runID string, stderr io.Writer) in
 			if model.Liveness.LastEvent != nil {
 				detail = model.Liveness.LastEvent.Detail
 			}
-			fmt.Fprintf(stderr, "\nticfac watch: run %s ended FAILED:\n%s\n", runID, detail)
-			// The resume is named only when the model can spell it (tick mwt):
-			// an epic nothing resolved names no command, and a sentence that
-			// points at an empty backticked nothing is worse than the plain
-			// one that says what has to happen.
-			if resume := statusmodel.ResumeCommand(model.Host, model.EpicID); resume != "" {
-				fmt.Fprintf(stderr, "Nothing is held for a person: the work has to be fixed and the epic run again — "+
-					"`%s` resumes it under this run id, without redoing what "+
-					"already passed. The evidence is on the integration branch, not in this line.\n\n", resume)
-			} else {
-				fmt.Fprintf(stderr, "Nothing is held for a person: the work has to be fixed and the epic run again. "+
-					"The evidence is on the integration branch, not in this line.\n\n")
-			}
+			sayWatchFailedEnd(runID, detail, model, stderr)
 			return exitGeneric
 		}
 		if watchModelEndedCancelled(model) {
@@ -1438,6 +1422,43 @@ func sayWatchHold(runID string, attention *statusmodel.Attention, stderr io.Writ
 		fmt.Fprintf(stderr, "move it on: %s\n", *attention.UnblockCommand)
 	}
 	fmt.Fprintf(stderr, "The evidence is on the integration branch, not in this line.\n\n")
+}
+
+// sayWatchFailedEnd is the one wording both watch paths end a FAILED run by
+// — the live view's last word and the stream's, the same sentences, so a
+// person reading a log and a person reading the block read one answer (the
+// rule sayWatchHold holds for a hold, tick 4mv; the failed ending had
+// already drifted between the paths once, and tick ziy — the failed sibling
+// of 3yx's cancelled fix — folded it back into one builder).
+//
+// The resume is named from the model, never re-spelled. The dead-run wait's
+// unblock command comes FIRST — the same command the frame's needs-you line
+// and the alert above the block print "move it on: …" — so an ending cannot
+// answer "nothing is held for a person" beside a frame that says otherwise.
+// A model with no dead-run wait is the frame that says "needs you: nothing":
+// nothing is held for a person, and the fix-forward is named from the
+// model's OWN host and epic — the same derivation the live view's ending
+// always used, and "" when nothing resolved. Never from the stream's old
+// epicOf(), whose run-id fallback spelled `ticfac run-epic run_…` for a
+// cloud-shaped id nothing resolved: a command naming a run id where an
+// epic belongs is worse than the plain sentence that says what has to
+// happen (tick mwt's rule, applied to the stream path).
+func sayWatchFailedEnd(runID, detail string, model statusmodel.Model, stderr io.Writer) {
+	fmt.Fprintf(stderr, "\nticfac watch: run %s ended FAILED:\n%s\n", runID, detail)
+	if resume := watchDeadRunResume(model); resume != "" {
+		fmt.Fprintf(stderr, "The work has to be fixed and the epic run again — "+
+			"`%s` resumes it under this run id, without redoing what already passed. "+
+			"The evidence is on the integration branch, not in this line.\n\n", resume)
+		return
+	}
+	if resume := statusmodel.ResumeCommand(model.Host, model.EpicID); resume != "" {
+		fmt.Fprintf(stderr, "Nothing is held for a person: the work has to be fixed and the epic run again — "+
+			"`%s` resumes it under this run id, without redoing what already passed. "+
+			"The evidence is on the integration branch, not in this line.\n\n", resume)
+		return
+	}
+	fmt.Fprintf(stderr, "Nothing is held for a person: the work has to be fixed and the epic run again. "+
+		"The evidence is on the integration branch, not in this line.\n\n")
 }
 
 // watchGraphCache serves the tracker's graph at most once per TTL: a frame
