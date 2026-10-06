@@ -713,6 +713,11 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
         .map((name) => [name, vars[name]]),
     );
     expect(declared).toEqual({
+      // The claude-sub rung's per-subscription cap (tick 6fv): 2 concurrent
+      // jobs per subscription — a quota budget, not a platform limit (4
+      // parallel ran clean on staging), so 2 at a time cannot drain the
+      // 5-hour window before the operator notices.
+      CLAUDE_SUB_MAX_CONCURRENT: "2",
       FACTORY_MAX_INSTANCES: "12",
       GITHUB_CONSENT_LABEL: "tk",
       RUN_HARNESS: "omp",
@@ -741,12 +746,16 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
   });
 
   it("pins the model-and-route vars to the operator's rule, so a default change can never decide them", () => {
-    // OPERATOR, 2026-09-23 (updated epic 43y, tick jhp): the cloud runs GLM
-    // 5.3 or GLM 5.3 Flash, through the factory's gateway — nothing in the
-    // cloud runs claude. Workers are hosted on pi-durable; the review, the
-    // one cloud boot that still runs a CLI harness in a container, runs omp. The pin is explicit in the
-    // deployable config (tick uqi) rather than left to the built-in default,
-    // so the config itself says the rule. Still deliberately unset:
+    // OPERATOR, 2026-09-23 (updated epic 43y, tick jhp; re-flowed by 6fv):
+    // the DEFAULT cloud routing runs GLM 5.3 or GLM 5.3 Flash, through the
+    // factory's gateway. Nothing runs claude per token — the claude-sub rung
+    // (claude on a versionless alias, against the operator's subscription)
+    // is OFF until a config selects it: these pins name Workers AI pairings
+    // and the ladder keeps them. Workers are hosted on pi-durable; the
+    // review, the one cloud boot that still runs a CLI harness in a
+    // container, runs omp. The pin is explicit in the deployable config
+    // (tick uqi) rather than left to the built-in default, so the config
+    // itself says the rule. Still deliberately unset:
     // GATEWAY_ALLOWED_PROVIDERS (workers-ai alone — the rung billed to the
     // operator's own Cloudflare account rather than to a card), SANDBOX_IMAGE
     // and BOARD_BASE_URL.

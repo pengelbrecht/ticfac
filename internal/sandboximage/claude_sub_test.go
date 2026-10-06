@@ -33,7 +33,6 @@ const claudeSubPlaceholder = "ticfac-claude-sub-placeholder-not-a-token"
 // factory's routing selected.
 func claudeSubFixture(t *testing.T) *workerFixture {
 	t.Helper()
-	shorttest.EndToEnd(t)
 	f := newWorkerFixture(t)
 	f.env[EnvHarness] = "claude"
 	f.env[EnvModel] = "opus"
@@ -61,6 +60,7 @@ func (f *workerFixture) harnessEnv(t *testing.T) string {
 // (the gateway serves no subscription alias), no auth token (the gateway token
 // is not a subscription credential). The job then completes like any other.
 func TestAClaudeSubBootHandsTheHarnessOnlyThePlaceholder(t *testing.T) {
+	shorttest.EndToEnd(t)
 	f := claudeSubFixture(t)
 
 	out, code := f.run()
@@ -102,6 +102,7 @@ func TestAClaudeSubBootHandsTheHarnessOnlyThePlaceholder(t *testing.T) {
 // pointed at the vendor would spend a request of the operator's quota for
 // nothing. The harness probe is the proof, through the real intercepted path.
 func TestAClaudeSubBootProbesNoGatewayRoute(t *testing.T) {
+	shorttest.EndToEnd(t)
 	f := claudeSubFixture(t)
 
 	out, code := f.run()
@@ -122,6 +123,7 @@ func TestAClaudeSubBootProbesNoGatewayRoute(t *testing.T) {
 // model id is a configuration nobody should be able to produce, and the
 // boot refuses it rather than spending per token on the vendor.
 func TestAClaudeSubBootRefusesAPinnedClaudeModel(t *testing.T) {
+	shorttest.EndToEnd(t)
 	f := claudeSubFixture(t)
 	f.env[EnvModel] = "claude-opus-5-5"
 
@@ -138,6 +140,7 @@ func TestAClaudeSubBootRefusesAPinnedClaudeModel(t *testing.T) {
 // other kind is a boot the factory miswired, and the container refuses it
 // before a single model call.
 func TestAClaudeSubMarkerOnAnotherHarnessIsRefused(t *testing.T) {
+	shorttest.EndToEnd(t)
 	f := claudeSubFixture(t)
 	f.env[EnvHarness] = "omp"
 
@@ -153,6 +156,7 @@ func TestAClaudeSubMarkerOnAnotherHarnessIsRefused(t *testing.T) {
 // A marked boot with no placeholder is the factory's own defect: claude would
 // fall back to per-token spend, so the container refuses before it starts.
 func TestAClaudeSubMarkerWithoutThePlaceholderIsRefused(t *testing.T) {
+	shorttest.EndToEnd(t)
 	f := claudeSubFixture(t)
 	delete(f.env, "CLAUDE_CODE_OAUTH_TOKEN")
 
