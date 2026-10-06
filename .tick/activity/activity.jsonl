@@ -2932,3 +2932,4 @@
 {"ts":"2026-10-06T01:20:59.982413Z","tick":"dfb","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"watch's hold alert dereferences a nil clearing command","type":"task"}}
 {"ts":"2026-10-06T01:21:00.005441Z","tick":"3d9","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"Runs fold main as main moves, not only at start and land","type":"task"}}
 {"ts":"2026-10-06T01:21:00.034189Z","tick":"9cp","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"The contracts bundle merges mechanically: versions and digests are derived, not cut by hand","type":"task"}}
+{"ts":"2026-10-06T04:35:55.112072Z","tick":"t0y","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"watch on an ended, merged run: tick count, CI and ci-phase disagree with the facts","type":"task"}}
