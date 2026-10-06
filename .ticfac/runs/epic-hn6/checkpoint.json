@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 345,
-  "state": "publishing",
-  "reason": "closing t6q behind its validated review-epic answer",
-  "updated_at": "2026-10-06T00:58:06Z",
+  "sequence": 346,
+  "state": "running",
+  "reason": "t6q is closed",
+  "updated_at": "2026-10-06T00:58:07Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -239,7 +239,7 @@
     },
     {
       "tick_id": "t6q",
-      "state": "reported",
+      "state": "closed",
       "attempt": 48
     }
   ],
