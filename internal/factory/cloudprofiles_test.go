@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -188,9 +189,14 @@ func TestNoRoleOfACloudRunResolvesToTheLocalSubprocessExecutor(t *testing.T) {
 	}
 	gate := filepath.Join(root, ".tick", "runners.toml")
 
-	// Every role, and every tier the roles table can route a role to — the
-	// balanced tier among them, whose common-file cell routes codex and whose
-	// cloud overlay is what must win.
+	// Every role, and every tier the roles table can route a role to. The
+	// balanced tier's common-file cell used to name codex, and this case
+	// proved the cloud overlay won over it (tick gbs); since tick 7ml
+	// deleted the cell, a pin of balanced REFUSES naming the tier under the
+	// cloud substrate too — fail-closed, never a fall back to another
+	// routing — and that refusal is the outcome this test accepts for it.
+	// What it must never see is a resolution onto the local executor or any
+	// runner but pi.
 	cases := []struct{ role, tier string }{
 		{"implement-tick", ""},
 		{"implement-tick", "economy"},
@@ -204,6 +210,12 @@ func TestNoRoleOfACloudRunResolvesToTheLocalSubprocessExecutor(t *testing.T) {
 			Dir: staged, RunnersConfig: gate, Tier: c.tier, Substrate: string(runconfig.SubstrateCloud),
 		})
 		if err != nil {
+			if c.tier == "balanced" && strings.Contains(err.Error(), fmt.Sprintf("declares no tier %q", c.tier)) {
+				// 7ml: no file declares the tier any more, so the profile layer
+				// refuses it naming the cell — the cloud never ran it and now
+				// cannot even resolve it.
+				continue
+			}
 			t.Fatalf("%s (tier %q) did not resolve from the staged cloud set under the cloud substrate: %v", c.role, c.tier, err)
 		}
 		if p.Executor == subprocess.ExecutorName {
@@ -215,9 +227,9 @@ func TestNoRoleOfACloudRunResolvesToTheLocalSubprocessExecutor(t *testing.T) {
 			t.Errorf("%s (tier %q) resolved to executor %q, want %s: the cloud set pairs every role with the executor that boots one worker container per attempt through the factory's door",
 				c.role, c.tier, p.Executor, cloudflaresandbox.ExecutorName)
 		}
-		if p.Runner != "pi" {
-			t.Errorf("%s (tier %q) resolved to runner %q, want pi: the cloud's workers run GLM through pi, and a role that resolved another harness after every overlay would be one the overlays moved",
-				c.role, c.tier, p.Runner)
+		if p.Runner != profile.HostedDurableHarness {
+			t.Errorf("%s (tier %q) resolved to runner %q, want %s: the cloud's workers run GLM on the durable harness under the name the sandbox image boots it by (tick twa), and a role that resolved another harness after every overlay would be one the overlays moved",
+				c.role, c.tier, p.Runner, profile.HostedDurableHarness)
 		}
 	}
 

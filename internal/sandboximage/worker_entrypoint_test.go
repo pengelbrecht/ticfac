@@ -91,6 +91,7 @@ type workerFixture struct {
 	env          map[string]string
 	ticfacRecord string
 	record       string
+	miseRecord   string
 	epic         string
 	tick         string
 }
@@ -133,6 +134,7 @@ func newWorkerFixture(t *testing.T) *workerFixture {
 		baseSHA:      base,
 		ticfacRecord: filepath.Join(root, "ticfac-record"),
 		record:       filepath.Join(root, "harness-record"),
+		miseRecord:   filepath.Join(root, "mise-record"),
 		epic:         workerTestEpic,
 		tick:         workerTestTick,
 	}
@@ -194,11 +196,12 @@ if [ -n "${TICKS_TEST_WORKER_RESULT:-}" ]; then
 fi
 exit "${TICKS_TEST_WORKER_EXIT:-0}"
 `
-	// omp and pi are both cross-provider agents a worker can run; the same
-	// stand-in serves both, so a pi worker is held to exactly omp's contract.
+	// omp is the image's default CLI harness and the stand-in agent for the
+	// all-in-one path; the pi CLI is deleted (epic 43y, tick jhp), so there is
+	// no pi stub and no case that could launch one — a pi-durable worker's
+	// container runs only the --boot/--finish halves.
 	writeStub(t, filepath.Join(f.binDir, "omp"), agent)
-	writeStub(t, filepath.Join(f.binDir, "pi"), agent)
-	// claude answers the same stand-in contract omp and pi are held to, plus
+	// claude answers the same stand-in contract omp is held to, plus
 	// the one fact only a claude run can record: the background-tasks switch
 	// the entrypoint exports for it (tick 060), read back by its test.
 	writeStub(t, filepath.Join(f.binDir, "claude"), harnessStubPreamble+`{
@@ -222,7 +225,12 @@ if [ -n "${TICKS_TEST_WORKER_RESULT:-}" ]; then
 fi
 exit "${TICKS_TEST_WORKER_EXIT:-0}"
 `)
-	writeStub(t, filepath.Join(f.binDir, "mise"), "exit 0\n")
+	// The version-manager stand-in records what it was asked to do — the
+	// entrypoint fixture's mise stub does the same — so a test can assert a
+	// door provisioned (or, for a review, did not provision) a toolchain.
+	writeStub(t, filepath.Join(f.binDir, "mise"), `[ -z "${TICKS_TEST_MISE_RECORD:-}" ] || printf '%s\n' "$*" >> "$TICKS_TEST_MISE_RECORD"
+exit 0
+`)
 	// The report checker the image ships beside ticfac (hn6 run_d51a, u5n).
 	// A stand-in, like every other binary here, so no test picks up a real
 	// one from the developer's PATH: it records how it was asked, refuses a
@@ -369,6 +377,16 @@ func (f *workerFixture) ticfacCalls() string {
 	return string(b)
 }
 
+// miseCalls returns everything the version-manager stub was asked to do.
+func (f *workerFixture) miseCalls() string {
+	f.t.Helper()
+	b, err := os.ReadFile(f.miseRecord)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
 func (f *workerFixture) harnessRecord() string {
 	f.t.Helper()
 	b, err := os.ReadFile(f.record)
@@ -405,7 +423,7 @@ func TestWorkerProbeWithholdsTheMarkerWhenTheContainerIsBroken(t *testing.T) {
 	shorttest.EndToEnd(t) // its fixtures are built inside subtests
 	for name, broken := range map[string]string{
 		"no tk":      "tk",
-		"no harness": "pi", // the default harness
+		"no harness": "omp", // the default harness
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newWorkerFixture(t)
@@ -493,25 +511,42 @@ func TestWorkerRunsTheHarnessOnTheTicksOwnPrompt(t *testing.T) {
 	mustContain(t, f.harnessRecord(), "IMPLEMENT-TICK-TAP-PLEASE", "the prompt the harness was given")
 }
 
-// A per-tick worker on pi (ticfac tick ha9): the tick's own prompt, headless,
-// trusting the checkout, on pi's provider for the Workers AI route — and the
-// worker's contract (commit, report, push) holds exactly as it does for omp.
-func TestWorkerRunsPiOnTheTicksOwnPrompt(t *testing.T) {
+// A worker dispatched on the HOSTED harness (epic 43y, tick jhp): its
+// conversation runs in the factory's WorkerAgent and this container runs only
+// the --boot/--finish halves, so the boot needs no CLI harness at all — the
+// three harness steps are skipped for the hosted kind and the image carries
+// no pi binary. Proven here with every harness binary absent from the PATH
+// the boot can see, so a boot that still routed or probed a CLI would fail.
+func TestWorkerBootsTheHostedHarnessWithoutACLI(t *testing.T) {
+	shorttest.EndToEnd(t)
 	f := newWorkerFixture(t)
-	f.env[EnvHarness] = "pi"
-	f.env[EnvModel] = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
-	f.env["TICKS_TEST_PROMPT"] = "IMPLEMENT-TICK-ON-PI"
-	out, code := f.run()
-	if code != 0 {
-		t.Fatalf("exit %d:\n%s", code, out)
+	f.phasesState(t)
+	f.env[EnvHarness] = "pi-durable"
+	f.env[EnvModel] = "workers-ai/@cf/zai-org/glm-5.3"
+	// No CLI harness anywhere the container can reach it: a hosted boot that
+	// still tried to route or probe one dies here.
+	for _, bin := range []string{"omp", "claude", "pi"} {
+		if err := os.Remove(filepath.Join(f.binDir, bin)); err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
 	}
-	rec := f.harnessRecord()
-	mustContain(t, rec, "IMPLEMENT-TICK-ON-PI", "the prompt pi was given")
-	mustContain(t, rec, "ARG=--approve", "pi trusts a checkout it has never seen")
-	mustContain(t, rec, "ARG=cloudflare-workers-ai/@cf/zai-org/glm-5.3", "pi's provider for the route")
-	branch := WorkerBranch(f.epic, f.tick)
-	if _, ok := f.remoteFile(branch, WorkerResultFile(f.tick)); !ok {
-		t.Error("a pi worker's report did not reach origin")
+	f.env["PATH"] = f.binDir + string(os.PathListSeparator) + "/usr/bin:/bin:/usr/sbin:/sbin"
+
+	out, code := f.run(WorkerBootArg)
+	if code != 0 {
+		t.Fatalf("a hosted boot without a single CLI harness exited %d:\n%s", code, out)
+	}
+	mustContain(t, out, "harness pi-durable is hosted", "the boot says what it skipped and why")
+	mustContain(t, out, WorkerBootMarker+" branch="+WorkerBranch(f.epic, f.tick),
+		"the hosted boot still hands the WorkerAgent its branch and prompt")
+	if rec := f.harnessRecord(); rec != "" {
+		t.Errorf("a hosted boot ran a CLI harness:\n%s", rec)
+	}
+	// The hosted kind's probe answers too — the container essentials, no CLI
+	// lookup for a kind that has no binary.
+	probeOut, probeCode := f.run(WorkerProbeArg)
+	if probeCode != 0 || !strings.Contains(probeOut, WorkerProbeMarker) {
+		t.Errorf("the hosted kind's probe (exit %d) withheld its marker:\n%s", probeCode, probeOut)
 	}
 }
 
@@ -522,7 +557,7 @@ func TestWorkerRunsPiOnTheTicksOwnPrompt(t *testing.T) {
 // rendered prompt is markdown and the whole of it must reach the harness.
 func TestWorkerRunsTheHarnessOnTheDispatchedRolePrompt(t *testing.T) {
 	shorttest.EndToEnd(t) // its fixtures are built inside subtests
-	for _, harness := range []string{"omp", "pi"} {
+	for _, harness := range []string{"omp", "claude"} {
 		t.Run(harness, func(t *testing.T) {
 			f := newWorkerFixture(t)
 			f.env[EnvHarness] = harness
@@ -801,7 +836,7 @@ func runBlocks(t *testing.T, path string) []string {
 // worker that finishes when asked again is a worker that finished.
 func TestWorkerRepromptsAHarnessThatEndsItsTurnWithNoReport(t *testing.T) {
 	shorttest.EndToEnd(t) // its fixtures are built inside subtests
-	for _, harness := range []string{"pi", "claude", "omp"} {
+	for _, harness := range []string{"claude", "omp"} {
 		t.Run(harness, func(t *testing.T) {
 			f := newWorkerFixture(t)
 			f.env[EnvHarness] = harness
@@ -894,7 +929,12 @@ func TestWorkerSpendsItsNudgesBeforeReportingMissingResult(t *testing.T) {
 	delete(f.env, "TICKS_TEST_WORKER_COMMIT")
 	runsPath := filepath.Join(f.root, "nudge-runs")
 	f.env["TICKS_TEST_NUDGE_RUNS"] = runsPath
-	writeStub(t, filepath.Join(f.binDir, "pi"), harnessStubPreamble+`{
+	// claude, the sessioned harness: this test's assertions are the session
+	// ones — every nudge re-prompts the SAME session and says what is missing
+	// in the nudge's own words (the pi CLI was the other sessioned kind; it is
+	// deleted, epic 43y tick jhp).
+	f.env[EnvHarness] = "claude"
+	writeStub(t, filepath.Join(f.binDir, "claude"), harnessStubPreamble+`{
   printf 'RUN\n'
   printf '%s\n' "$*"
 } >> "$TICKS_TEST_NUDGE_RUNS"
@@ -942,7 +982,7 @@ func TestAFailedHarnessIsNotNudged(t *testing.T) {
 	f.env["TICKS_TEST_WORKER_EXIT"] = "3"
 	runsPath := filepath.Join(f.root, "nudge-runs")
 	f.env["TICKS_TEST_NUDGE_RUNS"] = runsPath
-	writeStub(t, filepath.Join(f.binDir, "pi"), harnessStubPreamble+`{
+	writeStub(t, filepath.Join(f.binDir, "omp"), harnessStubPreamble+`{
   printf 'RUN\n'
   printf '%s\n' "$*"
 } >> "$TICKS_TEST_NUDGE_RUNS"
@@ -967,7 +1007,7 @@ func TestAHarnessThatWroteItsReportIsNotNudged(t *testing.T) {
 	f := newWorkerFixture(t)
 	runsPath := filepath.Join(f.root, "nudge-runs")
 	f.env["TICKS_TEST_NUDGE_RUNS"] = runsPath
-	writeStub(t, filepath.Join(f.binDir, "pi"), harnessStubPreamble+`{
+	writeStub(t, filepath.Join(f.binDir, "omp"), harnessStubPreamble+`{
   printf 'RUN\n'
   printf '%s\n' "$*"
 } >> "$TICKS_TEST_NUDGE_RUNS"

@@ -3,6 +3,7 @@ package subprocess
 import (
 	"os/exec"
 	"sync/atomic"
+	"syscall"
 )
 
 // A RUNNER'S LIFE, AS A STOP SEES IT.
@@ -37,6 +38,11 @@ type runnerLife struct {
 
 	exited atomic.Bool
 	reaped atomic.Bool
+	// deathSig is the signal that killed the runner, when it died by one:
+	// the name a relaunch cites as the death it recovered (relaunch.go), which
+	// the exit code cannot carry — Go reports a signalled process as -1, the
+	// same number a wall-clock stop and an OOM kill would otherwise share.
+	deathSig atomic.Int32
 	// exitedCh is closed once the runner has exited.
 	exitedCh chan struct{}
 	// early carries the exit code when the runner had to be reaped as soon
@@ -71,6 +77,16 @@ func (l *runnerLife) alive() bool {
 	return err == nil && held
 }
 
+// waitStatus is the kernel's wait status as this package reads it, asserted
+// as an interface so no per-platform file is needed for a read every Unix
+// kernel answers and the others simply do not: the supervisor runs on this
+// host's platforms, and where the assertion fails the death is still a
+// signal death by its -1 exit — only its NAME is missing.
+type waitStatus interface {
+	Signaled() bool
+	Signal() syscall.Signal
+}
+
 // code reaps the runner — once its exit has been observed — and returns its
 // exit code.
 func (l *runnerLife) code() int {
@@ -90,7 +106,21 @@ func (l *runnerLife) reap() int {
 	}
 	var exitErr *exec.ExitError
 	if asExitError(err, &exitErr) {
+		if ws, ok := exitErr.Sys().(waitStatus); ok && ws.Signaled() {
+			l.deathSig.Store(int32(ws.Signal()))
+		}
 		return exitErr.ExitCode()
 	}
 	return 1
+}
+
+// deathSignal names the signal that killed the runner, when it died by one.
+// It is asked only after the exit was observed and the code collected, so the
+// store it reads has already happened before any reader asks — the channel
+// that carried the code, or the reap itself, is the ordering.
+func (l *runnerLife) deathSignal() (syscall.Signal, bool) {
+	if sig := l.deathSig.Load(); sig != 0 {
+		return syscall.Signal(sig), true
+	}
+	return 0, false
 }

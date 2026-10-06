@@ -46,15 +46,16 @@ type Options struct {
 	// are closed and a field invented here would be one the reconciler ignores.
 	Model string
 
-	// Metering is the local gateway metering join (tick dm2, wired into this
-	// executor by tick gzv): a pi launch on a Workers AI model loads a
-	// generated provider override — written into THIS attempt's state
-	// directory at dispatch — that routes the provider's calls through the
-	// operator's AI Gateway and tags them with the run id, so the status
-	// model can meter the local spend from the gateway's own logs exactly as
-	// it meters a herdr dispatch's. Nil means the host states no join, and a
-	// worker launched with nil Metering runs exactly as it did before this
-	// tick — its calls unattributed, the cost line honestly unmetered.
+	// Metering is the local gateway metering join the dispatch resolved
+	// (tick dm2, carried here by tick gzv). Tick gzv loaded it into the pi
+	// CLI's launch as a generated `--extension` provider override; since
+	// epic 43y (tick hpk) the `pi` runner is the pi-durable Node harness,
+	// which has no extension surface and refuses unknown arguments, so this
+	// executor loads NOTHING from it: its workers' calls go unattributed and
+	// the cost line stays honestly unmetered until the join reaches the
+	// harness through worker.json. It is kept so the dispatch's resolution
+	// stays one value for both local substrates (the herdr executor's pi
+	// CLI panes still load it).
 	Metering *GatewayMetering
 
 	// RolePrompt is the profile's prompt for this job's role: the instruction
@@ -114,6 +115,13 @@ type Options struct {
 	// into the supervisor through the attempt record. Zero is
 	// DefaultStuckAfter; negative turns the watch off.
 	StuckAfter time.Duration
+
+	// HarnessFauxTranscript is a TEST-ONLY seam for the pi-durable runner
+	// (tick hpk): a scripted faux-model transcript file, handed to the
+	// harness through worker.json so this package's end-to-end tests can
+	// run a real worker with no model credential. Empty on every production
+	// attempt; no other Options field reaches the harness.
+	HarnessFauxTranscript string
 
 	Now func() time.Time
 
@@ -438,21 +446,24 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 	if err != nil {
 		return nil, fmt.Errorf("name the runner's session: %w", err)
 	}
-	// The gateway metering join (tick gzv, the same per-attempt extension the
-	// herdr executor loads — tick dm2): written into THIS attempt's state
-	// directory, and carried by every argv that launches pi for the attempt —
-	// the launch, the nudge, the report pushback and the stuck re-prompt —
-	// because a re-prompted session spends through the same provider too.
-	extension, err := e.meteringExtension(st)
-	if err != nil {
-		return nil, err
+	at := launch{
+		Prompt:       prompt,
+		GitCommonDir: common,
+		Model:        e.opts.Model,
+		HarnessDir:   e.harnessDir(),
+		StateDir:     dir,
+		Session:      session,
 	}
-	at := launch{Prompt: prompt, GitCommonDir: common, Model: e.opts.Model, Session: session, Extension: extension}
 	argv, err := resolveRunner(e.opts.Runner, e.opts.RunnerArgv, at)
 	if err != nil {
 		return nil, err
 	}
 	record.RunnerArgv = argv
+	// The override flag, not the argv, is what the record says about its own
+	// launch (tick rpw): RunnerArgv above is the RESOLVED argv the supervisor
+	// runs and is never empty, so it cannot tell a table launch from an
+	// override — and the supervisor's durable decisions read the flag.
+	record.RunnerArgvOverride = len(e.opts.RunnerArgv) > 0
 	record.Session = session
 	// What a runner that exits 0 without its report is prompted again with
 	// (nudge.go), rendered now for the same reason the argv is: it is this
@@ -482,6 +493,17 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 			return nil, err
 		}
 		record.StuckArgv = stuck
+	}
+	// The pi-durable runner's own halves (tick hpk): the worker.json its argv
+	// points at — storage, worktree, branch, report, steer socket, wall —
+	// and the socket the supervisor's stuck watch steers a live runner
+	// through. Written before any runner process exists, beside the record,
+	// so every process this attempt runs reads the same one.
+	if durableResume(e.opts.Runner, e.opts.RunnerArgv) {
+		record.SteerSock = steerSockPath(dir)
+		if err := writeWorkerConfig(e.opts.writeFile, dir, record, &e.opts); err != nil {
+			return nil, fmt.Errorf("write the pi-durable runner's worker.json: %w", err)
+		}
 	}
 
 	if err := e.makeWorktree(record, start); err != nil {
@@ -620,27 +642,6 @@ func (e *Executor) makeWorktree(record *attemptRecord, start string) error {
 	return nil
 }
 
-// meteringExtension writes this attempt's gateway metering override, when
-// this launch is one the join covers, and returns its path — or "" when it
-// is not. The gate mirrors the herdr executor's (tick dm2): only a PI
-// launch — the flag is the pi CLI's own — on a WORKERS AI model — the
-// override re-points the cloudflare-workers-ai provider, and tagging another
-// provider's calls would route a provider that is not its own — with
-// metering configured. An argv override joins nothing for the same reason
-// the model does not reach one: the override is the whole invocation, and
-// the caller who set it owns its own flags. Nothing is written when the
-// join does not apply: per-attempt state is written only when it is real.
-func (e *Executor) meteringExtension(st *store) (string, error) {
-	if len(e.opts.RunnerArgv) > 0 || e.opts.Runner != "pi" || !e.opts.Metering.Applies(e.opts.Model) {
-		return "", nil
-	}
-	path, err := e.opts.Metering.WriteExtension(st.dir)
-	if err != nil {
-		return "", fmt.Errorf("write the gateway metering extension for attempt %d: %w", e.opts.Attempt, err)
-	}
-	return path, nil
-}
-
 func (e *Executor) spawnSupervisor(st *store, record *attemptRecord) (int, error) {
 	argv := append([]string{}, e.opts.SupervisorArgv...)
 	argv = append(argv, "--state", record.State)
@@ -690,6 +691,18 @@ func (e *Executor) spawnSupervisor(st *store, record *attemptRecord) (int, error
 	go func() { _ = cmd.Wait() }()
 
 	return pid, nil
+}
+
+// harnessDir is where the pi-durable harness package lives for THIS run: the
+// repository's own harness/ — the harness is package source in the repository
+// this executor works against — or $TICFAC_HARNESS_DIR where an operator
+// points it elsewhere (the operator-preference surface the environment is,
+// the same layer as TICFAC_RUNNER).
+func (e *Executor) harnessDir() string {
+	if dir := os.Getenv("TICFAC_HARNESS_DIR"); dir != "" {
+		return dir
+	}
+	return filepath.Join(e.repo, "harness")
 }
 
 func (e *Executor) handleFor(record *attemptRecord) *JobHandle {

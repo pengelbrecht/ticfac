@@ -246,10 +246,33 @@ func TestTheIncidentsOwnShapeACloseoutMadeBlockedByAbsorbedTicksMidRun(t *testin
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if len(result.Closed) != 6 {
+	// Every tick of the epic, plus ONE review the run added: rv answered
+	// READY over a tree without n9, and n9 landed after it, so the run
+	// reviews the changed tree once more before it lands (#225,
+	// review_rounds.go). Asserted by name, not by count: the extra tick is
+	// the second review, and nothing else.
+	named := map[string]bool{"a1": true, "a2": true, "b1": true, "rv": true, "co": true, "n9": true}
+	var extra []string
+	for _, id := range result.Closed {
+		if !named[id] {
+			extra = append(extra, id)
+		}
+		delete(named, id)
+	}
+	if len(named) != 0 || len(extra) != 1 {
 		t.Fatalf("closed %v, want every tick of the epic — n9 was absorbed while the review ran and the close-out was made "+
-			"blocked-by it, so the run must work n9 and only then close the epic; the run ended %s: %+v",
-			result.Closed, result.State, result.Failure)
+			"blocked-by it, so the run must work n9 and only then close the epic — plus exactly one review of the tree "+
+			"n9 changed after rv's READY; the run ended %s: %+v", result.Closed, result.State, result.Failure)
+	}
+	reviews := reviewDecisions(t, draftsStore(t, f.Repo))
+	if len(reviews) != 2 {
+		t.Fatalf("%d review decisions, want 2: rv's READY, and one over the tree n9 changed after it", len(reviews))
+	}
+	if first, _ := reviews[0].Request["tick_id"].(string); first != "rv" {
+		t.Errorf("the first review decision is %q's, want rv's", first)
+	}
+	if again, _ := reviews[1].Request["tick_id"].(string); again != extra[0] {
+		t.Errorf("the second review decision is %q's, want the extra closed tick %s's", again, extra[0])
 	}
 	if result.State != runstate.StateCompleted {
 		t.Fatalf("the run ended %s, want completed: absorbing a gating finding into a running epic must not need a person "+
@@ -277,6 +300,16 @@ func TestTheIncidentsOwnShapeACloseoutMadeBlockedByAbsorbedTicksMidRun(t *testin
 	}
 	if dispatched["co"] < dispatched["n9"] {
 		t.Errorf("the close-out was dispatched at %d, before n9 was even dispatched at %d", dispatched["co"], dispatched["n9"])
+	}
+	if at, ok := dispatched[extra[0]]; !ok || at < closed["n9"] {
+		t.Errorf("the second review %s was dispatched at %d (seen %v), not after n9 closed at %d: it must judge a tree "+
+			"carrying n9", extra[0], at, ok, closed["n9"])
+	}
+	// And it is placed the moment n9 closes, so it runs BEFORE the close-out:
+	// the close-out's retro and the epic PR are about the reviewed tree.
+	if at, ok := closed[extra[0]]; !ok || dispatched["co"] < at {
+		t.Errorf("the close-out was dispatched at %d, before the second review %s closed at %d (seen %v): the review "+
+			"of the tree n9 changed comes first", dispatched["co"], extra[0], at, ok)
 	}
 }
 

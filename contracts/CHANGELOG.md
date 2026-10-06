@@ -53,6 +53,71 @@ loud.
 
 ---
 
+## 2.1.0
+
+MINOR: the second fold of main into epic/hn6 — two parallel cuts become one
+again, for the reason 1.7.0 and 1.2.0 state. Main cut its own 1.3.0 and 1.4.0
+(epic 43y, ticks pom and i3h — full text below): `worker-boot-contract.json`
+gains the pi-durable worker host's boot/finish and restore args. The epic had
+already cut 1.3.0 through 2.0.0 with different bytes, so main's two cuts
+cannot keep their numbers — a version string must never mean two different
+sets of bytes — and the union re-cuts here, at the next MINOR over the epic's
+2.0.0. `version_digests` keeps the epic's bindings of 1.3.0
+(d7186399dfcb49a41be43b37873d8542cfd037c5d9f46c72e14c48a7810af956) and 1.4.0
+(ab174cfb3b03114381011f8d4d2c6d2eff420fa0697a9971f643bf71c0d7b6fe); main's
+own cuts of the same versions,
+325f5c040bf3198e059e1dcdf12aa155de9d95d9a38e740dec8c745018a702fc (1.3.0) and
+b372da2086a161600f796bbdbf3985edb3109e51022efc84751116067fbfd886 (1.4.0), are
+recorded here instead. The two halves touch different files (the epic's
+`status-model.json` and run-state changes, main's `worker-boot-contract.json`),
+so the union is each side's bytes unchanged. Consumers: an unchanged reader of
+the epic's 2.0.0 is still correct but no longer complete; a consumer pinned to
+main's 1.4.0 adopts the epic's 1.5.0–2.0.0 — 2.0.0's MAJOR `recorded_usd`
+null included — by moving here. The cloudflare pin bumps in the same commit.
+
+### main's 1.4.0, re-cut here
+
+MINOR: two fields added (first cut on epic/43y as 1.3.0; renumbered above
+main's 1.2.0 when main was folded into the epic, see 1.3.0).
+`worker-boot-contract.json` gains `setup_arg` and `setup_command` — the pi-durable worker host's RESTORE half of the per-tick
+worker contract (epic 43y, tick i3h). A container lost mid-turn is rebuilt
+from the last wip snapshot by the host's own git plumbing, which re-runs the
+repository's `[sandbox]` setup through `ticks-worker --setup` in the restored
+box, so its dependency installs die with the container and are reborn with
+the restore. The entry takes none of the boot's inputs and honours the wave's
+`TICKS_WORKER_SETUP` lever; its faults keep the boot's own classes (2, 3, 6).
+An unchanged consumer is still correct: the all-in-one and the boot/finish
+phases run exactly as before, and the new args are additive. All readers
+follow in the same change — `image/worker.sh` answers the arg,
+`internal/sandboximage` (`WorkerSetupArg`, `WorkerSetupCommand`),
+`cloudflare/src/worker-boot.ts` (`WORKER_SETUP_ARG`, `WORKER_SETUP_COMMAND`)
+and the harness host's `WORKER_BOOT_PROTOCOL` (`setupCommand`, wired as the
+`WorkspaceGit.setup` the restore runs) assert it.
+
+### main's 1.3.0, re-cut here
+
+MINOR: six fields added (first cut on epic/43y as 1.2.0, at the same time
+main cut its own 1.2.0 below; when main was folded into the epic its 1.2.0
+kept the number it had already published, and the epic's two cuts moved up
+to 1.3.0 and 1.4.0, each carrying main's 1.2.0 fixtures with it).
+`worker-boot-contract.json` gains `boot_arg`, `boot_command`, `boot_marker`, `boot_prompt_begin`, `boot_prompt_end`,
+`finish_arg` and `finish_command` — the pi-durable worker host's half of the
+per-tick worker contract (epic 43y, tick pom; docs/spikes/
+n0b-round2-pi-durable.md, "The worker contract on pi-durable"). The host
+runs `--boot` as its environment's first command, submits the prompt it
+prints between the prompt markers to a durable conversation, and runs
+`--finish` with the conversation's outcome once it settles; the boot's faults
+keep the all-in-one's exit classes (2-8, 13-15) and the finish decides the
+same 9/10/11 from the same git facts. An unchanged consumer is still
+correct: the all-in-one default runs exactly as before, and the new args
+are additive. All three readers follow in the same change — `image/worker.sh`
+answers the args and prints the markers, `internal/sandboximage`
+(`WorkerBootArg`, `WorkerFinishArg` and the markers) and
+`cloudflare/src/worker-boot.ts` (`WORKER_BOOT_ARG`, `WORKER_FINISH_ARG` and
+the markers) assert them.
+
+---
+
 ## 2.0.0
 
 MAJOR: `recorded_usd` is null when no line is metered (tick dm2, epic hn6

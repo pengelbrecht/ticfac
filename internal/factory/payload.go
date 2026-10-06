@@ -30,6 +30,7 @@ func init() {
 func wireEmbeddedPayload() {
 	factoryFS = ticfac.FactoryFS()
 	sandboxFS = ticfac.SandboxFS()
+	harnessFS = ticfac.HarnessFS()
 	cloudProfilesFS = ticfac.CloudProfiles()
 	resetPayloadCaches()
 }

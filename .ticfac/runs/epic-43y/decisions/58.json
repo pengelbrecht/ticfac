@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 58,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "On a delivered steer, the supervisor breaks out without interrupting the tool tree. A steer is placed after the current tool round, and a hung bash round never ends, so DecideStuck returns StuckStop one StuckAfter later. The old CLI path killed the tool processes and re-prompted, which recovered the worker. steer_test.go:213 asserts the new stop outcome. Consider interrupting the running tool when the evidence is a hung tool.\nevidence: internal/exec/subprocess/supervisor.go:287-297; internal/exec/subprocess/steer_test.go:213\n\nticfac run epic-43y created this tick by absorbing the finding 9695f9612fc88a25abca12eb763f44768daaeaa1463baf721d0f524b725eb4ed (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/9695f9612fc88a25abca12eb763f44768daaeaa1463baf721d0f524b725eb4ed.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "l6n",
+    "title": "Local stuck steer cannot reach a hung tool; attempt is stopped, not recovered"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.24,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.15,
+      "design": 0.34,
+      "diagnosis": 0.1,
+      "mechanical": 0.38,
+      "translation": 0.03
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1336,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T19:07:34Z",
+  "answered_at": "2026-10-05T19:07:34Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "l6n",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "3839184dfdc31f15c6b8c5e775eb9484673e2999",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

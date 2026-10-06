@@ -54,7 +54,37 @@ const (
 	// repository. Not a guess and not a measurement, and recorded as neither,
 	// so the scoring (jlv) never grades a decision nobody predicted.
 	AbsorptionRule = "rule"
+
+	// The absorption policy of 2026-10-06 (operator decision): a finding is
+	// absorbed into the running epic only on an EXPLICIT basis — never on a
+	// classifier's prediction (Jev measured AUC ~0.4 on our own outcomes,
+	// docs/classifier-eval-2026-10-04-jev-clef.md, and epic hn6 grew from 13
+	// planned ticks to 60+ absorbing low-severity findings at confidence
+	// 0.44-0.47 while backlogging a high-severity one). The three bases a
+	// decision made under the policy carries:
+
+	// AbsorptionReviewer: the final reviewer (the review-epic job) judged the
+	// epic NOT READY and named this finding blocking, so it is the epic's
+	// work (review_rounds.go). Always gating.
+	AbsorptionReviewer = "reviewer"
+	// AbsorptionWorkerAssertedHigh: the reporter rated the finding HIGH
+	// severity and named, itself, the done item it breaks (or claimed the
+	// build or CI is broken, which breaks any done). Gating while the epic's
+	// work is still under way; once the work is done it is DEFERRED to the
+	// reviewer (placement deferred-to-review), not absorbed.
+	AbsorptionWorkerAssertedHigh = "worker-asserted-high"
+	// AbsorptionBacklogDefault: everything else — a backlog tick with an
+	// owner, listed in the epic PR. Never gating.
+	AbsorptionBacklogDefault = "backlog-default"
 )
+
+// absorptionBases is the closed basis vocabulary: the three the policy
+// writes, and the three earlier runs wrote (observed, predicted, rule), which
+// a run branch still carries and a cold reconstruction must still read.
+var absorptionBases = []string{
+	AbsorptionReviewer, AbsorptionWorkerAssertedHigh, AbsorptionBacklogDefault,
+	AbsorptionObserved, AbsorptionPredicted, AbsorptionRule,
+}
 
 // The placement of the tick the promotion created, as the run arranged it.
 // The absorbed tick is placed so it is fixed BEFORE the items it gates are
@@ -98,12 +128,20 @@ const (
 	// and the final review see it and can judge it (run_5c7c16d1, epic hn6:
 	// the bound used to halt the run for a person, who filed it by hand).
 	AbsorptionPastBound = "past-bound"
+	// AbsorptionDeferredToReview: a high-severity finding whose reporter
+	// named the done item it breaks, reported once the epic's work was done
+	// (every implementation tick closed, or the final review already run). It
+	// is a backlog tick with an owner, outside the epic, noted on the open
+	// review for its judgement: it enters the epic only if the reviewer names
+	// it blocking on its next round (review_rounds.go), and otherwise it is
+	// listed in the epic PR under "Deferred findings".
+	AbsorptionDeferredToReview = "deferred-to-review"
 )
 
 // AbsorptionPlacements is the closed placement vocabulary.
 var AbsorptionPlacements = []string{
 	AbsorptionBeforeReview, AbsorptionAfterReview, AbsorptionBacklog, AbsorptionRouted, AbsorptionNextRun,
-	AbsorptionPastBound,
+	AbsorptionPastBound, AbsorptionDeferredToReview,
 }
 
 // Absorption is one decision, at `.ticfac/runs/<run-id>/absorptions/<key>.json`,
@@ -183,9 +221,9 @@ func (a Absorption) Validate() error {
 		return fmt.Errorf("absorption of %s names no tick: the promotion is the tick the decision created, "+
 			"and the record must say which — an orphaned reasoning is the re-derivation hole the record exists to close", a.Key)
 	}
-	if !oneOf(a.Basis, []string{AbsorptionObserved, AbsorptionPredicted, AbsorptionRule}) {
-		return fmt.Errorf("absorption basis %q is not %s, %s or %s: a retro that cannot tell a guess from a "+
-			"measurement cannot report honestly", a.Basis, AbsorptionObserved, AbsorptionPredicted, AbsorptionRule)
+	if !oneOf(a.Basis, absorptionBases) {
+		return fmt.Errorf("absorption basis %q is not one of %v: a decision that cannot say what it rests on "+
+			"cannot be reported honestly", a.Basis, absorptionBases)
 	}
 	if !oneOf(a.Placement, AbsorptionPlacements) {
 		return fmt.Errorf("absorption placement %q is not one of %v", a.Placement, AbsorptionPlacements)
@@ -203,12 +241,21 @@ func (a Absorption) Validate() error {
 				"reachable names no item it breaks", a.Key, a.ItemID)
 		}
 		if a.Placement != AbsorptionBacklog && a.Placement != AbsorptionRouted && a.Placement != AbsorptionNextRun &&
-			a.Placement != AbsorptionPastBound {
+			a.Placement != AbsorptionPastBound && a.Placement != AbsorptionDeferredToReview {
 			return fmt.Errorf("absorption of %s is not gating and placed %q: a finding the done is reachable "+
 				"without becomes a backlog tick, not a child of the running epic", a.Key, a.Placement)
 		}
 	}
-	if a.Placement == AbsorptionPastBound {
+	if err := a.validatePolicy(); err != nil {
+		return err
+	}
+	if policyBasis(a.Basis) {
+		// Decided under the 2026-10-06 policy: validatePolicy is its whole
+		// agreement with itself.
+	} else if a.Placement == AbsorptionDeferredToReview {
+		return fmt.Errorf("absorption of %s is deferred to the review on basis %q: only a worker-asserted "+
+			"high-severity finding is deferred to the reviewer", a.Key, a.Basis)
+	} else if a.Placement == AbsorptionPastBound {
 		// The bound's rule agreeing with itself: decided by rule, about this
 		// repository, a local backlog tick gating nothing.
 		if a.Target != "" || a.Basis != AbsorptionRule || a.Gating || a.ItemID != "" || a.Confidence != 0 ||
@@ -273,4 +320,44 @@ func (a Absorption) Validate() error {
 		return fmt.Errorf("absorption of %s carries confidence %.2f, which is not a probability", a.Key, a.Confidence)
 	}
 	return a.Provenance.validate()
+}
+
+// policyBasis is whether a basis is one the 2026-10-06 policy writes.
+func policyBasis(basis string) bool {
+	return basis == AbsorptionReviewer || basis == AbsorptionWorkerAssertedHigh || basis == AbsorptionBacklogDefault
+}
+
+// validatePolicy is a policy decision's agreement with itself: about this
+// repository, answered by no classifier, and gating exactly where its basis
+// says it may be.
+func (a Absorption) validatePolicy() error {
+	if !policyBasis(a.Basis) {
+		return nil
+	}
+	if a.Target != "" || a.Confidence != 0 || a.Model != "" || a.Fallback != "" || strings.Contains(a.TickID, ":") {
+		return fmt.Errorf("absorption of %s is decided on basis %s and carries a target, a confidence, a model or a "+
+			"fallback: the policy decides about this repository and asks no classifier", a.Key, a.Basis)
+	}
+	switch a.Basis {
+	case AbsorptionBacklogDefault:
+		if a.Gating || a.Placement != AbsorptionBacklog {
+			return fmt.Errorf("absorption of %s is backlog-default and is gating or placed %q: the default is a "+
+				"backlog tick", a.Key, a.Placement)
+		}
+	case AbsorptionWorkerAssertedHigh:
+		if a.Gating && a.Placement != AbsorptionBeforeReview && a.Placement != AbsorptionAfterReview {
+			return fmt.Errorf("absorption of %s is a worker-asserted high-severity finding absorbed and placed %q: "+
+				"an absorbed finding is placed before the review or the close-out", a.Key, a.Placement)
+		}
+		if !a.Gating && a.Placement != AbsorptionDeferredToReview {
+			return fmt.Errorf("absorption of %s is a worker-asserted high-severity finding not absorbed and placed "+
+				"%q: it is deferred to the review", a.Key, a.Placement)
+		}
+	case AbsorptionReviewer:
+		if !a.Gating || (a.Placement != AbsorptionBeforeReview && a.Placement != AbsorptionAfterReview) {
+			return fmt.Errorf("absorption of %s is the reviewer's and is not gating before the review or the "+
+				"close-out (placed %q): a finding the reviewer names blocking is the epic's work", a.Key, a.Placement)
+		}
+	}
+	return nil
 }

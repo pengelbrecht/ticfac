@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
@@ -52,65 +51,6 @@ var buildBreakageClaim = regexp.MustCompile(
 // the build or CI.
 func claimsBuildBreakage(finding runstate.Finding) bool {
 	return buildBreakageClaim.MatchString(strings.ToLower(finding.Title))
-}
-
-// proseReason is the reasoning the prose rule's decision record carries.
-func proseReason(finding runstate.Finding, refusal string, gating bool) string {
-	if gating {
-		return fmt.Sprintf("the epic's acceptance is prose (%s), so no item can be pointed at — but the reporter "+
-			"claims this finding breaks the build or CI (%q), and a red build fails every definition of done, "+
-			"prose or not: it is a gating defect, absorbed into the running epic", refusal, finding.Title)
-	}
-	return fmt.Sprintf("the epic's acceptance is prose (%s), so there is no item the reporter's claim could gate "+
-		"and no judgement for a person to make: the finding is backlog work, filed as a tick with an owner. The "+
-		"reporter does not claim it breaks the build or CI, the one claim that gates a prose done", refusal)
-}
-
-// decideProseFinding records the prose rule's decision about one finding and
-// finishes behind it: a backlog tick, or — for a claimed build breakage — a
-// child of the running epic placed before the items are asserted. The same
-// create-if-absent record and finish every rule decision uses: a decision is
-// made once, and a concurrent incarnation's record stands.
-func (r *Reconciler) decideProseFinding(ctx context.Context, marker attemptHandle, standing runstate.Finding,
-	dispatch Dispatch, refusal string) (findingDecision, error) {
-
-	gating := claimsBuildBreakage(standing)
-	if gating {
-		// A gating verdict extends the absorption chain, and the chain is
-		// bounded whatever decided it (tick qjj), and past the bound it is
-		// deferred to the backlog — the run never halts over it.
-		links, bound, exceeded, err := r.boundedChain(standing, dispatch)
-		if err != nil {
-			return findingDecision{}, err
-		}
-		if exceeded {
-			return r.deferPastBound(ctx, marker, standing, dispatch, links, bound,
-				"breaks the build or CI, which gates any epic's done (its reporter's claim)")
-		}
-	}
-	tickID, err := r.mintTickID()
-	if err != nil {
-		return findingDecision{}, err
-	}
-	placement := runstate.AbsorptionBacklog
-	if gating {
-		if review, open := r.reviewTick(ctx); review != "" && open {
-			placement = runstate.AbsorptionBeforeReview
-		} else {
-			placement = runstate.AbsorptionAfterReview
-		}
-	}
-	record := runstate.Absorption{
-		Key:        standing.Key,
-		TickID:     tickID,
-		Gating:     gating,
-		Basis:      runstate.AbsorptionRule,
-		Placement:  placement,
-		Reason:     proseReason(standing, refusal, gating),
-		DecidedAt:  r.now().UTC().Format(time.RFC3339),
-		Provenance: r.attemptProvenance(dispatch),
-	}
-	return r.recordRoutedDecision(ctx, marker, standing, record)
 }
 
 // decideUndecidedFindings takes every finding of this run still waiting for a

@@ -1,0 +1,46 @@
+{
+  "schema_version": 3,
+  "key": "land-ci-j2k-69-5866571f6975",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "j2k",
+    "attempt": 69,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "5866571f6975b710bf4a888ef7a9d600ff5ecbbc",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "integrated",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:02d4205dfe376c01cceea8466fcf910859b131f3680bd8b685849c25c4108589",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  },
+  "check": {
+    "id": "ci",
+    "kind": "command",
+    "command": [
+      "forge-ci",
+      ".github/workflows/ci.yml"
+    ]
+  },
+  "started_at": "2026-10-06T00:05:19Z",
+  "finished_at": "2026-10-06T00:05:19Z",
+  "exit_code": 1,
+  "output": {
+    "mode": "inline",
+    "stdout": "CI (.github/workflows/ci.yml) is red on 5866571f6975b710bf4a888ef7a9d600ff5ecbbc, the head of the epic PR #222 (https://github.com/pengelbrecht/ticfac/pull/222), after one re-run of its failed jobs.\nFailing jobs: go, go test (reconcile 2/3)\nWorkflow runs: [37391064752]\nThe failing jobs' logs are on the forge; reproduce them locally with the repository's own gate (.tick/runners.toml [testing.commands]) on this tree.\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "fail",
+  "acceptance": "required",
+  "content_digest": "sha256:e3423980a596fa74dfa92929b8d194648d9165f13eb93eae892b114be553e807",
+  "persistence_uri": "git:refs/heads/epic/43y:.ticfac/runs/epic-43y/evidence/land-ci-j2k-69-5866571f6975.json"
+}

@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 14,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The subprocess supervisor's activity watch still reads the pi CLI's session transcripts (LastTranscriptEvent's `pi` case) for the runner now named `pi` — which is the Node pi-durable host and writes its conversation to the attempt's SQLite, not to pi's session files. The watch still decides correctly (tool-process CPU, worktree and branch moves carry it; the harness's own partial commits every ~100ms keep the runner's CPU moving during streaming), but the evidence sentence a stuck nudge carries now always says \"no session transcript could be read\", which misleads an operator reading where a live worker's progress lives. The honest signal is the storage file's mtime — commits are the heartbeat — or y03's commit-stream view.\nevidence: internal/exec/subprocess/activity.go LastTranscriptEvent (case \"pi\"), and its Evidence sentence; the storage is internal/exec/subprocess/workerconfig.go fileWorkerStorage\n\nticfac run epic-43y created this tick by absorbing the finding 8794627c1b2648dc6c2d5e88bf9f055f2b2518cf87e34c1c68534468aae6c0ab (reported by run-epic-43y/tick-hpk/attempt-9): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/8794627c1b2648dc6c2d5e88bf9f055f2b2518cf87e34c1c68534468aae6c0ab.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "bgx",
+    "title": "The stuck watch reads pi-CLI session transcripts for a runner that has none"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.43,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.06,
+      "design": 0.05,
+      "diagnosis": 0.32,
+      "mechanical": 0.55,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1415,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T18:40:37Z",
+  "answered_at": "2026-10-04T18:40:37Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "bgx",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "7d0779b77450e5af816a14bfe93f9620d1cba88d",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

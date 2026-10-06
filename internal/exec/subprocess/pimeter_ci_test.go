@@ -21,7 +21,7 @@ import (
 // (pimeter_test.go), and the displacement and the drain, the two claims a
 // fake gateway proves against real pi, were claims only this host made.
 // The fix is wiring: the go-test job that carries this package installs a
-// pinned pi, the same version the sandbox image ships. These guards keep
+// pinned pi (an exact version; the image ships none since epic 43y). These guards keep
 // that wiring from rotting back to a skip nobody reads — the same shape as
 // reconcile's paths-ignore guard, which keeps ciIgnoredPrefixes and the
 // workflow one list so the close-out's borrow stays sound.
@@ -86,10 +86,12 @@ func testRepoRoot(t *testing.T) string {
 //
 // The pin, both halves: the go-test job must install a pinned pi behind
 // the plan's `pi` flag — an unconditional install would pay for it in the
-// reconcile shards that run no test of this package — and the pin must be
-// the sandbox image's own, because the image is the pi a real run executes
-// and CI is the only place that can catch the two drifting apart before a
-// container answers a dispatch with a different pi than CI verified.
+// reconcile shards that run no test of this package — and it must be an
+// exact version, never a range. It used to be held equal to the sandbox
+// image's PI_VERSION; since epic 43y (tick jhp) the image ships no pi CLI at
+// all (internal/sandboximage's TestTheImageShipsNoPiCLI), and the pi the
+// drain suite stands for is the host's own, the one a herdr pane launches
+// with the metering extension (internal/exec/herdr), so the pin is CI's.
 func TestTheGoTestJobInstallsTheImagePinnedPiBehindThePlanFlag(t *testing.T) {
 	t.Parallel()
 
@@ -116,18 +118,6 @@ func TestTheGoTestJobInstallsTheImagePinnedPiBehindThePlanFlag(t *testing.T) {
 		t.Fatalf("the go-test job installs no pinned pi: %s's drain suite needs pi on PATH or it skips, which is what\nmade CI's word on the m4t displacement and the 648 drain a string match on the generated extension.\njob:\n%s", piPackage, strings.Join(block, "\n"))
 	}
 
-	root := testRepoRoot(t)
-	dockerfile, err := os.ReadFile(filepath.Join(root, "image", "Dockerfile"))
-	if err != nil {
-		t.Fatalf("read image/Dockerfile: %v", err)
-	}
-	arg := regexp.MustCompile(`ARG PI_VERSION=([0-9][0-9A-Za-z.\-+]*)`).FindSubmatch(dockerfile)
-	if arg == nil {
-		t.Fatal("image/Dockerfile carries no ARG PI_VERSION")
-	}
-	if version != string(arg[1]) {
-		t.Errorf("CI installs pi %s, the image ships pi %s: a real run executes the image's pi, so the drain suite\nCI runs must be run against the pi a dispatched worker actually launches", version, arg[1])
-	}
 }
 
 func slicesContains(hay []string, needle string) bool {

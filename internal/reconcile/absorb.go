@@ -8,7 +8,6 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/acceptance"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
-	"github.com/pengelbrecht/ticfac/internal/gating"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tk"
@@ -19,21 +18,22 @@ import (
 // definition of done is promoted into the RUNNING epic as a tick, placed so
 // it is fixed before the items it gates are asserted, with nobody triaging.
 //
-// The mechanism was already built: the two-tier decision (pzp's oracle, bse's
-// predictor), the durable finding drafts (7vn), the close-out hold (aqm), and
-// the plan's admission of a tick created mid-run (3h0). What this file adds
-// is the DECISION DRIVER and the RECORDING that makes the decision legitimate:
+// The mechanism was already built: the durable finding drafts (7vn), the
+// close-out hold (aqm), and the plan's admission of a tick created mid-run
+// (3h0). What this file adds is the DECISION DRIVER and the RECORDING that
+// makes the decision legitimate:
 //
-//   - the verdict is driven by pzp's OBSERVATION where the done can be run —
-//     and nothing overrides an observation — or by bse's PREDICTION where it
-//     cannot yet be, with the documented absorb fallback where neither tier
-//     can answer. Erring toward absorbing is deliberate and stated (bse):
-//     a false positive costs the epic work it did not need, a false negative
-//     closes an epic whose goal is unmet in a factory where nobody is
-//     watching, and those are not the same cost.
+//   - the verdict is the absorption POLICY's (operator decision 2026-10-06,
+//     absorb_policy.go): absorbed only on an explicit basis — the final
+//     reviewer names the finding blocking, or its reporter rates it high and
+//     names the done item it breaks while the epic's work is under way — and
+//     backlogged otherwise. No classifier is asked: the two-tier verdict
+//     that drove this before (pzp's oracle, bse's Jev predictor, an
+//     absorb-anyway fallback) grew epic hn6 from 13 ticks to 60+ on
+//     predictions with no measured signal.
 //
-//   - the decision is a RECORD on the run branch — item id, verdict,
-//     observed or predicted, the confidence when a classifier answered —
+//   - the decision is a RECORD on the run branch — item id, verdict, and
+//     its basis (reviewer, worker-asserted-high or backlog-default) —
 //     because absorbing changes the epic's shape mid-run and Axiom 1 says a
 //     cold reconstruction from git must reach the SAME epic: a re-derivation
 //     that reaches a smaller epic than the warm run is the failure this tick
@@ -51,12 +51,13 @@ import (
 //     itself is the one half this file does NOT re-buy (see the finding noted
 //     on placement below).
 //
-// WHAT STAYS: a finding the done is reachable without is still a backlog tick
-// with an owner, and it is still reported — unattended means nobody has to be
-// there, not that nobody is ever told. A finding against an epic whose
-// acceptance carries no [A<n>] items (the refusal: klq) is no longer left for
-// a person either (epic-6in): the prose rule decides it — backlog, unless its
-// reporter claims it breaks the build or CI (prose.go). A finding routed to
+// WHAT STAYS: a finding the policy does not absorb is still a backlog tick
+// with an owner, and it is still reported in the epic PR — unattended means
+// nobody has to be there, not that nobody is ever told. A finding against an
+// epic whose acceptance carries no [A<n>] items (the refusal: klq) is no
+// longer left for a person either (epic-6in): the policy decides it — backlog,
+// unless its reporter rates it high and claims it breaks the build or CI
+// (prose.go). A finding routed to
 // ANOTHER repository is no longer among them: it is filed in the target's
 // tracker or backlogged here naming it, and gates nothing (routed.go).
 
@@ -192,7 +193,7 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 		return findingDecision{}, fmt.Errorf("read the epic %s to decide the finding %s against its done: %w",
 			r.opts.EpicID, key, err)
 	}
-	evidence, commands, err := r.evidenceTable()
+	evidence, _, err := r.evidenceTable()
 	if err != nil {
 		return findingDecision{}, err
 	}
@@ -201,52 +202,40 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 		return findingDecision{}, fmt.Errorf("decide the absorption of finding %s: the epic %s carries an "+
 			"acceptance this run cannot read, and a person must fix the epic's own text: %w", key, r.opts.EpicID, err)
 	}
+	prose := ""
 	if refusal != nil {
 		// PROSE IS NOT A PERSON'S DECISION (epic-6in, 2026-09-28): 6in's
 		// fifteen findings were each "left for a person" here, and the close-out
-		// then held the run for them. With no [A<n>] item there is nothing a
-		// finding can be judged to gate, so the run's own rule decides — a
-		// backlog tick, the reason recorded — except a finding whose reporter
-		// claims it breaks the build or CI, which gates any done (prose.go).
+		// then held the run for them. With no [A<n>] item there is no item a
+		// finding can name, so the policy decides it as any other: the
+		// backlog, unless the reporter rates it high and claims it breaks the
+		// build or CI, which breaks any done (prose.go).
 		if r.opts.proseFindingsForAPerson {
 			r.record(marker.TickID, StageAbsorptionRefused,
 				"finding %s is left for a person: %s", key, refusal.Reason)
 			return findingDecision{Left: refusal.Reason}, nil
 		}
-		return r.decideProseFinding(ctx, marker, *standing, dispatch, refusal.Reason)
+		prose = refusal.Reason
 	}
 
-	// The verdict: the oracle where the done can be run, the predictor where
-	// it cannot yet be, and the documented absorb fallback where neither tier
-	// can answer — never a stop, because stopping is the one actor only a
-	// person can play, and this tick is what takes the person out.
-	//
-	// The reporter's DONE EVIDENCE rides along (tick wz0, finding c244ce2c):
-	// done_item and demonstrating_check reach both tiers as INPUTS — the
-	// classifier weighs the claim as evidence, the oracle scores it against
-	// what ran — and never as the verdict, which is the whole distinction
-	// the record's Basis field exists to keep.
-	finding := gating.Finding{
-		ID:                 standing.Key,
-		Title:              standing.Title,
-		Body:               standing.Body,
-		DoneItem:           standing.DoneItem,
-		DemonstratingCheck: standing.DemonstratingCheck,
-	}
-	verdict, err := r.gatingVerdict(ctx, finding, done, evidenceRunner{r: r, commands: commands})
+	// THE POLICY (operator decision 2026-10-06, absorb_policy.go): a finding
+	// enters the running epic only on an explicit basis — the reviewer's
+	// blocking verdict (review_rounds.go), or a HIGH-severity finding whose
+	// reporter names the done item it breaks, while the epic's work is still
+	// under way. No classifier is asked: Jev's prediction measured no signal
+	// on our own outcomes, and hn6 grew from 13 planned ticks to 60+ on it.
+	verdict, err := r.policyVerdict(ctx, *standing, done, prose)
 	if err != nil {
 		return findingDecision{}, err
 	}
 
-	// THE RECURSION'S BOUND (tick qjj): a gating verdict is about to make
-	// this finding the next link of a chain, and the chain is bounded. The
-	// check sits AFTER the verdict, never before it, because only a GATING
-	// finding extends the recursion — a non-gating one goes to the backlog
-	// and stops the chain where it stands, and a run that stopped over one
-	// would be holding a person for a decision the run itself was about to
-	// make. A chain already at the bound DEFERS the finding — a backlog tick
-	// with an owner, named in the epic PR — and the run carries on: it never
-	// halts for a person over the bound (absorb_bound.go).
+	// THE RECURSION'S BOUND (tick qjj): an absorption is about to make this
+	// finding the next link of a chain, and the chain is bounded. The check
+	// sits AFTER the verdict, never before it, because only an absorbed
+	// finding extends the recursion — a backlogged one stops the chain where
+	// it stands. A chain already at the bound DEFERS the finding — a backlog
+	// tick with an owner, named in the epic PR — and the run carries on: it
+	// never halts for a person over the bound (absorb_bound.go).
 	if verdict.Gating {
 		links, bound, exceeded, err := r.boundedChain(*standing, dispatch)
 		if err != nil {
@@ -256,7 +245,7 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 			// The verdict the bound overrode, in the deferral's own words: the
 			// past-bound record carries WHAT the finding claimed to gate, and
 			// the bound still wins (deferPastBound, absorb_bound.go).
-			overridden := runstate.Absorption{Gating: true, ItemID: verdict.ItemID, Basis: string(verdict.Basis)}
+			overridden := runstate.Absorption{Gating: true, ItemID: verdict.ItemID, Basis: verdict.Basis}
 			return r.deferPastBound(ctx, marker, *standing, dispatch, links, bound,
 				fmt.Sprintf("%s (basis %s)", verdictLine(overridden), verdict.Basis))
 		}
@@ -268,32 +257,18 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 	if err != nil {
 		return findingDecision{}, err
 	}
-	placement := runstate.AbsorptionBacklog
-	review, reviewOpen := r.reviewTick(ctx)
-	if verdict.Gating {
-		if review != "" && reviewOpen {
-			placement = runstate.AbsorptionBeforeReview
-		} else {
-			placement = runstate.AbsorptionAfterReview
-		}
-	}
 
 	// The decision record, on the run branch, BEFORE the tick exists: the
-	// reasoning that changed the epic's shape, durable, keyed by the finding.
-	// Model names the classifier that answered where the verdict was a
-	// prediction (tick ce4, finding b8137057), so the scores the close-out
-	// later grades against this record are per model.
+	// reasoning that changed the epic's shape — or chose not to — durable,
+	// keyed by the finding, with its basis explicit.
 	record := runstate.Absorption{
 		Key:        standing.Key,
 		TickID:     tickID,
 		Gating:     verdict.Gating,
 		ItemID:     verdict.ItemID,
-		Basis:      string(verdict.Basis),
-		Confidence: verdict.Confidence,
-		Model:      verdict.Model,
-		Fallback:   verdict.Fallback,
+		Basis:      verdict.Basis,
 		Reason:     verdict.Reason,
-		Placement:  placement,
+		Placement:  verdict.Placement,
 		DecidedAt:  r.now().UTC().Format(time.RFC3339),
 		Provenance: r.attemptProvenance(dispatch),
 	}
@@ -420,9 +395,17 @@ func (r *Reconciler) finishAbsorption(ctx context.Context, marker attemptHandle,
 			record.Key, record.TickID, record.Reason)
 		return findingDecision{TickID: record.TickID, Backlog: true}, nil
 	}
+	if record.Placement == runstate.AbsorptionDeferredToReview {
+		if err := r.noteDeferralOnReview(ctx, marker, standing, record); err != nil {
+			return findingDecision{}, err
+		}
+	}
 	stage, what := StageAbsorbed, "absorbed into the running epic"
 	if !record.Gating {
 		stage, what = StageBacklogged, "promoted to a backlog tick with an owner"
+	}
+	if record.Placement == runstate.AbsorptionDeferredToReview {
+		what = "deferred to the final reviewer"
 	}
 	r.record(marker.TickID, stage,
 		"finding %s is %s as tick %s: %s (basis %s%s%s), %s",
@@ -447,9 +430,15 @@ func placementLine(record runstate.Absorption) string {
 	case runstate.AbsorptionPastBound:
 		return "a backlog tick with an owner, outside the epic: deferred past the absorption bound, for the " +
 			"close-out and the final review to judge"
+	case runstate.AbsorptionDeferredToReview:
+		return "a backlog tick with an owner, outside the epic: deferred to the final reviewer, who absorbs it " +
+			"only by naming it blocking, and listed in the epic PR under deferred findings"
 	case runstate.AbsorptionBacklog:
 		if record.Target != "" {
 			return fmt.Sprintf("a backlog tick here naming %s, for a person to carry there", record.Target)
+		}
+		if record.Basis == runstate.AbsorptionBacklogDefault {
+			return "a backlog tick with an owner, outside the epic, listed in the epic PR"
 		}
 		return "a backlog tick: the done is reachable with the finding standing"
 	default:
@@ -467,6 +456,9 @@ func verdictLine(record runstate.Absorption) string {
 	if isPastBound(record) {
 		return "it would have extended an absorption chain already at the absorption bound, so the bound " +
 			"deferred it whatever it claims to gate"
+	}
+	if line, ok := policyVerdictLine(record); ok {
+		return line
 	}
 	if record.Basis == runstate.AbsorptionRule && record.Target == "" {
 		// The prose rule (prose.go): an epic whose acceptance carries no
@@ -522,10 +514,15 @@ func absorbedTickRecord(runID string, finding runstate.Finding, record runstate.
 	}
 	how := fmt.Sprintf(
 		"ticfac run %s created this tick by absorbing the finding %s (reported by %s): the finding was judged "+
-			"against the epic's definition of done and %s. The decision record — item id, verdict, observed or "+
-			"predicted, confidence — is .ticfac/runs/%s/absorptions/%s.json on the run branch.",
+			"against the epic's definition of done and %s. The decision record — item id, verdict, basis — is "+
+			".ticfac/runs/%s/absorptions/%s.json on the run branch.",
 		runID, finding.Key, finding.DiscoveredFrom, verdictLine(record), runID, finding.Key)
-	if !record.Gating {
+	if !record.Gating && policyBasis(record.Basis) {
+		how = fmt.Sprintf(
+			"ticfac run %s filed this backlog tick from the finding %s (reported by %s) rather than absorb it into "+
+				"the running epic: %s. The decision record is .ticfac/runs/%s/absorptions/%s.json on the run branch.",
+			runID, finding.Key, finding.DiscoveredFrom, verdictLine(record), runID, finding.Key)
+	} else if !record.Gating {
 		how = fmt.Sprintf(
 			"ticfac run %s filed this backlog tick from the finding %s (reported by %s): the done is reachable "+
 				"with the finding standing, so it is a backlog tick with an owner rather than the epic's to "+
@@ -589,159 +586,7 @@ func absorbedTickRecord(runID string, finding runstate.Finding, record runstate.
 	return tick
 }
 
-// ---------------------------------------------------------- the two tiers ---
-
-// gatingVerdict is the two-tier decision driven over the done: the oracle's
-// observation where an item is bound to a command, the predictor's guess
-// where it is not yet runnable, and the combined fallback where neither tier
-// can answer. Every tier's rules hold unchanged (pzp, bse): a runnable item is
-// never offered to the classifier, an observation is never overridden, and an
-// unreachable classifier absorbs rather than defers.
-func (r *Reconciler) gatingVerdict(ctx context.Context, finding gating.Finding, done acceptance.Done,
-	runner gating.Runner) (*gating.Verdict, error) {
-	observed, observedReason, err := gating.NewOracle(runner).Observe(ctx, finding, done)
-	if err != nil {
-		return nil, fmt.Errorf("observe the done against finding %s: %w", finding.ID, err)
-	}
-	if observed != nil && observed.Gating {
-		// Observed broken: the authoritative verdict, and no classifier
-		// overrides it. Nothing else is asked.
-		return &observed.Verdict, nil
-	}
-	predicted, predictedReason, err := gating.NewPredictor(r.opts.GatingClassifier).Predict(ctx, finding, done)
-	if err != nil {
-		return nil, fmt.Errorf("predict the done against finding %s: %w", finding.ID, err)
-	}
-	verdict, undecided := combineGating(finding.ID, done, observed, observedReason, predicted, predictedReason)
-	if verdict == nil {
-		return nil, fmt.Errorf("the two-tier decision over finding %s answered neither a verdict nor a reason: %s",
-			finding.ID, undecided)
-	}
-	return verdict, nil
-}
-
-// combineGating is the meeting point of the two tiers, and the one place the
-// absorption's own rule lives: where NEITHER tier can answer — the done's
-// commands could not run and no classifier is configured or reachable — the
-// decision errs toward absorbing, recorded as a prediction with the fallback
-// saying why no model answered, because deferring would stop an unattended
-// run on the one actor only a person can play.
-//
-// The cases, and every caller takes the same closed set:
-//
-//   - observed gating: the observation, unchanged.
-//   - observed not gating, every item decided: the observation (all runnable
-//     and demonstrated, or the prediction over the unverified half said none).
-//   - observed not gating but a RUNNABLE item produced no evidence (the
-//     command could not run, or answered error or skipped): the fallback —
-//     an item with no evidence is never read as demonstrated, which would be
-//     the false negative this epic exists to prevent, manufactured by the
-//     decision itself.
-//   - nothing observed: the prediction where its scope is the whole done,
-//     and the combined fallback where neither tier answered. NOTHING
-//     OBSERVED WHILE A RUNNABLE ITEM EXISTS is NOT the prediction's to
-//     answer: the oracle observed nothing — no runner is configured, or no
-//     command produced evidence about any runnable item — so every runnable
-//     item is unresolved, and an absence of observation is not an
-//     observation (finding 88ea36a8, tick wz0). A prediction answered only
-//     the UNVERIFIED half cannot carry a done whose runnable half nobody
-//     observed, so where a runnable item exists and the prediction does not
-//     absorb, the combined fallback absorbs naming the runnable items.
-func combineGating(findingID string, done acceptance.Done, observed *gating.Observed, observedReason string,
-	predicted *gating.Verdict, predictedReason string) (*gating.Verdict, string) {
-	if observed != nil && observed.Gating {
-		return &observed.Verdict, ""
-	}
-
-	// The unverified items are the predictor's alone; an unresolved entry
-	// that is NOT one of them is a runnable item whose command produced no
-	// evidence — a state neither tier answers, and the fallback's.
-	unverified := map[string]bool{}
-	for _, item := range done.Items {
-		if item.State == acceptance.Unverified {
-			unverified[item.ID] = true
-		}
-	}
-	if observed != nil {
-		var noEvidence []string
-		for _, unresolved := range observed.Unresolved {
-			if !unverified[unresolved.ItemID] {
-				noEvidence = append(noEvidence, unresolved.ItemID)
-			}
-		}
-		if predicted != nil && predicted.Gating {
-			return predicted, ""
-		}
-		if len(noEvidence) > 0 {
-			return absorbFallback(findingID, noEvidence, fmt.Sprintf(
-				"the commands for %s produced no evidence about their items (observed %s on the runnable half), "+
-					"and no prediction covers a runnable item", strings.Join(noEvidence, ", "),
-				observedReason)), ""
-		}
-		if predicted != nil {
-			return predicted, ""
-		}
-		// Nothing left to predict and nothing unresolved beyond the
-		// prediction's own scope: the observation stands.
-		return &observed.Verdict, ""
-	}
-
-	// Nothing was observed at all: the prediction decides only where its
-	// scope is the whole done, and the combined fallback answers where
-	// neither tier could. A RUNNABLE item makes all the difference: the
-	// oracle's nil answer means every runnable item produced no evidence,
-	// and no prediction covers a runnable item — so the fallback absorbs
-	// naming them rather than letting a prediction over the unverified half
-	// close a done whose runnable half was never observed.
-	var runnable []string
-	for _, item := range done.Items {
-		if item.State == acceptance.Runnable {
-			runnable = append(runnable, item.ID)
-		}
-	}
-	if predicted != nil && predicted.Gating {
-		return predicted, ""
-	}
-	if len(runnable) > 0 {
-		return absorbFallback(findingID, runnable, fmt.Sprintf(
-			"the oracle observed nothing (%s) while the done carries runnable items %s, and no prediction covers a "+
-				"runnable item: an absence of observation is not an observation, and a runnable item with no evidence is "+
-				"unresolved, never demonstrated", observedReason, strings.Join(runnable, ", "))), ""
-	}
-	if predicted != nil {
-		return predicted, ""
-	}
-	var atRisk []string
-	for _, item := range done.Items {
-		atRisk = append(atRisk, item.ID)
-	}
-	return absorbFallback(findingID, atRisk, fmt.Sprintf(
-		"neither tier could answer — the oracle: %s; the predictor: %s — and the decision errs toward absorbing",
-		observedReason, predictedReason)), ""
-}
-
-// absorbFallback is the verdict written when NO TIER could answer: the
-// documented decision to absorb anyway, recorded as a PREDICTION (a guess,
-// never a measurement), with Fallback carrying why and the reason naming
-// every item at risk — the same shape and the same bias bse's own fallback
-// keeps, written here because this decision owns what to do with the state
-// neither tier decides.
-func absorbFallback(findingID string, itemIDs []string, why string) *gating.Verdict {
-	return &gating.Verdict{
-		FindingID: findingID,
-		Gating:    true,
-		Basis:     gating.BasisPredicted,
-		Fallback:  why,
-		Reason: fmt.Sprintf(
-			"no verdict could be reached — %s — and the decision is to absorb anyway: a false negative would close "+
-				"an epic whose goal is unmet in a factory where nobody is watching, which costs more than the work a "+
-				"false positive wastes, and deferring would stop an unattended run on the one actor only a person can "+
-				"play. The items at risk are %s",
-			strings.TrimSpace(why), strings.Join(itemIDs, ", ")),
-	}
-}
-
-// ------------------------------------------------------------- the runner ---
+// ------------------------------------------------------- the evidence table ---
 
 // evidenceTable is the done's bindings and the commands they authorise, read
 // from the same runners.toml the gate reads and through the same validated
@@ -772,91 +617,6 @@ func (r *Reconciler) evidenceTable() (map[string]string, map[string]string, erro
 		}
 	}
 	return bindings, commands, nil
-}
-
-// evidenceRunner is the oracle's seam (pzp): it runs one command id the
-// evidence table authorises, on the tree the caller named — the integration
-// branch as origin has it, or a pinned commit — and reports the commit it ran
-// on — the key of the observed verdict, so the record says "this tree" rather
-// than "once, at some point". The command runs in a throwaway worktree of
-// that tree, through the gate's own shell and bound, so the oracle reuses the
-// one path the run already runs declared commands down.
-type evidenceRunner struct {
-	r        *Reconciler
-	commands map[string]string
-	// about, when non-empty, is the tree the observation must answer ON: the
-	// tree a prediction was made about — the finding's own tree, never the
-	// one that carries the absorbed fix the prediction drove (tick ce4,
-	// finding cfd74936), so a correct "this gates" prediction is scored
-	// against what the finding actually broke rather than against the repair
-	// the prediction bought. Empty runs the integration head as origin has
-	// it: the absorption decision's own rule, where the finding stands on the
-	// tree being handed over.
-	about string
-}
-
-// Run executes the command the evidence table bound to an item, and reports
-// what the run says about itself. A command that cannot be RESOLVED is an
-// error — a violated table, and a verdict over one would be a decision
-// wearing a defect's costume. A command that cannot RUN is the oracle's to
-// treat as unresolved, not this seam's to smooth over.
-func (e evidenceRunner) Run(ctx context.Context, command string) (gating.Run, error) {
-	line, ok := e.commands[command]
-	if !ok {
-		return gating.Run{}, fmt.Errorf("the evidence table binds the command id %q, which neither [testing.commands] "+
-			"nor [evidence.commands] declares: a binding that resolves to nothing is a stop", command)
-	}
-	ref := "refs/ticfac/fetched/" + e.r.git.fetch1D() + "/" + e.r.branch
-	if err := e.r.git.fetch(e.r.branch); err != nil {
-		return gating.Run{}, fmt.Errorf("fetch %s to run the done's command %s: %w", e.r.branch, command, err)
-	}
-	// The tree the observation answers on: the pinned about tree when one is
-	// named — the tree the finding was made on, a commit of the discovery's
-	// own moment that the fetch above already brought with the branch's
-	// history — else the branch head as origin has it, the tree the run hands
-	// over. A tree the repository cannot check out is the runner's error to
-	// report and the oracle's to read as unresolved, never a silent stand-in.
-	head := e.about
-	if head == "" {
-		var err error
-		head, err = e.r.git.run("", "rev-parse", ref)
-		if err != nil {
-			return gating.Run{}, err
-		}
-	}
-	dir, remove, err := e.r.git.tempWorktree("ticfac-done-", head)
-	if err != nil {
-		return gating.Run{}, err
-	}
-	defer remove()
-
-	started := time.Now().UTC()
-	stdout, stderr, code, err := runShell(ctx, dir, line, e.r.opts.GateTimeout)
-	finished := time.Now().UTC()
-	// The gate's own classification, not a reflex to err: `sh -c` reports a
-	// NORMAL non-zero exit through cmd.Wait's error with the true code beside
-	// it, and a command that ANSWERED non-zero is the fail the oracle reads —
-	// the evidence about the item — while a run that never reported a status
-	// (negative code) is an error: no evidence, the item unresolved, never
-	// assumed either way.
-	if err != nil && code < 0 {
-		// The command could not run: no evidence exists, and the oracle
-		// reads the item as unresolved, never as either verdict.
-		return gating.Run{}, fmt.Errorf("the done's command %s could not run on %s: %w", command, short(head), err)
-	}
-	result := gating.ResultFail
-	if code == 0 {
-		result = gating.ResultPass
-	}
-	return gating.Run{
-		Commit:     head,
-		Result:     result,
-		ExitCode:   code,
-		Stdout:     stdout,
-		Stderr:     stderr,
-		StartedAt:  started.Format(time.RFC3339),
-		FinishedAt: finished.Format(time.RFC3339),
-	}, nil
 }
 
 // mintTickID mints the id a promotion will name, through the durable tracker:

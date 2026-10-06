@@ -50,6 +50,13 @@ on top.
   bare `REVIEW-VERDICT: NOT READY`, or one whose reasons are only prose, is
   sent back to you. Use `high` only for a reason the epic is not ready;
   everything else is `medium` or `low`, and is filed as backlog.
+- Your tick's notes may list DEFERRED FINDINGS: high-severity findings a
+  worker reported, naming a done item they break, after the epic's work was
+  done. The run does not absorb them on the worker's word; you decide. One
+  you judge a reason the epic is not ready, re-report in your findings block
+  with exactly the kind and title the note gives, severity `high`, as a
+  reason for NOT READY: the run then absorbs its tick. One you leave out
+  stays backlog and is listed on the epic's pull request.
 - Do not rewrite the epic's plan and do not open new scope. If the epic is not
   ready, say what would make it ready. A discovery that deserves its own
   tick — in this repository, in an upstream one, or in the pinned contract
@@ -84,9 +91,11 @@ for its marks), and `check` the declared testing command id or the command
 that would demonstrate it. Omit `breaks` when the finding breaks no item —
 never write "none". `evidence` is optional: where to look, as file:line or a
 command and the line it fails with. When you found nothing, write the empty
-block, `[]`. The claim is evidence, never the verdict: the run runs the named
-check where it can, predicts where it cannot yet, and scores the claim against
-what the done actually did.
+block, `[]`. The claim is what the run's absorption decision reads, and no
+classifier second-guesses it: a `high` finding that names the item it breaks
+is fixed inside the epic while the epic's work is under way; once that work is
+done it waits for the final reviewer to name it blocking; anything else is
+filed as backlog and listed on the epic's pull request.
 
 Before you stop, check your report with the same reader the run collects it
 with, and fix every error it prints until it exits 0 — a report that fails it

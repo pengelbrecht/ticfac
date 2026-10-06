@@ -52,7 +52,7 @@ func TestEntrypointReachesTheSkillLoopWithTheRealTicfac(t *testing.T) {
 		t.Fatalf("exit %d, want 0 — the entrypoint did not reach the skill loop\n%s", code, out)
 	}
 	rec := f.harnessRecord()
-	mustContain(t, rec, "BIN=pi", "the harness never started")
+	mustContain(t, rec, "BIN=omp", "the harness never started")
 	mustContain(t, rec, "ticks", "the prompt names the skill")
 }
 
@@ -70,7 +70,7 @@ func TestEntrypointRoutesTheModelWithTheRealTicfac(t *testing.T) {
 
 [orchestrator]
 harness = "omp"
-kind = "pi"
+kind = "omp"
 
 [roles.implement]
 kind = "claude"

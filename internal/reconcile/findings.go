@@ -160,10 +160,10 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 			// field as reported: which acceptance item of the epic's definition
 			// of done the reporter says is broken ("none" when none), and the
 			// command or test that would demonstrate it. This is the half the
-			// absorption decision runs on — the done check where the item is
-			// runnable, a prediction's input where it is not — and the claim is
-			// what the reporter is later scored against, so it is preserved
-			// with the discovery, never summarised into it.
+			// absorption policy runs on (absorb_policy.go) — a high-severity
+			// finding that names an item of the done is the worker-asserted
+			// basis for absorbing it — so it is preserved with the discovery,
+			// never summarised into it.
 			DoneItem:           finding.DoneItem,
 			DemonstratingCheck: finding.DemonstratingCheck,
 			TickID:             marker.TickID,

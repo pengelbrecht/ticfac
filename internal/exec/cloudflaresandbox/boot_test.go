@@ -60,6 +60,48 @@ func TestAHandleBootedOnAnotherHarnessIsRefused(t *testing.T) {
 	}
 }
 
+// A HOSTED attempt's handle names the harness its WorkerAgent runs it on —
+// [WorkerAgentHarness] — not the harness the dispatch's profile resolved for
+// the container its tools run in (tick 4uj): the agent drives the boot, the
+// conversation and the finish, so the harness that ran is the agent's, and
+// the record a caller keeps names it. The request still carries the profile's
+// own harness — the container's boot environment is bound to it until the
+// pi-CLI path is deleted (tick jhp) — and Start accepts exactly that one
+// mismatch, the same rule the refusal above enforces answered on the hosted
+// side: the record names what ran.
+//
+// short: an httptest door and one state directory.
+func TestAHostedHandleNamesTheWorkerAgentHarnessItRanOn(t *testing.T) {
+	h := newHarness(t)
+	// The door's hosted path names the agent's harness in the handle, the
+	// one shape no container boot can produce.
+	h.door.bootedHarness = WorkerAgentHarness
+	handle, err := h.start("keh")
+	if err != nil {
+		t.Fatalf("Start refused a hosted attempt's handle: %v", err)
+	}
+	// The request still named the profile's own harness for the container.
+	if got := h.door.lastStartBody()["harness"]; got != testHarness {
+		t.Errorf("the start request carried harness %v, want the profile's own %q: a hosted attempt's "+
+			"container is still booted on the dispatch's harness", got, testHarness)
+	}
+	payload, err := local(handle)
+	if err != nil {
+		t.Fatalf("decode the handle payload: %v", err)
+	}
+	if payload.Harness != WorkerAgentHarness {
+		t.Errorf("the handle names harness %q, want the agent's %q", payload.Harness, WorkerAgentHarness)
+	}
+	record, err := newStore(payload.State).readAttempt()
+	if err != nil {
+		t.Fatalf("read the attempt record: %v", err)
+	}
+	if record.Harness != WorkerAgentHarness {
+		t.Errorf("the attempt record names harness %q, want the agent's %q: the record is what a "+
+			"trace reads the runner from, and the agent is what ran", record.Harness, WorkerAgentHarness)
+	}
+}
+
 // A dispatch with no harness is refused before the door is dialled: the door
 // requires one, and a start without it would boot on the factory's own
 // standing choice under a record that names nothing.

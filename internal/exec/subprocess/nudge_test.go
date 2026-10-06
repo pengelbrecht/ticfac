@@ -101,14 +101,15 @@ func TestClaudeIsLaunchedWithoutBackgroundTasks(t *testing.T) {
 }
 
 // The runners with a session this executor can name are nudged in THAT
-// session: claude starts with --session-id and resumes with --resume, pi uses
-// --session-id for both. codex has none, and is run again with the whole
-// prompt and the fresh-run section.
+// session: claude starts with --session-id and resumes with --resume. codex
+// has none, and is run again with the whole prompt and the fresh-run section.
+// pi is neither since tick hpk: its conversation is durable in the attempt's
+// own storage, so a nudge is the same argv with the nudge text as the
+// message, and the relaunched runner continues the same conversation.
 func TestTheNudgeResumesTheRunnersOwnSession(t *testing.T) {
 	record := &attemptRecord{Branch: "b", ResultPath: "/abs/RESULT.md"}
 	cases := map[string]struct{ start, resume string }{
 		"claude": {"--session-id", "--resume"},
-		"pi":     {"--session-id", "--session-id"},
 	}
 	for name, flags := range cases {
 		session, err := sessionFor(name, nil)
@@ -140,6 +141,9 @@ func TestTheNudgeResumesTheRunnersOwnSession(t *testing.T) {
 		}
 	}
 
+	if session, _ := sessionFor("pi", nil); session != "" {
+		t.Errorf("pi was given a session %q — the durable runner's session is its storage", session)
+	}
 	if session, _ := sessionFor("codex", nil); session != "" {
 		t.Errorf("codex was given a session %q it has no flag for", session)
 	}

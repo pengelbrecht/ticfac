@@ -33,9 +33,21 @@ const maxEpicDescription = 2000
 // findings, the changes the run made that no tick asked for (repairs and
 // resolutions), what it absorbed, and what it could not do at all.
 func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, findings []runstate.Finding,
-	absorptions []runstate.Absorption) string {
+	absorptions []runstate.Absorption, amendments []runstate.Amendment) string {
 
 	var items []string
+	var undecided []string
+	for _, amendment := range amendments {
+		if amendment.Status != runstate.AmendmentConfirmed {
+			undecided = append(undecided, fmt.Sprintf("%s (tick %s, %s)", short(amendment.Key),
+				amendment.ProposedBy, amendment.Status))
+		}
+	}
+	if len(undecided) > 0 {
+		items = append(items, fmt.Sprintf("%d worker-proposed amendment(s) to the epic's own record are %s — "+
+			"the operator's word on what a worker wrote to the record the acceptance is scored from, listed with "+
+			"their full text under the amendments below.", len(undecided), strings.Join(undecided, ", ")))
+	}
 	if final >= 0 && reviewVerdictOf(decisions[final].Response) == subprocess.ReviewVerdictNotReady {
 		items = append(items, "**The final review judged the epic NOT READY.** Read its verdict below before the "+
 			"diff: it says what would make the epic ready.")
@@ -76,7 +88,7 @@ func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, finding
 			"\"resolve-conflict: …\"): check each resolution keeps both sides' intent.",
 			strings.Join(dedupe(resolves), ", ")))
 	}
-	var absorbed, liveRun, pastBound []string
+	var absorbed, liveRun, pastBound, deferredToReview []string
 	for _, record := range absorptions {
 		switch {
 		case record.Gating:
@@ -85,6 +97,8 @@ func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, finding
 			liveRun = append(liveRun, record.TickID)
 		case isPastBound(record):
 			pastBound = append(pastBound, record.TickID)
+		case isDeferredToReview(record):
+			deferredToReview = append(deferredToReview, record.TickID)
 		}
 	}
 	if len(pastBound) > 0 {
@@ -97,6 +111,15 @@ func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, finding
 			"with an owner rather than absorb it, whatever done item it claims. Judge whether any must land "+
 			"before this merges: %s.", len(pastBound), strings.Join(pastBound, ", ")))
 	}
+	if len(deferredToReview) > 0 {
+		// The policy's late rule (absorb_policy.go): high-severity findings
+		// reported once the epic's work was done, which the final reviewer
+		// did not name blocking.
+		items = append(items, fmt.Sprintf("%d high-severity finding(s) naming a done item they break were reported "+
+			"after the epic's work was done, so the run deferred them to the final reviewer instead of absorbing "+
+			"them, and the reviewer did not name them blocking; each is a backlog tick with an owner. Judge whether "+
+			"any must land before this merges: %s.", len(deferredToReview), strings.Join(deferredToReview, ", ")))
+	}
 	if len(absorbed) > 0 {
 		items = append(items, fmt.Sprintf("The run ABSORBED %d tick(s) into the epic mid-run, fixes its own "+
 			"findings demanded: %s.", len(absorbed), strings.Join(absorbed, ", ")))
@@ -107,8 +130,9 @@ func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, finding
 			strings.Join(liveRun, ", ")))
 	}
 	if len(items) == 0 {
-		items = append(items, "Nothing the run flagged: the review answered READY, no finding is untriaged, and the "+
-			"run made no change of its own. Start with the ticks below — each closed behind the integrated gate.")
+		items = append(items, "Nothing the run flagged: the review answered READY, no finding is untriaged, no "+
+			"worker amendment to the epic's record is undecided, and the run made no change of its own. Start "+
+			"with the ticks below — each closed behind the integrated gate.")
 	}
 	var b strings.Builder
 	for i, item := range items {

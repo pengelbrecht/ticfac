@@ -67,33 +67,27 @@ func writeTranscript(t *testing.T, kind, cwd string, lines ...map[string]any) {
 	}
 }
 
-// The two layouts, as the installed harnesses write them (pi 0.85.1's
-// session-manager.js; Claude Code's ~/.claude/projects), and the event kinds
-// read out of each.
-func TestTranscriptsOfPiAndClaudeAreReadWhereTheHarnessWritesThem(t *testing.T) {
+// The claude layout, as the installed harness writes it (Claude Code's
+// ~/.claude/projects), and the event kinds read out of it. The pi CLI's
+// layout went with the herdr pi kind (epic 43y, tick uxi): the durable
+// runner named "pi" writes no session transcript at all, so kind pi has
+// no transcript dir — nothing under it can be mistaken for the durable
+// host's signal.
+func TestClaudeTranscriptsAreReadWhereTheHarnessWritesThem(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(EnvTranscriptHome, home)
 	cwd := t.TempDir()
-	real, _ := filepath.EvalSymlinks(cwd)
 
-	if got, want := TranscriptDir("pi", cwd), filepath.Join(home, ".pi", "agent", "sessions",
-		"--"+strings.ReplaceAll(strings.TrimPrefix(real, "/"), "/", "-")+"--"); got != want {
-		t.Errorf("pi dir = %s, want %s", got, want)
-	}
 	if got := TranscriptDir("claude", "/Users/x/.herdr/worktrees/a-b"); got != filepath.Join(home, ".claude", "projects", "-Users-x--herdr-worktrees-a-b") {
 		t.Errorf("claude dir = %s", got)
 	}
 	if TranscriptDir("codex", cwd) != "" {
 		t.Error("codex has a transcript dir, but its layout is not read")
 	}
-
-	writeTranscript(t, "pi", cwd,
-		map[string]any{"type": "session", "timestamp": "2026-09-28T06:43:07.734Z"},
-		map[string]any{"type": "message", "timestamp": "2026-09-28T07:01:04.886Z",
-			"message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": "thinking"}, map[string]any{"type": "toolCall"}}}})
-	ev, ok := LastTranscriptEvent("pi", cwd)
-	if !ok || ev.Kind != "tool call started" || !ev.ToolInFlight || ev.At.Format(time.RFC3339) != "2026-09-28T07:01:04Z" {
-		t.Errorf("pi last event = %+v (%t), want a tool call started at 07:01:04", ev, ok)
+	// The deleted pi kind's layout is gone with it: the durable runner named
+	// pi must not be answered from session files it never writes.
+	if got := TranscriptDir("pi", cwd); got != "" {
+		t.Errorf("pi transcript dir = %s, want none: the durable pi runner's conversation is its storage, and the pi CLI's layout left with the herdr pi kind", got)
 	}
 
 	writeTranscript(t, "claude", cwd,
@@ -102,9 +96,204 @@ func TestTranscriptsOfPiAndClaudeAreReadWhereTheHarnessWritesThem(t *testing.T) 
 		map[string]any{"type": "user", "timestamp": "2026-09-28T08:39:25.000Z",
 			"message": map[string]any{"role": "user", "content": []any{map[string]any{"type": "tool_result"}}}},
 		map[string]any{"type": "bridge-session"})
-	ev, ok = LastTranscriptEvent("claude", cwd)
+	ev, ok := LastTranscriptEvent("claude", cwd)
 	if !ok || ev.Kind != "tool result" || ev.ToolInFlight {
 		t.Errorf("claude last event = %+v (%t), want a tool result, the undated line skipped", ev, ok)
+	}
+}
+
+// The `pi` runner is the durable Node host (tick hpk), not the pi CLI: it
+// writes no session transcript, its conversation is the attempt's own
+// SQLite storage (workerconfig.go), and the watch's last-event signal for
+// it is the storage file's mtime. The pi CLI session files it must never be
+// mistaken for went with the herdr pi kind (epic 43y, tick uxi): TranscriptDir
+// knows no pi layout any more, so nothing under ~/.pi can be read as the
+// durable runner's evidence (tick bgx).
+//
+// The record's RunnerArgv is the RESOLVED argv — what the supervisor runs,
+// rendered at Start and never empty — and not the launch-time override the
+// durable predicate is decided on (tick rpw): the record carries the
+// override as its own flag, and a test that fakes the record the way the
+// supervisor reads it must use that shape, or it certifies the defect it
+// hides.
+func TestTheDurableRunnersTranscriptSignalIsItsStorageNotTheCliSessions(t *testing.T) {
+	worktree := t.TempDir()
+	state := t.TempDir()
+
+	// The production shape, as executor.go records it: the RESOLVED argv,
+	// which is never empty, and the override flag unset because this launch
+	// came from the runner table.
+	record := &attemptRecord{
+		Runner: "pi", Worktree: worktree, State: state,
+		RunnerArgv: []string{"node", "--experimental-strip-types",
+			"--import", filepath.Join("harness", "runtime", "register.mjs"),
+			filepath.Join("harness", "src", "local", "main.ts"),
+			"--config", filepath.Join(state, "worker.json"),
+			"--message", "do the job"},
+	}
+	if !durableAttempt(record) {
+		t.Error("a table-launched durable attempt read back with its resolved argv is not durable")
+	}
+
+	// No storage yet: nothing can be read — and the CLI transcript is not
+	// read in its place, or the evidence would point an operator at a file
+	// the runner never writes.
+	if _, ok := lastRunnerEvent(record); ok {
+		t.Error("the durable runner answered a transcript event with no storage to read")
+	}
+
+	// The storage appears: its mtime is the event, its path names the file.
+	storage := filepath.Join(state, fileWorkerStorage)
+	if err := os.WriteFile(storage, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ev, ok := lastRunnerEvent(record)
+	if !ok {
+		t.Fatal("no event with the storage present")
+	}
+	if ev.Path != storage {
+		t.Errorf("event path = %s, want the storage %s", ev.Path, storage)
+	}
+	if d := time.Since(ev.At); d < 0 || d > time.Minute {
+		t.Errorf("event at %s, want the storage's mtime (now, ±1m)", ev.At)
+	}
+
+	// An overridden `pi` runner is the CLI escape hatch (TICFAC_RUNNER_ARGV,
+	// the tests' fake runner). It keeps no transcript signal at all now:
+	// the pi CLI's layout left with the herdr pi kind, so the watch answers
+	// nothing rather than pointing an operator at a file it no longer knows
+	// how to find — the other signals (the process table, the storage) are
+	// what an overridden runner has. The override is the RECORD's flag: an
+	// override replaces the whole invocation, so nothing of the table's —
+	// not the durable storage, which belongs to the table's argv — is read
+	// through one, whatever argv it happens to spell.
+	record.RunnerArgvOverride = true
+	if durableAttempt(record) {
+		t.Error("an overridden runner is not the table's durable runner")
+	}
+	if ev, ok := lastRunnerEvent(record); ok {
+		t.Errorf("overridden runner event = %+v, want none: the pi CLI session layout is gone with the herdr pi kind", ev)
+	}
+}
+
+// The record's half of the durable predicate (tick rpw): the supervisor
+// reads an attempt back, not the launch, so what decides is the record's
+// own override flag — never its RunnerArgv, which is the resolved argv and
+// never empty. An attempt recorded before the flag is not an override: the
+// executor that wrote the record and the supervisor that reads it are the
+// same binary, and a table launch is the default a bare record spells.
+func TestDurableAttemptIsDecidedOnTheRecordsOverrideFlag(t *testing.T) {
+	for _, name := range []string{"claude", "codex"} {
+		if durableAttempt(&attemptRecord{Runner: name}) {
+			t.Errorf("the %s runner is not durable", name)
+		}
+	}
+	if durableAttempt(&attemptRecord{Runner: "no-such-runner"}) {
+		t.Error("an unknown runner is not durable")
+	}
+	// The durable runner is durable by name, with the argv the supervisor
+	// runs recorded beside it — the shape the defect hid in.
+	durable := &attemptRecord{Runner: "pi", RunnerArgv: []string{"node", "main.ts"}}
+	if !durableAttempt(durable) {
+		t.Error("the durable runner with its resolved argv recorded is not durable")
+	}
+}
+
+// pi-durable opens its SQLite with journal_mode=WAL (wal_autocheckpoint=1000),
+// so a live conversation's commits land in worker.sqlite-wal and the main
+// file's mtime stays put until a checkpoint (tick lmt): a worker that has
+// been thinking or reading for a long time must not read as quiet because
+// only the main file was asked. The signal is the newer of the two files.
+func TestTheStorageSignalCountsTheWalCommitsBesideTheMainFile(t *testing.T) {
+	state := t.TempDir()
+	storage := filepath.Join(state, fileWorkerStorage)
+	wal := storage + "-wal"
+	setMtime := func(path string, at time.Time) {
+		t.Helper()
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(path, at, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	checkedOut := time.Now().Add(-time.Hour)  // the last checkpoint, long ago
+	streaming := time.Now().Add(-time.Minute) // commits going to the WAL
+
+	// A quiesced database: only the main file, checkpointed long ago. Its
+	// mtime is the signal, as before.
+	setMtime(storage, checkedOut)
+	ev, ok := LastStorageEvent(state)
+	if !ok {
+		t.Fatal("no event with the storage present")
+	}
+	if !ev.At.Equal(checkedOut) || ev.Path != storage {
+		t.Errorf("event = %s @ %s, want the main file %s @ %s", ev.Path, ev.At, storage, checkedOut)
+	}
+
+	// The worker streams: commits land in the WAL, the main file stays put.
+	// The WAL's mtime must be the signal, or the worker reads as quiet for
+	// the whole window and is nudged and stopped while it works.
+	setMtime(wal, streaming)
+	ev, ok = LastStorageEvent(state)
+	if !ok {
+		t.Fatal("no event with the WAL present")
+	}
+	if !ev.At.Equal(streaming) {
+		t.Errorf("event at %s, want the WAL's mtime %s: a streaming worker is not quiet", ev.At, streaming)
+	}
+	if ev.Path != wal {
+		t.Errorf("event path = %s, want the WAL %s: the evidence must name the file that moved", ev.Path, wal)
+	}
+
+	// A checkpoint between rounds moves the main file past the WAL: the
+	// newer of the two is the signal, whichever wrote it.
+	afterCheckpoint := time.Now()
+	setMtime(storage, afterCheckpoint)
+	ev, ok = LastStorageEvent(state)
+	if !ok {
+		t.Fatal("no event after the checkpoint")
+	}
+	if !ev.At.Equal(afterCheckpoint) || ev.Path != storage {
+		t.Errorf("event = %s @ %s, want the main file %s @ %s after the checkpoint", ev.Path, ev.At, storage, afterCheckpoint)
+	}
+}
+
+// The evidence sentence names where a live worker's progress lives: the
+// durable runner's storage when it can be read, the storage honestly when
+// it cannot, and the CLI transcript for every other runner as before.
+func TestEvidenceNamesWhereTheDurableRunnersProgressLives(t *testing.T) {
+	now := time.Date(2026, 10, 4, 20, 0, 0, 0, time.UTC)
+	at := now.Add(-2 * time.Minute)
+	storage := filepath.Join("state", string(filepath.Separator), fileWorkerStorage)
+
+	durable := Activity{
+		FirstSeenAt:      now.Add(-time.Hour),
+		TranscriptSource: sourceStorage,
+		Transcript:       TranscriptEvent{At: at, Kind: "storage written", Path: storage},
+		HasTranscript:    true,
+	}
+	if s := durable.Evidence(now); !strings.Contains(s, "its conversation storage was last written 2m0s ago") ||
+		!strings.Contains(s, "("+fileWorkerStorage+")") {
+		t.Errorf("durable evidence = %s, want the storage and its file named", s)
+	}
+
+	durable.HasTranscript = false
+	if s := durable.Evidence(now); !strings.Contains(s, "its conversation storage could not be read") {
+		t.Errorf("durable evidence without a storage = %s, want the storage named as unreadable", s)
+	}
+
+	cli := Activity{
+		FirstSeenAt:   now.Add(-time.Hour),
+		Transcript:    TranscriptEvent{At: at, Kind: "model output"},
+		HasTranscript: true,
+	}
+	if s := cli.Evidence(now); !strings.Contains(s, "its transcript's last event was 2m0s ago (model output)") {
+		t.Errorf("cli evidence = %s, want the session transcript sentence as before", s)
+	}
+	if s := (Activity{FirstSeenAt: now.Add(-time.Hour)}).Evidence(now); !strings.Contains(s, "no session transcript could be read") {
+		t.Errorf("cli evidence without a transcript = %s, want the missing-transcript sentence as before", s)
 	}
 }
 
@@ -307,22 +496,23 @@ func lastObservationDetail(status *JobStatus) string {
 
 // The whole-tail read the dashboard's activity window answers from (hn6,
 // tick ltg): every dated line's stamp — the moments the worker was seen
-// doing something — and the LAST tool call as one bounded line, in both
-// harnesses' own block spellings.
+// doing something — and the LAST tool call as one bounded line, read from
+// Claude Code's layout and block spellings — the one harness that still
+// writes a session transcript since the pi CLI went (epic 43y, tick uxi).
 func TestReadTranscriptEventsAnswersTheWindowAndTheLastToolCall(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(EnvTranscriptHome, home)
 	cwd := t.TempDir()
 
-	writeTranscript(t, "pi", cwd,
+	writeTranscript(t, "claude", cwd,
 		map[string]any{"type": "session", "timestamp": "2026-09-28T06:43:07.734Z"},
-		map[string]any{"type": "message", "timestamp": "2026-09-28T06:44:00.000Z",
+		map[string]any{"type": "assistant", "timestamp": "2026-09-28T06:44:00.000Z",
 			"message": map[string]any{"role": "assistant", "content": []any{
-				map[string]any{"type": "toolCall", "name": "bash", "arguments": map[string]any{"command": "ls -la"}},
-				map[string]any{"type": "toolCall", "name": "bash",
-					"arguments": map[string]any{"command": "go test ./internal/reconcile"}},
+				map[string]any{"type": "tool_use", "name": "bash", "input": map[string]any{"command": "ls -la"}},
+				map[string]any{"type": "tool_use", "name": "bash",
+					"input": map[string]any{"command": "go test ./internal/reconcile"}},
 			}}})
-	events, ok := ReadTranscriptEvents(home, "pi", cwd)
+	events, ok := ReadTranscriptEvents(home, "claude", cwd)
 	if !ok {
 		t.Fatal("the transcript stands and the tail reader answered nothing")
 	}
@@ -355,12 +545,12 @@ func TestReadTranscriptEventsAnswersTheWindowAndTheLastToolCall(t *testing.T) {
 
 	// The line stays bounded however long the argument was.
 	long := strings.Repeat("word ", 40)
-	writeTranscript(t, "pi", cwd,
-		map[string]any{"type": "message", "timestamp": "2026-09-28T09:00:00.000Z",
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "assistant", "timestamp": "2026-09-28T09:00:00.000Z",
 			"message": map[string]any{"role": "assistant", "content": []any{
-				map[string]any{"type": "toolCall", "name": "bash", "arguments": map[string]any{"command": long}},
+				map[string]any{"type": "tool_use", "name": "bash", "input": map[string]any{"command": long}},
 			}}})
-	events, _ = ReadTranscriptEvents(home, "pi", cwd)
+	events, _ = ReadTranscriptEvents(home, "claude", cwd)
 	if len([]rune(events.LastToolCall)) > 80 {
 		t.Errorf("the last tool call line is %d runes, want it bounded to 80", len([]rune(events.LastToolCall)))
 	}
@@ -370,19 +560,19 @@ func TestReadTranscriptEventsAnswersTheWindowAndTheLastToolCall(t *testing.T) {
 
 	// A tool call whose first argument is not text (a list) carries the tool's
 	// name alone: never a guessed argument.
-	writeTranscript(t, "pi", cwd,
-		map[string]any{"type": "message", "timestamp": "2026-09-28T09:01:00.000Z",
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "assistant", "timestamp": "2026-09-28T09:01:00.000Z",
 			"message": map[string]any{"role": "assistant", "content": []any{
-				map[string]any{"type": "toolCall", "name": "todoWrite",
-					"arguments": map[string]any{"todos": []any{map[string]any{"id": "1"}}}},
+				map[string]any{"type": "tool_use", "name": "todoWrite",
+					"input": map[string]any{"todos": []any{map[string]any{"id": "1"}}}},
 			}}})
-	events, _ = ReadTranscriptEvents(home, "pi", cwd)
+	events, _ = ReadTranscriptEvents(home, "claude", cwd)
 	if events.LastToolCall != "todoWrite" {
 		t.Errorf("the last tool call is %q, want the tool's name alone for a non-text first argument", events.LastToolCall)
 	}
 
 	// Nothing to read: a working directory with no session at all.
-	if _, ok := ReadTranscriptEvents(home, "pi", t.TempDir()); ok {
+	if _, ok := ReadTranscriptEvents(home, "claude", t.TempDir()); ok {
 		t.Error("a worktree with no transcript answered events")
 	}
 }
@@ -465,13 +655,13 @@ func TestReadTranscriptEventsRedactsCredentialsFromTheLastToolCall(t *testing.T)
 		},
 	}
 	for i, c := range cases {
-		writeTranscript(t, "pi", cwd,
-			map[string]any{"type": "message", "timestamp": "2026-10-04T09:00:00.000Z",
+		writeTranscript(t, "claude", cwd,
+			map[string]any{"type": "assistant", "timestamp": "2026-10-04T09:00:00.000Z",
 				"message": map[string]any{"role": "assistant", "content": []any{
-					map[string]any{"type": "toolCall", "name": "bash",
-						"arguments": map[string]any{"command": c.command}},
+					map[string]any{"type": "tool_use", "name": "bash",
+						"input": map[string]any{"command": c.command}},
 				}}})
-		events, ok := ReadTranscriptEvents(home, "pi", cwd)
+		events, ok := ReadTranscriptEvents(home, "claude", cwd)
 		if !ok {
 			t.Fatalf("case %d: the transcript stands and the tail reader answered nothing", i)
 		}

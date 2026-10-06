@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 30,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The same failure class this tick (kjs) fixed in workspace-checkpoints.test.ts exists in harness/test/node/local-host.test.ts, which kjs does not cover: its tests spawn a whole worker child process and wait on wall-clock conditions (waitFor, 30s bound) that a loaded shared host starves. Observed twice in one night while a live reconcile.test and an Xprotect scan ran beside: 'resumes from the storage after the harness is killed mid-tool, without re-running the tool' failed 'timed out waiting for the tool to be running' after 1040s, and an earlier run failed 'continues the SAME conversation when relaunched with a follow-up message' in the same file. Both pre-exist this tick's diff (the file is untouched by it) and both pass on a quiet host, so it is the host, not the tree — but per the repo's flaky-means-bug rule these tests need the same treatment kjs gave the workspace-checkpoints pair: a longer per-test timeout, and/or extending harness-timeout-discipline's guard to full-worker tests.\nevidence: harness/test/node/local-host.test.ts:168 (waitFor throw) via :460; failure log of this attempt's run: 'timed out waiting for the tool to be running', test took 1040817ms at load average 23-47\n\nticfac run epic-43y created this tick by absorbing the finding 90d3606325713abe8188177baac93a1b17a3e61f04fe2889685e24657a04e6b7 (reported by run-epic-43y/tick-kjs/attempt-19): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/90d3606325713abe8188177baac93a1b17a3e61f04fe2889685e24657a04e6b7.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "7wg",
+    "title": "local-host node-suite tests starve past their waits under host load"
+  },
+  "response": {
+    "choice": "translation",
+    "confidence": 0.8,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0,
+      "design": 0.09,
+      "diagnosis": 0.05,
+      "mechanical": 0.02,
+      "translation": 0.84
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1512,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T11:34:56Z",
+  "answered_at": "2026-10-05T11:34:56Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "7wg",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "b72b9439c9e2c005ff914cfe6808354187c8af64",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

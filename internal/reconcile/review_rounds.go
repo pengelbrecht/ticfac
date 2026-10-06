@@ -263,6 +263,13 @@ func (r *Reconciler) absorbNotReadyFindings(ctx context.Context, durable *durabl
 			if _, err := r.tracker.Note(ctx, record.TickID, note); err != nil {
 				return false, fmt.Errorf("note the absorption of %s: %w", record.TickID, err)
 			}
+			// The decision record says so (the 2026-10-06 policy): the finding
+			// is in the epic on the REVIEWER's basis now, whatever placed it
+			// outside — so a cold reconstruction reads the epic the warm run
+			// reached, and the PR says who brought it in.
+			if err := r.recordReviewerAbsorption(*record, final, reviewed); err != nil {
+				return false, err
+			}
 			r.record(reviewed, StageAbsorbed, "blocking finding %s (%q) of the NOT READY review is absorbed into "+
 				"the running epic: its tick %s, filed as %s, is now a child of %s", key, f.Title, record.TickID,
 				record.Placement, r.opts.EpicID)
@@ -428,9 +435,19 @@ var reviewBookkeepingPrefixes = []string{runStatePrefix, ".tick/"}
 // review the moment anybody re-ran the epic: the same question asked again.
 // A merge is the close-out's when its message names a close-out tick of the
 // epic (integrate.go writes "ticfac run <run>: tick <id> attempt <n>").
-// Everything else counts: work the run closed since, a person's commit, a
-// repair, and a fold of the base — the review judges the epic AS
-// INTEGRATED, and code the base brought in is code it has not seen.
+// The other exception is a FOLD OF THE BASE: a merge whose second parent is
+// on the base branch (the land's fold, the start's fold, the resolve-conflict
+// job's fold, a person merging main in). Counting it made a loop of the land
+// while other PRs kept landing on main: a fold, a review, main moved again,
+// another fold, another review — an epic that never lands. The base's code
+// was reviewed where it landed, and the fold is gated by the integrated gate
+// and CI before anything merges; what the review owes a judgement on is the
+// epic's own work, which a fold does not add to. A resolve-conflict fold may
+// carry resolution edits to the epic's files, and those are not re-reviewed
+// either: they fit the epic's work to the base rather than change what it
+// does, they pass the same gate and CI, and reviewing them would bring the
+// loop back for every epic that touches what main touches. Everything else
+// counts: work the run closed since, a person's commit, a repair.
 //
 // A history that cannot be read (the judged commit gone after a force push)
 // answers CHANGED: a commit the branch can no longer show is not a tree
@@ -463,22 +480,38 @@ func (r *Reconciler) treeChangedSinceReview(ctx context.Context, decision runsta
 			}
 		}
 	}
-	return head, r.changedOutsideBookkeeping(judged, head, closeouts), nil
+	// The base's head, for telling a fold from the epic's own merges. A base
+	// that cannot be read leaves every merge counted: the conservative side
+	// is a review, never a merge nobody judged.
+	baseHead := ""
+	if base := r.prBase(); base != "" && r.git.fetch(base) == nil {
+		baseHead, _ = r.git.remoteHead(base)
+	}
+	return head, r.changedOutsideBookkeeping(judged, head, baseHead, closeouts), nil
 }
 
 // changedOutsideBookkeeping is treeChangedSinceReview's history read: one git
 // log over the first-parent line from `from` to `to`, each commit's paths
-// against its first parent.
-func (r *Reconciler) changedOutsideBookkeeping(from, to string, closeouts []string) bool {
+// against its first parent, the close-out's merges and folds of the base
+// (second parent on `baseHead`) left out.
+func (r *Reconciler) changedOutsideBookkeeping(from, to, baseHead string, closeouts []string) bool {
 	const commitSep, bodySep = "\x1e", "\x1f"
 	out, err := r.git.run("", "log", "--first-parent", "--diff-merges=first-parent", "--name-only",
-		"--format=%x1e%B%x1f", from+".."+to)
+		"--format=%x1e%P%n%B%x1f", from+".."+to)
 	if err != nil {
 		return true
 	}
 	for _, entry := range strings.Split(out, commitSep) {
-		body, paths, ok := strings.Cut(entry, bodySep)
-		if !ok || isCloseoutMerge(body, closeouts) {
+		head, paths, ok := strings.Cut(entry, bodySep)
+		if !ok {
+			continue
+		}
+		parentLine, body, _ := strings.Cut(head, "\n")
+		if isCloseoutMerge(body, closeouts) {
+			continue
+		}
+		if parents := strings.Fields(parentLine); len(parents) > 1 && baseHead != "" &&
+			r.git.contains(parents[1], baseHead) {
 			continue
 		}
 		for _, path := range strings.Split(paths, "\n") {
@@ -534,10 +567,13 @@ func isCloseoutMerge(message string, closeouts []string) bool {
 // follows the rules above. Every round is gated the same way, so it
 // terminates: a review over a tree unchanged since it lands or holds.
 //
-// It is asked where the run can still work a new tick: where a run is
-// resumed (Run, beside answerNotReadyReview) and where a run's plan has
-// drained, just before the readying (Run's work-the-plan loop) — which is
-// where a change after the READY review in the same run is seen.
+// It is asked where the run can still work a new tick: where a WORK tick
+// closes (runPlan's window, before its replan) — so a review of work that
+// landed after a READY runs before the close-out, and the close-out's retro
+// and the epic PR are about a reviewed tree — where a run is resumed (Run,
+// beside answerNotReadyReview), and, as the backstop for a change nothing in
+// the run saw (a commit pushed from outside it), where a run's plan has
+// drained, just before the readying (Run's work-the-plan loop).
 
 // reviewOverChangedTree places one more review when the final review's tree
 // has changed and nothing else will review it: a READY final review, or a
@@ -691,6 +727,29 @@ func (r *Reconciler) placeBehindOpenWork(ctx context.Context, durable *durableTr
 				return fmt.Errorf("place the re-review %s behind %s: %w", review, task.ID, err)
 			}
 		}
+	}
+	return nil
+}
+
+// recordReviewerAbsorption rewrites the decision record of a finding the
+// NOT READY review named blocking and the run adopted into the epic: basis
+// reviewer, gating, placed before the re-review, the earlier decision kept in
+// the reason. A record already on the reviewer's basis is left alone.
+func (r *Reconciler) recordReviewerAbsorption(record runstate.Absorption, final runstate.Decision, reviewed string) error {
+	if record.Basis == runstate.AbsorptionReviewer {
+		return nil
+	}
+	earlier := fmt.Sprintf("basis %s, placed %s: %s", record.Basis, record.Placement, record.Reason)
+	record.Basis = runstate.AbsorptionReviewer
+	record.Gating = true
+	record.Placement = runstate.AbsorptionBeforeReview
+	record.Confidence, record.Model, record.Fallback = 0, "", ""
+	record.Reason = fmt.Sprintf("the final review (%s, decision %d) judged the epic NOT READY and named this "+
+		"finding blocking, so it is the epic's work and is fixed before the re-review. It had been decided "+
+		"before the review named it (%s)", reviewed, final.Decision, earlier)
+	record.DecidedAt = r.now().UTC().Format(time.RFC3339)
+	if _, err := r.store.UpdateAbsorption(record); err != nil {
+		return fmt.Errorf("record the reviewer's absorption of finding %s: %w", record.Key, err)
 	}
 	return nil
 }

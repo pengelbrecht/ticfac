@@ -137,6 +137,11 @@ func HoldReason(detail string) string {
 //     names one is not released by it — the reporting tick's work is not
 //     what the bound stopped.
 //
+//   - epic_amendment_unconfirmed, the close-out's amendments gate (tick
+//     7sn), is cleared by the amendments surface addressed by the epic
+//     whose record a worker amended: the operator confirms or rejects each
+//     note, and no release or resume stands in for that word.
+//
 //   - claim_width and foreign_claim are cleared by the RUN AGAIN, addressed
 //     by the host the run lives on: they are facts about the world that end
 //     when the other holder's tick closes or a slot frees — never by a
@@ -185,6 +190,9 @@ func HoldClearingCommand(epicID, host, storeRunID, runID string, held runfeed.Ev
 	case reconcile.RefusedFindingUntriaged, reconcile.RefusedAbsorptionDepth:
 		command := TriageCommandForCurrentRun(epicID, storeRunID)
 		return &command
+	case reconcile.RefusedEpicAmendmentUnconfirmed:
+		command := AmendmentsCommand(epicID)
+		return &command
 	case reconcile.RefusedClaimWidth, reconcile.RefusedForeignClaim, reconcile.RefusedLandReviewNotReady:
 		command := ResumeCommand(host, epicID)
 		return &command
@@ -205,4 +213,15 @@ func commandOrNil(command string) *string {
 		return nil
 	}
 	return &command
+}
+
+// AmendmentsCommand is the one command that settles a run's unconfirmed
+// epic amendments — the close-out's amendments gate and the run_held line
+// it raises (tick 7sn) are both cleared through it, addressed by the epic
+// whose record was amended. It names the LISTING, which teaches the settle
+// command beside each amendment's short key prefix, for the same reason
+// TriageCommand does: a command that sends the operator to type the 64-hex
+// key by hand is the friction the surface exists to remove.
+func AmendmentsCommand(epicID string) string {
+	return fmt.Sprintf("ticfac amendments %s", epicID)
 }

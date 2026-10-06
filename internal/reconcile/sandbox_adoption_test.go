@@ -621,8 +621,13 @@ func (f *fixture) doorOptions(t *testing.T, repo *testRepo, door *fakeSandboxDoo
 	opts.ProfileDir = profiles
 	opts.ExecStateRoot = stateRoot
 	opts.Executors = []KnownExecutor{{
-		Name:         doorExecutorName,
-		Runners:      []string{"pi"},
+		Name: doorExecutorName,
+		// The harness names the production wiring states ([CloudRule].Harnesses,
+		// the way internal/cli/executor.go does): the profile files above name
+		// the runner table's "pi", which resolution binds to the hosted kind
+		// "pi-durable" on every dispatch into Cloudflare (tick twa), so a set
+		// admitting only "pi" refuses the run at construction.
+		Runners:      profile.CloudRule.Harnesses,
 		AcceptsModel: func(string) bool { return true },
 		// The harness's own poll cadence rather than the cloud's five
 		// minutes: a test that waits for anything waits milliseconds.

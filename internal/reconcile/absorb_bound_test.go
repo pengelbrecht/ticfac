@@ -254,7 +254,7 @@ func TestAFindingDeferredPastTheBoundIsNamedForTheReviewer(t *testing.T) {
 	t.Parallel()
 	record := runstate.Absorption{Key: "k4", TickID: "b04", Basis: runstate.AbsorptionRule,
 		Placement: runstate.AbsorptionPastBound, Reason: "past the absorption bound"}
-	look := (&Reconciler{}).lookFirst(nil, -1, nil, []runstate.Absorption{record})
+	look := (&Reconciler{}).lookFirst(nil, -1, nil, []runstate.Absorption{record}, nil)
 	if !strings.Contains(look, "deferred past the absorption bound") || !strings.Contains(look, "b04") {
 		t.Errorf("the reviewer's first list does not name the deferral: %s", look)
 	}

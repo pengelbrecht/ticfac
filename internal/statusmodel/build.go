@@ -1060,7 +1060,9 @@ func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wa
 		// the rows' next steps read): the close-out's untriaged-findings hold
 		// and the absorption bound's are cleared by the triage addressed to
 		// the run's own store (tick q8m) — settle releases an attempt, and
-		// these holds hold a person's decision, not one; the holds about the
+		// these holds hold a person's decision, not one; the close-out's
+		// unconfirmed-amendments hold by the amendments surface (tick 7sn),
+		// for the same reason; the holds about the
 		// world — the width, a foreign claim — by the run again, addressed by
 		// the host (tick gtk), because they fire before the tick's first
 		// dispatch, end when the world does, and no release clears them; the

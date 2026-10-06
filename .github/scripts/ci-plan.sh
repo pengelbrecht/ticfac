@@ -54,7 +54,7 @@ if [ "$event" = "pull_request" ]; then
 
 	for f in "${files[@]}"; do
 		case "$f" in
-		cloudflare/* | contracts/* | contracts.pin.json) ts=true ;;
+		cloudflare/* | contracts/* | contracts.pin.json | harness/*) ts=true ;;
 		esac
 		case "$f" in
 		go.mod | go.sum | Makefile | internal/shorttest/* | .github/* | .tick/runners.toml)
@@ -84,6 +84,9 @@ if [ "$event" = "pull_request" ]; then
 		# The worker's own sources and tests: typescript's, not Go's (what Go
 		# embeds of cloudflare/ was matched above).
 		cloudflare/*) ;;
+		# The pi-durable harness package: its conformance and replay suites run
+		# in the typescript job; no Go verdict rests on it.
+		harness/*) ;;
 		# Run records, the tracker, documentation: no Go verdict rests on them.
 		*.md | .ticfac/* | .tick/* | .gitignore | .gitattributes | benchmarks/*) ;;
 		*)
@@ -145,7 +148,11 @@ if [ "$has_reconcile" = true ]; then
 fi
 if [ "${#rest[@]}" -gt 0 ]; then
 	node=false
-	case " ${rest[*]} " in *" ./internal/exec/cloudflaresandbox "*) node=true ;; esac
+	# The pi-durable local host (tick hpk) runs on node and the pinned
+	# @earendil-works packages: internal/exec/subprocess's end-to-end test
+	# spawns the real harness, so it skips itself wherever harness/node_modules
+	# is not installed — the same reason cloudflaresandbox sets node.
+	case " ${rest[*]} " in *" ./internal/exec/cloudflaresandbox "*|*" ./internal/exec/subprocess "*) node=true ;; esac
 	# The real-pi metering suite (tick 3wq): pi on PATH is what separates
 	# internal/exec/subprocess's drain test — the only end-to-end check that
 	# pi resolves the generated !command and that the account token displaces

@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 70,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "stopTree (stuck stop, wall clock, supervisor signal) and cancel signal only the runner's own process group. pi-durable's NodeExecutionEnv spawns every bash tool detached, so each tool leads its own group and survives the stop, orphaned to init/launchd. A hung tool keeps running forever, and because it can inherit the runner's lock fd it may keep the attempt's liveness lock held. Reproduced: with the l6n interrupt disabled, TestAStuckDurableWorkerInAHungToolIsSteeredThroughIt ends stopped as stuck and leaves 'bash -c …; sleep 3600' plus its sleep alive. The fix is probably to call interruptToolGroups (interrupt.go) on the runner before stopTree, and in cancel.go.\nevidence: internal/exec/subprocess/supervisor.go stopTree; pi-durable dist/env/node.js spawn(..., { detached: true }); ps after the base's stuck stop shows the orphaned group with ppid 1\n\nticfac run epic-43y created this tick by absorbing the finding a021456e45ed5b764e1c0de4dc19d4fe9b79a040b950766b47f15b49cbd8dd3e (reported by run-epic-43y/tick-l6n/attempt-54): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/a021456e45ed5b764e1c0de4dc19d4fe9b79a040b950766b47f15b49cbd8dd3e.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "ug0",
+    "title": "Stopping a durable runner leaves its detached tool process groups running"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.56,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.05,
+      "design": 0.04,
+      "diagnosis": 0.12,
+      "mechanical": 0.64,
+      "translation": 0.15
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1425,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T21:03:45Z",
+  "answered_at": "2026-10-05T21:03:45Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "ug0",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "c15fd5507277c0d9422f3655f4313fbc97cd3150",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

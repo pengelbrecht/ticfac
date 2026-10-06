@@ -90,15 +90,27 @@ type attemptRecord struct {
 	ResultPath string `json:"result_path"`
 	ResultRel  string `json:"result_rel"`
 
-	Runner     string   `json:"runner"`
-	RunnerArgv []string `json:"runner_argv"`
-	RunnerEnv  []string `json:"runner_env"`
+	// RunnerArgvOverride says the RunnerArgv below came in WHOLE from the
+	// host's override (TICFAC_RUNNER_ARGV) rather than from the runner table
+	// (tick rpw): the record's argv is the RESOLVED one the supervisor runs,
+	// never empty, so it cannot itself tell the two apart — and the
+	// supervisor's durable decisions (the conversation storage as the
+	// last-event signal, activity.go) read this flag. An attempt recorded
+	// before the flag is a table launch, which is the default a bare record
+	// spells: the executor that writes the record and the supervisor that
+	// reads it are the same binary.
+	Runner             string   `json:"runner"`
+	RunnerArgv         []string `json:"runner_argv"`
+	RunnerArgvOverride bool     `json:"runner_argv_override,omitempty"`
+	RunnerEnv          []string `json:"runner_env"`
 
 	// Session is the runner session this attempt runs in (claude
-	// --session-id, pi --session-id), empty for a runner with none. NudgeArgv
-	// is what the supervisor re-prompts a runner with when it exits 0 without
-	// its report (nudge.go); an attempt recorded before nudges carries none
-	// and is never nudged.
+	// --session-id), empty for a runner with none this executor can name —
+	// the durable runner's "session" is the attempt's own storage, named by
+	// SteerSock and worker.json, never by a CLI flag. NudgeArgv is what the
+	// supervisor re-prompts a runner with when it exits 0 without its report
+	// (nudge.go); an attempt recorded before nudges carries none and is never
+	// nudged.
 	Session   string   `json:"session,omitempty"`
 	NudgeArgv []string `json:"nudge_argv,omitempty"`
 
@@ -117,6 +129,13 @@ type attemptRecord struct {
 	// Zero is an attempt recorded without the watch: it is never watched.
 	StuckAfterMS int64    `json:"stuck_after_ms,omitempty"`
 	StuckArgv    []string `json:"stuck_argv,omitempty"`
+
+	// SteerSock is the pi-durable runner's steer socket (tick hpk): the
+	// Unix domain path the supervisor's stuck watch steers a LIVE runner
+	// through instead of interrupting it, one per attempt beside the
+	// worker.json and the conversation's SQLite storage. Empty is a runner
+	// with no door to steer through — every kind but the durable one.
+	SteerSock string `json:"steer_sock,omitempty"`
 
 	// Model and RolePrompt are what the caller's PROFILE resolved for this
 	// job. They are recorded because "which model ran this, under which role

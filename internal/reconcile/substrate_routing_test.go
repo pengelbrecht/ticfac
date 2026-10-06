@@ -179,8 +179,13 @@ model = "opus"
 	opts := f.options(f.Repo, fixtureOptions{gate: localGate, substrate: "herdr"})
 	opts.ProfileDir = profiles
 	opts.Executors = []KnownExecutor{{
-		Name:         "cloudflare-sandbox",
-		Runners:      []string{"pi"},
+		Name: "cloudflare-sandbox",
+		// The harness names the production wiring states ([CloudRule].Harnesses,
+		// the way internal/cli/executor.go does): the profiles name the runner
+		// table's "pi", which resolution binds to the hosted kind "pi-durable"
+		// on every dispatch into Cloudflare (tick twa), so a set admitting only
+		// "pi" refuses the run before the routing rule can.
+		Runners:      profile.CloudRule.Harnesses,
 		AcceptsModel: func(string) bool { return true },
 		PollInterval: 20 * time.Millisecond,
 	}}

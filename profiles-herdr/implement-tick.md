@@ -52,9 +52,12 @@ isolated git worktree that is yours alone. Nobody will answer a question.
   that would demonstrate it. Omit `breaks` when the finding breaks no item —
   never write "none". `evidence` is optional: where to look, as file:line or
   a command and the line it fails with. When you found nothing, write the
-  empty block, `[]`. The claim is evidence, never the verdict: the run runs
-  the named check where it can, predicts where it cannot yet, and scores the
-  claim against what the done actually did. A finding is a DRAFT a person
+  empty block, `[]`. The claim is what the run's absorption decision reads,
+  and no classifier second-guesses it: a `high` finding that names the item it
+  breaks is fixed inside the epic while the epic's work is under way; once
+  that work is done it waits for the final reviewer to name it blocking;
+  anything else is filed as backlog and listed on the epic's pull request. A
+  finding is a DRAFT a person
   promotes — proposing scope costs you nothing, but nothing opens
   without the promotion, and the same finding repeated on a later attempt
   deduplicates rather than re-proposing.

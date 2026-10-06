@@ -46,6 +46,7 @@
 import { ACTIVE_RUN_STATES } from "./runs";
 import type { OrchestratorSandbox, SandboxBinding } from "./sandbox";
 import { attemptSandboxNameForSlot } from "./sandbox-executor";
+import type { WorkerAgentResolver } from "./worker-agent";
 import { WORKER_COMMAND, workerCancelCommand } from "./worker-boot";
 import { defaultSleeper, type Sleeper } from "./worker-dispatch";
 
@@ -273,6 +274,12 @@ export type ReclaimOptions = {
   now?: () => Date;
   /** Bound one container question; a test shortens it. */
   askTimeoutMs?: number;
+  /**
+   * Which runs' workers are WorkerAgents (epic 43y, tick xd3): such a
+   * worker is STOPPED through its agent before its container is destroyed —
+   * an agent left driving would find its container gone and restore it.
+   */
+  agents?: WorkerAgentResolver;
 };
 
 /** A question that does not answer in time is no answer — never a hang. */
@@ -355,6 +362,22 @@ async function reclaimBoots(
     if (boot.settled) {
       entry.detail += "the job had settled; its container is destroyed as a backstop";
       continue;
+    }
+    // A hosted worker (tick xd3) is stopped through its agent, never asked
+    // through its container: the agent owns the attempt, and its wip
+    // checkpoints already pushed what it had after every tool round.
+    try {
+      const hosting = options.agents === undefined ? null : await options.agents(boot.run_id);
+      if (hosting !== null) {
+        const stopped = await bounded(hosting.agent(name).reclaim(options.reason), askTimeout);
+        entry.detail +=
+          stopped === "timeout"
+            ? "its WorkerAgent did not answer the stop in time; the container is destroyed under it"
+            : `its WorkerAgent was stopped (${stopped.phase}); its wip checkpoints are on the attempt branch`;
+        continue;
+      }
+    } catch (error) {
+      entry.detail += `its WorkerAgent could not be stopped (${String(error)}); `;
     }
     if (Date.parse(boot.at) < recentSince) {
       entry.detail += "booted too long ago to be running; destroyed without being asked";

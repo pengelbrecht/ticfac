@@ -678,6 +678,30 @@ tracker_edit_finding)
 		} > "$TICFAC_RESULT_PATH"
 	fi
 	;;
+epic_note)
+	# The 8em shape (epic 43y, tick 7sn): b1's deliverable is a tracker edit
+	# that appends a NOTE to the EPIC's own record — the record the close-out
+	# scores the acceptance from — declaring an exception the acceptance
+	# does not carry. The run applies it (a worker may propose notes on its
+	# epic) and FILES the amendment as awaiting the operator: the tick closes
+	# behind the delivery, the run reaches the close-out, and the close-out
+	# holds on the unconfirmed amendment. Every other tick does its work.
+	if [ "$TICFAC_TICK" != "b1" ]; then
+		commit
+		report
+	else
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf 'The gap is closed by recording the exception where it is scored from; proposed for the run to apply.\n\n'
+			printf '%s\n' '```tracker-edits'
+			printf '%s\n' '[{"tick": "qeu", "field": "notes", "value": "tick b1: the slow-check gate is excepted from A1 on the record, now on the record"}]'
+			printf '%s\n' '```'
+			printf '\n%s\n%s\n%s\n\n' '```findings v2' '[]' '```'
+			printf 'STATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+	fi
+	;;
 a1-adds-nothing)
 	# The isp shape: a1's attempt was cut from a RELEASED attempt's carried
 	# work, finds the work already done, and correctly adds nothing — a
@@ -839,6 +863,53 @@ closeout_finding)
 		commit
 		report
 	fi
+	;;
+closeout_finding_high|closeout_finding_low)
+	# The absorption policy's late rule (operator decision 2026-10-06): only
+	# the close-out reports, after every implementation tick closed and the
+	# final review ran, ONE in-repository finding naming done item A1 — high
+	# severity in the one mode, low in the other. Neither is absorbed: the
+	# high one is deferred to the reviewer, the low one is backlog work.
+	if [ "$TICFAC_TICK" = "co" ]; then
+		severity=high
+		[ "$mode" = "closeout_finding_low" ] && severity=low
+		commit
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf 'The close-out found something after the work was done.\n\n'
+			printf '%s\n' '```findings'
+			printf '%s\n' '[{'
+			printf '%s\n' '  "kind": "proposed-tick",'
+			printf '%s\n' '  "title": "A late finding the close-out reports",'
+			printf '%s\n' '  "body": "Found after the epic work was done.",'
+			printf '%s\n' "  \"severity\": \"$severity\","
+			printf '%s\n' '  "target": "",'
+			printf '%s\n' '  "done_item": "A1",'
+			printf '%s\n' '  "demonstrating_check": "done"'
+			printf '%s\n' '}]'
+			printf '%s\n' '```'
+			printf '\nSTATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+	else
+		commit
+		report
+	fi
+	;;
+finding_local_low)
+	# The absorption policy's default (operator decision 2026-10-06): the
+	# finding_local finding at LOW severity, still naming done item A1. A
+	# reporter's claim at low severity is backlog work, whatever it names.
+	commit
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf 'The fake runner also found things outside its tick.\n\n'
+		findings_block_local | sed 's/"severity": "high"/"severity": "low"/'
+		printf '\n'
+		verdict_line
+		printf 'STATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
 	;;
 finding_bad)
 	# A findings block that does not parse: collect carries the problem, and

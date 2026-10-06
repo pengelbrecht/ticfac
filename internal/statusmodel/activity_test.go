@@ -61,28 +61,29 @@ func transcriptStamp(at time.Time) string {
 func TestActivityBucketsTranscriptEvents(t *testing.T) {
 	home := t.TempDir()
 	worktree := t.TempDir()
-	// A pi transcript for the standing attempt's worktree: events at
+	// A claude transcript for the standing attempt's worktree: events at
 	// now-700s (outside the window), now-95s and now-90s (the ninth-oldest
 	// minute bucket) and now-30s (the newest), the last one a tool call.
-	writeSessionTranscript(t, home, "pi", worktree,
+	writeSessionTranscript(t, home, "claude", worktree,
 		map[string]any{"type": "session", "timestamp": transcriptStamp(testNow.Add(-700 * time.Second))},
-		map[string]any{"type": "message", "timestamp": transcriptStamp(testNow.Add(-95 * time.Second)),
+		map[string]any{"type": "assistant", "timestamp": transcriptStamp(testNow.Add(-95 * time.Second)),
 			"message": map[string]any{"role": "assistant", "content": []any{
-				map[string]any{"type": "toolCall", "name": "bash", "arguments": map[string]any{"command": "ls -la"}},
+				map[string]any{"type": "tool_use", "name": "bash", "input": map[string]any{"command": "ls -la"}},
 			}}},
-		map[string]any{"type": "message", "timestamp": transcriptStamp(testNow.Add(-90 * time.Second)),
+		map[string]any{"type": "assistant", "timestamp": transcriptStamp(testNow.Add(-90 * time.Second)),
 			"message": map[string]any{"role": "assistant", "content": []any{
 				map[string]any{"type": "text", "text": "reading the layout"},
 			}}},
-		map[string]any{"type": "message", "timestamp": transcriptStamp(testNow.Add(-30 * time.Second)),
+		map[string]any{"type": "assistant", "timestamp": transcriptStamp(testNow.Add(-30 * time.Second)),
 			"message": map[string]any{"role": "assistant", "content": []any{
-				map[string]any{"type": "toolCall", "name": "bash",
-					"arguments": map[string]any{"command": "go test ./internal/reconcile"}},
+				map[string]any{"type": "tool_use", "name": "bash",
+					"input": map[string]any{"command": "go test ./internal/reconcile"}},
 			}}},
 	)
 
 	src := runningEpicSources()
 	src.Activity = TranscriptActivity(home)
+	src.Runner = claudeRunner
 	src.Standing[0].Worktree = worktree
 	model := Build(src)
 
@@ -126,15 +127,16 @@ func TestActivityBucketsTranscriptEvents(t *testing.T) {
 func TestActivityRedactsTheLastAction(t *testing.T) {
 	home := t.TempDir()
 	worktree := t.TempDir()
-	writeSessionTranscript(t, home, "pi", worktree,
-		map[string]any{"type": "message", "timestamp": transcriptStamp(testNow.Add(-30 * time.Second)),
+	writeSessionTranscript(t, home, "claude", worktree,
+		map[string]any{"type": "assistant", "timestamp": transcriptStamp(testNow.Add(-30 * time.Second)),
 			"message": map[string]any{"role": "assistant", "content": []any{
-				map[string]any{"type": "toolCall", "name": "bash",
-					"arguments": map[string]any{"command": "GH_TOKEN=ghp_0123456789abcdefghijklmnopqrstuv go test ./internal/reconcile"}},
+				map[string]any{"type": "tool_use", "name": "bash",
+					"input": map[string]any{"command": "GH_TOKEN=ghp_0123456789abcdefghijklmnopqrstuv go test ./internal/reconcile"}},
 			}}})
 
 	src := runningEpicSources()
 	src.Activity = TranscriptActivity(home)
+	src.Runner = claudeRunner
 	src.Standing[0].Worktree = worktree
 	model := Build(src)
 
@@ -151,6 +153,14 @@ func TestActivityRedactsTheLastAction(t *testing.T) {
 	if want := "bash: GH_TOKEN=<redacted> go test ./internal/reconcile"; *activity.LastAction != want {
 		t.Errorf("the last action is %q, want %q", *activity.LastAction, want)
 	}
+}
+
+// claudeRunner names claude as every standing attempt's harness: the pi
+// runner is the pi-durable host since epic 43y (tick uxi) and writes no
+// session transcript, so a transcript-read test stands on claude's layout.
+func claudeRunner(string, int) *string {
+	claude := "claude"
+	return &claude
 }
 
 // TestActivityCountsNudgesWithoutATranscript: the nudge count is the feed's

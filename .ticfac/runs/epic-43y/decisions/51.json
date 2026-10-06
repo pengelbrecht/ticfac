@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 51,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "FactorySandbox.listProcesses returns nothing while the in-memory ready flag is false, as it is after a deploy restarts the DO. Tracked bash's resume then misses the live process and starts the command again. Today ensureGuard's door.run sets ready first; with guardDir null (a supported option) the tool would run twice. The resume tests use guardDir null with fakes that do not model ready.\nevidence: cloudflare/src/factory-sandbox.ts:597; harness/src/env/factory-sandbox.ts:758,774-786; harness/test/tracked-bash-resume.test.ts\n\nticfac run epic-43y created this tick by absorbing the finding fd3da3610c420a2a5ca06feff2b45e6426c90a582fc2adc1a96d0344462f6f4a (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/fd3da3610c420a2a5ca06feff2b45e6426c90a582fc2adc1a96d0344462f6f4a.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "2oa",
+    "title": "Nonce replay relies on ensureGuard marking FactorySandbox ready first"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.31,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.05,
+      "design": 0.02,
+      "diagnosis": 0.44,
+      "mechanical": 0.4,
+      "translation": 0.09
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1347,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T18:05:24Z",
+  "answered_at": "2026-10-05T18:05:24Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "2oa",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "9cbc4ca757cb055da49b7d3e19bf6c065fd8ebda",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

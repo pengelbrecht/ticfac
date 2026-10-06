@@ -222,12 +222,13 @@ const REQUESTED_MODEL = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash";
 
 /**
  * The harness a dispatch names (tick 9iz): the profile's runner — deliberately
- * spelled the same as the built-in default so the test that proves the request
- * outranks the deployment sets `RUN_WORKER_HARNESS` to something else, and a
- * container booted on the deployment's standing choice is told apart from one
- * booted on what the request carried.
+ * spelled the same as the built-in default (pi-durable since epic 43y, tick
+ * jhp — the hosted kind, the only worker harness) so the test that proves the
+ * request outranks the deployment sets `RUN_WORKER_HARNESS` to something
+ * else, and a container booted on the deployment's standing choice is told
+ * apart from one booted on what the request carried.
  */
-const REQUESTED_HARNESS = "pi";
+const REQUESTED_HARNESS = "pi-durable";
 
 /**
  * The rendered role prompt a dispatch carries (tick 9iz): the profile's own
@@ -345,6 +346,10 @@ async function denialOf(response: Response): Promise<{ error: string; detail: st
 beforeEach(async () => {
   binding = new FakeSandboxes();
   set("SANDBOXES", binding);
+  // A deployment without WORKER_AGENTS (tick hxd): this file holds the
+  // container's own all-in-one worker path end to end — the hosted door
+  // (every run, either substrate) is worker-agent-door.test.ts's.
+  set("WORKER_AGENTS", undefined);
   // The D1 index persists across this file's tests, and every test leaves a
   // live run — an orchestrator slot by the door's count. Capacity has its own
   // describe below, which sets the ceiling against what is held; every other
@@ -745,6 +750,21 @@ describe("start", () => {
     expect((await postStart(runToken, startBody())).status).toBe(201);
     const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess()!;
     expect(work.env.TICKS_WORKER_TIMEOUT).toBeUndefined();
+  });
+
+  // Tick xba: the stuck window rides the dispatch to the hosted worker's own
+  // watch. Zero is the run that turned the watch OFF — the honest spelling,
+  // because a negative is a malformed bound the door refuses exactly like
+  // the wall's — and a positive window is accepted as it stands.
+  it("carries the stuck watch's window, and refuses a malformed one (tick xba)", async () => {
+    const bad = await postStart(runToken, startBody({ stuck_seconds: -1 }));
+    expect(bad.status).toBe(400);
+    expect((await denialOf(bad)).detail).toContain("stuck_seconds");
+    expect((await postStart(runToken, startBody({ stuck_seconds: 0 }))).status).toBe(201);
+    // The window is accepted: the second start under the same live identity
+    // is the door's own ADOPTION (200), never a rival boot — and it answers
+    // 200 only because the request was accepted in the first place.
+    expect((await postStart(runToken, startBody({ stuck_seconds: 900 }))).status).toBe(200);
   });
 
   // Epic hn6, run_3f034e68: a carried attempt boots at the released attempt's

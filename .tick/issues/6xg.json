@@ -1,0 +1,14 @@
+{
+  "id": "6xg",
+  "title": "A run that folds a red main waits for main to go green instead of spending its repair and halting",
+  "gloss": "red base: wait, don't repair",
+  "description": "2026-10-05 23:37 UTC: hn6's land step folded main at 4808b08f (#225), which was itself red on CI (TestTheIncidentsOwnShapeACloseoutMadeBlockedByAbsorbedTicksMidRun). The epic PR's CI went red on the same test, the run re-ran it once, dispatched its one repair for the close-out tick, and then halted (run_finished failed) — spending effort and a person's attention on a failure that belonged to main, not the epic. When the base's own CI is red on the folded commit (or the failing tests also fail on the base), the run should classify it as base-red: not dispatch a repair, record it, and wait (bounded, polling main's CI) for main to go green, then re-fold and continue; and the CI-watchdog / main's owner is the one to fix it.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "Test: a fold of a base whose CI is red on the same failing test records base_red, dispatches no repair, waits, and lands once the base is fixed; a failure only on the epic still gets its repair.",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-05T23:38:30.449308Z",
+  "updated_at": "2026-10-05T23:38:30.449308Z"
+}

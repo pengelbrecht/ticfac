@@ -1,0 +1,12 @@
+{
+  "id": "051",
+  "title": "Re-entering a completed run skips the changed-tree review check",
+  "description": "Run's completed-run re-entry path (reconcile.go: checkpoint.State == StateCompleted with the PR + CI gate declared) goes straight to finishReadying, so neither answerNotReadyReview nor reviewOverChangedTree (review_rounds.go, #223/#225) runs on it. A final review whose tree changed since — a person's commit, work closed outside the run — is therefore not reviewed again on that path. Today this is moot where the run merges its own PR (a completed run with the opt-in has already merged), but a repository whose merge is a person's keeps re-entering this path to keep the PR ready, and its PR body then carries a verdict about a tree that no longer exists. Fix: ask reviewOverChangedTree on re-entry and, when it places a review, continue into the normal plan path instead of returning at the readying. Recorded during the #225 follow-ups (operator asked to track, not fix).",
+  "status": "open",
+  "priority": 3,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-06T00:07:54.3743Z",
+  "updated_at": "2026-10-06T00:07:54.3743Z"
+}

@@ -1,0 +1,61 @@
+{
+  "schema_version": 3,
+  "decision": 35,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 25,
+    "attempt_head": "634436bf17caffaa707509f7903d42bf1c2e7ea0",
+    "conflict_files": [
+      "cloudflare/src/staging-agent.ts",
+      "harness/proof/README.md"
+    ],
+    "conflicting_ticks": [
+      "cni",
+      "7ml",
+      "jhp",
+      "qf4"
+    ],
+    "epic_id": "43y",
+    "job_id": "run-epic-43y/tick-cni/resolve-25",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:bfd4c79f9e9a327bd3ce383bed41ee8699f551bf1c918f70d9bf1a471c50aca7",
+    "resolve_branch": "ticfac/run-epic-43y/tick-cni/resolve-25",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "cni"
+  },
+  "response": {
+    "conflict_detail": "2 conflicts: content in cloudflare/src/staging-agent.ts; content in harness/proof/README.md",
+    "conflict_files": [
+      "cloudflare/src/staging-agent.ts",
+      "harness/proof/README.md"
+    ],
+    "job_id": "run-epic-43y/tick-cni/resolve-25",
+    "merge": "41aac8fb48414a038b7686ad0b91e46d6a665a98",
+    "resolve_head": "69bd11e8fd5359f59be3296e1d69a0cc848c5431",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T14:33:28Z",
+  "answered_at": "2026-10-05T14:33:28Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "cni",
+    "attempt": 25,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "af2a26033c00eeaf0f782a1877423e1c74d77a32",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "frontier",
+    "profile_digest": "sha256:bfd4c79f9e9a327bd3ce383bed41ee8699f551bf1c918f70d9bf1a471c50aca7",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

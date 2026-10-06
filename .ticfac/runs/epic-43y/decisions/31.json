@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 31,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "workerconfig.go writes `remote` unconditionally, so a read-only (review) attempt on the local pi runner still installs the workspace checkpoints — whose every push the read-only grade's git pins refuse (grade.go readOnlyPins). Each tool round then throws into onReport and logs a failed checkpoint, the run has none of the wip durability the local rung exists for, and the new finish-phase salvage would go on to `git add -A && git commit` locally on an attempt whose grade granted no ref to advance. No test covers a read-only local durable run; a dispatched review would run visibly broken at its first tool round.\nevidence: internal/exec/subprocess/workerconfig.go writeWorkerConfig (Remote: record.Remote, no read-only check); internal/exec/subprocess/grade.go:215 readOnlyPins; harness/src/workspace/checkpoints.ts afterTools throws on a failed push\n\nticfac run epic-43y created this tick by absorbing the finding 9a4f695bd9313a47a7f23275233e6cd1bde9c19d0ad96bf1c93e56cee9978be7 (reported by run-epic-43y/tick-nou/attempt-21): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/9a4f695bd9313a47a7f23275233e6cd1bde9c19d0ad96bf1c93e56cee9978be7.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "x8e",
+    "title": "Read-only local pi workers: pinned pushes fail every wip checkpoint"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.43,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.04,
+      "design": 0.05,
+      "diagnosis": 0.54,
+      "mechanical": 0.33,
+      "translation": 0.04
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1408,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T11:38:59Z",
+  "answered_at": "2026-10-05T11:38:59Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "x8e",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "fb4a191b202fb1e4b523ac1330e7cc44c5c851fe",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "gzw",
+  "title": "timeout-discipline guard misses promisify(execFile) as a process entry point",
+  "description": "The guard's isProcessCall only matches call expressions whose CALLEE identifier is in PROCESS_ENTRY_POINTS. A test that drives real processes via `execFileAsync = promisify(execFile)` passes execFile as an ARGUMENT (callee is `promisify`) and then calls `execFileAsync(...)` — an identifier the list does not know — so the guard classifies it as not process-driving and demands no bound from it. standin-worker-entry-env.test.ts's three tests (real bash through the real worker entry, declaring 300_000 voluntarily at :105, :116, :132) are therefore entirely unenforced: a future regression of their bounds to a quiet-host number passes every guard assertion. The fixing commit 3cecaa753's own message names the gap ('the guard's static entry-point list does not yet see' the shape). Fix belongs in the guard — recognize the promisify indirection, or add the assignment-target analysis drivenNames already has — and must not over-bind workerd-suite tests that cannot exec.\nevidence: harness/test/node/harness-timeout-discipline.test.ts:86-95 (PROCESS_ENTRY_POINTS, isProcessCall); harness/test/node/standin-worker-entry-env.test.ts:29 (promisify(execFile)), :87 (execFileAsync call), :105/:116/:132 (voluntary bounds)\n\nticfac run epic-43y filed this backlog tick from the finding 520027eebf7723e3438ae84c65a5d3ea0dadd45881164ce868081d1957a3fc5f (reported by run-epic-43y/tick-omq/attempt-62): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/520027eebf7723e3438ae84c65a5d3ea0dadd45881164ce868081d1957a3fc5f.json on the run branch.",
+  "notes": "2026-10-05 23:46 - ticfac run epic-43y: created by absorbing finding 520027eebf7723e3438ae84c65a5d3ea0dadd45881164ce868081d1957a3fc5f — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-43y/absorptions/520027eebf7723e3438ae84c65a5d3ea0dadd45881164ce868081d1957a3fc5f.json on epic/43y, and it says: the classifier put 0.20 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-omq/attempt-62",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T21:46:50Z",
+  "updated_at": "2026-10-05T21:46:57.454877Z"
+}

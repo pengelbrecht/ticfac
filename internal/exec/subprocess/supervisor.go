@@ -196,6 +196,37 @@ func Supervise(stateDir string) error {
 	}
 	stuckRestart := false
 
+	// relaunches is the ATTEMPT's spend of the signal-death relaunch bound
+	// (relaunch.go, tick 3c2): one budget across every turn, the nudge's own
+	// shape — a nudged or stuck-re-prompted runner that is killed is owed the
+	// same recovery the first turn is. lastLife is the last runner process
+	// this supervisor ran, asked for the signal that killed it when a
+	// relaunch says what it recovered; it is written only from this
+	// goroutine, which is also the only one that reads it.
+	relaunches := 0
+	var lastLife *runnerLife
+
+	// stopRunner ends this runner: its detached tool groups first, then its
+	// own process group. pi-durable's environment spawns every bash tool
+	// `detached`, in a process group of its own (interrupt.go, tick l6n), so
+	// a group signal to the RUNNER's group ends the runner and leaves those
+	// tools running — orphaned to init, holding the runner's inherited lock
+	// fd, which is the attempt's liveness — and before tick ug0 every stop
+	// here did exactly that. The tools are interrupted BEFORE the stop
+	// because they are named as the descendants of a runner that is still
+	// alive: once the runner's group is gone they are nobody's children,
+	// and no stop can find them again.
+	stopRunner := func(runnerPID int, runnerAlive func() bool) {
+		hung, err := hungToolGroups(runnerPID)
+		if err != nil {
+			note("the runner's tool groups could not be read before the stop (%v); stopping its own group only", err)
+		} else if killed := interruptToolGroups(runnerPID, hung); len(killed) > 0 {
+			note("detached tool group(s) %s interrupted before the stop, which the runner's own group signal "+
+				"would have left running", joinInts(killed))
+		}
+		stopTree(runnerPID, runnerAlive)
+	}
+
 	// runTurn starts one runner process and waits for it. settled is true
 	// when the attempt was settled on the way — the runner could not be
 	// started, or the supervisor itself was stopped — and runner.exit is
@@ -258,6 +289,7 @@ func Supervise(stateDir string) error {
 		// That is what makes stopTree's signals this supervisor's own child's
 		// and nobody else's, even after the runner itself is gone (exitwait.go).
 		life := watchRunner(runner, runnerLockPath)
+		lastLife = life
 		runnerAlive := life.alive
 
 		// The watch begins here, at every turn's loop, and not when its ticker
@@ -309,6 +341,46 @@ func Supervise(stateDir string) error {
 				}
 				switch step, evidence := watch.look(record, runnerPID, stuckAfter); step {
 				case StuckNudge:
+					// THE STUCK NUDGE IS A STEER on a durable runner (tick hpk): a
+					// live pi-durable conversation takes the message after the current
+					// tool round and keeps running — no interrupt, no relaunch. Only a
+					// steer that cannot be delivered falls back to the CLI runner's
+					// interrupt-and-re-prompt, and a runner with no door and no argv is
+					// nudged as observed-only, as before.
+					//
+					// A steer is read after the current tool round, and a HUNG
+					// tool's round never ends (tick l6n): so a runner with a tool
+					// still running at this look — quiet for the whole window, CPU
+					// included — has that tool interrupted once the steer is
+					// admitted, the way pi-durable's own abort ends one (interrupt.go).
+					// Its round then ends and the steer is the next thing it reads.
+					if record.SteerSock != "" {
+						watch.steers++
+						hung, herr := hungToolGroups(runnerPID)
+						if herr != nil {
+							note("the runner's tool processes could not be read (%v); steering without interrupting them", herr)
+						}
+						why := "the supervisor steered you rather than stopping you"
+						if len(hung) > 0 {
+							why = "the supervisor interrupted the command you were running so that you can read this, " +
+								"and steered you rather than stopping you"
+						}
+						steerText := StuckPrompt(evidence+", and "+why, stuckAfter)
+						if err := steerRunner(record.SteerSock, steerText, fmt.Sprintf("stuck-nudge-%d", watch.steers)); err == nil {
+							watch.state.StuckNudgedAt = time.Now()
+							how := fmt.Sprintf("the %s runner (pid %d) was steered in its own conversation, placed after "+
+								"the current tool round", record.Runner, runnerPID)
+							if killed := interruptToolGroups(runnerPID, hung); len(killed) > 0 {
+								how += fmt.Sprintf(", and its hung tool (process group(s) %s) was interrupted so that round ends",
+									joinInts(killed))
+							}
+							observe(ObsHeartbeat, StuckNudgeDetail(how, evidence))
+							note("the runner appears stuck; %s (not stopped): %s", how, evidence)
+							break
+						} else {
+							note("the steer could not be delivered (%v); falling back to interrupt and re-prompt", err)
+						}
+					}
 					if len(record.StuckArgv) == 0 {
 						watch.state.StuckNudgedAt = time.Now()
 						observe(ObsHeartbeat, StuckNudgeDetail("the runner cannot be spoken to mid-turn and carries no stuck argv", evidence))
@@ -319,7 +391,7 @@ func Supervise(stateDir string) error {
 						"re-prompted in its own session", record.Runner, runnerPID), evidence))
 					note("the runner appears stuck; interrupting it to re-prompt it: %s", evidence)
 					stuckRestart = true
-					stopTree(runnerPID, runnerAlive)
+					stopRunner(runnerPID, runnerAlive)
 				case StuckStop:
 					detail := StuckStopDetail(fmt.Sprintf("the %s runner (pid %d) was stopped by its supervisor",
 						record.Runner, runnerPID), evidence)
@@ -327,17 +399,17 @@ func Supervise(stateDir string) error {
 					watch.state.StuckStopped = true
 					_ = atomicWrite(st.path(fileStuckStopped), []byte(detail+"\n"), 0o644)
 					observe(ObsExited, detail)
-					stopTree(runnerPID, runnerAlive)
+					stopRunner(runnerPID, runnerAlive)
 				}
 
 			case <-wall:
 				note("wall clock of %ds exceeded; stopping the runner", record.WallSeconds)
 				_ = atomicWrite(st.path(fileWallExceeded), []byte(now()+"\n"), 0o644)
-				stopTree(runnerPID, runnerAlive)
+				stopRunner(runnerPID, runnerAlive)
 
 			case sig := <-stopping:
 				note("supervisor received %s; stopping the runner", sig)
-				stopTree(runnerPID, runnerAlive)
+				stopRunner(runnerPID, runnerAlive)
 				// A stop is not an exit — but an attempt nobody settles is an
 				// attempt nobody CAN settle. Returning here left no runner.exit
 				// and no live pid, which inspect reads as `lost`; the reconciler
@@ -358,21 +430,67 @@ func Supervise(stateDir string) error {
 		}
 	}
 
-	code, settled, err := runTurn(record.RunnerArgv, runnerEnv, func(pid int) {
+	// runAlive runs one turn of the attempt's runner and, when that turn's
+	// process dies by a signal, replays the SAME argv a bounded number of
+	// times before the ordinary ladders take over (relaunch.go, tick 3c2). A
+	// durable runner's conversation survives its process in the attempt's
+	// own storage: the relaunched process resumes the run the killed one left
+	// unfinished — the mid-tool kill recovery the WorkerAgent host's storage
+	// already gives the cloud rung, on the local one — instead of the run
+	// paying a full redispatch over a fresh conversation. The argv AND the
+	// environment are replayed exactly, because the harness identifies a
+	// turn's input by an env-derived requestId and "the same argv replayed
+	// after a crash must find the same one again"
+	// (harness/src/local/worker-host.ts): the killed turn is CONTINUED, not
+	// re-submitted. A pending stuck re-prompt owns the next relaunch itself,
+	// which is why stuckRestart breaks the loop: the watch already stopped
+	// that runner to say something, and its argv — not this turn's — is the
+	// one that must run next.
+	//
+	// started is the first process's callback (the observation and note its
+	// caller records); relaunched is every replayed process's, and a relaunch
+	// announces itself here — BEFORE the process starts, the nudge's own
+	// rule (hol) — rather than re-observing the credential issue.
+	runAlive := func(argv, env []string, started, relaunched func(pid int)) (code int, settled bool, err error) {
+		code, settled, err = runTurn(argv, env, started)
+		for !settled && !stuckRestart {
+			due, why := relaunchDue(st, record, code, relaunches)
+			if !due {
+				if relaunches > 0 {
+					note("no further relaunch: %s", why)
+				}
+				return code, settled, err
+			}
+			relaunches++
+			death := deathWord(lastLife)
+			observe(ObsStarted, RelaunchDetail(relaunches, record.Runner, death))
+			n := relaunches
+			code, settled, err = runTurn(argv, env, func(pid int) {
+				note("the %s runner died by %s; relaunch %d of %d (pid %d): the same argv resumes its own "+
+					"conversation from the attempt storage", record.Runner, death, n, MaxRelaunches, pid)
+				if relaunched != nil {
+					relaunched(pid)
+				}
+			})
+		}
+		return code, settled, err
+	}
+
+	code, settled, err := runAlive(record.RunnerArgv, runnerEnv, func(pid int) {
 		observe(ObsStarted, fmt.Sprintf("%s runner, pid %d, worktree %s", record.Runner, pid, record.Worktree))
 		observe(ObsCredentialIssued, box.note(record))
 		note("started %s (pid %d) on %s", record.Runner, pid, record.Branch)
-	})
+	}, nil)
 	// The stuck nudge: the watch stopped the runner to re-prompt it in its
 	// own session. The re-prompted runner is watched the same way, and a
 	// second silence is a stop, not another nudge (DecideStuck).
 	for stuckRestart && !settled && !st.stuckStopped() && !st.wallClockExceeded() {
 		stuckRestart = false
-		code, settled, err = runTurn(record.StuckArgv,
+		code, settled, err = runAlive(record.StuckArgv,
 			append(append([]string{}, runnerEnv...), EnvStuckNudge+"=1"),
 			func(pid int) {
 				observe(ObsStarted, fmt.Sprintf("the %s runner was re-prompted as stuck, pid %d", record.Runner, pid))
-			})
+			}, nil)
 	}
 	// The nudge (nudge.go): a runner that exited 0 with no report is prompted
 	// again, a bounded number of times, before the attempt settles. And the
@@ -381,7 +499,12 @@ func Supervise(stateDir string) error {
 	// session, a bounded number of times. The two bounds are separate: a
 	// worker that forgot its report and then wrote a bad one is owed both.
 	how := "running it again on the same worktree: it has no session to resume"
-	if record.Session != "" {
+	switch {
+	case record.SteerSock != "":
+		// The durable runner (tick hpk): the “session” is the attempt's own
+		// storage, and a re-prompt is the same argv with a follow-up message.
+		how = "resuming its own conversation from the attempt storage"
+	case record.Session != "":
 		how = "re-prompting its own session " + record.Session
 	}
 	for nudged, pushed := 0, 0; !settled; {
@@ -396,14 +519,14 @@ func Supervise(stateDir string) error {
 			}
 			pushed++
 			n := pushed
-			code, settled, err = runTurn(withLintErrors(record.LintArgv, lint.Text()),
+			code, settled, err = runAlive(withLintErrors(record.LintArgv, lint.Text()),
 				append(append([]string{}, runnerEnv...), fmt.Sprintf("%s=%d", EnvLintPushback, n)),
 				func(pid int) {
 					observe(ObsStarted, LintPushbackDetail(n, fmt.Sprintf("the %s runner exited 0", record.Runner),
 						record.ResultPath, fmt.Sprintf("%s (pid %d)", how, pid), len(lint.Errors)))
 					note("the report fails the report check (%d error(s)); pushback %d of %d (pid %d), %s",
 						len(lint.Errors), n, MaxLintPushbacks, pid, how)
-				})
+				}, nil)
 			continue
 		}
 		nudged++
@@ -415,12 +538,12 @@ func Supervise(stateDir string) error {
 		observe(ObsStarted, fmt.Sprintf("%snudge %d of %d: the %s runner exited 0 without "+
 			"writing its report at %s, and a headless runner that ends its turn early ends the job; %s",
 			nudgeDetailPrefix, nudged, MaxNudges, record.Runner, record.ResultPath, how))
-		code, settled, err = runTurn(record.NudgeArgv,
+		code, settled, err = runAlive(record.NudgeArgv,
 			append(append([]string{}, runnerEnv...), fmt.Sprintf("%s=%d", EnvNudge, nudged)),
 			func(pid int) {
 				note("the runner exited 0 with no report; nudge %d of %d (pid %d), %s",
 					nudged, MaxNudges, pid, how)
-			})
+			}, nil)
 	}
 	if settled {
 		return err

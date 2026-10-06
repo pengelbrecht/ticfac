@@ -547,6 +547,15 @@ func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle
 		} else if refusal != nil {
 			return refusal
 		}
+		// The amendments gate runs beside it (tick 7sn): the operator's word
+		// on what a worker wrote to the epic's own record is a decision no
+		// rule waives — a repository that hands over without a PR hands over
+		// behind the same confirmation.
+		if refusal, err := r.gateCloseoutOnAmendments(tick, 0); err != nil {
+			return err
+		} else if refusal != nil {
+			return refusal
+		}
 		return nil
 	}
 	if r.opts.PullRequests == nil {
@@ -629,6 +638,17 @@ func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle
 			// PR they are about to judge — one decision point, at the end,
 			// instead of one per tick mid-run.
 			if refusal, err := r.gateCloseoutOnFindings(tick, pr.Number); err != nil {
+				return err
+			} else if refusal != nil {
+				return refusal
+			}
+			// The operator's own gate (tick 7sn): a worker-proposed amendment to
+			// the epic's own record — a note declaring an exception the acceptance
+			// does not carry, as epic 43y's 8em filed — is the worker's claim, and
+			// the close-out does not hand over behind one the operator has not
+			// confirmed or rejected. The PR body's amendments section, written
+			// immediately above, carries each one's full text.
+			if refusal, err := r.gateCloseoutOnAmendments(tick, pr.Number); err != nil {
 				return err
 			} else if refusal != nil {
 				return refusal
@@ -747,6 +767,106 @@ func (r *Reconciler) filedFindings() ([]runstate.Finding, error) {
 		return nil, err
 	}
 	return r.store.Findings()
+}
+
+// ------------------------------------------------- the amendments gate (7sn) ---
+
+// gateCloseoutOnAmendments is the close-out's OPERATOR'S gate (tick 7sn,
+// epic 43y): the close-out does not hand over while any amendment a worker
+// proposed to the epic's OWN record — a note on the epic, the one record
+// the acceptance is scored from — is still awaiting the operator's word.
+// The production incident the gate exists for was observed on epic 43y,
+// 2026-10-05: tick 8em closed a gap in acceptance item A1 by proposing a
+// note on the epic declaring the cloud PR-review's omp CLI boot "excepted,
+// on this record"; the run applied the note through its durable tracker
+// writer, and from then on a close-out scoring A1 read the worker's
+// exception as part of the record — though the operator's own recorded
+// exceptions covered only the LOCAL claude frontier rung. A worker-authored
+// exception was self-ratifying the moment the run applied it; this gate is
+// the operator's veto point, at the one place a person is already being
+// asked to look (the findings gate's argument, tick aqm, one decision point
+// at the end instead of one per worker proposal mid-run).
+//
+// A PENDING amendment holds. A CONFIRMED one passes — the operator's word is
+// the word the close-out hands over behind. A REJECTED one holds harder: the
+// operator disowned the amendment and the record still carries it, so the
+// refusal names the repair — remove or rewrite the amendment through the
+// tracker's own writer (a person's, or a tick's), then revisit the decision
+// as confirmed; `ticfac amendments` carries each one's key.
+//
+// prNumber is the epic PR's number when one exists, zero when the repository
+// declares no PR + CI rule; the amendments are on the PR either way, in the
+// body's own section, written immediately before this gate runs. It returns
+// the refusal that stops the hand-over, and an error only when nobody can
+// say — an unreadable amendment store must not read as "no amendments",
+// the same way an unreachable remote never reads as "not merged".
+func (r *Reconciler) gateCloseoutOnAmendments(tick string, prNumber int) (*Refusal, error) {
+	amendments, err := r.filedAmendments()
+	if err != nil {
+		return nil, fmt.Errorf("read the run's filed amendments: %w", err)
+	}
+	var undecided []runstate.Amendment
+	for _, amendment := range amendments {
+		if amendment.Status != runstate.AmendmentConfirmed {
+			undecided = append(undecided, amendment)
+		}
+	}
+	if len(undecided) == 0 {
+		return nil, nil
+	}
+	onThePR := ""
+	if prNumber > 0 {
+		onThePR = fmt.Sprintf(" and the epic PR #%d carries each one's full text", prNumber)
+	}
+	named := make([]string, 0, len(undecided))
+	for _, amendment := range undecided {
+		what := "still waiting for the operator's word"
+		if amendment.Status == runstate.AmendmentRejected {
+			what = fmt.Sprintf("REJECTED by %s at %s, and the epic's record still carries it — remove or rewrite "+
+				"the amendment through the tracker's own writer, then revisit the decision as confirmed",
+				amendment.DecidedBy, amendment.DecidedAt)
+		}
+		named = append(named, fmt.Sprintf("%q (%s on the epic, proposed by %s, %s), key %s",
+			amendment.FirstLine(), amendment.Field, r.attemptName(amendment.ProposedBy, amendment.Attempt),
+			what, amendment.Key))
+	}
+	return r.refuse(RefusedEpicAmendmentUnconfirmed, tick,
+		"%d amendment(s) a worker proposed to the epic %s's own record are still waiting for the operator's word, "+
+			"and the close-out does not hand over behind one (tick 7sn): a worker's words on the record the acceptance "+
+			"is scored from are a claim, never the operator's word — %s. Decide each with `ticfac amendments %s` (the "+
+			"listing carries each one's key and full text) and `ticfac amendment %s <key> --confirm --by <who>` — or the "+
+			"same command with --reject to disown it. Then run the epic again under "+
+			"this run id: the close gate re-reads the record, it does not trust the admission's answer. The records "+
+			"are keys %s under .ticfac/runs/%s/amendments/ on %s%s",
+		len(undecided), r.opts.EpicID, strings.Join(named, "; "), r.opts.EpicID, r.opts.EpicID,
+		amendmentKeys(undecided), r.runID, r.opts.Remote, onThePR), nil
+}
+
+// filedAmendments is every worker-proposed amendment the run filed. Read
+// from ORIGIN, fetched first, for the same reason the untriaged findings
+// read is: a gate that checked this run's memory of the amendments rather
+// than the durable record is a gate that survives a decision made while the
+// run was stopped.
+func (r *Reconciler) filedAmendments() ([]runstate.Amendment, error) {
+	if r.store == nil {
+		return nil, nil
+	}
+	if _, err := r.store.Fetch(); err != nil {
+		return nil, err
+	}
+	return r.store.Amendments()
+}
+
+// amendmentKeys is the undecided amendments' keys, comma-joined for a refusal
+// a person reads — full keys, because the settle command addresses them by
+// SHORT prefix and a refusal that truncated the key would send the operator
+// typing a prefix that cannot be checked against it.
+func amendmentKeys(amendments []runstate.Amendment) string {
+	keys := make([]string, 0, len(amendments))
+	for _, amendment := range amendments {
+		keys = append(keys, amendment.Key)
+	}
+	return strings.Join(keys, ", ")
 }
 
 // gateCloseoutCarriesFindings is the integrity check that replaces the

@@ -150,8 +150,15 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 	if err != nil {
 		return "", 0, fmt.Errorf("read the run's absorption decisions: %w", err)
 	}
+	// The worker-proposed amendments to the epic's OWN record (tick 7sn) —
+	// read here so the "where to look first" opening and the amendments
+	// section below compose from one fetch of the same durable records.
+	amendments, err := r.store.Amendments()
+	if err != nil {
+		return "", 0, fmt.Errorf("read the run's amendments: %w", err)
+	}
 	body.WriteString("\n\n## Where to look first\n\n")
-	body.WriteString(r.lookFirst(decisions, final, findings, absorptions))
+	body.WriteString(r.lookFirst(decisions, final, findings, absorptions, amendments))
 	body.WriteString("\n## What this epic did\n\n")
 	body.WriteString(r.epicSummary())
 	body.WriteString("\n## Definition of done\n\n")
@@ -254,10 +261,10 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 	}
 
 	// WHAT THIS EPIC ABSORBED (tick jlv): the close-out must be able to say,
-	// for this epic, what was absorbed, against which acceptance item,
-	// whether the verdict was observed or predicted, by WHICH MODEL it was
-	// predicted, and — for each prediction later checked — whether it was
-	// right. An epic that absorbed silently is an epic whose shape changed
+	// for this epic, what was absorbed, against which acceptance item, and on
+	// which basis — reviewer, worker-asserted-high or backlog-default since
+	// the 2026-10-06 policy; an earlier run's observed or predicted record,
+	// with its model and any checked score, is still reported as it was. An epic that absorbed silently is an epic whose shape changed
 	// with no account of why, so the body carries every absorption decision
 	// with its item id, its basis, its answering model and the score of each
 	// checked prediction, composed from the same durable records the retro
@@ -323,6 +330,70 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 				}
 			}
 			body.WriteString("\n")
+		}
+	}
+
+	// AMENDMENTS TO THE EPIC'S OWN RECORD (tick 7sn): every note a WORKER
+	// proposed to the record the close-out scores the acceptance from, each
+	// with the operator's decision on it — a pending or rejected one is what
+	// the close-out's amendments gate holds the hand-over on, and this is the
+	// text the operator reads to decide. Full text, like the findings: a
+	// decision made against a summary is a decision made against prose
+	// nobody scored.
+	body.WriteString("\n## Amendments to the epic's record\n\n")
+	if len(amendments) == 0 {
+		// The absence is stated from the RECORD's view, and says so: a worker's
+		// note applied by an older run — before these records existed — is
+		// outside them, and the close-out's retro names such exceptions from
+		// the epic's notes themselves. An absence that read as "no worker ever
+		// wrote to the record" would be a claim the record cannot make.
+		body.WriteString("No worker-proposed amendment to the epic's record is filed with this run. A note a " +
+			"worker applied in an earlier run — before the amendment records existed — is outside these " +
+			"records, and the close-out's retro names it from the epic's notes.\n")
+	} else {
+		body.WriteString("Every note a worker proposed to the epic's own record — the one the acceptance is scored " +
+			"from — applied by the run, and waiting for or carrying the operator's decision. A worker's words on " +
+			"it are a claim, never the operator's word: the close-out does not hand over while one is undecided " +
+			"(confirm lets it stand as the operator's own, reject disowns it).\n")
+		for _, amendment := range amendments {
+			switch amendment.Status {
+			case runstate.AmendmentConfirmed:
+				fmt.Fprintf(&body, "\n- CONFIRMED — %q (key %s, %s on the epic, proposed by %s): the operator let it "+
+					"stand, by %s at %s\n", amendment.FirstLine(), short(amendment.Key), amendment.Field,
+					r.attemptName(amendment.ProposedBy, amendment.Attempt), amendment.DecidedBy, amendment.DecidedAt)
+			case runstate.AmendmentRejected:
+				fmt.Fprintf(&body, "\n- REJECTED — %q (key %s, %s on the epic, proposed by %s): the operator disowned "+
+					"it, by %s at %s, and the close-out does not hand over while the record still carries it\n",
+					amendment.FirstLine(), short(amendment.Key), amendment.Field,
+					r.attemptName(amendment.ProposedBy, amendment.Attempt), amendment.DecidedBy, amendment.DecidedAt)
+			default:
+				fmt.Fprintf(&body, "\n- PENDING — %q (key %s, %s on the epic, proposed by %s): waiting for the "+
+					"operator — confirm with `ticfac amendment %s %s --confirm --by <who>`, reject with --reject\n",
+					amendment.FirstLine(), amendment.Key, amendment.Field,
+					r.attemptName(amendment.ProposedBy, amendment.Attempt), r.opts.EpicID, amendment.Key)
+			}
+			fmt.Fprintf(&body, "\n  %s\n", strings.ReplaceAll(amendment.Value, "\n", "\n  "))
+		}
+	}
+
+	// DEFERRED FINDINGS (the 2026-10-06 absorption policy): a high-severity
+	// finding whose reporter named the done item it breaks, reported once the
+	// epic's work was done, is deferred to the final reviewer rather than
+	// absorbed on the reporter's word — and one the reviewer did not name
+	// blocking stays a backlog tick. So is a finding the absorption bound
+	// deferred. The PR is where a person sees each of them.
+	var deferred []runstate.Absorption
+	for _, record := range absorptions {
+		if isDeferredToReview(record) || isPastBound(record) {
+			deferred = append(deferred, record)
+		}
+	}
+	if len(deferred) > 0 {
+		body.WriteString("\n## Deferred findings\n\n")
+		body.WriteString("Findings the run did not absorb into the epic although they claim to break its done: " +
+			"each is a backlog tick with an owner. Judge whether any must land before this merges.\n\n")
+		for _, record := range deferred {
+			fmt.Fprintf(&body, "- tick %s (finding %s) — %s\n", record.TickID, short(record.Key), placementLine(record))
 		}
 	}
 

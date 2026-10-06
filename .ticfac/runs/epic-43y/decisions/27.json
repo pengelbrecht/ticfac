@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 27,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The restore's setup command runs through the sandbox run door — one RPC that awaits the container exec for the whole command (cloudflare/src/factory-sandbox.ts `run` holds `started.output()`; harness/src/env/factory-sandbox.ts `rawShort` calls it). The prototype's restore took 25.8s with a trivial setup; a real repository's [sandbox] setup (pnpm install, go mod download) runs minutes, and whether that whole exchange fits one Worker→DO RPC plus one container exec await is unproven. The A2 staging run should watch exactly this: if the restore reports 'the setup command: exit …' or the door times out mid-install, switch the restore's setup line to a polled startProcess (the door already has process polling) rather than widening any timeout.\n\nticfac run epic-43y created this tick by absorbing the finding be4be4971ac851baae246bde6913cb4c4c650552f4905b85af21597c96d6fdc6 (reported by run-epic-43y/tick-i3h/attempt-18): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/be4be4971ac851baae246bde6913cb4c4c650552f4905b85af21597c96d6fdc6.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "cni",
+    "title": "Prove the restore's setup survives a real dependency install on staging"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.18,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.35000000000000003,
+      "design": 0.18,
+      "diagnosis": 0.31,
+      "mechanical": 0.07,
+      "translation": 0.09
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1367,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T11:09:43Z",
+  "answered_at": "2026-10-05T11:09:43Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "cni",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "a3153db7598b805cda1415c2a3001b59cb118829",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

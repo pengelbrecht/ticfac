@@ -85,6 +85,57 @@ export const WORKER_CANCEL_MARKER = "ticks-worker-cancel-requested";
  */
 export const WORKER_CANCEL_REPORT_MARKER = "CANCELLED BY THE SUPERVISOR";
 
+// ------------------------------------------------ the boot/finish phases ---
+
+/** The argument that runs the BOOT half of the worker contract (epic 43y). */
+export const WORKER_BOOT_ARG = "--boot";
+
+/** The boot phase, as the pi-durable host runs it as its env's first command. */
+export const WORKER_BOOT_COMMAND = `${WORKER_COMMAND} ${WORKER_BOOT_ARG}`;
+
+/**
+ * What a booted container prints once its essentials answer and its prompt is
+ * rendered, carrying the two names the host cannot derive (adoption can
+ * rename the branch). The rendered prompt follows between the two prompt
+ * markers, for the host to submit as the conversation's input.
+ *
+ * The boot's faults are the all-in-one's own exit codes (2-8, 13-15) — the
+ * boot-fault classes #171/#178 keep their meanings through this door too.
+ */
+export const WORKER_BOOT_MARKER = "ticks-worker-boot-ok";
+
+/** Opens the rendered prompt the boot hands the host. */
+export const WORKER_BOOT_PROMPT_BEGIN = "ticks-worker-boot-prompt-begin";
+
+/** Closes the rendered prompt the boot hands the host. */
+export const WORKER_BOOT_PROMPT_END = "ticks-worker-boot-prompt-end";
+
+/** The argument that runs the FINISH half of the worker contract (epic 43y). */
+export const WORKER_FINISH_ARG = "--finish";
+
+/**
+ * The finish phase, as the pi-durable host runs it once the conversation
+ * settles: everything the container owes the durable layer — the boundary
+ * ledger, the sweep, the salvage, the report, the commit, the push — with the
+ * conversation's outcome as the command's one argument. The exit codes
+ * 9/10/11 come from git facts exactly as the all-in-one decides them.
+ */
+export const WORKER_FINISH_COMMAND = `${WORKER_COMMAND} ${WORKER_FINISH_ARG}`;
+
+/** The argument that runs the RESTORE's setup entry (epic 43y, tick i3h). */
+export const WORKER_SETUP_ARG = "--setup";
+
+/**
+ * The setup entry, as the pi-durable host's restore runs it after rebuilding a
+ * lost container's workspace from the last wip snapshot: the repository's own
+ * `[sandbox]` setup — the dependency installs that died with the container —
+ * and nothing else around it. No clone, no harness, no push, none of the
+ * boot's inputs; the wave's `TICKS_WORKER_SETUP` lever still holds, so a wave
+ * that skipped the install at boot keeps skipping it in a restored box. Its
+ * faults are the boot's own classes (2, 3, 6).
+ */
+export const WORKER_SETUP_COMMAND = `${WORKER_COMMAND} ${WORKER_SETUP_ARG}`;
+
 /** Where the container keeps the harness pid the door needs to find. */
 export const WORKER_STATE_DIR_ENV = "TICKS_WORKER_STATE_DIR";
 
@@ -356,14 +407,17 @@ export type WorkerBootInput = {
 /**
  * A worker container's own default harness.
  *
- * `pi`, per the operator's rule (tick uqi): the cloud's harness is pi and only
- * pi, and nothing in the cloud runs claude — `image/common.sh` refuses
- * `claude` outright against a non-Anthropic provider, by design, and the
- * routes the operator pays for are Workers AI ones the image wires pi to.
+ * `pi-durable` (epic 43y, tick jhp): every factory worker is hosted — its
+ * conversation runs in the factory's WorkerAgent and its tools run in the
+ * container via the `--boot`/`--finish` halves — so the hosted kind is what a
+ * container that named no harness is. The pi CLI is deleted from the image
+ * and from `image/common.sh`'s kind set; a profile or deployment naming `pi`
+ * is refused by the container at boot, loudly.
+ *
  * The default and the `wrangler.toml` pins agree; this constant is the floor
  * under a deployment that sets no `RUN_WORKER_HARNESS`, not the rule itself.
  */
-export const WORKER_DEFAULT_HARNESS = "pi";
+export const WORKER_DEFAULT_HARNESS = "pi-durable";
 
 /**
  * A worker container's own default model when nothing else names one.
@@ -432,6 +486,61 @@ function configured(value: string | null | undefined): string | null {
  */
 export function workerHarness(run?: string | null, deployment?: string | null): string {
   return configured(run) ?? configured(deployment) ?? WORKER_DEFAULT_HARNESS;
+}
+
+/**
+ * The review job's own harness floor (epic 43y, tick jhp).
+ *
+ * The review is the one cloud boot that still runs a CLI harness in its
+ * container: it reads a pull request and posts prose, one pass, no
+ * reconcile. Its floor is NOT the worker ladder's — `pi-durable` names a
+ * HOSTED conversation, and a review container would refuse it at boot —
+ * but `omp`, the CLI the image carries that reaches the review's Workers AI
+ * route through the gateway. A deployment that pins `RUN_HARNESS` or
+ * `RUN_WORKER_HARNESS` to a CLI harness it has verified may still route the
+ * review there; this floor is what an unset ladder falls to, and it must
+ * name a harness the image can actually run.
+ */
+export const REVIEW_DEFAULT_HARNESS = "omp";
+
+/**
+ * The harness kinds this factory's image ships — the whole set a worker or
+ * orchestrator container can be told to run, exactly as `image/common.sh`'s
+ * `require_common_inputs` accepts it and nothing else. The Worker and the
+ * image deploy together (one deploy-factory run builds both), so stating
+ * the set here is stating the image's own answer, and the deployment route
+ * serves it as `harness_kinds` (epic 43y, tick kkt) so a submission can be
+ * refused at the operator's knee — `ticfac run <epic> --cloud`'s harness
+ * preflight — rather than as a wave of containers each dying at boot with
+ * `unknown harness kind` (tick twa's finding).
+ *
+ * A Go parity test (internal/factory) pins this list to the case line in
+ * `image/common.sh`; the two cannot drift silently.
+ */
+export const IMAGE_HARNESS_KINDS = ["omp", "claude", "pi-durable"] as const;
+
+/**
+ * The harness names no review container can run: the hosted kind, whose
+ * conversation is a WorkerAgent's and never a CLI in the container, and the
+ * deleted pi CLI. Both still reach the review's ladder — the run's profile
+ * runner and the deployment's `RUN_WORKER_HARNESS` (pinned `pi-durable`) are
+ * WORKER choices — and the container refuses both at boot.
+ */
+const NOT_A_REVIEW_HARNESS = new Set([WORKER_DEFAULT_HARNESS, "pi"]);
+
+/** A configured rung, unless it names a harness no review container runs. */
+function reviewRung(value: string | null | undefined): string | null {
+  const name = configured(value);
+  return name === null || NOT_A_REVIEW_HARNESS.has(name) ? null : name;
+}
+
+/**
+ * Which harness a review container is actually told to run — the same
+ * ladder as {@link workerHarness} with the review's own floor under it, a
+ * rung naming a worker-only harness passed over.
+ */
+export function reviewHarness(run?: string | null, deployment?: string | null): string {
+  return reviewRung(run) ?? reviewRung(deployment) ?? REVIEW_DEFAULT_HARNESS;
 }
 
 /**

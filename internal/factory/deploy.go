@@ -375,6 +375,17 @@ func Deploy(ctx context.Context, opts Options) (*Result, error) {
 	// staged bundle is installed before it is deployed. Local work, done before
 	// the first `create`: a deploy that cannot bundle must not have provisioned
 	// half an account first.
+	// The harness package (epic 43y, tick xd3) first: the bundle links it
+	// (`link:../harness`), and its own dependencies — the pinned pi-durable,
+	// pi-ai and chord — are installed in its own directory, where the
+	// bundler resolves the WorkerAgent's imports from.
+	harnessDir := HarnessDir(bundleDir)
+	if err := MaterializeHarness(harnessDir); err != nil {
+		return nil, err
+	}
+	if err := pm.installDependencies(ctx, harnessDir); err != nil {
+		return nil, err
+	}
 	if err := pm.installDependencies(ctx, bundleDir); err != nil {
 		return nil, err
 	}

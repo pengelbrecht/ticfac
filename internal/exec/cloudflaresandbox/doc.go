@@ -94,8 +94,9 @@
 //
 // The executor is registered in internal/cli's honoured set beside
 // subprocess and herdr: a profile naming cloudflare-sandbox (the ones in
-// profiles-cloudflare-sandbox/, tick njj — dispatching pi on GLM 5.3 through
-// this executor) resolves, and the factory routes its dispatches here. The
+// profiles-cloudflare-sandbox/, tick njj — dispatching the hosted
+// pi-durable harness on GLM 5.3 through this executor, epic 43y tick
+// qf4) resolves, and the factory routes its dispatches here. The
 // factory configuration — the factory's base URL and the run's own gateway
 // token — comes from the container boot's TICKS_FACTORY_URL and
 // TICKS_FACTORY_TOKEN (or the same variables on a laptop driving cloud

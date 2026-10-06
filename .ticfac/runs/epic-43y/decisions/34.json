@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 34,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The cloud overlay applies last, so the FINAL resolved runner of every cloud role of this repository is \"pi\" from the overlay's cells — not the profile set's new pi-durable. The profile flip alone does not change what a cloud dispatch binds (TICKS_HARNESS): routing_check_test still pins the final cloud runner as \"pi\" and passes. Once jhp's image is deployed (image/common.sh's kind set becomes omp | claude | pi-durable), a cloud run of this repository starts — CloudRule still admits \"pi\" — and every worker container dies at boot with \"unknown harness kind 'pi'\": A1's cloud end state and A4's real cloud run both break. The overlay is outside an implement-tick's permitted .tick writes (config.md, runners.toml, learnings.md only), so it is reported here rather than changed. Only the cloud overlay's cells need the flip: the common runners.toml's kind = \"pi\" is the local substrates' correct name for the same durable harness (tick hpk) and must stay.\nevidence: .tick/runners.cloud.toml [roles.implement], [roles.review], [roles.review.tiers.strong], [roles.closeout] — kind = \"pi\" in each; the check still passes with final runner \"pi\" at internal/reconcile/routing_check_test.go:60; jhp commit 6b6a71f6 (image/common.sh kind set omp|claude|pi-durable, \"a profile or deployment naming pi is refused by the container at boot, loudly\")\n\nticfac run epic-43y created this tick by absorbing the finding 0d02f47761197473c64809b5c88a0fea68f935562a62a2d21d49cd60973d61b9 (reported by run-epic-43y/tick-qf4/attempt-22): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/0d02f47761197473c64809b5c88a0fea68f935562a62a2d21d49cd60973d61b9.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "twa",
+    "title": ".tick/runners.cloud.toml still routes every cloud role to kind \"pi\""
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.55,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.01,
+      "design": 0.01,
+      "diagnosis": 0.32,
+      "mechanical": 0.65,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1552,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T14:03:52Z",
+  "answered_at": "2026-10-05T14:03:52Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "twa",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "27e12d7667bfc73ee57a4c61cc6ca22b8f11f3fa",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

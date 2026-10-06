@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 53,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Tick 8em closed A1's cloud PR-review gap by appending a note to epic 43y that declares the omp review boot an exception 'now on the record'. The operator's recorded exceptions cover only the local claude rung (and the j6o review/closeout blessing). A worker-authored exception to an acceptance item should be confirmed by the operator at close-out, or the review boot moved onto pi-durable.\nevidence: .tick/issues/43y.json notes 2026-10-05 18:25; cloudflare/src/worker-boot.ts:504,529; cloudflare/src/run-workflow.ts:1756\n\nticfac run epic-43y created this tick by absorbing the finding 5abf22520700e97b4a7921ddd370d1217a621b786d434d37784916f48dc116ae (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/5abf22520700e97b4a7921ddd370d1217a621b786d434d37784916f48dc116ae.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "7sn",
+    "title": "Cloud PR-review omp exception to A1 was recorded by a worker, not the operator"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.41,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.05,
+      "design": 0.53,
+      "diagnosis": 0.29,
+      "mechanical": 0.09,
+      "translation": 0.04
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1367,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T18:06:05Z",
+  "answered_at": "2026-10-05T18:06:05Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "7sn",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "bf8a6a1a15e95ba765ae724bd27a9e41b81fa0aa",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -46,6 +46,9 @@ import (
 var factoryShippedPaths = []string{
 	".github/workflows/deploy-factory.yml",
 	"cloudflare", "image",
+	// The harness package the Worker bundle links (epic 43y, tick xd3).
+	"harness/src", "harness/package.json", "harness/pnpm-lock.yaml",
+	"harness/pnpm-workspace.yaml", "harness/tsconfig.json",
 	"embedded.go", "go.mod", "go.sum", "factory.pin.json", "contracts.pin.json", "contracts",
 	"profiles", "profiles-cloudflare-sandbox", "profiles-herdr",
 	"cmd/ticfac", "cmd/ticfac-exec-subprocess", "internal",
@@ -158,6 +161,13 @@ func runFactoryWaitDeployed(ctx context.Context, args []string, timeout, interva
 	}
 	if timeout <= 0 || interval <= 0 {
 		return reportCommand("factory wait-deployed", newExitError(exitUsage, "--timeout and --interval must be positive durations"), stderr)
+	}
+	// parseOnly: stop after argument validation (remedy_test.go holds the
+	// printed `ticfac factory wait-deployed <merge sha>` remedies — the
+	// cloud harness preflight prints one, tick kkt — to the real parser, and
+	// a run of this command would ask git, GitHub and the factory).
+	if parseOnly {
+		return 0
 	}
 	if ctx == nil {
 		ctx = context.Background()

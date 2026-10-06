@@ -1,0 +1,15 @@
+{
+  "id": "lox",
+  "title": "Post-merge cloud epic run on pi-durable to observe 43y's [A4] cloud half",
+  "description": "43y's [A4] asks for a real hn6-style cloud epic run on pi-durable. Only the local half is observed (docs/pi-durable-local-epic-run-2026-10-05.md, tick qdg). The cloud half can only run once main carries the epic and the factory has deployed it, so today it is predicted, owned by docs/pi-durable-cloud-run-runbook.md (tick kkt) with the operator named as owner, and no tick holds it. Run it per the runbook after `ticfac factory wait-deployed \u003cmerge sha\u003e` and record it beside qdg's doc. It spends money on the live factory, so the operator starts it. Pair it with the [A2] fault injections, the next finding, in one run.\nevidence: docs/pi-durable-cloud-run-runbook.md:64 (what 'observed' means for [A4]'s cloud half); docs/pi-durable-local-epic-run-2026-10-05.md:86 ('[A4] is half-met until the post-merge cloud run executes')\n\nticfac run epic-43y created this tick by absorbing the finding e39b3903ba16df227e1a52ed58c7bf52d63cd8172a1a957ed336140fd28c7bca (reported by run-epic-43y/tick-j2k/attempt-69): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/e39b3903ba16df227e1a52ed58c7bf52d63cd8172a1a957ed336140fd28c7bca.json on the run branch.",
+  "notes": "2026-10-06 01:34 - ticfac run epic-43y: created by absorbing finding e39b3903ba16df227e1a52ed58c7bf52d63cd8172a1a957ed336140fd28c7bca — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-43y/absorptions/e39b3903ba16df227e1a52ed58c7bf52d63cd8172a1a957ed336140fd28c7bca.json on epic/43y, and it says: the classifier put 0.96 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A4: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "43y",
+  "discovered_from": "run-epic-43y/tick-j2k/attempt-69",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T23:34:09Z",
+  "updated_at": "2026-10-05T23:34:18.166119Z"
+}

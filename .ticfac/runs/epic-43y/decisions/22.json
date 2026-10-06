@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 22,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "[A2]/[A4] evidence in RESULT; make gate passes with the CLI path removed",
+    "description": "Step 9 without the A/B: on staging kill the host mid-tool, destroy the container mid-turn, deploy mid-run; then one real cloud epic run and one local epic run on pi-durable; delete image/worker.sh's pi-CLI harness path, the pi CLI in the image and the herdr/subprocess pi-CLI profiles.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "jhp",
+    "title": "Delete the pi-CLI worker path; prove on staging and in real local + cloud runs"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.55,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.36,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.64,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1092,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T21:17:11Z",
+  "answered_at": "2026-10-04T21:17:11Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "jhp",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "e7ff7e2fca72a91ad1563737ecbd748b3aeae5ed",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -136,6 +136,10 @@ function set(name: string, value: unknown): void {
 beforeEach(() => {
   binding = new FakeWorkers();
   set("SANDBOXES", binding);
+  // A deployment without WORKER_AGENTS (tick hxd): the reclaim this suite
+  // holds is the container's own — a hosted worker's is the agent's, and is
+  // worker-agent-door.test.ts's.
+  set("WORKER_AGENTS", undefined);
 });
 
 afterEach(() => {

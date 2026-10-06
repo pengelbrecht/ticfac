@@ -55,6 +55,20 @@ func signalGroup(pgid int, sig syscall.Signal) error {
 	return syscall.Kill(-pgid, sig)
 }
 
+// processGroupOf is the process group a pid is in.
+func processGroupOf(pid int) (int, error) {
+	return syscall.Getpgid(pid)
+}
+
+// groupAlive asks whether any process is still in the group.
+func groupAlive(pgid int) bool {
+	if pgid <= 0 {
+		return false
+	}
+	err := syscall.Kill(-pgid, 0)
+	return err == nil || err == syscall.EPERM
+}
+
 // holdLock takes f's lock exclusively. It blocks, because the only thing it
 // can find in its way is an observer mid-probe, which lets go at once.
 func holdLock(f *os.File) error {
