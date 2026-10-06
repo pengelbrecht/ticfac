@@ -336,6 +336,45 @@ func TestOnlyTheStopsThatNeedNobodyAreResumable(t *testing.T) {
 	}
 }
 
+// Epic-v5t halted on 2026-10-06 over "a stop this run has no classification
+// for" when a `ticfac watch` leaking zombies had spent the host's process
+// limit and the orchestrator's fetch could not fork. Fork exhaustion is the
+// host's transient condition: the stop is named remote_transient and the
+// supervisor continues across it by itself, after its backoff.
+// short: the supervisor's rules over a synthesised stop
+func TestForkExhaustionIsAResumableStopNotAnUnclassifiedHalt(t *testing.T) {
+	t.Parallel()
+	retry := runstate.RemoteRetry{Sleep: func(time.Duration) {}}
+	tries := 0
+	err := retry.Do("git fetch", func() error {
+		tries++
+		return errors.New("git fetch --quiet origin epic/v5t: exit status 255: " +
+			"error: cannot fork() for remote-https: Resource temporarily unavailable")
+	})
+	if tries != runstate.DefaultRemoteAttempts {
+		t.Errorf("the run tried a fork failure %d times, want the transient bound's %d", tries,
+			runstate.DefaultRemoteAttempts)
+	}
+	err = fmt.Errorf("runstate: fetch origin epic/v5t: %w", err)
+
+	reason := errorStopReason(err)
+	if reason != StoppedRemoteTransient {
+		t.Fatalf("fork exhaustion is stop %q, want %q", reason, StoppedRemoteTransient)
+	}
+	stop := supervisedStop{Reason: reason, Message: err.Error(), Tree: treeUnreadable}
+	if halt := haltReason(stop, supervisedStop{}, 0, 3); halt != "" {
+		t.Fatalf("fork exhaustion halted the run for a person: %s", halt)
+	}
+	// Twice running over an unchanged tree is still waiting on the world,
+	// not a spin: the host frees its slots, nothing in the tree does.
+	if halt := haltReason(stop, stop, 1, 3); halt != "" {
+		t.Fatalf("a second fork-exhaustion stop halted the run as a spin: %s", halt)
+	}
+	if line := reasonOf(stop) + detailOf(stop); strings.Contains(line, "no classification") {
+		t.Errorf("the stop line still calls fork exhaustion unclassified: %s", line)
+	}
+}
+
 // Tick jsz: epic-yoh halted over "a stop this run has no classification for"
 // when the stop was a git auth refusal. A refusal that outlived runstate's
 // small bound is a NAMED stop, it halts (a key is a person's to fix), and the

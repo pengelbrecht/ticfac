@@ -282,7 +282,7 @@ func ClassifyRemote(err error) RemoteClass {
 		return RemoteAuthRefused
 	case containsAny(text, deniedMarkers):
 		return RemoteTerminal
-	case containsAny(text, transientMarkers), remoteRefFailed.MatchString(text):
+	case containsAny(text, transientMarkers), remoteRefFailed.MatchString(text), forkExhausted.MatchString(text):
 		return RemoteTransient
 	}
 	return RemoteUnclassified
@@ -298,6 +298,28 @@ func ClassifyRemote(err error) RemoteClass {
 // stale says so in the parentheses, which is why only these two bare words
 // match.
 var remoteRefFailed = regexp.MustCompile(`\[remote rejected\][^\n]*\((failed|failure)\)`)
+
+// forkExhausted is THIS host failing to start a process: fork(2) answering
+// EAGAIN because the per-user process limit is spent. On 2026-10-06 a
+// `ticfac watch` leaking zombies spent it, and epic-v5t's orchestrator halted
+// as "a stop this run has no classification for" over
+//
+//	runstate: fetch origin epic/v5t: git fetch ...: exit status 255:
+//	error: cannot fork() for remote-https: Resource temporarily unavailable
+//
+// Nothing was asked of the remote, so nothing was refused; the condition is
+// the host's, it is transient, and it passes when whatever holds the slots
+// lets go of them. So it is waited through, in the run and then by the
+// supervisor, like a network blip, rather than stopping for a person.
+//
+// The spellings are git's own ("cannot fork() for <cmd>"), a shell's ("fork:
+// retry: Resource temporarily unavailable", "fork: Resource temporarily
+// unavailable") and Go's os/exec ("fork/exec <path>: resource temporarily
+// unavailable"). A bare "resource temporarily unavailable" is deliberately
+// NOT matched: it is also what a non-blocking lock that is held says, and a
+// bare "fork/exec" is also what a missing binary says, which waiting cannot
+// fix.
+var forkExhausted = regexp.MustCompile(`cannot fork\(\)|fork/exec [^\n]*: resource temporarily unavailable|fork: (retry: )?resource temporarily unavailable`)
 
 func containsAny(text string, markers []string) bool {
 	for _, marker := range markers {
