@@ -38,6 +38,13 @@ export function fakeSandboxDoor(
       command: string,
       env: Record<string, string>,
     ) => { output?: string; exit?: number | null; ms?: number } | undefined;
+    /**
+     * Door calls that never come back (run_7445005f): a `run` whose command
+     * matches never answers, and neither does a `getProcess` or
+     * `readOutput` of a process whose command matches — an RPC parked on a
+     * container that does not answer it.
+     */
+    hangs?: (command: string) => boolean;
   } = {},
 ) {
   type FakeProcess = {
@@ -78,9 +85,15 @@ export function fakeSandboxDoor(
     return Promise.resolve(answer());
   };
 
+  const hung = (id: string) => {
+    const p = processes.get(id);
+    return p !== undefined && options.hangs?.(p.command) === true;
+  };
+
   const door: SandboxDoor = {
     run(command, env) {
       runs.push({ command, env });
+      if (options.hangs?.(command)) return new Promise(() => {});
       if (readyRefusals > 0) {
         readyRefusals -= 1;
         return Promise.resolve({ ready: false } as const);
@@ -112,6 +125,7 @@ export function fakeSandboxDoor(
       return view(p);
     },
     getProcess(id) {
+      if (hung(id)) return new Promise(() => {});
       return maybe(() => {
         const p = processes.get(id);
         return p === undefined ? null : view(p);
@@ -129,6 +143,7 @@ export function fakeSandboxDoor(
       });
     },
     readOutput(id, offset) {
+      if (hung(id)) return new Promise(() => {});
       return maybe(() => {
         const p = processes.get(id);
         if (p === undefined) return { text: "", offset };
