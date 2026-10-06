@@ -1,10 +1,10 @@
 {
   "id": "rlx",
   "title": "Close out the SDK 1.0 migration: retro, then the next feasible epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "l76"
   ],
@@ -12,5 +12,6 @@
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-01T08:24:24.770127Z",
-  "updated_at": "2026-10-01T08:24:24.770127Z"
+  "updated_at": "2026-10-06T14:18:04.167336947Z",
+  "started_at": "2026-10-06T14:18:04.167335717Z"
 }
