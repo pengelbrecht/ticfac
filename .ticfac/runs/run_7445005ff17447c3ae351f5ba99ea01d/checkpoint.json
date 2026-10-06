@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
   "epic_id": "umq",
-  "sequence": 20,
-  "state": "integrating",
-  "reason": "integrating rlx attempt 3 into epic/umq",
-  "updated_at": "2026-10-06T15:59:21Z",
+  "sequence": 21,
+  "state": "gating",
+  "reason": "running the integrated gate for rlx on 58287c219cc0",
+  "updated_at": "2026-10-06T15:59:29Z",
   "ticks": [
     {
       "tick_id": "dax",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "rlx",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 3
     }
   ],
