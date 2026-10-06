@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 3,
-  "state": "running",
-  "reason": "6fv is running as attempt 1",
-  "updated_at": "2026-10-06T17:14:32Z",
+  "sequence": 4,
+  "state": "collecting",
+  "reason": "collecting 6fv attempt 1",
+  "updated_at": "2026-10-06T21:18:49Z",
   "ticks": [
     {
       "tick_id": "6fv",
