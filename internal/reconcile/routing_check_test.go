@@ -126,7 +126,7 @@ func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 		case cloudRunnerIsDurable(job.Profile.Runner) && strings.HasPrefix(job.Profile.Model, "cloudflare-workers-ai/"):
 		default:
 			t.Errorf("cloud %s at tier %q under config %s routes to %s/%s — neither the durable harness on Workers AI nor a subscription rung pair",
-					job.Role, job.Tier, job.Config, job.Profile.Runner, job.Profile.Model)
+				job.Role, job.Tier, job.Config, job.Profile.Runner, job.Profile.Model)
 		}
 	}
 }
