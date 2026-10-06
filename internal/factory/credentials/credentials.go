@@ -214,7 +214,12 @@ func (f *File) Set(key, value string) {
 //   - a missing file prints nothing and the command still SUCCEEDS, exactly
 //     Get's empty value — a failed `!command` resolution is not a state pi's
 //     credential override has a way to report, so the shell reader degrades
-//     to the same empty credential Get degrades to.
+//     to the same empty credential Get degrades to. The cat up front is
+//     what buys that: it swallows the missing file's error and the
+//     pipeline's exit status stays sed's — success — while the command
+//     remains a plain pipeline a caller can extend with another `| stage`
+//     without an operator-precedence surprise (`|| true` at the end would
+//     bind to the caller's pipe, not to this command's failure).
 //
 // The command reads $HOME/.ticfacrc, not a path resolved here: pi runs it in
 // its own process, whose home is the one the credential file lives in.
@@ -224,12 +229,13 @@ func (f *File) Set(key, value string) {
 // carries a sed metacharacter, and the constants are the file's whole
 // vocabulary.
 func ShellGetCommand(key string) string {
-	return `sed -n '/^[[:space:]]*` + key + `[[:space:]]*=/{` +
+	return `cat "$HOME/` + FileName + `" 2>/dev/null | ` +
+		`sed -n '/^[[:space:]]*` + key + `[[:space:]]*=/{` +
 		`s/^[[:space:]]*` + key + `[[:space:]]*=//;` +
 		`s/^[[:space:]]*//;` +
 		`s/[[:space:]]*$//;` +
 		`p;` +
-		`q;}' "$HOME/` + FileName + `" 2>/dev/null || true`
+		`q;}'`
 }
 
 // Save writes the file back with owner-only permissions, replacing it

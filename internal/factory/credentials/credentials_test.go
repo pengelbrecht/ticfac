@@ -156,18 +156,18 @@ func TestShellGetCommandAgreesWithGet(t *testing.T) {
 		t.Skip("the shell command runs where pi runs: a POSIX shell")
 	}
 	for name, content := range map[string]string{
-		"a plain line":                "factory_cloudflare_api_token=cf_plain\n",
-		"hand-edited spaces":          "factory_cloudflare_api_token = cf_spaced \n",
-		"leading whitespace":         "\t factory_cloudflare_api_token=cf_indented\n",
-		"a duplicated key":            "factory_cloudflare_api_token=cf_first\nfactory_cloudflare_api_token=cf_second\n",
-		"a commented-out key":         "# factory_cloudflare_api_token=cf_commented\n",
-		"an indented comment":         "   # factory_cloudflare_api_token=cf_commented\n",
-		"a longer key sharing prefix": "factory_cloudflare_api_token_extra=cf_other\n",
+		"a plain line":                  "factory_cloudflare_api_token=cf_plain\n",
+		"hand-edited spaces":            "factory_cloudflare_api_token = cf_spaced \n",
+		"leading whitespace":            "\t factory_cloudflare_api_token=cf_indented\n",
+		"a duplicated key":              "factory_cloudflare_api_token=cf_first\nfactory_cloudflare_api_token=cf_second\n",
+		"a commented-out key":           "# factory_cloudflare_api_token=cf_commented\n",
+		"an indented comment":           "   # factory_cloudflare_api_token=cf_commented\n",
+		"a longer key sharing prefix":   "factory_cloudflare_api_token_extra=cf_other\n",
 		"the key inside a comment tail": "x# factory_cloudflare_api_token=cf_other\n",
-		"an empty value":              "factory_cloudflare_api_token=\n",
+		"an empty value":                "factory_cloudflare_api_token=\n",
 		"a value that keeps its equals": "factory_cloudflare_api_token=cf=a=b\n",
-		"other keys ignored":          "factory_gateway_url=https://gateway.example.com/v1/acct/gw\nfactory_url=https://f.example.com\n",
-		"blanks around the line":      "\n\n   factory_cloudflare_api_token=cf_blank_bordered\n\n",
+		"other keys ignored":            "factory_gateway_url=https://gateway.example.com/v1/acct/gw\nfactory_url=https://f.example.com\n",
+		"blanks around the line":        "\n\n   factory_cloudflare_api_token=cf_blank_bordered\n\n",
 	} {
 		home := t.TempDir()
 		if err := os.WriteFile(filepath.Join(home, FileName), []byte(content), 0o600); err != nil {
