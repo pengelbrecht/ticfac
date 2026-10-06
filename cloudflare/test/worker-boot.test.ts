@@ -3,7 +3,14 @@ import contract from "../../contracts/worker-boot-contract.json";
 import {
   attemptLandingBranch,
   ORCHESTRATOR_COMMAND,
+  REVIEW_DEFAULT_HARNESS,
+  reviewHarness,
   WORKER_ACTOR,
+  WORKER_BOOT_ARG,
+  WORKER_BOOT_COMMAND,
+  WORKER_BOOT_MARKER,
+  WORKER_BOOT_PROMPT_BEGIN,
+  WORKER_BOOT_PROMPT_END,
   WORKER_BRANCH_PREFIX,
   WORKER_CANCEL_ARG,
   WORKER_CANCEL_COMMAND,
@@ -13,10 +20,14 @@ import {
   WORKER_DEFAULT_HARNESS,
   WORKER_DEFAULT_MODEL,
   WORKER_EXIT,
+  WORKER_FINISH_ARG,
+  WORKER_FINISH_COMMAND,
   WORKER_PROBE_ARG,
   WORKER_PROBE_COMMAND,
   WORKER_PROBE_MARKER,
   WORKER_ROLE_PROMPT_ENV,
+  WORKER_SETUP_ARG,
+  WORKER_SETUP_COMMAND,
   WORKER_WORK_BASE_ENV,
   workerBootEnv,
   workerBranch,
@@ -59,6 +70,23 @@ describe("the worker boot contract", () => {
     expect(WORKER_CANCEL_COMMAND).toBe(contract.cancel_command);
     expect(WORKER_CANCEL_MARKER).toBe(contract.cancel_marker);
     expect(WORKER_CANCEL_REPORT_MARKER).toBe(contract.cancel_report_marker);
+    // The boot/finish phases (epic 43y, tick pom): the pi-durable worker
+    // host runs the same halves the all-in-one runs, as two commands, and
+    // the spellings are the contract's — a host that invents its own second
+    // spelling drifts the way the probe marker once nearly did.
+    expect(WORKER_BOOT_ARG).toBe(contract.boot_arg);
+    expect(WORKER_BOOT_COMMAND).toBe(contract.boot_command);
+    expect(WORKER_BOOT_MARKER).toBe(contract.boot_marker);
+    expect(WORKER_BOOT_PROMPT_BEGIN).toBe(contract.boot_prompt_begin);
+    expect(WORKER_BOOT_PROMPT_END).toBe(contract.boot_prompt_end);
+    expect(WORKER_FINISH_ARG).toBe(contract.finish_arg);
+    expect(WORKER_FINISH_COMMAND).toBe(contract.finish_command);
+    // The restore's setup entry (epic 43y, tick i3h): the host rebuilds a lost
+    // container's workspace and runs this command in it, so a restored box
+    // carries the repository's dependency installs. Same three readers, same
+    // reason as the phases above.
+    expect(WORKER_SETUP_ARG).toBe(contract.setup_arg);
+    expect(WORKER_SETUP_COMMAND).toBe(contract.setup_command);
     expect(WORKER_ACTOR).toBe(contract.worker_actor);
     expect(WORKER_BRANCH_PREFIX).toBe(contract.branch_prefix);
     // The boundary guard's two strings (tick dxk). The refusal is the
@@ -118,7 +146,7 @@ describe("the role prompt a dispatch carries (tick 9iz)", () => {
   const prompt = "# implement-tick\n\nYou are implementing ONE unit of work.\n";
 
   it("rides the boot environment the work command and the probe both get", () => {
-    const env = workerBootEnv({ ...boot, harness: "pi", prompt });
+    const env = workerBootEnv({ ...boot, harness: "pi-durable", prompt });
     expect(env[WORKER_ROLE_PROMPT_ENV]).toBe(prompt);
     // The green-start probe answers in the same environment, or it proves
     // something about a container nobody will use.
@@ -221,9 +249,10 @@ describe("the boot environment", () => {
       // Locks the specific id, so a drift in the constant is a visible test
       // failure rather than a silent routing change. It moved flash -> pro in
       // tick 1cd on run_215b7cbff9's evidence, then omp/DeepSeek -> pi/GLM 5.3
-      // in tick uqi on the operator's rule: GLM 5.3 / 5.3 Flash via pi only,
-      // and nothing in the cloud runs claude.
-      expect(WORKER_DEFAULT_HARNESS).toBe("pi");
+      // in tick uqi on the operator's rule, then pi -> pi-durable in epic
+      // 43y (tick jhp): every factory worker is hosted on pi-durable and
+      // the pi CLI is deleted; nothing in the cloud runs claude.
+      expect(WORKER_DEFAULT_HARNESS).toBe("pi-durable");
       expect(WORKER_DEFAULT_MODEL).toBe("workers-ai/@cf/zai-org/glm-5.3");
     });
 
@@ -240,6 +269,36 @@ describe("the boot environment", () => {
     it("the worker default is served through workerProbeSpec/workerWorkSpec too, since the probe must run in the real command's environment", () => {
       expect(workerProbeSpec(boot).env?.TICKS_MODEL).toBe(WORKER_DEFAULT_MODEL);
       expect(workerWorkSpec(boot).env?.TICKS_MODEL).toBe(WORKER_DEFAULT_MODEL);
+    });
+  });
+
+  // The review's own floor (epic 43y, tick jhp): the review is the one cloud
+  // boot that still runs a CLI harness in its container, and the pi CLI is
+  // deleted — so an unset ladder must fall to omp, the CLI that reaches the
+  // review's Workers AI route, never to the worker ladder's hosted kind (a
+  // review container would refuse pi-durable at boot) and never to a
+  // harness the image no longer ships.
+  describe("the review's own harness floor (epic 43y, tick jhp)", () => {
+    it("falls to omp, and never to the worker ladder's hosted kind", () => {
+      expect(REVIEW_DEFAULT_HARNESS).toBe("omp");
+      expect(reviewHarness(null, null)).toBe("omp");
+      // The run and deployment rungs still outrank it, spelled exactly as
+      // the worker ladder's do.
+      expect(reviewHarness("codex", null)).toBe("codex");
+      expect(reviewHarness(null, "claude")).toBe("claude");
+      expect(reviewHarness("   ", "omp")).toBe("omp");
+    });
+
+    it("passes over a rung naming the hosted kind or the deleted pi CLI", () => {
+      // What production actually hands it: the run's profile runner ("pi"
+      // until the cloud profiles flip, "pi-durable" after) and the
+      // deployment's RUN_WORKER_HARNESS, which wrangler.toml pins to
+      // pi-durable. A review container refuses both at boot, so neither is
+      // a review harness — the next rung, or the floor, is.
+      expect(reviewHarness("pi", "pi-durable")).toBe("omp");
+      expect(reviewHarness("pi-durable", "pi-durable")).toBe("omp");
+      expect(reviewHarness("pi-durable", "claude")).toBe("claude");
+      expect(reviewHarness(" pi ", null)).toBe("omp");
     });
   });
 
@@ -273,7 +332,7 @@ describe("the boot environment", () => {
     // built-in default.
     it("lets the run's own choice outrank the deployment variable", () => {
       expect(workerModel(GLM_FLASH, GLM)).toBe(GLM_FLASH);
-      expect(workerHarness("codex", "pi")).toBe("codex");
+      expect(workerHarness("codex", "omp")).toBe("codex");
     });
 
     // Same rule `textVar` applies to every other var: a var set to whitespace
@@ -291,10 +350,10 @@ describe("the boot environment", () => {
     it("resolves to something a boot environment can actually carry", () => {
       const env = workerBootEnv({
         ...boot,
-        harness: workerHarness(null, "pi"),
+        harness: workerHarness(null, "pi-durable"),
         model: workerModel(null, GLM_FLASH),
       });
-      expect(env.TICKS_HARNESS).toBe("pi");
+      expect(env.TICKS_HARNESS).toBe("pi-durable");
       expect(env.TICKS_MODEL).toBe(GLM_FLASH);
     });
   });

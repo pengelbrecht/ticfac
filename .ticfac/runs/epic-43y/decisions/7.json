@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 7,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "test: destroy the container mid-turn; the next turn sees both edits",
+    "description": "Step 4: an afterTools wip commit pushed to the attempt branch; on a lost container, clone the branch, check out the wip commit, run setup, continue — reusing the carried-work code.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "dwn",
+    "title": "Workspace checkpoints: wip commit after every tool round; restore on a lost container"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.8,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.84,
+      "design": 0.01,
+      "diagnosis": 0,
+      "mechanical": 0.13,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1054,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T14:47:48Z",
+  "answered_at": "2026-10-04T14:47:48Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "dwn",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "62ef0a9d7f5a6d3756c0e196052d4a2d948c1c07",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

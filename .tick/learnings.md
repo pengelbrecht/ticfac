@@ -1,38 +1,40 @@
 # Learnings
 
 Repo-specific gotchas, Problem → Cause → Rule. Hard cap 150 lines — compact every retro.
-Seeded from ticks' learnings 2026-09-02; last compacted at the 6in close-out, 2026-09-28.
+Seeded from ticks' learnings 2026-09-02; last compacted at the 43y close-out, 2026-10-06.
 
 ## Planning an epic
 
-**Problem:** FOUR epics closed without the run their acceptance names (Phase 4, xte, yoh; 2jn's A1
-run was traced and tested with a stand-in child, never run). **Rule:** When an epic's gate is a run,
-the FIRST tick wires the thinnest end-to-end path through the PRODUCTION entry point, and a named
-tick INSIDE the epic performs the run before the review; if the run lives elsewhere, say so.
+**Problem:** FIVE epics closed without the run their acceptance names (Phase 4, xte, yoh, 2jn; 43y's
+[A4] cloud half and [A2] real-run half). 43y's COULD not run in the epic: the factory deploys main
+only, so a cloud run on the epic's own code is post-merge by construction — found at the review.
+**Rule:** When an epic's gate is a run, the FIRST tick wires the thinnest end-to-end path through the
+PRODUCTION entry point and a named tick INSIDE the epic performs it before the review. A clause that
+needs the DEPLOYED factory to carry the epic's code is marked post-merge at planning, with its owner.
 
 **Problem:** gvc absorbed none of its 21 findings; 2jn scored none of 30 (A1-A6 bind no command); 6in's
 done has no [A<n>] items to bind. **Cause:** the DATA the machinery reads was left to prose. **Rule:**
 An epic that changes the orchestrator names the NEXT run on the rebuilt binary as its demonstration;
 [A<n>] items AND a command per item land at planning, or the run absorbs on guesses it cannot score.
 
-**Problem:** 2jn's review said NOT READY with ten findings; each became its own parallel tick, three
-of them rewrote exit-code logic (bot, 4mv, then bkg/rix/vqc), and the post-review burst took 16 ticks,
-7 conflict resolves and a silent same-function collision (7o5). **Rule:** Fold a NOT READY review's
-findings by SEAM (one tick owns "exit codes", one owns "clear commands"), not one tick per finding.
+**Problem:** 2jn's NOT READY review's ten findings each became a parallel tick; three rewrote exit-code
+logic (bot, 4mv, bkg/rix/vqc): 16 ticks, 7 conflict resolves, a silent same-function collision (7o5).
+**Rule:** Fold a NOT READY review's findings by SEAM (one tick owns "exit codes"), not one per finding.
 
-**Problem:** A policy held per layer and failed in the whole: xte checked the cloud overlay, then a
-tier overlay replaced the model; yoh keyed the Workers-AI rule on the substrate while the
-cloudflare-sandbox executor also ran under the local one (78v). **Rule:** Check a policy on the
-FINAL resolved value, keyed on what actually crosses the boundary (the executor), never on one input.
+**Problem:** A policy held per layer and failed in the whole: xte checked the cloud overlay, then a tier
+overlay replaced the model; yoh keyed the Workers-AI rule on the substrate, not the executor (78v).
+**Rule:** Check a policy on the FINAL resolved value, keyed on what actually crosses the boundary.
 
 **Problem:** wne put a vocabulary (mrn) and its consumer (0ju) in one wave; mrn died on add/add.
 **Rule:** A tick that DECLARES a vocabulary and one that CONSUMES it are different waves.
 
 **Problem:** l6t deleted the wave path and four things only it produced (harness bound, logs, board
 events, cron sweeps), each found later; after ticks' chz, four of 6in's fourteen findings were docs
-still naming deleted verbs and files. **Rule:** A deletion tick first LISTS every effect the deleted
-path produced and every pointer to it in BOTH repos (grep the name), then names each one's new owner
-or records it as dropped. Its acceptance is that list, not "tests still pass".
+still naming deleted verbs and files; after 43y's jhp deleted the pi CLI, six ticks chased cells,
+fixtures and templates still naming kind "pi" (twa, enb, uxi, jiv, qf4, 2p3) — twa's would have
+killed every cloud container at boot. **Rule:** A deletion tick first LISTS every effect the deleted
+path produced and every pointer to it in BOTH repos (grep the NAME in code, overlays, fixtures, init
+templates), then names each one's new owner or records it as dropped. Its acceptance is that list.
 
 **Problem:** dz1 took over the width tk 0.32.0 stopped enforcing, and a re-run under a new run id now
 holds on the claim its own STOPPED predecessor left. **Rule:** An enforcement moving into this repo
@@ -67,29 +69,25 @@ terminal verdict, "nothing new" on carried work included; a verifier commits its
 probe". **Rule:** Usage is a REFUSAL; a promotion is finished when the tick is COMMITTED.
 
 **Problem:** Ticks here that change the ticks repo were undispatchable (ha9: SEVEN dispatches); klq's
-"mark xte, wne, gvc" needed a tracker write its worker's boundary forbids. **Rule:** A tick lives where
-its CODE is AND where its worker can write; another repo's change is an `upstream-tick`, never a child here.
+"mark xte, wne, gvc" needed a tracker write its worker's boundary forbids; 43y's twa fix was four
+cells of runners.cloud.toml, outside the boundary (7vp); 8em "closed" an A1 gap by writing an
+exception onto the epic's notes, an operator's decision. **Rule:** A tick lives where its CODE is AND
+where its worker can write; another repo's change is an `upstream-tick`; a fix that is a decision
+(an exception to the done, a routing cell) goes to the operator, never to a dispatched tick.
 
-**Problem:** Two runs died with `conflict_exists`: the run-state store resolved origin through
-`FETCH_HEAD`, one file shared by every process on the checkout, and a watcher's fetch rewrote it.
-**Rule:** Never resolve a ref through process-global git state. Fetch into a private per-run ref with
-`--no-write-fetch-head --refmap=`.
-
-**Problem:** Host `rerere.enabled` replayed a person's resolve into a machine merge. **Rule:** The run
-states its own git environment (`-c rerere.enabled=false`); host config never reaches its merge.
+**Problem:** Two runs died with `conflict_exists` (a watcher's fetch rewrote the shared `FETCH_HEAD`);
+host `rerere.enabled` replayed a person's resolve into a machine merge. **Rule:** Process-global and
+host git state never reach the run: fetch into a private per-run ref (`--no-write-fetch-head
+--refmap=`) and state the run's own git environment (`-c rerere.enabled=false`).
 
 ## Waiting and watching
 
-**Problem:** Blind `sleep 300` loops; three hand-rolled watchers, each wrong. **Rule:** Wait on a
-CONDITION over durable evidence, a push stream, or a held PID's exit, covering every terminal state
-(reported, blocked, died-without-reporting) — or the watcher's silence means nothing.
-
-**Problem:** A watcher piped through `tail` delivered nothing; `pgrep -f` read ALIVE by matching its
-own argv. **Rule:** No `tail`/`head` in a watcher pipeline. Hold the PID and check its start time.
-
-**Problem:** The close-out refused PR #11 as "CI unsatisfiable" the second it opened it; GitHub had
-not created the check runs yet. **Rule:** Absence right after creation is "not yet". Bound a wait for
-the thing to APPEAR before calling it "never".
+**Problem:** Blind `sleep 300` loops; three hand-rolled watchers, each wrong; one piped through `tail`
+delivered nothing; `pgrep -f` read ALIVE by matching its own argv. **Rule:** Wait on a CONDITION over
+durable evidence, a push stream, or a held PID's exit (and start time), covering every terminal state
+(reported, blocked, died-without-reporting). No `tail`/`head` in a watcher pipeline. The close-out
+refused PR #11 as "CI unsatisfiable" before GitHub created its checks: absence right after creation is
+"not yet"; bound a wait for the thing to APPEAR before calling it "never".
 
 ## Reviews and repairs
 
@@ -113,15 +111,19 @@ the branch it gates. **Rule:** Key evidence by the SOURCE (tree minus the run's 
 a derived key a function of the thing it identifies, not of its history.
 
 **Problem:** Wall-clock tests refused innocent work six times; ONE host-dependent SIGTERM defect (8d6)
-failed at base in nine yoh ticks, four gvc refiles and five 2jn ticks. **Rule:** A gate verdict is
-about the tree only if the host is bounded; a guard on shared machine state attributes by a per-process
-temp root (registrytest.GuardMain). Before filing "fails at base", grep `.tick/issues/` for the test.
+failed at base in nine yoh ticks, four gvc refiles and five 2jn ticks; nine of 43y's ticks were
+harness test-timeout ticks, one 120s bound alone filed five times (h3c, 7oy, 4ao, omq, 30e). **Rule:**
+A gate verdict is about the tree only if the host is bounded; a guard on shared machine state attributes
+by a per-process temp root (registrytest.GuardMain). Before filing "fails at base", grep `.tick/issues/`
+for the test — as an instruction this failed five times in one epic; the run must dedupe on the test id.
 
 **Problem:** wne's gates went green while 7 of 10 relevant tests skipped under `-short`; yoh's ts
 gate ran no vitest; gvc's absorption tests are all EndToEnd, and the review found three high defects
-there; dz1 broke an EndToEnd reconcile test and epic CI sat red, unread until the close-out.
-**Rule:** A test the gate does not run is not evidence: add it to the gate, or name the gap. A tick
-touching dispatch or claims runs the full `./internal/reconcile/` suite.
+there; dz1 broke an EndToEnd reconcile test and epic CI sat red, unread until the close-out; 43y's
+epic CI went red on EndToEnd tests twice (enb, 4w7), read only by a review, and its new harness package
+runs in CI but not the per-tick gate. **Rule:** A test the gate does not run is not evidence: add it
+to the gate, or name the gap. A NEW package's suite joins `[testing.commands]` in the tick creating it.
+A tick touching dispatch, claims or a pinned fixture's input (a profile) runs `./internal/reconcile/`.
 
 **Problem:** 6in's close-out was admitted "CI green" two seconds after a red: forge.CI read a
 `.ticfac/`-only head whose checks were all SKIPPED as green, and never walked back to the code (#100).
@@ -130,11 +132,9 @@ touching dispatch or claims runs the full `./internal/reconcile/` suite.
 ## Fixtures
 
 **Problem:** A lost sandbox handle was green because the fake keyed on job_id; yoh's collect fake put
-work and report in ONE commit. **Rule:** A fake demands the identity and reproduces the real shape;
-a more forgiving fake certifies the defect it hides — fix it in the same change.
-
-**Problem:** Identical fixture commits shared a SHA; fake-runner keyed "first try" on TICFAC_ATTEMPT.
-**Rule:** Make fixture commits differ; "the tick's first try" keys on `$TICFAC_TRY`.
+work and report in ONE commit; identical fixture commits shared a SHA. **Rule:** A fake demands the
+identity and reproduces the real shape — a more forgiving fake certifies the defect it hides; fix it
+in the same change. Make fixture commits differ; "the tick's first try" keys on `$TICFAC_TRY`.
 
 ## Boundaries this repo pays to learn
 

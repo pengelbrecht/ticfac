@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 64,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "harness-timeout-discipline.test.ts flags node/dumb-git-origin.test.ts's first test (declares timeout 120_000) as process-driving, which the guard requires to declare at least 300_000. Reproduced verbatim at the base commit 9eb73179f53f in a scratch worktree, so it is pre-existing and not introduced by this tick; it fails every full `pnpm test` run of the harness node half, which CI runs as its own job beside the Go one.\nevidence: harness/test/node/dumb-git-origin.test.ts:147 declares { timeout: 120_000 } while harness/test/node/harness-timeout-discipline.test.ts:495 fails with 'expected [node/dumb-git-origin.test.ts: an origin that outlives the box carries the boot, the wip and the restore] to deeply equal []'\n\nticfac run epic-43y created this tick by absorbing the finding 25576903c43528a89fd0d4374bab80481cadef9ac5df3f2bc2cd38bba3985392 (reported by run-epic-43y/tick-4s2/attempt-44): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/25576903c43528a89fd0d4374bab80481cadef9ac5df3f2bc2cd38bba3985392.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "7oy",
+    "title": "harness node half fails at base: dumb-git-origin test under its own 300s rule"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.3,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.02,
+      "design": 0.01,
+      "diagnosis": 0.44,
+      "mechanical": 0.43,
+      "translation": 0.1
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1411,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T20:07:01Z",
+  "answered_at": "2026-10-05T20:07:01Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "7oy",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "787e1aa201e7304f2fffe2c986ec3fb9817049e8",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

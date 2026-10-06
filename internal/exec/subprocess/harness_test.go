@@ -147,23 +147,34 @@ type fixtureOptions struct {
 	// that runs the supervisor as a helper mode of the test binary itself
 	// (see superviseMissingChildren).
 	supervisorArgv []string
-	mode           string
-	status         string
-	sleep          string
-	runnerArgv     []string
-	pushInterval   time.Duration
-	attempt        int
-	guardsOff      map[string]bool
-	noRemote       bool
-	name           string
-	stateDir       string
-	model          string
-	rolePrompt     string
-	writeFile      func(path string, data []byte, perm fs.FileMode) error
+	// runner is the runner kind the executor launches; empty is claude, the
+	// local executor's own default.
+	runner string
+	// noFakeRunner launches the runner kind's OWN argv — the durable
+	// pi-durable host (tick hpk), or whatever a test needs the real table
+	// entry for — instead of the fake runner an override argv would give.
+	noFakeRunner bool
+	mode         string
+	status       string
+	sleep        string
+	runnerArgv   []string
+	pushInterval time.Duration
+	attempt      int
+	guardsOff    map[string]bool
+	noRemote     bool
+	name         string
+	stateDir     string
+	model        string
+	rolePrompt   string
+	writeFile    func(path string, data []byte, perm fs.FileMode) error
 	// stuckAfter is the stuck watch's window; zero keeps the default.
 	stuckAfter time.Duration
 	// env is extra NAME=value pairs for the fake runner.
 	env []string
+	// fauxTranscript is the scripted model transcript the durable runner's
+	// end-to-end test drives the REAL harness with (tick hpk) — the one
+	// Options.HarnessFauxTranscript seam.
+	fauxTranscript string
 }
 
 func newFixture(t *testing.T, opts fixtureOptions) *fixture {
@@ -180,7 +191,7 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	}
 
 	argv := opts.runnerArgv
-	if len(argv) == 0 {
+	if len(argv) == 0 && !opts.noFakeRunner {
 		argv = fakeRunnerArgv(t, opts)
 	}
 	remote := "origin"
@@ -195,10 +206,14 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 	if len(opts.supervisorArgv) > 0 {
 		supervisorArgv = opts.supervisorArgv
 	}
+	runner := opts.runner
+	if runner == "" {
+		runner = "claude"
+	}
 	executor, err := New(Options{
 		Repo:           repo.Dir,
 		StateDir:       state,
-		Runner:         "claude",
+		Runner:         runner,
 		RunnerArgv:     argv,
 		Model:          opts.model,
 		RolePrompt:     opts.rolePrompt,
@@ -209,6 +224,8 @@ func newFixture(t *testing.T, opts fixtureOptions) *fixture {
 		guardsOff:      opts.guardsOff,
 		writeFile:      opts.writeFile,
 		StuckAfter:     opts.stuckAfter,
+
+		HarnessFauxTranscript: opts.fauxTranscript,
 	})
 	if err != nil {
 		t.Fatal(err)

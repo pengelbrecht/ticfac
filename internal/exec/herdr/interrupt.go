@@ -13,21 +13,17 @@ import (
 // so a stop is key presses delivered through agent.send_keys — and which key
 // stops a running turn is a fact about the agent in the pane, not about
 // herdr. The executor used to send ctrl+c to every kind. For pi that is not
-// an interrupt at all: pi binds ctrl+c to app.clear ("Clear editor (first) /
-// exit (second)") and Escape to app.interrupt ("Cancel / abort"). Re-sent
-// once per five-second poll, the ctrl+c never landed as a double press, so a
-// working pi agent never stopped, and the wall clock waited out the whole
-// grace and closed the pane — epic-6in's 46x attempt 2 (2026-09-28) took 23
-// ctrl+c deliveries across 1m54s before the close. dz1 attempt 5 exited within
-// five seconds only because TWO polls happened to land in the same second:
-// a double ctrl+c, pi's QUIT, by accident.
+// an interrupt at all (pi binds ctrl+c to app.clear and Escape to
+// app.interrupt), so a working pi agent never stopped and the wall clock
+// waited out the whole grace and closed the pane — epic-6in's 46x attempt 2
+// (2026-09-28) took 23 ctrl+c deliveries across 1m54s before the close. The
+// pi kind is deleted (epic 43y, tick uxi) and keeps the generic chord like
+// every unverified kind; its interrupt evidence stays recorded here for the
+// day somebody round-trips a kind whose stop is not the generic chord.
 //
 // Each entry names where it was verified, so the next person to add a kind
 // checks the same way rather than guessing:
 //
-//   - pi (@earendil-works/pi-coding-agent 0.85.1): docs/keybindings.md —
-//     `app.interrupt` = escape ("Cancel / abort"); `app.clear` = ctrl+c
-//     ("Clear editor (first) / exit (second)"). README: "Escape | Cancel/abort".
 //   - claude (Claude Code 2.1.283): the default keybinding table in the
 //     binary — Chat context `escape: "chat:cancel"`, the cancel of a running
 //     turn; Global `"ctrl+c": "app:interrupt"` also interrupts, but it is the
@@ -50,7 +46,6 @@ var defaultInterrupt = []string{"ctrl+c"}
 // harnessInterrupts is each verified harness's own turn interrupt, as the
 // agent.send_keys key sequence that delivers it.
 var harnessInterrupts = map[string][]string{
-	"pi":     {"esc"},
 	"claude": {"esc"},
 	"codex":  {"esc"},
 }

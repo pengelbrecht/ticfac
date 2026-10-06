@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 9,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The env detects a lost container only where it can see a loss signal: the tracked bash's poll (process missing/lost) and a replay's fresh start. A container destroyed between rounds, under a file operation, boots empty and the next read/write fails plainly (ENOENT) rather than restoring, so the model sees missing files instead of a restored workspace. The run-door RPC has no loss observable, so the check belongs to the WorkerAgent host (epic step 6), which owns the container's lifetime and can verify a ready marker before a round (or call the public FactorySandboxEnv.restoreLostWorkspace()).\nevidence: harness/src/workspace/checkpoints.ts (module doc, 'Known boundary'); harness/src/env/factory-sandbox.ts containerLost/ensureWorkspaceRestored are the two covered paths\n\nticfac run epic-43y created this tick by absorbing the finding 7438ff08c3b3a96e7bbe29f58d0abdeb7730499d159813b98ff69fc0481e0331 (reported by run-epic-43y/tick-dwn/attempt-6): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/7438ff08c3b3a96e7bbe29f58d0abdeb7730499d159813b98ff69fc0481e0331.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "4fs",
+    "title": "A container lost BETWEEN tool rounds needs a host-side ready check"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.85,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.03,
+      "design": 0.88,
+      "diagnosis": 0.04,
+      "mechanical": 0.03,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1379,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T15:37:58Z",
+  "answered_at": "2026-10-04T15:37:58Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "4fs",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "f54c0c2a094301c2ba8a66dace439bf4ac404d4b",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

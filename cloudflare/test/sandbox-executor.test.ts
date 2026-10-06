@@ -988,6 +988,10 @@ describe("the deployment wiring's boot credential", () => {
   /** The executor the deployment would dispatch through, over fake containers. */
   function deployedExecutor(run: Run, binding: FakeSandboxes) {
     set("SANDBOXES", binding);
+    // A deployment without WORKER_AGENTS (tick hxd): these tests hold the
+    // container worker's boot credentials — a hosted attempt's are the
+    // agent's, and are worker-agent-door.test.ts's.
+    set("WORKER_AGENTS", undefined);
     set("FACTORY_BASE_URL", "https://factory.example.com");
     set("GITHUB_TOKEN", "gh-operator-test-token");
     return sandboxExecutorFromEnv(env, {

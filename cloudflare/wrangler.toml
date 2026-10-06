@@ -168,6 +168,20 @@ scheduling_policy = "durable_object"
 [containers.images.factory]
 dockerfile = "../image/Dockerfile"
 
+# One WorkerAgent per cloud worker attempt (epic 43y, ticks xd3 and hxd,
+# src/worker-agent.ts): the attempt's pi-durable conversation in this
+# object's own SQLite, its tools in the attempt's container — FactorySandbox
+# on the do_v1 substrate, the 0.x Sandbox behind the harness door on the
+# default sdk0 — its watch/steer WebSockets. Every worker of every run is
+# one.
+[[durable_objects.bindings]]
+name = "WORKER_AGENTS"
+class_name = "WorkerAgent"
+
+[[migrations]]
+tag = "v6"
+new_sqlite_classes = ["WorkerAgent"]
+
 # The Worker version this code is running as (its id, tag and upload time),
 # so GET /api/deployment can say which version the factory actually serves —
 # the one fact the D1 deployment record cannot hold, because wrangler assigns
@@ -307,9 +321,15 @@ FACTORY_MAX_INSTANCES = "12"
 # buy is that the choice is no longer a SOURCE EDIT: before them, changing
 # the worker model meant editing TypeScript and redeploying the factory.
 #
-# OPERATOR (ticks uqi, nwn): the cloud runs Workers AI models only — nothing
-# in the cloud runs claude. Today's choice within that rule is pi on GLM 5.3
-# (GLM 5.3 Flash for cheap work); the model may change, the rule does not. Pinned explicitly below
+# OPERATOR (ticks uqi, nwn; epic 43y tick jhp): the cloud runs Workers AI
+# models only — nothing in the cloud runs claude. Every factory worker is
+# HOSTED (epic 43y): its conversation runs in the factory's WorkerAgent on
+# pi-durable and its tools run in the container via the --boot/--finish
+# halves, so a worker container's harness kind is pi-durable and the pi CLI
+# is deleted from the image. The review is the one cloud boot that still
+# runs a CLI harness in its container, and omp is the CLI that reaches
+# Workers AI through the gateway; the model may change, the rule does not.
+# Pinned explicitly below
 # rather than left to the built-in default, so the deployable config says
 # the rule and no silent default change can decide it: an unset RUN_MODEL
 # would let the orchestrator container fall back to the repository's
@@ -322,9 +342,9 @@ FACTORY_MAX_INSTANCES = "12"
 #
 #   RUN_WORKER_MODEL = "workers-ai/@cf/zai-org/glm-5.3-flash"
 
-RUN_HARNESS = "pi"
+RUN_HARNESS = "omp"
 RUN_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
-RUN_WORKER_HARNESS = "pi"
+RUN_WORKER_HARNESS = "pi-durable"
 RUN_WORKER_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
 
 # What a CLASSIFIED work type costs on this deployment (tick mrn, epic wne):

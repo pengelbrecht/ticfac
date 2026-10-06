@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 32,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Epic 43y's [A4] (and [A2]'s 'in a real run') needs one real hn6-style cloud epic run and one local epic run on pi-durable. Neither can run inside jhp. The factory deploys only from main, so a cloud run executes main's code, not the epic's. A local run needs 2q5 (local implement on the durable host, merged on epic/43y but not on jhp's base) and nou (local durable worker no-commits, in flight). jhp delivered the staging [A2] proof (10/10 claims, harness/proof/README.md) and the deletion. The runs belong to a tick placed after nou and qf4 integrate, with the cloud half after the factory carries the epic's code.\nevidence: cloudflare deploy-factory deploys main only (AGENTS.md); .tick/issues/nou.json; epic/43y has 2q5's profiles-herdr re-cut that jhp's base lacks\n\nticfac run epic-43y created this tick by absorbing the finding d19446063b8031908fbb1eb3aad2a91da2c3e72be52a1e38b400912f2274ac4a (reported by run-epic-43y/tick-jhp/attempt-23): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/d19446063b8031908fbb1eb3aad2a91da2c3e72be52a1e38b400912f2274ac4a.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "qdg",
+    "title": "Run [A4]'s real cloud and local epic runs on the integrated pi-durable epic"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.3,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.43,
+      "design": 0.3,
+      "diagnosis": 0.09,
+      "mechanical": 0.14,
+      "translation": 0.04
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1428,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T11:59:25Z",
+  "answered_at": "2026-10-05T11:59:25Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "qdg",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "9c38bc5d1d3be9a32dcf47f39efec0056d5f3ddc",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

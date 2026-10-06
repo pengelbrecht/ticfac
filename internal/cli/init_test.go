@@ -34,6 +34,7 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/tk"
@@ -445,6 +446,62 @@ func TestInitAnswersTheQuestionsOnStdin(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("reconcile.New refuses the both answer's repository: %v", err)
 	}
+}
+
+// TestInitOnAPiRepositoryWritesCellsEverySubstrateCanRun (tick jiv): the
+// runner answer is the IMPLEMENT harness's answer, and before jiv init wrote
+// it as the kind of all three role cells. Under the harness substrate that
+// routing runs — the local subprocess executor launches pi and claude both
+// — but a run whose substrate resolves to herdr routes review and closeout
+// through the herdr profile set, whose executor is herdr, and herdr launches
+// claude, codex and opencode only (the pi kind is deleted, tick uxi): the
+// run refused at construction, naming the cell and the kinds herdr
+// launches, so a repository init'ed with --runner pi could not run an epic
+// on a machine where herdr answers. init writes the review and closeout
+// cells as claude when the runner answer is pi — the one harness every
+// substrate launches for those two roles — and the construction a run
+// performs is the proof, on both local substrates.
+func TestInitOnAPiRepositoryWritesCellsEverySubstrateCanRun(t *testing.T) {
+	repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+	code, stdout, stderr := runInitOn(t, repo, "", "--yes", "--runner", "pi")
+	if code != exitSuccess {
+		t.Fatalf("init exits %d: %s%s", code, stderr, stdout)
+	}
+
+	// The cells init wrote: implement keeps the answer's pi and model;
+	// review and closeout name claude, and no model — the shipped review
+	// and close-out profiles pair the claude harness with their own models,
+	// and init does not second-guess a pairing it was not asked about.
+	cfg, err := runconfig.LoadRepo(repo)
+	if err != nil {
+		t.Fatalf("the written runners.toml does not validate: %v", err)
+	}
+	if cell := cfg.Roles["implement"]; cell == nil || cell.Kind != initRunnerPi {
+		t.Errorf("the implement cell is %v, want the answer's pi", cell)
+	}
+	for _, role := range []string{"review", "closeout"} {
+		cell := cfg.Roles[role]
+		if cell == nil || cell.Kind != initRunnerClaude {
+			t.Errorf("the %s cell is %v, want claude — the one harness the herdr substrate launches for the role", role, cell)
+		}
+	}
+
+	// And the construction a run performs, on every local substrate the
+	// written routing can resolve to: the default profile set under the
+	// harness substrate, the herdr set under herdr. Before jiv the herdr
+	// construction refused on the review cell's kind.
+	constructs := func(substrate, profiles string) {
+		t.Helper()
+		if _, err := reconcile.New(reconcile.Options{
+			Repo: repo, EpicID: "e1", Tracker: &initFakeTracker{},
+			NewExecutor: executorFactory("pi", initRunnersPath(repo)),
+			Executors:   knownExecutors(), ProfileDir: profiles, Substrate: substrate,
+		}); err != nil {
+			t.Errorf("reconcile.New refuses the initialised repository on the %s substrate: %v", substrate, err)
+		}
+	}
+	constructs("harness", "")
+	constructs("herdr", profile.EmbeddedHerdr)
 }
 
 // TestInitRefusesACloudModelThatIsNotWorkersAI pins the cloud rule at the

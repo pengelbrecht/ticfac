@@ -359,6 +359,9 @@ func Resolve(role string, opts Options) (*Profile, error) {
 	// — a run whose substrate is local, selecting the cloudflare-sandbox
 	// executor by its --profiles, boots its workers in a Cloudflare container
 	// under local routing, and the rule is about what runs in Cloudflare.
+	if dispatchesIntoCloudflare(resolved.Executor) {
+		bindHostedHarness(resolved)
+	}
 	if opts.Substrate == string(runconfig.SubstrateCloud) || dispatchesIntoCloudflare(resolved.Executor) {
 		if err := enforceWorkersAI(resolved, opts.Tier); err != nil {
 			return nil, fmt.Errorf("profile %s: %w", role, err)

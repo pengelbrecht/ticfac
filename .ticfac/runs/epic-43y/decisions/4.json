@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 4,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "internal/runconfig.TestReadPiCatalogParsesTheRealListing shells the operator's host-installed pi and pi crashes inside @earendil-works/pi-coding-agent's formatTokenCount (a models.json entry with an undefined token count: `Cannot read properties of undefined (reading 'toString')`). It fails identically at base e17c2965, so every tick on this host merges on a red local gate — the bar AGENTS.md names. CI on ubuntu is unaffected (main is green). The fix could be tolerance in the test/reader, or fixing the model listing upstream.\nevidence: go test -run TestReadPiCatalogParsesTheRealListing ./internal/runconfig/ — fails at e17c2965369a with `TypeError: Cannot read properties of undefined (reading 'toString') at formatTokenCount`\n\nticfac run epic-43y created this tick by absorbing the finding 504a1b1b4fc2b823a05c66f3446f3de0e9b59b9c3437991025bba13f8f08ec57 (reported by run-epic-43y/tick-92k/attempt-1): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/504a1b1b4fc2b823a05c66f3446f3de0e9b59b9c3437991025bba13f8f08ec57.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "lid",
+    "title": "Host pi CLI crash reddens the local gate at base (ReadPiCatalog)"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.36,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.01,
+      "design": 0.49,
+      "diagnosis": 0.48,
+      "mechanical": 0.01,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1417,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T13:14:01Z",
+  "answered_at": "2026-10-04T13:14:01Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "lid",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "3ad18eeefec4e4c60af6fcfbf3577795fb2a2372",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

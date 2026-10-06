@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 48,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "A1 says every worker (implement and role jobs), local and cloud, runs on pi-durable. Every per-tick worker dispatch through the sandbox door IS a hosted WorkerAgent on pi-durable (sandbox-executor.ts, 'Every worker is a WorkerAgent', ticks xd3/hxd) — but the review job deliberately runs a CLI harness in its container: run-workflow.ts calls reviewHarness(), whose floor drops both pi-durable and the deleted 'pi' and falls back to omp on GLM ('the review is the one cloud boot that still runs a CLI harness in its container', tick jhp), whatever the overlay's review cell names. The operator's recorded exceptions in the epic notes cover only the LOCAL claude frontier rung; this cloud-side review exception lives only in code comments. Either the close-out scores A1 with this exception recorded in the epic record, or hosting the review on pi-durable is work worth a tick of its own — as it stands A1's letter and the shipped behavior disagree, and a reviewer scoring A1 from the text alone would call it met when the review dispatch's own attempt record says omp.\nevidence: cloudflare/src/run-workflow.ts:2530-2532 (superviseReview: review routed through reviewHarness, 'the one cloud boot that still runs a CLI harness'); cloudflare/src/worker-boot.ts NOT_A_REVIEW_HARNESS = {pi-durable, pi} and REVIEW_DEFAULT_HARNESS = omp\n\nticfac run epic-43y created this tick by absorbing the finding 35256f3a3385518995e83cef7075fe9235a369c7d2726255f7ae9785a1da2ac8 (reported by run-epic-43y/tick-kkt/attempt-33): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/35256f3a3385518995e83cef7075fe9235a369c7d2726255f7ae9785a1da2ac8.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "8em",
+    "title": "The cloud review boot still runs the omp CLI harness, against A1's letter"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.79,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.01,
+      "design": 0.83,
+      "diagnosis": 0.14,
+      "mechanical": 0.01,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1537,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T16:02:37Z",
+  "answered_at": "2026-10-05T16:02:37Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "8em",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "6c7795aaa1ebcc2dede8775d948cb613b225b5b2",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

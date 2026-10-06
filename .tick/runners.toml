@@ -33,13 +33,35 @@ effort = "medium"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
 
-[roles.implement.tiers.balanced]
-kind = "codex"
-model = "gpt-5.6-luna"
-effort = "max"
-args = []
+# `balanced` is NOT declared for implement, deliberately (epic 43y, tick
+# 7ml): until 2026-10-05 this cell named kind = "codex" (a Phase-2
+# leftover), and because runners.local.toml declares no [roles.implement]
+# role cell to overlay it away, a local run pinning --tier balanced
+# dispatched an implement worker on the codex CLI — a worker harness that is
+# neither pi-durable nor the claude-CLI frontier rung the operator's
+# 2026-10-04 decision keeps. No ladder ever derives balanced (the local
+# ladder climbs strong -> frontier, the cloud's economy -> strong), and in
+# the cloud this cell never reached a container anyway (the cloud's own role
+# cell applied last). With the cell gone, a pin of balanced is REFUSED
+# naming the tier — the profile layer's fail-closed rule (a tier that
+# silently falls back to the role is a tier an operator paid for and did not
+# get) — and internal/reconcile's routing guard resolves every tier name
+# a pin can reach on every substrate, so a cell like the old one cannot come
+# back unnoticed.
 
-# The frontier-tier review at epic completion.
+# The frontier-tier review at epic completion — and, with [roles.closeout]
+# below, the deliberate LOCAL claude exception the operator blessed
+# (2026-10-04/05 decisions; tick j6o): local final reviews and close-outs
+# run on the claude CLI on purpose — the hn6 run was moved to a local run
+# for exactly that — so these cells name claude opus and
+# runners.local.toml deliberately declares no review or closeout cell to
+# overlay them away. The claude CLI is otherwise the local FRONTIER rung
+# only: implementation runs on pi-durable at base and every tier but
+# frontier, and the cloud overlays every cell here away
+# (runners.cloud.toml applies last; nothing in the cloud runs claude).
+# TestThisRepositorysLocalClaudeRoutingIsExactlyTheBlessedCells holds this
+# table: claude exactly here and on implement's frontier rung, pi or a
+# named refusal everywhere else, on every local substrate.
 [roles.review]
 kind = "claude"
 model = "opus"
@@ -62,6 +84,12 @@ kind = "claude"
 model = "opus"
 effort = "high"
 
+# Closeout shares the review cell's blessing (see [roles.review] above):
+# the operator wants local close-outs on claude opus too — the same
+# 2026-10-05 decision, recorded on tick j6o — and the cloud overlays this
+# cell away exactly as it overlays review's. A local override that moves
+# either cell off the claude CLI is a change to an operator decision, not
+# a config edit: take it to the operator.
 [roles.closeout]
 kind = "claude"
 model = "opus"

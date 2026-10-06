@@ -18,9 +18,10 @@ import (
 // any stop is requested so a cancel that is itself killed halfway through
 // still leaves an attempt that can never boot again. The stop is the
 // harness's own interrupt delivered through agent.send_keys, the same
-// surface `herdr agent send-keys` drives: Escape for pi, claude and codex,
-// ctrl+c for a kind nobody has verified (interrupt.go). It stops the SPENDING; the
-// agent's process stays where it is until Dispose tears the workspace down,
+// surface `herdr agent send-keys` drives: Escape for the verified claude and
+// codex kinds, ctrl+c for a kind nobody has verified (interrupt.go). The
+// deleted pi kind has no special entry. It stops the SPENDING; the agent's
+// process stays where it is until Dispose tears the workspace down,
 // because closing the pane is teardown and not a stop.
 //
 // The one thing Cancel does NOT record is a cancellation of an attempt that

@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 77,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Tick 7sn (05ab6c83b) edited profiles/closeout-epic.md, which changes profileSetDigest and therefore provenance.profile_digest in every classification decision record. cloudflare/test/fixtures/classify-tick-decision.json was not regenerated, so TestTheClassificationRecordIsPinnedAsItIsWritten fails on the epic head (CI run 37380024533, headSha 9e924ef811, job 'go test (reconcile 2/3)'; also 37378487207 and 37376277849). The test is EndToEnd, so the per-tick make gate skipped it. Fix: run `go test ./internal/reconcile -run TestTheClassificationRecordIsPinnedAsItIsWritten -update-pin`, read the one-line diff (profile_digest sha256:3b438330... -> sha256:59098f58...), commit it, and then wait for CI on the epic head to be green. Verified locally: after regeneration the reconcile and runstate pin tests pass.\nevidence: internal/reconcile/classify_pin_test.go:106; cloudflare/test/fixtures/classify-tick-decision.json provenance.profile_digest; gh run view 37380024533 --log-failed\n\nticfac run epic-43y created this tick by absorbing the finding 0a26431e56904296f9887bae487a2ea06daff0a0a4f14f183ae594b9c741bd7e (reported by run-epic-43y/tick-o68/attempt-66): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/0a26431e56904296f9887bae487a2ea06daff0a0a4f14f183ae594b9c741bd7e.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "4w7",
+    "title": "Epic head CI red: classify-tick pin stale after 7sn changed closeout profile"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.98,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.01,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.99,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1545,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T22:15:14Z",
+  "answered_at": "2026-10-05T22:15:14Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "4w7",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "e8d011993d85d5c552af7e143343b85b697f32a7",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

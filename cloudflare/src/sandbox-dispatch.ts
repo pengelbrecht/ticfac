@@ -68,10 +68,11 @@
  * | `title` | the tick's title, carried for the same re-derivation. PROSE: any UTF-8 text on one line with no control character, at most 512 UTF-8 bytes (em-dashes welcome). |
  * | `base_sha` | the FULL 40-hex commit the worker clones at — the run branch head this pass pushed, not necessarily the run's submitted base (the wave door's rule, verbatim: a wave-2 worker must implement against the tree its dependencies landed in). |
  * | `model` | the model the caller's profile RESOLVED for this attempt (tick a08) — a FRESH container is booted on exactly this (`TICKS_MODEL`), outranking the deployment's `RUN_WORKER_MODEL`. Required: a start with no model would boot on the factory's own default, and the caller's record would name a model that never ran. The handle's `model` names the model the container it ANSWERS FOR is on: for a fresh boot, this field; for an adoption, the recorded model of the boot that started the running work process (tick dyo) — never an echo of what this request carried. |
- * | `harness` | the harness the caller's profile RESOLVED for this attempt (tick 9iz) — the worker container binds exactly this (`TICKS_HARNESS`), outranking the deployment's `RUN_WORKER_HARNESS`, and the handle's `harness` names it back. Required, for the model's reason verbatim: a start with no harness would boot on the factory's own default, and the caller's record would name a harness that never ran. |
+ * | `harness` | the harness the caller's profile RESOLVED for this attempt (tick 9iz) — the worker container binds exactly this (`TICKS_HARNESS`), outranking the deployment's `RUN_WORKER_HARNESS`, and the handle's `harness` names it back. On a run whose workers are WorkerAgents the handle names the AGENT's harness instead (`pi-durable`, tick 4uj): the agent drives the attempt whatever harness this field names for the container its tools run in, and the handle names what ran. Required, for the model's reason verbatim: a start with no harness would boot on the factory's own default, and the caller's record would name a harness that never ran. |
  * | `prompt` | the RENDERED role prompt the caller's profile resolved (tick 9iz) — the profile's own prompt text, not a filename and not a reference. The worker container's entrypoint renders its worker prompt from the checkout's tracker and never sees the factory's prompt otherwise; the door delivers it into the container's boot environment (`TICKS_ROLE_PROMPT`, beside the harness and the model the same boot carries), so the worker runs on the prompt the run's records digest into `prompt_digest`. Required: PROSE — any UTF-8 text with no control character but tab, LF and CR, at most 64 KiB (65536 UTF-8 bytes) — a start with no prompt would boot a worker on a prompt nobody chose. |
  * | `work_base_sha` | OPTIONAL: for a CARRIED attempt, the FULL 40-hex commit the carried work was cut from (epic hn6, run_3f034e68). `base_sha` is then the released attempt's head; the container (`TICKS_WORK_BASE_SHA`) measures the carried work from this, so a worker that finds it complete and adds nothing settles succeeded rather than no-work. Absent for every attempt that carries nothing. |
  * | `wall_seconds` | OPTIONAL: the dispatch's wall clock in whole seconds (tick 86y). The worker's harness is bounded just under it (`TICKS_WORKER_TIMEOUT`, the wall less the push margin — worker-boot.ts `workerHarnessBudgetMs`), so the container stops its harness, commits, reports and pushes before the reconciler's wall fires. Absent boots an unbounded harness. |
+ * | `stuck_seconds` | OPTIONAL: the stuck watch's window in whole seconds (tick xba) — how long the hosted worker may show no activity before the watch nudges it with a steer, and again before it stops it. Carried to the attempt's WorkerAgent beside the wall; zero turns the watch off (the run's negative `StuckAfter`); absent is the default window the host states, so every hosted attempt is watched. |
  *
  * The response NEVER blocks until the attempt finishes — nothing waits. What
  * returns is a HANDLE, once the dispatch is confirmed (the green-start probe
@@ -192,6 +193,34 @@
  * `GET /api/sandbox/attempts/:tick_id/:attempt` are the whole of it, and a
  * third route is a change to this contract that starts here.
  *
+ * ### The WorkerAgent routes (DECIDED, epic 43y tick xd3)
+ *
+ * That change: every worker is a WorkerAgent (worker-agent.ts) — the
+ * attempt's pi-durable conversation in a Durable Object of its own, its
+ * tools in its container, on whichever substrate the run was submitted on
+ * (`do_v1` or the default `sdk0`, tick hxd). The two routes
+ * above answer from the agent for such a run: the start records the attempt
+ * on its agent (an agent already holding it is the adoption), and the state
+ * route answers the agent's phase — `running` until it settles, then the
+ * attempt's exit code, the finish phase's — copies its log by cursor, and
+ * releases its container once settled. The reclaim stops the agent before
+ * its container is destroyed (container-capacity.ts). Nothing about either
+ * route's contract changes for the caller.
+ *
+ * A hosted attempt has a live conversation, and two routes reach it, on the
+ * same run credential and the same identity (`?job_id=` as on the state
+ * route):
+ *
+ *   - `GET /api/sandbox/attempts/:tick_id/:attempt/watch` — a WebSocket: the
+ *     attempt's state, then the conversation's agent events (pi-durable
+ *     `watchEvents`, one batch per commit, a snapshot first) and its log as
+ *     they land; a `{"type":"steer","text":…}` message steers.
+ *   - `POST /api/sandbox/attempts/:tick_id/:attempt/steer` — `{"text": …,
+ *     "request_id"?: …}`, placed after the running tool round: `202
+ *     {submission}`, `409 not_conversing` when nothing is running to steer.
+ *
+ * Both answer `409 not_hosted` for a run whose workers are not WorkerAgents.
+ *
  * ### The lease (D4)
  *
  * `POST` verifies — never acquires — the project's dispatch lease, exactly as
@@ -205,6 +234,7 @@
 
 import type { AttemptSpec } from "./attempt-protocol";
 import { heldSlots, mayBeAdoptable } from "./container-capacity";
+import { getRun } from "./db";
 import { authorizeGatewayRequest, type GatewayDenial } from "./gateway";
 import type { Env } from "./index";
 import { BASE_SHA_PATTERN, roomFor } from "./runs";
@@ -212,6 +242,7 @@ import { sandboxBinding } from "./sandbox";
 import {
   AdoptionModelUnknownError,
   attemptJobSlot,
+  attemptSandboxName,
   d1JobLogs,
   d1JobRecords,
   InvalidSandboxNameError,
@@ -222,6 +253,7 @@ import {
   specJobID,
   startNamedAttempt,
 } from "./sandbox-executor";
+import { type WorkerAgentStub, workerAgentsFromEnv } from "./worker-agent";
 
 // ------------------------------------------------------------ the results ---
 
@@ -232,6 +264,8 @@ import {
  */
 export type SandboxDispatchResult =
   | { ok: true; status: number; body: Record<string, unknown> }
+  /** A response the door hands back whole: the watch route's WebSocket upgrade. */
+  | { ok: true; status: 101; response: Response }
   | { ok: false; status: number; error: string; detail: string };
 
 function refuse(status: number, error: string, detail: string): SandboxDispatchResult {
@@ -459,6 +493,25 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     );
   }
 
+  // The stuck watch's window (tick xba), optional: how long the hosted
+  // worker may show no activity before the watch nudges it with a steer, and
+  // again before it stops it. Zero turns the watch off — the run's negative
+  // StuckAfter, spelled as zero because a negative window is refused here
+  // like any other malformed bound — and absent is the default window the
+  // attempt's host states, so an older client that sends none still gets the
+  // watch.
+  const stuckSeconds = raw.stuck_seconds;
+  if (
+    stuckSeconds !== undefined &&
+    (typeof stuckSeconds !== "number" || !Number.isInteger(stuckSeconds) || stuckSeconds < 0)
+  ) {
+    return refuse(
+      400,
+      "invalid_request",
+      "stuck_seconds, when present, must be the stuck watch's window as a whole number of seconds (0 turns the watch off)",
+    );
+  }
+
   const text = (name: string, field: unknown): string | SandboxDispatchResult => {
     if (typeof field !== "string" || !PLAIN_FIELD_PATTERN.test(field)) {
       return refuse(
@@ -616,6 +669,7 @@ async function startAttemptRoute(env: Env, request: Request): Promise<SandboxDis
     harness,
     prompt,
     ...(wallSeconds === undefined ? {} : { wall_seconds: wallSeconds }),
+    ...(stuckSeconds === undefined ? {} : { stuck_seconds: stuckSeconds }),
     ...(workBaseSHA === undefined ? {} : { work_base_sha: workBaseSHA }),
   };
 
@@ -732,8 +786,286 @@ async function attemptStatusRoute(
     // The worker's output past its confirm window, copied on every look and
     // drained before a settled container is reclaimed (tick 86y).
     env.ARTIFACTS === undefined ? undefined : d1JobLogs(env.DB, env.ARTIFACTS, run.project),
+    // A run whose workers are WorkerAgents answers from the agent (tick xd3).
+    workerAgentsFromEnv(env),
   );
   return { ok: true, status: 200, body: status as unknown as Record<string, unknown> };
+}
+
+/** The class for a live-conversation route on a run whose workers are not WorkerAgents. */
+export const NOT_HOSTED = "not_hosted";
+
+/** The class for a steer the attempt cannot take: it is not conversing. */
+export const NOT_CONVERSING = "not_conversing";
+
+/**
+ * The attempt's WorkerAgent, for the routes that only a hosted attempt has —
+ * or the refusal: the run's workers are not WorkerAgents (`409 not_hosted`),
+ * or the deployment binds none.
+ */
+async function hostedAgent(
+  env: Env,
+  request: Request,
+  tickID: string,
+  attemptText: string,
+): Promise<
+  | { ok: true; agent: WorkerAgentStub; run_id: string }
+  | { ok: false; refusal: SandboxDispatchResult }
+> {
+  const authorized = await authorizeGatewayRequest(env, request);
+  if (!authorized.ok) return { ok: false, refusal: fromDenial(authorized.denial) };
+  const found = await agentFor(env, request, authorized.run.run_id, tickID, attemptText);
+  if (!found.ok) return found;
+  return { ok: true, agent: found.agent, run_id: authorized.run.run_id };
+}
+
+/**
+ * One attempt's WorkerAgent, by its identity — run, tick, attempt and the
+ * job id `?job_id=` names (the attempt's own job when absent) — or the
+ * refusal: a path that names no attempt, a run whose workers are not
+ * WorkerAgents (`409 not_hosted`), or a deployment that binds none. The
+ * caller has already decided who may ask: the run credential on the door's
+ * routes, the operator's token on /api/runs.
+ */
+async function agentFor(
+  env: Env,
+  request: Request,
+  runID: string,
+  tickID: string,
+  attemptText: string,
+): Promise<
+  | { ok: true; agent: WorkerAgentStub; name: string; attempt: number }
+  | { ok: false; refusal: SandboxDispatchResult }
+> {
+  if (!TICK_ID_PATTERN.test(tickID)) {
+    return {
+      ok: false,
+      refusal: refuse(
+        400,
+        "invalid_request",
+        "the tick id in the path is not a name this door reads",
+      ),
+    };
+  }
+  if (/^[1-9][0-9]*$/.test(attemptText) === false) {
+    return {
+      ok: false,
+      refusal: refuse(400, "invalid_request", "the attempt in the path must be a positive integer"),
+    };
+  }
+  const jobID = jobIDOf(runID, new URL(request.url).searchParams.get("job_id") ?? undefined);
+  if (typeof jobID !== "string" && jobID !== undefined) return { ok: false, refusal: jobID };
+  const agents = workerAgentsFromEnv(env);
+  const hosting = agents === undefined ? null : await agents(runID);
+  if (hosting === null) {
+    return {
+      ok: false,
+      refusal: refuse(
+        409,
+        NOT_HOSTED,
+        `run ${runID}'s workers are not WorkerAgents (no WORKER_AGENTS binding on this ` +
+          "deployment, or no D1 to read the run's substrate with — a hosted attempt has no live " +
+          "conversation to watch or steer)",
+      ),
+    };
+  }
+  const attempt = Number(attemptText);
+  const name = attemptSandboxName(runID, tickID, attempt, jobID);
+  return { ok: true, agent: hosting.agent(name), name, attempt };
+}
+
+/**
+ * `GET /api/sandbox/attempts/:tick_id/:attempt/watch` — a WebSocket onto the
+ * attempt's WorkerAgent: its state, the live conversation's agent events and
+ * its log as they are committed; a `{"type":"steer","text":…}` message steers.
+ */
+async function attemptWatchRoute(
+  env: Env,
+  request: Request,
+  tickID: string,
+  attemptText: string,
+): Promise<SandboxDispatchResult> {
+  if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+    return refuse(
+      426,
+      "upgrade_required",
+      "the watch route is a WebSocket: send Upgrade: websocket",
+    );
+  }
+  const found = await hostedAgent(env, request, tickID, attemptText);
+  if (!found.ok) return found.refusal;
+  return { ok: true, status: 101, response: await found.agent.fetch(request) };
+}
+
+/**
+ * `POST /api/sandbox/attempts/:tick_id/:attempt/steer` — `{"text": …,
+ * "request_id"?: …}`: operator input placed after the attempt's running tool
+ * round (pi-durable `whenBusy: "steer"`); the stuck nudge is one of these.
+ * `202 {submission}`, or `409 not_conversing` when there is no running
+ * conversation to place it in.
+ */
+async function attemptSteerRoute(
+  env: Env,
+  request: Request,
+  tickID: string,
+  attemptText: string,
+): Promise<SandboxDispatchResult> {
+  const found = await hostedAgent(env, request, tickID, attemptText);
+  if (!found.ok) return found.refusal;
+  return steerAgent(found.agent, request);
+}
+
+/** A steer's body read, validated and placed on the agent: 202, or the refusal. */
+async function steerAgent(
+  agent: WorkerAgentStub,
+  request: Request,
+): Promise<SandboxDispatchResult> {
+  const parsed = await jsonBody(request);
+  if (!parsed.ok) return parsed.refusal;
+  const text = parsed.raw.text;
+  if (!isProse(text, PROMPT_FIELD_PATTERN, PROMPT_FIELD_MAX_BYTES)) {
+    return refuse(
+      400,
+      "invalid_request",
+      `text must be the steer's UTF-8 text (line breaks allowed, at most ${PROMPT_FIELD_MAX_BYTES} bytes)`,
+    );
+  }
+  const requestID = parsed.raw.request_id;
+  if (
+    requestID !== undefined &&
+    (typeof requestID !== "string" || !PLAIN_FIELD_PATTERN.test(requestID))
+  ) {
+    return refuse(
+      400,
+      "invalid_request",
+      "request_id, when present, must be printable ASCII with no spaces (at most 512 characters)",
+    );
+  }
+  const steered = await agent.steer(text, requestID);
+  if (!steered.ok) return refuse(409, NOT_CONVERSING, steered.error);
+  return { ok: true, status: 202, body: { submission: steered.submission } };
+}
+
+// ------------------------------------------------- the operator's window ---
+
+/** The class for an operator route naming a tick no hosted attempt was booted for. */
+export const NO_ATTEMPT = "no_attempt";
+
+/**
+ * The operator's window into one hosted worker (tick y03): the same agent
+ * the door's watch and steer routes reach, addressed by the run's id in the
+ * path and authorized by the OPERATOR's factory token — index.ts has already
+ * checked it before routing, as for every /api/runs path. `ticfac watch
+ * <run> <tick>` and `ticfac steer` are its client.
+ *
+ *   - `GET  /api/runs/:run_id/workers/:tick_id/:attempt` — the attempt's
+ *     state (WorkerAgentState) with the attempt it resolved;
+ *   - `GET  /api/runs/:run_id/workers/:tick_id/:attempt/watch` — the
+ *     agent's watch WebSocket: its state, the live conversation's agent
+ *     events and its log as they land; a `{"type":"steer","text":…}`
+ *     message steers;
+ *   - `POST /api/runs/:run_id/workers/:tick_id/:attempt/steer` — `{"text":
+ *     …, "request_id"?: …}` placed after the running tool round: `202
+ *     {submission}`, `409 not_conversing` when nothing is running.
+ *
+ * `:attempt` is a positive integer, or `latest`: the newest attempt of the
+ * tick this factory booted a worker for (the boot record every hosted start
+ * writes before its agent is started), which is what an operator watching
+ * "the worker on y03" means. `?job_id=` addresses a job other than the
+ * attempt's own, as on the door. An unknown run is `404 not_found`, a tick
+ * with no booted attempt `404 no_attempt`, a run whose workers are not
+ * WorkerAgents `409 not_hosted`.
+ *
+ * A steer is the one write here, and it is the operator's own: the status,
+ * logs and events routes stay read-only (D21) — this route steers ONE
+ * worker's conversation, never the run.
+ */
+export async function operatorWorkerRoute(
+  request: Request,
+  env: Env,
+  runID: string,
+  segments: string[],
+): Promise<SandboxDispatchResult> {
+  try {
+    return await routeOperatorWorker(request, env, runID, segments);
+  } catch (error) {
+    return doorFault(request, error);
+  }
+}
+
+async function routeOperatorWorker(
+  request: Request,
+  env: Env,
+  runID: string,
+  segments: string[],
+): Promise<SandboxDispatchResult> {
+  const [tickID = "", attemptText = "", action] = segments;
+  if (
+    segments.length < 2 ||
+    segments.length > 3 ||
+    (action !== undefined && action !== "watch" && action !== "steer")
+  ) {
+    return refuse(
+      404,
+      "not_found",
+      "the worker routes are GET /api/runs/:run_id/workers/:tick_id/:attempt, GET …/watch and POST …/steer",
+    );
+  }
+  const run = await getRun(env.DB, runID);
+  if (run === null) return refuse(404, "not_found", `no run ${runID} in this factory`);
+  let attempt = attemptText;
+  if (attempt === "latest") {
+    if (!TICK_ID_PATTERN.test(tickID)) {
+      return refuse(
+        400,
+        "invalid_request",
+        "the tick id in the path is not a name this door reads",
+      );
+    }
+    const newest = await env.DB.prepare(
+      "SELECT MAX(attempt) AS attempt FROM sandbox_job_boot WHERE run_id = ? AND tick_id = ? AND job = ''",
+    )
+      .bind(runID, tickID)
+      .first<{ attempt: number | null }>();
+    if (newest?.attempt === null || newest?.attempt === undefined) {
+      return refuse(404, NO_ATTEMPT, `no worker of tick ${tickID} was booted for run ${runID}`);
+    }
+    attempt = String(newest.attempt);
+  }
+  const found = await agentFor(env, request, runID, tickID, attempt);
+  if (!found.ok) return found.refusal;
+  if (action === "watch") {
+    if (request.method !== "GET") {
+      return refuse(405, "method_not_allowed", "the watch route is a GET WebSocket upgrade");
+    }
+    if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+      return refuse(
+        426,
+        "upgrade_required",
+        "the watch route is a WebSocket: send Upgrade: websocket",
+      );
+    }
+    return { ok: true, status: 101, response: await found.agent.fetch(request) };
+  }
+  if (action === "steer") {
+    if (request.method !== "POST")
+      return refuse(405, "method_not_allowed", "the steer route is POST");
+    return steerAgent(found.agent, request);
+  }
+  if (request.method !== "GET") {
+    return refuse(405, "method_not_allowed", "the worker's state route is GET");
+  }
+  return {
+    ok: true,
+    status: 200,
+    body: {
+      run_id: runID,
+      tick_id: tickID,
+      attempt: found.attempt,
+      name: found.name,
+      state: await found.agent.state(),
+    },
+  };
 }
 
 /**
@@ -827,11 +1159,24 @@ async function routeSandboxAttempt(
     }
     return attemptStatusRoute(env, request, segments[0]!, segments[1]!);
   }
+  if (segments.length === 3 && segments[2] === "watch") {
+    if (request.method !== "GET") {
+      return refuse(405, "method_not_allowed", "the watch route is a GET WebSocket upgrade");
+    }
+    return attemptWatchRoute(env, request, segments[0]!, segments[1]!);
+  }
+  if (segments.length === 3 && segments[2] === "steer") {
+    if (request.method !== "POST") {
+      return refuse(405, "method_not_allowed", "the steer route is POST");
+    }
+    return attemptSteerRoute(env, request, segments[0]!, segments[1]!);
+  }
   return refuse(
     404,
     "not_found",
-    "the sandbox dispatch door serves POST /api/sandbox/attempts and " +
-      "GET /api/sandbox/attempts/:tick_id/:attempt",
+    "the sandbox dispatch door serves POST /api/sandbox/attempts, " +
+      "GET /api/sandbox/attempts/:tick_id/:attempt, and for a hosted attempt " +
+      "GET …/:tick_id/:attempt/watch and POST …/:tick_id/:attempt/steer",
   );
 }
 

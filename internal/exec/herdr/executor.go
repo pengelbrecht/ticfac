@@ -47,10 +47,14 @@ type Options struct {
 	// ~/.config/herdr/herdr.sock.
 	SocketPath string
 
-	// Kind is the herdr agent kind ("claude", "codex", "pi", …) — the
+	// Kind is the herdr agent kind ("claude", "codex", "opencode") — the
 	// harness dimension, the herdr form of the profile's runner field. The
 	// caller resolves it from its role profile; empty defaults to claude,
-	// the same default the local executor's runner falls back to.
+	// the same default the local executor's runner falls back to. A profile
+	// routed to kind pi is refused before it ever reaches here — by the
+	// reconciler's construction check and by runconfig.Compile (epic 43y,
+	// tick uxi): herdr agents are interactive CLIs, and pi-durable, not the
+	// pi CLI, is the worker harness.
 	Kind string
 
 	// Args is the argv appended after the kind's own launch template, one

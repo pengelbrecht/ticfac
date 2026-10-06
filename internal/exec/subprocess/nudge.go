@@ -23,10 +23,17 @@ import (
 //
 // So the supervisor does not settle on that exit. It prompts the SAME session
 // again, at most MaxNudges times, saying what is missing and where it goes —
-// through the runner's own resume when it has one (claude --resume, pi
-// --session-id) and as a fresh run on the same worktree when it has none.
+// through the runner's own resume when it has one (claude --resume), as a
+// relaunch of the conversation the attempt's storage already holds on the
+// durable runner (tick hpk), and as a fresh run on the same worktree when it
+// has neither.
 // Only after that is it missing-result. A non-zero exit is not nudged: that
-// runner failed, and its own words are what collect classifies.
+// runner failed, and its own words are what collect classifies. A death by
+// SIGNAL is the one non-zero exit that is not a failure of the runner's own
+// making — a durable runner's conversation survives its process, so the
+// supervisor replays the same argv, bounded, before anything settles
+// (relaunch.go, tick 3c2); only when those relaunches are spent does the
+// kill settle the attempt.
 
 // MaxNudges bounds how often one attempt is re-prompted. A worker that ends
 // without its report twice more after being told what is missing is not
@@ -88,12 +95,46 @@ func freshNudgeSection(record *attemptRecord) string {
 		record.Branch, record.ResultPath)
 }
 
+// durableResume reports whether this runner's conversation survives its
+// process in the attempt's own storage (the pi-durable runner, tick hpk): a
+// re-prompt is the same argv with a different message, and the relaunched
+// process continues the conversation from its storage — no session flag to
+// insert, no fresh-run section to append, because it reads the whole
+// history from its storage rather than starting blind on the worktree. An
+// override argv is the whole invocation, so an overridden runner takes the
+// ordinary path whatever its kind.
+func durableResume(name string, override []string) bool {
+	def, ok := runners[name]
+	return ok && def.DurableResume && len(override) == 0
+}
+
+// durableAttempt is durableResume's answer for a record read back by the
+// supervisor (tick rpw): the record's RunnerArgv is the RESOLVED argv —
+// what the supervisor runs — and never empty, so durableResume cannot be
+// asked it directly: an override is indistinguishable in it, and every
+// durable attempt read as not durable, so its conversation storage was
+// never read as activity and a quiet, working durable worker was nudged
+// and stopped on the tool CPU alone. The override flag, recorded at Start,
+// is what the record knows about where its argv came from: an override is
+// the whole invocation, and a runner read through one is not the table's
+// durable runner whatever its name.
+func durableAttempt(record *attemptRecord) bool {
+	def, ok := runners[record.Runner]
+	return ok && def.DurableResume && !record.RunnerArgvOverride
+}
+
 // nudgeArgv is the argv that re-prompts this attempt's runner. It resumes the
 // runner's own session when the attempt has one, and otherwise repeats the
 // launch with the fresh-run section appended to the prompt — which is also
 // what an override argv (the tests' fake runner, TICFAC_RUNNER_ARGV) gets,
 // since an override is the whole invocation and nothing is inserted into it.
 func nudgeArgv(name string, override []string, at launch, record *attemptRecord) ([]string, error) {
+	if durableResume(name, override) {
+		resume := at
+		resume.Session = ""
+		resume.Prompt = nudgePrompt(record)
+		return resolveRunner(name, nil, resume)
+	}
 	if at.Session != "" && len(override) == 0 {
 		resume := at
 		resume.Resume = true
@@ -108,9 +149,18 @@ func nudgeArgv(name string, override []string, at launch, record *attemptRecord)
 
 // stuckArgv is the argv the stuck watch re-prompts a runner with: its own
 // session resumed with the stuck prompt, or — with no session to resume — the
-// launch repeated with the fresh-run section, as the report nudge does.
+// launch repeated with the fresh-run section, as the report nudge does. A
+// durable runner takes neither path: the stuck text is a follow-up message to
+// the conversation its storage already holds — and the FIRST move on a live
+// durable runner is not this argv at all, but a steer (steer.go).
 func stuckArgv(name string, override []string, at launch, record *attemptRecord, after time.Duration) ([]string, error) {
 	text := StuckPrompt("the supervisor stopped its tool processes and re-prompted it", after)
+	if durableResume(name, override) {
+		resume := at
+		resume.Session = ""
+		resume.Prompt = text
+		return resolveRunner(name, nil, resume)
+	}
 	if at.Session != "" && len(override) == 0 {
 		resume := at
 		resume.Resume = true

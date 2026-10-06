@@ -21,6 +21,12 @@ func signalGroup(pgid int, sig syscall.Signal) error {
 	return fmt.Errorf("the local subprocess executor needs unix process groups")
 }
 
+func processGroupOf(pid int) (int, error) {
+	return 0, fmt.Errorf("the local subprocess executor needs unix process groups")
+}
+
+func groupAlive(pgid int) bool { return false }
+
 func holdLock(f *os.File) error {
 	return fmt.Errorf("the local subprocess executor needs unix file locks")
 }

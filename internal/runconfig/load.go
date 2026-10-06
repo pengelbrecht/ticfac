@@ -82,8 +82,9 @@ var (
 	// schema rules that may diverge.
 	rolePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
 	// modelPattern is the schema's Model pattern. `:` is deliberately absent:
-	// effort belongs in `effort`, never smuggled into pi's model:thinking
-	// shorthand. A segment may LEAD with `@` because a provider namespace can
+	// model and effort are separate fields, so a level belongs in `effort`,
+	// never in a model-id suffix. A segment may LEAD with `@` because a
+	// provider namespace can
 	// be part of the id: every Workers AI model is `@cf/<vendor>/<name>`, so
 	// the qualified form is `workers-ai/@cf/openai/gpt-oss-120b`. That is the
 	// only position `@` is legal in — inside a segment it is still malformed,
@@ -898,7 +899,7 @@ func checkModel(add addFunc, path, value string) {
 		return
 	}
 	if strings.Contains(value, ":") {
-		add(path, fmt.Sprintf("%q must not contain ':' — put the level in `effort`; pi's model:thinking shorthand is what the spawner emits, not what the config carries", value))
+		add(path, fmt.Sprintf("%q must not contain ':' — model and effort are separate fields; put the level in `effort`", value))
 		return
 	}
 	if !modelPattern.MatchString(value) {

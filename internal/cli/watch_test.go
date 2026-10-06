@@ -163,7 +163,9 @@ func TestWatchReportsARunThatEndedOnItsOwn(t *testing.T) {
 }
 
 func TestWatchNeedsExactlyOneRunID(t *testing.T) {
-	for _, args := range [][]string{{"watch"}, {"watch", "a", "b"}, {"watch", ""}} {
+	// A second argument is a tick (the worker's watch, tick y03); a third is
+	// nothing either watch reads.
+	for _, args := range [][]string{{"watch"}, {"watch", "a", "b", "c"}, {"watch", ""}, {"watch", "a", ""}} {
 		var stdout, stderr syncBuffer
 		if code := Run(args, &stdout, &stderr); code != 2 {
 			t.Errorf("%v: exit code %d, want 2", args, code)

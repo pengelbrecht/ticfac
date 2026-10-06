@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 )
@@ -69,6 +70,10 @@ func TestStartReturnsAHandleWithoutBlocking(t *testing.T) {
 		// The dispatch's wall (tick 86y): the door bounds the worker's
 		// harness just under it.
 		"wall_seconds": float64(h.spec.Limits.WallSeconds),
+		// The run's stuck window (tick xba): the dispatch's StuckAfter, in
+		// whole seconds, so the hosted worker's own watch nudges at the same
+		// quiet the local watch would.
+		"stuck_seconds": float64(900),
 	} {
 		if got := body[field]; got != want {
 			t.Errorf("the start body's %q is %v, want %v", field, got, want)
@@ -100,12 +105,87 @@ func TestStartReturnsAHandleWithoutBlocking(t *testing.T) {
 	}
 }
 
+// The run's stuck window crosses the door spelled for the hosted worker's
+// own watch (tick xba): positive is the window in whole seconds, and the run
+// that turned the watch off crosses as zero — the door refuses negatives
+// like any other malformed bound, so the off switch has exactly one honest
+// spelling. A caller that said nothing sends nothing, which the door answers
+// with its own default window, the local watch's.
+//
+// short: one httptest door and one state directory.
+func TestTheStuckWindowCrossesTheDoor(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		after time.Duration
+		want  any
+	}{
+		{"the window in whole seconds", 15 * time.Minute, float64(900)},
+		{"the off switch as zero", -1, float64(0)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := newHarness(t)
+			ex, err := New(Options{
+				FactoryURL: h.door.URL(),
+				Token:      "run-r1-token",
+				EpicID:     "xte",
+				BaseRef:    "epic/xte",
+				Title:      "A cloudflare-sandbox executor that returns a handle, not a result",
+				Model:      testModel,
+				Harness:    testHarness,
+				Prompt:     testPrompt,
+				Attempt:    1,
+				StateDir:   t.TempDir(),
+				StuckAfter: tc.after,
+				Now:        func() time.Time { return time.Date(2026, 9, 22, 18, 0, 0, 0, time.UTC) },
+			})
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			h.ex = ex
+			if _, err := h.start("keh"); err != nil {
+				t.Fatalf("Start: %v", err)
+			}
+			if got := h.door.lastStartBody()["stuck_seconds"]; got != tc.want {
+				t.Errorf("the start body's stuck_seconds is %v, want %v", got, tc.want)
+			}
+		})
+	}
+
+	// A constructor that was never told a window sends nothing: the door's
+	// default (the local watch's own) applies, never a silent zero that
+	// would turn the watch off a caller never asked off.
+	h := newHarness(t)
+	ex, err := New(Options{
+		FactoryURL: h.door.URL(),
+		Token:      "run-r1-token",
+		EpicID:     "xte",
+		BaseRef:    "epic/xte",
+		Title:      "A cloudflare-sandbox executor that returns a handle, not a result",
+		Model:      testModel,
+		Harness:    testHarness,
+		Prompt:     testPrompt,
+		Attempt:    1,
+		StateDir:   t.TempDir(),
+		Now:        func() time.Time { return time.Date(2026, 9, 22, 18, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	h.ex = ex
+	if _, err := h.start("keh"); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if got, ok := h.door.lastStartBody()["stuck_seconds"]; ok {
+		t.Errorf("a start with no window to state sent stuck_seconds %v: the door's own default is what it should get", got)
+	}
+}
+
 // A CARRIED dispatch's work base crosses the door (epic hn6, run_3f034e68):
 // the container measures the carried work from it, so a worker that found it
 // complete and added nothing settles succeeded rather than no-work — and a
 // malformed one is refused before the door is asked anything.
 //
-// short: an httptest door and one state directory.
+// short: an httptest door and one state directory; no network, no container.
 func TestStartCarriesACarriedAttemptsWorkBase(t *testing.T) {
 	h := newHarness(t)
 	workBase := "fedcba9876543210fedcba9876543210fedcba98"

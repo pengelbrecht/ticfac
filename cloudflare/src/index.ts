@@ -153,7 +153,7 @@ import {
   submitRun,
 } from "./runs";
 import { sandboxBinding } from "./sandbox";
-import { sandboxAttemptRoute } from "./sandbox-dispatch";
+import { operatorWorkerRoute, sandboxAttemptRoute } from "./sandbox-dispatch";
 import { SignalInbox } from "./signal-inbox";
 import { parseSnapshotEnvelope, saveStatusSnapshot } from "./status";
 import { runDueSweeps } from "./sweep-dispatch";
@@ -175,6 +175,8 @@ import {
   unregisterTelegramWebhook,
 } from "./telegram";
 import { WEBHOOK_SOURCE_PREFIX, webhookSourceRoute } from "./webhook-sources";
+import { WorkerAgent, workerAgentsFromEnv } from "./worker-agent";
+import { IMAGE_HARNESS_KINDS } from "./worker-boot";
 
 /** Bindings from wrangler.toml; declared in src/env.d.ts. */
 export type Env = Cloudflare.Env;
@@ -236,6 +238,13 @@ async function deploymentRoute(env: Env): Promise<Response> {
     deployed_at: record?.deployed_at ?? null,
     image_ref: image?.image_ref ?? null,
     image_digest: image?.image_digest ?? null,
+    // The harness kinds this deployment's image ships (worker-boot.ts's
+    // IMAGE_HARNESS_KINDS, pinned to image/common.sh's kind case): what a
+    // submission may route a container to, so `ticfac run <epic> --cloud`'s
+    // preflight can refuse a repo whose .tick/runners.cloud.toml names a
+    // kind every container would die on (tick kkt) — at the operator's
+    // knee, before anything is pushed or booted.
+    harness_kinds: IMAGE_HARNESS_KINDS,
     worker_version_id: version?.id || null,
     worker_version_timestamp: version?.timestamp || null,
   });
@@ -1699,6 +1708,8 @@ export default {
       segments[2] === "attempts"
     ) {
       const result = await sandboxAttemptRoute(request, env, segments.slice(3));
+      // The watch route's WebSocket upgrade, handed back whole (tick xd3).
+      if (result.ok && "response" in result) return result.response;
       if (!result.ok) {
         return Response.json(
           { error: result.error, detail: result.detail },
@@ -1796,6 +1807,21 @@ export default {
         if (request.method !== "GET") return methodNotAllowed(["GET"]);
         return await logsRoute(url, segments[2]!, env);
       }
+      // /api/runs/:id/workers/:tick/:attempt[/watch|/steer] — the
+      // operator's window into one hosted worker's live conversation, and
+      // its voice in it (tick y03). The contract is documented where the
+      // door's own WorkerAgent routes are: src/sandbox-dispatch.ts.
+      if (segments.length >= 6 && segments[3] === "workers") {
+        const result = await operatorWorkerRoute(request, env, segments[2]!, segments.slice(4));
+        if (result.ok && "response" in result) return result.response;
+        if (!result.ok) {
+          return Response.json(
+            { error: result.error, detail: result.detail },
+            { status: result.status },
+          );
+        }
+        return Response.json(result.body, { status: result.status });
+      }
       // /api/runs/:id/events — the run's versioned event feed, readable
       // from anywhere the factory is (tick k7p). Read-only like logs: a
       // subscriber cannot steer a run through a path whose whole rule is
@@ -1855,7 +1881,12 @@ export default {
         // account's slots. Its own try, like the digest's: a reclaim that
         // cannot run must not stop the sweeps, nor they it.
         try {
-          const reclaimed = await reclaimOrphanedWorkers(env.DB, sandboxBinding(env));
+          const agents = workerAgentsFromEnv(env);
+          const reclaimed = await reclaimOrphanedWorkers(
+            env.DB,
+            sandboxBinding(env),
+            agents === undefined ? {} : { agents },
+          );
           if (reclaimed.length > 0) {
             console.log(
               `factory reclaim: the ${controller.cron} sweep reclaimed ${reclaimed.length} worker container(s) ` +
@@ -1894,7 +1925,8 @@ export { Sandbox } from "@cloudflare/sandbox";
 // The factory's own container class on the durable_object scheduling policy
 // (epic umq), bound as SANDBOXES_V1 beside the SDK's class above.
 export { FactorySandbox } from "./factory-sandbox";
+// The WorkerAgent (epic 43y, tick xd3): one cloud worker attempt on pi-durable.
 // workerd accepts a Durable Object class and a Workflow entrypoint as named
 // exports of the entry module; anything else named here fails at boot, not at
 // deploy (see SERVICE above).
-export { RepoRoom, RunRoom, RunWorkflow, SignalInbox };
+export { RepoRoom, RunRoom, RunWorkflow, SignalInbox, WorkerAgent };

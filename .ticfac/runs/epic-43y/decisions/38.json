@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 38,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "A4's cloud run cannot execute before the close-out merge: the factory deploys main only, and main (c7e11fe3 at 2026-10-05) is strictly behind epic/43y — the epic merges to main only at close-out, which the final review gates, and the review is blocked-by qdg itself. It also needs twa (open) to flip .tick/runners.cloud.toml to kind pi-durable — today a cloud dispatch of this repo boots every container into 'unknown harness kind pi' — and, for a hn6-style run of this repository, dm6 (open) for the factory-side forge access the PR rule requires. Runbook for whoever owns it: merge epic/43y to main at close-out; ticfac factory wait-deployed <merge sha>; land twa; land dm6; then ticfac run hn6 --cloud (hn6 is the operator's named candidate) or the next feasible epic — every worker then boots a factory sandbox container on pi-durable, and A4's cloud half is observed. Without an owner, A4 closes at best predicted.\nevidence: AGENTS.md (deploy-factory deploys main only); git merge-base origin/main epic/43y on 2026-10-05 (main strictly behind); .tick/issues/twa.json open; .tick/issues/dm6.json open; .tick/issues/hn6.json 'Candidate: the first epic run in the cloud once dm6 lands'\n\nticfac run epic-43y created this tick by absorbing the finding 65db9b2b893e99faac913afaab170a291fd873a5e8a4d76b392e536381d87189 (reported by run-epic-43y/tick-qdg/attempt-29): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/65db9b2b893e99faac913afaab170a291fd873a5e8a4d76b392e536381d87189.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "kkt",
+    "title": "Own the cloud half of [A4] post-merge: ticfac run <epic> --cloud"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.32,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.3,
+      "design": 0.03,
+      "diagnosis": 0.16,
+      "mechanical": 0.45,
+      "translation": 0.06
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1534,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T14:48:33Z",
+  "answered_at": "2026-10-05T14:48:33Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "kkt",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "8afd3713385cd16ec810c5cac0583596f7f3f090",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

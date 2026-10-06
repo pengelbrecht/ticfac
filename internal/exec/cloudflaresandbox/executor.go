@@ -86,7 +86,10 @@ type Options struct {
 	// Start refuses a handle that names another — for the model's reason
 	// verbatim: a start with no harness would boot on the factory's own
 	// standing choice, and the caller's record would name a harness that
-	// never ran. Required: the door refuses a start without one.
+	// never ran. The one exception is a hosted attempt (tick 4uj): its
+	// WorkerAgent runs it on [WorkerAgentHarness], the handle names that, and
+	// the record states it — provenance names what ran. Required: the door
+	// refuses a start without one.
 	Harness string
 
 	// Prompt is the RENDERED role prompt the dispatch's profile resolved (tick
@@ -141,6 +144,20 @@ type Options struct {
 
 	// RequestTimeout bounds one door call. Zero is DefaultRequestTimeout.
 	RequestTimeout time.Duration
+
+	// StuckAfter is the run's stuck window (tick wv2) — how long the hosted
+	// worker may show no activity before its own watch nudges it with a
+	// steer, and again before it stops it — carried to the door as
+	// stuck_seconds (tick xba) and by the door to the attempt's
+	// WorkerAgent, whose host runs the cloud half of the local watch. The
+	// mapping is the local one: positive is the window; negative turns the
+	// watch off (the door spells that as stuck_seconds 0, refusing
+	// negatives like any other malformed bound); zero says nothing and the
+	// door answers with its own default window, which is the local watch's
+	// (subprocess.DefaultStuckAfter). The reconciler defaults a dispatch's
+	// window before any executor sees it, so zero is only a constructor
+	// that was never told.
+	StuckAfter time.Duration
 
 	Now func() time.Time
 
@@ -306,20 +323,23 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	attempt := e.opts.Attempt
 	tickID := tickOf(spec)
 	req := &startRequest{
-		Epic:        e.opts.EpicID,
-		TickID:      tickID,
-		Attempt:     attempt,
-		JobID:       spec.JobID,
-		Role:        spec.Role,
-		WriteRef:    spec.Source.WriteRef,
-		BaseRef:     e.opts.BaseRef,
-		Title:       e.opts.Title,
-		BaseSHA:     spec.Source.BaseSHA,
-		Model:       e.opts.Model,
-		Harness:     e.opts.Harness,
-		Prompt:      e.opts.Prompt,
-		WallSeconds: spec.Limits.WallSeconds,
-		WorkBaseSHA: e.opts.WorkBaseSHA,
+		Epic:     e.opts.EpicID,
+		TickID:   tickID,
+		Attempt:  attempt,
+		JobID:    spec.JobID,
+		Role:     spec.Role,
+		WriteRef: spec.Source.WriteRef,
+		BaseRef:  e.opts.BaseRef,
+		Title:    e.opts.Title,
+		BaseSHA:  spec.Source.BaseSHA,
+		Model:    e.opts.Model,
+		Harness:  e.opts.Harness,
+		Prompt:   e.opts.Prompt,
+		// The run's stuck window (tick xba), spelled the way the door reads
+		// it: see startRequest.StuckSeconds.
+		StuckSeconds: stuckSecondsFor(e.opts.StuckAfter),
+		WallSeconds:  spec.Limits.WallSeconds,
+		WorkBaseSHA:  e.opts.WorkBaseSHA,
 	}
 	if err := validateDoorFields(req); err != nil {
 		return nil, err
@@ -424,11 +444,17 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 			"a record naming the requested model over a worker running another is a provenance that lies",
 			attempt, spec.JobID, payload.Model, req.Model)
 	}
-	// The door names the harness it bound the worker to, for the model's
-	// reason (tick 9iz): anything but the one asked for — an adoption of a
-	// container some other start booted, a door that fell back to its own
-	// standing choice — is refused before a record is written.
-	if payload.Harness != req.Harness {
+	// The door names the harness the attempt RUNS on. For a container attempt
+	// that is the harness it bound the worker to, for the model's reason
+	// (tick 9iz): anything but the one asked for — an adoption of a container
+	// some other start booted, a door that fell back to its own standing
+	// choice — is refused before a record is written. For a hosted attempt it
+	// is the WorkerAgent's (tick 4uj): the agent drives the attempt on
+	// [WorkerAgentHarness] whatever harness the dispatch's profile named for
+	// the container its tools run in, so the answer names it, the record
+	// below states it, and provenance names what ran — the same rule the
+	// refusal enforces, answered on the other side.
+	if payload.Harness != req.Harness && payload.Harness != WorkerAgentHarness {
 		return nil, fmt.Errorf("the door booted attempt %d of %s on harness %q, not the %q its dispatch resolved: "+
 			"a record naming the requested harness over a worker bound to another is a provenance that lies",
 			attempt, spec.JobID, payload.Harness, req.Harness)

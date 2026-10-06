@@ -634,6 +634,30 @@ tracker_edit_finding)
 		} > "$TICFAC_RESULT_PATH"
 	fi
 	;;
+epic_note)
+	# The 8em shape (epic 43y, tick 7sn): b1's deliverable is a tracker edit
+	# that appends a NOTE to the EPIC's own record — the record the close-out
+	# scores the acceptance from — declaring an exception the acceptance
+	# does not carry. The run applies it (a worker may propose notes on its
+	# epic) and FILES the amendment as awaiting the operator: the tick closes
+	# behind the delivery, the run reaches the close-out, and the close-out
+	# holds on the unconfirmed amendment. Every other tick does its work.
+	if [ "$TICFAC_TICK" != "b1" ]; then
+		commit
+		report
+	else
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf 'The gap is closed by recording the exception where it is scored from; proposed for the run to apply.\n\n'
+			printf '%s\n' '```tracker-edits'
+			printf '%s\n' '[{"tick": "qeu", "field": "notes", "value": "tick b1: the slow-check gate is excepted from A1 on the record, now on the record"}]'
+			printf '%s\n' '```'
+			printf '\n%s\n%s\n%s\n\n' '```findings v2' '[]' '```'
+			printf 'STATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+	fi
+	;;
 a1-adds-nothing)
 	# The isp shape: a1's attempt was cut from a RELEASED attempt's carried
 	# work, finds the work already done, and correctly adds nothing — a

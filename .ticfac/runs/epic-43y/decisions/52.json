@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 52,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "When the tree equals HEAD and no ticfac-wip-pushed record exists, pushWipCheckpoint writes the record and exits 3 without pushing, assuming HEAD is on origin. After a restore (which deletes .git's record) or a round-1 commit, HEAD has moved past origin, so the agent's commits are not pushed. A further container loss restores the older tip.\nevidence: harness/src/workspace/checkpoints.ts:215-216\n\nticfac run epic-43y created this tick by absorbing the finding 0718333001027829a8d99afb042cf1bcbc8713c0adcd591792b047d22c6b02ab (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/0718333001027829a8d99afb042cf1bcbc8713c0adcd591792b047d22c6b02ab.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "4s2",
+    "title": "First clean wip round is recorded as pushed without a push; commits can be lost"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.77,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.03,
+      "design": 0.02,
+      "diagnosis": 0.81,
+      "mechanical": 0.13,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1311,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T18:05:44Z",
+  "answered_at": "2026-10-05T18:05:44Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "4s2",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "91ed6fa27a9e7ea962e8aecddab8ea437a1c4c27",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

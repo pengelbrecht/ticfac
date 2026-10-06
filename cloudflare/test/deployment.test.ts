@@ -46,6 +46,12 @@ describe("deployment route", () => {
     // [version_metadata] is bound, null when it is not — never absent.
     expect(body).toHaveProperty("worker_version_id");
     expect(body).toHaveProperty("worker_version_timestamp");
+    // The harness kinds this deployment's image ships (tick kkt): what a
+    // submission may route a container to, the same set image/common.sh's
+    // require_common_inputs accepts — never empty, never a guess by the
+    // caller about which kinds an older deployment predating the field
+    // would have answered.
+    expect(body.harness_kinds).toEqual(["omp", "claude", "pi-durable"]);
   });
 
   it("answers nulls, not an error, for a factory no deploy has recorded", async () => {

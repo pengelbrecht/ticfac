@@ -53,6 +53,51 @@ loud.
 
 ---
 
+## 1.4.0
+
+MINOR: two fields added (first cut on epic/43y as 1.3.0; renumbered above
+main's 1.2.0 when main was folded into the epic, see 1.3.0).
+`worker-boot-contract.json` gains `setup_arg` and `setup_command` — the pi-durable worker host's RESTORE half of the per-tick
+worker contract (epic 43y, tick i3h). A container lost mid-turn is rebuilt
+from the last wip snapshot by the host's own git plumbing, which re-runs the
+repository's `[sandbox]` setup through `ticks-worker --setup` in the restored
+box, so its dependency installs die with the container and are reborn with
+the restore. The entry takes none of the boot's inputs and honours the wave's
+`TICKS_WORKER_SETUP` lever; its faults keep the boot's own classes (2, 3, 6).
+An unchanged consumer is still correct: the all-in-one and the boot/finish
+phases run exactly as before, and the new args are additive. All readers
+follow in the same change — `image/worker.sh` answers the arg,
+`internal/sandboximage` (`WorkerSetupArg`, `WorkerSetupCommand`),
+`cloudflare/src/worker-boot.ts` (`WORKER_SETUP_ARG`, `WORKER_SETUP_COMMAND`)
+and the harness host's `WORKER_BOOT_PROTOCOL` (`setupCommand`, wired as the
+`WorkspaceGit.setup` the restore runs) assert it.
+
+---
+
+## 1.3.0
+
+MINOR: six fields added (first cut on epic/43y as 1.2.0, at the same time
+main cut its own 1.2.0 below; when main was folded into the epic its 1.2.0
+kept the number it had already published, and the epic's two cuts moved up
+to 1.3.0 and 1.4.0, each carrying main's 1.2.0 fixtures with it).
+`worker-boot-contract.json` gains `boot_arg`, `boot_command`, `boot_marker`, `boot_prompt_begin`, `boot_prompt_end`,
+`finish_arg` and `finish_command` — the pi-durable worker host's half of the
+per-tick worker contract (epic 43y, tick pom; docs/spikes/
+n0b-round2-pi-durable.md, "The worker contract on pi-durable"). The host
+runs `--boot` as its environment's first command, submits the prompt it
+prints between the prompt markers to a durable conversation, and runs
+`--finish` with the conversation's outcome once it settles; the boot's faults
+keep the all-in-one's exit classes (2-8, 13-15) and the finish decides the
+same 9/10/11 from the same git facts. An unchanged consumer is still
+correct: the all-in-one default runs exactly as before, and the new args
+are additive. All three readers follow in the same change — `image/worker.sh`
+answers the args and prints the markers, `internal/sandboximage`
+(`WorkerBootArg`, `WorkerFinishArg` and the markers) and
+`cloudflare/src/worker-boot.ts` (`WORKER_BOOT_ARG`, `WORKER_FINISH_ARG` and
+the markers) assert them.
+
+---
+
 ## 1.2.0
 
 MINOR: three health counts added to the status model. `status-model.json`'s

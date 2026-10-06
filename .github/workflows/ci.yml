@@ -211,12 +211,19 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: cloudflare/pnpm-lock.yaml
+          # Both lockfiles: cloudflare's (the factory) and harness/'s (the
+          # pi-durable worker host, tick hpk) — the jobs that set `node`
+          # install whichever the affected packages need, and a change to
+          # either lockfile invalidates the pnpm store cache.
+          cache-dependency-path: |
+            cloudflare/pnpm-lock.yaml
+            harness/pnpm-lock.yaml
 
-      - name: Install the worker workspace
+      - name: Install the node workspaces
         if: matrix.node
-        working-directory: cloudflare
-        run: pnpm install --frozen-lockfile --prefer-offline
+        run: |
+          (cd cloudflare && pnpm install --frozen-lockfile --prefer-offline)
+          (cd harness && pnpm install --frozen-lockfile --prefer-offline)
 
       - name: go test
         run: .github/scripts/go-test-shard.sh "${{ matrix.pkgs }}" "${{ matrix.shard }}" "${{ matrix.of }}"
@@ -324,8 +331,8 @@ jobs:
   typescript:
     name: typescript
     # Always on a push or dispatch; on a pull request only when the diff
-    # touches what it reads (cloudflare/, contracts/, CI itself) — the plan
-    # job decides, and an epic PR skips it with the plan.
+    # touches what it reads (cloudflare/, contracts/, harness/, CI itself) —
+    # the plan job decides, and an epic PR skips it with the plan.
     needs: plan
     if: needs.plan.outputs.ts == 'true'
     runs-on: ubuntu-24.04
@@ -345,7 +352,12 @@ jobs:
         with:
           node-version: 22
           cache: pnpm
-          cache-dependency-path: cloudflare/pnpm-lock.yaml
+          # Both lockfiles: cloudflare's (the factory) and harness/'s (the
+          # pi-durable package), so a change to either's dependencies
+          # invalidates the pnpm store cache.
+          cache-dependency-path: |-
+            cloudflare/pnpm-lock.yaml
+            harness/pnpm-lock.yaml
 
       - name: Install
         working-directory: cloudflare
@@ -383,6 +395,21 @@ jobs:
       - name: pnpm test
         working-directory: cloudflare
         run: pnpm test
+
+      # The pi-durable harness package's own suites (tick 92k, epic 43y step
+      # 1): pi-durable's storage conformance cases against the DO SQLite
+      # adapter, and the faux-provider transcript replay test. This is the
+      # API-churn tripwire the spike asked for: the pinned packages say "the
+      # API changes without notice", and when one moves, THIS fails CI
+      # instead of a run. Lint and types first, exactly like the factory
+      # side's steps above: a behavioural suite that cannot typecheck has
+      # failed for a reason the log should name.
+      #
+      # ~9s measured locally (4s of it importing the worker bundle into
+      # workerd), beside a Go job several times longer: no wall clock.
+      - name: harness conformance and replay
+        working-directory: harness
+        run: pnpm install --frozen-lockfile && pnpm lint && pnpm typecheck && pnpm test
 
   # The release recipe, verified before a tag is the only thing that can
   # discover it is broken (tick 4yb). goreleaser check validates

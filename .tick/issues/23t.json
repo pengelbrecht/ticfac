@@ -1,0 +1,14 @@
+{
+  "id": "23t",
+  "title": "Cloud-run runbook says forge access waits on dm6, but the App rung shipped",
+  "description": "Precondition 3 of the runbook says the factory cannot push or open PRs for this repository 'until the GitHub App rung lands (epic dm6)'. The App rung shipped in #115 and #116 (cloudflare/src/github-app.ts, the manifest flow, per-run installation tokens). Only lej, the upstream credential-ownership contract re-cut, keeps dm6 open. An operator reading the runbook would wrongly believe a cloud run of this repository is impossible, or point the run at a scratch repo. The precondition should read: `ticfac factory status` (or doctor) names the App rung live and installed on this repository.\nevidence: docs/pi-durable-cloud-run-runbook.md:41-45; git log origin/main --grep dm6 (b45e0f8f5, 6a09b7a8b)\n\nticfac run epic-43y filed this backlog tick from the finding 703d06013d5d1b1cb932ccb907a57a9464224011094f2da4d48d5dcd4a3fb2eb (reported by run-epic-43y/tick-j2k/attempt-69): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/703d06013d5d1b1cb932ccb907a57a9464224011094f2da4d48d5dcd4a3fb2eb.json on the run branch.",
+  "notes": "2026-10-06 01:35 - ticfac run epic-43y: created by absorbing finding 703d06013d5d1b1cb932ccb907a57a9464224011094f2da4d48d5dcd4a3fb2eb — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-43y/absorptions/703d06013d5d1b1cb932ccb907a57a9464224011094f2da4d48d5dcd4a3fb2eb.json on epic/43y, and it says: the classifier put 0.19 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-43y/tick-j2k/attempt-69",
+  "created_by": "ticfac run epic-43y",
+  "created_at": "2026-10-05T23:35:31Z",
+  "updated_at": "2026-10-05T23:35:39.340913Z"
+}

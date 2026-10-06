@@ -17,10 +17,13 @@ package factory
 // parity check already does.
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -156,5 +159,80 @@ func TestWorkerProbeBudgetCoversTheMeasuredColdStart(t *testing.T) {
 				"(%.0fms x %.2f): the last container of a wide wave would be written off",
 			budget, coldMS, fanout,
 		)
+	}
+}
+
+// TestTheImageAndTheFactoryAgreeAboutTheHarnessKinds pins the kind set a
+// container accepts to the kind set the factory reports it ships.
+//
+// The two ends of this contract are written in different languages and
+// neither imports the other: image/common.sh's require_common_inputs is what
+// every container dies by ("unknown harness kind", the wave tick twa found),
+// and cloudflare/src/worker-boot.ts's IMAGE_HARNESS_KINDS is what the
+// deployment route serves as harness_kinds, which is what `ticfac run <epic>
+// --cloud`'s preflight refuses a submission against (epic 43y, tick kkt).
+// The Worker and the image deploy together (one deploy-factory run builds
+// both), so the constant can state the image's answer — and this guard is
+// what keeps that statement true. The factory that predates the field
+// reports nothing and the preflight warns; a DRIFTED field would make every
+// refusal a lie in one direction and every pass a lie in the other.
+func TestTheImageAndTheFactoryAgreeAboutTheHarnessKinds(t *testing.T) {
+	common, err := os.ReadFile(payloadPath(t, "image", "common.sh"))
+	if err != nil {
+		t.Fatalf("reading the image: %v", err)
+	}
+	// The require_common_inputs case, found relative to the "unknown harness
+	// kind" die it feeds: the only line of the file that lists every acceptable
+	// kind in one `a | b | c) ;;` arm, located by the death it guards against so
+	// another file's single-kind case arm can never satisfy the guard.
+	die := bytes.Index(common, []byte("unknown harness kind"))
+	if die < 0 {
+		t.Fatal("image/common.sh no longer dies on an unknown harness kind — the boot-time half of this contract is gone")
+	}
+	caseLine := regexp.MustCompile(`(?m)^\t([\w-]+(?: \| [\w-]+)*)\) ;;$`).FindSubmatch(common[:die])
+	if caseLine == nil {
+		t.Fatal("image/common.sh no longer lists its harness kinds in one case arm — " +
+			"the kind set require_common_inputs accepts moved, and this guard must move with it")
+	}
+	image := strings.Split(string(caseLine[1]), " | ")
+
+	src, err := os.ReadFile(payloadPath(t, "cloudflare", "src", "worker-boot.ts"))
+	if err != nil {
+		t.Fatalf("reading worker-boot.ts: %v", err)
+	}
+	list := regexp.MustCompile(`IMAGE_HARNESS_KINDS = \[([^\]]*)\]`).FindSubmatch(src)
+	if list == nil {
+		t.Fatal("cloudflare/src/worker-boot.ts no longer states IMAGE_HARNESS_KINDS — " +
+			"the deployment route's harness_kinds answer is the constant this guard pins")
+	}
+	var reported []string
+	for _, field := range strings.Split(string(list[1]), ",") {
+		quoted := regexp.MustCompile(`"([^"]+)"`).FindSubmatch([]byte(field))
+		if quoted == nil {
+			t.Fatalf("IMAGE_HARNESS_KINDS carries %q, which is not a quoted kind", field)
+		}
+		reported = append(reported, string(quoted[1]))
+	}
+
+	sort.Strings(image)
+	sort.Strings(reported)
+	if !reflect.DeepEqual(image, reported) {
+		t.Errorf("the factory reports harness_kinds %q but the image accepts %q — "+
+			"a submission the preflight passes would die at boot, or one it refuses would run",
+			reported, image)
+	}
+
+	// The hosted default must be among the shipped kinds: a default outside
+	// the image's own set is a worker that can never boot.
+	if m := regexp.MustCompile(`WORKER_DEFAULT_HARNESS = "([^"]+)"`).FindSubmatch(src); m != nil {
+		found := false
+		for _, kind := range reported {
+			if kind == string(m[1]) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("WORKER_DEFAULT_HARNESS %q is not in IMAGE_HARNESS_KINDS %q", m[1], reported)
+		}
 	}
 }

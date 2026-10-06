@@ -65,7 +65,7 @@ func excludeLine(prefix string) string {
 // be a claude-only or prompt-following assumption, and this test says so by
 // construction.
 func TestStartExcludesTheArtifactPrefixBeforeTheAgentRuns(t *testing.T) {
-	h := newHarness(t, harnessOptions{kind: "pi"})
+	h := newHarness(t, harnessOptions{kind: "opencode"})
 	handle, err := h.start("t1")
 	if err != nil {
 		t.Fatal(err)

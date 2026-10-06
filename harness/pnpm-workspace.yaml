@@ -1,0 +1,35 @@
+# The operator's global release-age gate (3 days) holds back new packages; the
+# cloudflare/ workspace exempts Cloudflare's own betas for the same reason this
+# one exempts Earendil's: the packages this harness is built on (pi-durable,
+# pi-ai, chord) release almost daily and say "the API changes without notice"
+# (docs/spikes/n0b-round2-pi-durable.md). Their versions are PINNED EXACT in
+# package.json, which is what makes accepting a younger release safe: nothing
+# moves until a tick moves it, and the conformance + replay suites in CI are
+# what notice when the pinned API churns.
+minimumReleaseAgeExclude:
+  - "@earendil-works/*"
+  # Same list as cloudflare/pnpm-workspace.yaml: the test runtime tracks the
+  # workerd/wrangler betas the factory side runs, and early Cloudflare
+  # releases are accepted here.
+  - wrangler
+  - workerd
+  - miniflare
+  - "@cloudflare/*"
+# Same reason as cloudflare/pnpm-workspace.yaml: @cloudflare/vitest-pool-workers
+# pins its own (older) miniflare, whose workerd rejects compatibility flags
+# newer than it, so the test runtime would refuse wrangler.toml. One miniflare
+# and one wrangler for the tree, matching what the factory side runs.
+overrides:
+  miniflare: 5.20261001.0-alpha
+  wrangler: 4.147.0
+  workerd: 1.20261004.1
+# Which dependencies may run install scripts. esbuild and workerd need theirs
+# (the binary IS the package). @google/genai and its protobufjs are transitive
+# deps of pi-ai that nothing here imports — approving a build script is a
+# decision about running third-party code at install time, and this package's
+# answer for those two is "do not run it".
+allowBuilds:
+  esbuild: true
+  workerd: true
+  "@google/genai": false
+  protobufjs: false

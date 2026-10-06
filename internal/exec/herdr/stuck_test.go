@@ -124,10 +124,6 @@ func (r *stuckRig) transcriptEvent(t *testing.T, kind string, content string) {
 	}
 	line := map[string]any{"type": "assistant", "timestamp": r.clock.now().UTC().Format(time.RFC3339Nano),
 		"message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": content}}}}
-	if kind == "pi" {
-		line = map[string]any{"type": "message", "timestamp": r.clock.now().UTC().Format(time.RFC3339Nano),
-			"message": map[string]any{"role": "assistant", "content": []any{map[string]any{"type": content}}}}
-	}
 	raw, _ := json.Marshal(line)
 	f, err := os.OpenFile(filepath.Join(dir, "session.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
@@ -208,8 +204,8 @@ func TestABusyToolIsNotStuckButTheSameToolGoneIdleIs(t *testing.T) {
 // that says so.
 func TestAStuckAgentIsNudgedOnceThenStopped(t *testing.T) {
 	shorttest.EndToEnd(t)
-	r, handle := newStuckRig(t, "pi", time.Now().UTC())
-	r.transcriptEvent(t, "pi", "thinking")
+	r, handle := newStuckRig(t, "claude", time.Now().UTC())
+	r.transcriptEvent(t, "claude", "thinking")
 	if err := os.WriteFile(filepath.Join(r.local.Worktree, "wip.txt"), []byte("half done\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

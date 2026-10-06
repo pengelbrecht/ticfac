@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 59,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "LastStorageEvent stats worker.sqlite. pi-durable 1.0.2 opens node SQLite with journal_mode=WAL and wal_autocheckpoint=1000, so commits land in worker.sqlite-wal and the main file's mtime stays put until a checkpoint. The conversation therefore barely counts as an activity signal. A worker that is thinking or reading for a long time is steered as stuck, and later stopped. Stat the -wal file too, or use the newer of the two.\nevidence: internal/exec/subprocess/activity.go:324-331; pi-durable dist/storage/sqlite/node.js:160-162\n\nticfac run epic-43y created this tick by absorbing the finding 6ee79d454c2e65b62d93e72f706c73205bac5cb771188a069f91cbcc843b9081 (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/6ee79d454c2e65b62d93e72f706c73205bac5cb771188a069f91cbcc843b9081.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "lmt",
+    "title": "Durable runner activity reads worker.sqlite mtime, but pi-durable writes WAL"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.84,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.04,
+      "design": 0.01,
+      "diagnosis": 0.07,
+      "mechanical": 0.87,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1355,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T19:11:41Z",
+  "answered_at": "2026-10-05T19:11:41Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "lmt",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "0c738d23a1eb215cbb9ef5c112b2061e378aa806",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

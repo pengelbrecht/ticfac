@@ -127,17 +127,21 @@ func TestThePushTimerIsAClockAndACredential(t *testing.T) {
 	}
 }
 
-// The runner table is the one place the three agents differ, and the prompt
-// reaches every one of them with no placeholder left behind.
+// The runner table is the one place the agents differ, and the prompt
+// reaches every one of them with no placeholder left behind. The pi runner
+// (the pi-durable Node host since tick hpk) is no longer a CLI named by its
+// argv[0]: it is `node` running the harness package's entry, and it needs
+// the harness and state directories the durable host runs from — the CLI
+// runners need neither.
 func TestEveryKnownRunnerTakesThePrompt(t *testing.T) {
-	at := launch{Prompt: "PROMPT-BODY", GitCommonDir: "/repo/.git"}
+	at := launch{Prompt: "PROMPT-BODY", GitCommonDir: "/repo/.git", HarnessDir: "/repo/harness", StateDir: "/state/attempt"}
 	for _, name := range KnownRunners() {
 		argv, err := resolveRunner(name, nil, at)
 		if err != nil {
 			t.Errorf("%s: %v", name, err)
 			continue
 		}
-		if len(argv) < 2 || argv[0] != name {
+		if len(argv) < 2 || argv[0] == "" {
 			t.Errorf("%s: argv %v", name, argv)
 		}
 		if !contains(argv, "PROMPT-BODY") {
@@ -148,9 +152,22 @@ func TestEveryKnownRunnerTakesThePrompt(t *testing.T) {
 				t.Errorf("%s: an unsubstituted placeholder survived: %v", name, argv)
 			}
 		}
+		if runners[name].DurableResume && !contains(argv, "node") {
+			t.Errorf("%s: the durable runner does not run under node: %v", name, argv)
+		}
 	}
 	if _, err := resolveRunner("emacs", nil, at); err == nil {
 		t.Error("an unknown runner was accepted; the set is closed")
+	}
+	// The durable runner without a harness directory is a refusal that names
+	// what is missing, not an argv that would fail in a subprocess.
+	if _, err := resolveRunner("pi", nil, launch{Prompt: "PROMPT-BODY", StateDir: "/state/attempt"}); err == nil {
+		t.Error("the pi runner launched with no harness directory")
+	} else if !strings.Contains(err.Error(), "harness_dir") {
+		t.Errorf("the refusal does not name the missing placeholder: %v", err)
+	}
+	if _, err := resolveRunner("pi", nil, launch{Prompt: "PROMPT-BODY", HarnessDir: "/repo/harness"}); err == nil {
+		t.Error("the pi runner launched with no state directory")
 	}
 	// An override with no placeholder gets the prompt last.
 	argv, err := resolveRunner("claude", []string{"/bin/sh", "-c", "true"}, at)

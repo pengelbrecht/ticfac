@@ -349,7 +349,12 @@ describe("two proposals accepted at once", () => {
       signal({ project: name, source: "telegram", external_ref: "b" }),
       signal({ project: name, source: "github", external_ref: "c" }),
     ]);
-    const outcomes = await Promise.all(drafts.map((id) => inbox(name).decide(id, "create", HUMAN)));
+    // Annotated: an RPC result is `T & Disposable` once the program's libs know
+    // `Symbol.dispose` (the harness package's Node types bring them in), and a
+    // type predicate over that intersection would not narrow to the plain arm.
+    const outcomes: DraftDecision[] = await Promise.all(
+      drafts.map((id) => inbox(name).decide(id, "create", HUMAN)),
+    );
 
     const created = outcomes.filter(
       (o): o is Extract<DraftDecision, { state: "accepted" }> => o.state === "accepted",

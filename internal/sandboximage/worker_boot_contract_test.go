@@ -39,6 +39,15 @@ type workerContract struct {
 	CancelCommand       string `json:"cancel_command"`
 	CancelMarker        string `json:"cancel_marker"`
 	CancelReportMarker  string `json:"cancel_report_marker"`
+	BootArg             string `json:"boot_arg"`
+	BootCommand         string `json:"boot_command"`
+	BootMarker          string `json:"boot_marker"`
+	BootPromptBegin     string `json:"boot_prompt_begin"`
+	BootPromptEnd       string `json:"boot_prompt_end"`
+	FinishArg           string `json:"finish_arg"`
+	FinishCommand       string `json:"finish_command"`
+	SetupArg            string `json:"setup_arg"`
+	SetupCommand        string `json:"setup_command"`
 	WorkerActor         string `json:"worker_actor"`
 	BranchPrefix        string `json:"branch_prefix"`
 	BranchExample       struct {
@@ -113,6 +122,29 @@ func TestWorkerBootContractMatchesThisPackage(t *testing.T) {
 		{"cancel command", WorkerCancelCommand(), c.CancelCommand},
 		{"cancel marker", WorkerCancelMarker, c.CancelMarker},
 		{"cancel report marker", WorkerCancelReportMarker, c.CancelReportMarker},
+		// The boot and finish phases (epic 43y, tick pom): the pi-durable
+		// worker host runs the same halves this container's all-in-one runs,
+		// as two commands. Same three readers as ever — the shell answers the
+		// args and prints the markers, this package asserts them, and
+		// worker-boot.ts is where the control plane reads the spellings — so a
+		// host that invents its own second spelling of the contract fails
+		// here rather than a wave of containers.
+		{"boot arg", WorkerBootArg, c.BootArg},
+		{"boot command", WorkerBootCommand(), c.BootCommand},
+		{"boot marker", WorkerBootMarker, c.BootMarker},
+		{"boot prompt begin", WorkerBootPromptBegin, c.BootPromptBegin},
+		{"boot prompt end", WorkerBootPromptEnd, c.BootPromptEnd},
+		{"finish arg", WorkerFinishArg, c.FinishArg},
+		{"finish command", WorkerFinishCommand(), c.FinishCommand},
+		// The setup entry (epic 43y, tick i3h): the host's restore re-runs
+		// the repository's [sandbox] setup in a rebuilt container through
+		// this same command, so a container lost mid-turn is restored with its
+		// dependency installs. Three readers as ever — the shell answers the
+		// arg, this package asserts it, and worker-boot.ts is where the
+		// control plane (and, through the protocol the harness hands it, the
+		// host's WorkspaceGit) reads the spelling.
+		{"setup arg", WorkerSetupArg, c.SetupArg},
+		{"setup command", WorkerSetupCommand(), c.SetupCommand},
 		{"worker actor", WorkerActor, c.WorkerActor},
 		{"branch prefix", WorkerBranchPrefix, c.BranchPrefix},
 		{"tick env", EnvTick, c.Env.Tick},

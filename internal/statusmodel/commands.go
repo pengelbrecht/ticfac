@@ -35,3 +35,14 @@ func ResumeCommand(host, epicID string) string {
 func TriageCommand(epicID string) string {
 	return fmt.Sprintf("ticfac triage %s", epicID)
 }
+
+// AmendmentsCommand is the one command that settles a run's unconfirmed
+// epic amendments — the close-out's amendments gate and the run_held line
+// it raises (tick 7sn) are both cleared through it, addressed by the epic
+// whose record was amended. It names the LISTING, which teaches the settle
+// command beside each amendment's short key prefix, for the same reason
+// TriageCommand does: a command that sends the operator to type the 64-hex
+// key by hand is the friction the surface exists to remove.
+func AmendmentsCommand(epicID string) string {
+	return fmt.Sprintf("ticfac amendments %s", epicID)
+}

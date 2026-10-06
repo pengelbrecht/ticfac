@@ -70,6 +70,26 @@ declare namespace Cloudflare {
       | import("./sandbox").SandboxBinding
       | import("./factory-sandbox").FactorySandboxNamespace;
     /**
+     * One WorkerAgent per cloud worker attempt (epic 43y, ticks xd3 and hxd,
+     * src/worker-agent.ts): the attempt's pi-durable conversation on its own
+     * DO SQLite, its tools in the attempt's container — FactorySandbox on the
+     * `do_v1` substrate, the 0.x Sandbox behind the harness door on `sdk0` —
+     * and its watch/steer WebSockets. Hosts every worker of every run. A
+     * seam, like the sandbox bindings, so a test can substitute a fake
+     * (`{ agent(name) }`).
+     */
+    WORKER_AGENTS?:
+      | import("./worker-agent").WorkerAgentNamespace
+      | { agent(name: string): import("./worker-agent").WorkerAgentStub };
+    /**
+     * One staging git origin per proof attempt (tick a2l,
+     * src/staging-git-origin.ts): the attempt's throwaway repository in Durable
+     * Object storage, so it outlives the container a proof can destroy
+     * mid-turn. A seam, like every binding here, so a test can substitute a
+     * fake; unset everywhere but the staging agent Worker.
+     */
+    GIT_ORIGINS?: import("./staging-git-origin").StagingGitOriginNamespace;
+    /**
      * The orchestrator image this deployment's container application serves,
      * for a deployment that pushed it into its own registry. Unset means the
      * bundled default (`DEFAULT_SANDBOX_IMAGE`).

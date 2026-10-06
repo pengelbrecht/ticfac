@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 69,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "activityWatch.look and lastRunnerEvent call durableResume(record.Runner, record.RunnerArgv). But executor.go stores the RESOLVED argv in record.RunnerArgv, which is never empty, so durableResume always returns false in the supervisor. The durable runner's conversation storage mtime (tick bgx) is therefore never read as activity, and the evidence says 'no session transcript could be read'. A durable worker in a long, quiet model generation is judged only on tool CPU, worktree and branch, so it can be nudged and stopped while it is working.\nevidence: internal/exec/subprocess/activity.go:353 and :696; executor.go:444 (record.RunnerArgv = argv); the runner log of TestAStuckDurableWorkerInAHungToolIsSteeredThroughIt reads 'no session transcript could be read' for the pi runner\n\nticfac run epic-43y created this tick by absorbing the finding 623504776f93b74bf0bf2e28d7e2a0d8d6b56d6a955455a491b6253c880d2d46 (reported by run-epic-43y/tick-l6n/attempt-54): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/623504776f93b74bf0bf2e28d7e2a0d8d6b56d6a955455a491b6253c880d2d46.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "rpw",
+    "title": "Stuck watch never reads durable storage activity (durableResume gets full argv)"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.65,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.02,
+      "design": 0,
+      "diagnosis": 0.72,
+      "mechanical": 0.25,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1416,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T20:57:08Z",
+  "answered_at": "2026-10-05T20:57:08Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "rpw",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "40678af354d57b7c4fde1dfaf1b0cfe93cac6c87",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

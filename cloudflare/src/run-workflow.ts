@@ -144,7 +144,8 @@ import {
   sandboxName,
   terminalExitReason,
 } from "./sandbox";
-import { workerHarness, workerModel } from "./worker-boot";
+import { workerAgentsFromEnv } from "./worker-agent";
+import { reviewHarness, workerModel } from "./worker-boot";
 
 // ------------------------------------------------------------- the shape ---
 
@@ -1743,13 +1744,16 @@ async function supervisePass(
               //   pre-flight probes — the deployment's run-level choice
               //   (RUN_HARNESS/RUN_MODEL) stands, as wrangler.toml pins it;
               // - the REVIEW job is routed like every other cloud role, through
-              //   the worker ladder (`workerHarness`/`workerModel`), whose floor
-              //   is pi on GLM — never the image's own harness selection, which
-              //   a deployment that routes nothing would leave at claude (the
-              //   xte finding dl8 absorbed).
+              //   the worker ladder — with the review's own floor (`reviewHarness`,
+              //   epic 43y tick jhp): the workers are hosted on pi-durable and the
+              //   pi CLI is deleted, so the review — the one cloud boot that still
+              //   runs a CLI harness in its container — falls to omp on GLM, never
+              //   the image's own harness selection, which a deployment that
+              //   routes nothing would leave at claude (the xte finding dl8
+              //   absorbed).
               ...(options.job === "review"
                 ? {
-                    harness: workerHarness(context.config.harness, env.RUN_WORKER_HARNESS),
+                    harness: reviewHarness(context.config.harness, env.RUN_WORKER_HARNESS),
                     model: workerModel(context.config.model, env.RUN_WORKER_MODEL),
                   }
                 : {
@@ -2383,7 +2387,10 @@ export async function finalize(
   // is where they are given back: each live worker is asked to stop and push
   // (its gateway token is already revoked, so the push is all it can still
   // do), given the grace window, destroyed, and the reclaim recorded.
+  // A run's WorkerAgents (epic 43y, tick xd3) are stopped through the agent.
+  const agents = workerAgentsFromEnv(env);
   await reclaimRunWorkers(env.DB, sandboxBinding(env), params.run_id, {
+    ...(agents === undefined ? {} : { agents }),
     reason: `run_ended:${outcome.state}`,
   });
 
@@ -2516,9 +2523,12 @@ export function applyProgress(outcome: RunOutcome, progress: RunProgress): RunOu
  *    the same pass machinery as any other run, because an autonomous loop with
  *    no ceiling is the one thing worse than a bad review.
  *  - **Routed like every other cloud role.** Its harness and model come from
- *    the worker ladder (`workerHarness`/`workerModel`), whose floor is pi on
- *    GLM — never the image's own harness selection, which a deployment that
- *    routes nothing would leave at claude (the xte finding dl8 absorbed).
+ *    the worker ladder with the review's own floor (`reviewHarness`/
+ *    `workerModel`): omp on GLM — the review is the one cloud boot that still
+ *    runs a CLI harness in its container, the workers are hosted on
+ *    pi-durable and the pi CLI is deleted (epic 43y, tick jhp) — never the
+ *    image's own harness selection, which a deployment that routes nothing
+ *    would leave at claude (the xte finding dl8 absorbed).
  */
 export async function superviseReview(
   env: Env,

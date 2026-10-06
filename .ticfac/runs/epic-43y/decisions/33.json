@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 33,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "After 2q5, no embedded profile routes herdr to kind pi, but runconfig still compiles a herdr spawn of the pi CLI for kind pi (kinds.go pi row, interrupt.go 'pi' key), and the herdr spawn and the runconfig catalog both shell out to `pi --list-models`. This is the last pi-CLI worker path in the tree. Kind 'pi' is shared with the durable routing in .tick/runners.toml, so this needs a design choice (refuse kind pi on the herdr executor, or rename the durable kind) rather than a blind delete.\nevidence: internal/runconfig/picatalog.go:211, internal/cli/executor.go:307, internal/runconfig/kinds.go:244, internal/exec/herdr/interrupt.go:53\n\nticfac run epic-43y created this tick by absorbing the finding 74e6c3d63b8610ca5fe70a908304ad91873d078648680f999d57d076c0517726 (reported by run-epic-43y/tick-jhp/attempt-23): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/74e6c3d63b8610ca5fe70a908304ad91873d078648680f999d57d076c0517726.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "uxi",
+    "title": "Delete herdr's pi agent kind and its `pi --list-models` catalog reads"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 1,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0,
+      "design": 1,
+      "diagnosis": 0,
+      "mechanical": 0,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1399,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T12:31:31Z",
+  "answered_at": "2026-10-05T12:31:31Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "uxi",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "d2b4382d521df4e6adec99c5cd2ac9d808a05eb2",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

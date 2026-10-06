@@ -745,13 +745,13 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     expect(declared).toEqual({
       FACTORY_MAX_INSTANCES: declaredMaxInstances(),
       GITHUB_CONSENT_LABEL: "tk",
-      RUN_HARNESS: "pi",
+      RUN_HARNESS: "omp",
       RUN_MAX_COST_USD: "250",
       RUN_MAX_WALL_CLOCK_MS: "86400000",
       RUN_MODEL: "workers-ai/@cf/zai-org/glm-5.3",
       RUN_QUEUE_TTL_MS: "1800000",
       RUN_STOP_GRACE_MS: "300000",
-      RUN_WORKER_HARNESS: "pi",
+      RUN_WORKER_HARNESS: "pi-durable",
       RUN_WORKER_MODEL: "workers-ai/@cf/zai-org/glm-5.3",
       // The work-type to model table (tick mrn, epic wne): what a classified
       // work type costs on this deployment. The vocabulary it keys on is the
@@ -771,8 +771,10 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
   });
 
   it("pins the model-and-route vars to the operator's rule, so a default change can never decide them", () => {
-    // OPERATOR, 2026-09-23: the cloud runs GLM 5.3 or GLM 5.3 Flash, via pi
-    // only — nothing in the cloud runs claude. The pin is explicit in the
+    // OPERATOR, 2026-09-23 (updated epic 43y, tick jhp): the cloud runs GLM
+    // 5.3 or GLM 5.3 Flash, through the factory's gateway — nothing in the
+    // cloud runs claude. Workers are hosted on pi-durable; the review, the
+    // one cloud boot that still runs a CLI harness in a container, runs omp. The pin is explicit in the
     // deployable config (tick uqi) rather than left to the built-in default,
     // so the config itself says the rule. Still deliberately unset:
     // GATEWAY_ALLOWED_PROVIDERS (workers-ai alone — the rung billed to the
@@ -785,11 +787,13 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     // The orchestrator's own route: an unset RUN_MODEL would leave the
     // container to the repository's role/tier routing, which is the LOCAL
     // worker CLI's route, not a factory-served one.
-    expect(`RUN_HARNESS=${String(vars.RUN_HARNESS)}`).toBe("RUN_HARNESS=pi");
+    expect(`RUN_HARNESS=${String(vars.RUN_HARNESS)}`).toBe("RUN_HARNESS=omp");
     expect(`RUN_MODEL=${String(vars.RUN_MODEL)}`).toBe("RUN_MODEL=workers-ai/@cf/zai-org/glm-5.3");
     // The per-tick worker's standing route: an unset RUN_WORKER_MODEL would
     // leave the boot to WORKER_DEFAULT_* in src/worker-boot.ts.
-    expect(`RUN_WORKER_HARNESS=${String(vars.RUN_WORKER_HARNESS)}`).toBe("RUN_WORKER_HARNESS=pi");
+    expect(`RUN_WORKER_HARNESS=${String(vars.RUN_WORKER_HARNESS)}`).toBe(
+      "RUN_WORKER_HARNESS=pi-durable",
+    );
     expect(`RUN_WORKER_MODEL=${String(vars.RUN_WORKER_MODEL)}`).toBe(
       "RUN_WORKER_MODEL=workers-ai/@cf/zai-org/glm-5.3",
     );
@@ -799,7 +803,7 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     // The ladder tick 1cd built, and the thing Phase 4 must not reorder: a
     // choice made about ONE run outranks a deployment's standing one, which
     // outranks the constant.
-    expect(WORKER_DEFAULT_HARNESS).toBe("pi");
+    expect(WORKER_DEFAULT_HARNESS).toBe("pi-durable");
     expect(WORKER_DEFAULT_MODEL).toBe("workers-ai/@cf/zai-org/glm-5.3");
 
     expect(workerModel(null, null)).toBe(WORKER_DEFAULT_MODEL);

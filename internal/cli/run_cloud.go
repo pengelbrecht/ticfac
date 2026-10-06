@@ -258,6 +258,12 @@ func cloudSubstrate() string { return strings.TrimSpace(os.Getenv(CloudSubstrate
 // container, "local" is `run --cloud-workers` (this machine), which the
 // factory records so it boots no orchestrator container for the run.
 func submitCloudRun(ctx context.Context, client *cloudClient, repo, epicID, orchestrator string, stdout io.Writer) (runID string, queued bool, err error) {
+	// The harness preflight (tick kkt): refuse a submission whose every
+	// container would die at boot, BEFORE anything is pushed or parked behind
+	// a lease — the refusal costs nothing and names the runbook's order.
+	if err := preflightCloudHarness(ctx, client, repo, stdout); err != nil {
+		return "", false, err
+	}
 	baseSHA, project, requestedBy, err := prepareCloudSubmission(ctx, repo, epicID)
 	if err != nil {
 		return "", false, err

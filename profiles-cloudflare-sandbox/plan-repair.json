@@ -3,7 +3,7 @@
   "role": "plan-repair",
   "version": "1.0.0",
   "executor": "cloudflare-sandbox",
-  "runner": "pi",
+  "runner": "pi-durable",
   "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
   "prompt": "plan-repair.md"
 }

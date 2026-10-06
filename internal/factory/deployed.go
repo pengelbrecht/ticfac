@@ -47,6 +47,14 @@ type DeployedFacts struct {
 	ImageDigest            string `json:"image_digest"`
 	WorkerVersionID        string `json:"worker_version_id"`
 	WorkerVersionTimestamp string `json:"worker_version_timestamp"`
+	// HarnessKinds is the harness kinds this deployment's image ships, as the
+	// deployment route reports them from the Worker's own constant (pinned to
+	// image/common.sh's kind case by a parity test). Empty when the answering
+	// factory predates the field: an older deployment, whose kinds nobody
+	// can know but itself — the caller decides what a missing answer means,
+	// and ticfac's cloud preflight (tick kkt) treats it as "cannot preflight",
+	// never as "shipped nothing".
+	HarnessKinds []string `json:"harness_kinds"`
 }
 
 // deployedCommitPattern reads the commit out of a `git describe` version:

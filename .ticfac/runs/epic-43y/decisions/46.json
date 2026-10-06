@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 46,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "ticfac init writes the operator's runner answer as `kind` for all three role cells, including review and closeout. With the herdr pi kind deleted (this tick), a repository init'ed with `--runner pi` whose run resolves the herdr substrate routes its review-epic and closeout-epic profiles (executor `herdr`, runner `claude`) through the roles-table overlay to kind `pi` — and `usableProfile` now refuses at run start, naming the cell and the kinds herdr launches. The refusal is fail-closed and names the fix (edit the routing or pin substrate=harness), so nothing spawns the pi CLI; but init could write those two cells as claude when the runner answer is pi, or say at write time which substrates the routing it wrote supports. Only bites repositories other than this one (this repo's own [roles.review] names claude).\nevidence: internal/cli/init.go (runnersTOML writes kind = answers.runner for implement, review and closeout); internal/reconcile/profiles.go usableProfile's Runners refusal; profiles-herdr/review-epic.json (executor herdr)\n\nticfac run epic-43y created this tick by absorbing the finding bd282f5d7faca7b85ac40b68bc727fa4c36669a64cf54d0b6d9be49e3d30e375 (reported by run-epic-43y/tick-uxi/attempt-30): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/bd282f5d7faca7b85ac40b68bc727fa4c36669a64cf54d0b6d9be49e3d30e375.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "jiv",
+    "title": "init --runner pi writes review/closeout cells the herdr substrate now refuses"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.49,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.07,
+      "design": 0.58,
+      "diagnosis": 0.12,
+      "mechanical": 0.22,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1450,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T15:42:04Z",
+  "answered_at": "2026-10-05T15:42:04Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "jiv",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "28726ae67677b13ce25344eec7b9297e9cb9feaa",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

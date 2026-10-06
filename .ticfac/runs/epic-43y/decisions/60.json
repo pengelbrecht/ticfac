@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 60,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The boot runs configure_caches, provision_toolchain and worker_repo_setup. The restore's setup entry (run_setup_entry) runs only configure_caches and worker_repo_setup. A repository that declares a toolchain the image lacks (mise.toml, .tool-versions) gets it at boot, but not after a container loss, so tests on the restored tree fail.\nevidence: image/worker.sh:1527-1541 vs :1460-1493; image/common.sh:1067\n\nticfac run epic-43y created this tick by absorbing the finding cc9334200bc848351c362a3c18951996efd7025e7b836609e20833a0d1490b6b (reported by run-epic-43y/tick-66a/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/cc9334200bc848351c362a3c18951996efd7025e7b836609e20833a0d1490b6b.json on the run branch.",
+    "epic_id": "43y",
+    "role": "classify-tick",
+    "tick_id": "r2m",
+    "title": "Restore's setup entry skips provision_toolchain; a restored box lacks mise tools"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.41,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.03,
+      "design": 0,
+      "diagnosis": 0.39,
+      "mechanical": 0.54,
+      "translation": 0.04
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1325,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T19:26:04Z",
+  "answered_at": "2026-10-05T19:26:04Z",
+  "provenance": {
+    "run_id": "epic-43y",
+    "tick_id": "r2m",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/43y",
+    "source_sha": "eff8e33dd1e05dfe127aef16018b8a3f0d659f5e",
+    "integration_ref": "refs/heads/epic/43y",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

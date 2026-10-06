@@ -192,9 +192,11 @@ func herdrAnswers(t *testing.T, detail string, err error) *bool {
 // only real subprocess is runlife's own ps, which the short suite already
 // runs for every probe it makes.
 
-// A live herdr means the run starts in herdr panes with the profile set
-// EMBEDDED in the binary: no filesystem path anywhere in the argv, and the
-// virtual name is the only new thing the run is told.
+// A live herdr means the run selects the embedded herdr profile set: no
+// filesystem path anywhere in the argv, and the virtual name is the only
+// new thing the run is told. The set is split, not uniform (tick 2q5):
+// panes host the frontier rung, implement workers run headless on the
+// pi-durable harness, and the starter's prose says so.
 func TestRunStartsInHerdrPanesWithTheEmbeddedProfileSet(t *testing.T) {
 	saveRunSeams(t)
 	repo := t.TempDir()
@@ -218,7 +220,10 @@ func TestRunStartsInHerdrPanesWithTheEmbeddedProfileSet(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "herdr 9.9.9 answers") ||
 		!strings.Contains(stdout.String(), "profile set embedded in this binary") {
-		t.Errorf("the start does not say it is dispatching into herdr panes: %q", stdout.String())
+		t.Errorf("the start does not say it is dispatching with the embedded herdr set: %q", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "pi-durable") {
+		t.Errorf("the start does not say where implement workers run: %q", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "starting it in the background") {
 		t.Errorf("a run that never ran says nothing about starting: %q", stdout.String())

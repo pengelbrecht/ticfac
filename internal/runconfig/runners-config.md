@@ -8,12 +8,12 @@ Two kinds of thing live here, and the dividing line is the working rule from the
 
 A worker is specified along **two explicit dimensions**, never as raw argv:
 
-- **`kind`** — the harness dimension, herdr's `--kind` value (`claude`, `codex`, `gemini`, `pi`, …). The installed herdr binary is the authority on the valid list (`herdr agent`).
+- **`kind`** — the runner/harness name interpreted by the executor the resolved profile selects. Under the herdr executor it is Herdr's `--kind`; under the local subprocess executor `pi` names the headless pi-durable host; under the cloud executor `pi-durable` names the hosted harness.
 - **`model`** + optional **`effort`** — the capability dimension, in the kind's own model namespace plus a kind-neutral effort level.
 
-The spawner compiles `model`/`effort` into that kind's native argv (`claude --model … --effort …`, `codex -m … -c model_reasoning_effort="…"`, `pi --model <provider>/<model>:<effort>`, `opencode --model <provider>/<model>` with no effort form at all). The translation table, the model families each kind accepts, and the fail-closed rule for impossible combinations live in [`herdr-kinds.md`](herdr-kinds.md) → *[Model and effort translation](herdr-kinds.md#model-and-effort-translation)*; this document never restates them, nor the per-kind spawn and full-auto templates.
+Under Herdr, the spawner compiles `model`/`effort` into one of the native argv forms ticfac actually supports (`claude --model … --effort …`, `codex -m … -c model_reasoning_effort="…"`, or `opencode --model <provider>/<model>` with no effort form). The compiled set is deliberately smaller than the list `herdr agent` prints: the `pi` entry there starts the pi CLI, and that worker path is deleted. A herdr profile routed to `kind = "pi"` is refused before a pane exists; pi-durable runs headlessly through the local subprocess executor or hosted in a cloud container. The translation table, accepted model families and fail-closed rules live in [`herdr-kinds.md`](herdr-kinds.md) → *[Model and effort translation](herdr-kinds.md#model-and-effort-translation)*.
 
-**Under the herdr substrate, "the spawner" is `ticfac run-epic`'s.** (The old `tk herd spawn` did this in-repo; that command and the rest of the wave-execution loop were deleted and moved to ticfac — see [`herdr-runner.md`](herdr-runner.md#the-wave-execution-loop-moved-to-ticfac).) It loads this file, resolves the role/tier cell, compiles the argv, refuses an impossible cell *before dialling herdr*, and passes the result through verbatim — so everything this document specifies about resolution order, argv order and fail-closed behaviour is enforced code, not a convention an orchestrator has to remember. Under harness orchestration the same structure is read by the active adapter, which cannot enforce it the same way.
+**Under the herdr substrate, "the spawner" is `ticfac run-epic`'s.** (The old `tk herd spawn` did this in-repo; that command and the rest of the wave-execution loop were deleted and moved to ticfac — see [`herdr-runner.md`](herdr-runner.md#the-wave-execution-loop-moved-to-ticfac).) It loads this file, resolves the role/tier cell and its profile's executor, compiles argv only for a herdr dispatch, refuses an impossible cell *before dialling herdr*, and passes the result through verbatim. A role whose profile names the local subprocess or cloud executor is validated against that executor's runner set instead; `kind` is not unconditionally a Herdr kind any more.
 
 The file is optional. Without it, the active runner adapter behaves exactly as it does today: harness-native subagents, adapter-default tier mapping. `runners.toml` only ever *adds* routing choices.
 
@@ -93,7 +93,7 @@ Advisory. Whichever agent is executing the run *is* the orchestrator; this secti
 | Key | Type | Meaning |
 |---|---|---|
 | `harness` | string | Runner adapter that plays orchestrator: `claude`, `codex`, `pi`, `prime` (see the matching `<harness>-runner.md`). |
-| `kind` | string | herdr kind to use if the orchestrator itself is ever spawned into a pane. |
+| `kind` | string | Runner/harness name the advisory orchestrator cell was written for. If it is ever spawned through Herdr, it must be in ticfac's compiled Herdr set. |
 | `model` | string | Model id in that kind's namespace, e.g. `opus`. See [Model id shape](#model-id-shape). |
 | `effort` | enum | Reasoning effort for the orchestrating model, e.g. `high`. |
 | `args` | array of strings | Escape-hatch native args for that kind, appended after the compiled model/effort flags. |
@@ -115,10 +115,10 @@ Keys are role names matching `^[a-z][a-z0-9_-]*$`. Well-known roles: `plan`, `sc
 
 | Key | Type | Meaning |
 |---|---|---|
-| `kind` | string, required | herdr kind to spawn for this role — the harness dimension. |
-| `model` | string | Model id **in that kind's namespace** (`opus`; `gpt-5.6-luna`; `openai-codex/gpt-5.6-sol`; `workers-ai/@cf/openai/gpt-oss-120b`). Omitted means the kind's own default. Compiled into the kind's native model flag. See [Model id shape](#model-id-shape). |
-| `effort` | `off` \| `minimal` \| `low` \| `medium` \| `high` \| `xhigh` \| `max` | Reasoning/thinking effort, kind-neutral. Omitted means the kind's own default. Compiled into the kind's native mechanism. |
-| `args` | array of strings | Escape hatch for anything the two dimensions do not express. Passed verbatim after `--` in `herdr agent start`, **appended last — after the kind's computed per-spawn extras and the compiled model/effort flags**. One argv element per entry — never a pre-joined shell string. |
+| `kind` | string, required | Runner/harness name for this role, interpreted by the profile's resolved executor. Under Herdr it must be one of ticfac's compiled kinds; `pi` is not one. |
+| `model` | string | Model id **in that kind's namespace** (`opus`; `gpt-5.6-luna`; `cloudflare-workers-ai/@cf/zai-org/glm-5.3`; `workers-ai/@cf/openai/gpt-oss-120b`). Omitted means the runner's own default. Under Herdr it is compiled into the kind's native model flag. See [Model id shape](#model-id-shape). |
+| `effort` | `off` \| `minimal` \| `low` \| `medium` \| `high` \| `xhigh` \| `max` | Reasoning/thinking effort, kind-neutral. Omitted means the runner's own default. Under Herdr it is compiled into the kind's native mechanism. |
+| `args` | array of strings | Herdr escape hatch for anything the two dimensions do not express. For a herdr dispatch it is passed verbatim after `--` in `herdr agent start`, **appended last — after the kind's computed per-spawn extras and the compiled model/effort flags**. One argv element per entry — never a pre-joined shell string. It is not a way to turn the durable `pi` runner back into the pi CLI. |
 | `harness` | string | Documentary note of the corresponding runner adapter. Routing uses `kind`. |
 | `tiers.<economy\|balanced\|strong\|frontier>` | table | Per-tier overrides; each entry may set any of `kind`, `model`, `effort`, `args` (at least one). |
 
@@ -126,9 +126,9 @@ The tier names are the shared capability tiers from `agent-runner.md` — the co
 
 **Args order matters.** Composed argv for a spawned worker is always, in order: the kind's full-auto template (from `herdr-kinds.md`, subject to `orchestration.full_auto`) → the kind's **computed per-spawn extras** → the flags compiled from `model`/`effort` → `args`.
 
-The computed extras are the one position that comes from neither the config file nor the kind's static template: they are argv a kind needs that only the *repository* can name, rendered at spawn time. Today there is exactly one — codex's `--add-dir <git-common-dir>`, which keeps a sandboxed worker able to write the git metadata of its own linked worktree (see [`herdr-kinds.md`](herdr-kinds.md#codex)). They sit next to the full-auto template because they belong to the same question, *what may this worker touch*, and they are **not** gated on `full_auto`. A kind that declares an extra and cannot render it is a spawn-time refusal, not an argv silently missing an element.
+The computed extras are the one position that comes from neither the config file nor the full-auto template: they are argv a Herdr kind needs in every mode, rendered at spawn time. Today there are two: claude's `--settings` value that disables background tasks, and codex's `--add-dir <git-common-dir>`, which keeps a sandboxed worker able to write the git metadata of its own linked worktree (see [`herdr-kinds.md`](herdr-kinds.md#codex)). They are **not** gated on `full_auto`. A kind that declares an extra and cannot render it is a spawn-time refusal, not an argv silently missing an element.
 
-**The effort enum is a union across kinds, not a per-kind guarantee.** `off` and `minimal` exist for pi but not for `claude --effort`; codex's accepted set belongs to the model, not the CLI; **opencode has no effort mechanism at all**, so every level is refused there and a tier ladder has to be built from `model` instead. The schema checks the value's *shape*; the spawner checks whether this *kind* accepts it — including whether it has anywhere to put it.
+**The effort enum is a format-level union, not a per-kind guarantee.** No compiled Herdr kind currently accepts `off` or `minimal`; `claude --effort` starts at `low`, codex's accepted set belongs to the model rather than the CLI, and **opencode has no effort mechanism at all**, so every level is refused there and a tier ladder has to be built from `model` instead. The schema checks the value's *shape*; the resolved executor checks whether this worker accepts it — including whether it has anywhere to put it.
 
 ### Resolution order
 
@@ -138,7 +138,7 @@ For a tick with role R and chosen tier T:
 2. Otherwise `roles.R.kind` + `roles.R.model` + `roles.R.effort` + `roles.R.args`.
 3. If role R has no entry, resolve against `implement` by the same two steps.
 
-**Step 3 is a spawner rule, and a consumer whose role fails closed must not apply it.** The herdr-substrate spawner (`ticfac run-epic`) has to produce a worker, so an unlisted role resolving to `implement` is the right answer there. A *gate* that refuses to run on a defaulted model needs the opposite answer: the pi extension reads `plan`, `scout`, `review` and `closeout` only from their own explicit tables, leaves the key unset when the table is absent, and blocks — so a repo that migrates without writing `[roles.review]` gets the same stop its `## Pi Orchestrator` block gave when it had no `review_model` line, rather than a final review quietly running on the economy implement model. Its one fallback is closeout to the planner model. Anything that spawns from this file should say explicitly which of the two rules it applies.
+**Step 3 is the config reader's fallback and every current executor sees the resolved cell.** Process jobs that must never inherit implementation routing are protected one layer above it: profile resolution names their role candidates explicitly, and run-start routing checks resolve every role and tier the policy can dispatch. The deleted ticks pi extension used a different gate-only fallback rule; it is history, not a second current interpretation of this table.
 
 `kind`, `model` and `effort` are scalars, so field-wise override is well-defined: a tier that sets only `effort = "high"` keeps the role's kind and model. That is the point of splitting the dimensions out of `args` — the common case (same vendor, same model, different effort) stops requiring a restated argv list.
 
@@ -185,28 +185,17 @@ The retired inline form, `[roles.<name>.substrates.<substrate>]`, is refused wit
 
 ### One table, one kind per reader
 
-`[roles]` is one table and more than one program reads it. The herdr-substrate spawner (`ticfac run-epic`) compiles a cell into a herdr spawn of that `kind`. The **pi extension** (ticks' `extensions/ticks-runner`, the runner adapter behind `/ticks-plan` and `/ticks-run`, until ticks deleted it with its execution surface at chz) compiled the same cell into `pi --provider/--model/--thinking` and spawned that subprocess itself. Because `model` lives **in the kind's own namespace**, a cell only means anything to the reader that dispatches that kind: `sonnet` is a `claude` id, `gpt-5.6-luna` is a `codex` id, and neither is a name `pi --model` takes.
+The heading is retained because older migration notes link to it; the current rule is **one runner namespace per resolved executor cell**. `[roles]` is one table, but a profile resolves the executor independently for each role. Only then does `kind` acquire its launch meaning:
 
-So **one `[roles]` table cannot carry a herdr routing and a pi routing at the same time.** It carries the kind's, and a second reader may not help itself to the model string with the kind dropped.
+- under `herdr`, `kind` is an interactive agent kind for which ticfac must have a compiled, round-tripped template (`claude`, `codex`, or `opencode`);
+- under `local-subprocess`, `pi` is the headless pi-durable host (and `claude`/`codex` are their headless CLIs);
+- under `cloudflare-sandbox`, `pi-durable` is the hosted WorkerAgent harness. The temporary alias `pi` is also admitted while repositories migrate their cloud override.
 
-**A reader that dispatches a kind reads only cells of that kind, and fails closed on the rest.** The pi extension refuses any role or tier whose `kind` is not `pi`: it derives no model from that cell, reports the mismatch naming the cell, the kind and the model it would otherwise have passed, and blocks the run — a config it cannot read authorizes nothing, exactly as for the whole-file rules below. It does **not** quietly leave the model unset and let `pi` pick its own default; that is the same silent substitution the spawner refuses for an impossible cell.
+That distinction is why deleting ticfac's Herdr `pi` row does **not** rename the durable local runner. The same text `kind = "pi"` is valid when the resolved profile selects `local-subprocess`, and refused when it selects `herdr`: the latter would ask Herdr to start the pi CLI, the worker path epic 43y deleted. The refusal happens before Herdr is dialled and points to the headless or hosted durable routes rather than suggesting `herdr agent`, whose own list still includes pi.
 
-```text
-roles.implement.tiers.balanced: kind = "codex", but this runner spawns `pi` and a model
-id is in its own kind's namespace — refusing to derive implement_balanced_model =
-"gpt-5.6-luna:max" from a codex role rather than hand a codex id to `pi
---provider/--model`. Give the role `kind = "pi"` and a pi model id, or run this epic
-under the herdr substrate (`ticfac run-epic`), the reader a codex role is written for.
-```
+`model` remains in the runner's namespace. A tier that crosses from `codex` to `claude` must restate its model; a substrate override that crosses from a local runner to a hosted one must do the same whenever their spellings differ. A reader may never drop `kind` and reuse a model simply because the string looks plausible.
 
-Four things follow, and each has bitten:
-
-- **This is a reader rule, not a file rule.** A `[roles]` table of `claude`/`codex` cells is a perfectly valid config; it is simply not addressed to the pi reader. The refusal names the reader, never the file's validity — see [Caught by a reader](#caught-by-a-reader-valid-for-one-kind-refused-by-another).
-- **The deprecated `## Pi Orchestrator` block is unaffected.** It named no kind because its heading was the kind; every key in it is pi routing by construction and still resolves. The refusal exists precisely because the TOML that replaced it is a *shared* table — a migration can retarget those keys to another reader without changing a single model string's meaning to the reader they were written for.
-- **`harness` does not license a kind.** Routing is `kind` (see [`[roles.<name>]`](#rolesname)); `harness = "pi"` on a `kind = "claude"` role is a documentary note on a claude cell, and the pi reader still refuses it.
-- **`TICKS_PI_*_MODEL` does not rescue a refused config.** The environment still wins over the file for an individual key, but the refusal is a config error, and a run never starts on a config that produced one. Fix the file or run the epic under the substrate its `[roles]` table is for.
-
-A repo that wants a herdr fleet of `claude`/`codex` workers **and** the pi extension's own planning and process gates cannot express both here today. It has to pick which substrate its `[roles]` table is for, and record the choice — a per-substrate routing shape is the only thing that would remove the constraint, and it does not exist yet.
+The old ticks pi extension described by earlier revisions of this section is gone with ticks' execution surface (epic chz), and its pi-CLI spawn rules are history, not an alternate reader this file still serves. In particular, no `TICKS_PI_*` override and no `args = ["--approve"]` can license a pi CLI worker through ticfac. Executor selection plus the executor's closed runner set is the authorization boundary now.
 
 ### Model id shape
 
@@ -221,7 +210,7 @@ as the `Model` pattern `^@?[A-Za-z0-9][A-Za-z0-9_.+-]*(/@?[A-Za-z0-9][A-Za-z0-9_
 
 **A segment may lead with `@`.** Some namespaces are part of the model id, not decoration a config invents: **every** Workers AI model is `@cf/<vendor>/<name>`, so the provider-qualified form is `workers-ai/@cf/openai/gpt-oss-120b` and a repo routed at Workers AI has no other way to name its model. `@` is legal in that one position and nowhere else — `workers-ai/cf@openai/…` and `workers-ai/@/…` are both rejected, so the id stays a real constraint rather than a string with a hole in it.
 
-**A `:` is still rejected.** Effort is its own key; pi's `model:thinking` shorthand is what the spawner *emits*, never what the config carries.
+**A `:` is still rejected.** Model and effort are separate fields; put a reasoning level in `effort`, never in a model-id suffix. No current spawner emits the deleted pi CLI's `model:thinking` shorthand.
 
 The pattern is enforced in two places that must agree — `runners-config.schema.json` and the Go loader (`internal/runconfig`) — because a file that one reader accepts and another rejects is worse than a file both refuse. (Two more readers enforced it while ticks carried an execution surface: ticks' Python reference validator and its pi extension. Both left ticks with chz.)
 
@@ -520,11 +509,11 @@ That block was key/value routing config in markdown, duplicating what `[roles]` 
 
 Three things a migration has to do rather than copy:
 
-- **Split the effort suffix.** `openai-codex/gpt-5.6-sol:xhigh` is one markdown string but two fields here: `model = "openai-codex/gpt-5.6-sol"` and `effort = "xhigh"`. The `Model` pattern rejects `:` for exactly this reason — the `model:thinking` shorthand is what the spawner *emits*, not what the config carries.
-- **Make the kind explicit.** The markdown block named models and never a kind; the kind was implied by the heading saying *Pi*. `kind` is required on every role here, so write `kind = "pi"`. If the repo's `[roles]` already carry another kind's routing, these keys have **no home in that table**: merging them retargets the pi extension's only routing at a reader it was never written for, which is a migration failure and not a merge conflict a warning covers. See [One table, one kind per reader](#one-table-one-kind-per-reader).
+- **Split the effort suffix.** `openai-codex/gpt-5.6-sol:xhigh` is one legacy markdown string but two fields here: `model = "openai-codex/gpt-5.6-sol"` and `effort = "xhigh"`. The `Model` pattern rejects `:` because model and effort stay separate. The deleted pi CLI used the joined `model:thinking` spelling; no current Herdr spawner emits it.
+- **Make the kind explicit.** The markdown block named models and never a kind; the kind was implied by the heading saying *Pi*. `kind` is required on every role, and a migrated local route uses `kind = "pi"` for the durable subprocess runner. That same cell is refused if its resolved executor is Herdr, where `pi` would mean the deleted CLI path. Existing role cells and per-world overrides therefore have to be reconciled by executor, not merged on the assumption that every `pi` spelling means one argv. See [One table, one kind per reader](#one-table-one-kind-per-reader).
 - **`max_parallel` lands in `[orchestration]`, not `[orchestrator]`.** They are different tables: `[orchestrator]` is advisory ("which harness this config was written for"), `[orchestration]` is dispatch policy.
 
-Two vocabulary notes for a reader porting the pi extension's own routing helper. Its `review` and `closeout` "tiers" are **roles** here, not tiers — the four tier names are `economy`/`balanced`/`strong`/`frontier`, and `[roles.review]`/`[roles.closeout]` is where those models belong. Its `foundation` tier is `[roles.review]` at the `frontier` tier. Neither needs a new key.
+Two vocabulary notes survive from the deleted pi extension's migration. Its `review` and `closeout` "tiers" are **roles** here, not tiers — the four tier names are `economy`/`balanced`/`strong`/`frontier`, and `[roles.review]`/`[roles.closeout]` is where those models belong. Its `foundation` tier maps to `[roles.review]` at the `frontier` tier. Neither needs a new key.
 
 One key in that block has **no home in this schema and does not get one**: `review_should_fix` (`repair` | `record`) is a review-outcome policy — what to do with a should-fix finding — not routing, not a command, and not a phase. Bolting it into `[orchestrator]` would start the second routing model this migration exists to remove. Until it is given a table of its own by a tick that has thought about run policy as a category, it stays where a model reads it.
 
@@ -810,63 +799,9 @@ harness = "codex"
 effort = "high"
 ```
 
-### 4. Cross-provider through pi
+### 4. A kind with no effort dimension: opencode
 
-A single `pi` kind covering every role, routing across providers by model id rather than by kind. Pi takes a provider-qualified id and carries effort as a `:<thinking>` suffix, so one kind spans vendors that `claude` and `codex` cannot reach individually — but the model ids must exist in the local pi's provider set (`pi --list-models`), and pi is not yet round-tripped as a tick implementer (see `herdr-kinds.md` → *Adding a kind*).
-
-```toml
-version = 1
-
-[orchestrator]
-harness = "pi"
-kind = "pi"
-model = "openai-codex/gpt-5.6-sol"
-effort = "xhigh"
-
-[orchestration]
-substrate = "herdr"
-max_parallel = 4
-
-[roles.plan]
-kind = "pi"
-harness = "pi"
-model = "openai-codex/gpt-5.6-sol"
-effort = "xhigh"
-
-[roles.scout]
-kind = "pi"
-harness = "pi"
-model = "openai-codex/gpt-5.6-sol"
-effort = "low"
-
-[roles.implement]
-kind = "pi"
-harness = "pi"
-model = "openai-codex/gpt-5.6-sol"
-effort = "medium"
-
-[roles.implement.tiers.economy]
-effort = "low"
-
-[roles.implement.tiers.strong]
-effort = "high"
-
-[roles.implement.tiers.frontier]
-model = "anthropic/claude-opus-4-6"   # cross-provider within one kind
-effort = "max"
-
-[roles.review]
-kind = "pi"
-harness = "pi"
-model = "openai-codex/gpt-5.6-sol"
-effort = "xhigh"
-```
-
-Compiled argv for `implement` at `frontier`: `--model anthropic/claude-opus-4-6:max`. The same pair under `kind = "claude"` would be an impossible cell (`anthropic/claude-opus-4-6` is not a name `claude --model` takes) — the cell's validity is a property of the *kind*, which is exactly why compatibility cannot live in the schema.
-
-### 5. A kind with no effort dimension: opencode
-
-Every example above varies its tiers by `effort`, because every kind above has somewhere to put one. `opencode` does not: its interactive CLI has no effort flag, so setting `effort` anywhere in an opencode role is a spawn refusal (see [`herdr-kinds.md`](herdr-kinds.md#opencode)). The tier ladder is therefore built from `model` — which is also what a multi-provider kind makes cheap, since the whole catalogue is addressable by id.
+The Herdr kinds above vary tiers by `effort`; `opencode` cannot. Its interactive CLI has no effort flag, so setting `effort` anywhere in an opencode role is a spawn refusal (see [`herdr-kinds.md`](herdr-kinds.md#opencode)). The tier ladder is therefore built from `model` — which is also what a multi-provider kind makes cheap, since the whole catalogue is addressable by id.
 
 ```toml
 version = 1
@@ -898,7 +833,7 @@ effort = "high"
 
 Compiled argv for `implement` at `strong`: `--auto --model openai/gpt-5.6-sol`. Two things to carry away. First, `--auto` is opencode's entire full-auto template — it approves permissions rather than choosing a sandbox, so unlike codex there is no computed per-spawn extra and nothing extra is needed to commit from a linked worktree. Second, the model ids must be **exactly** what `opencode models` prints: a bare or misspelled id is not an error there, it is a silent fall back to the CLI's default model, which is why the spawner's family check for this kind is strict about the `<provider>/<model>` shape.
 
-### 6. Routing plus the whole command surface
+### 5. Routing plus the whole command surface
 
 Everything above is routing. This one adds the four command tables, and is the shape a repo lands in after moving `.tick/config.md`'s structured sections here. Note what is *not* in it: no `phase` key on a command (the table is the phase), and no routing key that `[roles]`/`[roles.*.tiers]` did not already have.
 
@@ -966,7 +901,7 @@ git-identity = { command = "git config user.email", description = "git identity 
 
 `A4` points at a `[testing.commands]` id, which is allowed: close-out may run a testing command as evidence. The reverse is not — an implementer may not run `herd-helper-quick`, because it lives in `[evidence.commands]`, and no key in this file can change that.
 
-### 7. A repo that declares its own sandbox
+### 6. A repo that declares its own sandbox
 
 Routing, a small command surface, and the sandbox the repo needs on top of the base image: a toolchain the base does not carry and two warm steps. Nothing else in the file changes — a `[sandbox]` table is additive, and a repo that removes it goes back to the base image with no other edit.
 
@@ -1005,7 +940,7 @@ These are the failures a config author should expect, and where each one is caug
 | `effort = "ultra"` | Not in the effort enum. |
 | `effort = "High"` | Enum values are lowercase; no case folding. |
 | `effort = 3` | Effort is a string, not an integer. |
-| `model = "sonnet:high"` | `:` is rejected in `model`. Pi's `model:thinking` shorthand is what the spawner *emits*, not what the config carries — put the level in `effort`. |
+| `model = "sonnet:high"` | `:` is rejected in `model`. Model and effort are separate fields — put the level in `effort`. |
 | `model = ""` | Empty model. Omit the key to mean "the kind's default". |
 | `model = "workers-ai/cf@openai/gpt-oss-120b"` | `@` may only **lead** a segment, never sit inside one. |
 | `model = "workers-ai/@/gpt-oss-120b"` | `@` is a namespace prefix on a segment, not a segment. |
@@ -1037,15 +972,15 @@ These are the failures a config author should expect, and where each one is caug
 
 See [Caught by the config loader](#caught-by-the-config-loader) for the full statement of these three rules.
 
-### Caught by a reader (valid for one kind, refused by another)
+### Caught by a reader (valid shape, refused by the resolved executor)
 
-These configs are valid, and valid for the reader they were written for. They are refused by a *different* reader, which is a property of the pair, not of the file — see [One table, one kind per reader](#one-table-one-kind-per-reader).
+These cells pass the shared schema. They are refused only after the role's profile selects an executor, because `kind` is interpreted by that executor — see [One table, one kind per reader](#one-table-one-kind-per-reader).
 
-| Config | Read by | Why it fails |
+| Config | Resolved executor | Why it fails |
 |---|---|---|
-| `[roles.implement] kind = "claude", model = "sonnet"` | the pi extension | `sonnet` is a claude id; deriving `implement_*_model` from it would put it behind `pi --model` with no provider. Refused naming the cell, the kind and the model. Fine for the herdr-substrate spawner (`ticfac run-epic`). |
-| `[roles.implement.tiers.balanced] kind = "codex"` under a `kind = "pi"` role | the pi extension | The tier crosses to a kind this reader does not spawn. Only that tier's key is refused; the role's other tiers still resolve. |
-| `[roles.review] kind = "claude", harness = "pi"` | the pi extension | `harness` is documentary. Routing is `kind`, and the kind is claude. |
+| `kind = "pi"`, `model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"` | `herdr` | Ticfac's Herdr pi template is deleted: Herdr would start the pi CLI, not pi-durable. Use the local subprocess durable runner or the hosted cloud harness. |
+| `kind = "pi-durable"` | `local-subprocess` | `pi-durable` is the hosted name; the local runner table names the same durable harness `pi`. Unknown runners are refused before a tick is claimed. |
+| `kind = "opencode"`, `model = "openai/gpt-5.6-luna"` | `cloudflare-sandbox` | The cloud executor admits only its durable Workers-AI harness names; an interactive Herdr kind cannot reach a worker container. |
 
 ### Caught by the spawner (shape-valid, still unroutable)
 
@@ -1057,23 +992,24 @@ These configs are valid, and valid for the reader they were written for. They ar
 | `kind = "opencode"`, `model = "gpt-5.6-luna"` | Not provider-qualified. opencode takes ids exactly as `opencode models` prints them (`openai/gpt-5.6-luna`); anything else is silently replaced by its default model, so the check is strict. |
 | `kind = "codex"`, `model = "gpt-9-imaginary"` | Well-formed, non-existent. This is the [green-start trap](herdr-kinds.md#the-green-start-trap): the pane starts green and does zero work. Under `kind = "opencode"` the same class is *worse* — a provider-qualified but unresolvable id starts green, answers the gate correctly, and runs the whole tick on the CLI's default model. |
 | `model = "opus"` **and** `args = ["--model", "sonnet"]` | `args` restates a compiled flag. Duplicate/conflicting argv — a config error, not a precedence puzzle. |
-| `kind = "frobnicator"` | Shape-valid kind name the installed herdr does not know (`herdr agent`). |
+| `kind = "pi"` on the Herdr executor | Deliberately deleted even though `herdr agent` still lists it: that command starts the pi CLI, not pi-durable. The refusal names the local and hosted durable routes. |
+| `kind = "frobnicator"` | Shape-valid kind name for which ticfac has no round-tripped Herdr spawn template. The installed Herdr list is necessary but not sufficient. |
 | `kind = "codex"` where the repo's git common dir could not be resolved | The kind's computed `--add-dir <git-common-dir>` extra has nothing to render from. The config is fine; the *environment* is. Refused anyway — compiling the sandbox without the grant produces a worker that starts green, does the work and cannot commit it. |
 
 The dividing line is the same one stated under [Shape versus compatibility](#shape-versus-compatibility): the schema knows the file format, only the spawner knows the vendor. The last row is a third thing again — neither shape nor vendor but the repository — and it fails closed for the same reason as the rest.
 
 ## Authoring rules
 
-- **Never invent kinds.** Only kinds the installed herdr reports (`herdr agent`) are valid at run time; the schema's pattern is a shape check, not a catalog.
+- **Never invent kinds, and do not treat `herdr agent` as ticfac's allowlist.** Under Herdr, a kind must be both known to Herdr and present in ticfac's round-tripped `KnownKinds()` set. In particular Herdr still advertises `pi`, but ticfac refuses it because it launches the deleted pi CLI. Other executors have their own closed runner sets.
 - **Use `model`/`effort`, not `args`, for model and effort.** They are the two dimensions the spawner understands; `args` is the escape hatch for everything else (`--add-dir`, `--search`, a `-c` override with no field of its own). A config that reaches for `args` to set a model gets no compatibility checking and risks duplicating a compiled flag.
 - **Args are argv, not shell.** `["--add-dir", "/x"]`, never `["--add-dir /x"]`. Quoting inside a single argv element (as in Codex's `--config 'foo="bar"'`) is part of that element's value.
 - **`--add-dir` in `args` is additive, not a conflict.** The spawner already compiles one for codex (the git common dir); repeated `--add-dir` elements widen the sandbox further rather than overriding each other, so it is not a reserved flag. Name the *extra* directory a tick needs — never restate the git one.
 - **Omitting `model` is legal and means "the kind's own default".** Example 3 above carries `effort` and no `model`, so the spawner passes no model flag and codex resolves `model` from `~/.codex/config.toml` — verified live. That is a deliberate choice, not an oversight: it keeps the config from pinning a model string that will age. Set `model` only when a role must not follow the CLI's local default, and re-read [`herdr-kinds.md`](herdr-kinds.md)'s green-start trap before you do — a model string that the account cannot use starts green and does zero work.
-- **Model strings live in the kind's namespace.** `opus` means something to `claude` and nothing to `codex`; `openai-codex/gpt-5.6-sol` means something to `pi` and nothing to either; `openai/gpt-5.6-luna` is opencode's spelling of a model codex calls `gpt-5.6-luna`. Changing a tier's `kind` obliges you to restate its `model`.
+- **Model strings live in the kind's namespace.** `opus` means something to `claude` and nothing to `codex`; `cloudflare-workers-ai/@cf/zai-org/glm-5.3` is a durable-pi provider id, not a Herdr license for kind pi; `openai/gpt-5.6-luna` is opencode's spelling of a model codex calls `gpt-5.6-luna`. Changing a tier's `kind` obliges you to restate its `model`.
 - **`effort` is not universal.** A kind may have no mechanism for it (opencode), in which case setting it is a spawn refusal, not a hint. Check [`herdr-kinds.md`](herdr-kinds.md#model-and-effort-translation) before writing an effort ladder for a kind you have not used here before, and build the ladder from `model` when there is no effort dimension.
 - **Tier names are the contract**, model strings are not. Any model named in a config is a local, dated choice.
 - **Keep `[roles.implement]` present.** It is the fallback for every unlisted role.
-- **Write the table for one substrate.** Every cell's `model` is in its `kind`'s namespace, so a `[roles]` table is addressed to the reader that dispatches those kinds; a second reader refuses it rather than reusing the model strings. Decide whether a repo's roles are herdr routing or pi routing, and say so in a comment — see [One table, one kind per reader](#one-table-one-kind-per-reader).
+- **Write each substrate override for the executors it actually resolves.** Every cell's `model` is in its `kind`'s namespace; a second executor refuses it rather than reusing the string with `kind` dropped. The common/local/cloud layering is how one repository names a headless local durable runner, interactive Herdr frontier roles and a hosted cloud harness without pretending they share argv — see [One table, one kind per reader](#one-table-one-kind-per-reader).
 - **Declare `version = 2` the moment a command table appears.** That single line is what turns a hard break on an older `tk` into one sentence telling its operator to upgrade. `tk config migrate` writes it for you, including for a file an earlier migration already moved.
 - **The table is the authorisation.** Put a command in `[evidence.commands]` only if close-out is the *only* phase that may run it, and never copy it into `[testing.commands]` to "also run it in a wave" — that is the ambiguity the loader refuses. Move it and say so in the diff.
 - **Name commands for what they prove, not for how they run.** The id is a stable reference an acceptance mapping and a close-out report both quote (`package-rpc`, `herd-helper-quick`), so renaming one is a contract change; rewriting the command it points at is not.
