@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 53,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "3yx fixed the cancelled ending. The FAILED endings, live and stream, still say 'Nothing is held for a person' while the frame shows a needs-you line: the same contradiction. The stream FAILED path also builds its command from epicOf(), which falls back to the run id, so an unresolved run_* id can print 'ticfac run-epic run_…'.\nevidence: internal/cli/watch.go:546-552\n\nticfac run epic-hn6 created this tick by absorbing the finding a76440fc4a0dd0f6e7680e71b7103d739f5744af1be47028751f7539ffe501c5 (reported by run-epic-hn6/tick-pv7/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/a76440fc4a0dd0f6e7680e71b7103d739f5744af1be47028751f7539ffe501c5.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "ziy",
+    "title": "watch's FAILED ending says 'nothing is held' beside a red needs-you"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.62,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.02,
+      "design": 0.01,
+      "diagnosis": 0.69,
+      "mechanical": 0.27,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1291,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-06T00:15:22Z",
+  "answered_at": "2026-10-06T00:15:22Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "ziy",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "7a65c8977bdb69fbd2c45d790d19e51f0eba7c8c",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:a04fcc6adca25baf76e8f9ef27d5f11c4acbc2e1a72e018047e915994c67984b",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
