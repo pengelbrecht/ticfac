@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 312,
-  "state": "running",
-  "reason": "kf4 is running as attempt 45",
-  "updated_at": "2026-10-06T00:00:37Z",
+  "sequence": 313,
+  "state": "dispatching",
+  "reason": "dispatching uzs as attempt 46",
+  "updated_at": "2026-10-06T00:00:47Z",
   "ticks": [
     {
       "tick_id": "v16",
