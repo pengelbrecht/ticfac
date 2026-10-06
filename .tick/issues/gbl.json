@@ -1,0 +1,13 @@
+{
+  "id": "gbl",
+  "title": "Stream FAILED ending names no resume when the cloud model gather fails",
+  "description": "ziy routes the stream path's FAILED ending through sayWatchFailedEnd(model). When watchGatherModel errors (only the cloud path can), model is statusmodel.Model{}: Host and EpicID are empty, so ResumeCommand returns \"\" and the ending prints the plain sentence with no command. Before ziy, epicOf() resolved an epic-\u003cid\u003e run's epic and named `ticfac run \u003cid\u003e --cloud`. Fix: when the gather fails, fall back to an epic the caller actually resolved (never the run-id fallback ziy removed).\nevidence: internal/cli/watch.go:546-549 (sayWatchFailedEnd with the zero model when gatherErr != nil); internal/cli/watch.go:726 returns statusmodel.Model{} on error\n\nticfac run epic-hn6 filed this backlog tick from the finding 9edbcc83294055721949fe5401f8d155b0351944c7972c54a290584b1bce9ea7 (reported by run-epic-hn6/tick-t6q/attempt-48) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-hn6/absorptions/9edbcc83294055721949fe5401f8d155b0351944c7972c54a290584b1bce9ea7.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-t6q/attempt-48",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-06T00:57:37Z",
+  "updated_at": "2026-10-06T00:57:37Z"
+}
