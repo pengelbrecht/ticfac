@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
   "epic_id": "umq",
-  "sequence": 21,
-  "state": "gating",
-  "reason": "running the integrated gate for rlx on 58287c219cc0",
-  "updated_at": "2026-10-06T15:59:29Z",
+  "sequence": 22,
+  "state": "running",
+  "reason": "CI on the epic PR #242 is pending on the head that includes the close-out's own commits; the close-out of umq is held",
+  "updated_at": "2026-10-06T16:00:46Z",
   "ticks": [
     {
       "tick_id": "dax",
