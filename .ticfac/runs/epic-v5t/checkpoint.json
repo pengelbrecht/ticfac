@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 7,
-  "state": "publishing",
-  "reason": "closing 6fv behind the integrated gate on 200fdd02ed15",
-  "updated_at": "2026-10-06T21:22:11Z",
+  "sequence": 8,
+  "state": "running",
+  "reason": "6fv is closed",
+  "updated_at": "2026-10-06T21:22:16Z",
   "ticks": [
     {
       "tick_id": "6fv",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
