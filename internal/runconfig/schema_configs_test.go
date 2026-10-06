@@ -62,7 +62,7 @@ func TestTheSchemaNamesEveryTableTheReaderParses(t *testing.T) {
 	var defs struct {
 		Defs struct {
 			Config struct {
-				Properties         map[string]any `json:"properties"`
+				Properties          map[string]any `json:"properties"`
 				AdditionalProps     any            `json:"additionalProperties"`
 				MinProperties       int            `json:"minProperties"`
 				AdditionalPropsList []string
