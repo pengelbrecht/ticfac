@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "rlx",
   "attempt": 3,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-06T15:59:01Z",
+  "triaged_at": "2026-10-06T15:59:11Z",
+  "triaged_by": "ticfac run run_7445005ff17447c3ae351f5ba99ea01d absorbing 3hw",
+  "promoted_as": "3hw",
   "provenance": {
     "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
     "tick_id": "rlx",
