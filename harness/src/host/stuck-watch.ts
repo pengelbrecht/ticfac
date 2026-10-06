@@ -12,10 +12,13 @@
  * conversation's own host CAN see is exactly the local watch's three
  * signals, translated:
  *
- *   - its harness's transcript → this host's own log, which says every
- *     model round, every tool call, every checkpoint, every steer — the
- *     `ticfac-harness:` lines the WorkerAgent's watch socket already
- *     serves (`WorkerAttemptHost.say`);
+ *   - its harness's transcript → the conversation's own COMMIT STREAM
+ *     (pi-durable `watchEvents`): every model delta, every tool start,
+ *     output and result, every appended entry. Not this host's own log:
+ *     the log is also written by the host ITSELF — "a new host life
+ *     resumed", the watch's own steer — and run_7445005f's dax attempt
+ *     sat in a hung `tk --help` for hours while each new life's resume
+ *     line read as activity (and the hung tool's busy loop as CPU);
  *   - the CPU of the tool processes → the container's own `/proc`, the
  *     whole container being this attempt's tool tree, sampled through the
  *     door with one bounded command;
@@ -119,6 +122,26 @@ export function parseContainerCpuMs(output: string): number | null {
   return (ticks * 1000) / USER_HZ;
 }
 
+/**
+ * How many windows of commit silence end the attempt even while its
+ * container burns CPU: a tool that spins without printing (a shim that
+ * execs itself, a busy-wait) moves the CPU signal forever and nothing
+ * else, and the CPU rule alone would let it run to the wall (8h in the
+ * cloud). An hour of silence at the default window: longer than any
+ * honest quiet build the CPU rule protects.
+ */
+export const COMMIT_SILENCE_WINDOWS = 4;
+
+/**
+ * How long one look may wait on the container before its CPU reading is
+ * given up as unreadable: half the window, at most 30s. A look must never
+ * hang the watch — run_7445005f's looks issued a door call that did not
+ * come back, and a watch that waits on its own sensor decides nothing.
+ */
+export function lookTimeoutMs(windowMs: number): number {
+  return Math.min(Math.max(windowMs / 2, 10), 30_000);
+}
+
 /** What the watch keeps between looks — this life's, like the local supervisor's. */
 export type StuckWatchState = {
   /** The baseline: the attempt's start, so a host that restarts mid-quiet does not reset the window. */
@@ -134,8 +157,13 @@ export type StuckWatchState = {
 
 /** One look's signals. */
 export type StuckSignals = {
-  /** When the host's log last grew — the transcript signal. Null before this life said anything. */
-  lastLogAt: number | null;
+  /**
+   * When the conversation last committed progress — the transcript signal
+   * (a model delta, a tool's start, output or result, an appended entry;
+   * never the host's own log). Null before anything committed that any
+   * life has seen; a new life starts from what the last one recorded.
+   */
+  lastCommitAt: number | null;
   /** The container's CPU total in ms, when it could be read; the state's mark holds when it moved. */
   cpuRead: boolean;
 };
@@ -179,7 +207,7 @@ export function observeCpu(
  */
 export function lastActivity(state: StuckWatchState, signals: StuckSignals): number {
   let last = state.firstSeenAt;
-  if (signals.lastLogAt !== null && signals.lastLogAt > last) last = signals.lastLogAt;
+  if (signals.lastCommitAt !== null && signals.lastCommitAt > last) last = signals.lastCommitAt;
   if (state.cpuMarkAt !== null && state.cpuMarkAt > last) last = state.cpuMarkAt;
   return last;
 }
@@ -187,7 +215,8 @@ export function lastActivity(state: StuckWatchState, signals: StuckSignals): num
 /**
  * The rule (activity.go `DecideStuck`): quiet for the window → nudge once;
  * activity after a nudge clears it, so a later silence earns a nudge of its
- * own; still quiet for the window past the nudge → stop.
+ * own; still quiet for the window past the nudge → stop. And, over the
+ * CPU: no commit for {@link COMMIT_SILENCE_WINDOWS} windows → stop.
  */
 export function decideStuck(
   state: StuckWatchState,
@@ -195,6 +224,10 @@ export function decideStuck(
   now: number,
   windowMs: number,
 ): StuckStep {
+  // The silence bound first: no commit for COMMIT_SILENCE_WINDOWS windows
+  // is a stop whatever the CPU says — a spinning tool is not working.
+  const committed = Math.max(state.firstSeenAt, signals.lastCommitAt ?? 0);
+  if (now - committed >= COMMIT_SILENCE_WINDOWS * windowMs) return "stop";
   const last = lastActivity(state, signals);
   if (state.nudgedAt !== null && last > state.nudgedAt) {
     state.nudgedAt = null;
@@ -214,9 +247,9 @@ export function stuckEvidence(state: StuckWatchState, signals: StuckSignals, now
   const ago = (at: number | null): string =>
     at === null ? "never in this life" : `${Math.max(0, now - at)}ms ago`;
   const parts = [
-    signals.lastLogAt === null
-      ? "its harness log has said nothing in this life"
-      : `its harness log last grew ${ago(signals.lastLogAt)}`,
+    signals.lastCommitAt === null
+      ? "its conversation has committed nothing any host life has seen"
+      : `its conversation last committed progress ${ago(signals.lastCommitAt)}`,
   ];
   parts.push(
     signals.cpuRead
@@ -238,4 +271,64 @@ export function stuckPrompt(evidence: string, windowMs: number): string {
     `now, then carry on, or write your report if you cannot. If nothing moves in the next ${window} you are ` +
     "stopped and the tick is retried."
   );
+}
+
+// ------------------------------------------------------ the resume loop ---
+
+/**
+ * How many host lives in a row may resume the conversation with no new
+ * entry, the conversation quiet for a whole window before each, before the
+ * attempt is stopped as stuck in a resume loop. run_7445005f's dax attempt
+ * was resumed five times over three and a half hours, each life parked on
+ * the same hung tool call, and each life's watch began from nothing.
+ */
+export const RESUME_LOOP_LIMIT = 3;
+
+/** What the watch carries ACROSS host lives, in the attempt's record. */
+export type DurableWatch = {
+  /** The conversation's newest entry id any life saw, and when it saw it appear. */
+  readonly lastEntryId?: number;
+  readonly lastEntryAt?: number;
+  /** When the conversation last committed progress of any kind, as last recorded. */
+  readonly lastCommitAt?: number;
+  /** The newest entry id at the last resume, and how many quiet resumes in a row found it. */
+  readonly resumeEntryId?: number;
+  readonly idleResumes?: number;
+};
+
+/**
+ * A new host life resuming the conversation: counts it as an IDLE resume
+ * when the conversation has gained no entry for a whole window, consecutive
+ * with the last one when it resumed at the same entry; stuck when the count
+ * reaches {@link RESUME_LOOP_LIMIT}. Pure, so the rule is tested alone.
+ */
+export function judgeResume(
+  prev: DurableWatch | undefined,
+  entryId: number | undefined,
+  now: number,
+  windowMs: number,
+  startedAt: number,
+): { watch: DurableWatch; idleResumes: number; quietMs: number; stuck: boolean } {
+  // An entry the last life never recorded is progress made since: dated now,
+  // which is the conservative side — it resets the count, never advances it.
+  const moved = entryId !== undefined && entryId !== prev?.lastEntryId;
+  const lastEntryAt = moved ? now : (prev?.lastEntryAt ?? startedAt);
+  const quietMs = Math.max(0, now - lastEntryAt);
+  const idleResumes =
+    windowMs > 0 && quietMs >= windowMs
+      ? prev?.resumeEntryId === entryId
+        ? (prev?.idleResumes ?? 0) + 1
+        : 1
+      : 0;
+  return {
+    watch: {
+      ...prev,
+      ...(entryId === undefined ? {} : { lastEntryId: entryId, resumeEntryId: entryId }),
+      lastEntryAt,
+      idleResumes,
+    },
+    idleResumes,
+    quietMs,
+    stuck: idleResumes >= RESUME_LOOP_LIMIT,
+  };
 }

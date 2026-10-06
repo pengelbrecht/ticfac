@@ -50,6 +50,8 @@
 import { BACKGROUND_CONTEXT } from "@earendil-works/chord/context";
 import type { Models } from "@earendil-works/pi-ai";
 import {
+  type AgentEvent,
+  type AgentEventStream,
   type Conversation,
   createRegistry,
   defineExtension,
@@ -62,9 +64,10 @@ import {
   type SubmissionId,
   section,
   ToolTask,
+  watchEvents,
 } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
-import { FactorySandboxEnv } from "../env/factory-sandbox.js";
+import { bashNonceMarker, FactorySandboxEnv } from "../env/factory-sandbox.js";
 import type { SandboxBootOptions, SandboxDoor } from "../env/sandbox-door.js";
 import { gatewayModelRef } from "../gateway/workers-ai.js";
 import { createTrackedBashTool } from "../tools/tracked-bash.js";
@@ -78,7 +81,10 @@ import {
   CONTAINER_CPU_COMMAND,
   checkEveryMs,
   DEFAULT_STUCK_MS,
+  type DurableWatch,
   decideStuck,
+  judgeResume,
+  lookTimeoutMs,
   observeCpu,
   parseContainerCpuMs,
   type StuckSignals,
@@ -163,7 +169,7 @@ export type WorkerAttemptSpec = {
   readonly wallMs?: number;
   /**
    * The stuck watch's window, in ms (tick xba): how long the attempt may
-   * show no activity — no log line, no container CPU — before the watch
+   * show no activity — no conversation commit, no container CPU — before the watch
    * nudges it with a steer, and again before it stops it. Absent is the
    * default window (stuck-watch.ts `DEFAULT_STUCK_MS`, the local watch's
    * own); zero turns the watch off (the run's negative `StuckAfter`, which
@@ -207,6 +213,15 @@ export type WorkerAttemptRecord = {
   readonly harnessStatus?: number;
   readonly finish?: { readonly processId?: string; readonly tries: number };
   readonly settled?: WorkerAttemptSettlement;
+  /**
+   * The stuck watch's memory across host lives (stuck-watch.ts
+   * `DurableWatch`): the conversation's newest entry and when it appeared,
+   * its last progress commit, and the run of quiet resumes — so a new life
+   * neither resets the window nor reads its own resume as activity.
+   */
+  readonly watch?: DurableWatch;
+  /** Set once the watch stopped the attempt as stuck: a later life finishes, never resumes. */
+  readonly stuck?: { readonly reason: string; readonly at: string };
 };
 
 /** Where the host keeps its record: the DO's own storage in the cloud, memory in tests. */
@@ -311,9 +326,20 @@ export class WorkerAttemptHost {
   private driving: Promise<WorkerAttemptRecord> | undefined;
   private reclaimed = false;
   private wallFired = false;
-  /** When this life's log last grew — the stuck watch's transcript signal. */
-  private lastLogAt: number | null = null;
+  /** When the conversation last committed progress — the stuck watch's transcript signal. */
+  private lastCommitAt: number | null = null;
+  /** The conversation's newest entry id, as this life has seen it. */
+  private lastEntryId: number | undefined;
+  /** This life's own subscription to the conversation's commit stream. */
+  private commits: AgentEventStream | undefined;
+  /** When this life last wrote its commit time into the record. */
+  private commitSavedAt = 0;
   private stuckStopped = false;
+  /** Ends the conversation's wait without it: armed by a stuck stop, after its grace. */
+  private giveUp: (() => void) | undefined;
+  private giveUpTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The record's write chain: one write at a time (see {@link save}). */
+  private writes: Promise<void> = Promise.resolve();
 
   constructor(private readonly deps: WorkerAttemptDeps) {
     this.protocol = deps.protocol ?? WORKER_BOOT_PROTOCOL;
@@ -423,6 +449,11 @@ export class WorkerAttemptHost {
     const harness = this.harness;
     this.harness = undefined;
     this.conversation = undefined;
+    const commits = this.commits;
+    this.commits = undefined;
+    if (commits !== undefined) {
+      await commits.stop().catch((error: unknown) => this.report(error));
+    }
     if (harness !== undefined) {
       await harness.close(BACKGROUND_CONTEXT).catch((error: unknown) => this.report(error));
     }
@@ -511,6 +542,9 @@ export class WorkerAttemptHost {
   }
 
   private async conversePhase(record: WorkerAttemptRecord): Promise<WorkerAttemptRecord> {
+    // A life that finds the attempt already stopped as stuck (the stopping
+    // life died before it could finish) finishes it; it never resumes it.
+    if (record.stuck !== undefined) return this.toFinish(record, HARNESS_STATUS_UNANSWERED);
     const live = await this.openConversation(record);
     let submission: Submission | undefined;
     if (record.submissionId !== undefined) {
@@ -524,6 +558,12 @@ export class WorkerAttemptHost {
         await this.say(
           `a new host life resumed the conversation from its storage (submission ${record.submissionId})`,
         );
+        record = await this.judgeResume(record);
+        if (record.stuck !== undefined) {
+          await this.killTrackedTools();
+          await this.close();
+          return this.toFinish(record, HARNESS_STATUS_UNANSWERED);
+        }
       }
     }
     if (submission === undefined) {
@@ -555,6 +595,13 @@ export class WorkerAttemptHost {
             Math.max(0, record.deadlineAt - this.now()),
             BACKGROUND_CONTEXT,
           );
+    // The stuck stop's backstop: an abort reaches a tool only at its next
+    // poll, and a tool parked on a door call that never comes back never
+    // polls again — so a stopped conversation that has not settled within
+    // its grace is left behind, and the attempt finishes without it.
+    const gaveUp = new Promise<"gave-up">((resolve) => {
+      this.giveUp = () => resolve("gave-up");
+    });
     // The stuck watch (tick xba), armed beside the wall for the
     // conversation's life in THIS host: quiet for the window on every
     // signal → one nudge, a steer; still quiet a window past it → the
@@ -562,17 +609,35 @@ export class WorkerAttemptHost {
     // the finish phase run with the unanswered status, the run's retry
     // ladder (not the wall clock) taking it from there.
     const stuck = this.armStuckWatch(live, record);
-    let settled: Awaited<ReturnType<Submission["wait"]>>;
+    let settled: Awaited<ReturnType<Submission["wait"]>> | "gave-up";
     try {
-      settled = await submission.wait(BACKGROUND_CONTEXT);
-      // Follow-ups (the nudge, the report pushback) continue the SAME run;
-      // the run is over only when the conversation is idle.
-      await live.conversation.waitForIdle(BACKGROUND_CONTEXT);
+      settled = await Promise.race([
+        (async () => {
+          const ended = await submission.wait(BACKGROUND_CONTEXT);
+          // Follow-ups (the nudge, the report pushback) continue the SAME
+          // run; the run is over only when the conversation is idle.
+          await live.conversation.waitForIdle(BACKGROUND_CONTEXT);
+          return ended;
+        })(),
+        gaveUp,
+      ]);
     } finally {
+      this.giveUp = undefined;
+      if (this.giveUpTimer !== undefined) clearTimeout(this.giveUpTimer);
+      this.giveUpTimer = undefined;
       stuck.cancel();
       wall?.cancel();
     }
     if (this.reclaimed) return (await this.deps.records.load()) ?? record;
+    if (settled === "gave-up") {
+      await this.say(
+        "the stopped conversation did not settle within its grace (a tool call is parked on a " +
+          "container call that never answered); finishing the attempt without it",
+      );
+      // Not awaited: a harness whose tool is wedged may never close.
+      void this.close();
+      return this.toFinish((await this.deps.records.load()) ?? record, HARNESS_STATUS_UNANSWERED);
+    }
     const status =
       settled.status === "done"
         ? HARNESS_STATUS_DONE
@@ -587,12 +652,50 @@ export class WorkerAttemptHost {
           : `the conversation settled unanswered (${settled.reason ?? "no reason"}); finishing with status ${status}`,
     );
     await this.close();
+    return this.toFinish((await this.deps.records.load()) ?? record, status);
+  }
+
+  /** The conversation is over (or abandoned): on to the finish phase with `status`. */
+  private toFinish(record: WorkerAttemptRecord, status: number): Promise<WorkerAttemptRecord> {
     return this.save({
       ...record,
       phase: "finishing",
       harnessStatus: status,
       finish: { tries: 0 },
     });
+  }
+
+  /**
+   * A new life resumed the conversation: count it (stuck-watch.ts
+   * `judgeResume`), and stop the attempt as stuck in a resume loop when
+   * lives keep resuming it where it stands. The watch off (a zero window)
+   * is off here too.
+   */
+  private async judgeResume(record: WorkerAttemptRecord): Promise<WorkerAttemptRecord> {
+    const windowMs = record.spec.stuckMs ?? DEFAULT_STUCK_MS;
+    const startedAt = Date.parse(record.startedAt);
+    const now = this.now();
+    const judged = judgeResume(
+      record.watch,
+      this.lastEntryId,
+      now,
+      windowMs,
+      Number.isFinite(startedAt) ? startedAt : now,
+    );
+    if (!judged.stuck) {
+      return (await this.saveWatchFields(() => ({ watch: judged.watch }))) ?? record;
+    }
+    const reason =
+      `stuck in a resume loop: ${judged.idleResumes} host lives in a row resumed the conversation at ` +
+      `entry ${this.lastEntryId ?? "none"}, which has gained no entry for ${Math.round(judged.quietMs / 1000)}s`;
+    this.stuckStopped = true;
+    await this.say(`the attempt is being stopped: ${reason}`);
+    return (
+      (await this.saveWatchFields(() => ({
+        watch: judged.watch,
+        stuck: { reason, at: new Date(now).toISOString() },
+      }))) ?? record
+    );
   }
 
   private async finishPhase(record: WorkerAttemptRecord): Promise<WorkerAttemptRecord> {
@@ -696,6 +799,7 @@ export class WorkerAttemptHost {
     });
     this.harness = harness;
     this.conversation = conversation;
+    await this.watchCommits(harness, conversation, record);
     try {
       this.deps.onConversation?.({ harness, conversation });
     } catch (error) {
@@ -809,12 +913,73 @@ export class WorkerAttemptHost {
   // ----------------------------------------------- the stuck watch ---
 
   /**
+   * This life's subscription to the conversation's COMMIT STREAM — the stuck
+   * watch's transcript signal (stuck-watch.ts). Progress is a model delta, a
+   * tool's start, output or result, an appended entry, a turn; never the
+   * host's own log, never an inbox change (the watch's own steer is one).
+   * The newest entry is written into the record as it appears — entries are
+   * one per model turn or tool result, so this is cheap — and the commit
+   * time at most once a minute, so the next life starts from them.
+   */
+  private async watchCommits(
+    harness: Harness,
+    conversation: Conversation,
+    record: WorkerAttemptRecord,
+  ): Promise<void> {
+    this.lastCommitAt = record.watch?.lastCommitAt ?? null;
+    let stream: AgentEventStream;
+    try {
+      stream = await watchEvents(harness, conversation.id, BACKGROUND_CONTEXT);
+    } catch (error) {
+      // The watch is blinder without it, never the attempt's failure.
+      this.report(error);
+      return;
+    }
+    this.lastEntryId = newestEntry(stream.snapshot.entries, undefined);
+    this.commits = stream;
+    stream.start(async (events) => {
+      let entry = this.lastEntryId;
+      let progressed = false;
+      for (const event of events) {
+        if (PROGRESS_EVENTS.has(event.type)) progressed = true;
+        entry = newestEntry(entriesOf(event), entry);
+      }
+      const now = this.now();
+      if (progressed) this.lastCommitAt = now;
+      const newEntry = entry !== undefined && entry !== this.lastEntryId;
+      this.lastEntryId = entry;
+      if (newEntry || (progressed && now - this.commitSavedAt >= COMMIT_SAVE_EVERY_MS)) {
+        await this.saveWatch(newEntry ? { lastEntryId: entry, lastEntryAt: now } : {});
+      }
+    });
+  }
+
+  /** Folds this life's commit time (and `patch`) into the record's durable watch. */
+  private async saveWatch(patch: Partial<DurableWatch>): Promise<void> {
+    try {
+      this.commitSavedAt = this.now();
+      const lastCommitAt = this.lastCommitAt;
+      await this.saveWatchFields((current) => ({
+        watch: {
+          ...current.watch,
+          ...(lastCommitAt === null ? {} : { lastCommitAt }),
+          ...patch,
+        },
+      }));
+    } catch (error) {
+      this.report(error);
+    }
+  }
+
+  /**
    * Arms this conversation's stuck watch (tick xba; the policy and the
    * signals are stuck-watch.ts). The look cadence is a tenth of the
-   * window; one look at a time, so a slow door call cannot stack looks;
-   * the watch dies with the conversation it watches, and a host life that
-   * opens the conversation again arms a fresh one — the same reset the
-   * local supervisor's watch takes with its process.
+   * window; one look at a time, so a slow door call cannot stack looks —
+   * and a look never waits on the container past its own bound
+   * (`lookTimeoutMs`), so a door call that never answers cannot blind the
+   * watch either. The watch dies with the conversation it watches; a host
+   * life that opens the conversation again arms a fresh one, but from the
+   * record's last commit, not from nothing.
    */
   private armStuckWatch(
     live: { conversation: Conversation },
@@ -827,8 +992,8 @@ export class WorkerAttemptHost {
       // The baseline is the attempt's start, the local watch's own rule
       // (activity.go): nothing the attempt did can be older, so a host
       // life that opens a long-quiet conversation does not reset the
-      // window — and its own "a new host life resumed" line is activity
-      // that says the conversation is alive.
+      // window. Its own "a new host life resumed" line is NOT activity
+      // (run_7445005f): only the conversation's commits are.
       firstSeenAt: Number.isFinite(startedAt) ? Math.min(startedAt, this.now()) : this.now(),
       cpuMarkMs: 0,
       cpuMarkAt: null,
@@ -872,15 +1037,22 @@ export class WorkerAttemptHost {
   ): Promise<StuckStep> {
     let cpuMs: number | null = null;
     try {
-      const out = await this.deps.door.run(CONTAINER_CPU_COMMAND, {}, { maxBytes: 4096 });
-      if (out.ready) cpuMs = parseContainerCpuMs(out.output);
+      const out = await bounded(
+        this.deps.door.run(CONTAINER_CPU_COMMAND, {}, { maxBytes: 4096 }),
+        lookTimeoutMs(windowMs),
+      );
+      // A container that cannot be asked — a refusal, an error, a call that
+      // does not come back in time — is a signal that cannot be read: named
+      // in the evidence, never decided on.
+      if (out !== TIMED_OUT && out.ready) cpuMs = parseContainerCpuMs(out.output);
     } catch (error) {
-      // A container that cannot be asked is a signal that cannot be read —
-      // named in the evidence, never decided on.
       this.report(error);
     }
     if (cpuMs !== null) observeCpu(state, cpuMs, this.now(), windowMs);
-    const signals: StuckSignals = { lastLogAt: this.lastLogAt, cpuRead: cpuMs !== null };
+    if (this.lastCommitAt !== null && this.now() - this.commitSavedAt >= COMMIT_SAVE_EVERY_MS) {
+      await this.saveWatch({});
+    }
+    const signals: StuckSignals = { lastCommitAt: this.lastCommitAt, cpuRead: cpuMs !== null };
     const step = decideStuck(state, signals, this.now(), windowMs);
     if (step === "none") return step;
     const evidence = stuckEvidence(state, signals, this.now());
@@ -903,12 +1075,43 @@ export class WorkerAttemptHost {
     // The stop: the wall's own mechanism, so the finish phase still runs —
     // the ledger, the salvage, the report, the push — and the attempt
     // settles failed as the run's retry ladder expects, never as a reclaim.
+    // Recorded first, so a life that dies mid-stop is finished by the next
+    // one rather than resumed.
     this.stuckStopped = true;
     await this.say(`the attempt appears stuck and is being stopped: ${evidence}`);
-    await live.conversation.abort(BACKGROUND_CONTEXT).catch((error: unknown) => {
-      this.report(error);
-    });
+    const at = new Date(this.now()).toISOString();
+    await this.saveWatchFields(() => ({ stuck: { reason: `stopped as stuck: ${evidence}`, at } }));
+    // If the conversation does not settle — its tool parked on a door call
+    // that never answers, which the abort itself then waits on — the attempt
+    // finishes without it. Armed before the abort, because the abort can be
+    // what never comes back.
+    this.giveUpTimer = setTimeout(() => this.giveUp?.(), Math.max(windowMs, 10));
+    await bounded(
+      live.conversation.abort(BACKGROUND_CONTEXT).catch((error: unknown) => {
+        this.report(error);
+      }),
+      lookTimeoutMs(windowMs),
+    );
+    // The hung tool itself: an abort leaves a tracked process running (a
+    // replay must find it), but a STOPPED attempt has no replay, and a tool
+    // spinning in the container would burn it under the finish phase.
+    await this.killTrackedTools();
     return "stop";
+  }
+
+  /** Kills the model's tracked bash processes still running in the container, each call bounded. */
+  private async killTrackedTools(): Promise<void> {
+    try {
+      const listed = await bounded(this.deps.door.listProcesses(), KILL_CALL_MS);
+      if (listed === TIMED_OUT) return;
+      for (const view of listed) {
+        if (view.state !== "running" || !view.command?.includes(BASH_NONCE_PREFIX)) continue;
+        await bounded(this.deps.door.killProcess(view.id), KILL_CALL_MS);
+        await this.say(`killed the stopped attempt's running tool process ${view.id}`);
+      }
+    } catch (error) {
+      this.report(error);
+    }
   }
 
   // ------------------------------------------------------------- helpers ---
@@ -985,16 +1188,48 @@ export class WorkerAttemptHost {
    * Writes the record — never over a settled one: a reclaim settles the
    * attempt from outside the drive, and a phase that was mid-poll when it
    * did must not write the attempt back to life.
+   *
+   * The stuck watch writes the record too (its `watch` and `stuck`, from
+   * the commit stream, concurrently with the drive), so writes are
+   * serialized, and a write that does not own those fields carries the
+   * stored ones forward rather than the stale copy its caller spread.
    */
-  private async save(record: WorkerAttemptRecord): Promise<WorkerAttemptRecord> {
-    const current = await this.deps.records.load();
-    if (current?.phase === "settled") return current;
-    await this.deps.records.save(record);
-    return record;
+  private save(record: WorkerAttemptRecord): Promise<WorkerAttemptRecord> {
+    return this.write((current) => ({
+      ...record,
+      ...(current?.watch === undefined ? {} : { watch: current.watch }),
+      ...(current?.stuck === undefined ? {} : { stuck: current.stuck }),
+    }));
+  }
+
+  /** The stuck watch's own write: `patch` applied to the record as it stands, in the chain. */
+  private saveWatchFields(
+    patch: (current: WorkerAttemptRecord) => Pick<WorkerAttemptRecord, "watch" | "stuck">,
+  ): Promise<WorkerAttemptRecord | undefined> {
+    return this.write((current) =>
+      current === undefined ? undefined : { ...current, ...patch(current) },
+    );
+  }
+
+  private write<R extends WorkerAttemptRecord | undefined>(
+    next: (current: WorkerAttemptRecord | undefined) => R,
+  ): Promise<WorkerAttemptRecord | R> {
+    const write = this.writes.then(async () => {
+      const current = await this.deps.records.load();
+      if (current?.phase === "settled") return current;
+      const record = next(current);
+      if (record === undefined) return record;
+      await this.deps.records.save(record);
+      return record;
+    });
+    this.writes = write.then(
+      () => undefined,
+      () => undefined,
+    );
+    return write;
   }
 
   private async say(line: string): Promise<void> {
-    this.lastLogAt = this.now();
     try {
       await this.deps.log(`ticfac-harness: ${line}\n`);
     } catch (error) {
@@ -1056,6 +1291,71 @@ function restoreEnv(env: Readonly<Record<string, string>>): Record<string, strin
     if (value !== undefined && value !== "") out[name] = value;
   }
   return out;
+}
+
+/**
+ * The commit-stream events that are the conversation's PROGRESS: what the
+ * model and its tools did. Not an inbox change or a submission (the watch's
+ * own steer is one), not usage or agent bookkeeping, not a retry's backoff.
+ */
+const PROGRESS_EVENTS: ReadonlySet<AgentEvent["type"]> = new Set([
+  "message_start",
+  "message_update",
+  "message_end",
+  "tool_execution_start",
+  "tool_execution_update",
+  "tool_execution_end",
+  "entry_appended",
+  "turn_start",
+  "turn_end",
+  "compaction_end",
+]);
+
+/** How often the conversation's commit time is written into the record. */
+const COMMIT_SAVE_EVERY_MS = 60_000;
+
+/** The bound on each door call a stuck stop makes to kill the hung tool. */
+const KILL_CALL_MS = 10_000;
+
+/** What every tracked bash's container command starts with (factory-sandbox.ts `bashNonceMarker`). */
+const BASH_NONCE_PREFIX = bashNonceMarker("");
+
+const TIMED_OUT: unique symbol = Symbol("timed out");
+
+/** `promise`, or {@link TIMED_OUT} once `ms` pass first. The promise itself is left to run. */
+function bounded<T>(promise: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<typeof TIMED_OUT>((resolve) => {
+      timer = setTimeout(() => resolve(TIMED_OUT), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+/** The entries an agent event carries. */
+function entriesOf(event: AgentEvent): readonly { id: unknown }[] {
+  switch (event.type) {
+    case "snapshot":
+      return event.entries;
+    case "message_end":
+    case "entry_appended":
+      return [event.entry];
+    case "tool_execution_end":
+      return event.entry === undefined ? [] : [event.entry];
+    default:
+      return [];
+  }
+}
+
+/** The newest numeric entry id among `entries`, or `current`. */
+function newestEntry(entries: readonly { id: unknown }[], current: number | undefined) {
+  let newest = current;
+  for (const entry of entries) {
+    const id = Number(entry.id);
+    if (Number.isFinite(id) && (newest === undefined || id > newest)) newest = id;
+  }
+  return newest;
 }
 
 function brief(text: string, max: number): string {

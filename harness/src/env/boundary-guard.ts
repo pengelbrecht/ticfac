@@ -62,6 +62,13 @@ if [ -z "$_pass" ] && [ -n "$_checkout" ]; then
 	[ "$_here" = "$_checkout" ] || _pass=1
 fi
 if [ -n "$_pass" ]; then
+	# Never the guard itself (run_7445005f): a real-tk naming this shim would
+	# make every read below an exec of itself, forever — a hang that never
+	# prints and never exits. Refuse as "not installed" instead.
+	if [ -n "$_real" ] && [ "$_real" -ef "\${_guard}/tk" ]; then
+		printf 'ticks-worker: the boundary guard has no real tk to pass reads to (its real-tk names the guard itself).\\n' >&2
+		exit 127
+	fi
 	if [ -n "$_real" ] && [ -x "$_real" ]; then
 		exec "$_real" "$@"
 	fi
@@ -116,9 +123,12 @@ export type GuardInstallBase = {
  *
  * The companions are files the shim READS (exactly as the container's shim
  * does) rather than values baked into the script, so a path with a quote or a
- * space in it cannot break the shim. NOT idempotent on its own — it truncates
- * the ledger, as the container's installer does — so the caller memoizes the
- * promise and installs once per env.
+ * space in it cannot break the shim. Safe to run again over a directory that
+ * already holds a guard — the container boot's own, or an earlier host
+ * life's (run_7445005f): the real tk is resolved past it, and the ledger is
+ * created when missing, never truncated, so the refusals an earlier life or
+ * the image's guard recorded still reach the finish phase's report. The
+ * caller still memoizes the promise and installs once per env.
  */
 export async function installBoundaryGuard(
   base: GuardInstallBase,
@@ -131,7 +141,28 @@ export async function installBoundaryGuard(
   }
   // Resolved at install time, as the container's installer resolves them:
   // which tk is being shadowed, and which checkout this guard protects.
-  const realTk = await base.short("command -v tk || true", {});
+  //
+  // The real tk is looked up with the guard directory OFF the PATH, and an
+  // answer inside it is no answer (run_7445005f, tick dax): the env runs
+  // its short commands with the guard first on PATH, and the directory may
+  // already hold a shim — the container boot installs the image's guard
+  // into this same `<workdir>.guard`, and a second host life finds the
+  // first life's — so a plain `command -v tk` names the shim, the shim
+  // records itself as its own real tk, and every read it passes through
+  // becomes an exec of itself, forever.
+  const realTk = await base.short(
+    [
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the container's bash parameter expansion
+      'g="${DIR%/}"; p=""; IFS=:',
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: the container's bash parameter expansion
+      'for d in $PATH; do [ "${d%/}" = "$g" ] || p="${p:+$p:}$d"; done',
+      'unset IFS; t="$(PATH="$p" command -v tk 2>/dev/null || true)"',
+      'case "$t" in "$g"/*) t="" ;; esac',
+      '[ -n "$t" ] && [ "$t" -ef "$g/tk" ] && t=""',
+      'printf "%s\\n" "$t"',
+    ].join("; "),
+    { DIR: dir },
+  );
   const checkout = await base.short(
     "git rev-parse --path-format=absolute --git-common-dir || true",
     {},
@@ -143,7 +174,7 @@ export async function installBoundaryGuard(
   if (chmod.exitCode !== 0) {
     throw new Error(`boundary guard: could not make the shim executable: ${chmod.output.trim()}`);
   }
-  await base.short(': >"$LEDGER"', { LEDGER: `${dir}/attempts` });
+  await base.short('[ -e "$LEDGER" ] || : >"$LEDGER"', { LEDGER: `${dir}/attempts` });
 }
 
 /**
