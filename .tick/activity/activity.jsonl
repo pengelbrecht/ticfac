@@ -2554,3 +2554,4 @@
 {"ts":"2026-10-06T00:00:02.476094Z","tick":"frr","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"pi's credential grep and credentials.Get read ~/.ticfacrc differently"}}
 {"ts":"2026-10-06T00:00:31.355913Z","tick":"kf4","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Workers AI line reads fully metered when only some attempts were joined"}}
 {"ts":"2026-10-06T00:00:49.777807Z","tick":"uzs","action":"start","actor":"ticfac","epic":"hn6","data":{"title":"Pipeline next step prints an empty command when the run's epic is unresolved"}}
+{"ts":"2026-10-06T00:15:15.054533Z","tick":"uzs","action":"note","actor":"ticfac","epic":"hn6","data":{"note":"\n2026-10-06 02:15 - ticfac run epic-hn6: uzs try 1 (run dispatch #46) merged into epic/hn6 as e0ba5f88b54a; the integrated gate (go, ts) passed.","title":"Pipeline next step prints an empty command when the run's epic is unresolved"}}
