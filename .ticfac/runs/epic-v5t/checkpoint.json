@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 8,
-  "state": "running",
-  "reason": "6fv is closed",
-  "updated_at": "2026-10-06T21:22:16Z",
+  "sequence": 9,
+  "state": "dispatching",
+  "reason": "dispatching tda as attempt 2",
+  "updated_at": "2026-10-06T21:22:32Z",
   "ticks": [
     {
       "tick_id": "6fv",
