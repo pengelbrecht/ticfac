@@ -639,6 +639,29 @@ func TestDashboardShortPaneKeepsHoldBlocksWhole(t *testing.T) {
 	}
 }
 
+// TestDashboardCallsUnjoinedAttemptsNotMeteredBesideTheNumber (tick kf4):
+// a partially joined river renders as what it is — the measured number
+// for the attempts that joined, and "not metered" for the ones the join
+// never reached — both segments on the one cost line, so the dashboard
+// never reads a measured $X as the whole river's spend.
+func TestDashboardCallsUnjoinedAttemptsNotMeteredBesideTheNumber(t *testing.T) {
+	t.Parallel()
+	m := dashboardFixture()
+	m.Cost.Lines = []statusmodel.CostLine{
+		{Source: statusmodel.CostSourceWorkersAI, Metered: true, USD: ptr(0.12), Attempts: 2,
+			Basis: "AI Gateway logs: the calls of 2 of 32 attempts joined the gateway, beside the run's own model calls"},
+		{Source: statusmodel.CostSourceWorkersAI, Metered: false, USD: nil, Attempts: 30,
+			Basis: "not metered: dispatched without the gateway metering join, their calls never reached the gateway logs"},
+	}
+	joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if !strings.Contains(joined, "Workers AI $0.12") || !strings.Contains(joined, "Workers AI not metered") {
+		t.Errorf("a partially joined river does not render its number and its unmeasured remainder:\n%s", joined)
+	}
+	if strings.Count(joined, "Workers AI") != 2 {
+		t.Errorf("the split river renders %d Workers AI segments, want its two lines:\n%s", strings.Count(joined, "Workers AI"), joined)
+	}
+}
+
 // TestDashboardNeverPrintsZeroForUnmetered: honest cost (hn6 rule 7). A
 // metered line prints its measured number; an unmetered line says "not
 // metered" — an unmetered line wearing a $0.00 is a fabricated spend. A
