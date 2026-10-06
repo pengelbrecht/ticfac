@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
   "epic_id": "umq",
-  "sequence": 6,
+  "sequence": 7,
   "state": "gating",
-  "reason": "running the integrated gate for dax on b50e45a26f65",
-  "updated_at": "2026-10-06T11:46:29Z",
+  "reason": "running the integrated gate for dax on 41553f3957fe",
+  "updated_at": "2026-10-06T12:57:06Z",
   "ticks": [
     {
       "tick_id": "dax",
