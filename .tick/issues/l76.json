@@ -1,10 +1,10 @@
 {
   "id": "l76",
   "title": "Final review of the SDK 1.0 migration diff",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "dax"
   ],
@@ -12,5 +12,6 @@
   "role": "review",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-01T08:24:24.739238Z",
-  "updated_at": "2026-10-01T08:24:24.739238Z"
+  "updated_at": "2026-10-06T13:00:46.21738783Z",
+  "started_at": "2026-10-06T13:00:46.21738716Z"
 }
