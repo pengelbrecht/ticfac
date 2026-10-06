@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 318,
-  "state": "publishing",
-  "reason": "closing uzs behind the integrated gate on e0ba5f88b54a",
-  "updated_at": "2026-10-06T00:15:12Z",
+  "sequence": 319,
+  "state": "running",
+  "reason": "uzs is closed",
+  "updated_at": "2026-10-06T00:15:15Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -229,7 +229,7 @@
     },
     {
       "tick_id": "uzs",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 46
     },
     {
