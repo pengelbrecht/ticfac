@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 52,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "mwt made the command builders refuse an empty operand, but two drill-in next-step sentences still concatenate the command unconditionally. For a run whose epic cannot be resolved they read '… —  takes it up', with the command missing. TestNoClearingCommandCarriesAnEmptyOperand does not cover them.\nevidence: internal/statusmodel/pipeline.go:620,636\n\nticfac run epic-hn6 created this tick by absorbing the finding aabcb9eb59c61590692b55f20f4e606a6fa1903d44c40b9801b470dd87a4d259 (reported by run-epic-hn6/tick-pv7/attempt-42): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/aabcb9eb59c61590692b55f20f4e606a6fa1903d44c40b9801b470dd87a4d259.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "uzs",
+    "title": "Pipeline next step prints an empty command when the run's epic is unresolved"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.25,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.13,
+      "design": 0.01,
+      "diagnosis": 0.27,
+      "mechanical": 0.4,
+      "translation": 0.19
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1288,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-06T00:00:43Z",
+  "answered_at": "2026-10-06T00:00:43Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "uzs",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "b49bf14749d78b40051b0139c5946b97f5d0ba00",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:a04fcc6adca25baf76e8f9ef27d5f11c4acbc2e1a72e018047e915994c67984b",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
