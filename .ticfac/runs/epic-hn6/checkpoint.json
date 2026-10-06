@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 325,
-  "state": "publishing",
-  "reason": "closing 3wq behind the integrated gate on 6ae37ca30ee3",
-  "updated_at": "2026-10-06T00:18:45Z",
+  "sequence": 326,
+  "state": "running",
+  "reason": "3wq is closed",
+  "updated_at": "2026-10-06T00:18:48Z",
   "ticks": [
     {
       "tick_id": "v16",
@@ -214,7 +214,7 @@
     },
     {
       "tick_id": "3wq",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 43
     },
     {
