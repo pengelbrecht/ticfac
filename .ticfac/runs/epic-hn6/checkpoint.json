@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 317,
-  "state": "gating",
-  "reason": "running the integrated gate for uzs on e0ba5f88b54a",
-  "updated_at": "2026-10-06T00:12:30Z",
+  "sequence": 318,
+  "state": "publishing",
+  "reason": "closing uzs behind the integrated gate on e0ba5f88b54a",
+  "updated_at": "2026-10-06T00:15:12Z",
   "ticks": [
     {
       "tick_id": "v16",
