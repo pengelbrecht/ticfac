@@ -86,7 +86,8 @@ func TestAdoptionTakesTheLatestAttemptOfATickNotTheFirst(t *testing.T) {
 	// longer reads as rejected and neither disposition is redispatch. Whichever
 	// the run adopts, it closes the tick on that attempt's answer.
 	f.Runner = fakeRunnerArgv(t, "report")
-	resumed, result, err := f.run(f.Repo, fixtureOptions{})
+	// The refs stay on origin: the proof below reads attempt 2's branch there.
+	resumed, result, err := f.run(f.Repo, fixtureOptions{keepRemoteRefs: true})
 	if err != nil {
 		t.Fatalf("the resume did not finish: %v", err)
 	}

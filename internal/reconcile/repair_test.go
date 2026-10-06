@@ -1316,7 +1316,9 @@ func TestAChangedProfileIsNotEvidenceForTheProfileResolvedNow(t *testing.T) {
 func TestAnUnreadableRemoteIsNotAnAnswerAboutWhatIsIntegrated(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{})
-	if _, result, err := f.run(f.Repo, fixtureOptions{}); err != nil || result.State != runstate.StateCompleted {
+	// The premise is a merged attempt branch still on origin: the run's end
+	// must not retire it (tick 6is) before the question is asked.
+	if _, result, err := f.run(f.Repo, fixtureOptions{keepRemoteRefs: true}); err != nil || result.State != runstate.StateCompleted {
 		t.Fatalf("the run ended %v: %v", result, err)
 	}
 	marker := attemptMarker(t, f, "a1", 1)
