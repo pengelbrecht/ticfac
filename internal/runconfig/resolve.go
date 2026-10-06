@@ -49,6 +49,11 @@ type Worker struct {
 	// SubstrateTierApplied reports whether the override file's own
 	// `tiers.<Tier>` cell applied after its role cell.
 	SubstrateTierApplied bool
+	// Config is the named run config these values were resolved under
+	// (tick tda): [Config.Select] rewrote the cells this resolution read,
+	// so every value a selected config produced — and every value it let
+	// stand — is a value of that config. "" when no selection applied.
+	Config string
 
 	Kind   string
 	Model  string
@@ -116,6 +121,11 @@ func (c *Config) ResolveOn(sub Substrate, role string, tier Tier) (Worker, error
 	if w, err = c.applyTier(w, entry, tier); err != nil {
 		return Worker{}, err
 	}
+	// The named config the config was selected with, when one was (tick
+	// tda): the cells above are the config's cells — rewritten by Select —
+	// so the label below points the reader at the table that actually
+	// routed the worker.
+	w.Config = c.SelectedConfig
 	variant := entry.Substrates[string(sub)]
 	if variant == nil {
 		if sub != SubstrateCloud {
@@ -221,6 +231,9 @@ func (c *Config) applyTier(w Worker, entry *Role, tier Tier) (Worker, error) {
 // `roles.review` when no overlay contributed, and — when a substrate override
 // applied — the override file's cell after a " + ", since it applied last:
 // `roles.implement.tiers.frontier + .tick/runners.cloud.toml roles.implement`.
+// A named run config that was selected comes last of all, for the same
+// reason: it applied over everything beneath it (tick tda), and the table a
+// reader must edit is the config's own cell.
 // Pointing at the table the user must edit is the whole job of the label, so
 // a requested-but-undefined tier is not named.
 func (w Worker) Label() string {
@@ -235,6 +248,13 @@ func (w Worker) Label() string {
 			cell += ".tiers." + string(w.Tier)
 		}
 		label += " + " + OverrideFileName(w.Substrate) + " " + cell
+	}
+	if w.Config != "" {
+		cell := "configs." + w.Config + "." + base
+		if w.TierApplied {
+			cell += ".tiers." + string(w.Tier)
+		}
+		label += " + " + cell
 	}
 	return label
 }
