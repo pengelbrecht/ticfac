@@ -1,7 +1,7 @@
 {
   "id": "rlx",
   "title": "Close out the SDK 1.0 migration: retro, then the next feasible epic",
-  "notes": "2026-10-06 15:58 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: rlx try 1 (run dispatch #3) reported a finding the run itself decided — proposed-tick \"Retire the sdk0 opt-out and the residual Sandbox class once the 0.x app is gone\" (key 6e10e232d5de401115466cdc7115454edfa2358766678e2008e2e932e5efc53d, severity medium, for this repository) is promoted to a backlog tick with an owner, dob; the decision record is on the run branch at .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/6e10e232d5de401115466cdc7115454edfa2358766678e2008e2e932e5efc53d.json, and the draft is triaged as promoted.\n2026-10-06 15:59 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: rlx try 1 (run dispatch #3) reported a finding the run itself decided — defect \"A cloud close-out cannot write .tick/learnings.md: the guard refuses the file\" (key debc72db6a68ac7e263c0b98ab06f8a7cd94f3a260ef2dcff3a036d4efa47928, severity medium, for this repository) is promoted to a backlog tick with an owner, 3hw; the decision record is on the run branch at .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/debc72db6a68ac7e263c0b98ab06f8a7cd94f3a260ef2dcff3a036d4efa47928.json, and the draft is triaged as promoted.",
+  "notes": "2026-10-06 15:58 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: rlx try 1 (run dispatch #3) reported a finding the run itself decided — proposed-tick \"Retire the sdk0 opt-out and the residual Sandbox class once the 0.x app is gone\" (key 6e10e232d5de401115466cdc7115454edfa2358766678e2008e2e932e5efc53d, severity medium, for this repository) is promoted to a backlog tick with an owner, dob; the decision record is on the run branch at .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/6e10e232d5de401115466cdc7115454edfa2358766678e2008e2e932e5efc53d.json, and the draft is triaged as promoted.\n2026-10-06 15:59 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: rlx try 1 (run dispatch #3) reported a finding the run itself decided — defect \"A cloud close-out cannot write .tick/learnings.md: the guard refuses the file\" (key debc72db6a68ac7e263c0b98ab06f8a7cd94f3a260ef2dcff3a036d4efa47928, severity medium, for this repository) is promoted to a backlog tick with an owner, 3hw; the decision record is on the run branch at .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/debc72db6a68ac7e263c0b98ab06f8a7cd94f3a260ef2dcff3a036d4efa47928.json, and the draft is triaged as promoted.\n2026-10-06 16:10 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: rlx try 1 (run dispatch #3) merged into epic/umq as 58287c219cc0; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -13,6 +13,6 @@
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-01T08:24:24.770127Z",
-  "updated_at": "2026-10-06T15:59:16.514868346Z",
+  "updated_at": "2026-10-06T16:10:59.782783908Z",
   "started_at": "2026-10-06T14:18:04.167335717Z"
 }
