@@ -252,6 +252,13 @@ func runCloudWorkersCommand(ctx context.Context, epicID, repo string, fl *runFla
 	if *fl.wall > 0 {
 		argv = append(argv, "--wall", strconv.Itoa(*fl.wall))
 	}
+	// The named config rides the argv (tick tda): --cloud-workers' workers
+	// boot factory containers on the cells the repository's runners files
+	// declare for the cloud, and the named configs are the choice between
+	// them — the flag over the epic's label over the default.
+	if *fl.config != "" {
+		argv = append(argv, "--config", *fl.config)
+	}
 	logPath := filepath.Join(dir, startLogName)
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {

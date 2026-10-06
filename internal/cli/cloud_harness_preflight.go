@@ -103,6 +103,17 @@ func preflightCloudHarness(ctx context.Context, client *cloudClient, repo string
 	if err != nil {
 		return fmt.Errorf("the cloud routing at HEAD does not resolve: %w — a run would refuse to start on the same question; fix the cell the error names", err)
 	}
+	// Every NAMED config resolves too (tick tda): the branch may declare more
+	// than one complete routing — one epic on GLM, another on claude — and a
+	// config that cannot route is refused here, naming the config, before a
+	// submission can select it. The jobs the check returns carry their
+	// config, so the factory half below answers for the config that routed
+	// each job.
+	_, configJobs, err := reconcile.CheckEveryNamedConfig(profile.EmbeddedCloud, filepath.Join(dir, "runners.toml"), runconfig.SubstrateCloud)
+	if err != nil {
+		return fmt.Errorf("%w — a run selecting it would refuse to start on the same question; fix the cell the error names", err)
+	}
+	jobs = append(jobs, configJobs...)
 
 	// The factory half: its own answer to what its image ships.
 	facts, err := factory.FetchDeployed(ctx, client.http, client.baseURL, client.token)
@@ -132,24 +143,44 @@ func preflightCloudHarness(ctx context.Context, client *cloudClient, repo string
 		if job.Tier != "" {
 			at = fmt.Sprintf("%s (tier %s)", job.Role, job.Tier)
 		}
+		if job.Config != "" {
+			at = fmt.Sprintf("%s [config %s]", at, job.Config)
+		}
 		unshipped = append(unshipped, fmt.Sprintf("%s: %s", at, kind))
 	}
-	if len(unshipped) == 0 {
-		return nil
+	if len(unshipped) > 0 {
+		// The fix is the factory's, never the overlay's: a cloud job resolves
+		// only to the durable harness, and a runner table's `pi` binds to its
+		// hosted kind (profile.HostedDurableHarness, tick twa), so no cell the
+		// branch could flip names a kind an older image ships instead.
+		return fmt.Errorf(
+			"the cloud routing at HEAD names harness kinds this factory%s does not ship — %s:\n  %s\n"+
+				"every container of a run started now would die at boot with \"unknown harness kind\". "+
+				"The image ships %s; a cloud job resolves only to the hosted durable harness (%s — a runner table's \"pi\" binds to it), "+
+				"so the fix is the factory's, not the overlay's. The runbook's order (docs/pi-durable-cloud-run-runbook.md): "+
+				"merge the change that ships the kind, then wait for its deploy with `ticfac factory wait-deployed <merge sha>`",
+			deployedAt(facts), pluralJobs(len(unshipped)), strings.Join(unshipped, "\n  "),
+			strings.Join(facts.HarnessKinds, ", "), profile.HostedDurableHarness,
+		)
 	}
-	// The fix is the factory's, never the overlay's: a cloud job resolves
-	// only to the durable harness, and a runner table's `pi` binds to its
-	// hosted kind (profile.HostedDurableHarness, tick twa), so no cell the
-	// branch could flip names a kind an older image ships instead.
-	return fmt.Errorf(
-		"the cloud routing at HEAD names harness kinds this factory%s does not ship — %s:\n  %s\n"+
-			"every container of a run started now would die at boot with \"unknown harness kind\". "+
-			"The image ships %s; a cloud job resolves only to the hosted durable harness (%s — a runner table's \"pi\" binds to it), "+
-			"so the fix is the factory's, not the overlay's. The runbook's order (docs/pi-durable-cloud-run-runbook.md): "+
-			"merge the change that ships the kind, then wait for its deploy with `ticfac factory wait-deployed <merge sha>`",
-		deployedAt(facts), pluralJobs(len(unshipped)), strings.Join(unshipped, "\n  "),
-		strings.Join(facts.HarnessKinds, ", "), profile.HostedDurableHarness,
-	)
+
+	// The subscription rung's own question (tick tda): a named config whose
+	// workers ride the rung needs the factory to hold at least one
+	// subscription token, and the factory's own answer is already in hand —
+	// the same report the harness half just read, LABELS only, never values.
+	// A run on a claude config with the rung off would silently step every
+	// dispatch down to Workers AI, and the submission preflight is where
+	// that refusal costs nothing.
+	if riding := rungRidersByConfig(configJobs); len(riding) > 0 {
+		if len(facts.ClaudeSubLabels) == 0 {
+			return fmt.Errorf(
+				"%s, and this factory%s holds no subscription token (CLAUDE_SUB_TOKEN_<LABEL>) — "+
+					"a run on that config would silently step every dispatch down to Workers AI. "+
+					"Put the rung on: `wrangler secret put CLAUDE_SUB_TOKEN_<LABEL>` on the factory (a claude-sub token from the subscription)",
+				riding.oneLine(), deployedAt(facts))
+		}
+	}
+	return nil
 }
 
 // deployedAt names the factory's own version when it has one, so a refusal

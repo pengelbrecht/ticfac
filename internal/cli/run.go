@@ -99,6 +99,7 @@ type runFlags struct {
 	wall         *int
 	cloud        *bool
 	cloudWorkers *bool
+	config       *string
 	asJSON       *bool
 }
 
@@ -121,6 +122,13 @@ func defineRunFlags(fs *flag.FlagSet) *runFlags {
 				"the run and hands this machine its credential, every implement and role job boots in a worker "+
 				"container (the Workers AI cells of .tick/runners.cloud.toml), and the reconciler, its merges and "+
 				"the integrated gate run here — no environment to export"),
+		// The named run config (tick tda): the everyday command's own word —
+		// over the epic's own config: label, over the [configs] default the
+		// repository's runners files declare. One epic on GLM, another on
+		// claude, from the same repository, without editing the tracker.
+		config: fs.String("config", "",
+			"run the epic under one of the repository's named run configs ([configs.<name>] in .tick/runners.toml "+
+				"or the substrate's override file) — over the epic's own config: label, over the [configs] default"),
 		asJSON: fs.Bool("json", false,
 			"answer as one versioned document (ticfac.run.v1) when the command ends: what it did — attached, started, resumed — and how that ended, with the exit-table state word (done, running, held, failed, cancelled). The run's own prose goes to stderr, so stdout is the document's alone"),
 	}
@@ -403,6 +411,18 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 				"keeps it on this machine; name one\n")
 			return 2
 		}
+		// The cloud submission carries no --config today (tick tda): the
+		// factory's submission record has no field for it, and a flag that
+		// silently did nothing would be a lie an everyday command must not
+		// tell. A --cloud run selects by the epic's own label and the
+		// declared default — the in-factory orchestrator resolves the same
+		// precedence from the repository and the tracker it is handed.
+		if *fl.config != "" {
+			fmt.Fprintf(stderr, "ticfac run: --config does not apply to a --cloud run — a submitted run "+
+				"selects by the epic's own config: label and the [configs] default; set the epic's label, or run "+
+				"--cloud-workers, whose orchestrator is here and takes the flag\n")
+			return 2
+		}
 	}
 	if *fl.cloudWorkers && (*fl.noHerdr || *fl.profiles != "") {
 		fmt.Fprintf(stderr, "ticfac run: --cloud-workers dispatches every job through the factory with the "+
@@ -483,6 +503,15 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 	}
 	if *fl.wall > 0 {
 		argv = append(argv, "--wall", strconv.Itoa(*fl.wall))
+	}
+	// The named config rides the argv (tick tda): the child re-derives the
+	// same precedence — the flag over the epic's label over the default —
+	// and the flag is what makes this run's word win over the epic's own.
+	// The starter says what it started, so an operator reading start.log can
+	// tell which config this run asked for without re-deriving the argv.
+	if *fl.config != "" {
+		argv = append(argv, "--config", *fl.config)
+		fmt.Fprintf(prose, "run config: %s (named on the command line — over the epic's own config: label and the [configs] default)\n", *fl.config)
 	}
 	logPath := filepath.Join(dir, startLogName)
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)

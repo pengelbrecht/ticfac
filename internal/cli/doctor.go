@@ -391,6 +391,15 @@ func runDoctor(ctx context.Context, fl *doctorFlags, stdout, stderr io.Writer) i
 	// merge conflict). The same resolution a run's construction performs, for
 	// the local substrate and, when the repository runs to the cloud, the
 	// cloud one — with the profile set each actually selects.
+	//
+	// Every NAMED config resolves too (tick tda): a repository may declare
+	// more than one complete routing — one epic on GLM, another on claude —
+	// and a config that cannot route is a missing line here, naming the
+	// config, rather than a run that stops on it three ticks in. A config
+	// whose workers ride the subscription rung needs the factory to hold at
+	// least one subscription token: a run that asked for claude and found
+	// the rung off would silently step every dispatch down to Workers AI,
+	// which is the exact failure this command exists to name.
 	routingCheck := func() doctorCheck {
 		config := filepath.Join(repo, filepath.FromSlash(runconfig.FileName))
 		type target struct {
@@ -408,6 +417,30 @@ func runDoctor(ctx context.Context, fl *doctorFlags, stdout, stderr io.Writer) i
 				return doctorCheck{Name: "routing", Problem: fmt.Sprintf("%s: %v", tg.substrate, err), Fix: doctorFixRouting}
 			}
 			routed = append(routed, fmt.Sprintf("%s: %d jobs", tg.substrate, len(jobs)))
+			counts, configJobs, err := reconcile.CheckEveryNamedConfig(tg.profiles, config, tg.substrate)
+			if err != nil {
+				return doctorCheck{Name: "routing", Problem: fmt.Sprintf("%s: %v", tg.substrate, err), Fix: doctorFixRouting}
+			}
+			for _, name := range sortedConfigNames(counts) {
+				routed = append(routed, fmt.Sprintf("%s config %s: %d jobs", tg.substrate, name, counts[name]))
+			}
+			// The subscription rung's own question, asked only when a cloud
+			// config's workers actually ride it (tick tda): the factory's own
+			// answer, LABELS only. A factory that cannot be asked is not a
+			// fact about the config — the factory line above carries the
+			// unconfigured factory, and the cloud submission preflight refuses
+			// the run with the live answer where the refusal costs nothing.
+			if tg.substrate == runconfig.SubstrateCloud && len(configJobs) > 0 {
+				if riding := rungRidersByConfig(configJobs); len(riding) > 0 {
+					labels, askErr := doctorClaudeSubLabels()
+					if askErr == nil && len(labels) == 0 {
+						return doctorCheck{Name: "routing", Problem: fmt.Sprintf(
+							"%s, and the factory holds no subscription token (CLAUDE_SUB_TOKEN_<LABEL>), so a run on it would silently step every dispatch down to Workers AI",
+							riding.oneLine()),
+							Fix: "put the rung on: `wrangler secret put CLAUDE_SUB_TOKEN_<LABEL>` on the factory (a claude-sub token from the subscription), or route the config off the rung"}
+					}
+				}
+			}
 		}
 		return doctorCheck{Name: "routing", OK: true,
 			Detail: "every role job routes, the on-demand ones at the ceiling (" + strings.Join(routed, "; ") + ")"}
