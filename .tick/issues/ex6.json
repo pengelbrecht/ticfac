@@ -1,0 +1,14 @@
+{
+  "id": "ex6",
+  "title": "pi-durable in the cloud: prove and harden",
+  "gloss": "pi-durable cloud hardening",
+  "description": "Follow-on to 43y (landed as PR #222, merge 44d7c07f). 43y shipped pi-durable as the single worker harness; its first real cloud run (umq's run_7445005f…, 2026-10-06) stalled for hours: the WorkerAgent DO's host kept dying and resuming ('a new host life resumed the conversation from its storage') without progress, and no stall/stuck detection fired for a pi-durable worker (bgx). This epic proves pi-durable in the cloud for real and hardens it: the resume-loop root cause and pi-durable-aware stall detection (agent in progress 2026-10-06), the cloud PR-review boot on pi-durable, fault injection of 43y's A2 into a real cloud run, the post-merge cloud run for A4, harness suites in the per-tick gate, local pi-durable metering (m1w), and the small 43y follow-ups.",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "[A1] A real cloud epic run completes with every worker on pi-durable, no stall left undetected. [A2] Killing the harness host mid-tool and destroying the container mid-turn in a real cloud run both resume without redoing work. [A3] pi-durable workers are metered locally and in the cloud. [A4] make gate + cloudflare tests + harness suites pass in CI.",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-06T10:03:55.259418Z",
+  "updated_at": "2026-10-06T10:03:55.259418Z"
+}

@@ -7,9 +7,9 @@
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
-  "parent": "43y",
+  "parent": "ex6",
   "discovered_from": "run-epic-43y/tick-j2k/attempt-69",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T23:34:37Z",
-  "updated_at": "2026-10-05T23:34:44.724076Z"
+  "updated_at": "2026-10-06T10:03:55.326442Z"
 }

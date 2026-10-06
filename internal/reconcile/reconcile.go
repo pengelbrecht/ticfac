@@ -792,6 +792,12 @@ type Options struct {
 	// control. Names are contracts/lifecycle-invariants.json's guard names.
 	guardsOff map[string]bool
 
+	// keepRemoteRefs leaves a completed run's refs on origin (tick 6is's
+	// run-end retirement off), for the tests whose premise is an attempt
+	// branch still on origin after its run completed. Nothing in production
+	// sets it: `ticfac sweep refs` and the run end both retire.
+	keepRemoteRefs bool
+
 	// proseFindingsForAPerson restores the pre-epic-6in answer to a finding
 	// against a prose acceptance — left untriaged, for a person — and nothing
 	// in production sets it. It exists for the tests of the machinery that
@@ -932,6 +938,12 @@ type Reconciler struct {
 	sleep func(time.Duration)
 
 	guardsOff map[string]bool
+	// keepRemoteRefs is Options.keepRemoteRefs.
+	keepRemoteRefs bool
+	// replayingTerminal is set while a re-entered TERMINAL run takes down
+	// what its end left: the retirement still deletes what it can, but a ref
+	// it keeps again is not news, and a replay says nothing it did not do.
+	replayingTerminal bool
 
 	// The lifecycle machinery. Every one of these is read by Run.
 	step       *Step
@@ -1282,6 +1294,12 @@ const (
 	StageLanded        = "landed"
 	StageLandVerified  = "land_verified"
 	StageLandSkipped   = "land_skipped"
+	// StageEpicClosed is the landed epic's own tick closed ON THE BASE, its
+	// reason naming the PR and the merge (land_close.go).
+	StageEpicClosed = "epic_closed"
+	// StageEpicCloseRefused is tk refusing that close — an epic with open
+	// children stays open — which does not fail the landed run.
+	StageEpicCloseRefused = "epic_close_refused"
 
 	// StageCIRestarted: the code the epic PR would merge had no executed CI
 	// verdict — its runs were cancelled by a later push that changed only
@@ -1669,6 +1687,7 @@ func New(opts Options) (*Reconciler, error) {
 	r.now = opts.Now
 	r.sleep = r.waitSleep(opts.Sleep)
 	r.guardsOff = opts.guardsOff
+	r.keepRemoteRefs = opts.keepRemoteRefs
 	r.lastPolled = map[string]time.Time{}
 	r.liveness = map[string]string{}
 	r.holds = map[string]*hold{}
@@ -2023,7 +2042,9 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			// Nothing is restarted, but what the finished run left — a
 			// teardown its end could not complete — is still this run's to
 			// take down, and a re-run is the retry (sweep.go).
+			r.replayingTerminal = true
 			r.sweepClosed(ctx, checkpoint.State == runstate.StateCompleted)
+			r.replayingTerminal = false
 			r.record("", StageRunFinished, "the run is already %s: %s", checkpoint.State, checkpoint.Reason)
 			return r.result(checkpoint.State, checkpoint.Reason), nil
 		}
@@ -3045,6 +3066,7 @@ const (
 	RefusedLandPush           = "land_push_refused"     // the remote declined the merge's push (opt-in)
 	RefusedLandBaseCI         = "land_base_ci_failed"   // CI red on the base's merge commit (opt-in)
 	RefusedLandReviewNotReady = "land_review_not_ready" // the final review said NOT READY; the merge is a person's
+	RefusedLandEpicClose      = "land_epic_close"       // the landed epic's tick could not be closed on the base
 
 	// The two a RUNNING epic's own liveness adds (tick 3h0). A run is not
 	// working a snapshot: a person absorbs a finding into the epic as a new

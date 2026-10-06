@@ -281,6 +281,15 @@ func (c *Client) Close(ctx context.Context, tickID string) (Tick, error) {
 	return out, err
 }
 
+// CloseWithReason closes a tick with tk's documented --reason flag, which the
+// manifest's close argv does not pin (spelled as an extra argument, as graph's
+// --all is). The answer is still the manifest's close schema.
+func (c *Client) CloseWithReason(ctx context.Context, tickID, reason string) (Tick, error) {
+	var out Tick
+	err := c.invokeJSONArgs(ctx, "close", map[string]string{"<tick-id>": tickID}, []string{"--reason", reason}, &out)
+	return out, err
+}
+
 // Reopen reopens a closed tick.
 func (c *Client) Reopen(ctx context.Context, tickID string) (Tick, error) {
 	var out Tick

@@ -914,10 +914,34 @@ const (
 	StuckStop
 )
 
+// CommitSilenceWindows is how many stuck windows a DURABLE runner may go
+// without committing to its conversation storage, moving its branch or
+// changing its worktree before it is stopped, however busy its tool
+// processes are. A tool that spins without printing (run_7445005f: a `tk`
+// guard that exec'd itself forever) moves the CPU signal and nothing else,
+// and the CPU rule alone would protect it to the wall clock. The harness's
+// cloud watch applies the same bound (harness/src/host/stuck-watch.ts
+// COMMIT_SILENCE_WINDOWS). Only the durable runner has the honest signal
+// for it: its storage is written on every model delta and tool output.
+const CommitSilenceWindows = 4
+
 // DecideStuck applies the rule: quiet for `after` → nudge once; still quiet
 // `after` past the nudge → stop. Activity after a nudge clears it, so a
-// later silence earns a nudge of its own.
+// later silence earns a nudge of its own. And for the durable runner: no
+// durable progress for CommitSilenceWindows windows → stop, whatever its
+// CPU says.
 func DecideStuck(s *ActivityState, a Activity, now time.Time, after time.Duration) StuckStep {
+	if a.TranscriptSource == sourceStorage && a.HasTranscript && after > 0 {
+		progress := a.FirstSeenAt
+		for _, t := range []time.Time{a.Transcript.At, a.BranchAt, a.WorktreeAt} {
+			if t.After(progress) {
+				progress = t
+			}
+		}
+		if now.Sub(progress) >= CommitSilenceWindows*after {
+			return StuckStop
+		}
+	}
 	last := a.Last()
 	if !s.StuckNudgedAt.IsZero() && last.After(s.StuckNudgedAt) {
 		s.StuckNudgedAt = time.Time{}

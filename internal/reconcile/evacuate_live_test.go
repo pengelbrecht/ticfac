@@ -194,14 +194,19 @@ func TestALegacyEvacuationSnapshotOnOriginIsSupersededByTheWorkersOwnResult(t *t
 	}
 	assertEpicCompleted(t, f, r, got.result, f.Repo)
 
-	// The worker's result replaced the snapshot on origin; it was not merged
-	// over it.
-	head := originRefSHA(t, f.Repo.Origin, "refs/heads/"+work.Branch)
-	if head == snapshot {
+	// The worker's result replaced the snapshot; it was not merged over it.
+	// The completed run has retired its merged attempt branch from origin
+	// (tick 6is), so the property is asked of what the run integrated: the
+	// integration branch carries the worker's result and never the snapshot.
+	if head := originRefSHA(t, f.Repo.Origin, "refs/heads/"+work.Branch); head == snapshot {
 		t.Fatalf("origin's %s still holds the snapshot %s", work.Branch, short(snapshot))
 	}
-	if msg := mustRun(t, f.Repo.Origin, "git", "log", "--format=%s", head); strings.Contains(msg, "evacuation snapshot") {
-		t.Errorf("the attempt branch's history still carries the snapshot:\n%s", msg)
+	integrated := originRefSHA(t, f.Repo.Origin, "refs/heads/epic/qeu")
+	if mustRunAllowingFailure(f.Repo.Origin, "git", "merge-base", "--is-ancestor", snapshot, integrated) {
+		t.Errorf("the integration branch carries the evacuation snapshot %s", short(snapshot))
+	}
+	if msg := mustRun(t, f.Repo.Origin, "git", "log", "--format=%s", integrated); strings.Contains(msg, "evacuation snapshot") {
+		t.Errorf("the integration branch's history carries the snapshot:\n%s", msg)
 	}
 }
 

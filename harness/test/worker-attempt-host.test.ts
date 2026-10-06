@@ -657,7 +657,7 @@ describe("a worker attempt driven by the host", () => {
     const lines = log.join("");
     // The nudge: a STEER carrying the evidence, placed after the hung round.
     expect(lines).toContain("steer: You appear stuck");
-    expect(lines).toContain("its harness log last grew");
+    expect(lines).toContain("its conversation last committed progress");
     // The stop, a window later — and the finish phase with the unanswered
     // status, so the attempt settles failed with the finish's own exit.
     expect(lines).toContain("the attempt appears stuck and is being stopped");
@@ -753,6 +753,291 @@ describe("a worker attempt driven by the host", () => {
     // Off means off: not even a look, so not one container command spent.
     expect(door.runs.some((r) => r.command.includes("/proc/"))).toBe(false);
     expect(log.join("")).not.toContain("You appear stuck");
+  });
+
+  // run_7445005f (epic umq, tick dax): the hosted worker's bash ran a `tk`
+  // whose guard exec'd itself forever — no output, no exit, the container
+  // busy — and the watch neither nudged nor stopped it for hours. These are
+  // the watch's half of that fix (the guard's is test/node/guard-reinstall).
+
+  it("stops a tool that spins without a commit, however busy the container is", {
+    timeout: 120_000,
+  }, async () => {
+    // The CPU climbs on every look — the busy signal that keeps a slow build
+    // from being nudged — but the conversation commits nothing past the
+    // tool's start. COMMIT_SILENCE_WINDOWS windows of that is a stop.
+    let ticks = 0;
+    const door = fakeSandboxDoor({
+      runOutput: (command) => {
+        if (command.includes("/proc/")) {
+          ticks += 1000;
+          return `${ticks}\n`;
+        }
+        return command.includes("git rev-parse HEAD") ? "cafef00d\n" : "";
+      },
+      processScript: (command) => {
+        if (command === WORKER_BOOT_PROTOCOL.bootCommand) {
+          return { output: bootOutput(), exit: 0, ms: 20 };
+        }
+        if (command.startsWith(WORKER_BOOT_PROTOCOL.finishCommand)) {
+          return { output: "ticks-worker: pushed\n", exit: 9, ms: 20 };
+        }
+        return { output: "", exit: 0, ms: 600_000 };
+      },
+    });
+    const log: string[] = [];
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "tk --help" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("stopped"),
+    ]);
+    const host = new WorkerAttemptHost({
+      door: door.sandbox,
+      storage: async () => new MemoryStorage(),
+      models,
+      records: memoryRecords(),
+      log: (text) => {
+        log.push(text);
+      },
+      pollMs: 5,
+      bashPollMs: 5,
+      guardDir: null,
+    });
+    await host.start(spec({ stuckMs: 150 }));
+    const settled = await host.drive();
+    const lines = log.join("");
+    expect(lines).toContain("the attempt appears stuck and is being stopped");
+    expect(lines).toContain("its conversation last committed progress");
+    expect(settled.harnessStatus).toBe(HARNESS_STATUS_UNANSWERED);
+    expect(settled.stuck?.reason).toContain("stopped as stuck");
+    expect(settled.settled?.exitCode).toBe(9);
+    // The spinning tool was killed, not left to burn the finish phase's box.
+    const bash = door.processes.find((p) => p.command.includes("tk --help"));
+    expect(bash !== undefined && door.kills.includes(bash.id)).toBe(true);
+  });
+
+  it("is not blinded by a look whose container call never answers", {
+    timeout: 120_000,
+  }, async () => {
+    // The CPU sampler's call never comes back. A look that waited on it
+    // would decide nothing, ever; the bounded look reads the CPU as
+    // unreadable and the commit silence decides.
+    const door = fakeSandboxDoor({
+      hangs: (command) => command.includes("/proc/"),
+      runOutput: (command) => (command.includes("git rev-parse HEAD") ? "cafef00d\n" : ""),
+      processScript: (command) => {
+        if (command === WORKER_BOOT_PROTOCOL.bootCommand) {
+          return { output: bootOutput(), exit: 0, ms: 20 };
+        }
+        if (command.startsWith(WORKER_BOOT_PROTOCOL.finishCommand)) {
+          return { output: "ticks-worker: pushed\n", exit: 9, ms: 20 };
+        }
+        return { output: "", exit: 0, ms: 600_000 };
+      },
+    });
+    const log: string[] = [];
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("stopped"),
+    ]);
+    const host = new WorkerAttemptHost({
+      door: door.sandbox,
+      storage: async () => new MemoryStorage(),
+      models,
+      records: memoryRecords(),
+      log: (text) => {
+        log.push(text);
+      },
+      pollMs: 5,
+      bashPollMs: 5,
+      guardDir: null,
+    });
+    await host.start(spec({ stuckMs: 200 }));
+    const settled = await host.drive();
+    const lines = log.join("");
+    expect(lines).toContain("steer: You appear stuck");
+    expect(lines).toContain("its container's process CPU could not be read");
+    expect(lines).toContain("the attempt appears stuck and is being stopped");
+    expect(settled.settled?.exitCode).toBe(9);
+  });
+
+  it("finishes without a stopped conversation whose tool is parked on a call that never answers", {
+    timeout: 120_000,
+  }, async () => {
+    // The tool's own poll is the parked call: the abort cannot reach it, so
+    // the conversation never settles — and the attempt finishes anyway, a
+    // grace after the stop, instead of holding its slot until the wall.
+    const door = fakeSandboxDoor({
+      hangs: (command) => command.includes("make test"),
+      runOutput: (command) => (command.includes("git rev-parse HEAD") ? "cafef00d\n" : ""),
+      processScript: (command) => {
+        if (command === WORKER_BOOT_PROTOCOL.bootCommand) {
+          return { output: bootOutput(), exit: 0, ms: 20 };
+        }
+        if (command.startsWith(WORKER_BOOT_PROTOCOL.finishCommand)) {
+          return { output: "ticks-worker: pushed\n", exit: 9, ms: 20 };
+        }
+        return { output: "", exit: 0, ms: 600_000 };
+      },
+    });
+    const log: string[] = [];
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("never reached"),
+    ]);
+    const host = new WorkerAttemptHost({
+      door: door.sandbox,
+      storage: async () => new MemoryStorage(),
+      models,
+      records: memoryRecords(),
+      log: (text) => {
+        log.push(text);
+      },
+      pollMs: 5,
+      bashPollMs: 5,
+      guardDir: null,
+    });
+    await host.start(spec({ stuckMs: 150 }));
+    const settled = await host.drive();
+    const lines = log.join("");
+    expect(lines).toContain("the attempt appears stuck and is being stopped");
+    expect(lines).toContain("did not settle within its grace");
+    expect(settled.harnessStatus).toBe(HARNESS_STATUS_UNANSWERED);
+    expect(settled.settled?.exitCode).toBe(9);
+  });
+
+  it("stops an attempt that new host lives keep resuming where it stands (run_7445005f)", {
+    timeout: 120_000,
+  }, async () => {
+    // Each life parks on the same hung tool and dies there; the next one
+    // resumes it at the same entry. The window is far longer than any life
+    // here, so only the resume count can stop it — and the clock between
+    // lives says each resume found the conversation quiet for two windows.
+    const windowMs = 60_000;
+    let clock = Date.parse("2026-10-06T04:39:00Z");
+    const door = scriptedDoor({ bashMs: 600_000, finishExit: 9 });
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "which tk; tk --help" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("never reached"),
+    ]);
+    const records = memoryRecords();
+    const storage = new MemoryStorage();
+    const lines: string[] = [];
+    const life = () =>
+      new WorkerAttemptHost({
+        door: door.sandbox,
+        storage: async () => storage,
+        models,
+        records,
+        log: (text) => {
+          lines.push(text);
+        },
+        now: () => clock,
+        pollMs: 5,
+        bashPollMs: 5,
+        guardDir: null,
+      });
+    const first = life();
+    await first.start(spec({ stuckMs: windowMs }));
+    void first.drive();
+    await waitFor("the hung tool to start", () =>
+      door.starts.some((s) => s.command.includes("tk --help")),
+    );
+    let dead = 0;
+    let settled: WorkerAttemptRecord | undefined;
+    for (let n = 1; settled === undefined; n++) {
+      expect(n).toBeLessThan(6);
+      // This life dies under the tool; the next one is two windows later.
+      door.die();
+      await waitFor("the dying life to park on a dead call", () => door.deadCalls > dead);
+      dead = door.deadCalls;
+      door.thaw();
+      clock += 2 * windowMs;
+      const driving = life().drive();
+      await waitFor(`life ${n + 1} to judge its resume`, () =>
+        records.saves.some((r) => r.stuck !== undefined || r.watch?.idleResumes === n),
+      );
+      if (records.saves.some((r) => r.stuck !== undefined)) settled = await driving;
+    }
+    const text = lines.join("");
+    expect(text).toContain(
+      "stuck in a resume loop: 3 host lives in a row resumed the conversation",
+    );
+    expect(settled.harnessStatus).toBe(HARNESS_STATUS_UNANSWERED);
+    expect(settled.settled?.exitCode).toBe(9);
+    expect(door.starts.at(-1)?.command).toBe(
+      `${WORKER_BOOT_PROTOCOL.finishCommand} ${HARNESS_STATUS_UNANSWERED}`,
+    );
+    // The tool ran once across every life — each resume reattached to it —
+    // and the stop killed it.
+    const tools = door.processes.filter((p) => p.command.includes("tk --help"));
+    expect(tools).toHaveLength(1);
+    expect(door.kills).toContain(tools[0]?.id);
+  });
+
+  it("does not read a working attempt from before the watch's memory as silent since its start", {
+    timeout: 120_000,
+  }, async () => {
+    // A live attempt across the deploy that brings the commit-silence bound:
+    // its record has no `watch`, it started hours ago, and its conversation
+    // committed seconds ago. A new life dates its progress from the
+    // snapshot's entries, never from the attempt's start.
+    const door = scriptedDoor({ bashMs: 400 });
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      () => fauxAssistantMessage("finished after the deploy"),
+    ]);
+    const records = memoryRecords();
+    const storage = new MemoryStorage();
+    const lines: string[] = [];
+    const life = () =>
+      new WorkerAttemptHost({
+        door: door.sandbox,
+        storage: async () => storage,
+        models,
+        records,
+        log: (text) => {
+          lines.push(text);
+        },
+        pollMs: 5,
+        bashPollMs: 5,
+        guardDir: null,
+      });
+    const first = life();
+    await first.start(spec({ stuckMs: 2_000 }));
+    void first.drive();
+    await waitFor("the model's bash to start", () =>
+      door.starts.some((s) => s.command.includes("make test")),
+    );
+    door.die();
+    await waitFor("the dead life to park on a dead call", () => door.deadCalls >= 1);
+    door.thaw();
+    // The record as the previous deploy left it: started five hours ago, no watch.
+    const old = (await records.load()) as WorkerAttemptRecord;
+    const { watch: _watch, ...legacy } = old;
+    await records.save({
+      ...legacy,
+      startedAt: new Date(Date.now() - 5 * 3_600_000).toISOString(),
+    });
+
+    const settled = await life().drive();
+    expect(lines.join("")).not.toContain("appears stuck");
+    expect(settled.settled).toMatchObject({ exitCode: 0, phase: "finishing" });
+    expect(settled.harnessStatus).toBe(0);
   });
 
   it("is reclaimed where it stands: settled, no finish phase, and a later drive changes nothing", {

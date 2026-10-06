@@ -6,9 +6,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/profile"
+	"github.com/pengelbrecht/ticfac/internal/refsweep"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -74,6 +76,11 @@ func (r *Reconciler) sweepTick(tick string) {
 // that name no tick (a base fold's): only at the end of a run that completed,
 // when nothing of the run will be asked for again.
 func (r *Reconciler) sweepClosed(ctx context.Context, everything bool) {
+	if everything {
+		// A completed run has ended: what it left on origin retires with it
+		// (tick 6is), after the local half below has run.
+		defer r.retireRemoteRefs(ctx)
+	}
 	closed := map[string]bool{}
 	r.sweepLeftovers(ctx, "", func(tick string) bool {
 		if tick == "" {
@@ -227,6 +234,67 @@ func (r *Reconciler) sweepLeftovers(ctx context.Context, tick string, sweepable 
 			continue
 		}
 		say("swept: deleted the branch %s — its commits are on %s", branch, r.branch)
+	}
+}
+
+// retireRemoteRefs is the run end's half of the remote ref sweep (tick 6is):
+// a COMPLETED run's own refs on origin — its job branches, published start
+// commits and wip snapshots — are deleted, by exact name under a lease, when
+// the integration branch already holds them. A ref holding commits nothing
+// merged is kept, and `ticfac sweep refs` retires it once its epic has been
+// closed for the grace. A failure is recorded and left for the next pass; it
+// never refuses the run.
+func (r *Reconciler) retireRemoteRefs(ctx context.Context) {
+	if r.git == nil || r.git.remote == "" || r.opts.Repo == "" || r.runID == "" || r.keepRemoteRefs {
+		return
+	}
+	say := func(format string, args ...any) { r.record("", StageCleanedUp, format, args...) }
+	opts := refsweep.Options{Git: refsweep.Git{Repo: r.opts.Repo, Remote: r.git.remote}}
+	if r.tracker != nil {
+		opts.Epic = func(ctx context.Context, id string) (refsweep.Epic, error) {
+			current, err := r.tracker.Show(ctx, id)
+			if err != nil {
+				return refsweep.Epic{}, err
+			}
+			closedAt, _ := time.Parse(time.RFC3339, current.ClosedAt)
+			return refsweep.Epic{Known: true, Closed: current.Status == "closed", ClosedAt: closedAt}, nil
+		}
+	}
+	run := refsweep.Run{ID: r.runID, Epic: r.opts.EpicID, State: runstate.StateCompleted, UpdatedAt: time.Now()}
+	report, err := refsweep.RetireRun(ctx, opts, run, r.integrationHeads())
+	if err != nil {
+		say("not swept: the run's refs on %s could not be listed (%s: %s); `ticfac sweep refs` retries",
+			r.git.remote, remoteFailure(err), firstLine(err.Error()))
+		return
+	}
+	if len(report.Deleted) > 0 {
+		names := make([]string, len(report.Deleted))
+		for i, ref := range report.Deleted {
+			names[i] = ref.Name
+		}
+		say("swept: deleted %d of the run's refs on %s — their commits are on %s: %s", len(names), r.git.remote,
+			r.branch, strings.Join(names, ", "))
+	}
+	failed := make([]string, 0, len(report.Failed))
+	for ref := range report.Failed {
+		failed = append(failed, ref)
+	}
+	sort.Strings(failed)
+	for _, ref := range failed {
+		say("not swept: the ref %s on %s could not be deleted (%s); `ticfac sweep refs` retries", ref, r.git.remote,
+			firstLine(report.Failed[ref]))
+	}
+	kept := 0
+	for _, v := range report.Verdicts {
+		if !v.Delete {
+			kept++
+		}
+	}
+	// Idempotent in what it says: a replay of a terminal run that keeps the
+	// same refs again has done nothing, and a replay says only what it did.
+	if kept > 0 && !r.replayingTerminal {
+		say("kept: %d of the run's refs on %s hold commits %s does not have; `ticfac sweep refs` retires them "+
+			"once the epic has been closed for the grace", kept, r.git.remote, r.branch)
 	}
 }
 

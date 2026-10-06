@@ -640,6 +640,24 @@ func (f *fakeTracker) Close(_ context.Context, tickID string) (tk.Tick, error) {
 	})
 }
 
+// CloseWithReason is `tk close --reason`: the close a landed epic gets, its
+// reason naming the PR and the merge (land_close.go).
+func (f *fakeTracker) CloseWithReason(_ context.Context, tickID, reason string) (tk.Tick, error) {
+	f.tally("close:" + tickID)
+	// tk refuses to close an epic with open children (epic 43y on main: its
+	// post-merge follow-ups are its children).
+	if state, err := f.load(); err == nil {
+		for id, child := range state.Ticks {
+			if child.Parent == tickID && child.Status != "closed" {
+				return tk.Tick{}, fmt.Errorf("cannot close epic %s: has open children (%s)", tickID, id)
+			}
+		}
+	}
+	return f.mutate(tickID, func(tick *tk.Tick) {
+		tick.Status, tick.ClosedReason = "closed", reason
+	})
+}
+
 func (f *fakeTracker) mutate(tickID string, apply func(*tk.Tick)) (tk.Tick, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -968,8 +986,10 @@ type fixtureOptions struct {
 	guardsOff map[string]bool
 	stopAfter func(Event) bool
 	repo      *testRepo
-	budget    float64
-	ceiling   float64
+	// keepRemoteRefs: the run's end leaves its refs on origin (Options.keepRemoteRefs).
+	keepRemoteRefs bool
+	budget         float64
+	ceiling        float64
 
 	// pullRequests is the code-hosting surface behind the PR + CI close-out
 	// rule (tick 0iz): the fake forge a test that declares the rule supplies.
@@ -1207,6 +1227,7 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		GateHeartbeatEvery:      opts.gateHeartbeat,
 		Sleep:                   func(time.Duration) { time.Sleep(5 * time.Millisecond) },
 		guardsOff:               opts.guardsOff,
+		keepRemoteRefs:          opts.keepRemoteRefs,
 		stopAfter:               opts.stopAfter,
 		NewExecutor:             f.newExecutor,
 		NewSweeper:              f.newSweeper,
