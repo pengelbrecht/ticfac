@@ -3,8 +3,13 @@
 ## How much to run locally: targeted tests + `make gate`, then merge
 
 Run the tests you touched or added (`go test -run '<names>' -timeout 20m ./<pkg>/`)
-and `make gate`. That is the bar to merge: PR CI is advisory, not a required
-check, so you do not wait for it. Don't run the full `internal/reconcile`
+and `make gate`. That is the bar to merge for most PRs: PR CI is advisory,
+not a required check, so you do not wait for it.
+
+**Exception: a PR that touches `internal/reconcile/` waits for its PR CI to be
+green before you merge it.** The full reconcile suite only runs in CI, and
+three merges that skipped it turned main red within two days (#225, #226,
+#233), blocking every other agent's deploy. Operator decision, 2026-10-06. Don't run the full `internal/reconcile`
 suite locally as a matter of course: it takes 20-30 minutes and this host is
 shared with live runs and other agents. Run heavy local commands at low
 priority (GOTEST_PARALLEL=4, GOFLAGS=-p=2).
