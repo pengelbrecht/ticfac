@@ -1,0 +1,14 @@
+{
+  "id": "v5t",
+  "title": "Claude on the subscription in cloud runs, chosen per epic",
+  "gloss": "claude-sub per epic",
+  "description": "Operator 2026-10-06: take jvj's spike (docs/spikes/jvj-claude-sub-cloud.md, PR #243) to production and let each epic choose its cloud config. Ticks: 6fv (claude-sub production wiring, the cloud routing rule change, a current claude CLI in the image) then tda (named run configs in the runners files; epic declares config: claude or glm). Ladder: implement sonnet → opus, review/closeout opus, versionless aliases. Cloud rule becomes 'no per-token billing in the cloud'.",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "[A1] An epic declaring config: claude runs in the cloud with workers on sonnet/opus via the operator's subscription (token never in a container), falling back to Workers AI when no subscription is free. [A2] Another epic on the default GLM config runs unchanged. [A3] status/watch/the epic PR name the config; escalation and cost per config. [A4] make gate + cloudflare tests pass in CI.",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-06T17:13:35.876948Z",
+  "updated_at": "2026-10-06T17:13:35.876948Z"
+}
