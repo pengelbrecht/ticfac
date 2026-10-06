@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
   "epic_id": "umq",
-  "sequence": 4,
-  "state": "collecting",
-  "reason": "collecting dax attempt 1",
-  "updated_at": "2026-10-06T11:40:44Z",
+  "sequence": 5,
+  "state": "integrating",
+  "reason": "integrating dax attempt 1 into epic/umq",
+  "updated_at": "2026-10-06T11:41:23Z",
   "ticks": [
     {
       "tick_id": "dax",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
