@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 324,
-  "state": "gating",
-  "reason": "running the integrated gate for 3wq on 6ae37ca30ee3",
-  "updated_at": "2026-10-06T00:16:04Z",
+  "sequence": 325,
+  "state": "publishing",
+  "reason": "closing 3wq behind the integrated gate on 6ae37ca30ee3",
+  "updated_at": "2026-10-06T00:18:45Z",
   "ticks": [
     {
       "tick_id": "v16",
