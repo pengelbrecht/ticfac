@@ -2994,3 +2994,4 @@
 {"ts":"2026-10-06T17:13:35.949156Z","tick":"tda","action":"block","actor":"ticks-sandbox@ticks.invalid","epic":"v5t","data":{"blockers":["6fv"],"title":"Named run configs in the runners files: one epic on GLM, another on claude"}}
 {"ts":"2026-10-06T17:13:35.972663Z","tick":"54l","action":"create","actor":"ticks-sandbox@ticks.invalid","epic":"v5t","data":{"priority":2,"title":"Final review of the claude-sub per-epic diff","type":"task"}}
 {"ts":"2026-10-06T17:13:35.99585Z","tick":"9uc","action":"create","actor":"ticks-sandbox@ticks.invalid","epic":"v5t","data":{"priority":2,"title":"Close out claude-sub per epic: retro, then the next feasible epic","type":"task"}}
+{"ts":"2026-10-06T17:14:28.609266Z","tick":"6fv","action":"start","actor":"ticfac","epic":"v5t","data":{"title":"claude-sub in production: wiring, the cloud routing rule, and a current claude CLI in the image"}}
