@@ -586,6 +586,21 @@ func (p *pipelineIndex) reasonLine(tickID string, attempt int) *runfeed.Event {
 	return latest
 }
 
+// takesItUp words a drill-in next step whose answer is the resume: the
+// reason, the command that takes the work up, and the clause that says so —
+// or the reason alone when the model cannot state the epic the resume
+// would name (tick uzs, the same refusal the builders hold, tick mwt, and
+// the header's commandOrNil keeps): a sentence that prints "—  takes it
+// up" with nothing before "takes" carries a hole where the command
+// should be, and a person reading it cannot tell the command was withheld
+// rather than lost. The reason already says what is wanted.
+func takesItUp(reason, host, epicID string) string {
+	if command := ResumeCommand(host, epicID); command != "" {
+		return reason + " — " + command + " takes it up"
+	}
+	return reason
+}
+
 // nextStepOf states what the run does next about a refused last try, in the
 // order the run's own facts answer it: a redispatch that already happened; a
 // prior run's hold that still stands — the header's own release command,
@@ -617,7 +632,7 @@ func (p *pipelineIndex) nextStepOf(tick *Tick, last Try) *string {
 	// machinery here will retry anything — the honest next step is the
 	// resume, the same command the run header names (hn6, tick gmo).
 	if p.nonNewestOwner[tick.TickID] {
-		step := "nothing of that run is working — " + ResumeCommand(p.host, p.epicID) + " takes it up"
+		step := takesItUp("nothing of that run is working", p.host, p.epicID)
 		return &step
 	}
 	if command := p.attentionCommand(tick.TickID); command != nil {
@@ -633,7 +648,7 @@ func (p *pipelineIndex) nextStepOf(tick *Tick, last Try) *string {
 	// step is the resume, the same command the header's needs-you entry
 	// carries (one answer, two wordings, the rule tick eli holds).
 	if p.notGoing {
-		step := "the run is not going — " + ResumeCommand(p.host, p.epicID) + " takes it up"
+		step := takesItUp("the run is not going", p.host, p.epicID)
 		return &step
 	}
 	step := "the run will retry or escalate the tier"
