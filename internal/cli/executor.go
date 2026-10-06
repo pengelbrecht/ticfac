@@ -330,8 +330,10 @@ func spawnArgv(gate string, d reconcile.Dispatch) (*runconfig.Config, []string, 
 
 // localMetering resolves the gateway metering join for one LOCAL dispatch
 // — a herdr pane or a subprocess worker (ticks dm2 and gzv): the run id the
-// spend is attributed to, and the operator's AI Gateway URL — both from
-// facts the dispatch and the host already hold. Nil,
+// spend is attributed to, the operator's AI Gateway URL — both from
+// facts the dispatch and the host already hold — and (tick kf4) the
+// dispatch's own tick and attempt, the keys the stamped metadata names so
+// a gateway number read back can say which attempts it measured. Nil,
 // never an error, on a host that cannot join: cost telemetry is the
 // documented OPTIONAL state (gatewaytrace.ConfigFrom's own refusal names the
 // command that fixes it), a dispatch must never stop over it, and the cost
@@ -359,5 +361,5 @@ func localMetering(d reconcile.Dispatch) *subprocess.GatewayMetering {
 		// metering this join exists for.
 		return nil
 	}
-	return &subprocess.GatewayMetering{RunID: d.RunID, GatewayURL: gateway}
+	return &subprocess.GatewayMetering{RunID: d.RunID, TickID: d.TickID, Attempt: d.Attempt, GatewayURL: gateway}
 }
