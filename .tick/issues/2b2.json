@@ -2,6 +2,7 @@
   "id": "2b2",
   "title": "backlog tick 8ct still reads open though its fix landed inside epic umq",
   "description": "The repair the run merged to make dax's integrated gate green (4f742e41d, \"Liveness in exec/subprocess: existence is not life\", named for 8ct) fixes exactly what backlog tick 8ct (\"Subprocess interrupt tests fail at base in Linux containers\") describes: the three tests it names pass on the epic tree, re-verified in this review's own container of the same kind. 8ct can be closed naming the merge that carries the fix, so its owner does not re-derive it.\nevidence: .tick/issues/8ct.json (status open); internal/exec/subprocess/zombie_linux.go (names 8ct and the three tests); commit 4f742e41d on epic/umq\n\nticfac run run_7445005ff17447c3ae351f5ba99ea01d filed this backlog tick from the finding 287edb27013f4dae0c2b70b2ac315ba6b4f5b7ec594c45da86d512fa1ce2b8d6 (reported by run-run_7445005ff17447c3ae351f5ba99ea01d/tick-l76/attempt-2) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/287edb27013f4dae0c2b70b2ac315ba6b4f5b7ec594c45da86d512fa1ce2b8d6.json on the run branch.",
+  "notes": "2026-10-06 14:17 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: created by absorbing finding 287edb27013f4dae0c2b70b2ac315ba6b4f5b7ec594c45da86d512fa1ce2b8d6 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/287edb27013f4dae0c2b70b2ac315ba6b4f5b7ec594c45da86d512fa1ce2b8d6.json on epic/umq, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_7445005ff17447c3ae351f5ba99ea01d/tick-l76/attempt-2",
   "created_by": "ticfac run run_7445005ff17447c3ae351f5ba99ea01d",
   "created_at": "2026-10-06T14:17:10Z",
-  "updated_at": "2026-10-06T14:17:10Z"
+  "updated_at": "2026-10-06T14:17:17.526356657Z"
 }
