@@ -4,7 +4,7 @@
   "gloss": "claude-sub to production",
   "description": "Follow-up of jvj (docs/spikes/jvj-claude-sub-cloud.md, PR #243), operator 2026-10-06 'yes please': (1) production wiring of the claude-sub rung: Worker secrets CLAUDE_SUB_TOKEN_\u003cLABEL\u003e (operator sets them; deploy/doctor report which labels exist, never values), the per-subscription cap of 2, quota/rate-limit handling and the Workers AI fallback; (2) the cloud routing rule (tick nwn, CloudRule in internal/profile/cloudworker.go) changes from 'Workers AI models only' to 'no per-token billing in the cloud': subscription rungs only with the versionless claude aliases (sonnet, opus) and each naming a Workers AI fallback; (3) the claude CLI in the production worker image, with an automatic pin bump (scheduled CI job/PR that moves CLAUDE_CODE_VERSION to the latest release) so the aliases resolve to the latest models (2.1.227 maps opus to claude-opus-5; current releases map it to 5.5); (4) ladder: implement sonnet → opus, review/closeout opus. Off unless a config selects it (tda).",
   "notes": "2026-10-06 23:19 - ticfac run epic-v5t: 6fv try 1 (run dispatch #1) reported a finding the run itself decided — defect \"runners*.toml comments still state the old cloud rule\" (key 21a406cfb4198887bdd2a2d35e173affe3db8f490542eea9e5359a0b298d5865, severity low, for this repository) is promoted to a backlog tick with an owner, k20; the decision record is on the run branch at .ticfac/runs/epic-v5t/absorptions/21a406cfb4198887bdd2a2d35e173affe3db8f490542eea9e5359a0b298d5865.json, and the draft is triaged as promoted.\n2026-10-06 23:22 - ticfac run epic-v5t: 6fv try 1 (run dispatch #1) merged into epic/v5t as 200fdd02ed15; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -12,6 +12,6 @@
   "acceptance_criteria": "[1] A production cloud run whose config selects claude-sub runs a review on opus via the subscription, token never in the container, falls back to Workers AI when no subscription is free. [2] CloudRule enforces the new rule with tests. [3] A scheduled job keeps the image's claude CLI current. [4] make gate + cloudflare tests pass.",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-06T17:13:15.382474Z",
-  "updated_at": "2026-10-06T21:22:15.677322Z",
-  "started_at": "2026-10-06T17:14:28.608987Z"
+  "updated_at": "2026-10-06T21:22:15.881868Z",
+  "closed_at": "2026-10-06T21:22:15.881868Z"
 }
