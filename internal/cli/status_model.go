@@ -402,10 +402,14 @@ var statusBuild = statusmodel.Build
 // the rows the metering join's cf-aig-metadata tag produces. Where the
 // logs answer calls for the run, the sum of their measured cost is the
 // host's ground-truth number the model's workers-ai line meters (the same
-// claim the factory's own cost sync makes for a cloud run); where they
-// answer none — the calls were never joined, or the host states no
-// gateway — the answer is nil and the line says "not metered", the honest
-// word for spend no measurement names.
+// claim the factory's own cost sync makes for a cloud run), handed to the
+// model WITH the coverage that names what the number measured (tick kf4):
+// which attempts the rows join, which calls are the run's own, and which
+// rows predate the join's per-attempt names — so the line never states a
+// measured $X over attempts the join never reached. Where the logs answer
+// none — the calls were never joined, or the host states no gateway — the
+// answer is nil and the line says "not metered", the honest word for
+// spend no measurement names.
 //
 // A host whose ~/.ticfacrc names no gateway or no token is the documented
 // OPTIONAL state, nil and never an error: cost telemetry is optional, and
@@ -439,7 +443,17 @@ var statusWorkerCost = func(ctx context.Context, runID string) (*statusmodel.Wor
 		return nil, nil
 	}
 	totals := gatewaytrace.Sum(calls)
-	return &statusmodel.WorkerCostInput{USD: totals.Cost, Source: "gateway"}, nil
+	// The coverage beside the money (tick kf4): a sum alone reads as the
+	// whole run's spend, and a resumed run — or a host that configured its
+	// gateway mid-run — has attempts the join never reached. The reader
+	// hands the model what the rows name so the line can claim only what
+	// was measured.
+	coverage := gatewaytrace.CoverageOf(calls)
+	return &statusmodel.WorkerCostInput{
+		USD: totals.Cost, Source: "gateway",
+		Calls: coverage.Calls, Attempts: coverage.Attempts,
+		OwnCalls: coverage.OwnCalls, UnnamedCalls: coverage.UnnamedCalls,
+	}, nil
 }
 
 // modelGatherers is the per-frame source policy for a FOLLOWING surface:

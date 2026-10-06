@@ -2,6 +2,7 @@ package statusmodel
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -391,6 +392,196 @@ func TestCostAProviderQualifiedClaudeIdIsPiLocalNotTheSubscription(t *testing.T)
 		t.Errorf("the claude line is %+v, want the fable dispatch alone, unmetered with no number", line)
 	}
 	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestCostALocalGatewayNumberMetersOnlyTheAttemptsItNames (tick kf4, the
+// finding kf4 exists for): a resumed local run dispatched 30 workers-ai
+// attempts before the metering join existed and 2 after it did, and the
+// gateway answered rows — a measured $X — for the 2. The line must never
+// state that number over all 32 attempts: the metered line covers the 2
+// attempts whose calls joined the gateway (and the run's own calls the
+// classifier makes beside them), and the 30 unmeasured ones are called
+// "not metered", on their own line, with no number.
+func TestCostALocalGatewayNumberMetersOnlyTheAttemptsItNames(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Records.Decisions = nil
+	src.Records.Attempts = localWorkersAIAttempts(32)
+	src.WorkerCost = &WorkerCostInput{
+		USD: 0.12, Source: "gateway",
+		Calls: 8, Attempts: 2, OwnCalls: 2, UnnamedCalls: 0,
+	}
+	model := Build(src)
+
+	metered := CostLine{
+		Source: CostSourceWorkersAI, Metered: true, USD: float64Ptr(0.12), Attempts: 2,
+		Basis: "AI Gateway logs: the calls of 2 of 32 attempts joined the gateway, beside the run's own model calls",
+	}
+	unmeasured := CostLine{
+		Source: CostSourceWorkersAI, Metered: false, USD: nil, Attempts: 30,
+		Basis: "not metered: dispatched without the gateway metering join, their calls never reached the gateway logs",
+	}
+	var remainder []CostLine
+	for _, line := range model.Cost.Lines {
+		if line.Source != CostSourceWorkersAI {
+			continue
+		}
+		remainder = append(remainder, line)
+	}
+	if len(remainder) != 2 || !reflect.DeepEqual(remainder[0], metered) || !reflect.DeepEqual(remainder[1], unmeasured) {
+		t.Errorf("the workers-ai river is %+v, want the 2 named attempts metered %v and the 30 unmeasured ones %v",
+			remainder, metered, unmeasured)
+	}
+	if model.Cost.RecordedUSD == nil || *model.Cost.RecordedUSD != 0.12 {
+		t.Errorf("recorded_usd is %v, want the measured 0.12", model.Cost.RecordedUSD)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestCostALocalGatewayNumberOverEveryAttemptIsMeteredWholly: where the
+// join covers every attempt on the river — every row names an attempt the
+// river counts — the line is the simple metered one, the cloud shape's own
+// basis; the run's own calls beside them are named in the basis, because
+// their money is in the number and belongs to no attempt.
+func TestCostALocalGatewayNumberOverEveryAttemptIsMeteredWholly(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Records.Decisions = nil
+	src.Records.Attempts = localWorkersAIAttempts(2)
+	src.WorkerCost = &WorkerCostInput{USD: 0.41, Source: "gateway", Calls: 5, Attempts: 2, OwnCalls: 1}
+	model := Build(src)
+	line := costLineOf(t, model, CostSourceWorkersAI)
+	if !line.Metered || line.USD == nil || *line.USD != 0.41 || line.Attempts != 2 {
+		t.Errorf("a fully joined river's line is %+v, want metered 0.41 over the 2 attempts", line)
+	}
+	if want := "AI Gateway logs: every attempt's calls joined the gateway, beside the run's own model calls"; line.Basis != want {
+		t.Errorf("a fully joined river's basis is %q, want %q", line.Basis, want)
+	}
+	count := 0
+	for _, line := range model.Cost.Lines {
+		if line.Source == CostSourceWorkersAI {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("the river carries %d lines, want one: the river is wholly metered", count)
+	}
+	assertValidatesAgainstTheContract(t, model)
+
+	// Without the run's own calls beside them, the basis is the plain one the
+	// cloud line carries: the number and the attempts it covers agree.
+	sole := runningEpicSources()
+	sole.Records.Decisions = nil
+	sole.Records.Attempts = localWorkersAIAttempts(1)
+	sole.WorkerCost = &WorkerCostInput{USD: 0.2, Source: "gateway", Calls: 3, Attempts: 1}
+	model = Build(sole)
+	line = costLineOf(t, model, CostSourceWorkersAI)
+	if want := "AI Gateway logs"; line.Basis != want {
+		t.Errorf("a fully joined river's basis is %q, want the plain %q", line.Basis, want)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestCostTheRunsOwnCallsAreNeverAWorkersLineOverAttempts: the classifier's
+// own calls carry the run tag (tick 24u), so a run with NO workers-ai
+// dispatch still gets gateway rows — measured money that belongs to no
+// worker attempt. The line says what the money is (the run's own calls) and
+// names no attempt it did not measure, instead of a metered "Workers AI
+// $0.0x (0 attempts)" beside a decisions line that reads not metered.
+func TestCostTheRunsOwnCallsAreNeverAWorkersLineOverAttempts(t *testing.T) {
+	t.Parallel()
+
+	// No workers-ai attempt at all: the rows are the run's own calls.
+	src := runningEpicSources()
+	src.Records.Decisions = nil
+	src.Records.Attempts = []runstate.Attempt{
+		attemptMarker(1, "nwj", "2026-09-27T03:19:05Z", "strong", "opus", "local-subprocess"),
+	}
+	src.WorkerCost = &WorkerCostInput{USD: 0.02, Source: "gateway", Calls: 2, OwnCalls: 2}
+	model := Build(src)
+	line := costLineOf(t, model, CostSourceWorkersAI)
+	if !line.Metered || line.USD == nil || *line.USD != 0.02 || line.Attempts != 0 {
+		t.Errorf("the run-own calls' line is %+v, want metered 0.02 over no attempt", line)
+	}
+	if want := "AI Gateway logs: gateway-joined calls of no worker dispatch this run made (the classifier's own calls carry the run tag)"; line.Basis != want {
+		t.Errorf("the run-own calls' basis is %q, want %q", line.Basis, want)
+	}
+	if model.Cost.RecordedUSD == nil || *model.Cost.RecordedUSD != 0.02 {
+		t.Errorf("recorded_usd is %v, want the measured 0.02", model.Cost.RecordedUSD)
+	}
+	assertValidatesAgainstTheContract(t, model)
+
+	// Workers-ai attempts exist but NONE of them joined — every row is the
+	// run's own: the attempts are called not metered on their own line, the
+	// measured own-call money keeps its number, and neither wears the other.
+	split := runningEpicSources()
+	split.Records.Decisions = nil
+	split.Records.Attempts = localWorkersAIAttempts(3)
+	split.WorkerCost = &WorkerCostInput{USD: 0.02, Source: "gateway", Calls: 2, OwnCalls: 2}
+	model = Build(split)
+	var workers, own []CostLine
+	for _, line := range model.Cost.Lines {
+		if line.Source == CostSourceWorkersAI {
+			if line.Metered {
+				own = append(own, line)
+			} else {
+				workers = append(workers, line)
+			}
+		}
+	}
+	if len(own) != 1 || own[0].Attempts != 0 || own[0].USD == nil || *own[0].USD != 0.02 {
+		t.Errorf("the run-own calls' line is %+v, want the measured number over no attempt", own)
+	}
+	if len(workers) != 1 || workers[0].Attempts != 3 || workers[0].USD != nil || workers[0].Metered {
+		t.Errorf("the unjoined attempts' line is %+v, want 3 attempts not metered with no number", workers)
+	}
+	if want := "not metered: dispatched without the gateway metering join, their calls never reached the gateway logs"; workers[0].Basis != want {
+		t.Errorf("the unjoined attempts' basis is %q, want %q", workers[0].Basis, want)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestCostRowsFromBeforeTheJoinNamedAttemptsKeepTheWholeRiverHonest: rows
+// that carry no attempt name — every attempt dispatched between dm2 and
+// kf4, whose calls joined the gateway before the join named them — cannot
+// be attributed per attempt, so no per-attempt claim is made from them:
+// one metered line whose basis names the calls the number sums and the
+// attempts the rows name, and calls the never-joined attempts not metered.
+func TestCostRowsFromBeforeTheJoinNamedAttemptsKeepTheWholeRiverHonest(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Records.Decisions = nil
+	src.Records.Attempts = localWorkersAIAttempts(4)
+	src.WorkerCost = &WorkerCostInput{
+		USD: 0.3, Source: "gateway",
+		Calls: 4, Attempts: 2, OwnCalls: 1, UnnamedCalls: 1,
+	}
+	model := Build(src)
+	line := costLineOf(t, model, CostSourceWorkersAI)
+	if !line.Metered || line.USD == nil || *line.USD != 0.3 || line.Attempts != 4 {
+		t.Errorf("a river with pre-tag rows is %+v, want one metered line over the river's 4 attempts", line)
+	}
+	want := "AI Gateway logs: the sum of 4 gateway-joined calls; " +
+		"attempts whose calls are named by them: 2 of 4; " +
+		"run-own model calls: 1; " +
+		"rows carrying no attempt name (from before the join named its attempts): 1; " +
+		"attempts whose calls never reached the gateway are not metered"
+	if line.Basis != want {
+		t.Errorf("a river with pre-tag rows has basis %q, want %q", line.Basis, want)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// localWorkersAIAttempts draws n local workers-ai dispatch markers, the
+// river a local pi run on the gateway's models makes.
+func localWorkersAIAttempts(n int) []runstate.Attempt {
+	attempts := make([]runstate.Attempt, 0, n)
+	for i := 1; i <= n; i++ {
+		attempts = append(attempts, attemptMarker(i, fmt.Sprintf("t%02d", i%48),
+			fmt.Sprintf("2026-09-27T0%d:00:00Z", (i%9)+1), "strong",
+			"cloudflare-workers-ai/@cf/zai-org/glm-5.3", "local-subprocess"))
+	}
+	return attempts
 }
 
 // float64Ptr is the test-side pointer a metered line's number needs.
