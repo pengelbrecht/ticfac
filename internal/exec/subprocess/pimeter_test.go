@@ -49,7 +49,7 @@ func TestGatewayMeteringWritesTheOverrideTheReaderJoins(t *testing.T) {
 	metering := &GatewayMetering{
 		RunID:      "epic-hn6",
 		TickID:     "kf4",
-		Attempt:   45,
+		Attempt:    45,
 		GatewayURL: "https://gateway.ai.cloudflare.com/v1/acct/gw/",
 	}
 
