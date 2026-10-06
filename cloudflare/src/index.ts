@@ -86,6 +86,7 @@ import {
 } from "./auth";
 import { BRANCH_CLAIM_PATH, branchOwnershipRoute, claimBranch } from "./branch-ownership";
 import { ciEscalationsRoute } from "./ci-escalations";
+import { claudeSubRoute, subscriptionLabels } from "./claude-sub";
 import { reclaimOrphanedWorkers } from "./container-capacity";
 import { proxyGitRequest } from "./credentials";
 import {
@@ -253,6 +254,12 @@ async function deploymentRoute(env: Env): Promise<Response> {
     // kind every container would die on (tick kkt) — at the operator's
     // knee, before anything is pushed or booted.
     harness_kinds: IMAGE_HARNESS_KINDS,
+    // The claude-sub subscriptions this deployment has a token secret for —
+    // their LABELS only, never the values (tick 6fv). What `ticfac factory
+    // status` and `ticfac doctor` report, so a missing or benched token is
+    // a thing an operator sees from their own machine rather than a run
+    // that silently steps down to Workers AI.
+    claude_sub_labels: subscriptionLabels(env as unknown as Record<string, unknown>),
     worker_version_id: version?.id || null,
     worker_version_timestamp: version?.timestamp || null,
   });
@@ -1796,6 +1803,16 @@ export default {
       return await deploymentRoute(env);
     }
 
+    // The claude-sub pool's operator view (tick 6fv, src/claude-sub.ts):
+    // which subscriptions this deployment has a token for — labels, leases,
+    // benches, last limit headers, never a value — and the one action that
+    // clears a bench, which is the operator's after rotating a token.
+    // Authenticated by the operator's factory token like every other /api
+    // route: the caller is a person, never a run.
+    if (segments[0] === "api" && segments[1] === "claude-sub") {
+      return await claudeSubRoute(request, env);
+    }
+
     if (segments[0] === "api" && segments[1] === "projects") {
       return await projectsRoute(request, env, segments.slice(2));
     }
@@ -1956,6 +1973,14 @@ export default {
 // class IS the container's control plane, and everything this factory wants
 // from it lives behind the seam in src/sandbox.ts.
 export { Sandbox } from "@cloudflare/sandbox";
+// The claude-sub rung's two halves (tick 6fv, src/claude-sub.ts): the POOL,
+// bound as CLAUDE_SUB_POOL (leases, benches), and the PROXY — a
+// WorkerEntrypoint, so workerd accepts it beside the classes — whose props
+// name the subscription a job leased and whose fetch the container's
+// api.anthropic.com traffic is intercepted onto. Production exported the
+// pair with this tick; a `claudeSub` boot on a deployment that predates it
+// still fails closed at the interception install.
+export { ClaudeSubPool, ClaudeSubProxy } from "./claude-sub";
 // The factory's own container class on the durable_object scheduling policy
 // (epic umq), bound as SANDBOXES_V1 beside the SDK's class above.
 export { FactorySandbox } from "./factory-sandbox";

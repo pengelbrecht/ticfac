@@ -92,6 +92,15 @@ A `claudeSub` boot there fails closed at boot ("needs ClaudeSubProxy
 exported"). It can never run without a credential, and it never runs with one
 nobody granted.
 
+*(2026-10-06, tick 6fv: this paragraph described the spike's state. The
+production wiring has landed — `wrangler.toml` now binds `CLAUDE_SUB_POOL`,
+the entry module exports `ClaudeSubProxy`/`ClaudeSubPool`, and the lease at
+dispatch releases at collect — but the rung stays OFF exactly as designed
+until the operator sets a `CLAUDE_SUB_TOKEN_<LABEL>` secret and a config
+selects the rung. The fail-closed shapes remain: a boot on a deployment
+without the pool steps down to Workers AI, and one with no token configured
+never leases.)*
+
 ## Measurements (staging, 2026-10-06)
 
 The job is the real `profiles/review-epic.md` prompt, plus a short "this job"

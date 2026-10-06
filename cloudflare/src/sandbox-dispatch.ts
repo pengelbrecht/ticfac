@@ -234,6 +234,7 @@
  */
 
 import type { AttemptSpec } from "./attempt-protocol";
+import { claudeSubRelease } from "./claude-sub";
 import { heldSlots, mayBeAdoptable } from "./container-capacity";
 import { getRun } from "./db";
 import { authorizeGatewayRequest, type GatewayDenial } from "./gateway";
@@ -789,6 +790,10 @@ async function attemptStatusRoute(
     env.ARTIFACTS === undefined ? undefined : d1JobLogs(env.DB, env.ARTIFACTS, run.project),
     // A run whose workers are WorkerAgents answers from the agent (tick xd3).
     workerAgentsFromEnv(env),
+    // The claude-sub release half (tick 6fv): when this read is the one that
+    // ends the job — a settled worker's container reclaimed, a stopped
+    // container settled — the subscription lease ends with it.
+    claudeSubRelease(env),
   );
   return { ok: true, status: 200, body: status as unknown as Record<string, unknown> };
 }

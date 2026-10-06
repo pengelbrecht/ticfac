@@ -496,6 +496,14 @@ export type SpawnOptions = {
    * seven paid runs to learn.
    */
   logs?: WorkerLogSink;
+  /**
+   * The claude subscription this job leased (tick 6fv, src/claude-sub.ts):
+   * passed to the sandbox binding's `get`, which installs the
+   * api.anthropic.com interception on the container BEFORE it starts — so the
+   * container's claude traffic is authenticated with the subscription's
+   * token, which never enters the container. Absent: an ordinary boot.
+   */
+  claudeSub?: { label: string; jobId: string };
 };
 
 /**
@@ -583,7 +591,10 @@ export async function spawnWorker(
   // no manifest would correctly conclude nothing was dispatched and boot a
   // second one (src/reconcile.ts).
   await opts.record?.dispatched(task, sandboxName);
-  const sandbox = await binding.get(sandboxName);
+  const sandbox = await binding.get(
+    sandboxName,
+    opts.claudeSub === undefined ? undefined : { claudeSub: opts.claudeSub },
+  );
 
   let probe: ProbeOutcome;
   try {

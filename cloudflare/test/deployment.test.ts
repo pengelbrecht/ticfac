@@ -63,6 +63,30 @@ describe("deployment route", () => {
     });
   });
 
+  // The claude-sub half (tick 6fv): which subscription LABELS this
+  // deployment has a token secret for — deploy, doctor and status report
+  // them, and NEVER a value. The list is what makes a missing token a thing
+  // an operator can see from their own machine rather than a run that
+  // silently steps down to Workers AI.
+  it("names the configured claude-sub subscription labels, never their tokens", async () => {
+    env.CLAUDE_SUB_TOKEN_MAX1 = "sk-ant-oat01-not-a-real-token";
+    try {
+      const res = await get();
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.claude_sub_labels).toEqual(["MAX1"]);
+      expect(JSON.stringify(body)).not.toContain("sk-ant");
+    } finally {
+      delete env.CLAUDE_SUB_TOKEN_MAX1;
+    }
+  });
+
+  it("answers an empty claude-sub label list when no subscription token is set", async () => {
+    const res = await get();
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({ claude_sub_labels: [] });
+  });
+
   it("is behind the factory token", async () => {
     const res = await SELF.fetch(url);
     expect(res.status).toBe(401);

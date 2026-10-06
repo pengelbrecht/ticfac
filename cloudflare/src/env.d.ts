@@ -496,5 +496,21 @@ declare namespace Cloudflare {
      */
     TICFAC_REF_WRITER?: import("./git-refs").GitRefWriter;
     [signalSecret: `SIGNAL_SECRET_${string}`]: string | undefined;
+    /**
+     * The one claude subscription pool (tick 6fv, src/claude-sub.ts):
+     * per-subscription concurrency leases and quota benches for the
+     * claude-sub rung. Optional — a deployment that binds none runs no
+     * claude-sub job, and every lease falls back to the Workers AI ladder.
+     */
+    CLAUDE_SUB_POOL?: DurableObjectNamespace<import("./claude-sub").ClaudeSubPool>;
+    /** The per-subscription job cap (tick 6fv). Absent: 2, the default. */
+    CLAUDE_SUB_MAX_CONCURRENT?: string;
+    /**
+     * The subscription tokens, one per label (tick 6fv): the operator sets
+     * `CLAUDE_SUB_TOKEN_<LABEL>` with `wrangler secret put`, and only the
+     * LABELS are ever reported — by /api/claude-sub and /api/deployment —
+     * never the values.
+     */
+    [claudeSubToken: `CLAUDE_SUB_TOKEN_${string}`]: string | undefined;
   }
 }

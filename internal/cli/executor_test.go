@@ -52,17 +52,31 @@ func TestTheHonouredSetNamesTheSandboxExecutor(t *testing.T) {
 			t.Errorf("the sandbox executor launches %v, none of which is pi: the dispatch profile pairs it with pi",
 				executor.Runners)
 		}
-		// The cloud's Runners list is the DURABLE harness set, not
-		// runconfig.KnownKinds() (epic 43y, tick uxi): herdr's kinds are
-		// interactive CLIs, and the pi row among them is deleted — the pi
-		// worker path is pi-durable, hosted or headless. The cloud still
-		// admits the name "pi" because this repository's own
-		// .tick/runners.cloud.toml routes every role to it as the local
-		// runner table's name for the same durable harness, and "pi-durable"
-		// is the hosted kind the cloud profile set names.
-		if !reflect.DeepEqual(executor.Runners, profile.CloudRule.Harnesses) {
-			t.Errorf("the sandbox executor launches %v, want the durable harness set %v",
-				executor.Runners, profile.CloudRule.Harnesses)
+		// The cloud's Runners list is the durable harness set plus the
+		// subscription rungs' harnesses (profile.CloudAllowedHarnesses,
+		// tick 6fv), not runconfig.KnownKinds() (epic 43y, tick uxi):
+		// herdr's kinds are interactive CLIs, and the pi row among them is
+		// deleted — the pi worker path is pi-durable, hosted or headless.
+		// The cloud still admits the name "pi" because this repository's
+		// own .tick/runners.cloud.toml routes every role to it as the local
+		// runner table's name for the same durable harness, "pi-durable" is
+		// the hosted kind the cloud profile set names, and "claude" is the
+		// claude-sub rung's harness — the pairing the cloud billing rule
+		// admits on a versionless alias, which a sandbox dispatch can
+		// resolve and must not be refused here before the rule ever sees it.
+		if !reflect.DeepEqual(executor.Runners, profile.CloudAllowedHarnesses()) {
+			t.Errorf("the sandbox executor launches %v, want the rule's harness allowlist %v",
+				executor.Runners, profile.CloudAllowedHarnesses())
+		}
+		runsClaude := false
+		for _, runner := range executor.Runners {
+			if runner == "claude" {
+				runsClaude = true
+			}
+		}
+		if !runsClaude {
+			t.Errorf("the sandbox executor launches %v, none of which is the claude-sub rung's harness: a profile "+
+				"the cloud billing rule admits would be refused here before it dispatched", executor.Runners)
 		}
 	}
 	if !found {

@@ -94,21 +94,21 @@ model = "opus"
 	}
 }
 
-// NEVER CLAUDE IN THE CLOUD (the tick's acceptance, in so many words): a
+// NEVER PER-TOKEN CLAUDE IN THE CLOUD (the tick's acceptance, re-flowed by 6fv): a
 // cloud routing that resolves the repair job to claude is refused on its
 // FINAL value, and the same config on a laptop keeps it — the rule is the
 // cloud's, and the repair job answers to it like every other role.
-func TestTheRepairJobNeverRunsClaudeInTheCloud(t *testing.T) {
+func TestTheRepairJobNeverRunsPerTokenClaudeInTheCloud(t *testing.T) {
 	t.Parallel()
 	config := cloudRuleConfig(t, `version = 2
 
 [roles.review]
 kind = "claude"
-model = "opus"
+model = "claude-opus-5-5"
 `)
 
 	_, err := Resolve(RoleRepairGate, Options{RunnersConfig: config, Substrate: "cloud"})
-	assertCloudRefusal(t, err, RoleRepairGate, "claude", "opus", "no tier")
+	assertCloudRefusal(t, err, RoleRepairGate, "claude", "claude-opus-5-5", "no tier")
 
 	local, err := Resolve(RoleRepairGate, Options{RunnersConfig: config, Substrate: "herdr"})
 	if err != nil {

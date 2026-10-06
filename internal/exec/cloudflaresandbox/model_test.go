@@ -204,3 +204,86 @@ func TestAStartWithNoModelIsRefusedBeforeTheDoor(t *testing.T) {
 			h.door.startCount(), h.door.statusCount())
 	}
 }
+
+// The subscription rung crosses the door (tick 6fv): a dispatch whose profile
+// resolved claude on a versionless alias — the claude-sub rung the cloud
+// billing rule admits — starts, and the record names the pairing that ran.
+// The door check is the rule's own predicate (profile.CloudBillingAllows), so
+// the rung that [Resolve] admits is the rung the executor accepts; anything
+// else would be a resolution the cloud dispatches and its own executor
+// refuses.
+//
+// short: an httptest door and one state directory.
+func TestAStartOnTheSubscriptionRungIsAccepted(t *testing.T) {
+	h := newHarness(t)
+	h.newExecutorOnRung(t.TempDir(), "claude", "opus")
+	handle, err := h.start("keh")
+	if err != nil {
+		t.Fatalf("a start on the claude/opus subscription rung was refused: %v", err)
+	}
+	if got := h.door.lastStartBody()["model"]; got != "opus" {
+		t.Errorf("the start request carried model %v, want the alias %q", got, "opus")
+	}
+	if got := h.door.lastStartBody()["harness"]; got != "claude" {
+		t.Errorf("the start request carried harness %v, want %q", got, "claude")
+	}
+	payload, err := local(handle)
+	if err != nil {
+		t.Fatalf("decode the handle payload: %v", err)
+	}
+	if payload.Harness != "claude" || payload.Model != "opus" {
+		t.Errorf("the handle names %s/%s, want the claude/opus rung it booted on", payload.Harness, payload.Model)
+	}
+	record, err := newStore(payload.State).readAttempt()
+	if err != nil {
+		t.Fatalf("read the attempt record: %v", err)
+	}
+	if record.Harness != "claude" || record.Model != "opus" {
+		t.Errorf("the record names %s/%s, want the claude/opus rung it ran on", record.Harness, record.Model)
+	}
+}
+
+// The rung's own harness on a PINNED id is refused by the same predicate: a
+// pinned claude model bills per token, and the door check is what keeps a
+// start that recorded it from ever doing so.
+//
+// short: an httptest door and one state directory.
+func TestAStartOnAPinnedClaudeModelIsRefused(t *testing.T) {
+	h := newHarness(t)
+	h.newExecutorOnRung(t.TempDir(), "claude", "claude-opus-5-5")
+	_, err := h.start("keh")
+	if err == nil {
+		t.Fatal("a start on a pinned claude model id was accepted")
+	}
+	if !strings.Contains(err.Error(), "claude-opus-5-5") {
+		t.Errorf("the refusal does not name the model it refused: %v", err)
+	}
+	if !strings.Contains(err.Error(), "billing rule") {
+		t.Errorf("the refusal does not name the rule that fired: %v", err)
+	}
+}
+
+// newExecutorOnRung points a FRESH executor at the door on a subscription
+// rung's harness/alias pair — the dispatch whose profile a claude-sub config
+// resolved.
+func (h *harness) newExecutorOnRung(state, harness, model string) {
+	h.Helper()
+	ex, err := New(Options{
+		FactoryURL: h.door.URL(),
+		Token:      "run-r1-token",
+		EpicID:     "xte",
+		BaseRef:    "epic/xte",
+		Title:      "A cloudflare-sandbox executor that returns a handle, not a result",
+		Model:      model,
+		Harness:    harness,
+		Prompt:     testPrompt,
+		Attempt:    1,
+		StateDir:   state,
+		StuckAfter: 15 * time.Minute,
+		Now:        func() time.Time { return time.Date(2026, 10, 6, 18, 0, 0, 0, time.UTC) },
+	})
+	if err != nil {
+		h.Fatalf("New: %v", err)
+	}
+	h.ex = ex
+}

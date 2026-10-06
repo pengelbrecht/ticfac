@@ -461,3 +461,35 @@ func TestStatusReportsAPartialConfiguration(t *testing.T) {
 		t.Errorf("status does not name the missing rung:\n%s", out)
 	}
 }
+
+// The claude-sub subscriptions on a status report (tick 6fv): LABELS only,
+// never values, and the empty state names its fix — "the rung is off" is a
+// thing an operator can act on rather than a run that silently steps down.
+func TestStatusReportsTheClaudeSubLabels(t *testing.T) {
+	report := &StatusReport{
+		Deployment: CredentialState{Name: "deployment", Configured: true},
+		Deployed: &DeployedFacts{
+			Version:         "1.2.3",
+			ImageDigest:     "sha256:abc",
+			ClaudeSubLabels: []string{"MAX1", "MAX2"},
+		},
+	}
+	var with bytes.Buffer
+	report.Write(&with)
+	for _, want := range []string{"claude-sub", "MAX1, MAX2"} {
+		if !strings.Contains(with.String(), want) {
+			t.Errorf("status does not report %q:\n%s", want, with.String())
+		}
+	}
+	if strings.Contains(with.String(), "sk-ant") {
+		t.Errorf("status printed something shaped like a token:\n%s", with.String())
+	}
+
+	report.Deployed = &DeployedFacts{Version: "1.2.3", ImageDigest: "sha256:abc"}
+	var without bytes.Buffer
+	report.Write(&without)
+	if !strings.Contains(without.String(), "none configured") ||
+		!strings.Contains(without.String(), "CLAUDE_SUB_TOKEN_<LABEL>") {
+		t.Errorf("status does not name the empty rung with its fix:\n%s", without.String())
+	}
+}

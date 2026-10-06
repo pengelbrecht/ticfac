@@ -26,6 +26,7 @@
  * started in the wrong one.
  */
 
+import { claudeSubProcessEnv } from "./claude-sub";
 import type { ProbeSpec, WorkSpec } from "./worker-dispatch";
 
 // ------------------------------------------------------------ the commands ---
@@ -359,6 +360,15 @@ export type WorkerBootInput = {
   gateway_token: string;
   harness?: string;
   model?: string;
+  /**
+   * The claude subscription this job leased (tick 6fv, src/claude-sub.ts),
+   * when the dispatch resolved the claude-sub rung and a subscription was
+   * free. The container's process environment gains the OAuth placeholder,
+   * the interception's CA and the claude-sub marker; the subscription's
+   * token itself is a Worker secret the proxy swaps in per request and never
+   * enters the container. Absent: a Workers AI (or stepped-down) worker.
+   */
+  claude_sub?: { label: string; jobId: string };
   github_token?: string;
   /** Where `github_token` is refreshed on the App rung; see sandbox.ts. */
   github_token_url?: string;
@@ -642,6 +652,11 @@ export function workerBootEnv(input: WorkerBootInput): Record<string, string> {
     AI_GATEWAY_BASE_URL: input.gateway_base_url,
     AI_GATEWAY_TOKEN: input.gateway_token,
     TICKS_WORKER_SETUP: input.setup ?? "always",
+    // The claude-sub process environment (tick 6fv): the placeholder that
+    // puts the CLI in its subscription dialect, the interception's CA, the
+    // marker the entrypoint's claude-sub route keys on. No credential: the
+    // subscription's token is swapped in by the Worker per request.
+    ...(input.claude_sub === undefined ? {} : claudeSubProcessEnv()),
   };
   const optional: [string, string | undefined][] = [
     // Defaulted rather than left absent, unlike everything else below: an
