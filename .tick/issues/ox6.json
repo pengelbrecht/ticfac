@@ -1,0 +1,13 @@
+{
+  "id": "ox6",
+  "title": ".gitignore's unanchored coverage.* pattern can silently untrack source files",
+  "description": "The coverage.* ignore pattern (meant for Go coverage artifacts at the repo root) has no leading slash, so it matches at every depth: a source file named coverage.go in any package is silently untracked while local tests stay green. This tick's first two make gate runs passed on a working tree whose HEAD could not compile (internal/gatewaytrace/coverage.go existed only on disk); it was caught by diffing the branch against the base and fixed by renaming to attribution.go. Anchoring the pattern (/coverage.*) or narrowing it to the artifact extensions would remove the trap.\nevidence: .gitignore:15; the near-miss is commit 759e8c339's message\n\nticfac run epic-hn6 filed this backlog tick from the finding 6ffe736d4e43b1fa86caa9632a829e1e23c119d66c1d3ad6ef07287105ef7c3f (reported by run-epic-hn6/tick-kf4/attempt-45) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-hn6/absorptions/6ffe736d4e43b1fa86caa9632a829e1e23c119d66c1d3ad6ef07287105ef7c3f.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-kf4/attempt-45",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-06T00:42:53Z",
+  "updated_at": "2026-10-06T00:42:53Z"
+}
