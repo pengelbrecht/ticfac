@@ -147,6 +147,29 @@ class_name = "WorkerAgent"
 tag = "v6"
 new_sqlite_classes = ["WorkerAgent"]
 
+# The one claude subscription pool (tick 6fv, src/claude-sub.ts): per-
+# subscription concurrency leases and quota benches for the claude-sub rung
+# — a cloud job on the subscription (claude on a versionless alias) leases
+# one subscription here at dispatch, and every answer the proxy sees is
+# reported to this pool. The TOKENS are Worker secrets the operator sets,
+# one per subscription:
+#
+#   wrangler secret put CLAUDE_SUB_TOKEN_MAX1   # from `claude setup-token`
+#
+# Nothing committed here names a value; /api/claude-sub and /api/deployment
+# report the LABELS only. With no token secret set the pool exists but has
+# no subscription, every lease answers `none`, and every claude-sub job
+# falls back to the Workers AI ladder — the rung is OFF until the operator
+# puts a token on, which is the design: nothing runs on the subscription
+# nobody granted.
+[[durable_objects.bindings]]
+name = "CLAUDE_SUB_POOL"
+class_name = "ClaudeSubPool"
+
+[[migrations]]
+tag = "v7"
+new_sqlite_classes = ["ClaudeSubPool"]
+
 # The Worker version this code is running as (its id, tag and upload time),
 # so GET /api/deployment can say which version the factory actually serves —
 # the one fact the D1 deployment record cannot hold, because wrangler assigns
@@ -318,6 +341,24 @@ RUN_HARNESS = "omp"
 RUN_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
 RUN_WORKER_HARNESS = "pi-durable"
 RUN_WORKER_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
+
+# The claude-sub rung (tick 6fv, spike jvj): how many jobs ONE subscription
+# may hold at once. Not a platform limit — 4 parallel ran clean on staging —
+# but a quota budget: at roughly 1–2% of the 5-hour window per opus review,
+# 2 at a time cannot drain the window before the operator notices, and it
+# leaves their own interactive use headroom. Each subscription gets the
+# same cap; more subscriptions (more CLAUDE_SUB_TOKEN_<LABEL> secrets) add
+# capacity, not per-subscription spend.
+#
+# The rung is OFF until a config selects it: this deployment's pins above
+# name Workers AI pairings, and the run-submission/deployment ladder keeps
+# them. A config that selects claude-sub names the versionless aliases —
+# claude on `sonnet` or `opus` (implement sonnet → opus, review/closeout on
+# opus) — never a pinned model id, which bills per token and is refused at
+# routing. A claude-sub job that finds no free subscription (busy, or every
+# one benched on its quota) falls back to the Workers AI ladder for that
+# job; it never waits.
+CLAUDE_SUB_MAX_CONCURRENT = "2"
 
 # What a CLASSIFIED work type costs on this deployment (tick mrn, epic wne):
 # which model serves each kind of work. The vocabulary — mechanical,

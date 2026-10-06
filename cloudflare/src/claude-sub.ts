@@ -435,6 +435,64 @@ export function claudeSubPool(env: ClaudeSubEnv): DurableObjectStub<ClaudeSubPoo
   return ns === undefined ? null : ns.get(ns.idFromName("pool"));
 }
 
+// ------------------------------------------------------- the operator view ---
+
+/**
+ * The pool's OPERATOR surface, mounted at /api/claude-sub in production (tick
+ * 6fv): which subscriptions this deployment has a token for, their leases,
+ * their benches and the last limit headers the proxy saw — never a token
+ * value, so the whole answer is safe to paste into a log or a terminal.
+ *
+ * The one action is UNBENCHING a label: a subscription benched `auth` until
+ * its token is rotated stays benched until somebody rotates it and says so
+ * here — the rotation itself is a secret (`wrangler secret put
+ * CLAUDE_SUB_TOKEN_<LABEL>`), which this Worker can never see being done.
+ *
+ * Authentication is NOT this function's: it mounts behind the factory's own
+ * bearer check like every other /api route, because the caller is the
+ * operator reading what their subscriptions are doing, never a run.
+ */
+export async function claudeSubRoute(request: Request, env: ClaudeSubEnv): Promise<Response> {
+  const pool = claudeSubPool(env);
+  if (pool === null) {
+    return Response.json(
+      {
+        error: "no_claude_sub_pool",
+        detail:
+          "this deployment binds no CLAUDE_SUB_POOL, so no claude-sub job can lease a subscription — every one falls back to the Workers AI ladder",
+      },
+      { status: 503 },
+    );
+  }
+  const labels = subscriptionLabels(env as Record<string, unknown>);
+  const url = new URL(request.url);
+  // The pool view itself, and the one action under it. Anything else under
+  // /api/claude-sub is a 404 rather than a silently answered GET: an
+  // operator's typo should not read like the pool's whole answer.
+  const unbench = /^\/api\/claude-sub\/unbench\/([A-Za-z0-9_]{1,32})$/.exec(url.pathname);
+  if (unbench === null && url.pathname !== "/api/claude-sub") {
+    return Response.json({ error: "not_found", labels }, { status: 404 });
+  }
+  if (unbench !== null) {
+    if (request.method !== "POST") return new Response("method not allowed", { status: 405 });
+    const label = unbench[1]!;
+    if (!labels.includes(label)) {
+      return Response.json(
+        {
+          error: "unknown_subscription",
+          detail: `no CLAUDE_SUB_TOKEN_${label} secret is configured on this deployment`,
+          labels,
+        },
+        { status: 404 },
+      );
+    }
+    await pool.unbench(label);
+  } else if (request.method !== "GET") {
+    return new Response("method not allowed", { status: 405 });
+  }
+  return Response.json({ labels, subscriptions: await pool.snapshot() });
+}
+
 // ----------------------------------------------------------- the proxy ---
 
 /**
