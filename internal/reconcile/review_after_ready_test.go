@@ -138,3 +138,61 @@ func TestAnUnchangedTreeAfterAReadyReviewLandsWithoutAnotherReview(t *testing.T)
 		t.Errorf("%d review decisions, want 1: the close-out's merge is not a change a review is owed", n)
 	}
 }
+
+// 4. Work that closes after a READY review is reviewed BEFORE the close-out:
+// the review is placed the moment the tree-changing tick closes, and the
+// close-out — its retro, the epic PR — is about the reviewed tree. A finding
+// absorbed while the review ran (n9, with the close-out made blocked-by it)
+// is the shape: rv's READY never saw n9.
+func TestWorkClosedAfterAReadyReviewIsReviewedBeforeTheCloseout(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	pr := &landingForge{}
+	f := newFixture(t, fixtureOptions{gate: wideGate, mode: "report", pullRequests: pr})
+	pr.origin = f.Repo.Origin
+	declareRule(t, f.Repo, landingRule)
+	layerDynamically(t, f, map[string][]string{
+		"rv": {"a1", "a2", "b1"},
+		"co": {"a1", "a2", "b1", "rv"},
+	})
+	f.wrap = func(inner Executor) Executor {
+		return &trackerMutator{Executor: inner, tracker: f.Tracker, on: "rv",
+			mutate: func(state *trackerState) {
+				addTick(state, "n9")
+				state.BlockedBy["co"] = []string{"a1", "a2", "b1", "rv", "n9"}
+			}}
+	}
+
+	r, result, err := f.run(f.Repo, fixtureOptions{gate: wideGate, mode: "report", pullRequests: pr})
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.State != runstate.StateCompleted || !strings.Contains(result.Reason, "merged into main") {
+		t.Fatalf("the run ended %s (%q, %+v), want it landed", result.State, result.Reason, result.Failure)
+	}
+	reviews := reviewDecisions(t, draftsStore(t, f.Repo))
+	if len(reviews) != 2 {
+		t.Fatalf("%d review decisions, want 2: rv's READY and one over the tree n9 changed", len(reviews))
+	}
+	again, _ := reviews[1].Request["tick_id"].(string)
+	dispatched, closed := map[string]int{}, map[string]int{}
+	for i, event := range r.Journal() {
+		switch event.Stage {
+		case StageDispatched, StageAdopted, StageRedispatched:
+			if _, seen := dispatched[event.Tick]; !seen {
+				dispatched[event.Tick] = i
+			}
+		case StageClosed:
+			closed[event.Tick] = i
+		}
+	}
+	at, ok := dispatched[again]
+	if !ok || at < closed["n9"] {
+		t.Errorf("the second review %s was dispatched at %d (seen %v), not after n9 closed at %d", again, at, ok,
+			closed["n9"])
+	}
+	if done, ok := closed[again]; !ok || dispatched["co"] < done {
+		t.Errorf("the close-out was dispatched at %d, before the second review %s closed at %d (seen %v)",
+			dispatched["co"], again, done, ok)
+	}
+}

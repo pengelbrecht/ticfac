@@ -567,10 +567,13 @@ func isCloseoutMerge(message string, closeouts []string) bool {
 // follows the rules above. Every round is gated the same way, so it
 // terminates: a review over a tree unchanged since it lands or holds.
 //
-// It is asked where the run can still work a new tick: where a run is
-// resumed (Run, beside answerNotReadyReview) and where a run's plan has
-// drained, just before the readying (Run's work-the-plan loop) — which is
-// where a change after the READY review in the same run is seen.
+// It is asked where the run can still work a new tick: where a WORK tick
+// closes (runPlan's window, before its replan) — so a review of work that
+// landed after a READY runs before the close-out, and the close-out's retro
+// and the epic PR are about a reviewed tree — where a run is resumed (Run,
+// beside answerNotReadyReview), and, as the backstop for a change nothing in
+// the run saw (a commit pushed from outside it), where a run's plan has
+// drained, just before the readying (Run's work-the-plan loop).
 
 // reviewOverChangedTree places one more review when the final review's tree
 // has changed and nothing else will review it: a READY final review, or a
