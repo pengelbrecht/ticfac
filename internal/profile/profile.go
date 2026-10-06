@@ -496,7 +496,7 @@ func route(p *Profile, opts Options) error {
 				return fmt.Errorf("profile %s: %w: %s declares no [roles.%s] cell — a cloud run refuses rather than falling back to the role's own %q/%q",
 					p.Role, ErrNoCloudRouting, runconfig.OverrideFileName(runconfig.SubstrateCloud), name, role.Kind, role.Model)
 			}
-			} else {
+		} else {
 			apply(overlay.Kind, overlay.Model)
 			routed = append(routed, fmt.Sprintf("%s [roles.%s]", role.OverrideFile, name))
 			if opts.Tier != "" {
