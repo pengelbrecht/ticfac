@@ -59,6 +59,7 @@ import type {
   AttemptSpec,
   AttemptStatus,
 } from "./attempt-protocol";
+import { claudeSubPool, claudeSubRelease, isSubscriptionRung } from "./claude-sub";
 import { containerGitToken, planSandboxGit } from "./credentials";
 import {
   putSandboxJobLogCursor,
@@ -498,6 +499,13 @@ export type SandboxExecutorDeps = {
    * WORKER_AGENTS.
    */
   agents?: WorkerAgentResolver;
+  /**
+   * The claude-sub pool's release half (tick 6fv): what collect and cancel
+   * call with the job id whose subscription lease ends with the attempt.
+   * Absent on a deployment that binds no CLAUDE_SUB_POOL — the boot seam
+   * never resolves the rung there either, so no lease exists to release.
+   */
+  claudeSub?: { release(jobId: string): Promise<void> };
 };
 
 // ------------------------------------------------------------ job logs ---
@@ -769,7 +777,10 @@ async function startNamedAttemptUnchecked(
   });
   const work = workerWorkSpec(boot);
   const task = { tick_id: spec.tick_id, branch: landing, base_sha: boot.base_sha };
-  const spawned = await spawnWorker(deps.binding, name, task, work, deps.spawn);
+  const spawned = await spawnWorker(deps.binding, name, task, work, {
+    ...deps.spawn,
+    ...(boot.claude_sub === undefined ? {} : { claudeSub: boot.claude_sub }),
+  });
   if (deps.jobLogs !== undefined && spawned.launched && spawned.process_id !== null) {
     // Where the confirm window's copy ended, so the state route continues the
     // stream rather than repeating it (tick 86y). Best effort: a cursor that
@@ -1086,6 +1097,13 @@ export async function namedAttemptStatus(
   records?: SandboxJobRecords,
   logs?: SandboxJobLogs,
   agents?: WorkerAgentResolver,
+  /**
+   * The claude-sub release half (tick 6fv): called with the job id when this
+   * read is the one that ends the job — a settled worker's container
+   * reclaimed, a stopped container settled — so the subscription's cap is
+   * free for the next job. Absent on a deployment that wires no pool.
+   */
+  releaseClaudeSub?: (jobId: string) => Promise<void>,
 ): Promise<AttemptStatus> {
   // The records first, and the container only when they cannot answer
   // (epic hn6's second cloud run). Through the SDK, ANY call on a container
@@ -1131,6 +1149,9 @@ export async function namedAttemptStatus(
   if (records !== undefined && sandbox.isRunning !== undefined && !(await sandbox.isRunning())) {
     const stopped = { state: "failed" as const, exit_code: null };
     await records.settle(identity, stopped);
+    // The job is settled — over — so its claude-sub lease ends with it
+    // (tick 6fv). Best effort: the lease's TTL is the backstop.
+    await releaseClaudeSub?.(jobID).catch(() => {});
     return statusFromProcess(stopped, jobID, now);
   }
   // The list, never a remembered id — the evidence-gap rule the seam documents
@@ -1174,6 +1195,10 @@ export async function namedAttemptStatus(
         `factory sandbox door: could not reclaim settled container ${name}: ${String(error)}`,
       );
     }
+    // Reclaimed: the container is gone and the job with it, so the
+    // subscription's cap is free for the next job (tick 6fv). Best effort —
+    // the lease's TTL is the backstop.
+    await releaseClaudeSub?.(jobID).catch(() => {});
   }
   return statusFromProcess(settled, jobID, now);
 }
@@ -1356,6 +1381,23 @@ async function collectAttempt(
   deps: SandboxExecutorDeps,
   handle: SandboxJobHandle,
 ): Promise<AttemptReport> {
+  // The attempt is being collected: whatever its outcome, its claude-sub
+  // lease ends here (tick 6fv). Best effort — the lease's TTL backstops a
+  // collect path that never reaches this line.
+  const collected = await (async () => {
+    try {
+      return await collectAttemptInner(deps, handle);
+    } finally {
+      await deps.claudeSub?.release(handle.job_id).catch(() => {});
+    }
+  })();
+  return collected;
+}
+
+async function collectAttemptInner(
+  deps: SandboxExecutorDeps,
+  handle: SandboxJobHandle,
+): Promise<AttemptReport> {
   const payload = handle.handle;
   // The base and run ride the put so it reads the branch the container
   // ACTUALLY pushed — never another run's branch that holds the landing name
@@ -1426,6 +1468,8 @@ async function cancelAttempt(deps: SandboxExecutorDeps, handle: SandboxJobHandle
     ...(deps.spawn?.sleep === undefined ? {} : { sleep: deps.spawn.sleep }),
   });
   await teardownWorker(deps.binding, payload.sandbox, payload.process_id);
+  // The attempt is cancelled: its claude-sub lease ends with it (tick 6fv).
+  await deps.claudeSub?.release(handle.job_id).catch(() => {});
 }
 
 // --------------------------------------------------------------- the whole ---
@@ -1586,6 +1630,12 @@ export function sandboxExecutorDepsFromEnv(
       // Every worker is a WorkerAgent (epic 43y, ticks xd3 and hxd), on
       // whichever substrate the run was submitted on.
       ...(agents === undefined ? {} : { agents }),
+      // The claude-sub pool's release half (tick 6fv): absent when this
+      // deployment wires no pool — and then the boot seam above never
+      // resolves the rung, so no lease exists to release.
+      ...(claudeSubRelease(env) === undefined
+        ? {}
+        : { claudeSub: { release: claudeSubRelease(env)! } }),
       boot: async (spec) => {
         const slot = attemptJobSlot(spec.run_id, spec.tick_id, spec.attempt, spec.job_id);
         // Minted per dispatch, revoking NOTHING (tick 53s): the run's workers
@@ -1619,11 +1669,18 @@ export function sandboxExecutorDepsFromEnv(
           // the harness the caller's profile resolved and the rendered role
           // prompt beside it, and a choice about this attempt outranks the
           // deployment's standing one — the same ladder the model rides.
-          harness: workerHarness(spec.harness ?? null, textVar(env, "RUN_WORKER_HARNESS")),
-          // The dispatch's own model first (tick a08): the door carries the
-          // model the caller's profile resolved, and a choice about this
-          // attempt outranks the deployment's standing one.
-          model: workerModel(spec.model ?? null, textVar(env, "RUN_WORKER_MODEL")),
+          //
+          // The claude-sub rung (tick 6fv): a dispatch that resolves the rung
+          // — claude on a versionless alias — leases one subscription HERE,
+          // under the pool's per-subscription cap, keyed on the attempt's
+          // own job id (sticky, so a re-ask of the same job keeps its
+          // subscription), and the boot carries the lease beside the pair.
+          // A lease that fails never waits: THIS job steps down to the
+          // Workers AI rung — the deployment's standing pair — and the next
+          // dispatch asks the pool again. The step-down is the lease's whole
+          // fallback story: no worker ever queues on a subscription, and
+          // none ever runs claude per-token instead.
+          ...(await claudeSubLeaseForBoot(env, spec)),
           prompt: spec.prompt,
           // A carried attempt's work base (epic hn6, run_3f034e68): the
           // container measures the carried work from it, so a worker that
@@ -1643,6 +1700,56 @@ export function sandboxExecutorDepsFromEnv(
         };
       },
     },
+  };
+}
+
+/**
+ * The claude-sub half of one dispatch's boot (tick 6fv): when the harness and
+ * model this dispatch resolved ARE the subscription rung, lease one
+ * subscription and hand the boot its label — the container's process
+ * environment gains the OAuth placeholder and the interception's CA
+ * ({@link workerBootEnv}), and the spawn installs the interception
+ * (FactorySandbox's claudeSub boot option). A lease that fails (no token
+ * configured, every one busy, every one benched on its quota) overrides the
+ * pair with the Workers AI rung — the deployment's standing choices — and
+ * returns nothing, so the boot is a plain Workers AI worker for THIS job.
+ *
+ * The job id is the attempt's own ([attemptJobIDOf]), so the pool's stickiness
+ * answers a re-ask of the same dispatch with the same subscription.
+ */
+async function claudeSubLeaseForBoot(
+  env: Env,
+  spec: AttemptSpec,
+): Promise<
+  | { claude_sub: { label: string; jobId: string }; harness: string; model: string }
+  | { harness: string; model: string }
+> {
+  const harness = workerHarness(spec.harness ?? null, textVar(env, "RUN_WORKER_HARNESS"));
+  const model = workerModel(spec.model ?? null, textVar(env, "RUN_WORKER_MODEL"));
+  if (!isSubscriptionRung(harness, model)) return { harness, model };
+  const pool = claudeSubPool(env);
+  const lease =
+    pool === null
+      ? ({ ok: false, reason: "none", retry_at: null } as const)
+      : await pool.lease(specJobID(spec));
+  if (lease.ok) {
+    return {
+      harness,
+      model,
+      claude_sub: { label: lease.label, jobId: specJobID(spec) },
+    };
+  }
+  console.log(
+    JSON.stringify({
+      claude_sub: "stepped_down",
+      job: specJobID(spec),
+      reason: lease.reason,
+      retry_at: lease.retry_at,
+    }),
+  );
+  return {
+    harness: workerHarness(null, textVar(env, "RUN_WORKER_HARNESS")),
+    model: workerModel(null, textVar(env, "RUN_WORKER_MODEL")),
   };
 }
 

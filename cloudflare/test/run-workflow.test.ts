@@ -3,6 +3,14 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { type RunRecord, readHarnessOutput, readRunRecord, reconcileKey } from "../src/artifacts";
 import {
+  CLAUDE_CODE_OAUTH_TOKEN,
+  CLAUDE_SUB_PLACEHOLDER,
+  CONTAINER_CA_PATH,
+  claudeSubPool,
+  TICKS_CLAUDE_SUB,
+  TOKEN_SECRET_PREFIX,
+} from "../src/claude-sub";
+import {
   enrolProject,
   getRun,
   getRunProgress,
@@ -2309,6 +2317,113 @@ describe("the pull request review job (tick dl8)", () => {
     const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
     expect(record.detail ?? "").toMatch(/no review comment/i);
     expect(sandboxes.booted).toHaveLength(1);
+  });
+
+  // The claude-sub rung (tick 6fv): a config that selects it — the run-level
+  // harness/model pair — boots the review on the SUBSCRIPTION, with the
+  // container holding only the placeholder and the interception's CA. The
+  // lease is taken at dispatch (per subscription, under the cap) and released
+  // when the container is collected, and the run's feed says which
+  // subscription took the job.
+  it("boots a review on the subscription the rung selected, and never hands the container a token", async () => {
+    set("RUN_HARNESS", "claude");
+    set("RUN_MODEL", "opus");
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+
+    const { runID, pr } = await igniteReview();
+    const process = await firstProcess();
+    expect(process.env).toMatchObject({
+      TICKS_PHASE: "review",
+      TICKS_HARNESS: "claude",
+      TICKS_MODEL: "opus",
+      // The placeholder and the CA, and nothing else: the real token is a
+      // Worker secret the proxy swaps in per request.
+      [CLAUDE_CODE_OAUTH_TOKEN]: CLAUDE_SUB_PLACEHOLDER,
+      NODE_EXTRA_CA_CERTS: CONTAINER_CA_PATH,
+      [TICKS_CLAUDE_SUB]: "1",
+    });
+    expect(JSON.stringify(process.env)).not.toContain("sk-ant");
+
+    // The lease is live under the subscription while the container is.
+    const pool = claudeSubPool(env as unknown as Parameters<typeof claudeSubPool>[0])!;
+    const leased = await pool.snapshot();
+    expect(leased).toHaveLength(1);
+    expect(leased[0]!.label).toBe("MAX1");
+    expect(leased[0]!.active_leases).toEqual([sandboxName(runID, 1)]);
+
+    // The review completes exactly as a Workers AI one does.
+    const response = await SELF.fetch(`${FACTORY}${REVIEW_PATH}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${process.env.TICKS_FACTORY_TOKEN}`,
+        "content-type": "text/markdown",
+      },
+      body: "claude-sub review done",
+    });
+    expect(response.status).toBe(201);
+    process.exit(0);
+    const run = await settled(runID);
+    expect(run.state).toBe("completed");
+    expect(commenter.posted[0]!.number).toBe(pr);
+
+    // Collected: the container is destroyed and the lease released, so the
+    // subscription's cap is free for the next job.
+    expect(sandboxes.booted.at(-1)!.destroyed).toBe(true);
+    const released = await pool.snapshot();
+    expect(released[0]!.active_leases).toEqual([]);
+  });
+
+  // No subscription is free — here because none is CONFIGURED — and the job
+  // does not wait: it steps down to the Workers AI rung for THIS job, and the
+  // run's feed says so, because an operator reading a run they expected on
+  // opus needs to know why it was not.
+  it("falls back to the Workers AI rung when no subscription is configured", async () => {
+    set("RUN_HARNESS", "claude");
+    set("RUN_MODEL", "opus");
+
+    const { runID, project } = await igniteReview();
+    const process = await firstProcess();
+    expect(process.env).toMatchObject({
+      TICKS_HARNESS: "omp",
+      TICKS_MODEL: "workers-ai/@cf/zai-org/glm-5.3",
+    });
+    // No claude-sub environment at all: nothing about the failed lease
+    // reaches the container.
+    expect(process.env[CLAUDE_CODE_OAUTH_TOKEN]).toBeUndefined();
+    expect(process.env[TICKS_CLAUDE_SUB]).toBeUndefined();
+
+    const feed = await readRunFeed(env.ARTIFACTS, project, runID);
+    expect(feed).toContain("claude-sub");
+    expect(feed).toContain("no subscription configured");
+
+    process.exit(0);
+    const run = await settled(runID);
+    expect(run.state).toBe("stopped");
+  });
+
+  // The cap's case: the subscription exists but is BUSY (or benched — the
+  // same lease refusal, a different reason on the same line). The step-down
+  // names the reason, and the fallback runs on Workers AI for this job only.
+  it("falls back when the subscription is busy under its cap, naming why on the feed", async () => {
+    set("RUN_HARNESS", "claude");
+    set("RUN_MODEL", "opus");
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+    set("CLAUDE_SUB_MAX_CONCURRENT", "1");
+
+    const pool = claudeSubPool(env as unknown as Parameters<typeof claudeSubPool>[0])!;
+    const held = await pool.lease("another-job-holding-the-subscription");
+    expect(held.ok).toBe(true);
+
+    const { runID, project } = await igniteReview();
+    const process = await firstProcess();
+    expect(process.env.TICKS_HARNESS).toBe("omp");
+    const feed = await readRunFeed(env.ARTIFACTS, project, runID);
+    expect(feed).toContain("claude-sub");
+    expect(feed).toContain("busy");
+
+    process.exit(0);
+    await settled(runID);
+    await pool.release("another-job-holding-the-subscription");
   });
 });
 

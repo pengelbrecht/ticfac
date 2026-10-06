@@ -743,6 +743,23 @@ describe("factorySandboxBinding", () => {
     ]);
   });
 
+  it("carries a claude-sub lease to the start, so the interception binds before the container runs", async () => {
+    const { namespace, calls } = recordingNamespace();
+    const binding = factorySandboxBinding(namespace);
+    const sub = { label: "MAX1", jobId: "run_1-1" };
+
+    const s = await binding.get("run_1-1", { keepAlive: true, claudeSub: sub });
+    await s.startProcess("claude -p review", { env: {} });
+
+    expect(calls).toEqual([
+      {
+        name: "run_1-1",
+        method: "startProcess",
+        args: ["claude -p review", {}, { keepAlive: true, claudeSub: sub }],
+      },
+    ]);
+  });
+
   it("does nothing at get: no question is asked until a method is called", async () => {
     const { namespace, calls } = recordingNamespace();
     await factorySandboxBinding(namespace).get("n");

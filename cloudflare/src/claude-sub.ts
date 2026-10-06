@@ -49,6 +49,44 @@ export const CLAUDE_SUB_PLACEHOLDER = "ticfac-claude-sub-placeholder-not-a-token
 /** The secret-name prefix of a subscription token: CLAUDE_SUB_TOKEN_<LABEL>. */
 export const TOKEN_SECRET_PREFIX = "CLAUDE_SUB_TOKEN_";
 
+/** The env name the claude CLI reads the subscription's OAuth token from. */
+export const CLAUDE_CODE_OAUTH_TOKEN = "CLAUDE_CODE_OAUTH_TOKEN";
+
+/**
+ * The marker the control plane sets on a claude-sub job's process environment
+ * (tick 6fv): what image/common.sh's claude-sub route keys on. The pair
+ * (placeholder, marker) is what tells the container's entrypoint its claude
+ * traffic is billed to the operator's subscription and intercepted by this
+ * Worker — never per-token through the gateway.
+ */
+export const TICKS_CLAUDE_SUB = "TICKS_CLAUDE_SUB";
+
+/**
+ * The claude-sub rung, the TypeScript half of [profile.CloudRule]'s
+ * SubscriptionRungs (internal/profile/cloudworker.go, tick 6fv): the harness
+ * whose CLI speaks the subscription's OAuth dialect, and the VERSIONLESS
+ * aliases a config may name on it — never a pinned id, which bills per token
+ * and the rule refuses. The Go parity test
+ * (internal/profile/cloudworker_test.go) pins this list to CloudRule's, so
+ * the two languages cannot admit different rungs.
+ */
+export const SUBSCRIPTION_HARNESS = "claude";
+export const SUBSCRIPTION_ALIASES = ["sonnet", "opus"] as const;
+
+/**
+ * Whether a resolved harness/model pair IS the subscription rung — the
+ * factory's half of the routing rule: a pair this answers true for leases a
+ * subscription at dispatch and falls back to the Workers AI rung when none
+ * is free; every other pair never touches the pool at all.
+ */
+export function isSubscriptionRung(
+  harness: string | null | undefined,
+  model: string | null | undefined,
+): boolean {
+  if (harness !== SUBSCRIPTION_HARNESS) return false;
+  return (SUBSCRIPTION_ALIASES as readonly string[]).includes(model ?? "");
+}
+
 /** The beta the subscription (OAuth) dialect of the Messages API needs. */
 export const OAUTH_BETA = "oauth-2025-04-20";
 
@@ -248,9 +286,10 @@ export function upstreamRequest(request: Request, token: string): Request {
  */
 export function claudeSubProcessEnv(): Record<string, string> {
   return {
-    CLAUDE_CODE_OAUTH_TOKEN: CLAUDE_SUB_PLACEHOLDER,
+    [CLAUDE_CODE_OAUTH_TOKEN]: CLAUDE_SUB_PLACEHOLDER,
     NODE_EXTRA_CA_CERTS: CONTAINER_CA_PATH,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+    [TICKS_CLAUDE_SUB]: "1",
   };
 }
 
@@ -433,6 +472,21 @@ export class ClaudeSubPool extends DurableObject<ClaudeSubEnv> {
 export function claudeSubPool(env: ClaudeSubEnv): DurableObjectStub<ClaudeSubPool> | null {
   const ns = env.CLAUDE_SUB_POOL;
   return ns === undefined ? null : ns.get(ns.idFromName("pool"));
+}
+
+/**
+ * The pool's release half as one function (tick 6fv): what a caller that
+ * ends a job — collect, cancel, the settled container's reclaim — calls with
+ * the job id the lease was taken under. Releasing a job that never leased is
+ * a no-op; the lease's TTL is the backstop for an ending nothing observes.
+ * Undefined when this deployment wires no pool.
+ */
+export function claudeSubRelease(
+  env: ClaudeSubEnv,
+): ((jobId: string) => Promise<void>) | undefined {
+  const pool = claudeSubPool(env);
+  // An arrow, never `pool.release.bind(pool)`: an RPC stub carries no `bind`.
+  return pool === null ? undefined : (jobId: string) => pool.release(jobId);
 }
 
 // ------------------------------------------------------- the operator view ---

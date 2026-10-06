@@ -300,7 +300,21 @@ export interface OrchestratorSandbox {
 export interface SandboxBinding {
   get(
     name: string,
-    options?: { image?: string; keepAlive?: boolean },
+    options?: {
+      image?: string;
+      keepAlive?: boolean;
+      /**
+       * The claude subscription this job leased (tick 6fv,
+       * src/claude-sub.ts): the container's traffic to api.anthropic.com is
+       * intercepted and authenticated with that subscription's token — a
+       * Worker secret the container never holds. Honoured by the
+       * durable_object substrate (FactorySandbox installs the interception);
+       * a substrate with no per-host interception ignores it and the boot's
+       * own claude-sub route refuses inside the container, never a silent
+       * fall back to per-token spend.
+       */
+      claudeSub?: { label: string; jobId: string };
+    },
   ): Promise<OrchestratorSandbox>;
 }
 
@@ -469,8 +483,18 @@ export function sdkSandboxBinding(namespace: SandboxNamespace): SandboxBinding {
   return {
     async get(
       name: string,
-      options?: { image?: string; keepAlive?: boolean },
+      options?: {
+        image?: string;
+        keepAlive?: boolean;
+        claudeSub?: { label: string; jobId: string };
+      },
     ): Promise<OrchestratorSandbox> {
+      // claudeSub is deliberately dropped (not honoured): the 0.x SDK has no
+      // per-host outbound interception, so a claude-sub boot there would
+      // carry the placeholder into a container whose api.anthropic.com
+      // traffic reaches the vendor unauthenticated. The entrypoint's
+      // claude-sub route dies at its model probe in that shape — visibly,
+      // never as spend. The rung is a durable_object-substrate feature.
       return adaptSandbox(getSandbox(namespace, name, sdkBootOptions(options)));
     },
   };
