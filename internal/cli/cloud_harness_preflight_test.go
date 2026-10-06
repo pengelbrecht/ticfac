@@ -127,6 +127,14 @@ func commitPreflightConfig(t *testing.T, repo string, common, overlay string) {
 // with the kinds an image ships (nil = the field is absent: a factory that
 // predates it).
 func deploymentAnswer(version string, kinds []string) (int, any) {
+	return deploymentAnswerWithSubscriptions(version, kinds, nil)
+}
+
+// deploymentAnswerWithSubscriptions is [deploymentAnswer] with the claude-sub
+// subscription LABELS the deployment holds (tick tda): nil omits the field —
+// a factory that predates it — and an empty-but-present slice is the honest
+// "the rung is off" a config riding the rung is refused against.
+func deploymentAnswerWithSubscriptions(version string, kinds, subs []string) (int, any) {
 	body := map[string]any{
 		"version":      version,
 		"image_ref":    "registry/ticks-orchestrator@sha256:abc",
@@ -134,6 +142,9 @@ func deploymentAnswer(version string, kinds []string) (int, any) {
 	}
 	if kinds != nil {
 		body["harness_kinds"] = kinds
+	}
+	if subs != nil {
+		body["claude_sub_labels"] = subs
 	}
 	return 200, body
 }
@@ -398,5 +409,314 @@ func TestRunCloudRefusesARoutingThatDoesNotResolve(t *testing.T) {
 	// asked nothing.
 	if requestSeen(requests, http.MethodGet, "/api/deployment") {
 		t.Errorf("an unresolvable routing still asked the factory what it ships")
+	}
+}
+
+// The named-config half of the submission preflight (tick tda): the branch may
+// declare more than one complete routing — one epic on GLM, another on
+// claude through the operator's subscription — and a config that cannot route
+// is refused at the knee, before anything is pushed or booted, naming the
+// config. The one refusal the acceptance names specially: a claude config
+// with no subscription token configured, which would otherwise silently step
+// every dispatch down to Workers AI.
+
+// preflightConfiguredOverlay is the repository's own cloud shape with the
+// named configs added: glm (the declared default, Workers AI) and claude
+// (the subscription rung — implement on sonnet climbing to opus, review and
+// close-out on opus, the ladder the operator named 2026-10-06).
+func preflightConfiguredOverlay() string {
+	return `version = 2
+
+[configs]
+default = "glm"
+
+[configs.glm.roles.implement]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[configs.glm.roles.implement.tiers.economy]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
+
+[configs.glm.roles.implement.tiers.strong]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[configs.glm.roles.review]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[configs.glm.roles.review.tiers.strong]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[configs.glm.roles.closeout]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[configs.glm.tier_policy]
+default = "economy"
+ceiling = "strong"
+step = 2
+
+[configs.claude.roles.implement]
+kind = "claude"
+model = "sonnet"
+
+[configs.claude.roles.implement.tiers.economy]
+model = "sonnet"
+
+[configs.claude.roles.implement.tiers.strong]
+model = "opus"
+
+[configs.claude.roles.review]
+kind = "claude"
+model = "opus"
+
+[configs.claude.roles.review.tiers.strong]
+kind = "claude"
+model = "opus"
+
+[configs.claude.roles.closeout]
+kind = "claude"
+model = "opus"
+
+[configs.claude.tier_policy]
+default = "economy"
+ceiling = "strong"
+step = 2
+
+[configs.claude.tier_policy.concurrency]
+economy = 2
+strong = 1
+
+[roles.implement]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[roles.implement.tiers.economy]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
+effort = "medium"
+
+[roles.implement.tiers.strong]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[roles.review]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[roles.review.tiers.strong]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[roles.closeout]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[tier_policy]
+default = "economy"
+ceiling = "strong"
+step = 2
+`
+}
+
+// TestRunCloudRefusesAClaudeConfigWithNoSubscription is the acceptance's own
+// refusal: a cloud config riding the claude-sub rung and a factory holding
+// no subscription token — a run on that config would silently step every
+// dispatch down to Workers AI. The submission is refused naming the config,
+// the rung and the `wrangler secret put` that turns the rung on, and the
+// only factory traffic is the reads.
+func TestRunCloudRefusesAClaudeConfigWithNoSubscription(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	commitPreflightConfig(t, repo, preflightCommonRunners, preflightConfiguredOverlay())
+
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+			return 200, map[string]any{"runs": []any{}}
+		case request.Method == http.MethodGet && request.Path == "/api/deployment":
+			// The image ships claude (the rung's harness) and holds NO
+			// subscription token: the field is present and empty, which is
+			// the rung being off — not absent, which is a factory that
+			// predates the field.
+			return deploymentAnswerWithSubscriptions("v1.0.0-7-gdeadbeef0123",
+				[]string{"omp", "claude", "pi-durable"}, []string{})
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			t.Errorf("the preflight refused nothing: the factory was asked to start a run")
+			return 201, map[string]any{"run": map[string]any{"run_id": "dd44", "state": "starting"}}
+		}
+		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+	rec := recordCloudAttach(t)
+
+	code, stdout, stderr := runRunCloud(t, repo, "epic1")
+	if code != exitGeneric {
+		t.Fatalf("exit %d, want the failure class %d:\nstdout:\n%s\nstderr:\n%s", code, exitGeneric, stdout.String(), stderr.String())
+	}
+	joined := stdout.String() + stderr.String()
+	for _, want := range []string{
+		"config claude rides the claude-sub subscription rung", // the config, named
+		"implement-tick (tier economy)",                        // the jobs that ride it
+		"no subscription token (CLAUDE_SUB_TOKEN_<LABEL>)",     // the rung being off
+		"silently step every dispatch down to Workers AI",      // what would happen instead
+		"wrangler secret put CLAUDE_SUB_TOKEN_<LABEL>",         // the fix
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the refusal does not name %q:\n%s", want, joined)
+		}
+	}
+	if len(rec.runIDs) != 0 {
+		t.Errorf("the refused submission attached to a run: %v", rec.runIDs)
+	}
+}
+
+// TestRunCloudSubmitsAClaudeConfigWithASubscription: the same branch, the same
+// factory, one difference — the factory holds a subscription token, so the
+// rung is on and the config can be served. The preflight passes silently and
+// the submission goes through: an epic on claude is a submission the factory
+// can take, not one the preflight second-guesses.
+func TestRunCloudSubmitsAClaudeConfigWithASubscription(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	commitPreflightConfig(t, repo, preflightCommonRunners, preflightConfiguredOverlay())
+	started := cloudRunIDOf("ee55")
+
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+			return 200, map[string]any{"runs": []any{}}
+		case request.Method == http.MethodGet && request.Path == "/api/deployment":
+			return deploymentAnswerWithSubscriptions("v1.0.0-7-gdeadbeef0123",
+				[]string{"omp", "claude", "pi-durable"}, []string{"max"})
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			return 201, map[string]any{"run": map[string]any{"run_id": started, "state": "starting"}}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+	rec := recordCloudAttach(t)
+
+	code, stdout, stderr := runRunCloud(t, repo, "epic1")
+	if code != exitSuccess {
+		t.Fatalf("exit %d, want the success class the preflight passed into:\nstdout:\n%s\nstderr:\n%s", code, stdout.String(), stderr.String())
+	}
+	if len(rec.runIDs) != 1 || rec.runIDs[0] != started {
+		t.Errorf("attached to %v, want [%s]", rec.runIDs, started)
+	}
+}
+
+// TestRunCloudRefusesAConfigThatCannotRoute: a named config with broken cells
+// — the rung's harness on a PINNED model id, which bills per token in the
+// cloud exactly as firmly as claude on any other harness — is refused naming
+// the CONFIG, before a run can select it, with the same refusal a run's own
+// start would give.
+func TestRunCloudRefusesAConfigThatCannotRoute(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	overlay := `version = 2
+
+[configs]
+default = "glm"
+
+[configs.glm.roles.implement]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[configs.glm.roles.review]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[configs.glm.roles.review.tiers.strong]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[configs.glm.roles.closeout]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[configs.broken.roles.implement]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[configs.broken.roles.review]
+kind = "claude"
+model = "claude-sonnet-5-5"
+
+[configs.broken.tier_policy]
+default = "economy"
+ceiling = "strong"
+step = 2
+
+[roles.implement]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[roles.implement.tiers.economy]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
+effort = "medium"
+
+[roles.implement.tiers.strong]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[tier_policy]
+default = "economy"
+ceiling = "strong"
+step = 2
+
+[roles.review]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[roles.review.tiers.strong]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[roles.closeout]
+kind = "pi-durable"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+`
+	commitPreflightConfig(t, repo, preflightCommonRunners, overlay)
+
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+			return 200, map[string]any{"runs": []any{}}
+		case request.Method == http.MethodGet && request.Path == "/api/deployment":
+			return deploymentAnswer("v1.0.0-7-gdeadbeef0123", []string{"omp", "claude", "pi-durable"})
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			t.Errorf("the preflight refused nothing: the factory was asked to start a run")
+			return 201, map[string]any{"run": map[string]any{"run_id": "ff66", "state": "starting"}}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+	rec := recordCloudAttach(t)
+
+	code, stdout, stderr := runRunCloud(t, repo, "epic1")
+	if code != exitGeneric {
+		t.Fatalf("exit %d, want the failure class %d:\nstdout:\n%s\nstderr:\n%s", code, exitGeneric, stdout.String(), stderr.String())
+	}
+	joined := stdout.String() + stderr.String()
+	for _, want := range []string{
+		`the named run config "broken" cannot route`, // the config, named
+		"pinned model id bills per token",            // the cell the error names
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the refusal does not name %q:\n%s", want, joined)
+		}
+	}
+	if len(rec.runIDs) != 0 {
+		t.Errorf("the refused submission attached to a run: %v", rec.runIDs)
 	}
 }

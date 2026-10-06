@@ -86,11 +86,11 @@ const NoExecutorMessage = reconcile.NoExecutorMessage
 // the help, completions and man pages derived from the tree) and the body's
 // reads share one declaration.
 type runEpicFlags struct {
-	repo, remote, branch, base, runID, owner, runner, tier, profiles, stateRoot, gate *string
-	budget, ceiling                                                                   *float64
-	wall, maxResumes, stallWarn, evacuateSeconds, absorptionDepth, stuckAfter         *int
-	supervise, statusPush                                                             *bool
-	asJSON                                                                            *bool
+	repo, remote, branch, base, runID, owner, runner, tier, profiles, stateRoot, gate, config *string
+	budget, ceiling                                                                           *float64
+	wall, maxResumes, stallWarn, evacuateSeconds, absorptionDepth, stuckAfter                 *int
+	supervise, statusPush                                                                     *bool
+	asJSON                                                                                    *bool
 }
 
 // defineRunEpicFlags declares every run-epic flag on fs — defaults, usage
@@ -98,14 +98,20 @@ type runEpicFlags struct {
 // body that parsed them.
 func defineRunEpicFlags(fs *flag.FlagSet) *runEpicFlags {
 	return &runEpicFlags{
-		repo:      fs.String("repo", "", "the checkout attempts branch from"),
-		remote:    fs.String("remote", "origin", "the remote holding the run's durable authority"),
-		branch:    fs.String("branch", "", "the EpicRun integration branch"),
-		base:      fs.String("base", "HEAD", "what the integration branch is cut from"),
-		runID:     fs.String("run-id", "", "the run's id"),
-		owner:     fs.String("owner", "ticfac", "who claims a tick in the tracker"),
-		runner:    fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi"),
-		tier:      fs.String("tier", "", "pin a [roles.*.tiers.<name>] overlay for every dispatch of this run (by default the tier is DERIVED per tick from [tier_policy])"),
+		repo:   fs.String("repo", "", "the checkout attempts branch from"),
+		remote: fs.String("remote", "origin", "the remote holding the run's durable authority"),
+		branch: fs.String("branch", "", "the EpicRun integration branch"),
+		base:   fs.String("base", "HEAD", "what the integration branch is cut from"),
+		runID:  fs.String("run-id", "", "the run's id"),
+		owner:  fs.String("owner", "ticfac", "who claims a tick in the tracker"),
+		runner: fs.String("runner", os.Getenv("TICFAC_RUNNER"), "claude | codex | pi"),
+		tier:   fs.String("tier", "", "pin a [roles.*.tiers.<name>] overlay for every dispatch of this run (by default the tier is DERIVED per tick from [tier_policy])"),
+		// The named run config (tick tda): the operator's word for this one
+		// run, over the epic's own config: label, over the [configs] default
+		// the runners files declare. A config is a complete routing — one
+		// epic on GLM, another on claude — selected once at start, never per
+		// dispatch. Empty selects by the precedence below it.
+		config:    fs.String("config", "", "run every dispatch under one of the runners files' named run configs ([configs.<name>] in .tick/runners.toml or the substrate's override file) — over the epic's own config: label, over the [configs] default"),
 		profiles:  fs.String("profiles", "", "resolve role profiles from this directory (\"herdr\" names the herdr set embedded in this binary)"),
 		stateRoot: fs.String("state-root", "", "where attempt state lives, outside the repository"),
 		gate:      fs.String("gate", "", "the runners.toml the integrated gate is read from"),
@@ -369,21 +375,29 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// interface is not nil — the seam would dial a client that does not exist,
 	// and the nil check each exchange runs would pass it straight through.
 	opts := reconcile.Options{
-		Repo:                 *fl.repo,
-		Remote:               *fl.remote,
-		EpicID:               epicID,
-		RunID:                *fl.runID,
-		IntegrationBranch:    *fl.branch,
-		BaseRef:              *fl.base,
-		Owner:                *fl.owner,
-		Tracker:              tracker,
-		NewExecutor:          executorFactory(*fl.runner, *fl.gate),
-		NewSweeper:           sweeperFactory(*fl.gate),
-		Executors:            knownExecutors(),
-		ExecStateRoot:        *fl.stateRoot,
-		GateConfig:           *fl.gate,
-		ProfileDir:           *fl.profiles,
-		Tier:                 *fl.tier,
+		Repo:              *fl.repo,
+		Remote:            *fl.remote,
+		EpicID:            epicID,
+		RunID:             *fl.runID,
+		IntegrationBranch: *fl.branch,
+		BaseRef:           *fl.base,
+		Owner:             *fl.owner,
+		Tracker:           tracker,
+		NewExecutor:       executorFactory(*fl.runner, *fl.gate),
+		NewSweeper:        sweeperFactory(*fl.gate),
+		Executors:         knownExecutors(),
+		ExecStateRoot:     *fl.stateRoot,
+		GateConfig:        *fl.gate,
+		ProfileDir:        *fl.profiles,
+		Tier:              *fl.tier,
+		RunConfig:         *fl.config,
+		// The run-start subscription preflight's seam (tick tda): the
+		// deployed factory's own answer to which subscription labels it
+		// holds — labels only, never values. A factory that cannot be
+		// asked is not a fact about the config: the reconciler leaves the
+		// question to the surfaces that can ask (doctor, the submission
+		// preflight), exactly as a nil seam does.
+		SubscriptionTokens:   subscriptionTokensForRun,
 		WallSeconds:          *fl.wall,
 		StuckAfter:           time.Duration(*fl.stuckAfter) * time.Second,
 		StallWarnAfter:       time.Duration(*fl.stallWarn) * time.Second,
