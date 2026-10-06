@@ -58,6 +58,7 @@ import {
 import { modelRoutingComplaint, revokeRunTokens } from "./gateway";
 import type { Env } from "./index";
 import { type OrchestratorKind, recordLocalOrchestrator } from "./local-orchestrator";
+import { endedSupervisorOf, readRunInstance } from "./run-orphans";
 import type {
   DispatchLeaseView,
   LeaseOrigin,
@@ -1280,29 +1281,22 @@ export async function runStatus(env: Env, runID: string): Promise<RunStatus | nu
   };
 }
 
-/** Workflow instance statuses after which nothing will ever read a stop. */
-const SUPERVISOR_ENDED: ReadonlySet<string> = new Set(["errored", "terminated", "complete"]);
-
 /**
  * The run's supervisor, when it has CERTAINLY ended; null otherwise.
  *
  * With one driver there is one binding to ask (tick mn7). The question is
  * still asked carefully: an instance whose status cannot be read is left
  * alone, because finishing a live run's record on a failed read would be
- * worse than a stuck one — only a CONFIRMED ended status finishes the stop
- * here.
+ * worse than a stuck one. A CONFIRMED ending finishes the stop here — an
+ * ended status, or Cloudflare saying it has no such instance at all (tick
+ * gbg: that answer used to share the failed read's path, so a stop on a
+ * record whose instance was gone froze at `stopping` forever).
  */
 async function endedSupervisor(env: Env, run: Run): Promise<{ id: string; status: string } | null> {
   const workflow = runWorkflowBinding(env);
   if (workflow === null) return null;
-  try {
-    const instance = await workflow.get(run.run_id);
-    const status = await instanceStatus(instance);
-    if (!SUPERVISOR_ENDED.has(status)) return null;
-    return { id: instance.id, status };
-  } catch {
-    return null;
-  }
+  const ended = endedSupervisorOf(await readRunInstance(workflow, run.run_id));
+  return ended === null ? null : { id: run.run_id, status: ended.status };
 }
 
 async function workflowPhase(env: Env, run: Run): Promise<{ id: string; status: string } | null> {
