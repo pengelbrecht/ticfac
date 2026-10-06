@@ -89,6 +89,46 @@ func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 			}
 		}
 	}
+
+	// Every NAMED config the cloud file declares routes too (tick tda): the
+	// repository now carries two — glm, the declared default, and claude,
+	// the subscription rung — and a config that cannot route is a config
+	// doctor and the submission preflight refuse, so the repository's own
+	// gate must catch it first. Each config's every job satisfies the cloud
+	// billing rule on its FINAL resolved worker: the durable harness on a
+	// Workers AI model (glm), or the claude-sub rung's harness on one of its
+	// VERSIONLESS aliases (claude — admitted since 6fv: the alias is what
+	// makes the rung subscription-billed, and a pinned id anywhere in the
+	// claude config is per-token spend the rule refuses by name).
+	counts, jobs, err := CheckEveryNamedConfig(profile.EmbeddedCloud, config, runconfig.SubstrateCloud)
+	if err != nil {
+		t.Fatalf("every named config did not route: %v", err)
+	}
+	if len(counts) != 2 {
+		t.Errorf("the cloud file declares %d named configs, want the two the acceptance names: %v", len(counts), counts)
+	}
+	if _, ok := counts["glm"]; !ok {
+		t.Error("the declared default config glm is missing")
+	}
+	if _, ok := counts["claude"]; !ok {
+		t.Error("the claude config is missing")
+	}
+	for _, job := range jobs {
+		_, onRung := profile.SubscriptionRungFor(job.Profile.Runner, job.Profile.Model)
+		switch {
+		case onRung:
+			// The claude-sub rung: legal exactly as the harness/alias pair,
+			// and only ever under the config that chose it.
+			if job.Config != "claude" {
+				t.Errorf("the %s config routes %s at %q onto the subscription rung (%s/%s) — the rung is the claude config's to select, never a default's",
+					job.Config, job.Role, job.Tier, job.Profile.Runner, job.Profile.Model)
+			}
+		case cloudRunnerIsDurable(job.Profile.Runner) && strings.HasPrefix(job.Profile.Model, "cloudflare-workers-ai/"):
+		default:
+			t.Errorf("cloud %s at tier %q under config %s routes to %s/%s — neither the durable harness on Workers AI nor a subscription rung pair",
+					job.Role, job.Tier, job.Config, job.Profile.Runner, job.Profile.Model)
+		}
+	}
 }
 
 // cloudRunnerIsDurable reports whether a resolved cloud profile finally
