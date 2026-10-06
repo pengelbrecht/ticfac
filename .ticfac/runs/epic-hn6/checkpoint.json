@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-hn6",
   "epic_id": "hn6",
-  "sequence": 314,
-  "state": "running",
-  "reason": "uzs is running as attempt 46",
-  "updated_at": "2026-10-06T00:00:56Z",
+  "sequence": 315,
+  "state": "collecting",
+  "reason": "collecting uzs attempt 46",
+  "updated_at": "2026-10-06T00:12:08Z",
   "ticks": [
     {
       "tick_id": "v16",
