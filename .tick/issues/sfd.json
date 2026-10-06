@@ -1,0 +1,14 @@
+{
+  "id": "sfd",
+  "title": "Local pi-durable worker: the supervisor's timed push fights the harness's wip-checkpoint push on the same branch",
+  "gloss": "timed push vs wip push",
+  "description": "v5t's 6fv local worker (2026-10-06, pi-durable harness via local-subprocess): runner.log shows 'wip checkpoint pushed to ticfac/run-epic-v5t/tick-6fv/attempt-1: \u003csha\u003e' after tool rounds, and between them 'the timed push of ticfac/run-epic-v5t/tick-6fv/attempt-1 failed; the next tick tries again' every 30s — two writers (the supervisor's timed push of the worktree branch and the harness's afterTools wip commit+push, 43y dwn) push the same ref and race. Meanwhile ticfac status says the branch 'last moved 46m ago' and a stall warning fired although wip checkpoints were landing. One writer per ref: under pi-durable the harness's wip push is the push (the supervisor stops its timed push, or pushes only when the harness hasn't), and status/stall read the ref the harness moves.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "A local pi-durable worker logs no failed timed pushes; status shows the branch moving with each wip checkpoint; tests.",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-06T18:00:51.423931Z",
+  "updated_at": "2026-10-06T18:00:51.423931Z"
+}
