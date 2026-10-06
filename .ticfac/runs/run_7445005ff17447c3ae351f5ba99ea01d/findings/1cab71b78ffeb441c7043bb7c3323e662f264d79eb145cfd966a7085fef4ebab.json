@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "l76",
   "attempt": 2,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-06T14:16:27Z",
+  "triaged_at": "2026-10-06T14:16:36Z",
+  "triaged_by": "ticfac run run_7445005ff17447c3ae351f5ba99ea01d absorbing xtd",
+  "promoted_as": "xtd",
   "provenance": {
     "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
     "tick_id": "l76",
