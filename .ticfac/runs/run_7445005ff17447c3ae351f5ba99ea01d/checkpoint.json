@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
   "epic_id": "umq",
-  "sequence": 27,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for a6b",
-  "updated_at": "2026-10-06T17:01:40Z",
+  "sequence": 28,
+  "state": "publishing",
+  "reason": "closing a6b behind its validated review-epic answer",
+  "updated_at": "2026-10-06T17:02:18Z",
   "ticks": [
     {
       "tick_id": "dax",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "a6b",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 4
     }
   ],
