@@ -58,6 +58,13 @@ version = 2                 # optional; 1 or 2 — 2 once any command table is p
 [sandbox]                   # optional — the sandbox this repo's runs get
                             #            image / toolchain / setup
 
+[tier_policy]               # optional — the evaluated tier ladder (ticfac's)
+[configs]                   # optional — named run configs + the default
+[configs.<name>]            #            one complete routing: roles (with
+                            #            tiers) and a tier policy, and nothing
+                            #            else — one epic on GLM, another on
+                            #            claude, from the same repository
+
 [findings.route.<repo>]     # optional — ANOTHER repository a run may file a
                             #            routed finding into, "owner/name"
 
@@ -182,6 +189,86 @@ With neither override file a run reads exactly `runners.toml`. The rules:
 - **The substrate that picks the file is decided from the common file** (and `TICKS_SUBSTRATE`); an override cannot move a run to another world.
 
 The retired inline form, `[roles.<name>.substrates.<substrate>]`, is refused with a pointer to the file it moved to. ticfac's own readers (`ticfac sandbox substrate`, the substrate decision) read only the common file.
+
+### Named run configs
+
+A repository may declare **more than one complete routing** and let each epic
+choose between them — the operator's own words (2026-10-06): *"i might want
+multiple possible cloud configs in the same repo, so i might run one epic on
+glm and another on claude"*.
+
+```toml
+# fragment
+[configs]
+default = "glm"                 # the config a run uses when nothing selects
+
+[configs.glm.roles.implement]   # a named config is a ROUTING: roles (with
+kind = "pi"                     # tiers) and a tier policy, and nothing else
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+
+[configs.glm.tier_policy]       # the config's own ladder and concurrency caps
+default = "economy"
+ceiling = "strong"
+
+[configs.claude.roles.implement]
+kind = "claude"                 # the claude-sub rung: the CLI's own
+model = "sonnet"                # versionless aliases, never a pinned id
+```
+
+**Selection is one precedence, resolved once at run start and never per
+dispatch**: `ticfac run <epic> --config <name>` over the epic's own
+`config: <name>` label over the declared `default`. The flag is a person's
+word for this one run (a run diagnosing a config's behaviour wants the other
+config without editing the tracker); the epic's label is the design's word for
+every run of that epic; the default is the repository's word for every run that
+said neither.
+
+The rules that keep a config honest:
+
+- **A config is a routing, and nothing else.** Roles (with tiers) and a tier
+  policy — not the gate, not the acceptance evidence table, not the substrate,
+  not the findings routes. Those are the repository's rules, the same for every
+  run of it, and a config that could vary them would be two repositories
+  wearing one checkout. Unknown keys under `[configs.<name>]` are refused.
+- **A config that declares named configs declares a default**, and the default
+  names a declared config. With more than one routing to choose between, what
+  a run with no selection uses is a choice too — a silent fall back to the
+  file's own cells would be a third routing nobody chose.
+- **A config that declares nothing is refused.** It would silently run the
+  file's own cells under a name that promises more.
+- **A config's cells apply as the LAST overlay** — over the common file's,
+  the substrate override's and every tier — because the config is the thing a
+  run chose, and nothing beneath it may win over it. Its `tier_policy`, when
+  it declares one, REPLACES the merged policy: a ladder is a whole thing.
+  Cells the config does not declare keep the merged document's values.
+- **A selection of a name nobody declared is refused** naming the declared
+  ones — never a silent run on the file's own cells. An operator who asked
+  for `claude` and silently got GLM would be an operator whose epic ran on a
+  routing nobody chose.
+- **A config-created role cell cannot route a cloud role the merged document
+  never declared**: under `cloud` a role without a cell is still refused, and
+  a config selects among the routings a repository has, it does not add one.
+
+The configs live in every runners file and merge the way every other table
+does — the override's cells over the common file's — so a cloud file can
+declare the configs and the common file the base cells, or the two can split a
+config between them. A config declared only in `runners.cloud.toml` does not
+exist for a local run, exactly as a tier declared only in
+`runners.local.toml` does not exist for a cloud one.
+
+On the cloud substrate, a config whose workers ride the **claude-sub rung**
+(claude on its versionless `sonnet`/`opus` aliases) needs the factory to hold
+at least one subscription token: doctor, the cloud submission preflight and a
+selected run's own start all refuse a claude config with the rung off, naming
+the `wrangler secret put CLAUDE_SUB_TOKEN_<LABEL>` that turns it on — a run
+that asked for claude and silently stepped every dispatch down to Workers AI is
+the "paid for X and got Y" failure, not a fallback. A busy subscription
+stepping a lease down at dispatch time is the rung's own live arithmetic, and
+a different thing entirely.
+
+The chosen config is recorded by the run: stated in its own feed at the start
+of every incarnation, named in `ticfac status` and the epic PR beside the
+escalation and cost numbers, so two configs can be compared on real epics.
 
 ### One table, one kind per reader
 
@@ -966,6 +1053,10 @@ These are the failures a config author should expect, and where each one is caug
 | Config | Why it fails |
 |---|---|
 | `A1 = "package-rcp"` with no such command id | **Unresolvable authorisation.** Nothing outside this file authorises shell, so there is no command to run. A stop, never "run the closest match". |
+| `[configs.glm]` with no roles and no tier policy | **A config that declares nothing** would silently run the file's own cells under a name that promises more. |
+| `[configs]` declaring configs but no `default` | With more than one routing to choose between, the config a run with no selection uses is a choice too. Declare it. |
+| `[configs] default = "claude"` naming no declared config | The default is the config a run uses when nothing selects; it must be one a run can select. |
+| `[configs.glm.orchestration]` | A named config is a routing: roles and a tier policy only. The gate, the evidence table, the substrate and the findings routes are the repository's, the same for every run. |
 | the same id in `[testing.commands]` and `[environment.commands]` | Ambiguous: an acceptance reference could not say which phase it meant. |
 | the same command **string** in `[testing.commands]` and `[evidence.commands]` | Ambiguous authorisation — the close-out-only command becomes runnable by an implementer. This is the rule the markdown format spelled as "verbatim and *uniquely*". |
 | `A1 = "go-toolchain"` where `go-toolchain` is in `[environment.commands]` | A pre-flight check is not acceptance evidence. |
