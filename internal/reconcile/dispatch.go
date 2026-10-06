@@ -1773,6 +1773,7 @@ func (r *Reconciler) planDispatch(entry planEntry, number, try, failed int, carr
 		WriteRef: attemptWriteRef(jobID), BaseSHA: base, StateDir: stateDir,
 		BaseRef: r.opts.BaseRef, Title: entry.Title,
 		Profile: dispatchProfile, Tier: tier, Executor: dispatchProfile.Executor,
+		Config:      r.runConfig.Name,
 		ResumedFrom: resumed, WallSeconds: wall,
 		// What the tick's earlier attempts found (tick nvn): the reports a
 		// re-dispatched attempt is shown in its prompt, newest first. Gathered
@@ -2150,6 +2151,7 @@ func (r *Reconciler) dispatchFor(marker attemptHandle) (Dispatch, error) {
 		WriteRef: marker.WriteRef, BaseSHA: marker.BaseSHA, StateDir: marker.StateRoot,
 		BaseRef: r.opts.BaseRef, Title: r.titleOf(marker.TickID),
 		Tier:        marker.Tier,
+		Config:      r.runConfig.Name,
 		WallSeconds: marker.WallSeconds,
 		// The executor the attempt RAN ON, off the marker — never the one a
 		// profile re-resolved today would name (tick d6s): a later leg must

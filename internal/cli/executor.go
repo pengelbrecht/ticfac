@@ -304,8 +304,12 @@ func spawnArgv(gate string, d reconcile.Dispatch) (*runconfig.Config, []string, 
 		gate = filepath.Join(d.Repo, filepath.FromSlash(runconfig.FileName))
 	}
 	// A herdr dispatch runs on this machine, so runners.local.toml merges
-	// over the common file (tick 5uo) — its tiers are real here.
-	cfg, err := runconfig.LoadFor(gate, runconfig.SubstrateHerdr)
+	// over the common file (tick 5uo) — its tiers are real here — and the
+	// dispatch's selected named config applies over both (tick tda), so the
+	// effort and args the worker is spawned with are the config's own: the
+	// same cells the profile routed on. A dispatch with no selection ("")
+	// reads exactly what a herdr run always read.
+	cfg, err := runconfig.LoadForConfig(gate, runconfig.SubstrateHerdr, d.Config)
 	if err != nil && !os.IsNotExist(err) {
 		// A MISSING file routes nothing — the profile ships as written. A
 		// file that EXISTS and fails validation is a stop, never a silent
