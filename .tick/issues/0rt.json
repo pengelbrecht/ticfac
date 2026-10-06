@@ -1,0 +1,21 @@
+{
+  "id": "0rt",
+  "title": "Final review of the pi-durable cloud hardening diff",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "blocked_by": [
+    "2pn",
+    "8gd",
+    "9if",
+    "lox",
+    "sck",
+    "m1w"
+  ],
+  "parent": "ex6",
+  "role": "review",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-06T10:03:55.413515Z",
+  "updated_at": "2026-10-06T10:03:55.591984Z"
+}

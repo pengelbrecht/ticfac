@@ -7,8 +7,9 @@
   "priority": 2,
   "type": "task",
   "owner": "ticks-sandbox@ticks.invalid",
+  "parent": "ex6",
   "acceptance_criteria": "A local subprocess worker on pi-durable records its model spend (or says not measured) exactly as a herdr/pi-CLI worker does; tests.",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-06T01:20:59.959835Z",
-  "updated_at": "2026-10-06T01:20:59.959835Z"
+  "updated_at": "2026-10-06T10:03:55.391431Z"
 }
