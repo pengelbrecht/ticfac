@@ -169,9 +169,9 @@ func (r *Reconciler) finishCollect(ctx context.Context, f *finishing) error {
 		return r.refuse(RefusedIntegratedHeadMissing, tick,
 			"%s was taken as already integrated into %s, but its head is not on %s now: there is no executor "+
 				"to collect it through and nothing merged to gate. Its work is on %s. Put it back on %s, or "+
-				"release the attempt with `ticfac settle %s %s %d --release \"<who>\"`, and run the epic again",
+				"release the attempt with `%s`, and run the epic again",
 			r.attemptName(tick, marker.Attempt), r.branch, r.branch, branchOf(marker.WriteRef), r.branch,
-			r.opts.EpicID, tick, marker.Attempt)
+			r.settleCommand(tick, marker.Attempt))
 	}
 
 	collected, err := r.collect(ctx, fl.entry, fl.handle, fl.executor, marker, f.status)

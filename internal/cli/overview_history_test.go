@@ -250,9 +250,25 @@ func TestTheBareOverviewLeadsWithWhatNeedsAPersonAndCollapsesHistory(t *testing.
 	if !strings.Contains(out, summary) || !strings.Contains(out, "ticfac --all") {
 		t.Errorf("the collapsed history is not one summary line naming %q and `ticfac --all`:\n%s", summary, out)
 	}
-	if strings.Count(strings.TrimSpace(out), "\n")+1 > len(attention)+1 {
-		t.Errorf("the overview is %d lines, want %d rows and the one summary line:\n%s",
-			strings.Count(strings.TrimSpace(out), "\n")+1, len(attention)+1, out)
+	// Every listed run's row is its first line plus the dashboard headline
+	// its gathered model carries (tick 3rc); the history is still one
+	// summary line. Counting the rows' first lines — the headline lines are
+	// indented under them — the screen holds exactly the attention rows and
+	// the summary.
+	rows, summaries := 0, 0
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if strings.HasPrefix(line, "  ") {
+			continue // a row's dashboard headline (tick 3rc)
+		}
+		if strings.Contains(line, "older run") && strings.Contains(line, "not shown") {
+			summaries++
+			continue
+		}
+		rows++
+	}
+	if rows != len(attention) || summaries != 1 {
+		t.Errorf("the overview holds %d rows and %d summary lines, want %d rows and one summary line:\n%s",
+			rows, summaries, len(attention), out)
 	}
 
 	// --all lists every run, history included, each history row saying why.
@@ -272,6 +288,17 @@ func TestTheBareOverviewLeadsWithWhatNeedsAPersonAndCollapsesHistory(t *testing.
 	}
 	if line := lineOf(all, history[1]); !strings.Contains(line, "closed") {
 		t.Errorf("the closed epic's run does not say its epic is closed: %q", line)
+	}
+
+	// History rows print exactly one line each even though --all gathers
+	// them in full: no dashboard headline under a history row (tick 3rc).
+	for _, id := range history {
+		if lineOf(all, id) == "" {
+			continue // listed at all is asserted above
+		}
+		if after := lineAfter(all, id); strings.HasPrefix(after, "  ") {
+			t.Errorf("%s is history and carries a dashboard headline under its line: %q", id, after)
+		}
 	}
 
 	// --json is complete: every run, flagged, attention first.

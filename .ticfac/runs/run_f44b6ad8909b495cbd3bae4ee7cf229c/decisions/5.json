@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 5,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "For a run started as `ticfac run <epic> --run-id run-p` (a non-epic-shaped local id — the pipeline fixture's own run-pip shape), watchEpicID returns the run id itself as the epic, so the settle alert spells `ticfac settle run-p <tick> <n> --run-id run-p --release \"<who>\"`: the --run-id store address is right, but the epic argument names no epic and the command refuses (no branch, no epic run-p). The model path reads the checkpoint's EpicID and spells the real epic, so the two renderers disagree — the one-model rule (hn6 rule 8) exists to prevent exactly this. Fixing it means the stream path reading the run's checkpoint (as watchGatherModel already does) instead of guessing from the id shape.\nevidence: internal/cli/watch.go watchEpicID (falls through to `return runID` when the id has no epic- prefix and the source is not a cloudFeedSource); reproducible with `ticfac run <epic> --run-id run-p` and an attempt hold\n\nticfac run run_f44b6ad8909b495cbd3bae4ee7cf229c created this tick by absorbing the finding 3fd771f37ed8bc6110e2f98a634789c8b4679cae01d050aec72fd66f48e5fb33 (reported by run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-v2f/attempt-4): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/absorptions/3fd771f37ed8bc6110e2f98a634789c8b4679cae01d050aec72fd66f48e5fb33.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "fub",
+    "title": "Stream-path hold alert guesses the epic id from a non-epic local run id"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.75,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.12,
+      "design": 0,
+      "diagnosis": 0.02,
+      "mechanical": 0.81,
+      "translation": 0.05
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1508,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T10:58:36Z",
+  "answered_at": "2026-10-04T10:58:36Z",
+  "provenance": {
+    "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
+    "tick_id": "fub",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "5da80b932723c418ccf9dc58e21f75b163e58756",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -159,6 +159,14 @@ func TestRejectedWorkDisposalIsBoundedByTheLadder(t *testing.T) {
 	if !strings.Contains(resumed.Failure.Message, "bound is spent") {
 		t.Errorf("the backstop does not say the bound is spent: %s", resumed.Failure.Message)
 	}
+	// The release command the backstop names is addressed by the run whose
+	// store carries the attempt (tick qxj): this run's records live under
+	// r-fixture, not under the epic spelling a settle without --run-id opens.
+	if !strings.Contains(resumed.Failure.Message,
+		"ticfac settle qeu a1 5 --run-id r-fixture --release") {
+		t.Errorf("the backstop's release command does not name the run its attempt is recorded under: %s",
+			resumed.Failure.Message)
+	}
 	_ = r
 }
 

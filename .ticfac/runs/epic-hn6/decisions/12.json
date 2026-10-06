@@ -1,0 +1,60 @@
+{
+  "schema_version": 3,
+  "decision": 12,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 8,
+    "attempt_head": "b9e85c8f6e13fe062652a71c54abe90669e44d93",
+    "conflict_files": [
+      "cloudflare/contracts.pin.json",
+      "contracts/bundle.json"
+    ],
+    "conflicting_ticks": [
+      "ghh",
+      "d9d",
+      "e6g"
+    ],
+    "epic_id": "hn6",
+    "job_id": "run-epic-hn6/tick-ghh/resolve-8",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:bfd4c79f9e9a327bd3ce383bed41ee8699f551bf1c918f70d9bf1a471c50aca7",
+    "resolve_branch": "ticfac/run-epic-hn6/tick-ghh/resolve-8",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "ghh"
+  },
+  "response": {
+    "conflict_detail": "2 conflicts: content in cloudflare/contracts.pin.json; content in contracts/bundle.json",
+    "conflict_files": [
+      "cloudflare/contracts.pin.json",
+      "contracts/bundle.json"
+    ],
+    "job_id": "run-epic-hn6/tick-ghh/resolve-8",
+    "merge": "e02130c7db5381b05711643d9d0ad7987374d6b4",
+    "resolve_head": "81751c7e70739a5171e952ce303d7c858b250781",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T18:47:49Z",
+  "answered_at": "2026-10-04T18:47:49Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "ghh",
+    "attempt": 8,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "cde7febb0bf4e84b7258b0919ee162c187bb0759",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "frontier",
+    "profile_digest": "sha256:bfd4c79f9e9a327bd3ce383bed41ee8699f551bf1c918f70d9bf1a471c50aca7",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

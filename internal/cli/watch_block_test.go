@@ -25,19 +25,47 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
+	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
-// fakeTerminal makes every writer a 100x30 terminal for one test.
+// fakeTerminal makes every writer a 100x30 terminal for one test — and the
+// keyboard keyless, because a test has none whatever the host's stdin is
+// attached to. The terminal it fakes shows no colour (NO_COLOR): these
+// tests assert the frame's layout byte for byte, and the palette has its
+// own grid tests (watch_colour_test.go) — colour never changes widths, so
+// the plain frame is the layout assertion, and the coloured one is the
+// colour assertion.
 func fakeTerminal(t *testing.T) {
 	t.Helper()
+	t.Setenv("NO_COLOR", "1")
 	realTTY, realSize := watchIsTerminal, watchTerminalSize
 	t.Cleanup(func() { watchIsTerminal, watchTerminalSize = realTTY, realSize })
 	watchIsTerminal = func(io.Writer) bool { return true }
 	watchTerminalSize = func(io.Writer) (int, int, bool) { return 100, 30, true }
+	realKeys := watchAttachKeys
+	t.Cleanup(func() { watchAttachKeys = realKeys })
+	watchAttachKeys = func(context.Context) (<-chan string, func(), bool) { return nil, nil, false }
+}
+
+// fakeKeys replaces the keyboard seam with a channel the test feeds and a
+// restore the test can watch, so the key wiring is driven headless the way
+// the reducer is.
+func fakeKeys(t *testing.T) (chan string, *bool) {
+	t.Helper()
+	real := watchAttachKeys
+	t.Cleanup(func() { watchAttachKeys = real })
+	keys := make(chan string, 8)
+	restored := new(bool)
+	watchAttachKeys = func(context.Context) (<-chan string, func(), bool) {
+		return keys, func() { *restored = true }, true
+	}
+	return keys, restored
 }
 
 // watchWaitsFor polls a condition on a short interval until it holds or the
@@ -105,36 +133,38 @@ func TestWatchOnATerminalRendersTheEpicInPlace(t *testing.T) {
 		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
 	}()
 
-	// The frame renders from the model: the bar names the wave the run is
-	// in, and the frontier's ticks hold fixed rows.
-	watchWaitsFor(t, "the lifecycle bar", func() bool {
-		return strings.Contains(stdout.String(), "● waves 2/3")
+	// The frame renders from the model: the phase bar names the wave the run
+	// is in, and the frontier's ticks hold fixed rows.
+	watchWaitsFor(t, "the phase bar", func() bool {
+		return strings.Contains(stdout.String(), "◐ waves 2/3")
 	}, &stdout, &stderr)
 	watchWaitsFor(t, "the frontier's rows", func() bool {
 		out := stdout.String()
-		return strings.Contains(out, "  t2 dispatched") && strings.Contains(out, "  t3 ready")
+		return strings.Contains(out, " t2    the second tick") && strings.Contains(out, " t3    the third tick")
 	}, &stdout, &stderr)
-	// Done and upcoming waves are one line each, and the whole epic is in
-	// every frame.
-	watchWaitsFor(t, "the compressed waves", func() bool {
+	// Every tick of the epic is a fixed row in the dashboard's table, and
+	// the whole epic is in every frame — the done wave's ticks as much as
+	// the upcoming ones.
+	watchWaitsFor(t, "the whole epic's rows", func() bool {
 		out := stdout.String()
-		return strings.Contains(out, "wave 1 · done") && strings.Contains(out, "wave 3 ·")
+		return strings.Contains(out, " t1    the first tick") && strings.Contains(out, " t4    the fourth tick") &&
+			strings.Contains(out, " t5    the fifth tick")
 	}, &stdout, &stderr)
 	// Redrawn in place, not appended: the cursor moves back over the frame.
 	watchWaitsFor(t, "an in-place redraw", func() bool {
 		return strings.Contains(stdout.String(), "\x1b[J")
 	}, &stdout, &stderr)
-	if strings.Count(stdout.String(), "● waves 2/3") < 2 {
+	if strings.Count(stdout.String(), "◐ waves 2/3") < 2 {
 		t.Errorf("the frame was never redrawn in place:\n%s", stdout.String())
 	}
 
-	// An event worth remembering — a gate failure — is kept ABOVE the
-	// block, as a plain line in the scrollback, and the block below it
-	// keeps working.
+	// The feed is no longer replayed as lines above the block: an event
+	// worth remembering — a gate failure — lands in the frame's own
+	// two-line tail (epic hn6 rule 6), and the block below it keeps working.
 	two := 2
 	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "t2", &two,
 		reconcile.StageGateFailed, "the integrated gate refused: go test failed"))
-	watchWaitsFor(t, "the keep line", func() bool {
+	watchWaitsFor(t, "the event in the tail", func() bool {
 		return strings.Contains(stdout.String(), "gate_failed: the integrated gate refused")
 	}, &stdout, &stderr)
 
@@ -272,7 +302,7 @@ func TestWatchOnATerminalFollowsACloudRun(t *testing.T) {
 
 	watchWaitsFor(t, "the cloud frame", func() bool {
 		out := stdout.String()
-		return strings.Contains(out, "epic cld") && strings.Contains(out, "  t1 ready")
+		return strings.Contains(out, "cloud · alive") && strings.Contains(out, " t1    the one tick")
 	}, &stdout, &stderr)
 
 	// The Workflow's record is the liveness answer: it says completed, the
@@ -351,6 +381,70 @@ func TestWatchOnATerminalEndsFailed(t *testing.T) {
 	// The last word is still in the scrollback below the final frame.
 	if !strings.Contains(stdout.String(), "run_finished") {
 		t.Errorf("the run's own last word never printed:\n%s", stdout.String())
+	}
+}
+
+// The live view's failed end names the resume the frame names (tick ziy,
+// the failed sibling of 3yx's cancelled fix): a run whose terminal line
+// says it FAILED is a dead-run RESUME in the model's attention, so the
+// frame's needs-you line and the alert kept above the block both name the
+// command that moves it on. The ending under that block must not answer
+// the same failure with the opposite — "nothing is held for a person",
+// beside a frame that says otherwise — or one failed run gives two
+// answers. A failed run the model is deliberately quiet about (the tests
+// above) keeps the plain ending; this one names the same resume the frame
+// named.
+func TestWatchOnATerminalEndsFailedNamingTheResume(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+	runID := "epic-rmod"
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+	fakeTerminal(t)
+
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	// The run's own failed word: the terminal line the model reads as the
+	// dead-run wait whose unblock command is the resume.
+	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "t2", nil,
+		reconcile.StageRunFinished, "failed: t2 did not pass: the integrated gate refused the work"))
+
+	var stdout, stderr syncBuffer
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
+	}()
+
+	life.Release("ended failed")
+	var got int
+	select {
+	case got = <-code:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the watch never returned after the run ended")
+	}
+	if got != exitGeneric {
+		t.Fatalf("exit code %d, want %d (the failed class) for a run that ended failed; stderr:\n%s", got, exitGeneric, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended FAILED") {
+		t.Errorf("the failed end is not said to the person reading the block:\n%s", stderr.String())
+	}
+	// The premise of the contradiction, pinned: the alert above the block
+	// said the run is holding for a person and named the command — and the
+	// ending must name the SAME command, never "nothing is held".
+	resume := statusmodel.ResumeCommand(statusmodel.HostLocal, "rmod")
+	if !strings.Contains(stdout.String(), "move it on: "+resume) {
+		t.Errorf("the alert never named the resume %q (the premise of this test):\n%s", resume, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), resume) {
+		t.Errorf("the failed end does not name the resume %q the frame named:\n%s", resume, stderr.String())
+	}
+	if strings.Contains(strings.ToLower(stderr.String()), "nothing is held for a person") {
+		t.Errorf("the end said nothing is held below a frame and alert that named the resume:\n%s", stderr.String())
 	}
 }
 
@@ -464,6 +558,70 @@ func TestWatchOnATerminalEndsCancelledWhenAPersonStoppedTheRun(t *testing.T) {
 	}
 }
 
+// The live view's cancelled end names the resume the frame names (tick
+// 3yx): a run whose terminal line carries the factory's own stop word —
+// "stopped:" — is a dead-run RESUME in the model's attention, so the
+// frame's needs-you line and the alert kept above the block both name the
+// command that moves it on. The ending under that block must not answer
+// the same deliberate stop with the opposite — "nothing is held for a
+// person", no command — or one command run gives two answers. A cancelled
+// run the model is deliberately quiet about (the checkpoint's own word,
+// the tests above) keeps the plain ending; this one names the same resume
+// the frame named.
+func TestWatchOnATerminalEndsCancelledNamingTheResume(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+	runID := "epic-rmod"
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+	fakeTerminal(t)
+
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	// The factory's own word for a deliberate stop: the terminal line the
+	// model reads as the dead-run wait whose unblock command is the resume.
+	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "", nil,
+		reconcile.StageRunFinished, "stopped: stop requested by the operator"))
+
+	var stdout, stderr syncBuffer
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
+	}()
+
+	life.Release("stopped by the operator")
+	var got int
+	select {
+	case got = <-code:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the watch never returned after the run ended")
+	}
+	if got != exitCancelled {
+		t.Fatalf("exit code %d, want %d (the cancelled class) for a stopped run; stderr:\n%s", got, exitCancelled, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended CANCELLED") {
+		t.Errorf("the cancelled end is not said to the person reading the block:\n%s", stderr.String())
+	}
+	// The premise of the contradiction, pinned: the alert above the block
+	// said the run is holding for a person and named the command — and the
+	// ending must name the SAME command, never "nothing is held".
+	resume := statusmodel.ResumeCommand(statusmodel.HostLocal, "rmod")
+	if !strings.Contains(stdout.String(), "move it on: "+resume) {
+		t.Errorf("the alert never named the resume %q (the premise of this test):\n%s", resume, stdout.String())
+	}
+	if !strings.Contains(stderr.String(), resume) {
+		t.Errorf("the cancelled end does not name the resume %q the frame named:\n%s", resume, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "nothing is held for a person") {
+		t.Errorf("the end said nothing is held below a frame and alert that named the resume:\n%s", stderr.String())
+	}
+}
+
 // setCheckpointState rewrites the run's durable checkpoint state: the word
 // the reconciler writes on its last state change, read by the model's
 // lifecycle the frames render from.
@@ -485,5 +643,236 @@ func setCheckpointState(t *testing.T, repo, runID, state string) {
 	}
 	if err := os.WriteFile(path, out, 0o644); err != nil {
 		t.Fatalf("write the checkpoint: %v", err)
+	}
+}
+
+// TestWatchOnATerminalTakesKeys: on a terminal the dashboard answers the
+// keyboard (epic hn6 wave 4). j selects the plan's first row, enter opens
+// that tick's drill view, esc comes back down, e opens the whole feed —
+// lines the dashboard's two-line tail never showed — and q on the dashboard
+// ends the watch exactly as SIGINT does today: the same words, the same
+// exit code. Raw mode is restored on the way out, whatever ended the watch.
+func TestWatchOnATerminalTakesKeys(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+	runID := "epic-rmod"
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+	fakeTerminal(t)
+	keys, restored := fakeKeys(t)
+
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	var stdout, stderr syncBuffer
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
+	}()
+
+	watchWaitsFor(t, "the dashboard", func() bool {
+		return strings.Contains(stdout.String(), "◐ waves 2/3")
+	}, &stdout, &stderr)
+
+	// j moves the cursor onto the plan's first row.
+	keys <- "j"
+	watchWaitsFor(t, "the cursor on t1", func() bool {
+		return strings.Contains(stdout.String(), "▸t1")
+	}, &stdout, &stderr)
+
+	// enter opens the tick's drill view.
+	keys <- "enter"
+	watchWaitsFor(t, "the tick view", func() bool {
+		return strings.Contains(stdout.String(), "[esc] back")
+	}, &stdout, &stderr)
+
+	// esc comes back, and the frame under the cursor is the dashboard's
+	// again — drawn after the drill view's last frame.
+	keys <- "esc"
+	watchWaitsFor(t, "back on the dashboard", func() bool {
+		out := stdout.String()
+		return strings.LastIndex(out, "◐ waves 2/3") > strings.LastIndex(out, "[esc] back")
+	}, &stdout, &stderr)
+
+	// e opens the whole feed: the standing feed's own lines, not the tail's
+	// two — the retry line is the feed's oldest and the tail never shows it.
+	keys <- "e"
+	watchWaitsFor(t, "the feed view", func() bool {
+		return strings.Contains(stdout.String(), "origin refused the fetch; retry 1")
+	}, &stdout, &stderr)
+
+	// esc comes back once more, and q on the dashboard ends the watch the
+	// way SIGINT does: the run is still going here, so the interrupted
+	// answer is the running class — exit 5, the same words — the answer the
+	// stream path already gives and the live path's keys regressed away from
+	// (tick iph). Never exit 1: an attach caller reads 1 as a failure while
+	// the run keeps going.
+	keys <- "esc"
+	watchWaitsFor(t, "back on the dashboard again", func() bool {
+		out := stdout.String()
+		return strings.LastIndex(out, "◐ waves 2/3") > strings.LastIndex(out, "origin refused the fetch")
+	}, &stdout, &stderr)
+	keys <- "q"
+	var got int
+	select {
+	case got = <-code:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("q on the dashboard never ended the watch;\nstdout:\n%s\nstderr:\n%s", stdout.String(), stderr.String())
+	}
+	if got != exitRunning {
+		t.Errorf("exit code %d, want %d for a watch ended by q on a live run — the running class, the same answer the stream path gives (tick 8v3); stderr:\n%s", got, exitRunning, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "the watch was interrupted") {
+		t.Errorf("q did not end the watch the way SIGINT words it:\n%s", stderr.String())
+	}
+	if !*restored {
+		t.Error("the terminal's raw mode was never restored on the way out")
+	}
+}
+
+// TestWatchKeyedFramesEndCRLF (tick r3x): with the keyboard attached the
+// terminal is raw — the newline's carriage return is gone for the whole
+// device, stdout included — so every line the live block writes ends \r\n,
+// and the run's own last word, written AFTER the watch restored the
+// terminal, ends plain \n again. A last word that rode raw mode out of the
+// watch would staircase exactly like the frames did.
+//
+// short: in-process fixture over a temp checkout, like the block tests
+// above; the real-terminal proof of the same fact lives in the pty test.
+func TestWatchKeyedFramesEndCRLF(t *testing.T) {
+	fakeTerminal(t)
+	keys, restored := fakeKeys(t)
+
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+	runID := "epic-rmod"
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	var stdout, stderr syncBuffer
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"watch", "--repo", repo, "--interval", "50ms", runID}, &stdout, &stderr)
+	}()
+
+	watchWaitsFor(t, "the first frame", func() bool {
+		return strings.Contains(stdout.String(), "◐ waves 2/3")
+	}, &stdout, &stderr)
+
+	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "", nil,
+		reconcile.StageRunFinished, "completed: every tick closed behind the gate"))
+	life.Release("ended")
+	// The run's end no longer closes a keyboarded dashboard (tick 2xk): the
+	// end is kept above the block and the view stands for drill-in, so the
+	// key that ends the watch is the test's to send — and the assertions
+	// below pin that the end still rides the exit the way it always did.
+	watchWaitsFor(t, "the end kept above the block", func() bool {
+		return strings.Contains(stdout.String(), "has ended — the dashboard stays open")
+	}, &stdout, &stderr)
+	keys <- watchKeyQuit
+	var got int
+	select {
+	case got = <-code:
+	case <-time.After(10 * time.Second):
+		t.Fatal("q never closed the dashboard over the ended run")
+	}
+	if got != 0 {
+		t.Fatalf("exit code %d for a run that ended clean; stderr:\n%s", got, stderr.String())
+	}
+	if !*restored {
+		t.Error("the terminal's raw mode was never restored before the last words")
+	}
+
+	out := stdout.String()
+	// The last word ends the buffer, and it ends with a plain \n — written
+	// after the restore, the way cooked output is written. Everything the
+	// block wrote before it — frames and kept alerts — ends \r\n: the
+	// carriage, written by hand while the terminal was raw.
+	if !strings.HasSuffix(out, "run_finished: completed: every tick closed behind the gate\n") {
+		t.Errorf("the run's last word is not the buffer's plain-newline end:\n%q", out)
+	}
+	lastBare := -1
+	for i := 0; i < len(out); i++ {
+		if out[i] == '\n' && (i == 0 || out[i-1] != '\r') {
+			lastBare = i
+		}
+	}
+	if lastBare != len(out)-1 {
+		t.Errorf("the block wrote a bare newline while the keyboard held raw mode — the staircase:\n%q",
+			out[max(0, lastBare-120):min(len(out), lastBare+1)])
+	}
+}
+
+// TestWatchKeepsInsertedLinesInsideThePane (tick r3x): the lines kept ABOVE
+// the block — the attention alert, a failed reading — are cut to the pane's
+// width, because a kept line that wraps pushes the block down rows the
+// redraw's cursor arithmetic does not know about, and the next frame would
+// draw over the block's own rows.
+//
+// short: in-process fixture over a temp checkout, like the block tests
+// above.
+func TestWatchKeepsInsertedLinesInsideThePane(t *testing.T) {
+	fakeTerminal(t)
+
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+	runID := "epic-rmod"
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+
+	life, err := runlife.Claim(repo, runID)
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	// The hold the other tests use: its alert line is ~180 cells, far past
+	// the pane's 100 columns.
+	two := 2
+	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "t2", &two,
+		reconcile.StageRunHeld, "attempt_unaddressed: nobody can say whether the attempt is running"))
+
+	var stdout, stderr syncBuffer
+	code := make(chan int, 1)
+	go func() {
+		code <- Run([]string{"watch", "--repo", repo, "--interval", "120ms", runID}, &stdout, &stderr)
+	}()
+
+	watchWaitsFor(t, "the kept alert", func() bool {
+		return strings.Contains(stdout.String(), "! ticfac watch: run epic-rmod is holding for a person")
+	}, &stdout, &stderr)
+
+	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "", nil,
+		reconcile.StageRunFinished, "completed: every tick closed behind the gate"))
+	life.Release("ended")
+	var got int
+	select {
+	case got = <-code:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the watch never returned after the run ended")
+	}
+	// The hold the scenario stands on keeps the precedence the exit table
+	// gives it: the run ended holding, and the code is the held class.
+	if got != ExitHeld {
+		t.Fatalf("exit code %d, want %d (the held class) for a run that ended holding; stderr:\n%s", got, ExitHeld, stderr.String())
+	}
+
+	out := stdout.String()
+	for i, line := range strings.Split(strings.TrimSuffix(out, "\n"), "\n") {
+		if w := ansi.StringWidth(ansi.Strip(line)); w > 100 {
+			t.Errorf("line %d is %d cells wide in a 100-column pane: %q", i, w, ansi.Strip(line))
+		}
 	}
 }

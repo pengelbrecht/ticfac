@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 32,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "newMergedRuns always appends the subject run's records as the newest layer, even when an older run is the subject and a chronologically later prior run exists (the checkout-without-the-local-feed resolution). The later run that actually closed a tick loses row, owner and marker precedence to the older subject, so a closed row can show the ended run's attempt and tier rather than the closing run's. Tick cno fixed the state this produced; ordering the merge by the checkpoints' own UpdatedAt (with a defined tie-break) would fix the provenance too.\nevidence: internal/statusmodel/epic.go newMergedRuns (runs = prior..., current always last); internal/cli/status_model.go priorRunsForEpic already orders the priors by UpdatedAt\n\nticfac run epic-hn6 created this tick by absorbing the finding c46fd55cda40b763f59f7cad87058d86e86a181fd4fda554d2fe8e8738e81141 (reported by run-epic-hn6/tick-cno/attempt-26): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/c46fd55cda40b763f59f7cad87058d86e86a181fd4fda554d2fe8e8738e81141.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "c9n",
+    "title": "Merge orders the subject run last regardless of checkpoint chronology"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.6,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.14,
+      "design": 0.13,
+      "diagnosis": 0.05,
+      "mechanical": 0.68,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1361,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T14:10:25Z",
+  "answered_at": "2026-10-05T14:10:25Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "c9n",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "458c0fe396b84f9e6f2e68471147ea9e704108ed",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

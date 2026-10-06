@@ -1,0 +1,32 @@
+{
+  "schema_version": 3,
+  "key": "da5bc1f440c5b5984e2636009a57c5aa7ae1a2bada279a360c8261e131f3c933",
+  "tick_id": "jmf",
+  "gating": true,
+  "item_id": "A6",
+  "basis": "predicted",
+  "confidence": 0.4,
+  "model": "jev-1.13.0",
+  "reason": "the classifier put 0.50 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A6: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side",
+  "placement": "after-review-before-closeout",
+  "decided_at": "2026-10-05T15:44:01Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "qjl",
+    "attempt": 29,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "d1c35d15628c9daa977de61c565a8e7375aeff43",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "closeout",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:02d4205dfe376c01cceea8466fcf910859b131f3680bd8b685849c25c4108589",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}

@@ -222,11 +222,16 @@ func orFirst(first, second string) string {
 	return second
 }
 
-// oneLine flattens a snippet to a single bounded line.
+// oneLine flattens a snippet to a single bounded line: bound CHARACTERS, cut
+// on a rune boundary — a byte cut splits a multi-byte rune into invalid
+// UTF-8, and the line rides JSON a renderer prints. The ellipsis is inside
+// the bound: the whole line stays within it, the way boundLine (the action
+// line in internal/exec/subprocess) cuts its own 80.
 func oneLine(text string, bound int) string {
 	text = strings.Join(strings.Fields(text), " ")
-	if len(text) > bound {
-		text = text[:bound] + "…"
+	runes := []rune(text)
+	if len(runes) <= bound {
+		return text
 	}
-	return text
+	return string(runes[:bound-1]) + "…"
 }

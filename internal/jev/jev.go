@@ -82,6 +82,31 @@ const Model = "typesafe/jev"
 // and directly below the factory's gateway route (which knows its own account).
 const runPath = "/ai/run"
 
+// MetadataHeader is the header the operator's AI Gateway turns into the
+// metadata its logs filter by — the same name the factory's proxy stamps on a
+// cloud run's calls (cloudflare/src/gateway.ts), dm2's metering join writes
+// into the workers' provider override (internal/exec/subprocess/pimeter.go),
+// and gatewaytrace — the status model's reader — filters its log query by. A
+// parity test in workersai_test.go fails the build if any side drifts.
+const MetadataHeader = "cf-aig-metadata"
+
+// gatewayMetadata is the metadata a tagged request carries: the one key the
+// per-run join is made on, spelled as the logs API's filter expects — a JSON
+// object of string values, exactly the shape the factory's proxy stamps and
+// dm2's metering join writes — and, since tick kf4, the caller that names
+// these rows as the run's OWN calls rather than any worker attempt's, so a
+// gateway cost read attributes measured money to what made it.
+type gatewayMetadata struct {
+	RunID  string `json:"run_id"`
+	Caller string `json:"caller,omitempty"`
+}
+
+// CallerTag names the classifier in the metadata its requests stamp (tick
+// kf4): the value the status model's cost reader reads back as money that
+// belongs to no worker attempt. It is the harness's own name, not a role —
+// every call jev makes is the run's own, whichever role asked for it.
+const CallerTag = "jev"
+
 // Config is everything needed to reach the classifier.
 type Config struct {
 	// APIBase is the API root; empty means DefaultAPIBase. Inside a sandbox it
@@ -96,6 +121,17 @@ type Config struct {
 	// without dialling, so a run without classification configured degrades
 	// rather than fails.
 	APIKey string
+	// RunID, when non-empty, is stamped on every request as
+	// [MetadataHeader]'s run_id (tick 24u): the local run's classification and
+	// gating calls are the operator's Workers AI spend, and without the tag
+	// they are unattributable in the gateway's logs — the rows exist, the run
+	// id does not — so they can never be joined per run the way the workers'
+	// calls join through dm2's metering. Empty means untagged: the probe
+	// `ticfac doctor` runs and a one-off ask file their spend under no run,
+	// honestly. On the gateway route the factory's proxy owns what reaches
+	// Workers AI — it forwards none of the caller's headers — so there the
+	// tag is a statement of the request and the proxy is the authority.
+	RunID string
 }
 
 // endpoint is where one round trip posts.
@@ -180,9 +216,15 @@ type Classification struct {
 
 // Usage is what the call cost, for the decision record.
 type Usage struct {
-	InputTokens  int     `json:"input_tokens"`
-	OutputTokens int     `json:"output_tokens"`
-	CostUSD      float64 `json:"cost_usd"`
+	InputTokens  int `json:"input_tokens"`
+	OutputTokens int `json:"output_tokens"`
+	// CostUSD is the price the ANSWERING SERVICE stated for the call, not a
+	// default (tick fzt): nil when it stated none — the decision record then
+	// carries cost_usd null, the distinguishable no-price, never the
+	// marshalled zero a plain float64 forced onto every record — and a
+	// pointer to the stated number otherwise, so a service that honestly
+	// answers $0.00 is a statement rather than a fabrication.
+	CostUSD *float64 `json:"cost_usd"`
 }
 
 // Result is what one batch's work-type classification round trip produced.
@@ -227,6 +269,7 @@ func New(config Config, client *http.Client) *Client {
 		config.APIBase = DefaultAPIBase
 	}
 	config.APIBase = strings.TrimRight(config.APIBase, "/")
+	config.RunID = strings.TrimSpace(config.RunID)
 	return &Client{config: config, http: client}
 }
 
@@ -355,6 +398,20 @@ func (c *Client) post(ctx context.Context, built request) ([]byte, string) {
 	request.Header.Set("Authorization", "Bearer "+c.config.APIKey)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
+	// The run tag (tick 24u): the same cf-aig-metadata mechanism the factory's
+	// proxy stamps and dm2's metering join writes, so the gateway's logs carry
+	// the run id a per-run read — gatewaytrace, the status model's cost line —
+	// joins this call's spend by. A request that carries it and one that does
+	// not answer the same; only the log row differs. The caller name (tick
+	// kf4) marks the row as the run's OWN call, so the cost read never counts
+	// a classifier's measured spend as a worker attempt's.
+	if c.config.RunID != "" {
+		metadata, err := json.Marshal(gatewayMetadata{RunID: c.config.RunID, Caller: CallerTag})
+		if err != nil {
+			return nil, fmt.Sprintf("the classifier's gateway metadata could not be encoded: %v", err)
+		}
+		request.Header.Set(MetadataHeader, string(metadata))
+	}
 
 	response, err := c.http.Do(request)
 	if err != nil {

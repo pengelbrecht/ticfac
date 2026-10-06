@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/runregistry/registrytest"
+	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 )
 
 // A test that claims a run writes a machine-local registration beside the
@@ -55,5 +57,28 @@ func TestMain(m *testing.M) {
 	if os.Getenv(evacChildEnv) != "" {
 		os.Exit(m.Run())
 	}
+	keepGatewayOffTheOperatorsHome()
 	registrytest.GuardMain(m)
+}
+
+// keepGatewayOffTheOperatorsHome stops the package's status, watch, push
+// and overview fixtures from reading the operator's real AI Gateway logs.
+// Every local status model asks statusWorkerCost (tick dm2), which loads
+// ~/.ticfacrc and, on a host whose file names a gateway and a Cloudflare
+// token, pages the real logs API: a call measured at ~20s on this host,
+// past the 10s a watch or push fixture waits, so those tests failed
+// intermittently on the network rather than on the code. Under the HOME
+// the process started with the read answers nil — the not-metered answer
+// a host with no gateway gets — and under any other HOME (the gateway
+// tests' temp homes, each with its own credential file and test server)
+// it is the production reader unchanged.
+func keepGatewayOffTheOperatorsHome() {
+	operatorHome, _ := os.UserHomeDir()
+	read := statusWorkerCost
+	statusWorkerCost = func(ctx context.Context, runID string) (*statusmodel.WorkerCostInput, error) {
+		if home, _ := os.UserHomeDir(); home == operatorHome {
+			return nil, nil
+		}
+		return read(ctx, runID)
+	}
 }

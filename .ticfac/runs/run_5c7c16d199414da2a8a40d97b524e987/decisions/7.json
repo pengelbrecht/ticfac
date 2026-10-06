@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 7,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "A pty-driven test (github.com/creack/pty or equivalent) renders the dashboard with keys on at 120x40 and 80x24 and asserts every frame line starts at column 0 (no staircase) and fits the width; the same test covers the end-of-watch message. make gate passes.",
+    "description": "Operator screenshot 2026-10-01 (ticfac watch hn6 in iTerm/herdr, stdin+stdout a terminal): every line after the first starts where the previous ended — rows, headers, the feed tail and the end message all drift right and wrap. Cause (verify): the key-reading mode puts the terminal in raw mode, where \\n no longer returns the carriage, so every newline the dashboard (and the final summary) writes must be \\r\\n while raw mode is on — or render through a frame writer that positions each line absolutely. Also the closing message printed after the watch ends must restore the terminal first. Header columns (TICK WHAT TIER PIPELINE TIME ATTEMPTS) were also laid out across the full pane width with huge gaps — size columns to content.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "r3x",
+    "title": "watch dashboard renders as a staircase in a real terminal: raw mode needs CRLF"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.69,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.76,
+      "design": 0,
+      "diagnosis": 0.02,
+      "mechanical": 0.22,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1236,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T01:06:47Z",
+  "answered_at": "2026-10-04T01:06:47Z",
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "r3x",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "5a20dbad3b418c20180cf3f2dc6045c63885ef27",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -772,10 +772,9 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 					"it. This run neither collects it again (the teardown that followed the refusal removed the "+
 					"attempt's worktree, so a second collect would report a missing report rather than the verdict "+
 					"the attempt really had) nor dispatches over it (that would orphan the only copy). Read the "+
-					"branch; then take the work, or release the attempt with "+
-					"`ticfac settle %s %s %d --release \"<who>\"` and run the epic again for a fresh attempt.%s",
-				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), where, r.opts.EpicID,
-				tick, existing.Attempt, why+spent)
+					"branch; then take the work, or release the attempt with `%s` and run the epic again for a fresh attempt.%s",
+				attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), where, r.settleCommand(tick, existing.Attempt),
+				why+spent)
 		}
 		// Appendix A #6: the first ADOPTABLE attempt of a newest-first pass is
 		// the highest-numbered one, which is the one the pass remembers — the
@@ -2801,11 +2800,10 @@ func (r *Reconciler) addressOnce(ctx context.Context, fl *inflightAttempt) (*sub
 			refusal := r.refuse(RefusedUnaddressed, marker.TickID,
 				"%s still reads %s %s past the wall clock of %ds it was issued, and this run has "+
 					"watched it for %s without it settling. Its executor could not settle it: %s. Nobody can say "+
-					"it is finished; look at it, stop whatever is still running, then release it with "+
-					"`ticfac settle %s %s %d --release \"<who>\"`",
+					"it is finished; look at it, stop whatever is still running, then release it with `%s`",
 				r.attemptName(marker.TickID, marker.Attempt), status.State, over.Round(time.Second),
 				r.wallOf(marker), watched.Round(time.Second), lastObservation(status),
-				r.opts.EpicID, marker.TickID, marker.Attempt)
+				r.settleCommand(marker.TickID, marker.Attempt))
 			// An attempt whose job lives at the factory is asked of the
 			// factory first (factory_unanswered.go).
 			if settled, answered := r.askFactoryAgain(ctx, fl, refusal); answered {
@@ -3391,7 +3389,12 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	// about it. The one exception is a `no-commits` attempt whose worker
 	// stopped to ask (`blocked-first`): since tick tyd that is a question, and
 	// the verdict check above hands it to the same ladder this branch does.
-	if answer := collected.Result.RoleResult; answer != nil && needsHuman(answer.Status) {
+	// A tracker-edit delivery (trackerEditDelivery) is the one BLOCKED answer
+	// that never reaches it: the run answered the question itself by applying
+	// the fix the report named (tick l89), and a delivery the run has taken is
+	// not re-litigated into the ladder.
+	if answer := collected.Result.RoleResult; answer != nil && needsHuman(answer.Status) &&
+		!trackerEditDelivery(collected) {
 		if err := r.rejectDurably(marker, collected.Verdict, answer.Status+": "+answer.Summary); err != nil {
 			return nil, err
 		}
@@ -3863,7 +3866,16 @@ func isBranchUnsafe(err error) bool {
 // one the reconciler's own contract does not have. `runner` is the fallback an
 // operator names on the command line, for a dispatch whose profile resolved
 // none.
-func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Duration) func(Dispatch) (Executor, Substrate, error) {
+// `metering`, when not nil, resolves the local gateway metering join for one
+// dispatch — the per-attempt pi extension that routes a Workers AI worker's
+// calls through the operator's AI Gateway, tagged with the run id (tick gzv).
+// It is a RESOLVER, not a value, because the join names each dispatch's own
+// run id; and it is the host's, not the reconciler's, because the facts it
+// resolves from — the gateway URL and the account token — are the operator's
+// own ~/.ticfacrc, which this package must not read: the caller that can
+// build executors is the caller that holds credentials. A nil resolver joins
+// nothing, and the dispatch runs exactly as it did before the join existed.
+func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Duration, metering func(Dispatch) *subprocess.GatewayMetering) func(Dispatch) (Executor, Substrate, error) {
 	return func(d Dispatch) (Executor, Substrate, error) {
 		supervisor, err := supervisorArgv()
 		if err != nil {
@@ -3877,6 +3889,10 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 				dispatched = d.Profile.Runner
 			}
 			model, rolePrompt = d.Profile.Model, d.Profile.Prompt
+		}
+		var join *subprocess.GatewayMetering
+		if metering != nil {
+			join = metering(d)
 		}
 		executor, err := subprocess.New(subprocess.Options{
 			Repo:           d.Repo,
@@ -3894,6 +3910,7 @@ func DefaultExecutor(runner string, runnerArgv []string, pushInterval time.Durat
 			PriorSnapshots: d.PriorSnapshots,
 			Escalation:     d.Escalation,
 			StuckAfter:     d.StuckAfter,
+			Metering:       join,
 		})
 		if err != nil {
 			return nil, Substrate{}, err

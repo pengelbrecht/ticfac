@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 4,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Rule 7/A4. statusmodel/cost.go:79-93 emits the decisions line metered with USD 0 whenever any decision record exists, even with no usage block, and nothing ever sets jev.Usage.CostUSD, so every local run with a decision shows 'decisions $0.00'. Cloud: runs.cost_usd is NOT NULL DEFAULT 0 and cloudStatusDoc (status.ts:481-492) / status_model.go:647 turn any number into a metered 'AI Gateway logs' line, so a run before its first cost sync or with telemetry 'unavailable: …' (cost_source, unread on the status path) shows 'Workers AI $0.00'. Fix: emit the decisions line metered only when a record carries a measured cost, and make the cloud line unmetered unless cost_source is 'gateway'; teach P3's generator a metered-zero/no-usage decision and an unsynced cloud record.\nevidence: internal/statusmodel/cost.go:79-93; internal/jev/jev.go:185; cloudflare/migrations/0002_runs.sql:16; cloudflare/src/status.ts:481-492; internal/cli/status_model.go:647\n\nticfac run epic-hn6 created this tick by absorbing the finding 9a2119c4bfd29f34c98468360ed7f59a901a9ab023aea9a2bedad710c1c5a339 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/9a2119c4bfd29f34c98468360ed7f59a901a9ab023aea9a2bedad710c1c5a339.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "1tm",
+    "title": "Cost still prints a fabricated $0.00: decisions line and cloud default 0"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.64,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.25,
+      "design": 0.01,
+      "diagnosis": 0.02,
+      "mechanical": 0.72,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1485,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T16:21:59Z",
+  "answered_at": "2026-10-04T16:21:59Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "1tm",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "d27d583c80c9ec4c5ae37d875f71c9b9590b4d04",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

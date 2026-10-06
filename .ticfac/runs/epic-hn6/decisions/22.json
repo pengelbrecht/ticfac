@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 22,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "cloudStatusDoc (cloudflare/src/status.ts) maps a cloud run's factory record state \"stopped\" to lifecycle phase \"cancelled\", so the phone page's row for a factory-stopped run reads the cancelled class, while the checkout-side Go model for the same run now reads the phase where the epic stands, verdict \"stopped\", and a needs-you resume (tick jkb's frame). The bare ticfac overview agrees with the phone page (its liveness compensation also renders stopped cloud rows cancelled), so the two ROW classes agree — but the watch frame and the phone page answer one ending with two stories, and hn6's rule 8 says the two renderers of one model cannot disagree. Worth a tick to decide which surface owns the stopped run's story and make the other render it.\n\nticfac run epic-hn6 created this tick by absorbing the finding 9e28a43c03148c9ee556fbca638abdf91c59228b4d0a0001ba75a7469bf4626d (reported by run-epic-hn6/tick-jkb/attempt-12): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/9e28a43c03148c9ee556fbca638abdf91c59228b4d0a0001ba75a7469bf4626d.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "5d4",
+    "title": "phone-page row and watch frame tell a stopped cloud run's ending differently"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.95,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0,
+      "design": 0.97,
+      "diagnosis": 0.03,
+      "mechanical": 0,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1372,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T20:38:34Z",
+  "answered_at": "2026-10-04T20:38:34Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "5d4",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "6d3932e8bbc2dbd9000b96b98e929a888619b9e2",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

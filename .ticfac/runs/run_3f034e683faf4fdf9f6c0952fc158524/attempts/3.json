@@ -1,0 +1,55 @@
+{
+  "schema_version": 3,
+  "attempt": 3,
+  "tick_id": "ltg",
+  "dispatched_at": "2026-09-30T16:24:30Z",
+  "job_handle": {
+    "attempt": 3,
+    "base_sha": "8031f1c77bce56077ac48a1ca49f0981ec403c5e",
+    "executor": "cloudflare-sandbox",
+    "job_id": "run-run_3f034e683faf4fdf9f6c0952fc158524/tick-ltg/attempt-3",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "prompt_digest": "sha256:c25d77e407a584a3674741ad2476828c148e64504bdd1d523b44641b216e8784",
+    "remote": "origin",
+    "resumed_from": {
+      "tick_id": "ltg",
+      "attempt": 4,
+      "write_ref": "refs/heads/tick/hn6/attempt-4/ltg",
+      "sha": "8031f1c77bce56077ac48a1ca49f0981ec403c5e",
+      "released_by": "ticfac (took over the claim of run run_911b556fce394004837695b3196e3925, which ended: the factory's record says failed and its Workflow instance is complete)",
+      "run_id": "run_911b556fce394004837695b3196e3925"
+    },
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "taken_over": {
+      "run_id": "run_911b556fce394004837695b3196e3925",
+      "evidence": "the factory's record says failed and its Workflow instance is complete"
+    },
+    "tick_id": "ltg",
+    "tier": "economy",
+    "touch": null,
+    "try": 1,
+    "wall_seconds": 28800,
+    "write_ref": "refs/heads/ticfac/run-run_3f034e683faf4fdf9f6c0952fc158524/tick-ltg/attempt-3"
+  },
+  "provenance": {
+    "run_id": "run_3f034e683faf4fdf9f6c0952fc158524",
+    "tick_id": "ltg",
+    "attempt": 3,
+    "source_ref": "refs/heads/tick/hn6/attempt-4/ltg",
+    "source_sha": "8031f1c77bce56077ac48a1ca49f0981ec403c5e",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:5ab57f1f6dc05bc69f1c1522eabf44e8537f2c2d18ae5f2d23dd56ddcc52cae1",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

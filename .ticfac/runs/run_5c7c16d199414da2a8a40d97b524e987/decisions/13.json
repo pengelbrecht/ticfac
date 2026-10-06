@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 13,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The WaitFinding attention reads only the newest run's records, and a run that died before its close-out raised no run_held line — so a prior run's untriaged drafts are invisible to needs-you even though a person's decision is standing. Worse, the close-out's findings gate reads only the run's own store (r.untriagedFindings -> r.store.Findings), so a resumed-under-a-new-id run never gates on the dead run's drafts: they can silently never gate anything. A tick could surface every run's untriaged drafts in needs-you (the per-run triage command this tick already spells, TriageCommandForRun) and decide whether a new run should adopt or gate on inherited drafts.\nevidence: internal/statusmodel/build.go buildWaits WaitFinding block iterates recs.Findings only; internal/reconcile/findings.go:395 gateCloseoutOnFindings -> r.untriagedFindings() -> r.store.Findings() (own store); merged prior findings reach only the per-tick drill-in (epic.go findingByKey)\n\nticfac run run_5c7c16d199414da2a8a40d97b524e987 created this tick by absorbing the finding cfc9535a2998aec59e859ae4e61b60671420519850cf070cf0092e4ebb5f66d4 (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-z3p/attempt-10): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/cfc9535a2998aec59e859ae4e61b60671420519850cf070cf0092e4ebb5f66d4.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "d23",
+    "title": "Untriaged findings without a hold line never reach needs-you across runs"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.82,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.06,
+      "design": 0.86,
+      "diagnosis": 0.04,
+      "mechanical": 0.04,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1517,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T03:58:19Z",
+  "answered_at": "2026-10-04T03:58:19Z",
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "d23",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "e86641ab0f99faf82cfe1aa645fd7de31655ba06",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

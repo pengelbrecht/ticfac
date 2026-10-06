@@ -18,6 +18,7 @@ import {
   type Run,
   removeEnrolledProject,
   type Signal,
+  updateRunCost,
   updateRunState,
 } from "../src/db";
 
@@ -46,6 +47,7 @@ describe("factory D1 query layer", () => {
       started_at: "2026-08-19T12:00:00.000Z",
       ended_at: null,
       cost_usd: 1.25,
+      cost_source: null,
       trace_id: "tr_0123456789abcdef0123456789abcdef",
       credential_grade: "write",
     };
@@ -106,6 +108,7 @@ describe("factory D1 query layer", () => {
       started_at: "2026-08-19T12:00:00.000Z",
       ended_at: null,
       cost_usd: 0,
+      cost_source: null,
       trace_id: null,
       credential_grade: "write",
     };
@@ -123,6 +126,36 @@ describe("factory D1 query layer", () => {
     );
     // A state change for a run that does not exist is not an error, it is null.
     await expect(updateRunState(env.DB, "run-missing", "failed")).resolves.toBeNull();
+  });
+
+  // A moved cost is a MEASURED cost (tick 1tm): the same UPDATE that moves
+  // the number stamps cost_source = 'gateway', the fact that separates it
+  // from the row's NOT NULL DEFAULT 0 for every status path that reads it —
+  // and a row nothing has synced keeps cost_source null, whatever number the
+  // schema's default left on it.
+  it("moves a run's cost and stamps where the number came from", async () => {
+    const run: Run = {
+      run_id: "run-daq-cost",
+      project: "ticks/cost",
+      epic: "ko8",
+      base_sha: "d".repeat(40),
+      requested_by: "operator@example.com",
+      state: "running",
+      started_at: "2026-08-19T12:00:00.000Z",
+      ended_at: null,
+      cost_usd: 0,
+      cost_source: null,
+      trace_id: null,
+      credential_grade: "write",
+    };
+    await insertRun(env.DB, run);
+
+    const moved = await updateRunCost(env.DB, run.run_id, 0.41);
+    expect(moved).toMatchObject({ run_id: run.run_id, cost_usd: 0.41, cost_source: "gateway" });
+    await expect(getRun(env.DB, run.run_id)).resolves.toMatchObject({
+      cost_usd: 0.41,
+      cost_source: "gateway",
+    });
   });
 
   // Enrolment is a security boundary (migrations/0003): the bearer token says

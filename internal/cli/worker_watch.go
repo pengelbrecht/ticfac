@@ -248,7 +248,7 @@ func (o *liveWorkerOutput) update(m *workerview.Model, now time.Time) {
 func (o *liveWorkerOutput) tick(m *workerview.Model, now time.Time) { o.draw(m, now) }
 
 func (o *liveWorkerOutput) note(line string) {
-	insertAboveBlock(o.w, o.previous, []string{line})
+	insertAboveBlock(o.w, o.previous, o.width, "\n", []string{line})
 }
 
 // plainWorkerOutput streams one line per settled item, and f6o's heartbeat

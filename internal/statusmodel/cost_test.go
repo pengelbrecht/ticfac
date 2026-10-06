@@ -1,0 +1,599 @@
+package statusmodel
+
+import (
+	"encoding/json"
+	"fmt"
+	"reflect"
+	"testing"
+
+	"github.com/pengelbrecht/ticfac/internal/runstate"
+)
+
+// The cost suite (epic hn6, wave 2 — tick 7uv): the spend split per river,
+// metered only where something measured it and never a fabricated $0.00
+// where nothing did — the first-use bug's "cost $0.00 recorded (10
+// attempts)" header, with the local claude and pi/GLM spend it hid counted
+// as unmetered lines. Every case builds the whole Model and holds it to the
+// contract through the same bundleFixture helper the verdict suite does.
+
+// costLineOf finds one cost line by its river, for the assertion that reads.
+func costLineOf(t *testing.T, model Model, source string) CostLine {
+	t.Helper()
+	for _, line := range model.Cost.Lines {
+		if line.Source == source {
+			return line
+		}
+	}
+	t.Fatalf("no %s cost line in %+v", source, model.Cost.Lines)
+	return CostLine{}
+}
+
+// TestCostLocalSpendIsUnmeteredNeverADollarZero: local attempts on claude and
+// on pi serving GLM, with no decision recorded, are two unmetered lines —
+// the subscription spend and the unmeasured pi spend, each with usd null
+// and a basis saying so, recorded_usd NULL (tick dm2: a 0 beside
+// all-unmetered lines is the fabricated zero again) — and the marshalled
+// JSON carries no number where no measurement exists.
+func TestCostLocalSpendIsUnmeteredNeverADollarZero(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Records.Decisions = nil
+	src.Records.Attempts = []runstate.Attempt{
+		attemptMarker(1, "nwj", "2026-09-27T03:19:05Z", "strong", "opus", "local-subprocess"),
+		attemptMarker(2, "89m", "2026-09-27T04:00:00Z", "strong", "@cf/zai-org/glm-5.3", "local-subprocess"),
+	}
+	model := Build(src)
+
+	want := []CostLine{
+		{Source: CostSourceClaude, Metered: false, USD: nil, Attempts: 1, Basis: "not metered (subscription)"},
+		{Source: CostSourcePiLocal, Metered: false, USD: nil, Attempts: 1, Basis: "not metered"},
+	}
+	if !reflect.DeepEqual(model.Cost.Lines, want) {
+		t.Errorf("the cost lines are %+v, want the two unmetered ones %+v", model.Cost.Lines, want)
+	}
+	if model.Cost.RecordedUSD != nil {
+		t.Errorf("recorded_usd is %v, want null: nothing measured any spend", *model.Cost.RecordedUSD)
+	}
+
+	// The JSON, not the struct: no line states a number it did not measure,
+	// and the roll-up states no number either.
+	raw, err := json.Marshal(model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Cost struct {
+			RecordedUSD *float64   `json:"recorded_usd"`
+			Lines       []CostLine `json:"lines"`
+		} `json:"cost"`
+	}
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	if document.Cost.RecordedUSD != nil {
+		t.Errorf("the marshalled recorded_usd is %v, want null: nothing measured any spend", *document.Cost.RecordedUSD)
+	}
+	for _, line := range document.Cost.Lines {
+		if !line.Metered && line.USD != nil {
+			t.Errorf("the %s line is unmetered and states usd %v: an unmetered spend wearing a number is a fabricated spend",
+				line.Source, *line.USD)
+		}
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestCostTheCloudsWorkersAISpendIsMeteredFromTheGateway: dispatches that
+// ran through the factory's gateway — a model in its namespace, or the
+// executor that boots its workers in Cloudflare — are one workers-ai line,
+// metered with the host's own gateway-backed number and the attempts counted.
+// Locally the same models are unmetered: the calls are not joined to gateway
+// logs from where the model is built, and the line says so instead of
+// inventing a number.
+func TestCostTheCloudsWorkersAISpendIsMeteredFromTheGateway(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Host = HostCloud
+	src.RunID = "run_1a2b3c4d5e6f"
+	src.WorkerCost = &WorkerCostInput{USD: 0.41, Source: "gateway"}
+	src.Records.Decisions = nil
+	src.Records.Attempts = []runstate.Attempt{
+		attemptMarker(1, "nwj", "2026-09-27T03:19:05Z", "strong", "cloudflare-workers-ai/@cf/zai-org/glm-5.3", "local-subprocess"),
+		attemptMarker(2, "89m", "2026-09-27T04:00:00Z", "strong", "glm-5.3-flash", "cloudflare-sandbox"),
+	}
+	src.Standing, src.StandingRead, src.Session = nil, false, nil
+	model := Build(src)
+
+	want := []CostLine{{
+		Source: CostSourceWorkersAI, Metered: true, USD: float64Ptr(0.41), Attempts: 2,
+		Basis: "AI Gateway logs",
+	}}
+	if !reflect.DeepEqual(model.Cost.Lines, want) {
+		t.Errorf("the cost lines are %+v, want the one metered workers-ai line %+v", model.Cost.Lines, want)
+	}
+	if model.Cost.RecordedUSD == nil || *model.Cost.RecordedUSD != 0.41 {
+		t.Errorf("recorded_usd is %v, want the gateway number 0.41", model.Cost.RecordedUSD)
+	}
+	assertValidatesAgainstTheContract(t, model)
+
+	// The same model spelled in the gateway's namespace, run LOCALLY: the
+	// host states no ground truth, so the line is unmetered and says why.
+	local := runningEpicSources()
+	local.Records.Decisions = nil
+	local.Records.Attempts = []runstate.Attempt{
+		attemptMarker(1, "nwj", "2026-09-27T03:19:05Z", "strong", "cloudflare-workers-ai/@cf/zai-org/glm-5.3", "local-subprocess"),
+	}
+	localModel := Build(local)
+	line := costLineOf(t, localModel, CostSourceWorkersAI)
+	if line.Metered || line.USD != nil || line.Attempts != 1 {
+		t.Errorf("a local workers-ai line is %+v, want unmetered with no number over 1 attempt", line)
+	}
+	if want := "not metered: this run's Workers AI calls are not joined to gateway logs"; line.Basis != want {
+		t.Errorf("a local workers-ai line's basis is %q, want %q", line.Basis, want)
+	}
+	if localModel.Cost.RecordedUSD != nil {
+		t.Errorf("recorded_usd is %v, want null: nothing measured the local spend", *localModel.Cost.RecordedUSD)
+	}
+}
+
+// TestCostDecisionsCarryTheirOwnMeteredUsage: the run's own recorded model
+// exchanges are metered — the records state the price — with their line first
+// and the per-river attempt lines behind it; recorded_usd is the sum of the
+// metered lines only.
+func TestCostDecisionsCarryTheirOwnMeteredUsage(t *testing.T) {
+	t.Parallel()
+	model := Build(runningEpicSources())
+
+	decisionsUSD := 0.04
+	want := []CostLine{
+		{Source: CostSourceDecisions, Metered: true, USD: &decisionsUSD, Attempts: 1, Basis: "usage recorded on decision records"},
+		{Source: CostSourceClaude, Metered: false, USD: nil, Attempts: 1, Basis: "not metered (subscription)"},
+		{Source: CostSourcePiLocal, Metered: false, USD: nil, Attempts: 2, Basis: "not metered"},
+	}
+	if !reflect.DeepEqual(model.Cost.Lines, want) {
+		t.Errorf("the cost lines are %+v, want %+v", model.Cost.Lines, want)
+	}
+	metered := 0.0
+	anyMetered := false
+	for _, line := range model.Cost.Lines {
+		if line.Metered && line.USD != nil {
+			metered += *line.USD
+			anyMetered = true
+		}
+	}
+	if !anyMetered || model.Cost.RecordedUSD == nil || *model.Cost.RecordedUSD != metered {
+		t.Errorf("recorded_usd is %v, want the metered lines' sum %v", model.Cost.RecordedUSD, metered)
+	}
+	if model.Cost.Attempts != 3 {
+		t.Errorf("the cost counts %d attempts, want the 3 dispatch markers", model.Cost.Attempts)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestCostDecisionsWithoutAMeasuredCostAreNeverMeteredZero (tick 1tm): the
+// decisions line is metered ONLY when a record carries a measured cost. Two
+// shapes nothing measured: the explicit null a post-fzt usage states for a
+// price the answering service never gave (tick fzt — the field is a
+// pointer), and the marshalled zero every classification record wrote before
+// fzt, when the never-set plain float64 fabricated a price; a role decision
+// carries no usage block at all — none is a measurement, so the line says
+// "not metered" with no number and recorded_usd stays null (tick dm2: the
+// roll-up carries no number where no line is metered), the
+// decisions still counted. A record that states a price still meters the
+// line, and the number is the stated price alone.
+func TestCostDecisionsWithoutAMeasuredCostAreNeverMeteredZero(t *testing.T) {
+	t.Parallel()
+
+	// The never-set field's marshalled zero, and a role decision with no
+	// usage block at all: nothing measured either spend.
+	src := runningEpicSources()
+	src.Records.Attempts = nil
+	src.Records.Evidence = nil
+	src.Records.Absorptions = nil
+	src.Records.Findings = nil
+	src.Records.Decisions = []runstate.Decision{
+		decisionWithResponse(1, map[string]any{
+			"model": "classifier@example.com",
+			"usage": map[string]any{"cost_usd": 0.0, "input_tokens": 1549, "output_tokens": 60},
+		}),
+		decisionWithResponse(2, map[string]any{
+			"model": "classifier@example.com",
+			// the post-fzt no-price shape (tick fzt): the service stated none,
+			// and the pointer marshals the explicit null
+			"usage": map[string]any{"cost_usd": nil, "input_tokens": 1549, "output_tokens": 60},
+		}),
+		decisionWithResponse(3, map[string]any{
+			"model": "opus",
+			// a role decision: no usage block at all
+		}),
+	}
+	model := Build(src)
+	line := costLineOf(t, model, CostSourceDecisions)
+	if line.Metered || line.USD != nil {
+		t.Errorf("the decisions line is %+v, want unmetered with no number: no record carried a measured cost", line)
+	}
+	if want := "not metered: the decision records carry no measured cost"; line.Basis != want {
+		t.Errorf("the decisions line's basis is %q, want %q", line.Basis, want)
+	}
+	if model.Cost.RecordedUSD != nil {
+		t.Errorf("recorded_usd is %v, want null: nothing measured the decisions' spend", *model.Cost.RecordedUSD)
+	}
+	// The marshalled JSON, not the struct: no unmetered line states a number,
+	// and the roll-up states none either.
+	raw, err := json.Marshal(model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		Cost struct {
+			RecordedUSD *float64   `json:"recorded_usd"`
+			Lines       []CostLine `json:"lines"`
+		} `json:"cost"`
+	}
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatal(err)
+	}
+	if document.Cost.RecordedUSD != nil {
+		t.Errorf("the marshalled recorded_usd is %v, want null: nothing measured the decisions' spend", *document.Cost.RecordedUSD)
+	}
+	for _, line := range document.Cost.Lines {
+		if !line.Metered && line.USD != nil {
+			t.Errorf("the %s line is unmetered and states usd %v: an unmetered spend wearing a number is a fabricated spend",
+				line.Source, *line.USD)
+		}
+	}
+	assertValidatesAgainstTheContract(t, model)
+
+	// A record that states a price beside them meters the line: the number is
+	// the stated price alone, the line's attempts still counting the records
+	// whose usage the line speaks for.
+	priced := runningEpicSources()
+	priced.Records.Attempts = nil
+	priced.Records.Evidence = nil
+	priced.Records.Absorptions = nil
+	priced.Records.Findings = nil
+	priced.Records.Decisions = append([]runstate.Decision{
+		decisionWithResponse(4, map[string]any{
+			"model": "classifier@example.com",
+			"usage": map[string]any{"cost_usd": 0.02, "input_tokens": 900, "output_tokens": 40},
+		}),
+	}, src.Records.Decisions...)
+	metered := Build(priced)
+	line = costLineOf(t, metered, CostSourceDecisions)
+	if !line.Metered || line.USD == nil || *line.USD != 0.02 {
+		t.Errorf("the decisions line is %+v, want metered with the stated price 0.02", line)
+	}
+	if want := "usage recorded on decision records"; line.Basis != want {
+		t.Errorf("a metered decisions line's basis is %q, want %q", line.Basis, want)
+	}
+	if metered.Cost.RecordedUSD == nil || *metered.Cost.RecordedUSD != 0.02 {
+		t.Errorf("recorded_usd is %v, want the stated price 0.02", metered.Cost.RecordedUSD)
+	}
+	assertValidatesAgainstTheContract(t, metered)
+}
+
+// decisionWithResponse is one validated decision record with the response
+// the caller states — the shape the decisions' own cost reading consumes.
+func decisionWithResponse(n int, response map[string]any) runstate.Decision {
+	return runstate.Decision{
+		SchemaVersion: runstate.SchemaVersion,
+		Decision:      n,
+		Role:          runstate.RoleClassifyTick,
+		Request:       map[string]any{"epic_id": "2jn"},
+		Response:      response,
+		Validated:     true,
+		RequestedAt:   "2026-09-27T03:10:00Z",
+		AnsweredAt:    "2026-09-27T03:10:20Z",
+	}
+}
+
+// TestCostAnUnsyncedCloudRunIsNeverAMeteredZero (tick 1tm): the factory's
+// run row is cost_usd NOT NULL DEFAULT 0, and the host states no gateway
+// number until its telemetry answers — so a cloud run before its first cost
+// sync, or one whose telemetry could not be read, gets an UNMETERED
+// workers-ai line that names why in its basis, never a metered $0.00 the
+// row's default dressed up as a measurement.
+func TestCostAnUnsyncedCloudRunIsNeverAMeteredZero(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Host = HostCloud
+	src.RunID = "run_1a2b3c4d5e6f"
+	src.Records.Decisions = nil
+	src.Records.Attempts = []runstate.Attempt{
+		attemptMarker(1, "nwj", "2026-09-27T03:19:05Z", "strong", "cloudflare-workers-ai/@cf/zai-org/glm-5.3", "cloudflare-sandbox"),
+	}
+	src.Standing, src.StandingRead, src.Session = nil, false, nil
+	model := Build(src)
+
+	line := costLineOf(t, model, CostSourceWorkersAI)
+	if line.Metered || line.USD != nil {
+		t.Errorf("an unsynced cloud run's workers-ai line is %+v, want unmetered with no number", line)
+	}
+	if want := "not metered: the gateway's cost telemetry has not answered for this run"; line.Basis != want {
+		t.Errorf("an unsynced cloud run's workers-ai line basis is %q, want %q", line.Basis, want)
+	}
+	if model.Cost.RecordedUSD != nil {
+		t.Errorf("recorded_usd is %v, want null: nothing measured the cloud spend yet", *model.Cost.RecordedUSD)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestCostSplitsRiversTheProvenanceNames: the river comes from each
+// dispatch's own provenance — a Claude-family model is claude however the
+// harness was spelled, a codex-shaped model lands on other, and a dispatch
+// that states nothing lands on other too, its attempts still counted.
+func TestCostSplitsRiversTheProvenanceNames(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Records.Decisions = nil
+	src.Records.Attempts = []runstate.Attempt{
+		attemptMarker(1, "nwj", "2026-09-27T03:19:05Z", "strong", "sonnet", "local-subprocess"),
+		attemptMarker(2, "89m", "2026-09-27T04:00:00Z", "strong", "gpt-5.6-luna", "local-subprocess"),
+	}
+	model := Build(src)
+
+	if line := costLineOf(t, model, CostSourceClaude); line.Attempts != 1 || line.Metered {
+		t.Errorf("the claude line is %+v, want the sonnet dispatch unmetered", line)
+	}
+	if line := costLineOf(t, model, CostSourceOther); line.Attempts != 1 || line.Metered || line.USD != nil {
+		t.Errorf("the other line is %+v, want the codex-shaped dispatch unmetered", line)
+	}
+	if line := recoveredLine(model, CostSourcePiLocal); line != nil {
+		t.Errorf("the model carries a pi-local line %+v, want none: no dispatch is provider-qualified", line)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestCostAProviderQualifiedClaudeIdIsPiLocalNotTheSubscription: the claude
+// river is the subscription — a bare Claude-family model, the same family the
+// runner config itself recognises (runconfig's claudeFamily: an alias, or a
+// claude-… name, never provider-qualified). A provider-qualified claude id is
+// a different river: the local pi serving a claude model through another
+// provider is pay-per-token spend this repository does not meter, and reading
+// it as the subscription merges two rivers into one line. The fourth alias
+// fable is the family's own too.
+func TestCostAProviderQualifiedClaudeIdIsPiLocalNotTheSubscription(t *testing.T) {
+	t.Parallel()
+
+	// Two provider-qualified claude spellings, no bare alias anywhere: one
+	// pi-local line carrying both, and NO claude line at all — the
+	// subscription river only ever carries a bare family name.
+	src := runningEpicSources()
+	src.Records.Decisions = nil
+	src.Records.Attempts = []runstate.Attempt{
+		attemptMarker(1, "nwj", "2026-09-27T03:19:05Z", "strong", "openrouter/anthropic/claude-opus-5", "local-subprocess"),
+		attemptMarker(2, "89m", "2026-09-27T04:00:00Z", "strong", "bedrock/anthropic.claude-sonnet-4-5", "local-subprocess"),
+	}
+	model := Build(src)
+	if line := recoveredLine(model, CostSourceClaude); line != nil {
+		t.Errorf("the model carries a claude line %+v, want none: a provider-qualified claude id is not the subscription", line)
+	}
+	line := costLineOf(t, model, CostSourcePiLocal)
+	if line.Attempts != 2 || line.Metered || line.USD != nil {
+		t.Errorf("the pi-local line is %+v, want both provider-qualified claude dispatches, unmetered with no number", line)
+	}
+	if model.Cost.RecordedUSD != nil {
+		t.Errorf("recorded_usd is %v, want null: nothing measured the pi-local spend", *model.Cost.RecordedUSD)
+	}
+	assertValidatesAgainstTheContract(t, model)
+
+	// fable, the family's fourth alias — the same bare spelling the claude
+	// runner's --model takes — is the subscription river, not pi-local.
+	alias := runningEpicSources()
+	alias.Records.Decisions = nil
+	alias.Records.Attempts = []runstate.Attempt{
+		attemptMarker(1, "nwj", "2026-09-27T03:19:05Z", "strong", "fable", "local-subprocess"),
+	}
+	model = Build(alias)
+	if line := recoveredLine(model, CostSourcePiLocal); line != nil {
+		t.Errorf("the model carries a pi-local line %+v, want none: fable is a bare claude family alias", line)
+	}
+	line = costLineOf(t, model, CostSourceClaude)
+	if line.Attempts != 1 || line.Metered || line.USD != nil {
+		t.Errorf("the claude line is %+v, want the fable dispatch alone, unmetered with no number", line)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestCostALocalGatewayNumberMetersOnlyTheAttemptsItNames (tick kf4, the
+// finding kf4 exists for): a resumed local run dispatched 30 workers-ai
+// attempts before the metering join existed and 2 after it did, and the
+// gateway answered rows — a measured $X — for the 2. The line must never
+// state that number over all 32 attempts: the metered line covers the 2
+// attempts whose calls joined the gateway (and the run's own calls the
+// classifier makes beside them), and the 30 unmeasured ones are called
+// "not metered", on their own line, with no number.
+func TestCostALocalGatewayNumberMetersOnlyTheAttemptsItNames(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Records.Decisions = nil
+	src.Records.Attempts = localWorkersAIAttempts(32)
+	src.WorkerCost = &WorkerCostInput{
+		USD: 0.12, Source: "gateway",
+		Calls: 8, Attempts: 2, OwnCalls: 2, UnnamedCalls: 0,
+	}
+	model := Build(src)
+
+	metered := CostLine{
+		Source: CostSourceWorkersAI, Metered: true, USD: float64Ptr(0.12), Attempts: 2,
+		Basis: "AI Gateway logs: the calls of 2 of 32 attempts joined the gateway, beside the run's own model calls",
+	}
+	unmeasured := CostLine{
+		Source: CostSourceWorkersAI, Metered: false, USD: nil, Attempts: 30,
+		Basis: "not metered: dispatched without the gateway metering join, their calls never reached the gateway logs",
+	}
+	var remainder []CostLine
+	for _, line := range model.Cost.Lines {
+		if line.Source != CostSourceWorkersAI {
+			continue
+		}
+		remainder = append(remainder, line)
+	}
+	if len(remainder) != 2 || !reflect.DeepEqual(remainder[0], metered) || !reflect.DeepEqual(remainder[1], unmeasured) {
+		t.Errorf("the workers-ai river is %+v, want the 2 named attempts metered %v and the 30 unmeasured ones %v",
+			remainder, metered, unmeasured)
+	}
+	if model.Cost.RecordedUSD == nil || *model.Cost.RecordedUSD != 0.12 {
+		t.Errorf("recorded_usd is %v, want the measured 0.12", model.Cost.RecordedUSD)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestCostALocalGatewayNumberOverEveryAttemptIsMeteredWholly: where the
+// join covers every attempt on the river — every row names an attempt the
+// river counts — the line is the simple metered one, the cloud shape's own
+// basis; the run's own calls beside them are named in the basis, because
+// their money is in the number and belongs to no attempt.
+func TestCostALocalGatewayNumberOverEveryAttemptIsMeteredWholly(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Records.Decisions = nil
+	src.Records.Attempts = localWorkersAIAttempts(2)
+	src.WorkerCost = &WorkerCostInput{USD: 0.41, Source: "gateway", Calls: 5, Attempts: 2, OwnCalls: 1}
+	model := Build(src)
+	line := costLineOf(t, model, CostSourceWorkersAI)
+	if !line.Metered || line.USD == nil || *line.USD != 0.41 || line.Attempts != 2 {
+		t.Errorf("a fully joined river's line is %+v, want metered 0.41 over the 2 attempts", line)
+	}
+	if want := "AI Gateway logs: every attempt's calls joined the gateway, beside the run's own model calls"; line.Basis != want {
+		t.Errorf("a fully joined river's basis is %q, want %q", line.Basis, want)
+	}
+	count := 0
+	for _, line := range model.Cost.Lines {
+		if line.Source == CostSourceWorkersAI {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("the river carries %d lines, want one: the river is wholly metered", count)
+	}
+	assertValidatesAgainstTheContract(t, model)
+
+	// Without the run's own calls beside them, the basis is the plain one the
+	// cloud line carries: the number and the attempts it covers agree.
+	sole := runningEpicSources()
+	sole.Records.Decisions = nil
+	sole.Records.Attempts = localWorkersAIAttempts(1)
+	sole.WorkerCost = &WorkerCostInput{USD: 0.2, Source: "gateway", Calls: 3, Attempts: 1}
+	model = Build(sole)
+	line = costLineOf(t, model, CostSourceWorkersAI)
+	if want := "AI Gateway logs"; line.Basis != want {
+		t.Errorf("a fully joined river's basis is %q, want the plain %q", line.Basis, want)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestCostTheRunsOwnCallsAreNeverAWorkersLineOverAttempts: the classifier's
+// own calls carry the run tag (tick 24u), so a run with NO workers-ai
+// dispatch still gets gateway rows — measured money that belongs to no
+// worker attempt. The line says what the money is (the run's own calls) and
+// names no attempt it did not measure, instead of a metered "Workers AI
+// $0.0x (0 attempts)" beside a decisions line that reads not metered.
+func TestCostTheRunsOwnCallsAreNeverAWorkersLineOverAttempts(t *testing.T) {
+	t.Parallel()
+
+	// No workers-ai attempt at all: the rows are the run's own calls.
+	src := runningEpicSources()
+	src.Records.Decisions = nil
+	src.Records.Attempts = []runstate.Attempt{
+		attemptMarker(1, "nwj", "2026-09-27T03:19:05Z", "strong", "opus", "local-subprocess"),
+	}
+	src.WorkerCost = &WorkerCostInput{USD: 0.02, Source: "gateway", Calls: 2, OwnCalls: 2}
+	model := Build(src)
+	line := costLineOf(t, model, CostSourceWorkersAI)
+	if !line.Metered || line.USD == nil || *line.USD != 0.02 || line.Attempts != 0 {
+		t.Errorf("the run-own calls' line is %+v, want metered 0.02 over no attempt", line)
+	}
+	if want := "AI Gateway logs: gateway-joined calls of no worker dispatch this run made (the classifier's own calls carry the run tag)"; line.Basis != want {
+		t.Errorf("the run-own calls' basis is %q, want %q", line.Basis, want)
+	}
+	if model.Cost.RecordedUSD == nil || *model.Cost.RecordedUSD != 0.02 {
+		t.Errorf("recorded_usd is %v, want the measured 0.02", model.Cost.RecordedUSD)
+	}
+	assertValidatesAgainstTheContract(t, model)
+
+	// Workers-ai attempts exist but NONE of them joined — every row is the
+	// run's own: the attempts are called not metered on their own line, the
+	// measured own-call money keeps its number, and neither wears the other.
+	split := runningEpicSources()
+	split.Records.Decisions = nil
+	split.Records.Attempts = localWorkersAIAttempts(3)
+	split.WorkerCost = &WorkerCostInput{USD: 0.02, Source: "gateway", Calls: 2, OwnCalls: 2}
+	model = Build(split)
+	var workers, own []CostLine
+	for _, line := range model.Cost.Lines {
+		if line.Source == CostSourceWorkersAI {
+			if line.Metered {
+				own = append(own, line)
+			} else {
+				workers = append(workers, line)
+			}
+		}
+	}
+	if len(own) != 1 || own[0].Attempts != 0 || own[0].USD == nil || *own[0].USD != 0.02 {
+		t.Errorf("the run-own calls' line is %+v, want the measured number over no attempt", own)
+	}
+	if len(workers) != 1 || workers[0].Attempts != 3 || workers[0].USD != nil || workers[0].Metered {
+		t.Errorf("the unjoined attempts' line is %+v, want 3 attempts not metered with no number", workers)
+	}
+	if want := "not metered: dispatched without the gateway metering join, their calls never reached the gateway logs"; workers[0].Basis != want {
+		t.Errorf("the unjoined attempts' basis is %q, want %q", workers[0].Basis, want)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestCostRowsFromBeforeTheJoinNamedAttemptsKeepTheWholeRiverHonest: rows
+// that carry no attempt name — every attempt dispatched between dm2 and
+// kf4, whose calls joined the gateway before the join named them — cannot
+// be attributed per attempt, so no per-attempt claim is made from them:
+// one metered line whose basis names the calls the number sums and the
+// attempts the rows name, and calls the never-joined attempts not metered.
+func TestCostRowsFromBeforeTheJoinNamedAttemptsKeepTheWholeRiverHonest(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Records.Decisions = nil
+	src.Records.Attempts = localWorkersAIAttempts(4)
+	src.WorkerCost = &WorkerCostInput{
+		USD: 0.3, Source: "gateway",
+		Calls: 4, Attempts: 2, OwnCalls: 1, UnnamedCalls: 1,
+	}
+	model := Build(src)
+	line := costLineOf(t, model, CostSourceWorkersAI)
+	if !line.Metered || line.USD == nil || *line.USD != 0.3 || line.Attempts != 4 {
+		t.Errorf("a river with pre-tag rows is %+v, want one metered line over the river's 4 attempts", line)
+	}
+	want := "AI Gateway logs: the sum of 4 gateway-joined calls; " +
+		"attempts whose calls are named by them: 2 of 4; " +
+		"run-own model calls: 1; " +
+		"rows carrying no attempt name (from before the join named its attempts): 1; " +
+		"attempts whose calls never reached the gateway are not metered"
+	if line.Basis != want {
+		t.Errorf("a river with pre-tag rows has basis %q, want %q", line.Basis, want)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// localWorkersAIAttempts draws n local workers-ai dispatch markers, the
+// river a local pi run on the gateway's models makes.
+func localWorkersAIAttempts(n int) []runstate.Attempt {
+	attempts := make([]runstate.Attempt, 0, n)
+	for i := 1; i <= n; i++ {
+		attempts = append(attempts, attemptMarker(i, fmt.Sprintf("t%02d", i%48),
+			fmt.Sprintf("2026-09-27T0%d:00:00Z", (i%9)+1), "strong",
+			"cloudflare-workers-ai/@cf/zai-org/glm-5.3", "local-subprocess"))
+	}
+	return attempts
+}
+
+// float64Ptr is the test-side pointer a metered line's number needs.
+func float64Ptr(v float64) *float64 { return &v }
+
+// recoveredLine is the negative lookup a split assertion needs: the line for
+// a river that should carry nothing, nil when it carries nothing.
+func recoveredLine(model Model, source string) *CostLine {
+	for i := range model.Cost.Lines {
+		if model.Cost.Lines[i].Source == source {
+			return &model.Cost.Lines[i]
+		}
+	}
+	return nil
+}

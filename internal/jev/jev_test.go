@@ -160,7 +160,7 @@ func TestAnEpicsTicksBatchIntoOneCall(t *testing.T) {
 	if result.Model != "jev-2026-09" {
 		t.Errorf("the answering model was %q, want the identity from result.result.model", result.Model)
 	}
-	if result.Usage.InputTokens != 52945 || result.Usage.CostUSD != 0.0022 {
+	if result.Usage.InputTokens != 52945 || result.Usage.CostUSD == nil || *result.Usage.CostUSD != 0.0022 {
 		t.Errorf("usage decoded as %+v, want the measured 52945 input tokens at $0.0022", result.Usage)
 	}
 }
@@ -505,5 +505,54 @@ func TestTheRequestCarriesTitleDescriptionAndAcceptanceCriteria(t *testing.T) {
 	}
 	if request.Questions[0].Type != "choice" {
 		t.Errorf("question type = %q, want the Choice primitive", request.Questions[0].Type)
+	}
+}
+
+// The price in a usage block is a statement the answering service made, not
+// a default (tick fzt): no price stated — the key absent, or an explicit
+// null — decodes to a nil CostUSD, so a decision record built from that
+// usage marshals cost_usd as the distinguishable no-price rather than the
+// fabricated zero a plain float64 forced onto every record. A service that
+// states $0.00 is a pointer, so an honestly measured free call stays
+// distinguishable from an unpriced one.
+func TestUsageCostIsThePriceTheServiceStatedNotADefaultZero(t *testing.T) {
+	t.Parallel()
+	classificationBody := func(usage string) []byte {
+		return []byte(fmt.Sprintf(
+			`{"success":true,"result":{"state":"Completed","result":{"model":"jev-1","answers":{},"usage":%s}}}`, usage))
+	}
+	for name, usage := range map[string]string{
+		"no price stated, key absent":    `{"input_tokens":1200,"output_tokens":40}`,
+		"no price stated, explicit null": `{"input_tokens":1200,"output_tokens":40,"cost_usd":null}`,
+	} {
+		_, _, got, unavailable := parseResponse(classificationBody(usage))
+		if unavailable != "" {
+			t.Fatalf("%s: the measured wire shape read as a no-answer: %s", name, unavailable)
+		}
+		if got.CostUSD != nil {
+			t.Errorf("%s: cost_usd decoded as %v, want nil: no price was stated", name, *got.CostUSD)
+		}
+		// The decision record marshals the usage as the classifier stated
+		// it: an explicit null for the no-price, never a zero.
+		raw, err := json.Marshal(got)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(raw), `"cost_usd":null`) {
+			t.Errorf("%s: the usage marshals as %s, want cost_usd null: a never-set price is no price, not a zero", name, raw)
+		}
+	}
+	for name, stated := range map[string]float64{
+		"a stated zero is a statement":    0,
+		"a stated price is the statement": 0.0022,
+	} {
+		_, _, got, unavailable := parseResponse(classificationBody(
+			fmt.Sprintf(`{"input_tokens":1200,"output_tokens":40,"cost_usd":%v}`, stated)))
+		if unavailable != "" {
+			t.Fatalf("%s: the measured wire shape read as a no-answer: %s", name, unavailable)
+		}
+		if got.CostUSD == nil || *got.CostUSD != stated {
+			t.Errorf("%s: cost_usd decoded as %v, want the stated %v", name, got.CostUSD, stated)
+		}
 	}
 }

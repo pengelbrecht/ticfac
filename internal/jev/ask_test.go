@@ -158,7 +158,7 @@ func TestAskReturnsAnswersOverTheCallersOwnLabels(t *testing.T) {
 	if result.Model != "jev-2026-09" {
 		t.Errorf("the answering model was %q, want the identity from result.result.model", result.Model)
 	}
-	if result.Usage.InputTokens != 52945 || result.Usage.CostUSD != 0.0022 {
+	if result.Usage.InputTokens != 52945 || result.Usage.CostUSD == nil || *result.Usage.CostUSD != 0.0022 {
 		t.Errorf("usage decoded as %+v, want the measured usage", result.Usage)
 	}
 }

@@ -34,7 +34,7 @@
 import { getEnrolledProject } from "./db";
 import type { Env } from "./index";
 import type { StatusDoc } from "./status";
-import { primaryAttention } from "./status";
+import { primaryAttention, resumeCommand } from "./status";
 import { escapeHTML, sendTelegramHTML } from "./telegram";
 
 /** The minimum gap between two sends for one run. Batches, never suppresses: a deferred send waits for the next evaluation. */
@@ -78,13 +78,23 @@ export function stopsFromStatusDoc(doc: StatusDoc): StatusStop[] {
     });
   }
   if (!doc.liveness.alive) {
-    if (doc.lifecycle.phase === "failed") {
+    if (doc.lifecycle.phase === "failed" && primary === null) {
+      // The failed stop pages only where no attention entry already IS the
+      // news (tick jkb): a failed run now carries its own resume in
+      // attention — the same rule the done branch holds — and two messages
+      // about one move is a page nobody needed.
       const reason = doc.liveness.reason === "" ? "the run failed" : doc.liveness.reason;
       stops.push({
         key: `terminal:failed:${keyProse(reason)}`,
         kind: "failed",
         what: reason,
-        clear_with: `ticfac run-epic ${doc.epic_id}`,
+        // The resume is named by the host the run lives on, the Go model's
+        // own answer (statusmodel.ResumeCommand): a failed cloud run's page
+        // must not name `run-epic` — the local foreground form that would
+        // restart the epic on the reader's machine (tick tt6).
+        clear_with:
+          resumeCommand(doc.host, doc.epic_id) ||
+          null /* an epic the doc cannot state names no command (tick mwt) */,
       });
     } else if (doc.lifecycle.phase === "done" && primary === null) {
       const reason =

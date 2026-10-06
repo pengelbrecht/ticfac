@@ -104,6 +104,11 @@ func TestAFindingRidesToTheCloseOutAndHoldsThere(t *testing.T) {
 		"close-out does not hand over",
 		"breaks done item A1", // the hold names each finding's claim against the done (tick nfo)
 		"ticfac triage qeu",   // and teaches the everyday path, never the old 64-hex command (tick 8yn)
+		// The command addresses the run's OWN store (tick q8m): the fixture
+		// run writes under r-fixture, not the local default epic-qeu, so the
+		// bare command would land a person on a store that holds nothing.
+		"ticfac triage qeu --run-id r-fixture",
+		"listed by `ticfac findings qeu --run-id r-fixture`",
 	} {
 		if !strings.Contains(result.Failure.Message, want) {
 			t.Errorf("the hold does not name %q — a hold a person cannot act on is a stall by definition: %s",

@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The same fixture-drift class tick oro removed from the two named cells is still live in values no guard reads: in status_model_running_wave, nwj carries duration_seconds null though the document's own facts derive 2898 (its try stamp to its gate's finished_at) and 6dh carries duration_seconds null with elapsed_seconds 4892 where generated_at minus its own dispatched_at is 4912; in status_model_completed_awaiting_merge, progress counts 14 closed ticks and 3 waves beside an empty waves list; in the dashboard golden, v7z carries elapsed_seconds null though its reported state is live with a stamped current try, and its gates array backs only 46x of its closed ticks. The builder cannot emit any of these pairs: durationOf and the elapsed rule read the very stamps the document carries, buildWaves counts progress in the same loop that lists the ticks, and buildGates emits one gate per evidence record. Fix shape as oro's: correct the values through the bundle's cut procedure and extend TestEveryGoldenAgreesWithThePipelineDerivation with duration/elapsed/progress/gates rules, each derivable from the document alone.\nevidence: contracts/status-model.json goldens status_model_running_wave (nwj/6dh duration+elapsed), status_model_completed_awaiting_merge (progress vs waves []), dashboard (v7z elapsed, gates); derivation: durationOf internal/statusmodel/pipeline.go:347, elapsed internal/statusmodel/build.go:366, progress internal/statusmodel/build.go:271, buildGates internal/statusmodel/build.go:490\n\nticfac run run_ee8ebb4fe13d4311b8f9be6f66db69d4 created this tick by absorbing the finding ca2d70983c0c670168f6da0f0c6a8d5dadb3f4115de4caf37358bfce039dcfc2 (reported by run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-oro/attempt-3): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_ee8ebb4fe13d4311b8f9be6f66db69d4/absorptions/ca2d70983c0c670168f6da0f0c6a8d5dadb3f4115de4caf37358bfce039dcfc2.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "fq0",
+    "title": "The goldens carry more values the wave-2 derivation can never produce"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.6,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.68,
+      "design": 0.01,
+      "diagnosis": 0.03,
+      "mechanical": 0.19,
+      "translation": 0.09
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1619,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-01T06:28:55Z",
+  "answered_at": "2026-10-01T06:28:55Z",
+  "provenance": {
+    "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
+    "tick_id": "fq0",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "e57e3ce075c4145e45a4c6e79f397fb67679c7c1",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

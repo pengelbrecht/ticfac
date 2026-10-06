@@ -1,0 +1,25 @@
+{
+  "schema_version": 3,
+  "run_id": "run_911b556fce394004837695b3196e3925",
+  "bound": 3,
+  "recorded_at": "2026-09-30T13:00:54Z",
+  "provenance": {
+    "run_id": "run_911b556fce394004837695b3196e3925",
+    "tick_id": "3gk",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "8558ae1646f7a4a186d2d0e611e3d8ffda2f02b3",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:081a87517f0ab90d00a3d9fc0345b717df1255ffc33390f2bdfbd3e5cd4e6645",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

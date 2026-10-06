@@ -1,0 +1,57 @@
+{
+  "schema_version": 3,
+  "decision": 7,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 6,
+    "attempt_head": "7bfabda3127faa12889688c0ce63864036a2fb0c",
+    "conflict_files": [
+      "internal/cli/watch.go"
+    ],
+    "conflicting_ticks": [
+      "gf0",
+      "fub"
+    ],
+    "epic_id": "hn6",
+    "job_id": "run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-gf0/resolve-6",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (cloudflare-sandbox/pi, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:2ec895ee2ea6b5afe4e77460bd5ea6902c6c290544d45c7d10f95905341927cb",
+    "resolve_branch": "ticfac/run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-gf0/resolve-6",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "gf0"
+  },
+  "response": {
+    "conflict_detail": "1 conflict: content in internal/cli/watch.go",
+    "conflict_files": [
+      "internal/cli/watch.go"
+    ],
+    "job_id": "run-run_f44b6ad8909b495cbd3bae4ee7cf229c/tick-gf0/resolve-6",
+    "merge": "ffc9d2814769fb379eb2de81edeef3854bb33983",
+    "resolve_head": "2600b16904c717091fccb733a55cf35e3629ebe6",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T12:36:08Z",
+  "answered_at": "2026-10-04T12:36:08Z",
+  "provenance": {
+    "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
+    "tick_id": "gf0",
+    "attempt": 6,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "2eb7a00224b6f977d905819ff9a5edde03ae428d",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "strong",
+    "profile_digest": "sha256:2ec895ee2ea6b5afe4e77460bd5ea6902c6c290544d45c7d10f95905341927cb",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

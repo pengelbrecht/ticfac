@@ -1,0 +1,16 @@
+{
+  "id": "3wq",
+  "title": "Run the real-pi metering tests in CI (m4t displacement, 648 stream drain)",
+  "description": "TestPiDrainsTheGatewayStreamThroughTheMeteringOverride is the only end-to-end check that pi resolves the !command and that the account token displaces pi's stored key. It skips when pi is not on PATH, which includes every CI runner, so CI checks m4t only through a string match on the generated extension. Installing a pinned pi into the go test job would make the claim CI-verified.\nevidence: internal/exec/subprocess/pimeter_drain_test.go\n\nticfac run epic-hn6 created this tick by absorbing the finding 9d64c1cf34f7a38a8ceabd57224ac37cb5bcea20cc244338f8de117dc0bd2691 (reported by run-epic-hn6/tick-pv7/attempt-42): the finding was judged against the epic's definition of done and gates done item A6. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/9d64c1cf34f7a38a8ceabd57224ac37cb5bcea20cc244338f8de117dc0bd2691.json on the run branch.",
+  "notes": "2026-10-06 01:24 - ticfac run epic-hn6: created by absorbing finding 9d64c1cf34f7a38a8ceabd57224ac37cb5bcea20cc244338f8de117dc0bd2691 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-hn6/absorptions/9d64c1cf34f7a38a8ceabd57224ac37cb5bcea20cc244338f8de117dc0bd2691.json on epic/hn6, and it says: the classifier put 0.36 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A6: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side\n2026-10-06 02:18 - ticfac run epic-hn6: 3wq try 1 (run dispatch #43) merged into epic/hn6 as 6ae37ca30ee3; the integrated gate (go, ts) passed.",
+  "status": "closed",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "hn6",
+  "discovered_from": "run-epic-hn6/tick-pv7/attempt-42",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T23:24:02Z",
+  "updated_at": "2026-10-06T00:18:48.206051Z",
+  "closed_at": "2026-10-06T00:18:48.206051Z"
+}

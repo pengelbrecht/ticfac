@@ -1,0 +1,72 @@
+{
+  "schema_version": 3,
+  "decision": 55,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "hn6",
+    "job_id": "run-epic-hn6/tick-t6q/attempt-48",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:fa6462f436784f6995e2e4a7d1f1d2d6480f38445b155fd86a6c6ee7f4995690",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "993cd1f485930c92bcde5169989cd4a134962eb2",
+    "tick_id": "t6q"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "ziy routes the stream path's FAILED ending through sayWatchFailedEnd(model). When watchGatherModel errors (only the cloud path can), model is statusmodel.Model{}: Host and EpicID are empty, so ResumeCommand returns \"\" and the ending prints the plain sentence with no command. Before ziy, epicOf() resolved an epic-<id> run's epic and named `ticfac run <id> --cloud`. Fix: when the gather fails, fall back to an epic the caller actually resolved (never the run-id fallback ziy removed).\nevidence: internal/cli/watch.go:546-549 (sayWatchFailedEnd with the zero model when gatherErr != nil); internal/cli/watch.go:726 returns statusmodel.Model{} on error",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Stream FAILED ending names no resume when the cloud model gather fails"
+      },
+      {
+        "body": "In CI's go race job the test failed once: its TempDir cleanup found origin.git/objects not empty. Something the test started (a git process or a goroutine) is still writing into the fixture remote after the test returns. It passed on the next two runs. Flaky means a bug: the test, or the code it drives, has to wait for its writer before returning.\nevidence: CI run 37393481229, job go race: testing.go:1464: TempDir RemoveAll cleanup: unlinkat .../TestTriageDiscardAndFixedByShortPrefix.../001/origin.git/objects: directory not empty",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "TestTriageDiscardAndFixedByShortPrefix flakes on TempDir cleanup under -race"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-hn6/tick-t6q/attempt-48",
+      "commits": 0,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-hn6/t6q/RESULT-t6q.md",
+      "review_verdict": "READY",
+      "review_verdict_detail": ""
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "epic/hn6's head CI is red, and both failures are inherited: #225's replan test (fixed on main by #227) and the runconfig real-pi catalog test that 3wq exposed (deleted on main by 43y). Confirm CI goes green on the head after the close-out folds main, and that the fold's resolution of ci-plan.sh keeps 3wq's pi flag."
+  },
+  "validated": true,
+  "requested_at": "2026-10-06T00:58:04Z",
+  "answered_at": "2026-10-06T00:58:04Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "t6q",
+    "attempt": 48,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "993cd1f485930c92bcde5169989cd4a134962eb2",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:fa6462f436784f6995e2e4a7d1f1d2d6480f38445b155fd86a6c6ee7f4995690",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}

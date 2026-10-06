@@ -2,6 +2,9 @@ package subprocess
 
 import (
 	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -387,6 +390,74 @@ func TestALocalRunnerIsNotStuckWhileItsToolIsBusyAndIsRepromptedWhenItHangs(t *t
 	}
 }
 
+// superviseSlowStartArg is the helper mode: Supervise, with every runner held
+// for slowStartHold after it starts and before its supervisor first looks at
+// it — where a loaded host held tick onv's gate: the fsynced pid file and the
+// announcements between the runner's start and the watch loop.
+const superviseSlowStartArg = "__supervise_slow_start__"
+
+const slowStartHold = 2 * time.Second
+
+func superviseSlowStart(args []string) int {
+	fs := flag.NewFlagSet("supervise", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	state := fs.String("state", "", "")
+	if err := fs.Parse(args); err != nil || *state == "" {
+		fmt.Fprintf(os.Stderr, "supervise helper: --state is required\n")
+		return 2
+	}
+	runnerStarted = func([]string) { time.Sleep(slowStartHold) }
+	if err := Supervise(*state); err != nil {
+		fmt.Fprintf(os.Stderr, "supervise helper: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// The same runner, with its supervisor held past the 1.5s window between the
+// runner's start and the first look — tick onv's gate, made to happen every
+// time. The watch's baseline was dated before the hold, so the first look
+// read "quiet for the window" over tool CPU it had never watched and nudged
+// at once, 2s into the 4s busy phase. And the re-prompted runner, which
+// reports and exits during its own hold, was looked at once more before its
+// exit was collected — select picks among ready cases at random — and nudged
+// as stuck a second time.
+func TestASlowStartingSupervisorDoesNotNudgeABusyRunner(t *testing.T) {
+	f := newFixture(t, fixtureOptions{mode: "busy_then_hang", stuckAfter: 1500 * time.Millisecond,
+		env: []string{"FAKE_RUNNER_BUSY=4"}, supervisorArgv: []string{os.Args[0], superviseSlowStartArg}})
+	handle := f.Start(f.spec("run-onv/tick-slw/attempt-1", "slw"))
+	f.waitSettled(handle)
+
+	status := f.inspect(handle)
+	if collected := f.collect(handle); collected.Verdict != VerdictReadyToMerge {
+		t.Fatalf("verdict %s, want ready-to-merge\n%s", collected.Verdict, formatObservations(status.Observations))
+	}
+	var nudges, restarts int
+	var nudgedAt, startedAt time.Time
+	for _, o := range status.Observations {
+		switch {
+		case IsStuckNudge(o):
+			nudges++
+			nudgedAt, _ = time.Parse(time.RFC3339, o.At)
+		case o.Kind == ObsStarted && strings.Contains(o.Detail, "re-prompted as stuck"):
+			restarts++
+		case o.Kind == ObsStarted && startedAt.IsZero():
+			startedAt, _ = time.Parse(time.RFC3339, o.At)
+		}
+	}
+	if nudges != 1 || restarts != 1 {
+		t.Fatalf("stuck nudges %d, restarts %d, want 1 and 1:\n%s", nudges, restarts, formatObservations(status.Observations))
+	}
+	// The start is announced after the hold, so the busy phase has 2s of its
+	// 4s left when the watch begins; a nudge at the first look is 0-1s after
+	// the announcement (the stamps are whole seconds), one after the tool
+	// went quiet 3-4s.
+	if nudgedAt.Sub(startedAt) < 2*time.Second {
+		t.Errorf("the runner was nudged %s after its start was announced, inside its busy phase:\n%s",
+			nudgedAt.Sub(startedAt), formatObservations(status.Observations))
+	}
+}
+
 // A runner that hangs again after its stuck nudge is stopped and settled as
 // stuck: a runner error that says so.
 func TestALocalRunnerThatStaysStuckIsStopped(t *testing.T) {
@@ -421,4 +492,196 @@ func lastObservationDetail(status *JobStatus) string {
 		return ""
 	}
 	return status.Observations[len(status.Observations)-1].Detail
+}
+
+// The whole-tail read the dashboard's activity window answers from (hn6,
+// tick ltg): every dated line's stamp — the moments the worker was seen
+// doing something — and the LAST tool call as one bounded line, read from
+// Claude Code's layout and block spellings — the one harness that still
+// writes a session transcript since the pi CLI went (epic 43y, tick uxi).
+func TestReadTranscriptEventsAnswersTheWindowAndTheLastToolCall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(EnvTranscriptHome, home)
+	cwd := t.TempDir()
+
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "session", "timestamp": "2026-09-28T06:43:07.734Z"},
+		map[string]any{"type": "assistant", "timestamp": "2026-09-28T06:44:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "tool_use", "name": "bash", "input": map[string]any{"command": "ls -la"}},
+				map[string]any{"type": "tool_use", "name": "bash",
+					"input": map[string]any{"command": "go test ./internal/reconcile"}},
+			}}})
+	events, ok := ReadTranscriptEvents(home, "claude", cwd)
+	if !ok {
+		t.Fatal("the transcript stands and the tail reader answered nothing")
+	}
+	if len(events.Events) != 2 {
+		t.Errorf("the tail read %d dated events, want 2: every dated line is a moment", len(events.Events))
+	}
+	if at, err := time.Parse(time.RFC3339Nano, "2026-09-28T06:44:00.000Z"); err != nil || !events.Events[1].Equal(at) {
+		t.Errorf("the events read %v, want the lines' own stamps in file order", events.Events)
+	}
+	// The LAST tool call of the last message that carries one — the second
+	// block, not the first.
+	if events.LastToolCall != "bash: go test ./internal/reconcile" {
+		t.Errorf("the last tool call is %q, want the tool's own name plus its first argument", events.LastToolCall)
+	}
+	if at, err := time.Parse(time.RFC3339Nano, "2026-09-28T06:44:00.000Z"); err != nil || !events.LastToolAt.Equal(at) {
+		t.Errorf("the last tool call is stamped %v, want its own line's stamp", events.LastToolAt)
+	}
+
+	// Claude Code's own spellings: tool_use blocks, the arguments in "input".
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "assistant", "timestamp": "2026-09-28T08:39:19.791Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "tool_use", "name": "Bash", "input": map[string]any{"command": "go vet ./..."}},
+			}}})
+	events, ok = ReadTranscriptEvents(home, "claude", cwd)
+	if !ok || events.LastToolCall != "Bash: go vet ./..." {
+		t.Errorf("the claude tail read %q (ok %t), want the tool_use block's own name and first argument",
+			events.LastToolCall, ok)
+	}
+
+	// The line stays bounded however long the argument was.
+	long := strings.Repeat("word ", 40)
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "assistant", "timestamp": "2026-09-28T09:00:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "tool_use", "name": "bash", "input": map[string]any{"command": long}},
+			}}})
+	events, _ = ReadTranscriptEvents(home, "claude", cwd)
+	if len([]rune(events.LastToolCall)) > 80 {
+		t.Errorf("the last tool call line is %d runes, want it bounded to 80", len([]rune(events.LastToolCall)))
+	}
+	if !strings.HasPrefix(events.LastToolCall, "bash: ") || !strings.HasSuffix(events.LastToolCall, "…") {
+		t.Errorf("the bounded line %q lost the tool's name or the cut's ellipsis", events.LastToolCall)
+	}
+
+	// A tool call whose first argument is not text (a list) carries the tool's
+	// name alone: never a guessed argument.
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "assistant", "timestamp": "2026-09-28T09:01:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "tool_use", "name": "todoWrite",
+					"input": map[string]any{"todos": []any{map[string]any{"id": "1"}}}},
+			}}})
+	events, _ = ReadTranscriptEvents(home, "claude", cwd)
+	if events.LastToolCall != "todoWrite" {
+		t.Errorf("the last tool call is %q, want the tool's name alone for a non-text first argument", events.LastToolCall)
+	}
+
+	// Nothing to read: a working directory with no session at all.
+	if _, ok := ReadTranscriptEvents(home, "claude", t.TempDir()); ok {
+		t.Error("a worktree with no transcript answered events")
+	}
+}
+
+// The LAST tool call line is what the dashboard renders and the phone
+// snapshot ships off-host (tick ghh): a command's first argument can carry
+// a credential — an exported token, an Authorization header, a URL with a
+// secret in it — and the line a person reads must not state it. Every shape
+// a worker plausibly types is redacted to <redacted> at the reader, the one
+// producer every renderer reads, and the redaction happens BEFORE the
+// 80-rune bound so a cut line can never carry half a secret.
+func TestReadTranscriptEventsRedactsCredentialsFromTheLastToolCall(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(EnvTranscriptHome, home)
+	cwd := t.TempDir()
+
+	cases := []struct {
+		command string
+		want    string
+	}{
+		{
+			// An inline assignment in front of the command, unquoted.
+			command: "GH_TOKEN=ghp_0123456789abcdefghijklmnopqrstuv go test ./internal/reconcile",
+			want:    "bash: GH_TOKEN=<redacted> go test ./internal/reconcile",
+		},
+		{
+			// An exported variable, quoted value.
+			command: `export ANTHROPIC_AUTH_TOKEN="sk-ant-api03-0123456789abcdefghijklmnopqrstuvwxyz"`,
+			want:    "bash: export ANTHROPIC_AUTH_TOKEN=<redacted>",
+		},
+		{
+			// An Authorization header, bearer scheme spelled or not.
+			command: `curl -H "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9abcdef" https://example.com/v1`,
+			want:    `bash: curl -H "Authorization: <redacted>" https://example.com/v1`,
+		},
+		{
+			// A URL query parameter named for a credential.
+			command: "curl 'https://api.example.com/v1/messages?api_key=0123456789abcdef&other=1'",
+			want:    "bash: curl 'https://api.example.com/v1/messages?api_key=<redacted>&other=1'",
+		},
+		{
+			// Userinfo with a password in it.
+			command: "git clone https://operator:hunter2@example.com/ticfac/ticfac.git",
+			want:    "bash: git clone https://<redacted>@example.com/ticfac/ticfac.git",
+		},
+		{
+			// A flag whose value is a token, space form; and a known token
+			// literal anywhere in the line.
+			command: "gh auth login --with-token ghp_0123456789abcdefghijklmnopqrstuv",
+			want:    "bash: gh auth login --with-token <redacted>",
+		},
+		{
+			// Redaction happens before the bound: the token's 200 runes must
+			// not push the tail out of the line, and no cut may carry them.
+			command: "MY_API_KEY=" + strings.Repeat("k", 200) + " echo done",
+			want:    "bash: MY_API_KEY=<redacted> echo done",
+		},
+		{
+			// A named credential nested inside another assignment's value —
+			// the value is rescanned, never left as someone else's value.
+			command: "kubectl create secret generic s --from-literal=password=hunter2",
+			want:    "bash: kubectl create secret generic s --from-literal=password=<redacted>",
+		},
+		{
+			// curl's -u user:password — a credential whose flag says nothing.
+			command: "curl -u admin:hunter2 https://example.com",
+			want:    "bash: curl -u <redacted> https://example.com",
+		},
+		{
+			// The redaction is about credentials, not about every value: an
+			// ordinary command line states itself whole — a bare --key names a
+			// sort key as often as a credential, and a variable whose name
+			// merely mentions one stays readable.
+			command: "npx vitest run status-model --key nonexistent",
+			want:    "bash: npx vitest run status-model --key nonexistent",
+		},
+		{
+			command: "go test ./internal/reconcile -count=1",
+			want:    "bash: go test ./internal/reconcile -count=1",
+		},
+	}
+	for i, c := range cases {
+		writeTranscript(t, "claude", cwd,
+			map[string]any{"type": "assistant", "timestamp": "2026-10-04T09:00:00.000Z",
+				"message": map[string]any{"role": "assistant", "content": []any{
+					map[string]any{"type": "tool_use", "name": "bash",
+						"input": map[string]any{"command": c.command}},
+				}}})
+		events, ok := ReadTranscriptEvents(home, "claude", cwd)
+		if !ok {
+			t.Fatalf("case %d: the transcript stands and the tail reader answered nothing", i)
+		}
+		if events.LastToolCall != c.want {
+			t.Errorf("case %d: the last tool call is %q, want %q — a credential reached the dashboard line",
+				i, events.LastToolCall, c.want)
+		}
+	}
+
+	// Claude Code's own spelling answers through the same redaction: the seam
+	// is the line the reader builds, not one harness's blocks.
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "assistant", "timestamp": "2026-10-04T09:01:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "tool_use", "name": "Bash",
+					"input": map[string]any{"command": "GITHUB_TOKEN=gho_0123456789abcdefghijklmnopqrstu gh pr view 1"}},
+			}}})
+	events, ok := ReadTranscriptEvents(home, "claude", cwd)
+	if !ok || events.LastToolCall != "Bash: GITHUB_TOKEN=<redacted> gh pr view 1" {
+		t.Errorf("the claude tail read %q (ok %t), want the tool_use line with the credential redacted",
+			events.LastToolCall, ok)
+	}
 }

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 )
 
 func TestStatusPushFlagDefaultsFromTheConfiguredEnvironment(t *testing.T) {
@@ -300,7 +301,7 @@ func TestStatusSnapshotForCarriesTheLabelMap(t *testing.T) {
 	}
 	t.Cleanup(func() { tickLabels = previousLabels })
 
-	envelope := statusSnapshotFor(context.Background(), t.TempDir(), "epic-2jn")
+	envelope := statusSnapshotFor(context.Background(), t.TempDir(), "epic-2jn", statusmodel.HostLocal)
 	if envelope.TickLabels["i1r"] != "Follow ticfac from a phone" {
 		t.Errorf("envelope tick_labels = %v, want the label map the page names ticks by", envelope.TickLabels)
 	}
@@ -347,5 +348,118 @@ func TestPushFailureIsALineNeverAnExit(t *testing.T) {
 	}
 	if strings.Contains(warned.String(), "panic") {
 		t.Error("a refused push panicked")
+	}
+}
+
+// ---- the cloud half (hn6 h7w): the orchestrator container's own push ----
+
+// overrideCloudPushEnv points the container-detection seam at one fixed
+// client (or none) for the duration of a test. The production read is the
+// container's environment, which a test replaces rather than owns.
+func overrideCloudPushEnv(t *testing.T, client *cloudClient) {
+	t.Helper()
+	previous := cloudPushClientFromEnv
+	cloudPushClientFromEnv = func(string) *cloudClient { return client }
+	t.Cleanup(func() { cloudPushClientFromEnv = previous })
+}
+
+func TestCloudPushClientFromEnvReadsTheContainerBoot(t *testing.T) {
+	// The production read, through the real seam: the three variables the
+	// feed relay reads are the orchestrator container's own boot, and the
+	// run id is what keeps any other process — a laptop that merely has a
+	// factory configured, or a worker container holding the same factory
+	// pair — from pushing anything.
+	t.Setenv("TICKS_FACTORY_URL", " https://factory.example.com/ ")
+	t.Setenv("TICKS_FACTORY_TOKEN", "run-scoped-token")
+	t.Setenv("TICKS_RUN_ID", "run_5d4c3b2a1f0e")
+
+	client := cloudPushClientFromEnv("run_5d4c3b2a1f0e")
+	if client == nil {
+		t.Fatal("the booted container's own run produced no client")
+	}
+	if client.baseURL != "https://factory.example.com" {
+		t.Errorf("client baseURL = %q, want the container's factory, trimmed", client.baseURL)
+	}
+	if client.token != "run-scoped-token" {
+		t.Errorf("client token = %q, want the run's own credential", client.token)
+	}
+
+	// Another run's id: not this process's run, so not this process's push.
+	if client := cloudPushClientFromEnv("epic-2jn"); client != nil {
+		t.Error("a process that was not booted as this run produced a client")
+	}
+
+	// Any of the three missing, and there is nothing to push through.
+	t.Setenv("TICKS_FACTORY_URL", "")
+	if client := cloudPushClientFromEnv("run_5d4c3b2a1f0e"); client != nil {
+		t.Error("a container with no factory endpoint produced a client")
+	}
+	t.Setenv("TICKS_FACTORY_URL", "https://factory.example.com")
+	t.Setenv("TICKS_FACTORY_TOKEN", "")
+	if client := cloudPushClientFromEnv("run_5d4c3b2a1f0e"); client != nil {
+		t.Error("a container with no run credential produced a client")
+	}
+	t.Setenv("TICKS_FACTORY_TOKEN", "run-scoped-token")
+	t.Setenv("TICKS_RUN_ID", "")
+	if client := cloudPushClientFromEnv("run_5d4c3b2a1f0e"); client != nil {
+		t.Error("a process that was not booted as any run produced a client")
+	}
+	// A malformed endpoint is a container that cannot reach its factory,
+	// never a push to a guessed URL.
+	t.Setenv("TICKS_RUN_ID", "run_5d4c3b2a1f0e")
+	t.Setenv("TICKS_FACTORY_URL", "not a url")
+	if client := cloudPushClientFromEnv("run_5d4c3b2a1f0e"); client != nil {
+		t.Error("a malformed factory endpoint produced a client")
+	}
+}
+
+func TestStartCloudStatusPusherIsNilOutsideAContainer(t *testing.T) {
+	// Outside an orchestrator container — the laptop case — the cloud
+	// pusher is nil, and the opt-in local pusher (or none) is the answer.
+	overrideCloudPushEnv(t, nil)
+	if p := startCloudStatusPusher(t.TempDir(), "epic-2jn", io.Discard); p != nil {
+		p.Stop()
+		t.Fatal("a process that is no container's booted run started a cloud pusher")
+	}
+}
+
+func TestCloudPusherSendsTheEnvelopeTheRelayDoorPins(t *testing.T) {
+	quietForge(t)
+	door := newPushCapture(t)
+	overrideCloudPushEnv(t, snapshotClient(door.server, "run-scoped-token"))
+
+	pusher := startCloudStatusPusher(t.TempDir(), "run_5d4c3b2a1f0e", io.Discard)
+	if pusher == nil {
+		t.Fatal("the booted container run started no pusher")
+	}
+
+	push := door.next()
+	if push.path != statusRelayPath {
+		t.Errorf("push path = %q, want the run-credential door %q", push.path, statusRelayPath)
+	}
+	if push.auth != "Bearer run-scoped-token" {
+		t.Errorf("push Authorization = %q, want the run's own credential", push.auth)
+	}
+
+	var envelope statusSnapshotEnvelope
+	if err := json.Unmarshal(push.body, &envelope); err != nil {
+		t.Fatalf("the pushed body is not the envelope: %v", err)
+	}
+	if envelope.Host != statusmodel.HostCloud {
+		t.Errorf("envelope host = %q, want cloud (the door refuses another host)", envelope.Host)
+	}
+	if envelope.Model.Host != statusmodel.HostCloud {
+		t.Errorf("model host = %q, want cloud: the clearing commands are the host's", envelope.Model.Host)
+	}
+	if envelope.Model.RunID != "run_5d4c3b2a1f0e" {
+		t.Errorf("model run_id = %q, want the booted run's own id", envelope.Model.RunID)
+	}
+	if envelope.Model.SchemaVersion != statusmodel.SchemaVersion {
+		t.Errorf("model schema_version = %d, want %d", envelope.Model.SchemaVersion, statusmodel.SchemaVersion)
+	}
+
+	pusher.Stop()
+	if final := door.next(); final.path != statusRelayPath {
+		t.Errorf("the ending push path = %q, want %q", final.path, statusRelayPath)
 	}
 }

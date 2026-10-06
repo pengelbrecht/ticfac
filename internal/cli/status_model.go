@@ -19,6 +19,7 @@ package cli
 // check runs. No new source of truth is created and none is written.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -26,11 +27,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/gatewaytrace"
+	"github.com/pengelbrecht/ticfac/internal/jev"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/runprogress"
@@ -39,21 +44,35 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
-// epicGraph is the epic's own orchestration graph, read through `tk graph`
-// the same way `tickLabels` reads `tk list` — the same layering the run
-// dispatches by. A tracker that cannot be read costs the model its waves and
-// nothing else: the map comes back nil, the model says so, and every other
-// field answers. Swappable so a test fakes the tracker without a binary.
+// epicGraph is the epic's own orchestration graph, read through `tk graph --all`
+// — the same layering `tk graph` computes, with the tracker's CLOSED tasks
+// included, because the epic's whole table is the dashboard's rows. The read
+// is from the INTEGRATION BRANCH on origin, where the epic's tracker writes
+// are durable (status_tracker.go) — an operator watching a cloud run from a
+// main checkout would otherwise see every closed tick open — and falls back
+// to the checkout's own tree, the shape every caller has always read, when
+// the branch cannot be served. A tracker that cannot be read in either
+// place costs the model its waves and nothing else: the map comes back nil,
+// the model says so, and every other field answers. Swappable so a test
+// fakes the tracker without a binary.
 var epicGraph = func(ctx context.Context, repo, epicID string) *tk.Graph {
 	if epicID == "" {
 		return nil
+	}
+	if graph := graphAtIntegrationBranch(ctx, repo, epicID); graph != nil {
+		return graph
 	}
 	client, err := tk.NewContext(ctx, tk.Options{Dir: repo})
 	if err != nil {
 		return nil
 	}
-	graph, err := client.Graph(ctx, epicID)
+	graph, err := client.GraphAll(ctx, epicID)
 	if err != nil {
+		// The manifest-pinned read, for a tracker whose binary predates the
+		// flag: the open tasks alone are still the layering tk computes.
+		if graph, err := client.Graph(ctx, epicID); err == nil {
+			return &graph
+		}
 		return nil
 	}
 	return &graph
@@ -78,12 +97,20 @@ func lockStatusRecords(key string) func() {
 	return lock.Unlock
 }
 
-// statusRecords reads the run's durable records: through the run-state store
-// (origin — durable means pushed, and the store is the authority every other
-// surface reads) and, where no remote can be fetched, from the run directory
-// the checkout holds. The fallback is a fallback for checkouts without a
-// remote, not a second opinion: what origin says, goes.
-func statusRecords(repo, runID, epicID string) (statusmodel.Records, error) {
+// statusRecords reads the run's durable records — and, beside them, every
+// EARLIER run's records for the same epic from the same fetched branch
+// (hn6, tick gmo): the epic's state is what every run left on the
+// integration branch, and the newest run's own records are only the newest
+// layer of it. The run is read under the id the surface names (a cloud run's
+// factory run_<hex> — the container execs `run-epic --run-id $TICKS_RUN_ID`,
+// so its records land there), falling back to the epic spelling an older
+// container wrote (tick tem's era) when the named id carries nothing. Through
+// the run-state store (origin — durable means pushed, and the store is the
+// authority every other surface reads) and, where no remote can be fetched,
+// from the run directories the checkout holds. The fallback is a fallback
+// for checkouts without a remote, not a second opinion: what origin says,
+// goes.
+func statusRecords(repo, runID, epicID string) (statusmodel.Records, []statusmodel.Records, error) {
 	// One store fetch at a time per run in a checkout: the store fetches into
 	// a ref private to this PROCESS and run, so two concurrent reads of the
 	// same run here (the overview gathers cloud runs concurrently, and every
@@ -91,15 +118,207 @@ func statusRecords(repo, runID, epicID string) (statusmodel.Records, error) {
 	// that ref's lock and one would come back degraded.
 	unlock := lockStatusRecords(repo + "\x00" + runID)
 	defer unlock()
+	// A run id that names no epic still belongs to one, and its checkpoint —
+	// on whichever epic branch the repo can read — is what names it (tick
+	// mwt): the branch the fetch below opens is found by looking for the
+	// run's own records, never guessed from the id's shape, and a run
+	// nothing resolves stays on the checkout's own records alone.
+	if epicID == "" {
+		epicID = epicOfUnhintedRun(repo, runID)
+	}
 	if epicID != "" {
 		store, err := runstate.Open(runstate.Options{Repo: repo, Branch: "epic/" + epicID, RunID: runID})
 		if err == nil {
-			if _, err := store.Fetch(); err == nil {
-				return statusmodel.RecordsFromStore(store)
+			if _, fetchErr := store.Fetch(); fetchErr == nil {
+				// The run the surface names first — the id every other
+				// surface addresses the run by. A run dir with no checkpoint
+				// is no record the run wrote; the epic spelling behind it is
+				// the older container's layout, and the honest second try.
+				for _, candidate := range runRecordCandidates(runID, epicID) {
+					_, ok, err := store.Read(runstate.CheckpointPath(candidate))
+					if err != nil {
+						return statusmodel.Records{}, nil, err
+					}
+					if !ok {
+						continue
+					}
+					records, err := statusmodel.RecordsFromStoreRun(store, candidate)
+					if err != nil {
+						return statusmodel.Records{}, nil, err
+					}
+					prior, err := statusPriorRecords(store, candidate, epicID)
+					if err != nil {
+						return statusmodel.Records{}, nil, err
+					}
+					return records, prior, nil
+				}
+				// The branch carries nothing for either spelling: the run has
+				// written no durable record — the honest empty answer, and
+				// every prior run's records beside it.
+				prior, err := statusPriorRecords(store, "", epicID)
+				if err != nil {
+					return statusmodel.Records{}, nil, err
+				}
+				return statusmodel.Records{}, prior, nil
 			}
 		}
 	}
-	return statusmodel.RecordsFromDir(filepath.Join(repo, runstate.Root, "runs", runID))
+	for _, candidate := range runRecordCandidates(runID, epicID) {
+		records, err := statusmodel.RecordsFromDir(filepath.Join(repo, runstate.Root, "runs", candidate))
+		if err != nil {
+			return statusmodel.Records{}, nil, err
+		}
+		if records.Checkpoint != nil {
+			prior, err := statusPriorRecordsFromDir(repo, candidate, epicID)
+			if err != nil {
+				return statusmodel.Records{}, nil, err
+			}
+			return records, prior, nil
+		}
+	}
+	prior, err := statusPriorRecordsFromDir(repo, runID, epicID)
+	if err != nil {
+		return statusmodel.Records{}, nil, err
+	}
+	return statusmodel.Records{}, prior, nil
+}
+
+// runRecordCandidates is the run ids one run's records may sit under, in the
+// order they are tried: the id the surface names (today's writer — the
+// container execs `run-epic --run-id $TICKS_RUN_ID`), then the epic spelling
+// an older container's default run id wrote.
+func runRecordCandidates(runID, epicID string) []string {
+	candidates := []string{runID}
+	if epicID != "" {
+		if epic := "epic-" + epicID; epic != runID {
+			candidates = append(candidates, epic)
+		}
+	}
+	return candidates
+}
+
+// statusPriorRecords is every OTHER run's records for one epic, as the
+// fetched branch carries them, oldest first — the runs whose work the
+// dashboard's rows and progress count. A sibling run is one whose own
+// checkpoint names this epic and is not the run being read; a run with no
+// readable checkpoint is no run of this epic, not an error.
+func statusPriorRecords(store *runstate.Store, currentRunID, epicID string) ([]statusmodel.Records, error) {
+	ids := []string{}
+	for _, path := range store.List(runstate.Root + "/runs") {
+		// The path under `.ticfac/runs/` names the run; only checkpoint
+		// records identify a run as this epic's.
+		rest, ok := strings.CutPrefix(path, runstate.Root+"/runs/")
+		if !ok || !strings.HasSuffix(path, "/checkpoint.json") {
+			continue
+		}
+		runID := strings.TrimSuffix(rest, "/checkpoint.json")
+		if strings.ContainsAny(runID, "/") || runID == currentRunID || runID == "" {
+			continue
+		}
+		ids = append(ids, runID)
+	}
+	readCheckpoint := func(id string) (*runstate.Checkpoint, bool) {
+		raw, ok, err := store.Read(runstate.CheckpointPath(id))
+		if err != nil || !ok {
+			return nil, false
+		}
+		var checkpoint runstate.Checkpoint
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&checkpoint); err != nil {
+			// A sibling record that does not read back clean is not this
+			// read's business: the run's OWN records refuse a drifted
+			// record, and a sibling's drift is named by its own reader.
+			return nil, false
+		}
+		return &checkpoint, true
+	}
+	readAll := func(id string) (statusmodel.Records, error) {
+		records, err := statusmodel.RecordsFromStoreRun(store, id)
+		if err != nil {
+			return statusmodel.Records{}, fmt.Errorf("read run %s's records: %w", id, err)
+		}
+		return records, nil
+	}
+	return priorRunsForEpic(ids, currentRunID, epicID, readCheckpoint, readAll)
+}
+
+// statusPriorRecordsFromDir is the same every-run read where no remote can
+// be fetched: the sibling run directories this checkout holds.
+func statusPriorRecordsFromDir(repo, currentRunID, epicID string) ([]statusmodel.Records, error) {
+	if epicID == "" {
+		return nil, nil
+	}
+	runsDir := filepath.Join(repo, runstate.Root, "runs")
+	entries, err := os.ReadDir(runsDir)
+	if err != nil {
+		return nil, nil // no runs on disk at all: the honest empty answer
+	}
+	ids := []string{}
+	for _, entry := range entries {
+		if entry.IsDir() && entry.Name() != currentRunID {
+			ids = append(ids, entry.Name())
+		}
+	}
+	readCheckpoint := func(id string) (*runstate.Checkpoint, bool) {
+		raw, err := os.ReadFile(filepath.Join(runsDir, id, "checkpoint.json"))
+		if err != nil {
+			return nil, false
+		}
+		var checkpoint runstate.Checkpoint
+		dec := json.NewDecoder(bytes.NewReader(raw))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&checkpoint); err != nil {
+			return nil, false
+		}
+		return &checkpoint, true
+	}
+	readAll := func(id string) (statusmodel.Records, error) {
+		records, err := statusmodel.RecordsFromDir(filepath.Join(runsDir, id))
+		if err != nil {
+			return statusmodel.Records{}, fmt.Errorf("read run %s's records: %w", id, err)
+		}
+		return records, nil
+	}
+	return priorRunsForEpic(ids, currentRunID, epicID, readCheckpoint, readAll)
+}
+
+// priorRunsForEpic is the sibling selection both readers share: of the run
+// ids given, keep those whose checkpoint reads back clean and names the
+// epic, excluding the run being read, ordered oldest checkpoint first. A
+// run whose records cannot then be read whole is an error — a sibling
+// named by its own checkpoint is a run whose records exist, and half of a
+// run's history is a history that lies.
+func priorRunsForEpic(
+	ids []string, currentRunID, epicID string,
+	readCheckpoint func(id string) (*runstate.Checkpoint, bool),
+	readAll func(id string) (statusmodel.Records, error),
+) ([]statusmodel.Records, error) {
+	type priorRun struct {
+		id        string
+		updatedAt string
+	}
+	var priors []priorRun
+	for _, id := range ids {
+		if id == currentRunID || id == "" {
+			continue
+		}
+		checkpoint, ok := readCheckpoint(id)
+		if !ok || checkpoint.EpicID != epicID {
+			continue
+		}
+		priors = append(priors, priorRun{id: id, updatedAt: checkpoint.UpdatedAt})
+	}
+	sort.Slice(priors, func(i, j int) bool { return priors[i].updatedAt < priors[j].updatedAt })
+	out := []statusmodel.Records{}
+	for _, prior := range priors {
+		records, err := readAll(prior.id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, records)
+	}
+	return out, nil
 }
 
 // statusCI asks the forge about the epic PR: the state the close-out's gate
@@ -167,6 +386,76 @@ var statusCI = func(ctx context.Context, repo, epicID string) (*statusmodel.CIIn
 	return input, nil
 }
 
+// statusBuild is the model's assembly point, a seam in the shape of
+// epicGraph and statusCI above it: both gathering functions hand their
+// Sources to THIS and never to statusmodel.Build directly, so a test can
+// observe what the wiring passes. The dashboard's wave-1 readers (hn6,
+// tick r5i) answer nil — the honest not-measured — which means an emitted
+// model cannot tell a wired gathering from an unwired one: the Sources are
+// the only place the wire is observable, and the command-level tests hold
+// it there.
+var statusBuild = statusmodel.Build
+
+// statusWorkerCost is a LOCAL run's own gateway-joined spend (tick dm2): the
+// operator's AI Gateway logs, read back through the same client the cloud
+// trace reads them with, filtered to the rows stamped with this run id —
+// the rows the metering join's cf-aig-metadata tag produces. Where the
+// logs answer calls for the run, the sum of their measured cost is the
+// host's ground-truth number the model's workers-ai line meters (the same
+// claim the factory's own cost sync makes for a cloud run), handed to the
+// model WITH the coverage that names what the number measured (tick kf4):
+// which attempts the rows join, which calls are the run's own, and which
+// rows predate the join's per-attempt names — so the line never states a
+// measured $X over attempts the join never reached. Where the logs answer
+// none — the calls were never joined, or the host states no gateway — the
+// answer is nil and the line says "not metered", the honest word for
+// spend no measurement names.
+//
+// A host whose ~/.ticfacrc names no gateway or no token is the documented
+// OPTIONAL state, nil and never an error: cost telemetry is optional, and
+// a status answer must never degrade over it. An error from a gateway that
+// SHOULD have answered (a revoked token, an unreachable API) IS reported —
+// degraded, like every source this model cannot read.
+var statusWorkerCost = func(ctx context.Context, runID string) (*statusmodel.WorkerCostInput, error) {
+	if strings.TrimSpace(runID) == "" {
+		return nil, nil
+	}
+	file, err := credentials.Load()
+	if err != nil {
+		return nil, err
+	}
+	config, err := gatewaytrace.ConfigFrom(file)
+	if err != nil {
+		return nil, nil // not configured: the optional state, not a failed read
+	}
+	// The same test-and-override knob the jev credential resolution honours
+	// (its $TICFAC_JEV_API_BASE), so a test points the reader at a server of
+	// its own without touching production's default.
+	if base := strings.TrimSpace(os.Getenv(jev.OperatorBaseEnv)); base != "" {
+		config.APIBase = base
+	}
+	client := gatewaytrace.New(config, nil)
+	calls, err := client.Calls(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	if len(calls) == 0 {
+		return nil, nil
+	}
+	totals := gatewaytrace.Sum(calls)
+	// The coverage beside the money (tick kf4): a sum alone reads as the
+	// whole run's spend, and a resumed run — or a host that configured its
+	// gateway mid-run — has attempts the join never reached. The reader
+	// hands the model what the rows name so the line can claim only what
+	// was measured.
+	coverage := gatewaytrace.CoverageOf(calls)
+	return &statusmodel.WorkerCostInput{
+		USD: totals.Cost, Source: "gateway",
+		Calls: coverage.Calls, Attempts: coverage.Attempts,
+		OwnCalls: coverage.OwnCalls, UnnamedCalls: coverage.UnnamedCalls,
+	}, nil
+}
+
 // modelGatherers is the per-frame source policy for a FOLLOWING surface:
 // `status --json` answers once and pays every read on the way, but the live
 // watch (89m) re-gathers every frame, and a frame every two seconds must
@@ -174,8 +463,9 @@ var statusCI = func(ctx context.Context, repo, epicID string) (*statusmodel.CIIn
 // `status --follow` already set for its labels. The one-shot surface passes
 // the direct reads; the watch passes the caches (watch.go).
 type modelGatherers struct {
-	graph func(context.Context, string, string) *tk.Graph
-	ci    func(context.Context, string, string) (*statusmodel.CIInput, error)
+	graph      func(context.Context, string, string) *tk.Graph
+	ci         func(context.Context, string, string) (*statusmodel.CIInput, error)
+	workerCost func(context.Context, string) (*statusmodel.WorkerCostInput, error)
 }
 
 // epicIDOf derives the epic id a run id names: `epic-<id>` for a local run,
@@ -191,6 +481,51 @@ func epicIDOf(runID string, records statusmodel.Records) string {
 	return ""
 }
 
+// priorFeedsLocal is every prior run's own event feed, keyed by the run id its
+// records were read under — the facts about a hold that only the feed states
+// (the records say a tick was rejected; only the line says it was held FOR
+// A PERSON). Local runs are read from the logs this checkout keeps,
+// `.ticfac/logs/<run-id>/events.jsonl`; a cloud run's from the factory's
+// events route per run id. Best-effort per run: a prior feed that cannot be
+// read is a missing hint, not a degraded source — the run's records carry
+// the rest of its history, and an unreadable feed must never cost the model
+// its answer.
+func priorFeedsLocal(repo string, prior []statusmodel.Records) map[string][]runfeed.Event {
+	feeds := map[string][]runfeed.Event{}
+	for _, records := range prior {
+		if records.Checkpoint == nil || records.Checkpoint.RunID == "" {
+			continue
+		}
+		if events, err := runfeed.Read(runfeed.Path(repo, records.Checkpoint.RunID)); err == nil {
+			feeds[records.Checkpoint.RunID] = events
+		}
+	}
+	return feeds
+}
+
+// priorFeedsCloud is the same read for a cloud run's earlier runs, through
+// the factory's events route per run id — the same route the run's own feed
+// comes from, and the only place its prior runs' feeds exist.
+func priorFeedsCloud(ctx context.Context, client *cloudClient, warn io.Writer, prior []statusmodel.Records) map[string][]runfeed.Event {
+	feeds := map[string][]runfeed.Event{}
+	for _, records := range prior {
+		if records.Checkpoint == nil || records.Checkpoint.RunID == "" {
+			continue
+		}
+		source := &cloudFeedSource{client: client, runID: records.Checkpoint.RunID, warn: warn}
+		located, absent, err := feedStanding(ctx, source)
+		if err != nil || absent {
+			continue
+		}
+		events := make([]runfeed.Event, 0, len(located))
+		for _, line := range located {
+			events = append(events, line.Event)
+		}
+		feeds[records.Checkpoint.RunID] = events
+	}
+	return feeds
+}
+
 // localStatusModel gathers everything a LOCAL run's model reads and builds
 // it. The liveness answer is the probe's own, carried as data; every age the
 // model states is measured against the one `now` the gathering stamps.
@@ -201,10 +536,24 @@ func epicIDOf(runID string, records statusmodel.Records) string {
 // resolve each run's working repo through internal/runregistry first and
 // probe THERE; that package's doc comment is the convention.
 func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Status, gather modelGatherers) statusmodel.Model {
+	return localStatusModelHosted(ctx, repo, runID, probe, gather, statusmodel.HostLocal)
+}
+
+// localStatusModelHosted is the gathering the local model and the cloud
+// container's pushed model share (hn6 h7w): everything a run's own host
+// machine can read — its feed, its records on origin, the tracker, the forge,
+// the worktree census — with the HOST as the caller states it. The run-epic
+// inside an orchestrator container IS local to that container (its pidfile
+// probes, its feed reads), but the run it works is the factory's cloud run,
+// so the model it pushes names the host the reader must see: "cloud", whose
+// clearing commands are the factory's, never a local `run-epic` on the
+// machine reading the page. The one host-dependent input is the host itself
+// — every source the gathering reads is the machine's own either way.
+func localStatusModelHosted(ctx context.Context, repo, runID string, probe runlife.Status, gather modelGatherers, host string) statusmodel.Model {
 	now := time.Now()
 	degraded := []string{}
 
-	records, err := statusRecords(repo, runID, epicHintOf(runID))
+	records, prior, err := statusRecords(repo, runID, epicHintOf(runID))
 	if err != nil {
 		records = statusmodel.Records{}
 		degraded = append(degraded, "run-state")
@@ -230,19 +579,39 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 		degraded = append(degraded, "forge")
 	}
 
+	priorFeeds := priorFeedsLocal(repo, prior)
+
+	// The local run's own gateway-joined spend (tick dm2): the logs read
+	// under the run id the surface named, metering the workers-ai line where
+	// the run's calls were joined to the gateway and answering nil — the
+	// honest not-measured — where they were not. An error from a gateway
+	// that should have answered degrades the model's cost, like every
+	// source this model cannot read; a host that states no gateway is the
+	// documented optional state and degrades nothing.
+	var workerCost *statusmodel.WorkerCostInput
+	if gather.workerCost != nil {
+		if cost, costErr := gather.workerCost(ctx, runID); costErr == nil {
+			workerCost = cost
+		} else {
+			degraded = append(degraded, "cost")
+		}
+	}
+
 	home, _ := os.UserHomeDir()
 	session := func(worktree string) *statusmodel.Turn {
 		return statusmodel.SessionLog(home, worktree)
 	}
 
-	return statusmodel.Build(statusmodel.Sources{
+	return statusBuild(statusmodel.Sources{
 		Now:          now,
 		RunID:        runID,
-		Host:         statusmodel.HostLocal,
+		Host:         host,
 		EpicID:       epicID,
 		Degraded:     degraded,
 		Graph:        graph,
 		Records:      &records,
+		PriorRecords: prior,
+		PriorFeeds:   priorFeeds,
 		Feed:         feed,
 		Standing:     standing,
 		StandingRead: standingErr == nil,
@@ -253,7 +622,22 @@ func localStatusModel(ctx context.Context, repo, runID string, probe runlife.Sta
 			Source: "run.pid",
 		},
 		Session: session,
-		CI:      ci,
+		// The dashboard's per-worker and per-tick readers (hn6 wave 1): the
+		// activity window from the runner's transcript, the attempt reports
+		// from the run's records, and — since zl1 — the worker's executor-own
+		// name from the attempt record in the dispatch's state directory on
+		// this machine. All are nil-safe stubs where nothing answers.
+		Activity: statusmodel.TranscriptActivity(home),
+		Report:   statusmodel.AttemptReports(repo),
+		Handle:   statusmodel.WorkerHandles(runID),
+		// The worker's harness kind, from the same executor record the handle
+		// reader walks (tick 5uq): the kind is what says which transcript
+		// layout the activity reader reads, and the durable attempt record
+		// cannot name it — its model "opus" and executor "herdr" name
+		// anything but the harness.
+		Runner:     statusmodel.WorkerRunner(runID),
+		WorkerCost: workerCost,
+		CI:         ci,
 	})
 }
 
@@ -306,24 +690,20 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 
 	epicID := strings.TrimSpace(record.Epic)
 
-	// The records a cloud run reads are the CONTAINER's, not the factory's:
-	// the orchestrator container runs `ticfac run-epic <epic>` — the same
-	// command a local run is — so its durable records land on the integration
-	// branch under the run id that command constructs, epic-<epic-id> (the
-	// same derivation resolveFindingsRun spells for the triage surfaces).
-	// The factory's run_<hex> names the Workflow instance, and reading under
-	// it answers from an empty directory, degrading the model to
-	// feed-and-graph only (tick tem). The model still NAMES the factory's
-	// run id — that is the id every surface addresses the run by; only the
-	// records are read under the container's.
+	// The records a cloud run reads are on the integration branch under the
+	// id the run was written under. The container execs `ticfac run-epic
+	// --run-id $TICKS_RUN_ID` (the factory's run_<hex>, hn0), so TODAY's
+	// records land there — read under the id the surface names. tem's era
+	// spelled it epic-<epic-id>; statusRecords tries both and answers what
+	// exists. The model still NAMES the factory's run id — the id every
+	// surface addresses the run by.
 	recordsID := runID
-	if epicID != "" {
-		recordsID = "epic-" + epicID
-	}
 	var records statusmodel.Records
+	var prior []statusmodel.Records
 	if ours {
-		if read, err := statusRecords(repo, recordsID, epicID); err == nil {
+		if read, priors, err := statusRecords(repo, recordsID, epicID); err == nil {
 			records = read
+			prior = priors
 		} else {
 			degraded = append(degraded, "run-state")
 		}
@@ -355,6 +735,11 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		degraded = append(degraded, "feed")
 	}
 
+	var priorFeeds map[string][]runfeed.Event
+	if ours {
+		priorFeeds = priorFeedsCloud(ctx, client, warn, prior)
+	}
+
 	var ci *statusmodel.CIInput
 	if ours {
 		input, ciErr := gather.ci(ctx, repo, epicID)
@@ -364,7 +749,18 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		ci = input
 	}
 
-	return statusmodel.Build(statusmodel.Sources{
+	// The factory's own ground-truth cost, ONLY when its record says the
+	// number is the gateway's measurement: the runs row's cost_usd is NOT
+	// NULL DEFAULT 0, so a bare number is not a measurement — a run before
+	// its first cost sync, or one whose telemetry reads "unavailable: …",
+	// is an unsynced record and the model's cost lines answer empty (tick
+	// 1tm). A record that carries no number states none either.
+	var workerCost *statusmodel.WorkerCostInput
+	if record.CostSource != nil && strings.TrimSpace(*record.CostSource) == "gateway" && record.CostUSD != nil {
+		workerCost = &statusmodel.WorkerCostInput{USD: *record.CostUSD, Source: "gateway"}
+	}
+
+	return statusBuild(statusmodel.Sources{
 		Now:          now,
 		RunID:        runID,
 		Host:         statusmodel.HostCloud,
@@ -372,6 +768,8 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		Degraded:     degraded,
 		Graph:        graph,
 		Records:      &records,
+		PriorRecords: prior,
+		PriorFeeds:   priorFeeds,
 		Feed:         feed,
 		StandingRead: false, // a cloud run's worktrees are not on this machine
 		Liveness: statusmodel.LivenessInput{
@@ -380,7 +778,13 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 			Reason: liveness.Reason,
 			Source: liveness.Source,
 		},
-		CI: ci,
+		// A cloud run's runners and attempt reports are not on this machine
+		// (its worktrees belong to the factory's containers): the readers pass
+		// nil and the model leaves the fields null, the honest not-measured.
+		Activity:   nil,
+		Report:     nil,
+		WorkerCost: workerCost,
+		CI:         ci,
 	})
 }
 

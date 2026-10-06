@@ -114,7 +114,7 @@ func (r *Reconciler) findingLeftNote(marker attemptHandle, finding subprocess.Fi
 		"(key %s, severity %s, for %s). %s; the tick closes and the finding rides to the close-out, "+
 		"which does not hand over while it is untriaged.",
 		r.runID, r.attemptName(marker.TickID, marker.Attempt), finding.Kind, finding.Title, key,
-		finding.Severity, targetName(finding.Target), triagePointer(r.opts.EpicID))
+		finding.Severity, targetName(finding.Target), triagePointer(r.opts.EpicID, r.runID))
 }
 
 // decideFinding takes one drafted finding through the absorption decision. It
@@ -242,6 +242,9 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 			return findingDecision{}, err
 		}
 		if exceeded {
+			// The verdict the bound overrode, in the deferral's own words: the
+			// past-bound record carries WHAT the finding claimed to gate, and
+			// the bound still wins (deferPastBound, absorb_bound.go).
 			overridden := runstate.Absorption{Gating: true, ItemID: verdict.ItemID, Basis: verdict.Basis}
 			return r.deferPastBound(ctx, marker, *standing, dispatch, links, bound,
 				fmt.Sprintf("%s (basis %s)", verdictLine(overridden), verdict.Basis))

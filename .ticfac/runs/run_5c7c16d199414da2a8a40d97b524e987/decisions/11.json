@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 11,
+  "role": "plan-repair",
+  "request": {
+    "attempt": 6,
+    "attempt_head": "97e99c7a63a9f3955d934e1643239f389a472acf",
+    "epic_id": "hn6",
+    "failing_checks": [
+      "ts"
+    ],
+    "gate_failures": "ts (fail)",
+    "gate_sha": "d55c7f76be3b1598e338d6fd0d09731534d20c79",
+    "job_id": "run-run_5c7c16d199414da2a8a40d97b524e987/tick-gmo/repair-6",
+    "output_schema": "ticfac.job-result.plan-repair.v1",
+    "profile": "plan-repair@1.0.0 (cloudflare-sandbox/pi, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:596c6b3408ec60e9f2d328d895dc024b19171174bb4f93aa2578caeb0450910f",
+    "repair_branch": "ticfac/run-run_5c7c16d199414da2a8a40d97b524e987/tick-gmo/repair-6",
+    "role": "plan-repair",
+    "source_grade": "write",
+    "tick_id": "gmo"
+  },
+  "response": {
+    "gate_failures": "ts (fail)",
+    "job_id": "run-run_5c7c16d199414da2a8a40d97b524e987/tick-gmo/repair-6",
+    "merge": "2b7276b3956fee9599d35153fdd3f15cfb71d81b",
+    "repair_head": "82bb04da6396edb620ecdddc794352e32be0cc11",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T03:09:45Z",
+  "answered_at": "2026-10-04T03:09:45Z",
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "gmo",
+    "attempt": 6,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "1935109d90b59d1834755bde6b027115f38f9705",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "plan-repair",
+    "tier": "strong",
+    "profile_digest": "sha256:596c6b3408ec60e9f2d328d895dc024b19171174bb4f93aa2578caeb0450910f",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

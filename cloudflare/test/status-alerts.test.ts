@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
 import { evaluateStatusAlerts, stopAlertHTML, stopsFromStatusDoc } from "../src/notify";
 import type { StatusDoc } from "../src/status";
+import { classifyStatusDoc } from "../src/status";
 
 /**
  * The notification half of tick i1r: a run needing a person produces ONE
@@ -320,6 +321,121 @@ describe("the stop vocabulary (pure)", () => {
     expect(a[0]!.key).toBe(b[0]!.key);
   });
 
+  it("spells a failed run's resume by the host the run lives on (tick tt6)", () => {
+    const failed = {
+      liveness: {
+        alive: false,
+        state: "dead",
+        reason: "the gate refused the attempt",
+        source: "run.pid",
+      },
+      lifecycle: { phase: "failed", phases: [], wave: null },
+      waits_on: null,
+    };
+    // A LOCAL run's resume is the foreground form the reconciler itself runs.
+    const localStops = stopsFromStatusDoc(doc("epic-2jn", "2jn", failed) as unknown as StatusDoc);
+    expect(localStops.find((stop) => stop.kind === "failed")!.clear_with).toBe(
+      "ticfac run-epic 2jn",
+    );
+    // A CLOUD run's resume is a new submission to its factory: `run-epic` on
+    // the reader's machine would restart the epic LOCALLY, in the foreground
+    // — the same stop, a different run (the move ResumeCommand exists to
+    // prevent).
+    const cloudStops = stopsFromStatusDoc(
+      doc("epic-2jn", "2jn", { ...failed, host: "cloud" }) as unknown as StatusDoc,
+    );
+    expect(cloudStops.find((stop) => stop.kind === "failed")!.clear_with).toBe(
+      "ticfac run 2jn --cloud",
+    );
+  });
+
+  it("names no command when the document cannot state the epic (tick mwt)", () => {
+    const failed = {
+      liveness: {
+        alive: false,
+        state: "dead",
+        reason: "the gate refused the attempt",
+        source: "run.pid",
+      },
+      lifecycle: { phase: "failed", phases: [], wave: null },
+      waits_on: null,
+    };
+    // A run whose epic nothing resolved — the factory's run_<hex>, pushed
+    // before any record named the epic — must not carry a command with a
+    // hole where the epic should be: "ticfac run-epic " is a sentence
+    // nobody can type, and the stop and the page both say what happened
+    // without suggesting what cannot run. The Go model's own builder
+    // refuses it; this is the same refusal on the page's side of the one
+    // model the two render.
+    for (const host of ["local", "cloud"]) {
+      const unattributed = doc("run_6d88e3de89ca466c8dab3841185931c1", "", {
+        ...failed,
+        host,
+      }) as unknown as StatusDoc;
+      const stop = stopsFromStatusDoc(unattributed).find((s) => s.kind === "failed")!;
+      expect(stop.clear_with).toBeNull();
+      expect(classifyStatusDoc(unattributed).clear_with).toBeNull();
+    }
+  });
+
+  it("answers a failed run's resume the same way the phone page does — one model, no disagreement (tick tt6)", () => {
+    for (const host of ["local", "cloud"]) {
+      const failed = doc("epic-2jn", "2jn", {
+        liveness: {
+          alive: false,
+          state: "dead",
+          reason: "the gate refused the attempt",
+          source: "run.pid",
+        },
+        lifecycle: { phase: "failed", phases: [], wave: null },
+        waits_on: null,
+        host,
+      }) as unknown as StatusDoc;
+      const stop = stopsFromStatusDoc(failed).find((s) => s.kind === "failed")!;
+      const page = classifyStatusDoc(failed);
+      expect(page.clear_with).toBe(stop.clear_with);
+    }
+  });
+
+  it("keeps a failed run's own resume one message and one class (tick jkb)", () => {
+    // A failed run's model now carries its resume in attention, as the Go
+    // model states it: the row keeps the failed class with the same resume
+    // (never the held band), and the page is the one stop — never a second
+    // "terminal:failed" message about the same move.
+    const failed = doc("epic-2jn", "2jn", {
+      liveness: {
+        alive: false,
+        state: "dead",
+        reason: "the gate refused the attempt",
+        source: "run.pid",
+      },
+      lifecycle: { phase: "failed", phases: [], wave: null },
+      waits_on: {
+        kind: "dead-run",
+        what: "run epic-2jn failed: the gate refused the attempt",
+        since: null,
+        needs_person: true,
+        unblock_command: "ticfac run-epic 2jn",
+      },
+      attention: [
+        {
+          kind: "dead-run",
+          what: "run epic-2jn failed: the gate refused the attempt",
+          since: null,
+          needs_person: true,
+          unblock_command: "ticfac run-epic 2jn",
+        },
+      ],
+    }) as unknown as StatusDoc;
+    const page = classifyStatusDoc(failed);
+    expect(page.state).toBe("failed");
+    expect(page.clear_with).toBe("ticfac run-epic 2jn");
+    const stops = stopsFromStatusDoc(failed);
+    expect(stops).toHaveLength(1);
+    expect(stops[0]!.kind).toBe("person");
+    expect(stops[0]!.clear_with).toBe("ticfac run-epic 2jn");
+  });
+
   it("names no tick when the run pushed no labels", () => {
     const html = stopAlertHTML(
       "epic-2jn",
@@ -348,6 +464,9 @@ describe("the stop vocabulary (pure)", () => {
     expect(sentTexts()).toHaveLength(1);
     expect(sentTexts()[0]).toContain("run_cloud");
     expect(sentTexts()[0]).toContain("run failed");
+    // The resume the ending names is the cloud run's own: a new submission to
+    // its factory (tick tt6), never the local foreground `run-epic`.
+    expect(sentTexts()[0]).toContain("clear with: <code>ticfac run ko8 --cloud</code>");
 
     // A retried finalize step is the same ending: not a second page.
     await notifyRunEnded(

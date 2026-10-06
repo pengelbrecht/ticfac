@@ -225,6 +225,28 @@ jobs:
           (cd cloudflare && pnpm install --frozen-lockfile --prefer-offline)
           (cd harness && pnpm install --frozen-lockfile --prefer-offline)
 
+      # The real-pi metering suite (tick 3wq). The drain test in
+      # internal/exec/subprocess — the only end-to-end check that pi
+      # resolves the generated !command and that the account token
+      # displaces the key pi stored on its own (m4t) — skips wherever pi
+      # is not on PATH, and no CI runner had one: until this step, CI's
+      # whole word on the gateway join was a string match on the generated
+      # extension. The plan sets `pi` on exactly the job whose packages
+      # carry that one (ci-plan.sh), and the pin is an exact version
+      # (TestTheGoTestJobInstallsTheImagePinnedPiBehindThePlanFlag). The
+      # sandbox image ships no pi CLI since epic 43y (tick jhp): the pi this
+      # suite stands for is the host's own, the one a local herdr pane
+      # launches with the metering extension. --ignore-scripts: nothing in
+      # pi needs an install hook.
+      - uses: actions/setup-node@v4
+        if: matrix.pi
+        with:
+          node-version: 22
+
+      - name: Install the pinned pi
+        if: matrix.pi
+        run: npm install -g --ignore-scripts "@earendil-works/pi-coding-agent@0.85.1"
+
       - name: go test
         run: .github/scripts/go-test-shard.sh "${{ matrix.pkgs }}" "${{ matrix.shard }}" "${{ matrix.of }}"
 

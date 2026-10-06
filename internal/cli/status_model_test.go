@@ -280,7 +280,7 @@ func TestStatusJSONEmitsTheVersionedModel(t *testing.T) {
 	if len(ticks[1].Tries) != 1 || ticks[1].Tries[0].Outcome != statusmodel.TryInFlight {
 		t.Errorf("the dispatched tick's try history reads %+v", ticks[1].Tries)
 	}
-	if model.Cost.RecordedUSD != 0.02 || model.Cost.Attempts != 2 {
+	if model.Cost.RecordedUSD == nil || *model.Cost.RecordedUSD != 0.02 || model.Cost.Attempts != 2 {
 		t.Errorf("the cost reads %+v, want 0.02 recorded over 2 attempts", model.Cost)
 	}
 	if len(model.Gates) != 1 || model.Gates[0].Check != "go" || model.Gates[0].Result != "pass" {
@@ -420,13 +420,15 @@ func TestStatusJSONEmitsTheModelForACloudRun(t *testing.T) {
 		t.Errorf("the fake tracker's wave did not ride: %+v", model.Waves)
 	}
 	// The run's own typed hold line is the wait, addressed to a person, with
-	// the settle command spelled the way watch spells it.
+	// the settle command named for the run whose store carries the attempt:
+	// this run's id is the factory's run_<hex>, not the epic spelling settle
+	// defaults to, so the command names it (tick ulw).
 	if model.WaitsOn == nil || model.WaitsOn.Kind != statusmodel.WaitHeldForPerson {
 		t.Fatalf("a cloud run holding an attempt waits on %+v, want held-for-person", model.WaitsOn)
 	}
 	if model.WaitsOn.UnblockCommand == nil ||
-		*model.WaitsOn.UnblockCommand != `ticfac settle cld t1 1 --release "<who>"` {
-		t.Errorf("the unblocking command is %+v, want the settle command", model.WaitsOn.UnblockCommand)
+		*model.WaitsOn.UnblockCommand != `ticfac settle cld t1 1 --run-id `+runID+` --release "<who>"` {
+		t.Errorf("the unblocking command is %+v, want the settle command addressed to the holding run", model.WaitsOn.UnblockCommand)
 	}
 	if len(*requests) == 0 {
 		t.Error("the factory was never asked")
@@ -603,6 +605,161 @@ func TestStatusCloudRunReadsTheContainersRecords(t *testing.T) {
 	}
 }
 
+// captureStatusSources swaps the model's assembly seam for a recorder that
+// hands back the Sources each gathering built, so a test can pin WHAT the
+// wiring passes rather than what the model answers. The dashboard's wave-1
+// readers (hn6, tick r5i) are nil-safe stubs that answer nil, so an emitted
+// model cannot tell a wired gathering from an unwired one: the Sources are
+// the only place the wire is observable at all.
+func captureStatusSources(t *testing.T) *statusmodel.Sources {
+	t.Helper()
+	real := statusBuild
+	captured := &statusmodel.Sources{}
+	statusBuild = func(src statusmodel.Sources) statusmodel.Model {
+		*captured = src
+		return statusmodel.Model{SchemaVersion: statusmodel.SchemaVersion}
+	}
+	t.Cleanup(func() { statusBuild = real })
+	return captured
+}
+
+// TestStatusModelLocalWiringPassesTheDashboardReaders (hn6 wave 1, tick r5i):
+// a LOCAL run's gathering passes the two dashboard readers the wave-2
+// ticks fill — the runner-transcript activity window and the attempt
+// reports — and, since zl1, the worker-handle reader: no executor names the
+// worker on the durable attempt marker, so the handle cell is null in every
+// real run until a reader is wired. All three answer nil where nothing
+// names an answer, so an unwired gathering would leave every wave-2 fill
+// invisible in `status --json` while every suite stays green (the package
+// tests pin the readers, the renderer tests pin the golden); this pin is
+// the only thing that holds the wire in place.
+func TestStatusModelLocalWiringPassesTheDashboardReaders(t *testing.T) {
+	captured := captureStatusSources(t)
+
+	// A bare repository stands for the checkout: every source read is
+	// best-effort, and the wiring under test is what the gathering PASSES,
+	// not what any source answers.
+	repo := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = repo
+		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	git("init", "--quiet", "-b", "main")
+	git("config", "user.email", "status@example.com")
+	git("config", "user.name", "status test")
+	if err := os.WriteFile(filepath.Join(repo, "base.txt"), []byte("base\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "-A")
+	git("commit", "--quiet", "-m", "base")
+
+	localStatusModel(context.Background(), repo, "epic-none",
+		runlife.Status{State: runlife.Alive},
+		modelGatherers{
+			graph: func(context.Context, string, string) *tk.Graph { return nil },
+			ci:    func(context.Context, string, string) (*statusmodel.CIInput, error) { return nil, nil },
+		})
+
+	if captured.Activity == nil {
+		t.Error("localStatusModel passes no Activity reader: the wave-2 activity tick would fill a reader no gathering calls")
+	}
+	if captured.Report == nil {
+		t.Error("localStatusModel passes no Report reader: the wave-2 report tick would fill a reader no gathering calls")
+	}
+	if captured.Handle == nil {
+		t.Error("localStatusModel passes no Handle reader: the workers panel's handle cell renders null in every real run (zl1)")
+	}
+}
+
+// TestStatusModelCloudWiringCarriesTheHostCost (hn6 wave 1, tick r5i;
+// re-gated by tick 1tm): a CLOUD run's gathering passes no readers — its
+// runners and attempt reports are not on this machine — and passes the
+// factory's own ground-truth cost as the gateway's number ONLY when the
+// record says its cost_source is the gateway: the runs row's cost_usd is
+// NOT NULL DEFAULT 0, so a bare number is not a measurement — a run before
+// its first cost sync, or one whose telemetry reads "unavailable: …", is
+// an unsynced record and the model's cost lines answer empty. The command
+// path reads the record the factory serves, so the record's cost_usd and
+// cost_source must ride through the same fetch the liveness answer rides
+// on; and only this pin says the river is wired.
+func TestStatusModelCloudWiringCarriesTheHostCost(t *testing.T) {
+	runID := "run_6a4b8e0f2c1d5f3a"
+	const cost = 1.23
+	for _, leg := range []struct {
+		name       string
+		costUSD    any
+		costSource any
+		carry      bool
+	}{
+		{"record carries the gateway's measured cost", cost, "gateway", true},
+		{"record carries cost_usd with no cost_source", cost, nil, false},
+		{"record carries cost_usd with unavailable telemetry", 0, "unavailable: no Cloudflare API token is configured", false},
+		{"record carries no cost fields at all", nil, nil, false},
+	} {
+		t.Run(leg.name, func(t *testing.T) {
+			captured := captureStatusSources(t)
+			repo := t.TempDir()
+			execTestCmd(t, repo, "git", "init", "--quiet", "-b", "main")
+
+			endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+				run := map[string]any{"run_id": runID, "epic": "cst", "state": "running"}
+				if leg.costUSD != nil {
+					run["cost_usd"] = leg.costUSD
+				}
+				if leg.costSource != nil {
+					run["cost_source"] = leg.costSource
+				}
+				switch {
+				case request.Path == "/api/runs":
+					return 200, map[string]any{"runs": []any{run}}
+				case request.Path == "/api/runs/"+runID:
+					return 200, map[string]any{"run": run}
+				case request.Path == "/api/runs/"+runID+"/events":
+					return 200, map[string]any{"run_id": runID, "state": "running", "text": "", "bytes": 0, "total_bytes": 0}
+				}
+				return 404, map[string]any{"error": "not_found"}
+			})
+			configureCloudFactory(t, endpoint)
+
+			realGraph := epicGraph
+			t.Cleanup(func() { epicGraph = realGraph })
+			epicGraph = func(context.Context, string, string) *tk.Graph { return nil }
+
+			var out, errOut bytes.Buffer
+			if code := Run([]string{"status", "--repo", repo, "--json", runID}, &out, &errOut); code != 0 {
+				t.Fatalf("a live cloud run exited %d: %s\n%s", code, out.String(), errOut.String())
+			}
+			if len(cloudFactoryRequests(requests)) == 0 {
+				t.Fatal("the factory was never asked")
+			}
+
+			// A cloud run's runners and reports are not on this machine: the
+			// readers pass nil and the model states the honest not-measured —
+			// the worker's handle among them, which this machine's state
+			// directories cannot name (zl1).
+			if captured.Activity != nil || captured.Report != nil || captured.Handle != nil {
+				t.Errorf("a cloud run's gathering passes readers (activity=%v report=%v handle=%v), want nil: its worktrees belong to the factory's containers",
+					captured.Activity != nil, captured.Report != nil, captured.Handle != nil)
+			}
+			switch {
+			case leg.carry && captured.WorkerCost == nil:
+				t.Error("the record carried the gateway's measured cost and the gathering passed no WorkerCost: the factory's ground-truth number is the river the wave-2 cost lines read")
+			case leg.carry && (captured.WorkerCost.USD != cost || captured.WorkerCost.Source != "gateway"):
+				t.Errorf("the gathering passed WorkerCost $%.2f from %q, want the record's own $%.2f from \"gateway\"",
+					captured.WorkerCost.USD, captured.WorkerCost.Source, cost)
+			case !leg.carry && captured.WorkerCost != nil:
+				t.Errorf("an unsynced record (cost_usd %v, cost_source %v) passed WorkerCost %+v, want nil: the runs row's default zero is not a measurement",
+					leg.costUSD, leg.costSource, *captured.WorkerCost)
+			}
+		})
+	}
+}
+
 // TestStatusCIRefusesAnotherForge (tick 4zo): the CI gatherer resolves the
 // repository the forge mirrors through the same reader everything else
 // does, so a GitLab origin is refused by the host check — naming the host —
@@ -629,5 +786,310 @@ func TestStatusCIRefusesAnotherForge(t *testing.T) {
 		t.Fatal("the CI gatherer resolved a GitLab origin")
 	} else if !strings.Contains(err.Error(), "gitlab.com") {
 		t.Errorf("the refusal does not name the host it found: %v", err)
+	}
+}
+
+// TestStatusRecordsCarriesEveryRunsRecords (hn6, tick gmo): the gathering
+// reads the epic's records across EVERY run on the integration branch, not
+// only the addressed run's — oldest first — and reads a run with no records
+// under the id it was named by from the epic spelling an older container
+// wrote. The dashboard's rows and progress bar are the consumer.
+func TestStatusRecordsCarriesEveryRunsRecords(t *testing.T) {
+	repo := newFindingsRepo(t)
+
+	head := func() string {
+		t.Helper()
+		out, err := exec.Command("git", "-C", repo, "rev-parse", "refs/remotes/origin/epic/qeu").Output()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	putCheckpoint := func(store *runstate.Store, runID string, state runstate.State, at string) {
+		t.Helper()
+		if _, err := store.PutCheckpoint(runstate.Checkpoint{
+			SchemaVersion: runstate.SchemaVersion,
+			RunID:         runID,
+			EpicID:        "qeu",
+			Sequence:      1,
+			State:         state,
+			Reason:        "the fixture says so",
+			UpdatedAt:     at,
+			Provenance: runstate.Provenance{RunID: runID, SourceRef: "refs/heads/epic/qeu",
+				SourceSHA: head(), IntegrationRef: runstate.Ptr("refs/heads/epic/qeu"),
+				Phase: runstate.PhaseWorker},
+		}); err != nil {
+			t.Fatalf("checkpoint for %s: %v", runID, err)
+		}
+	}
+
+	oldStore, err := runstate.Open(runstate.Options{Repo: repo, Remote: "origin", Branch: "epic/qeu", RunID: "run_old"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	putCheckpoint(oldStore, "run_old", runstate.StateCompleted, "2026-09-26T10:00:00Z")
+	midStore, err := runstate.Open(runstate.Options{Repo: repo, Remote: "origin", Branch: "epic/qeu", RunID: "run_mid"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	putCheckpoint(midStore, "run_mid", runstate.StateFailed, "2026-09-27T10:00:00Z")
+	// A run of ANOTHER epic stands beside them: never this epic's history.
+	otherStore, err := runstate.Open(runstate.Options{Repo: repo, Remote: "origin", Branch: "epic/qeu", RunID: "run_other_epic"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := otherStore.PutCheckpoint(runstate.Checkpoint{
+		SchemaVersion: runstate.SchemaVersion,
+		RunID:         "run_other_epic",
+		EpicID:        "zzz",
+		Sequence:      1,
+		State:         runstate.StateCompleted,
+		Reason:        "a different epic's run",
+		UpdatedAt:     "2026-09-25T10:00:00Z",
+		Provenance: runstate.Provenance{RunID: "run_other_epic", SourceRef: "refs/heads/epic/qeu",
+			SourceSHA: head(), IntegrationRef: runstate.Ptr("refs/heads/epic/qeu"),
+			Phase: runstate.PhaseWorker},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	ownStore, err := runstate.Open(runstate.Options{Repo: repo, Remote: "origin", Branch: "epic/qeu", RunID: "epic-qeu"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	putCheckpoint(ownStore, "epic-qeu", runstate.StateRunning, "2026-09-28T10:00:00Z")
+
+	// The addressed run is epic-qeu: its own records first, then every prior
+	// run of the same epic, oldest first.
+	records, prior, err := statusRecords(repo, "epic-qeu", "qeu")
+	if err != nil {
+		t.Fatalf("statusRecords: %v", err)
+	}
+	if records.Checkpoint == nil || records.Checkpoint.RunID != "epic-qeu" {
+		t.Fatalf("the addressed run's records are %+v, want epic-qeu's own", records.Checkpoint)
+	}
+	if len(prior) != 2 || prior[0].Checkpoint == nil || prior[1].Checkpoint == nil ||
+		prior[0].Checkpoint.RunID != "run_old" || prior[1].Checkpoint.RunID != "run_mid" {
+		t.Fatalf("the prior runs read %+v, want [run_old run_mid] oldest first, the other epic's run excluded", prior)
+	}
+
+	// A run named by an id that carries no records of its own — a cloud
+	// run's factory id beside an older layout — is read from the epic
+	// spelling, and still gets every prior run beside it.
+	records, prior, err = statusRecords(repo, "run_named", "qeu")
+	if err != nil {
+		t.Fatalf("statusRecords for the unnamed spelling: %v", err)
+	}
+	if records.Checkpoint == nil || records.Checkpoint.RunID != "epic-qeu" {
+		t.Fatalf("the fallback spelling read %+v, want epic-qeu's records", records.Checkpoint)
+	}
+	if len(prior) != 2 {
+		t.Fatalf("the fallback spelling's priors read %d records, want the same two", len(prior))
+	}
+}
+
+// TestStatusModelSurfacesAPriorRunsHold: a hold an earlier run left is a fact
+// the feed is the only writer of — the records say the tick was rejected, but
+// only the line says the run held it FOR A PERSON — and the local gathering
+// reads each prior run's feed from the logs this checkout keeps (tick z3p).
+// The model's attention names the hold with the command that releases THAT
+// run's attempt, because attempt numbers are per run.
+func TestStatusModelSurfacesAPriorRunsHold(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+
+	life, err := runlife.Claim(repo, "epic-rmod")
+	if err != nil {
+		t.Fatalf("claim the run as this process: %v", err)
+	}
+	t.Cleanup(func() { life.Release("test") })
+
+	// An earlier run of the same epic: its records name the epic, and its
+	// feed holds t3 for a person — a tick the tracker leaves open and the
+	// newest run never touched.
+	priorID := "run_old"
+	priorDir := filepath.Join(repo, ".ticfac", "runs", priorID)
+	if err := os.MkdirAll(priorDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := map[string]any{
+		"schema_version": 3, "run_id": priorID, "epic_id": "rmod",
+		"sequence": 2, "state": "failed", "reason": "the container was evicted mid-run",
+		"updated_at": now.Add(-2 * time.Hour).UTC().Format(time.RFC3339),
+		"ticks":      []any{map[string]any{"tick_id": "t3", "state": "rejected", "attempt": 1}},
+		"provenance": map[string]any{
+			"run_id": priorID, "tick_id": nil, "attempt": 0,
+			"source_ref": "refs/heads/epic/rmod", "source_sha": "0fc09212e0e8f96fc3fdc87c2f681519bb0d191a",
+			"integration_ref": nil, "phase": "worker", "executor": "local-subprocess",
+			"workspace_id": nil, "backend": nil, "substrate_protocol": nil, "substrate_server_version": nil,
+			"role": nil, "tier": nil, "profile_digest": nil, "model": nil,
+			"context_manifest_digest": nil,
+		},
+	}
+	raw, err := json.Marshal(checkpoint)
+	if err != nil {
+		t.Fatalf("marshal the prior checkpoint: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(priorDir, "checkpoint.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	feed := runfeed.Open(repo, priorID)
+	one := 1
+	if err := feed.Append(runfeed.NewEvent(now.Add(-90*time.Minute), priorID, "t3", &one,
+		reconcile.StageRunHeld, reconcile.RefusedHeld+": attempt 1 of t3 struck out")); err != nil {
+		t.Fatal(err)
+	}
+
+	realGraph := epicGraph
+	t.Cleanup(func() { epicGraph = realGraph })
+	epicGraph = func(context.Context, string, string) *tk.Graph {
+		return &tk.Graph{Waves: []tk.GraphWave{{
+			Wave: 1,
+			Tasks: []tk.GraphTask{
+				{ID: "t1", Title: "the first tick", Status: "closed"},
+				{ID: "t2", Title: "the second tick", Status: "open"},
+				{ID: "t3", Title: "the third tick", Status: "open"},
+			},
+		}}}
+	}
+	t.Setenv("HOME", home)
+
+	var out bytes.Buffer
+	if code := Run([]string{"status", "--repo", repo, "--json", "epic-rmod"}, &out, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("a live run exited %d: %s", code, out.String())
+	}
+	var model statusmodel.Model
+	if err := json.Unmarshal(out.Bytes(), &model); err != nil {
+		t.Fatalf("the JSON model does not decode: %v\n%s", err, out.String())
+	}
+
+	// The prior hold outranks the run's own standing worker: the wait is the
+	// hold, the attention names it, and the command addresses the holding
+	// run.
+	if model.WaitsOn == nil || model.WaitsOn.Kind != statusmodel.WaitHeldForPerson {
+		t.Fatalf("the model waits on %+v, want the hold run_old left on t3", model.WaitsOn)
+	}
+	if !strings.Contains(model.WaitsOn.What, "run_old") || !strings.Contains(model.WaitsOn.What, "t3") {
+		t.Errorf("the hold reads %q, want the holding run and the tick named", model.WaitsOn.What)
+	}
+	if model.WaitsOn.UnblockCommand == nil ||
+		*model.WaitsOn.UnblockCommand != `ticfac settle rmod t3 1 --run-id run_old --release "<who>"` {
+		t.Errorf("the hold's command is %+v, want the release addressed to the holding run", model.WaitsOn.UnblockCommand)
+	}
+	if len(model.Attention) != 1 || model.Attention[0].Kind != statusmodel.WaitHeldForPerson {
+		t.Errorf("the attention reads %+v, want the single held-for-person entry", model.Attention)
+	}
+}
+
+// TestStatusModelForACloudRunSurfacesAPriorRunsHold: the same wait for a
+// cloud run, with each prior run's feed read from the factory's events route
+// per run id — the only place a cloud run's feed exists — while its records
+// come from the checkout as always.
+func TestStatusModelForACloudRunSurfacesAPriorRunsHold(t *testing.T) {
+	runID := "run_62c289d1e6f4a2b3c4d"
+	priorID := "run_9d0f17aa4c2e5b81f0d3"
+	repo := t.TempDir()
+	execTestCmd(t, repo, "git", "init", "--quiet", "-b", "main")
+	execTestCmd(t, repo, "git", "config", "user.email", "status@example.com")
+	execTestCmd(t, repo, "git", "config", "user.name", "status test")
+
+	// The prior run's records, as the checkout holds them: the epic id is
+	// what makes it this epic's.
+	priorDir := filepath.Join(repo, ".ticfac", "runs", priorID)
+	if err := os.MkdirAll(priorDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	checkpoint := map[string]any{
+		"schema_version": 3, "run_id": priorID, "epic_id": "cld",
+		"sequence": 2, "state": "failed", "reason": "the container was evicted mid-run",
+		"updated_at": "2026-09-27T03:00:00Z",
+		"ticks":      []any{map[string]any{"tick_id": "t1", "state": "rejected", "attempt": 1}},
+		"provenance": map[string]any{
+			"run_id": priorID, "tick_id": nil, "attempt": 0,
+			"source_ref": "refs/heads/epic/cld", "source_sha": "0fc09212e0e8f96fc3fdc87c2f681519bb0d191a",
+			"integration_ref": nil, "phase": "worker", "executor": "cloudflare-sandbox",
+			"workspace_id": nil, "backend": nil, "substrate_protocol": nil, "substrate_server_version": nil,
+			"role": nil, "tier": nil, "profile_digest": nil, "model": nil,
+			"context_manifest_digest": nil,
+		},
+	}
+	raw, err := json.Marshal(checkpoint)
+	if err != nil {
+		t.Fatalf("marshal the prior checkpoint: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(priorDir, "checkpoint.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	at := "2026-09-27T04:08:08Z"
+	feedText := `{"schema_version":1,"at":"` + at + `","run_id":"` + runID + `","stage":"run_started","detail":"the run started"}` + "\n"
+	priorFeedText := strings.Join([]string{
+		`{"schema_version":1,"at":"` + at + `","run_id":"` + priorID + `","stage":"run_started","detail":"the run started"}`,
+		`{"schema_version":1,"at":"` + at + `","run_id":"` + priorID + `","tick_id":"t1","attempt":1,"stage":"run_held","detail":"held: attempt 1 of t1 struck out"}`,
+		"",
+	}, "\n")
+	endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Path == "/api/runs":
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": runID, "epic": "cld", "state": "running",
+			}}}
+		case request.Path == "/api/runs/"+runID:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": runID, "epic": "cld", "state": "running",
+			}}
+		case request.Path == "/api/runs/"+runID+"/events":
+			return 200, map[string]any{
+				"run_id": runID, "state": "running",
+				"text": feedText, "bytes": len(feedText), "total_bytes": len(feedText),
+			}
+		case request.Path == "/api/runs/"+priorID+"/events":
+			return 200, map[string]any{
+				"run_id": priorID, "state": "failed",
+				"text": priorFeedText, "bytes": len(priorFeedText), "total_bytes": len(priorFeedText),
+			}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	realGraph := epicGraph
+	t.Cleanup(func() { epicGraph = realGraph })
+	epicGraph = func(context.Context, string, string) *tk.Graph {
+		return &tk.Graph{Waves: []tk.GraphWave{{
+			Wave:  1,
+			Tasks: []tk.GraphTask{{ID: "t1", Title: "the one tick", Status: "open"}},
+		}}}
+	}
+
+	var out bytes.Buffer
+	if code := Run([]string{"status", "--repo", repo, "--json", runID}, &out, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("a live cloud run exited %d: %s", code, out.String())
+	}
+	var model statusmodel.Model
+	if err := json.Unmarshal(out.Bytes(), &model); err != nil {
+		t.Fatalf("the JSON model does not decode: %v\n%s", err, out.String())
+	}
+
+	// The prior run's hold reaches needs-you, with the release addressed to
+	// the run that holds the attempt — the factory's own run id, not the
+	// one the default would name.
+	if model.WaitsOn == nil || model.WaitsOn.Kind != statusmodel.WaitHeldForPerson {
+		t.Fatalf("the model waits on %+v, want the hold the earlier cloud run left", model.WaitsOn)
+	}
+	if !strings.Contains(model.WaitsOn.What, priorID) || !strings.Contains(model.WaitsOn.What, "t1") {
+		t.Errorf("the hold reads %q, want the holding run and the tick named", model.WaitsOn.What)
+	}
+	if model.WaitsOn.UnblockCommand == nil ||
+		*model.WaitsOn.UnblockCommand != `ticfac settle cld t1 1 --run-id `+priorID+` --release "<who>"` {
+		t.Errorf("the hold's command is %+v, want the release addressed to the holding run", model.WaitsOn.UnblockCommand)
+	}
+	asked := false
+	for _, request := range *requests {
+		if request.Path == "/api/runs/"+priorID+"/events" {
+			asked = true
+		}
+	}
+	if !asked {
+		t.Errorf("the factory was never asked for the prior run's feed: %+v", *requests)
 	}
 }

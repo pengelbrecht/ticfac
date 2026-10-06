@@ -1,0 +1,28 @@
+{
+  "schema_version": 3,
+  "run_id": "run_09ebaf290f934172912b00bd112d8e06",
+  "epic_id": "hn6",
+  "sequence": 1,
+  "state": "failed",
+  "reason": "main at 2eebdbec3cab and epic/hn6 at 173871a6e557 do not fold together (2 conflicts: content in contracts/CHANGELOG.md; content in contracts/bundle.json) and 3 resolve-conflict jobs for this fold failed without delivering a resolution: ticfac/run-run_09ebaf290f934172912b00bd112d8e06/base-fold-1-2eebdbec3cab (failed, operational: main at 2eebdbec3cab and epic/hn6 at 173871a6e557 do not fold together (2 conflicts: content in contracts/CHANGELOG.md; content in contracts/bundle.json) and the resolve-conflict job dispatched for the fold failed: it answered with no report the run could read and the run's verdict is missing-result (failed): the container's branch tick/hn6/attempt-1-base-fold-1-2e482d1a/hn6 carries no report and no commit beyond the base it was cut from: the push never landed, and this is neither running nor done. The tick is neither resolved nor re-dispatched. Its branch ticfac/run-run_09ebaf290f934172912b00…); ticfac/run-run_09ebaf290f934172912b00bd112d8e06/base-fold-2-2eebdbec3cab (failed, operational: main at 2eebdbec3cab and epic/hn6 at 173871a6e557 do not fold together (2 conflicts: content in contracts/CHANGELOG.md; content in contracts/bundle.json) and the resolve-conflict job dispatched for the fold failed: it answered with no report the run could read and the run's verdict is missing-result (failed): the container's branch tick/hn6/attempt-2-base-fold-2-2d482b87/hn6 carries no report and no commit beyond the base it was cut from: the push never landed, and this is neither running nor done. The tick is neither resolved nor re-dispatched. Its branch ticfac/run-run_09ebaf290f934172912b00…); ticfac/run-run_09ebaf290f934172912b00bd112d8e06/base-fold-3-2eebdbec3cab (failed, operational: main at 2eebdbec3cab and epic/hn6 at 173871a6e557 do not fold together (2 conflicts: content in contracts/CHANGELOG.md; content in contracts/bundle.json) and the resolve-conflict job dispatched for the fold failed: it answered with no report the run could read and the run's verdict is missing-result (failed): the container's branch tick/hn6/attempt-3-base-fold-3-2c4829f4/hn6 carries no report and no commit beyond the base it was cut from: the push never landed, and this is neither running nor done. The tick is neither resolved nor re-dispatched. Its branch ticfac/run-run_09ebaf290f934172912b00…). 2 retries after the first is the bound: read why the jobs did not answer, merge main into epic/hn6 by hand, and run the epic again",
+  "updated_at": "2026-09-30T22:39:38Z",
+  "provenance": {
+    "run_id": "run_09ebaf290f934172912b00bd112d8e06",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "173871a6e557e226ced6c56ca8391955d3eafa48",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

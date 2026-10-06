@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "[1] health.verdict is healthy/degraded/stopped with recovered counts per the rules; `go test -short -timeout 20m -run 'TestVerdict|TestCost|TestTheContract' ./internal/statusmodel/` passes. [2] No cost line is ever metered:false with a number; unmetered claude/pi-local/workers-ai spend is a line with usd null, and a cloud run's gateway cost is metered. [3] `make gate` passes.",
+    "description": "Epic hn6, wave 2: fill the two run-level verdicts the dashboard header shows. (1) The health VERDICT goes in internal/statusmodel/verdict.go (`buildVerdict`). (2) The honest COST lines go in internal/statusmodel/cost.go (`buildCost`). Both are pure functions of Sources, Records, the feed and the Model built so far.\n\nThe wave-1 contract tick declared the fields: Health.verdict {state healthy|degraded|stopped, summary, recovered[{what,count,seconds}]} and Cost.lines [{source decisions|workers-ai|claude|pi-local|other, metered, usd (null when unmetered), attempts, basis}]. Read their doc comments in internal/statusmodel/statusmodel.go and the \"dashboard\" golden in contract.json first.\n\nThe hn6 rules this implements:\n- Rule 3: health is a verdict, not raw counters: \"healthy (recovered: …)\" / \"degraded: …\" / \"stopped: …\". The raw counts stay in Health's existing counters.\n- Rule 7: cost is honest. It is metered where measured and says \"not metered\" where not (local claude on Max, local pi/GLM if unmeasured). Never a fabricated $0.00.\n- The first-use bug: the header said \"cost $0.00 recorded (10 attempts)\" while local pi/GLM and claude spend went uncounted.\n\nVerdict rules (feed stage constants are in internal/reconcile, e.g. reconcile.StageRemoteRetried):\n- stopped: liveness not alive AND the lifecycle phase is not done or cancelled (a dead run or a failed run). The summary is liveness.reason, or else the waits_on.what of a dead-run wait.\n- degraded: alive, AND any of:\n  - m.Degraded is non-empty;\n  - a worker has a `stuck_nudged` line for its current attempt with no later activity line for that attempt;\n  - a `remote_exhausted` line exists;\n  - a `stall_warned` line exists in the last 15 minutes (measured against src.Now).\n  The summary names the first cause in that order, e.g. \"degraded: forge unreadable\" or \"degraded: v7z nudged as stuck 4m ago\".\n- healthy: otherwise, with summary \"healthy\".\n- recovered (listed in any state): {what:\"net\", count: number of remote_retried lines} when >0; {what:\"sleep\", count: number of host_suspended lines, seconds: the sum of the suspension durations when the lines' details state them, else null} when >0; {what:\"interventions\", count: resumed_automatically lines} when >0; {what:\"wall clocks\", count} when >0. The renderer prints these as \"(recovered: net ×14, sleep 41m)\". An empty list when nothing recovered.\n\nCost rules: group recs.Attempts by source, deciding the source from each attempt's Provenance (Executor, Model; see buildTick in build.go for where they come from):\n- Model starting \"cloudflare-workers-ai/\", or executor \"cloudflare-sandbox\" → workers-ai.\n- Executor or harness kind claude (a model like \"opus\"/\"sonnet\", or the attempt's kind) → claude.\n- Harness pi with any other model → pi-local.\n- Anything else → other.\nThen:\n- decisions line: metered, usd = the existing sum of decision usage.cost_usd; attempts = number of decisions carrying usage. Omit the line when there are no decisions.\n- workers-ai line: metered with usd = src.WorkerCost.USD when src.WorkerCost != nil (a cloud run, from the factory's gateway-backed cost_usd), basis \"AI Gateway logs\". Otherwise metered:false, usd:null, basis \"not metered: this run's Workers AI calls are not joined to gateway logs\".\n- claude line: always metered:false, basis \"not metered (subscription)\".\n- pi-local and other: metered:false, basis \"not metered\".\nKeep recorded_usd equal to the sum of the metered lines' usd. Never emit metered:false with a number. Add a code comment stating rule 7.\n\nFiles: internal/statusmodel/verdict.go, internal/statusmodel/cost.go, and new tests internal/statusmodel/verdict_test.go and internal/statusmodel/cost_test.go. Nothing else.\n\nTests (named TestVerdict* and TestCost*):\n- Verdict cases: (a) alive with no warnings → healthy, recovered []; (b) 14 remote_retried + 2 host_suspended → healthy with recovered net ×14 and sleep ×2; (c) degraded forge → degraded, with a summary naming it; (d) an unresolved stuck nudge → degraded; (e) not alive with phase waves → stopped; (f) done and not alive → NOT stopped.\n- Cost cases: (a) local attempts on claude + pi GLM with no decisions → two unmetered lines, recorded_usd 0, and the JSON has no line with metered:false and a number; (b) cloud with WorkerCost 0.41 → workers-ai metered 0.41; (c) decisions with cost → decisions line metered.\n- Every case's Build output still validates against the contract, via the contract_test.go helper.\n\nRun: `go test -short -timeout 20m -run 'TestVerdict|TestCost|TestTheContract' ./internal/statusmodel/`. Must still pass: `go test -short -timeout 20m ./internal/statusmodel/ ./internal/cli/`, and then `make gate`.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "7uv",
+    "title": "Status model states a health verdict and honest cost lines"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.95,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.96,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.04,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 2372,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-09-30T06:57:20Z",
+  "answered_at": "2026-09-30T06:57:20Z",
+  "provenance": {
+    "run_id": "run_8511bc66fe444bfaa4b5c9d6cd2073b4",
+    "tick_id": "7uv",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "f1a0831961f04b2acef198a86c0a9756d77d5f0c",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

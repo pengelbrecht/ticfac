@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 20,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Rendered from Build's output, the epic-state golden at width 120 loses the progress bar: the model states Remaining for the failed newest run (pinned by TestBuildETAAcrossRuns on the same fixture), the renderer adds 'ETA ~3h50m' to the progress line, and dashProgressLine drops the bar when the whole line exceeds the pane. A dead run also reads as promising a finish it cannot keep. Either the model should state no remaining time for a run whose records say it ended, or the renderer should seat the bar over the ETA.\nevidence: internal/cli/testdata/watch_dashboard_epic_state.txt line 2 (no bar, ETA present); internal/cli/watch_view.go:198-215; internal/statusmodel/build_epic_test.go:392-405\n\nticfac run epic-hn6 created this tick by absorbing the finding cdb7fa03f2e9bea101458d937dfb8a0dc9feb5c9011f096d1cb6ae67db4c99f2 (reported by run-epic-hn6/tick-qwb/attempt-14): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/cdb7fa03f2e9bea101458d937dfb8a0dc9feb5c9011f096d1cb6ae67db4c99f2.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "onv",
+    "title": "A stopped run's ETA displaces the progress bar at width 120"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.8,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.02,
+      "design": 0.84,
+      "diagnosis": 0.11,
+      "mechanical": 0.03,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1370,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T19:39:53Z",
+  "answered_at": "2026-10-04T19:39:53Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "onv",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "34c781a5e40d6429f7ab3481cc5faef1ad8acdfd",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

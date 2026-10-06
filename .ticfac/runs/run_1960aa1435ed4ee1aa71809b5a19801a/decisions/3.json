@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "plan-repair",
+  "request": {
+    "attempt": 1,
+    "attempt_head": "b6effb18af8d62d8ae86ad7ed3cfeef633c5d1c6",
+    "epic_id": "hn6",
+    "failing_checks": [
+      "go"
+    ],
+    "gate_failures": "go (fail)",
+    "gate_sha": "6b07511270cbb4b5b17d11fc292ddf94d4e5d17e",
+    "job_id": "run-run_1960aa1435ed4ee1aa71809b5a19801a/tick-r5i/repair-1-r2",
+    "output_schema": "ticfac.job-result.plan-repair.v1",
+    "repair_branch": "ticfac/run-run_1960aa1435ed4ee1aa71809b5a19801a/tick-r5i/repair-1-r2",
+    "role": "plan-repair",
+    "source_grade": "write",
+    "tick_id": "r5i"
+  },
+  "response": {
+    "failure": "operational",
+    "gate_failures": "go (fail)",
+    "job_id": "run-run_1960aa1435ed4ee1aa71809b5a19801a/tick-r5i/repair-1-r2",
+    "merge": "",
+    "reason": "the integrated gate on 6b07511270cb did not pass for r5i (go (fail)) and the repair job run-run_1960aa1435ed4ee1aa71809b5a19801a/tick-r5i/repair-1-r2 could not be started: attempt 1 of run-run_1960aa1435ed4ee1aa71809b5a19801a/tick-r5i/repair-1-r2 already settled as succeeded under this identity: a retry is a new attempt number, not this one again",
+    "repair_head": "",
+    "status": "failed"
+  },
+  "validated": true,
+  "requested_at": "2026-09-28T23:16:20Z",
+  "answered_at": "2026-09-28T23:16:20Z",
+  "provenance": {
+    "run_id": "run_1960aa1435ed4ee1aa71809b5a19801a",
+    "tick_id": "r5i",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "01928ce8b42899f0265fd9981d6ba423c69acadb",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": "plan-repair",
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 6,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "Golden + model tests over a fixture epic with ticks closed by two earlier runs and a failed newest run: the progress bar and rows reflect the closed ticks, held ticks show held, and the run header says the newest run failed. make gate passes.",
+    "description": "Operator screenshot 2026-10-01: after many runs closed 13 of hn6's ticks, `ticfac watch hn6` answered for the newest cloud run (which failed at orchestrator boot before doing anything) and showed '0/11 ticks', every row with attempts 0 and empty tier/pipeline/time, while closed ticks r5i 3gk 7uv ltg 0rx 378 oro fq0 zl1 lh4 u5n 3rc c2u exist and open ones (yjq held, lkq, u4l, l89, review, close-out) are missing or wrong. The dashboard must derive tick rows and the progress bar from the epic's tracker state on the integration branch plus every run's records for it (closed ticks show done with their last run's pipeline/time/attempts), and the run section (alive, workers, cost, feed) from the newest run. Count only real ticks (exclude duplicates closed as duplicates, or show them dimmed).",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "gmo",
+    "title": "watch dashboard shows the epic's state, not only the latest run's"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.97,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.98,
+      "design": 0,
+      "diagnosis": 0.01,
+      "mechanical": 0.01,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1264,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T01:03:24Z",
+  "answered_at": "2026-10-04T01:03:24Z",
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "gmo",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "b5ae523ce0dee8d28b7dd68b9f287b81f488ceb6",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

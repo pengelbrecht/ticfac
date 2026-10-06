@@ -39,4 +39,22 @@ func TestAQuestionAskedAgainByTheTryToldToDecideHolds(t *testing.T) {
 		t.Errorf("a1 has %d attempts, want 2 — the question and the one try told to decide it; a third is the "+
 			"unbounded ladder", got)
 	}
+
+	// The resume holds the question again rather than dispatching it, and the
+	// hold's release command is addressed by the run whose store carries the
+	// attempt (tick qxj): r-fixture, not the epic spelling a settle without
+	// --run-id opens.
+	_, resumed, err := f.run(f.Repo, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the resumed run did not finish: %v", err)
+	}
+	if resumed.Failure == nil || resumed.Failure.Reason != RefusedNeedsHuman ||
+		!strings.Contains(resumed.Failure.Message, question) {
+		t.Fatalf("the resume ended %+v, want the question held again for a person", resumed.Failure)
+	}
+	if !strings.Contains(resumed.Failure.Message, "ticfac settle qeu a1 3 --run-id r-fixture --release") ||
+		!strings.Contains(resumed.Failure.Message, "--carry-work") {
+		t.Errorf("the resumed hold's release command does not name the run its attempt is recorded under: %s",
+			resumed.Failure.Message)
+	}
 }

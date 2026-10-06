@@ -207,6 +207,23 @@ export const BRANCH_CLAIM_PREFIX = "/api/branches";
 export const FEED_RELAY_PATH = "/api/feed";
 
 /**
+ * The status-relay door (hn6, tick h7w), exempt for the same reason as the
+ * feed-relay door beside it: its caller is the orchestrator container holding
+ * its run's own token, never the operator's. It is where the container's own
+ * `ticfac run-epic` pushes the status model it gathers in situ — the same
+ * model `ticfac watch` builds for the same run — so the phone page renders a
+ * CLOUD run from the run's own model rather than the bare composition the
+ * factory's records alone can state (two renderers, one model). There is no
+ * run id in the path — the credential says which run is speaking, and the
+ * envelope that names another run is refused.
+ *
+ * Declared here rather than imported from src/status-relay.ts because this
+ * module deliberately imports nothing (see {@link isAuthExempt}); the two
+ * spellings are pinned together by a test.
+ */
+export const STATUS_RELAY_PATH = "/api/status-relay";
+
+/**
  * The heartbeat door (src/local-orchestrator.ts), exempt for the same reason
  * as the doors above: its caller is a LOCAL orchestrator — `ticfac run
  * --cloud-workers` on the operator's machine — beating on its run's own
@@ -440,6 +457,7 @@ export function isAuthExempt(pathname: string): boolean {
   if (pathname === BRANCH_CLAIM_PREFIX) return true;
   if (pathname === GITHUB_TOKEN_DOOR) return true;
   if (pathname === FEED_RELAY_PATH) return true;
+  if (pathname === STATUS_RELAY_PATH) return true;
   if (pathname === HEARTBEAT_PATH) return true;
   if ((GITHUB_APP_FLOW_PAGES as readonly string[]).includes(pathname)) return true;
   if (pathname === STATUS_PAGE_PATH || pathname.startsWith(`${STATUS_PAGE_PATH}/`)) return true;

@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 31,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "dashProgressLine drops the whole bar when bar + counts + verdict exceed the pane, instead of truncating the verdict summary. A stopped or degraded run's summary routinely does this at 120 columns, so the header loses the bar A1 names.\nevidence: internal/cli/watch_view.go:256-258; live 120x40 frame: '53/56 ticks · 5d3h · ● stopped: the Workflow instance is complete and the run record says stopped' with no bar\n\nticfac run epic-hn6 created this tick by absorbing the finding 9f26079a4e1d2c9db3b474b2cc3d3d880c9094c5365a7bc273747f5561677dc9 (reported by run-epic-hn6/tick-435/attempt-22): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/9f26079a4e1d2c9db3b474b2cc3d3d880c9094c5365a7bc273747f5561677dc9.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "g94",
+    "title": "Progress bar vanishes at 120 cols when the verdict summary is long"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.35,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.24,
+      "design": 0.02,
+      "diagnosis": 0.24,
+      "mechanical": 0.48,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1323,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T14:02:57Z",
+  "answered_at": "2026-10-05T14:02:57Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "g94",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "c1f294c14e0b5169134da9b2b1c09a2840088872",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

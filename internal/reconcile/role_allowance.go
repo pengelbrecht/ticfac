@@ -129,7 +129,7 @@ func (r *Reconciler) roleJobLedgerOf(role, tick, baseJobID string) (roleJobLedge
 func latestReleaseOf(decisions []runstate.Decision, tick string) int {
 	latest := 0
 	for _, decision := range decisions {
-		if op, _ := decision.Request["op"].(string); op != settleOp {
+		if op, _ := decision.Request["op"].(string); op != SettleOp {
 			continue
 		}
 		if id, _ := decision.Request["tick_id"].(string); id == tick && decision.Decision > latest {

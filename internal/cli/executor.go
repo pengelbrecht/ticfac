@@ -24,6 +24,8 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox"
 	"github.com/pengelbrecht/ticfac/internal/exec/herdr"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
+	"github.com/pengelbrecht/ticfac/internal/gatewaytrace"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
@@ -104,7 +106,7 @@ func knownExecutors() []reconcile.KnownExecutor {
 // default must read the same file the reconciler does (tick 53k). runner is
 // the operator's fallback for a dispatch whose profile resolved none.
 func executorFactory(runner, gate string) func(reconcile.Dispatch) (reconcile.Executor, reconcile.Substrate, error) {
-	local := reconcile.DefaultExecutor(runner, nil, pushInterval)
+	local := reconcile.DefaultExecutor(runner, nil, pushInterval, localMetering)
 	return func(d reconcile.Dispatch) (reconcile.Executor, reconcile.Substrate, error) {
 		if d.Profile == nil {
 			return local(d)
@@ -249,6 +251,15 @@ func herdrExecutor(gate string, d reconcile.Dispatch) (reconcile.Executor, recon
 		RolePrompt: d.Profile.Prompt,
 		Remote:     d.Remote,
 		Attempt:    d.Attempt,
+		// The gateway metering join (tick dm2): a pi dispatch on a Workers AI
+		// model gets its calls tagged with the run id and routed through the
+		// operator's AI Gateway, so the status model can meter the local
+		// spend from the gateway's own logs — the SAME resolution the local
+		// subprocess executor joins through (tick gzv), because both substrates
+		// launch pi on this machine. Nil on a host whose ~/.ticfacrc names no
+		// gateway or no token — the documented optional-telemetry state, and
+		// the dispatch then runs exactly as it did before.
+		Metering: localMetering(d),
 		// What the tick's earlier attempts found (tick nvn), for the same
 		// section of the worker prompt the local executor renders.
 		PriorReports: d.PriorReports,
@@ -331,4 +342,40 @@ func spawnArgv(gate string, d reconcile.Dispatch) (*runconfig.Config, []string, 
 		return nil, nil, fmt.Errorf("compile the herdr spawn for %s (%s): %w", d.TickID, w.Label(), err)
 	}
 	return cfg, spawn.Argv, nil
+}
+
+// localMetering resolves the gateway metering join for one LOCAL dispatch
+// — a herdr pane or a subprocess worker (ticks dm2 and gzv): the run id the
+// spend is attributed to, the operator's AI Gateway URL — both from
+// facts the dispatch and the host already hold — and (tick kf4) the
+// dispatch's own tick and attempt, the keys the stamped metadata names so
+// a gateway number read back can say which attempts it measured. Nil,
+// never an error, on a host that cannot join: cost telemetry is the
+// documented OPTIONAL state (gatewaytrace.ConfigFrom's own refusal names the
+// command that fixes it), a dispatch must never stop over it, and the cost
+// line says "not metered" honestly instead.
+//
+// BOTH halves must exist or nothing is built: the gateway URL without the
+// token would send requests the gateway refuses (the join would break the
+// dispatch it meant to meter), and the token without the gateway names a
+// route nothing reads. A half-configured factory is the same half-set state
+// the jev credential resolution names rather than guesses around.
+func localMetering(d reconcile.Dispatch) *subprocess.GatewayMetering {
+	file, err := credentials.Load()
+	if err != nil {
+		return nil
+	}
+	gateway := strings.TrimSpace(file.Get(credentials.KeyGatewayURL))
+	token := strings.TrimSpace(file.Get(credentials.KeyCloudflareAPIToken))
+	if gateway == "" || token == "" {
+		return nil
+	}
+	if _, _, ok := gatewaytrace.GatewayIDs(gateway); !ok {
+		// A gateway not hosted by Cloudflare has no logs API to join to; the
+		// requests would still route through it, but nothing could ever read
+		// the spend back, and routing without the read is cost without the
+		// metering this join exists for.
+		return nil
+	}
+	return &subprocess.GatewayMetering{RunID: d.RunID, TickID: d.TickID, Attempt: d.Attempt, GatewayURL: gateway}
 }

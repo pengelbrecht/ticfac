@@ -1,0 +1,56 @@
+{
+  "schema_version": 3,
+  "attempt": 1,
+  "tick_id": "v16",
+  "dispatched_at": "2026-10-04T16:00:58Z",
+  "job_handle": {
+    "attempt": 1,
+    "base_sha": "3c4fc3812dd6a72bbd96d8538bffcf5a0a563d89",
+    "collected_from": null,
+    "executor": "herdr",
+    "job_id": "run-epic-hn6/tick-v16/attempt-1",
+    "model": "opus",
+    "prompt_digest": "sha256:c50bfb8e7218f9e2c00ac8dfb5caaea2fe83f749471bfe67a361aa9d3d62542a",
+    "remote": "origin",
+    "resumed_from": {
+      "tick_id": "v16",
+      "attempt": 1,
+      "write_ref": "refs/heads/tick/hn6/attempt-1/v16",
+      "sha": "3c4fc3812dd6a72bbd96d8538bffcf5a0a563d89",
+      "released_by": "ticfac (took over the claim of run run_08f5d90d3f134f00bb9d31226d6f0618, which ended: the factory's record says stopped and its Workflow instance is complete)",
+      "run_id": "run_08f5d90d3f134f00bb9d31226d6f0618"
+    },
+    "role": "review-epic",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3",
+    "taken_over": {
+      "run_id": "run_08f5d90d3f134f00bb9d31226d6f0618",
+      "evidence": "the factory's record says stopped and its Workflow instance is complete"
+    },
+    "tick_id": "v16",
+    "tier": "",
+    "touch": null,
+    "try": 1,
+    "wall_seconds": 28800,
+    "write_ref": "refs/heads/ticfac/run-epic-hn6/tick-v16/attempt-1"
+  },
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "v16",
+    "attempt": 1,
+    "source_ref": "refs/heads/tick/hn6/attempt-1/v16",
+    "source_sha": "3c4fc3812dd6a72bbd96d8538bffcf5a0a563d89",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:d251a161caa636cf29259dc058d36015243e7c7363028f39590d33e915e23b2d",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}

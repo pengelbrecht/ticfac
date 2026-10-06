@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 4,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "[1] renderWatchFrame draws the hn6 layout (header with progress/ETA/verdict/phase bar/needs-you, a tick table whose rows never reorder with a pipeline cell, workers with activity, CI and cost lines, a two-line recent tail) and matches testdata/watch_dashboard_120.txt and _60.txt. [2] `go test -short -timeout 20m -run 'TestDashboard|TestWatchPlural|TestTheFrame|TestWatch' ./internal/cli/` passes, including the narrow-width, height-fit, never-$0.00 and 'retries' cases. [3] `make gate` passes.",
+    "description": "Epic hn6, wave 3: rewrite the `ticfac watch` frame renderer (internal/cli/watch_view.go) into the dashboard layout. It stays a PURE function of the status model plus the pane's width and height, testable headless as render-to-string at a fixed width. There is no terminal, pty or herdr in its tests.\n\nInput: statusmodel.Model with the hn6 fields (per-tick pipeline, parent_tick_id, duration_seconds, tries[].tier/reason/next_step, workers[].activity/handle, health.verdict, cost.lines, recent, epic_title, tick gloss). Read their doc comments in internal/statusmodel/statusmodel.go. internal/statusmodel/contract.json has a golden named \"dashboard\" with every field populated: decode it in your tests.\n\nTarget layout (the hn6 spec; exact glyphs negotiable, the order is not):\n```\n6in ticfac takeover of what ticks drops            local · alive\n███████████████████░░░░ 5/6 ticks · 12h24m · ETA ~40m · ● healthy (recovered: net ×14, sleep 41m)\nplan ✓ waves ✓ review ✓ close-out ◐ ci ◐ merge ○          needs you: nothing\n\nTICK  WHAT                              TIER      PIPELINE                          TIME   ATTEMPTS\n060   cloud worker early-exit nudge     strong    claim ▸ work ▸ gate ▸ merged ✓    49m    1\n46x   port sandbox verbs to ticfac      frontier  claim ▸ work ▸ gate ▸ merged ✓    1h39m  2 ⤴\nv7z   close out phase 7                 closeout  claim ▸ work ▸ ●ci ▸ …            1h12m  2\n └ 823 repair: tk 0.32 width tests      frontier  claim ▸ work ▸ gate ▸ merged ✓    2h03m  2 ⤴\n\nWORKERS                                       ACTIVITY (10m)   LAST\nv7z  claude opus · tick-v7z-a11               ▁▃▅█▇▅▃▁▂▅       ran go test ./internal/reconcile (42s ago)\n\nCI #98  go ◐ 6m · go race ✓ · ts ✓ · contracts ✓        cost  Workers AI $0.41 · claude not metered\n─ recent ──────────────────────────────────────────────────────────\n19:12 v7z gate passed on 9a1c…\n19:04 fold resolved 2 conflicts                                  [e] events  [enter] tick\n```\nRules this implements:\n1. Rows never move. There is one row per tick, in plan order (waves in order, the tracker's order inside a wave), and children are indented (\" └ \") under the row named by parent_tick_id. A tick's row never changes position between frames; only its cells change. The PIPELINE cell fills left to right: a done stage is plain, the active one bold with \"●\", a failed one red with \"✗\", and every pending stage after the active one is one dim \"…\". A closed tick ends \"merged ✓\" (or \"closed ✓\" for a role tick). ATTEMPTS is len(tries), plus \" ⤴\" when the tier changed between the first and the last try.\n2. Attention first and quiet when empty. \"needs you: nothing\" is dim. A needs_person attention shows amber in the header, on its own line, as \"needs you: <what> — <unblock_command>\".\n3. Health as a verdict: health.verdict.state is green \"● healthy\", amber \"● degraded: …\" or red \"● stopped: …\". It is followed by \"(recovered: net ×14, sleep 41m)\" from verdict.recovered, where seconds render through humanDuration and a null seconds renders as \"×count\". Raw counters are NOT shown.\n4. ETA: \"ETA ~<humanDuration(remaining.approximate_seconds)>\" only when remaining is non-null.\n5. Workers: one row per worker. It shows the model and executor (from the worker's tick), the handle, a sparkline of activity.buckets (▁▂▃▄▅▆▇█ scaled to the max bucket; all zero → \"··········\"), last_action with its age, and an amber \"nudged ×N\" when nudges > 0. When workers is null (a cloud run), one dim line: \"workers run in the cloud — not visible from here\".\n6. The tail: m.Recent's last 2 events through the existing watchEventLine (internal/cli/watch.go; call it, do not edit it), under a \"─ recent\" rule, with the key hint \"[e] events  [enter] tick\" at the right.\n7. Cost: one segment per cost.lines entry, labelled Workers AI / claude / pi (local) / decisions / other. A metered line prints \"$%.2f\"; an unmetered one prints \"not metered\". The string \"$0.00\" must NEVER appear for an unmetered line. With no lines at all, print \"cost not metered\".\n8. CI: \"CI #<pr> <check> <✓|✗|◐ age>\" per m.CI.Checks; a dim \"CI: no PR yet\" when m.CI is null.\nAlso fix the first-use typo: watchPlural(\"remote retry\") printed \"remote retrys\". Make watchPlural pluralize a word ending in consonant+y as \"ies\", and add a test.\n\nWidth and height (the renderer must work in herdr panes and in plain terminals of any size):\n- width ≥ 100: every column in full words.\n- 64–99: PIPELINE becomes one glyph per stage (✓ done, ● active, ✗ failed, ○ pending), and LAST moves under the worker row.\n- < 64: TIER and ATTEMPTS drop.\n- < 48: WHAT drops.\n- Every line is truncated to the width (ansi.Truncate, as today).\n- Height > 0 and the frame too tall: the header, needs-you and tail are always kept. Closed rows collapse IN PLACE into one dim \"✓ N closed\" line per contiguous run of closed rows, so no row moves relative to another. If it is still too tall, the table ends with \"+N more\" (at most height lines total).\n- Width 0 means unknown: render everything.\n\nAPI: keep `renderWatchFrame(m statusmodel.Model, st watchStyles, width, height int, selected string) []string`. Add the `selected` parameter: the tick id whose row renders with a \"▸\" marker, \"\" for none. Update its call sites in internal/cli/watch.go to pass \"\" (that one-line change is the only edit allowed in watch.go). Also export, inside the package, `dashboardHeadline(m statusmodel.Model, st watchStyles, width int) []string`: the first three header lines. The bare overview reuses it in a later tick, so give it that name and signature exactly. Add a `green` style to watchStyles.\n\nFiles: internal/cli/watch_view.go, internal/cli/watch_view_test.go (rewrite for the new layout), new golden files internal/cli/testdata/watch_dashboard_120.txt and internal/cli/testdata/watch_dashboard_60.txt, the call-site change in internal/cli/watch.go, and assertions in internal/cli/watch_block_test.go / watch_test.go ONLY where they assert old frame text. Do not touch overview.go, internal/statusmodel or cloudflare/.\n\nTests (identity styles for the words, ANSI styles for one colour test):\n- TestDashboardGolden: the contract's \"dashboard\" golden renders at width 120 and at width 60, and both match the testdata files byte-for-byte. Add a `-update` flag to regenerate them.\n- TestDashboardRowsKeepTheirOrder: a model and a successor with states advanced → the tick-id column sequence is identical.\n- TestDashboardNeedsYou: \"needs you: nothing\" with no attention, and the command shown with a hold.\n- TestDashboardNeverPrintsZeroForUnmetered.\n- TestDashboardVerdictColours.\n- TestDashboardNarrowWidths at 99, 63 and 47: the columns drop as specified, and no line is wider than the width.\n- TestDashboardFitsHeight at 12 lines: closed rows collapse in place.\n- TestWatchPluralRetries.\n\nRun: `go test -short -timeout 20m -run 'TestDashboard|TestWatchPlural|TestTheFrame|TestWatch' ./internal/cli/`. Must still pass: `go test -short -timeout 20m ./internal/cli/`, and then `make gate`.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "u5n",
+    "title": "Watch renders the dashboard frame"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.99,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.99,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.01,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 3211,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-01T06:50:30Z",
+  "answered_at": "2026-10-01T06:50:30Z",
+  "provenance": {
+    "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
+    "tick_id": "u5n",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "7f2b6c3a471c77583925dcf52ddc1d7b4804abd6",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

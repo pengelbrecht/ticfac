@@ -140,6 +140,14 @@ func TestAnIntegratedAttemptWhoseHeadVanishedIsRefusedNotCollected(t *testing.T)
 		t.Fatalf("the resumed run ended %s with %+v, want %s for a1: a1's stages %v",
 			result.State, result.Failure, RefusedIntegratedHeadMissing, r.Stages("a1"))
 	}
+	// The release command the refusal names is addressed by the run whose
+	// store carries the attempt (tick qxj): r-fixture, not the epic spelling
+	// a settle without --run-id opens.
+	if !strings.Contains(result.Failure.Message, "--run-id r-fixture --release") ||
+		!strings.Contains(result.Failure.Message, "ticfac settle qeu a1 ") {
+		t.Errorf("the refusal's release command does not name the run its attempt is recorded under: %s",
+			result.Failure.Message)
+	}
 	if containsCommit(t, f, releasedHead, "origin/epic/qeu") {
 		t.Fatal("the rewrite did not take the carried work off the integration branch; this fixture proves nothing")
 	}

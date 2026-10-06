@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-qxj-2-ts",
+  "provenance": {
+    "run_id": "run_f44b6ad8909b495cbd3bae4ee7cf229c",
+    "tick_id": "qxj",
+    "attempt": 2,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "1ca29c8a4eb0e22abebc518ad122d2941ab6a925",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "integrated",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:7d83b0eadf2ccf3beaba73364d307bc167e813a34455560329e4c34a35f23941",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "ts",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit"
+    ]
+  },
+  "started_at": "2026-10-04T09:08:33Z",
+  "finished_at": "2026-10-04T09:13:34Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "Lockfile is up to date, resolution step is skipped\nProgress: resolved 1, reused 0, downloaded 0, added 0\nPackages: +88\n++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\nProgress: resolved 88, reused 0, downloaded 1, added 0\nProgress: resolved 88, reused 0, downloaded 5, added 0\nProgress: resolved 88, reused 0, downloaded 18, added 2\nProgress: resolved 88, reused 0, downloaded 22, added 4\nProgress: resolved 88, reused 0, downloaded 33, added 6\nProgress: resolved 88, reused 0, downloaded 34, added 8\nProgress: resolved 88, reused 0, downloaded 55, added 12\nProgress: resolved 88, reused 0, downloaded 78, added 20\nProgress: resolved 88, reused 0, downloaded 81, added 20\nProgress: resolved 88, reused 0, downloaded 88, added 26\nProgress: resolved 88, reused 0, downloaded 88, added 88, done\n.../esbuild@0.28.1/node_modules/esbuild postinstall$ node install.js\n.../node_modules/workerd postinstall$ node install.js\n.../esbuild@0.28.1/node_modules/esbuild postinstall: Done\n.../node_modules/workerd postinstall: Done\n\ndependencies:\n+ @cloudflare/sandbox 0.12.7\n\ndevDependencies:\n+ @biomejs/biome 2.5.13\n+ @cloudflare/vitest-pool-workers 0.22.0\n+ @cloudflare/workers-types 5.20261001.1\n+ esbuild 0.28.1\n+ miniflare 5.20261001.0-alpha\n+ typescript 5.9.3\n+ vite 8.2.1\n+ vitest 4.1.11\n+ wrangler 4.147.0\n\nDone in 13.8s using pnpm v11.0.6\n\u001b[0m\u001b[34mChecked 150 files in 1878\u001b[0m\u001b[0m\u001b[2m\u001b[34mms\u001b[0m\u001b[0m\u001b[34m.\u001b[0m\u001b[0m\u001b[34m No fixes applied.\u001b[0m\ncontracts: ok — 16 contract(s) at bundle 1.4.0 read in place from \u003credacted-host-path\u003e/contracts (mode: workspace)\n",
+    "stderr": "$ biome ci --error-on-warnings\n$ node scripts/contracts.mjs check\n",
+    "truncated": false,
+    "redacted": true,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:3d47e3010a222e1d8b50b264b59b1125d1075c3ae51de5184226536adfc9a30c",
+  "persistence_uri": "git:refs/heads/epic/hn6:.ticfac/runs/run_f44b6ad8909b495cbd3bae4ee7cf229c/evidence/gate-qxj-2-ts.json"
+}

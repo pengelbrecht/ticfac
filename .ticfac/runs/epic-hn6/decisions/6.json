@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 6,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "adoptInheritedFindings reads every run's checkpoint on the integration branch (other epics' included) before filtering by epic; decodeRecord disallows unknown fields and any error aborts Run. A factory-written checkpoint newer than the local binary, or one corrupt record, stops every run of the epic at boot. Each boot also asks ClaimHolder serially per non-terminal sibling.\nevidence: internal/reconcile/inherit.go:50-75; internal/reconcile/reconcile.go:1976\n\nticfac run epic-hn6 created this tick by absorbing the finding 4e1bf54a67f7b0f3babffc1296c7438329a7f23cf62ed1a16270c8d37a258477 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/4e1bf54a67f7b0f3babffc1296c7438329a7f23cf62ed1a16270c8d37a258477.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "d9d",
+    "title": "One unreadable sibling checkpoint fails every boot of the epic (d23)"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.75,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.03,
+      "design": 0.12,
+      "diagnosis": 0.8,
+      "mechanical": 0.04,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1315,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T16:31:29Z",
+  "answered_at": "2026-10-04T16:31:29Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "d9d",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "cc6d01f8abde8213434fbce5b5d350324c569761",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 41,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "reportSummary takes the first non-heading paragraph, and cloud worker reports open with '<!-- ticks-worker: container facts, prepended after the harness exited … -->'. So 11 ticks' drill-in report line (0rx 378 3rc 7uv c2u fq0 lh4 ltg oro zl1 u5n) reads the container preamble rather than what the worker did. Skip HTML comment paragraphs.\nevidence: internal/statusmodel/report.go:262-284 (reportSummary); live tick view for 0rx; `ticfac status epic-hn6 --json` .waves[].ticks[].report.summary\n\nticfac run epic-hn6 created this tick by absorbing the finding bce10995fc814c2b0790be7f2df2f61da022047d54551a9d7b36aa3627df1ede (reported by run-epic-hn6/tick-qjl/attempt-29): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/bce10995fc814c2b0790be7f2df2f61da022047d54551a9d7b36aa3627df1ede.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "wvn",
+    "title": "Drill-in report summary is the ticks-worker preamble comment, not the report"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.55,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.06,
+      "design": 0.01,
+      "diagnosis": 0.29,
+      "mechanical": 0.63,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1333,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T17:39:11Z",
+  "answered_at": "2026-10-05T17:39:11Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "wvn",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "622563d9dfddb9967395a1962fad57a054123e99",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

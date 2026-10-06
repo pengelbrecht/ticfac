@@ -231,6 +231,42 @@ type SettledState struct {
 	Evidence  string
 }
 
+// FactoryAttemptAnswer is what a factory that ran the attempt's worker can
+// still say about that attempt, asked by a host that holds none of its
+// state (Options.FactoryAttempt, settle.go). The factory booted the worker,
+// keeps its settlement record and answers for it by identity, so its answer
+// is what a release from elsewhere rules on — the same three things the
+// executor's own Inspect would have said on the host that ran it.
+//
+// The zero value is "not asked": no factory is configured, the run is not
+// one of its, or it could not be reached. Nothing is released on it — the
+// caller keeps its own refusal, and Evidence says why the question stood
+// unanswered.
+type FactoryAttemptAnswer struct {
+	// Asked says the factory was reached and answered; every field below is
+	// meaningful only when it is set.
+	Asked bool
+	// Terminal says the factory recorded the attempt's worker settled, and
+	// State is its own last word about it (succeeded, failed) — what a
+	// release from elsewhere records as the state it ruled on.
+	Terminal bool
+	State    string
+	// Live says the factory still answers for the run itself, so the attempt
+	// is addressable by the run that owns it: its orchestrator can cancel
+	// and collect the worker, and a live attempt is never released behind
+	// its back — Appendix A #6 is not an operator's to waive.
+	Live bool
+	// Lost says the factory cannot say what became of the worker: the run
+	// has ended and the worker's container left no settlement behind. That
+	// is `lost` — the one state a person may release — with the factory as
+	// the party that cannot say.
+	Lost bool
+	// Evidence is why the answer says what it does: recorded into the
+	// refusal when a release is refused on it, so a person holding a run
+	// reads what the factory actually said.
+	Evidence string
+}
+
 // Substrate is the versioned substrate a dispatch's executor observed at the
 // build that will run the job: its protocol version (herdr's API protocol,
 // the number between the client's hard floor and its warn line) and the
@@ -577,6 +613,20 @@ type Options struct {
 	// this host through the executor, without this. Nil, or an answer that
 	// is not Known, carries the work into a fresh worker as before.
 	SettledAttempt func(ctx context.Context, runID, tickID string, attempt int) SettledState
+
+	// FactoryAttempt answers what a factory that ran one of ITS OWN runs'
+	// attempts can still say about that attempt, asked by a settle running
+	// on a host that holds none of the attempt's state (settle.go, tick bd5):
+	// the operator's machine the hold's printed `ticfac settle --run-id
+	// run_…` command runs on, which never ran the worker and cannot build its
+	// executor. The factory booted the worker, keeps its settlement record
+	// and answers for it by identity, so it — not this host's directories —
+	// is the witness the release rules on. Asked only of THIS run's attempt,
+	// and only when this host holds no state for it; a local run's id is
+	// not one of the factory's, so the answer a factory gives cannot reach a
+	// local attempt's release. Nil keeps the refusal that was: nothing here
+	// was started, so there is nothing to release.
+	FactoryAttempt func(ctx context.Context, runID, tickID string, attempt int) FactoryAttemptAnswer
 
 	// ReleaseOnly builds a reconciler that only releases attempts (`ticfac
 	// settle`): it never reaches the close-out, so the close-out rule's
@@ -993,8 +1043,12 @@ const (
 	StageClosed       = "closed"
 	StageRedispatched = "redispatched"
 	StageCleanedUp    = "cleaned_up"
-	StageResumed      = "resumed"
-	StageSettled      = "settled"
+	// StageResumed aliases the feed's own line class (runfeed.terminal.go):
+	// the four stages the feed itself classifies — terminal and resume —
+	// have one spelling, shared with the reader that decides what they mean
+	// (tick 7l6).
+	StageResumed = runfeed.StageResumed
+	StageSettled = "settled"
 	// StageRepairDispatched is the dispatch of the repair job a failed gate
 	// dispatches (tick wj6) — its own line rather than StageDispatched because
 	// the two answer different questions: a dispatch admits a tick's work,
@@ -1002,7 +1056,7 @@ const (
 	// and the journal's readers — like the test that proves the run admits
 	// nothing past a refusal — must be able to tell them apart.
 	StageRepairDispatched = "repair_dispatched"
-	StageRunFinished      = "run_finished"
+	StageRunFinished      = runfeed.StageRunFinished
 	// StageBudgetSet is the effective budget, said at ADMISSION while the run
 	// can still be cancelled cheaply. It is NOT run_finished: a subscriber to
 	// the run feed must not be told the run ended seconds after it started,
@@ -1026,7 +1080,7 @@ const (
 	// is LED by runstate's cancelled word (tick vqc), the same vocabulary
 	// run_finished's details are led by — the watch classifies that line
 	// cancelled, every other death failed.
-	StageRunDied = "run_died"
+	StageRunDied = runfeed.StageRunDied
 	// StageTierDerived is the record of one dispatch's tier DERIVATION —
 	// the pure function's answer and reason, written before the tick is
 	// claimed, so "why was this expensive" is a question the run's own
@@ -1331,7 +1385,7 @@ const (
 	// Both are run-level and carry no tick: the subject is the run's
 	// continuation, not any one tick's, even when the refusal underneath them
 	// names one.
-	StageResumedAutomatically = "resumed_automatically"
+	StageResumedAutomatically = runfeed.StageResumedAutomatically
 	StageSupervisionHalted    = "supervision_halted"
 )
 
@@ -1788,6 +1842,32 @@ func (r *Reconciler) Stages(tick string) []string {
 	return out
 }
 
+// resumeOverStandingTerminal states this incarnation over the terminal feed
+// line a previous one left standing (tick 7l6): when the run's feed carries a
+// run_finished or run_died that no resume — deliberate or automatic — answers,
+// the resume line this records makes that ending the PREVIOUS incarnation's
+// history, exactly as every reader of the position rule reads it. Nothing is
+// recorded when nothing stands: a first incarnation, a supervised continuation
+// whose predecessor already wrote its resumed_automatically line, and a fresh
+// clone whose feed is empty all append nothing, because a resume line with no
+// ending to answer is noise a chronology would have to forgive.
+func (r *Reconciler) resumeOverStandingTerminal(standing string) {
+	events, err := runfeed.Read(r.feed.Path())
+	if err != nil {
+		// No feed to read — nothing was written, or it was written on a disk
+		// this checkout does not hold. The feed is exhaust and a hint: a run
+		// that cannot read its own still answers for itself through its work.
+		return
+	}
+	line := runfeed.StandingTerminal(events)
+	if line == nil {
+		return
+	}
+	r.record("", StageResumed,
+		"%s — this resume answers the previous incarnation's %s line, which is that incarnation's ending and not this one's",
+		standing, line.Stage)
+}
+
 // ------------------------------------------------------------------ run ---
 
 // Result is what the run concluded.
@@ -1950,7 +2030,29 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 		if checkpoint.State == runstate.StateFailed {
 			r.record("", StageResumed, "the run stopped at %s and is resumed under the same run id: %s",
 				checkpoint.State, checkpoint.Reason)
+		} else {
+			// A NON-TERMINAL checkpoint is a run a previous incarnation was
+			// interrupted in the middle of — a signal, a panic, a lost
+			// container — and that incarnation's terminal line is still
+			// standing in the append-only feed this one appends to (tick
+			// 7l6). The resume has to be STATED, not inferred: runEnding and
+			// every reader behind it answer "how did this run end" from the
+			// last terminal line no resume answers, so an incarnation that
+			// continues without saying so leaves the death speaking for the
+			// live run — phase cancelled, no ETA, beside a run that is
+			// working.
+			r.resumeOverStandingTerminal(fmt.Sprintf(
+				"the run was interrupted at %s and is resumed under the same run id: %s",
+				checkpoint.State, checkpoint.Reason))
 		}
+	} else {
+		// No checkpoint at all, and a terminal feed line may still be
+		// standing: a run can die before its first checkpoint write, and the
+		// next incarnation under the same run id starts fresh against a feed
+		// that says the run ended. It states itself for the same reason the
+		// non-terminal branch above does.
+		r.resumeOverStandingTerminal(
+			"the run left no checkpoint and is resumed under the same run id")
 	}
 
 	// Every live worker a previous incarnation left is polled BEFORE the slow
@@ -1986,6 +2088,17 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	// including the store's own: its view was fetched before the fold.
 	if _, err := store.Fetch(); err != nil {
 		return nil, fmt.Errorf("reconcile: read the run state: %w", err)
+	}
+
+	// The untriaged drafts every ENDED earlier run of this epic left are
+	// adopted into this run's own store before anything is planned (tick d23,
+	// inherit.go): a run that died before its close-out raised no hold over
+	// its drafts, and the close-out's findings gate reads only this run's
+	// own store — so un-adopted, the inherited drafts would gate nothing,
+	// forever. Adopted, this run's own rules decide them and its close-out
+	// holds for a person what the rules cannot.
+	if err := r.adoptInheritedFindings(); err != nil {
+		return nil, fmt.Errorf("reconcile: adopt the untriaged findings earlier runs left: %w", err)
 	}
 
 	// A finding promoted to two ticks — by two runs, before cross-run dedup
@@ -2777,6 +2890,21 @@ const (
 	// is waiting for.
 	RefusedFindingInvalid   = "finding_report_invalid"
 	RefusedFindingUntriaged = "finding_untriaged"
+
+	// RefusedAbsorptionDepth is the hold the absorption bound used to raise
+	// (tick qjj): a gating finding would have been one absorption too many
+	// for ONE chain, and the run stopped for a person to judge it. Past the
+	// bound the run now DEFERS the finding to the backlog and carries on —
+	// it never halts over the bound (absorb_bound.go, run_5c7c16d1) — so no
+	// hold the reconciler raises carries this reason any more. It stays in
+	// the closed vocabulary because a hold recorded before that change is
+	// still standing state on a run branch (hn6's chain gmo → z3p → ulw →
+	// qxj held on it, 2026-10-04), and the surfaces that answer for
+	// recorded holds — the status model's HoldClearingCommand, the watch
+	// alert — still name its clearing command: the triage addressed to the
+	// HOLDING run's own store (tick q8m), where that run's drafts live,
+	// never the bare command's default.
+	RefusedAbsorptionDepth = "absorption_depth_exceeded"
 
 	// RefusedEpicAmendmentUnconfirmed is the close-out's other person's gate
 	// (tick 7sn, epic 43y): a note on the epic's own record that a WORKER

@@ -380,9 +380,15 @@ func (r *Reconciler) mintBaseFold(resolveHead, baseHead string, marker attemptHa
 		return "", failed("it committed %s still carrying its conflict markers — a resolution that did not happen "+
 			"is not a fold, whatever the commit says", path)
 	}
-	tree, err := r.git.run("", "rev-parse", resolveHead+"^{tree}")
+	// The job's container commits its own report on its branch, and the
+	// conflicted fold its worktree starts from may still carry reports an
+	// older merge left on the integration branch: the tree is minted with no
+	// report in it, like every merge into the integration branch
+	// (report_merge.go). ab0cdab4 rewrote RESULT-hn6.md on epic/hn6 through
+	// exactly this path, after the reports guard was already on the branch.
+	tree, err := r.treeWithoutReports(resolveHead)
 	if err != nil {
-		return "", fmt.Errorf("read the tree the resolve-conflict job resolved to: %w", err)
+		return "", err
 	}
 	message := fmt.Sprintf("Merge the base branch into %s through the resolve-conflict job\n\nticfac run %s: "+
 		"the fold of %s into %s conflicted (%s) and was resolved by the resolve-conflict job %s",

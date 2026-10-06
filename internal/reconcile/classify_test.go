@@ -2,6 +2,7 @@ package reconcile
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"reflect"
 	"sort"
@@ -78,7 +79,7 @@ func classificationAnswer(tick string) jev.Result {
 			},
 		}},
 		Model: "jev-1",
-		Usage: jev.Usage{InputTokens: 1200, OutputTokens: 40, CostUSD: 0.00005},
+		Usage: jev.Usage{InputTokens: 1200, OutputTokens: 40, CostUSD: runstate.Ptr(0.00005)},
 	}
 }
 
@@ -129,7 +130,7 @@ func TestARecordedClassificationReReadsItsFullDistribution(t *testing.T) {
 		Probabilities: map[string]float64{
 			"mechanical": 0.10, "translation": 0.03, "construction": 0.42, "diagnosis": 0.05, "design": 0.40,
 		},
-		Model: "jev-1", Usage: jev.Usage{InputTokens: 1200, OutputTokens: 40, CostUSD: 0.00005},
+		Model: "jev-1", Usage: jev.Usage{InputTokens: 1200, OutputTokens: 40, CostUSD: runstate.Ptr(0.00005)},
 	})
 	if decision.Validate() != nil {
 		t.Fatalf("a classification decision record does not validate: %v", decision.Validate())
@@ -339,6 +340,77 @@ func TestClassificationIsAskedOnceAndLandsOnTheRunBranch(t *testing.T) {
 		if coldRead.Probabilities[workType] != mass {
 			t.Errorf("the cold record says %s is %v, the warm answer said %v", workType, coldRead.Probabilities[workType], mass)
 		}
+	}
+}
+
+// A classification that stated no price records no price (tick fzt): the
+// decision record carries cost_usd as the distinguishable no-price —
+// explicit null — never the marshalled zero of a field nothing ever set, so
+// the status model can tell an unpriced call from a measured free one.
+func TestAClassificationThatStatedNoPriceRecordsNullNotAZero(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	opts := f.options(f.Repo, fixtureOptions{})
+	unpriced := func(tick string) jev.Result {
+		answer := classificationAnswer(tick)
+		answer.Usage = jev.Usage{InputTokens: 1200, OutputTokens: 40}
+		return answer
+	}
+	classifier := &countingClassifier{answer: unpriced}
+	opts.Classifier = classifier
+	r, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wireClassification(t, r, f)
+
+	entry := planEntry{TickID: "a1", Role: "implement-tick"}
+	if _, err := r.classificationFor(context.Background(), entry, true); err != nil {
+		t.Fatalf("the exchange refused a role-less tick: %v", err)
+	}
+	if classifier.count() != 1 {
+		t.Fatalf("the classifier was called %d times for one tick", classifier.count())
+	}
+
+	// The record on the run branch — what a cold re-derivation and the
+	// status model both read — states the no-price as an explicit null.
+	cold := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "cold"))
+	coldStore, err := runstate.Open(runstate.Options{
+		Repo: cold.Dir, Remote: "origin", Branch: r.branch, RunID: r.runID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := coldStore.Fetch(); err != nil {
+		t.Fatal(err)
+	}
+	decisions, err := coldStore.Decisions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(decisions) != 1 {
+		t.Fatalf("%d decisions on the cold run branch, want the one classification", len(decisions))
+	}
+	usage, ok := decisions[0].Response["usage"].(map[string]any)
+	if !ok {
+		t.Fatalf("the record carries no usage block: %+v", decisions[0].Response)
+	}
+	cost, stated := usage["cost_usd"]
+	if !stated || cost != nil {
+		t.Errorf("the record's usage cost_usd is %v (present %v), want the explicit null of a price nothing stated", cost, stated)
+	}
+	// The marshalled record carries null, never a zero: a price nothing
+	// stated is not a zero, and a future measured $0.00 must stay
+	// distinguishable from this shape.
+	raw, err := json.Marshal(decisions[0].Response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"cost_usd":null`) {
+		t.Errorf("the record marshals as %s, want cost_usd null", raw)
+	}
+	if strings.Contains(string(raw), `"cost_usd":0`) {
+		t.Errorf("the record marshals a zero cost_usd: %s", raw)
 	}
 }
 

@@ -17,9 +17,15 @@ package cli
 // The bodies keep their own refusals byte-for-byte: a command that has always
 // printed "ticfac <name>: <reason>" to stderr and exited N still does, and it
 // returns a printedExit so fang's styled error does not say the same thing
-// twice. What fang styles is what cobra reports before a body ever runs — an
-// unknown command, an unknown flag, a malformed argument count — and fang
-// still renders those through a colorprofile writer, so anything that is not
+// twice. A printedExit never reaches fang at all (tick jmf): it ends at
+// cobra, because fang's error path asks the terminal for its colourscheme —
+// an OSC 11 query on stdin — before it renders anything, and a live view
+// that just returned leaves a key reader parked on that same stdin, so the
+// query's reply is swallowed by the reader and the process stalls until
+// another byte arrives, or forever on a terminal that never answers. What
+// fang styles is what cobra reports before a body ever runs — an unknown
+// command, an unknown flag, a malformed argument count — and fang still
+// renders those through a colorprofile writer, so anything that is not
 // a terminal (a test buffer, a piped script, CI) sees exactly the words.
 
 import (
@@ -61,6 +67,19 @@ func runContext(parent context.Context, args []string, stdout, stderr io.Writer)
 
 	root := newRootCommand(stdout, stderr)
 	root.SetArgs(args)
+	// A printedExit ends at cobra, never at fang (tick jmf): fang's error
+	// path queries the terminal for its colourscheme — OSC 11 out, stdin in
+	// — before it hands the error to the handler, and the live view's key
+	// reader is still parked in a read of that same stdin when the watch
+	// returns. On a terminal that answers, the reply is swallowed by the
+	// reader and the query waits out its timeout; on one that does not
+	// (script(1), most CI ptys), the query parks on the read lock and the
+	// process hangs until another byte arrives — or never. The words a
+	// printedExit carries are the body's own, already said; the styled error
+	// would be silence anyway, so routing the code out of fang's error path
+	// changes nothing on the wire and takes the query with it.
+	printedExits := &printedExitCapture{}
+	routePrintedExitsBeforeFang(root, printedExits)
 	// fang.Execute: styled help and errors, --version, completions and man
 	// pages — the wrapper, and the one place it is called. Its version is
 	// the build's own Version variable, so `ticfac --version` and
@@ -71,7 +90,54 @@ func runContext(parent context.Context, args []string, stdout, stderr io.Writer)
 	); err != nil {
 		return exitCodeOf(err)
 	}
+	if code, ok := printedExits.take(); ok {
+		return code
+	}
 	return exitSuccess
+}
+
+// routePrintedExitsBeforeFang wraps every RunE in the tree so a body that
+// ends in a printedExit — its refusal already printed, its error only the
+// code — ends at cobra as success rather than as an error fang's error path
+// would take. It walks the whole tree, because every command body funnels
+// through its own RunE; a command with no RunE (a group) has nothing to
+// wrap, and its children are reached by the walk. The capture is the
+// caller's, one per invocation, so no code outlives the tree that produced
+// it.
+func routePrintedExitsBeforeFang(cmd *cobra.Command, captured *printedExitCapture) {
+	if cmd.RunE != nil {
+		inner := cmd.RunE
+		cmd.RunE = func(c *cobra.Command, args []string) error {
+			err := inner(c, args)
+			var printed *printedExit
+			if errors.As(err, &printed) {
+				captured.set(printed.code)
+				return nil
+			}
+			return err
+		}
+	}
+	for _, sub := range cmd.Commands() {
+		routePrintedExitsBeforeFang(sub, captured)
+	}
+}
+
+// printedExitCapture holds the exit code of the one printedExit a RunE
+// ended in, for runContext to return once fang reports the tree ran clean.
+// The body's words are already on the wire; only the code is left to carry.
+type printedExitCapture struct {
+	code int
+	seen bool
+}
+
+func (c *printedExitCapture) set(code int) {
+	c.code, c.seen = code, true
+}
+
+func (c *printedExitCapture) take() (int, bool) {
+	code, seen := c.code, c.seen
+	c.code, c.seen = 0, false
+	return code, seen
 }
 
 // newRootCommand builds the whole tree: eleven commands, the same names,

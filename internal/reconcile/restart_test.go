@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/profile"
+	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
@@ -591,4 +592,93 @@ func tickRowOf(t *testing.T, store *runstate.Store, tick string) string {
 		}
 	}
 	return ""
+}
+
+// A restart states itself over the death line its previous incarnation left
+// (tick 7l6).
+//
+// A SIGINT's run_died is the run's own terminal word for the INCARNATION that
+// died, and the feed is append-only per run id — but the run is not over: the
+// checkpoint a signal death leaves is non-terminal, and the operator's
+// restart under the SAME run id continues it. Run used to state a resume
+// only for a FAILED checkpoint, so the restart appended to a feed whose last
+// terminal line was still the death, and every reader keyed on "the last
+// terminal line no resume answers" — the live phase, the ETA, the factory's
+// notify — read a WORKING run as cancelled with no ETA, exactly the incident:
+// `ticfac status epic-hn6 --json` said lifecycle.phase cancelled beside a run
+// whose liveness was alive.
+//
+// The assertion the reader actually consumes is [runfeed.StandingTerminal]:
+// the position rule the status model reads is the one the writer asks before
+// stating itself, so the test asserts through it — the death stands before the
+// restart, and the restart's own run-level resume is what answers it.
+func TestARestartStatesItselfOverTheRunDiedItsPreviousIncarnationLeft(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+
+	// The interrupted incarnation: cut just after a1's close is published,
+	// where the checkpoint on origin is non-terminal — the incident's shape,
+	// minus the signal.
+	_, _, err := f.run(f.Repo, fixtureOptions{stopAfter: stopAt("a1", StageClosed)})
+	killedAfter(t, err, "a1", StageClosed)
+
+	// The SIGINT death line run-epic writes around the reconciler
+	// (signalStopDetail): a simulated kill runs no wrapper, so the test
+	// writes the line the operating system path leaves standing — the same
+	// line a person's Ctrl-C left on the live incident's feed.
+	if err := runfeed.Open(f.Repo.Dir, "r-fixture").Append(runfeed.NewEvent(
+		time.Now(), "r-fixture", "", nil, StageRunDied,
+		"cancelled: stopped by a signal (interrupt) before the run finished")); err != nil {
+		t.Fatalf("write the interrupted incarnation's run_died line: %v", err)
+	}
+	// And it stands, before the restart answers it: the defect's own fixture,
+	// checked at the cut.
+	if line := runfeed.StandingTerminal(feedStages(t, f.Repo.Dir, "r-fixture")); line == nil {
+		t.Fatal("the run_died line does not stand in the feed; this fixture proves nothing about a resume answering it")
+	}
+
+	// The restart the operator types: the same checkout, the same run id —
+	// which is why the feed still carries the death.
+	restarted, result, err := f.run(f.Repo, fixtureOptions{})
+	if err != nil {
+		t.Fatalf("the restart did not finish: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the restart ended %s: %s", result.State, result.Reason)
+	}
+
+	// The restart STATED ITSELF, at the run's own level, before any tick's
+	// work: the resume is what a person reading the feed learns the
+	// continuation from, and what every keyed reader waits for.
+	if got := restarted.Stages(""); !contains(got, StageResumed) {
+		t.Errorf("the restart's run-level stages %v do not record the resume; the previous incarnation's run_died still speaks for the live run", got)
+	}
+
+	// And the statement is the one the reader reads. The death line the
+	// restart appended after is answered — through the position rule the
+	// status model itself applies — so the run's standing terminal word is no
+	// longer the interrupted incarnation's; what stands now is the run's own
+	// ending, the one this restart wrote.
+	events := feedStages(t, f.Repo.Dir, "r-fixture")
+	diedAt, resumedAt := -1, -1
+	for i, event := range events {
+		if event.TickID != nil {
+			continue
+		}
+		switch event.Stage {
+		case StageRunDied:
+			diedAt = i
+		case StageResumed:
+			resumedAt = i
+		}
+	}
+	if diedAt < 0 || resumedAt < diedAt {
+		t.Fatalf("the feed carries no run-level resume after its run_died (died at %d, resumed at %d)", diedAt, resumedAt)
+	}
+	if line := runfeed.StandingTerminal(events[:resumedAt+1]); line != nil {
+		t.Errorf("the restart's resume does not answer the death: the standing terminal line after it is still %+v", *line)
+	}
+	if line := runfeed.StandingTerminal(events); line == nil || line.Stage != StageRunFinished {
+		t.Fatalf("the run's standing terminal word after the restart is not its own ending: %+v", line)
+	}
 }

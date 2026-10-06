@@ -1,0 +1,48 @@
+{
+  "schema_version": 3,
+  "attempt": 1,
+  "tick_id": "3gk",
+  "dispatched_at": "2026-09-30T06:56:58Z",
+  "job_handle": {
+    "attempt": 1,
+    "base_sha": "6ecf959bb8860c91202534a6ca2fc75cd764c5d0",
+    "executor": "cloudflare-sandbox",
+    "job_id": "run-run_8511bc66fe444bfaa4b5c9d6cd2073b4/tick-3gk/attempt-1",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "prompt_digest": "sha256:c25d77e407a584a3674741ad2476828c148e64504bdd1d523b44641b216e8784",
+    "remote": "origin",
+    "resumed_from": null,
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "taken_over": {
+      "run_id": "run_0f64adbcecb5484fb20cbe33d5e97e17",
+      "evidence": "the factory's record says failed and its Workflow instance is complete"
+    },
+    "tick_id": "3gk",
+    "tier": "",
+    "touch": null,
+    "try": 1,
+    "wall_seconds": 28800,
+    "write_ref": "refs/heads/ticfac/run-run_8511bc66fe444bfaa4b5c9d6cd2073b4/tick-3gk/attempt-1"
+  },
+  "provenance": {
+    "run_id": "run_8511bc66fe444bfaa4b5c9d6cd2073b4",
+    "tick_id": "3gk",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "6ecf959bb8860c91202534a6ca2fc75cd764c5d0",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:081a87517f0ab90d00a3d9fc0345b717df1255ffc33390f2bdfbd3e5cd4e6645",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

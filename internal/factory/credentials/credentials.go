@@ -194,6 +194,50 @@ func (f *File) Set(key, value string) {
 	f.lines = append(f.lines, line)
 }
 
+// ShellGetCommand returns a POSIX-shell command that prints exactly what
+// [File.Get] returns for key in ~/.ticfacrc — the ONE builder of the file's
+// shell-side reader, so the two consumers of the same file cannot drift
+// again (tick frr). The shell side is pi's `!command` credential syntax:
+// pi resolves the value of a provider-override header by running the text
+// after `!` in a shell at request time, and that shell has no Go — it must
+// re-derive Get's reading from the file's documented format:
+//
+//   - the key may sit inside leading whitespace and may carry spaces around
+//     the `=` (a hand-edited `key = value` reads fine in Get, so it must
+//     read fine in the shell too);
+//   - a line whose first non-blank character is `#` is a comment, never a
+//     match, whatever it spells after the `#`;
+//   - only the FIRST match counts (a duplicated key must not produce a
+//     two-line header value);
+//   - the value is everything after the first `=`, minus surrounding
+//     whitespace — so a value may itself contain `=`;
+//   - a missing file prints nothing and the command still SUCCEEDS, exactly
+//     Get's empty value — a failed `!command` resolution is not a state pi's
+//     credential override has a way to report, so the shell reader degrades
+//     to the same empty credential Get degrades to. The cat up front is
+//     what buys that: it swallows the missing file's error and the
+//     pipeline's exit status stays sed's — success — while the command
+//     remains a plain pipeline a caller can extend with another `| stage`
+//     without an operator-precedence surprise (`|| true` at the end would
+//     bind to the caller's pipe, not to this command's failure).
+//
+// The command reads $HOME/.ticfacrc, not a path resolved here: pi runs it in
+// its own process, whose home is the one the credential file lives in.
+//
+// key must be one of this package's Key constants — a bare identifier —
+// because it is interpolated into a sed program verbatim; no Key constant
+// carries a sed metacharacter, and the constants are the file's whole
+// vocabulary.
+func ShellGetCommand(key string) string {
+	return `cat "$HOME/` + FileName + `" 2>/dev/null | ` +
+		`sed -n '/^[[:space:]]*` + key + `[[:space:]]*=/{` +
+		`s/^[[:space:]]*` + key + `[[:space:]]*=//;` +
+		`s/^[[:space:]]*//;` +
+		`s/[[:space:]]*$//;` +
+		`p;` +
+		`q;}'`
+}
+
 // Save writes the file back with owner-only permissions, replacing it
 // atomically so a crash cannot leave a half-written credential file. An
 // existing file that was too permissive is tightened to 0600 by the swap.

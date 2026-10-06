@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 25,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "Frame tests (terminal-emulator screen grid) assert the colour attribute per state: a closed group is dim, an in-flight pipeline stage amber, a failed/held row red, needs-you red+bold when non-empty, ids cyan; NO_COLOR renders no SGR colour codes with an identical layout; screenshots of the dashboard at 120x40 and 80x24 attached to the report per the 'work someone will see' pattern. make gate passes.",
+    "description": "Operator, 2026-10-05, after reviewing screenshots of the dashboard at 120x40 and 80x24 (nearly monochrome; only 'healthy' is green): use DISCRETE colour accents — colour carries meaning, sparingly, never decoration. Semantic palette (ANSI 16-colour names so terminal themes map them; no background fills except the progress bar): green = done/closed/passed/healthy; amber/yellow = in flight/working/stall warning; red = failed/rejected/held/needs-you (the needs-you line is the most prominent thing on screen when non-empty); cyan = tick ids and key hints; dim/grey = secondary text (closed groups, provenance like 'glm-5.3 · herdr', the feed tail's timestamps, 'not metered'); bold for section headers (TICK…, WORKERS, recent). At most these four hues. Respect NO_COLOR and TERM=dumb (plain text, same layout); colour never changes widths. Apply the same palette to the drill-in and feed views; the plain-lines mode stays uncoloured when stdout is not a terminal.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "5ba",
+    "title": "watch dashboard uses discrete colour accents"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.87,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.9,
+      "design": 0.08,
+      "diagnosis": 0,
+      "mechanical": 0.02,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1335,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T11:30:55Z",
+  "answered_at": "2026-10-05T11:30:55Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "5ba",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "c8dd9d8aa66862e48157df68fbb6a4e553581674",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

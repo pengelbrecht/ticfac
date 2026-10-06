@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 15,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The CURRENT run's held-for-person unblock command is pinned as `ticfac settle <epic> <tick> <attempt> --release \"<who>\"` with no --run-id, and settle without the flag defaults its run id to epic-<epic-id>. Today's cloud runs write their records under the factory's run_<hex> (the orchestrator container execs `ticfac run-epic --run-id \"$run_id\"`), so the command a person copies from needs-you addresses a store that carries no such attempt and refuses — the hold the header points at cannot be cleared by the command the header gives. This tick deliberately kept the current-run spelling unchanged (it is prior holds that must name their run); the fix is one call-site: pass the model's own run id to SettleCommand whenever it is not the epic spelling, and update the pinned strings in the cli/watch/overview tests.\nevidence: internal/statusmodel/build.go buildWaits SettleCommand(m.EpicID, *held.TickID, *held.Attempt, \"\"); internal/reconcile/reconcile.go:1373 (RunID default epic-<id>); internal/reconcile/settle.go store.Attempt refusal \"no run dispatch #%d\"; internal/factory/ticfacentrypoint.go:334 (--run-id \"$run_id\"); pinned shape internal/cli/status_model_test.go:428\n\nticfac run run_5c7c16d199414da2a8a40d97b524e987 created this tick by absorbing the finding 91ef366f5e5a5839ed103c43b2f4fa1ab268d6b741ba968163bfdaf65959c773 (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-z3p/attempt-10): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/91ef366f5e5a5839ed103c43b2f4fa1ab268d6b741ba968163bfdaf65959c773.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "ulw",
+    "title": "A held cloud run's needs-you command cannot release the attempt it names"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.92,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.05,
+      "design": 0,
+      "diagnosis": 0.01,
+      "mechanical": 0.94,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1581,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T03:59:03Z",
+  "answered_at": "2026-10-04T03:59:03Z",
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "ulw",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "5d96a9c72944bea122245f42b7c593fbdfe1ba3b",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -305,14 +305,16 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 	finished, resumed := cloudRunIDOf("ab12"), cloudRunIDOf("cd34")
 
 	// The integration branch the cloud run works on, and the finding its
-	// worker drafted there — the same branch shape a local run's records
-	// take, which is the point: triage reads one channel for both hosts.
+	// worker drafted there — under the run's OWN id, the way a cloud run's
+	// container writes it (`run-epic --run-id` the factory's run_<hex>, tick
+	// ulw): the same branch shape a local run's records take, which is the
+	// point: triage reads one channel for both hosts, addressed by the run
+	// id the hold names (tick q8m).
 	execTestCmd(t, repo, "git", "push", "origin", "main:refs/heads/epic/epic1")
 	finding := testDraftFinding(triageKey("d34db33f"), "")
-	finding.DiscoveredFrom = "run-epic-epic1/tick-a1/attempt-1"
-	finding.Provenance.RunID = "epic-epic1"
+	finding.Provenance.RunID = resumed
 	store, err := runstate.Open(runstate.Options{
-		Repo: repo, Remote: "origin", Branch: "epic/epic1", RunID: "epic-epic1",
+		Repo: repo, Remote: "origin", Branch: "epic/epic1", RunID: resumed,
 	})
 	if err != nil {
 		t.Fatalf("open the run's state store: %v", err)
@@ -329,12 +331,15 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 	// prefix, so a fake that spells the detail any other way rides the
 	// settle branch while claiming to test the triage one (tick il6). The
 	// message names the finding it holds by the key the triage below then
-	// settles by — the same words a person reads on the real run's feed.
+	// settles by — the same words a person reads on the real run's feed —
+	// and it names the triage ADDRESSED TO THE RUN'S OWN STORE (tick q8m):
+	// the command a person copies from the hold must reach the drafts
+	// without discovering --run-id on their own.
 	at := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 	heldDetail := reconcile.RefusedFindingUntriaged + ": 1 finding(s) this run drafted are still waiting for a person — " +
 		`"A finding the surface lists" (proposed-tick, severity high, tick a1, for this repository, unlinked: names no done item) — ` +
 		"and the close-out does not hand over while one is (tick aqm): the ticks that reported them are closed, the findings " +
-		"rode here, and this is the one decision point. Triage with `ticfac triage epic1`: every untriaged finding of the " +
+		"rode here, and this is the one decision point. Triage with `ticfac triage epic1 --run-id " + resumed + "`: every untriaged finding of the " +
 		"run settles there, addressed by a short key prefix — absorb (a tick under the epic, which the run then works), file " +
 		"(a backlog tick with an owner), fixed <commit>, or discard. A finding routed to another repository is not yours to " +
 		"settle and never holds the run: the run disposes of it itself — filed into the target's tracker when " +
@@ -342,8 +347,8 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 		"target; `ticfac finding` remains for promoting one into a tick that already exists. Then run the epic " +
 		"again under this run id: the gate has already passed, so the close-out's close is the only step left — and the " +
 		"resume closes each role tick behind its recorded decision, it does not dispatch the job again (tick 80x). The " +
-		"drafts are keys " + triageKey("d34db33f") + " under .ticfac/runs/epic-epic1/findings/ on origin, listed by " +
-		"`ticfac findings epic1`"
+		"drafts are keys " + triageKey("d34db33f") + " under .ticfac/runs/" + resumed + "/findings/ on origin, listed by " +
+		"`ticfac findings epic1 --run-id " + resumed + "`"
 	feed := feedLine(t, runfeed.NewEvent(at, resumed, "epic1", nil, reconcile.StageRunHeld, heldDetail))
 	feed += feedLine(t, runfeed.NewEvent(at.Add(time.Minute), resumed, "", nil, reconcile.StageRunFinished,
 		"holding: the close-out waits on untriaged findings"))
@@ -380,8 +385,9 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 		t.Fatalf("exit %d, want the held-for-person code %d a local run ends by:\n%s\n%s",
 			code, ExitHeld, stderr.String(), stdout.String())
 	}
-	if !strings.Contains(stderr.String(), "HOLDING") || !strings.Contains(stderr.String(), "ticfac triage epic1") {
-		t.Fatalf("the hold does not name the triage command:\n%s", stderr.String())
+	if !strings.Contains(stderr.String(), "HOLDING") ||
+		!strings.Contains(stderr.String(), "ticfac triage epic1 --run-id "+resumed) {
+		t.Fatalf("the hold does not name the triage addressed to the run's own store:\n%s", stderr.String())
 	}
 	// The triage branch's OWN words, never the settle branch's: the fake
 	// hold reproduces the reconciler's reason-first line, so the watch picks
@@ -389,7 +395,7 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 	// the detail any other way passes through the settle branch while its
 	// assertion is satisfied by the prose itself (tick il6). Settle here
 	// would point a person at a command that refuses this hold.
-	if !strings.Contains(stderr.String(), "Triage the finding(s) with `ticfac triage epic1`") {
+	if !strings.Contains(stderr.String(), "Triage the finding(s) with `ticfac triage epic1 --run-id "+resumed+"`") {
 		t.Errorf("the cloud hold's alert does not say the triage branch's own words:\n%s", stderr.String())
 	}
 	if strings.Contains(stderr.String(), "ticfac settle") {
@@ -403,14 +409,16 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 	}
 
 	// The one command that moves the hold on, settled the everyday way — a
-	// short key prefix, no 64-hex key — on the branch the cloud run owns.
+	// short key prefix, no 64-hex key — at the address the hold's own words
+	// named: the cloud run's own store (tick q8m). The finding was seeded
+	// under that id, so only the addressed command finds it.
 	var triageOut, triageErr bytes.Buffer
-	triageCode := Run([]string{"triage", "--repo", repo, "epic1", "d34=discard"}, &triageOut, &triageErr)
+	triageCode := Run([]string{"triage", "--repo", repo, "epic1", "--run-id", resumed, "d34=discard"}, &triageOut, &triageErr)
 	if triageCode != exitSuccess {
 		t.Fatalf("triage exit %d settling the cloud run's finding: %s", triageCode, triageErr.String())
 	}
 	settled, err := runstate.Open(runstate.Options{
-		Repo: repo, Remote: "origin", Branch: "epic/epic1", RunID: "epic-epic1",
+		Repo: repo, Remote: "origin", Branch: "epic/epic1", RunID: resumed,
 	})
 	if err != nil {
 		t.Fatalf("reopen the run's state store: %v", err)
@@ -424,6 +432,67 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 	}
 	if findings[0].Status != runstate.FindingDiscarded {
 		t.Errorf("the finding's status is %q, want discarded", findings[0].Status)
+	}
+}
+
+// The cloud hold's release command names the run its attempt is recorded
+// under (tick qxj): the factory's run_<hex> spells no epic, so a settle
+// without --run-id opens epic-<epic-id>, a store that carries no such
+// attempt, and refuses — the same broken release the status model stopped
+// naming (tick ulw), live here on the surface a person reads during a hold.
+func TestRunCloudHeldAttemptReleaseCommandNamesTheRun(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	finished, resumed := cloudRunIDOf("ab12"), cloudRunIDOf("cd34")
+
+	// The feed the factory serves the resumed run: it ends holding an attempt
+	// for a person — the unaddressed hold, the settle branch's own shape, not
+	// the untriaged-findings hold the triage branch answers (tick il6).
+	at := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
+	attempt := 2
+	feed := feedLine(t, runfeed.NewEvent(at, resumed, "a1", &attempt, reconcile.StageRunHeld,
+		reconcile.RefusedUnaddressed+": nobody can say whether the attempt is running"))
+	feed += feedLine(t, runfeed.NewEvent(at.Add(time.Minute), resumed, "", nil, reconcile.StageRunFinished,
+		"holding: a1 cannot be addressed"))
+
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": finished, "epic": "epic1", "project": "acme/project", "state": "completed", "started_at": "2026-09-26T10:00:00Z",
+			}}}
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			return http.StatusCreated, map[string]any{
+				"run": map[string]any{"run_id": resumed, "state": "starting"},
+			}
+		case request.Path == "/api/runs/"+resumed:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": resumed, "epic": "epic1", "state": "completed",
+			}}
+		case request.Path == "/api/runs/"+resumed+"/events":
+			return 200, map[string]any{
+				"run_id": resumed, "state": "completed",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
+		}
+		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	code, stdout, stderr := runRunCloud(t, repo, "epic1")
+	if code != ExitHeld {
+		t.Fatalf("exit %d, want the held-for-person code %d:\n%s\n%s", code, ExitHeld, stderr.String(), stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "HOLDING a1 try 1 (run dispatch #2)") {
+		t.Errorf("the alert does not name the held attempt:\n%s", stderr.String())
+	}
+	// The one command that clears the hold is addressed by the run itself,
+	// spelled whole — never a placeholder a person fills in from another
+	// screen (tick gtk).
+	want := "ticfac settle epic1 a1 2 --run-id " + resumed + " --release \"<who>\""
+	if !strings.Contains(stderr.String(), want) {
+		t.Errorf("the cloud hold's release command does not name the run its attempt is recorded under:\n%s", stderr.String())
 	}
 }
 

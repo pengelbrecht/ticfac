@@ -200,6 +200,19 @@ func (r *Reconciler) integratedAlready(marker attemptHandle, branch string) (mer
 	return merge{AttemptHead: head, EpicHead: epicHead, GateSHA: epicHead, Merged: false}, nil
 }
 
+// AttemptMergeNeedle is the words every merge commit that carries one
+// attempt into the integration branch spells: "ticfac run <run>: tick
+// <tick> attempt <n>" — whole (the plain merge below) or as the opening of
+// the resolution's story (the resolve-conflict job's two spellings in
+// resolve.go). The status model's report drill-in searches a repository's
+// merge commits for exactly these words to read a merged attempt's diff
+// after the close swept the attempt's branch (tick ihw): the wording lives
+// here, where the message is minted, so the writer and the reader are one
+// spelling and cannot drift apart.
+func AttemptMergeNeedle(runID, tickID string, attempt int) string {
+	return fmt.Sprintf("ticfac run %s: tick %s attempt %d", runID, tickID, attempt)
+}
+
 // mergeInWorktree performs the merge itself. A conflict is returned as a
 // conflict rather than resolved here: resolving one is the resolve-conflict
 // job's (tick 2p6), and a reconciler that resolved it silently would be a
@@ -212,8 +225,8 @@ func (r *Reconciler) mergeInWorktree(tick string, attempt int, branch, head, epi
 	}
 	defer remove()
 
-	message := fmt.Sprintf("Merge branch '%s' into %s\n\nticfac run %s: tick %s attempt %d",
-		branch, r.branch, r.runID, tick, attempt)
+	message := fmt.Sprintf("Merge branch '%s' into %s\n\n%s",
+		branch, r.branch, AttemptMergeNeedle(r.runID, tick, attempt))
 	// Worker reports are kept out of the merge (report_merge.go): a report
 	// never lands on the integration branch and never conflicts. The
 	// unmerged paths come back read BEFORE the abort, which is what erases

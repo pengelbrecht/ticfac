@@ -46,6 +46,18 @@ type Options struct {
 	// are closed and a field invented here would be one the reconciler ignores.
 	Model string
 
+	// Metering is the local gateway metering join the dispatch resolved
+	// (tick dm2, carried here by tick gzv). Tick gzv loaded it into the pi
+	// CLI's launch as a generated `--extension` provider override; since
+	// epic 43y (tick hpk) the `pi` runner is the pi-durable Node harness,
+	// which has no extension surface and refuses unknown arguments, so this
+	// executor loads NOTHING from it: its workers' calls go unattributed and
+	// the cost line stays honestly unmetered until the join reaches the
+	// harness through worker.json. It is kept so the dispatch's resolution
+	// stays one value for both local substrates (the herdr executor's pi
+	// CLI panes still load it).
+	Metering *GatewayMetering
+
 	// RolePrompt is the profile's prompt for this job's role: the instruction
 	// that says what the role IS, which the rendered worker prompt opens with.
 	// The executor owns the mechanics around it — the report path, the
@@ -234,6 +246,11 @@ func DefaultStateDir() string {
 
 // Repo is the checkout this executor was pointed at.
 func (e *Executor) Repo() string { return e.repo }
+
+// Metering is the gateway metering join this executor was built with — the
+// join the dispatch resolved, for the factory that wires it and the test
+// that asserts the wiring. Nil on a host that joins nothing.
+func (e *Executor) Metering() *GatewayMetering { return e.opts.Metering }
 
 // RepoKey identifies the repository — half of a handle's identity, and the
 // half that keeps one tick id in two checkouts from colliding.

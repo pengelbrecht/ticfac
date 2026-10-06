@@ -1,0 +1,55 @@
+{
+  "schema_version": 3,
+  "attempt": 1,
+  "tick_id": "r5i",
+  "dispatched_at": "2026-09-29T12:37:39Z",
+  "job_handle": {
+    "attempt": 1,
+    "base_sha": "e89c11bee73779bfc24693a862f18a1e9130ea42",
+    "executor": "cloudflare-sandbox",
+    "job_id": "run-run_0f64adbcecb5484fb20cbe33d5e97e17/tick-r5i/attempt-1",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "prompt_digest": "sha256:c25d77e407a584a3674741ad2476828c148e64504bdd1d523b44641b216e8784",
+    "remote": "origin",
+    "resumed_from": {
+      "tick_id": "r5i",
+      "attempt": 1,
+      "write_ref": "refs/heads/tick/hn6/attempt-1/r5i-run_aaf6886d67b5489a85fa1505239bad7e",
+      "sha": "e89c11bee73779bfc24693a862f18a1e9130ea42",
+      "released_by": "ticfac (took over the claim of run run_aaf6886d67b5489a85fa1505239bad7e, which ended: the factory's record says failed and its Workflow instance is complete)",
+      "run_id": "run_aaf6886d67b5489a85fa1505239bad7e"
+    },
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "taken_over": {
+      "run_id": "run_aaf6886d67b5489a85fa1505239bad7e",
+      "evidence": "the factory's record says failed and its Workflow instance is complete"
+    },
+    "tick_id": "r5i",
+    "tier": "",
+    "touch": null,
+    "try": 1,
+    "wall_seconds": 28800,
+    "write_ref": "refs/heads/ticfac/run-run_0f64adbcecb5484fb20cbe33d5e97e17/tick-r5i/attempt-1"
+  },
+  "provenance": {
+    "run_id": "run_0f64adbcecb5484fb20cbe33d5e97e17",
+    "tick_id": "r5i",
+    "attempt": 1,
+    "source_ref": "refs/heads/tick/hn6/attempt-1/r5i-run_aaf6886d67b5489a85fa1505239bad7e",
+    "source_sha": "e89c11bee73779bfc24693a862f18a1e9130ea42",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:081a87517f0ab90d00a3d9fc0345b717df1255ffc33390f2bdfbd3e5cd4e6645",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

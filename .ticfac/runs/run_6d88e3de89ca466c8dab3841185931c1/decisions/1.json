@@ -1,0 +1,56 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "resolve-conflict",
+  "request": {
+    "base_branch": "main",
+    "base_head": "3e88ca73ab5c1c611d87e45e930396572bfa2f19",
+    "conflict_files": [
+      "contracts/CHANGELOG.md",
+      "contracts/bundle.json"
+    ],
+    "epic_head": "220aea004231d56324cbae545b48d774265db59e",
+    "epic_id": "hn6",
+    "job_id": "run-run_6d88e3de89ca466c8dab3841185931c1/base-fold-1",
+    "kind": "base-fold",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (cloudflare-sandbox/pi, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:2ec895ee2ea6b5afe4e77460bd5ea6902c6c290544d45c7d10f95905341927cb",
+    "resolve_branch": "ticfac/run-run_6d88e3de89ca466c8dab3841185931c1/base-fold-1-3e88ca73ab5c",
+    "role": "resolve-conflict",
+    "source_grade": "write"
+  },
+  "response": {
+    "conflict_detail": "2 conflicts: content in contracts/CHANGELOG.md; content in contracts/bundle.json",
+    "conflict_files": [
+      "contracts/CHANGELOG.md",
+      "contracts/bundle.json"
+    ],
+    "job_id": "run-run_6d88e3de89ca466c8dab3841185931c1/base-fold-1",
+    "merge": "ebf95cbf8f153fe359dabe821ad4a695bd648fb5",
+    "resolve_head": "b3d001537e6898b54a7e1cab79ae3a2486c246dc",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-10-01T00:24:16Z",
+  "answered_at": "2026-10-01T00:24:16Z",
+  "provenance": {
+    "run_id": "run_6d88e3de89ca466c8dab3841185931c1",
+    "tick_id": "hn6",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "a7c5bf39fe5fb6155531c0bb721b0295910ea4dc",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "strong",
+    "profile_digest": "sha256:2ec895ee2ea6b5afe4e77460bd5ea6902c6c290544d45c7d10f95905341927cb",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

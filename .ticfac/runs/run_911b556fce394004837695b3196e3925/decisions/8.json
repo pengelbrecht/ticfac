@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "triage-failure",
+  "request": {
+    "attempt": 2,
+    "epic_id": "hn6",
+    "job_id": "run-run_911b556fce394004837695b3196e3925/tick-7uv/attempt-2",
+    "op": "settle_attempt",
+    "run_id": "run_911b556fce394004837695b3196e3925",
+    "state": "rejected",
+    "tick_id": "7uv"
+  },
+  "response": {
+    "by_run": true,
+    "carry_ref": "refs/heads/ticfac/run-run_911b556fce394004837695b3196e3925/tick-7uv/attempt-2",
+    "carry_sha": "52af70615b2abf66299ed49b2087938f706ad4ad",
+    "disposition": "carry-work",
+    "reason": "missing-result, decided on resume from the recorded rejection",
+    "released_by": "ticfac",
+    "settled": true,
+    "state": "rejected",
+    "step": "ceiling"
+  },
+  "validated": true,
+  "requested_at": "2026-09-30T13:36:29Z",
+  "answered_at": "2026-09-30T13:36:29Z",
+  "provenance": {
+    "run_id": "run_911b556fce394004837695b3196e3925",
+    "tick_id": "7uv",
+    "attempt": 2,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "341ce14a6da712c0d29b39a8829f79c537646d47",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": null,
+    "profile_digest": "sha256:081a87517f0ab90d00a3d9fc0345b717df1255ffc33390f2bdfbd3e5cd4e6645",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -317,7 +317,16 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	// redirected invocation and run.log both carry it. Resolution happens here
 	// because the client is a constructor input; the SAY waits until the run
 	// exists, so a refusal writes no stdout of any kind.
-	classifier, classifierNote := classifierForRun()
+	//
+	// The run id the calls are TAGGED with (tick 24u) is the run's own id — the
+	// --run-id flag, else the same default reconcile.New derives — so the
+	// gateway's logs attribute the decisions river's spend to this run exactly
+	// as dm2's metering attributes the workers' calls.
+	runID := *fl.runID
+	if runID == "" {
+		runID = runIDOfEpic(epicID)
+	}
+	classifier, classifierNote := classifierForRun(runID)
 
 	if *fl.runner == "" {
 		*fl.runner = "claude"
@@ -498,7 +507,26 @@ func runEpic(args []string, fl *runEpicFlags, stdout, stderr io.Writer) (code in
 	stopRelay := func() { relay.Stop(relayDrainTimeout) }
 	defer stopRelay()
 
-	pusher := startStatusPusher(repoDir, liveRun, operatorStderr, *fl.statusPush)
+	// The status pusher (tick i1r, and h7w): the run's own model, pushed to
+	// the factory the phone page reads on a short cadence while the run works
+	// — plus once more at each ending, when the terminal record exists, so a
+	// finished run's last reading is its own answer. Two halves share the
+	// loop: the operator's OPT-IN local pusher, and the cloud orchestrator
+	// container's own push (startCloudStatusPusher, nil outside a container)
+	// — which is not opt-in, exactly like the feed relay above it, because a
+	// cloud run already belongs to the factory whose page reads the push. A
+	// cloud run takes precedence: the two are mutually exclusive in practice
+	// (a container holds no operator ~/.ticfacrc and a laptop holds no
+	// TICKS_RUN_ID), and the cloud door is the run-credential one the
+	// container can actually knock on. The Stop defer is registered BEFORE
+	// the pidfile release on purpose, so its ending push is written LAST —
+	// after the release — and carries the run's terminal answer (a probe
+	// that still saw the pidfile would make "done" read "running" forever
+	// on the page).
+	pusher := startCloudStatusPusher(repoDir, liveRun, operatorStderr)
+	if pusher == nil {
+		pusher = startStatusPusher(repoDir, liveRun, operatorStderr, *fl.statusPush)
+	}
 	defer func() {
 		if pusher != nil {
 			pusher.Stop()
@@ -849,10 +877,23 @@ func startupLine(runID string) string {
 // 2026-10-06, which asks no classifier. It is a function of its own so the wiring is the
 // same under test as in production: what run-epic hands the reconciler is
 // exactly what these tests build.
-func classifierForRun() (classifier *jev.Client, note string) {
+//
+// The run id, when one is named, TAGS every call the client makes (tick 24u):
+// cf-aig-metadata, the same header the factory's proxy stamps for a cloud
+// run and dm2's metering join writes for the workers, so the gateway's logs
+// carry the run a per-run read joins this run's classifier spend by. Empty
+// stays untagged — the doctor probe and a one-off ask file their spend under
+// no run — and the startup note says the tag beside the credential, so the
+// run's own record states its spend is attributable.
+func classifierForRun(runID string) (classifier *jev.Client, note string) {
 	source := resolveClassifierCredential()
 	if !source.Configured {
 		return nil, source.Note
+	}
+	source.Config.RunID = runID
+	if source.Config.RunID != "" {
+		source.Note += "; every call is tagged run_id " + source.Config.RunID +
+			" in the gateway's logs (cf-aig-metadata), so this run's classifier spend is attributable to it"
 	}
 	return jev.New(source.Config, nil), source.Note
 }
@@ -967,7 +1008,13 @@ attempt AND base the next one on its branch, so the next worker starts from the
 work rather than redoing it. Nothing merges unproven — the gate still decides —
 but the evidence the interrupted attempt produced is not thrown away, and the
 next attempt's provenance records that its source is the released attempt's
-ref and commit (tick 0z0).`,
+ref and commit (tick 0z0).
+
+A cloud run's attempt is answered by the factory that ran its worker: this
+command opens the run's records by --run-id, and when the machine it runs on
+holds none of the attempt's state — an operator's machine, never the factory's
+container — the factory's own record of the worker is what the release rules
+on. A live attempt is still refused there, exactly as it is here.`,
 	}
 	fs := flag.NewFlagSet("settle", flag.ContinueOnError)
 	fl := defineSettleFlags(fs)
@@ -1038,6 +1085,7 @@ func settle(args []string, fl *settleFlags, stdout, stderr io.Writer) int {
 		GateConfig:        *fl.gate,
 		ProfileDir:        *fl.profiles,
 		Tier:              *fl.tier,
+		FactoryAttempt:    factoryAttemptAnswer,
 		ReleaseOnly:       true,
 	})
 	if err != nil {

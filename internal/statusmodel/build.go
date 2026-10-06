@@ -43,12 +43,40 @@ type Sources struct {
 	EpicID   string
 	Degraded []string
 
-	// Graph is the epic's own graph — the same layering `tk graph` computes.
-	// Nil when the tracker could not be read.
+	// Graph is the epic's own graph — the same layering `tk graph` computes,
+	// with the tracker's closed tasks included where the read can serve
+	// them. Nil when the tracker could not be read.
 	Graph *tk.Graph
-	// Records is the run's durable state, as gathered. Nil when the run's
-	// records could not be read at all.
+	// Records is the SUBJECT run's durable state — the run the surface was
+	// opened on — as gathered. Nil when the run's records could not be read
+	// at all.
 	Records *Records
+	// PriorRecords is every OTHER run's records for the same epic, ordered
+	// oldest first by the reader that selected them — normally the EARLIER
+	// runs whose work the tracker already carries, and, since the merge
+	// orders layers by the checkpoints' own clocks (tick c9n), a
+	// chronologically later sibling too when the surface named an older
+	// subject (a checkout without the local feed). The dashboard answers
+	// for the epic, not for the subject's own checkpoint: a fresh run seeds
+	// its plan "ready" before it settles the tracker's answer, so a run
+	// that failed at boot must not erase the ticks other runs closed. Each
+	// tick's row is read from the chronologically last run that touched it
+	// (its dispatch markers, gate evidence and provenance); the run SECTION
+	// — alive, workers, cost, feed, waits — is still the subject's alone,
+	// with the one exception the waits themselves make: a hold an earlier
+	// run left for a person (PriorFeeds).
+	PriorRecords []Records
+	// PriorFeeds is every EARLIER run's own event feed, keyed by the run id
+	// the records are keyed by (the checkpoint's run_id) — the feeds of the
+	// runs PriorRecords carries, walked in the same oldest-first order. A
+	// hold is a fact the feed is the only writer of: the records say the
+	// tick was rejected, but only the line says the run held it FOR A
+	// PERSON, and a hold an earlier run left stands until somebody answers
+	// it no matter what newer runs did elsewhere (tick z3p). A run whose
+	// feed could not be read is absent from the map — the model answers
+	// with what exists, and a missing feed is a missing hint, not a
+	// degraded source.
+	PriorFeeds map[string][]runfeed.Event
 	// Feed is the run's own event feed, whole. The feed is exhaust and
 	// hints: nothing in the model takes a VERDICT from a line, but the
 	// waits, the health counts and the wall clock firings are facts the
@@ -69,6 +97,50 @@ type Sources struct {
 	// and what its last turn said. Nil when there is no reader (a run whose
 	// runners keep no session log this machine can read).
 	Session func(worktree string) *Turn
+
+	// Activity answers one worker's measured activity window: the events
+	// of its transcript and its last action. Nil when there is no reader —
+	// every caller is nil-safe, and the model leaves activity null. The first
+	// parameter is the worker's runner string: the harness kind the executor's
+	// own attempt record names where the Runner reader answered one, else the
+	// durable attempt's model-or-executor spelling (see runnerOf).
+	Activity func(runner, worktree string) *ActivityInput
+
+	// Runner answers one (tick, attempt) worker's harness kind — the agent
+	// kind the executor launched: herdr's `kind`, the local supervisor's
+	// `runner` — from the attempt record in the dispatch's state directory
+	// on this machine (tick 5uq). The durable attempt cannot name the
+	// harness: its provenance carries the model and the executor, and
+	// neither says which harness runs the worker (the bare alias "opus" runs
+	// under claude, the executor "herdr" under any kind). The reader's
+	// answer wins over the durable spelling, which addresses the activity
+	// seam wherever the reader says nothing. Nil when there is no reader —
+	// a cloud run's workers are not on this machine.
+	Runner func(tickID string, attempt int) *string
+
+	// Handle answers one (tick, attempt) worker's executor-own name from
+	// where this machine keeps it: the attempt record in the dispatch's
+	// state directory — herdr's agent name, the pane it runs in, a local
+	// supervisor's pid (zl1). The durable attempt marker cannot carry the
+	// name: it is cut before the start, and the executor's own handle is
+	// host paths a public repository must never commit. Nil when there is
+	// no reader — a cloud run's workers are not on this machine — and the
+	// model falls back to whatever the attempt record's own job handle
+	// spells, null when nothing names the worker.
+	Handle func(tickID string, attempt int) *string
+
+	// Report answers one (run, tick, attempt) report: its summary and its
+	// diff stats. The RUN is the one whose row the tick reads — the run that
+	// dispatched the attempt, whose per-run attempt number the row carries —
+	// because the same (tick, attempt) in two runs names two dispatches (tick
+	// ihw). Nil when there is no reader — the model leaves report null,
+	// which is the honest "the report was not read".
+	Report func(runID, tickID string, attempt int) *ReportInput
+
+	// WorkerCost is what the run's host states about what the workers spent —
+	// the factory's own ground-truth number and the river it came from. Nil
+	// when no host stated one, and the model's cost lines answer empty.
+	WorkerCost *WorkerCostInput
 
 	// CI is the forge's answer for the epic PR, per check per head. Nil
 	// when there is no PR or the forge could not be asked.
@@ -144,16 +216,42 @@ func Build(src Sources) Model {
 	}
 
 	m.Liveness = buildLiveness(src)
-	absorbed := absorbedTicks(recs.Absorptions)
-	m.Waves, m.Progress = buildWaves(src, recs, absorbed)
+	// EpicTitle and Recent are direct carries: the graph's own title and the
+	// feed's own last five lines, oldest first — the one dashboards datum
+	// this tick computes for real (hn6 wave 1).
+	if src.Graph != nil {
+		title := src.Graph.Epic.Title
+		m.EpicTitle = &title
+	}
+	m.Recent = append([]runfeed.Event{}, src.Feed[max(0, len(src.Feed)-5):]...)
+	merged := newMergedRuns(recs, src.PriorRecords)
+	absorbed := merged.absorbed
+	m.Waves, m.Progress = buildWaves(src, merged, absorbed)
+	// The epic's own clock, beside the counts it shares progress with: the
+	// span is read off the dispatch markers, not the waves, so an unread
+	// tracker costs the model the counts but not the clock (tick e6g).
+	m.Progress.RunElapsedSeconds = buildRunElapsed(src, merged, recs)
+	// The prior runs' standing holds, answered once by the rules buildWaits
+	// applies — and the same answer handed to the pipeline index, so a row's
+	// next step and the header's command are wordings of one answer, not two
+	// derivations that can drift apart (tick eli).
+	priorHolds := standingPriorHolds(src, func(id string) string { return mergedStateOf(m, id) })
+	decorateTicks(src, merged, priorHolds, &m)
 	m.Workers = buildWorkers(src, recs)
+	decorateWorkers(src, recs, &m)
+	decorateReports(src, merged, &m)
 	m.Health = buildHealth(src.Feed)
-	m.Gates = buildGates(recs.Evidence)
+	// The gates array is the EPIC's evidence, per tick across runs (tick
+	// ihw): a closed tick's gate rows belong to the run that closed it, and
+	// the drill-in reads them wherever the newest run's own records carry
+	// none.
+	m.Gates = buildGates(merged.evidenceAll())
 	m.CI = buildCI(src.CI)
-	m.Cost = buildCost(recs)
+	m.Cost = buildCost(src, recs)
 	m.Lifecycle = buildLifecycle(src, recs, m)
-	m.WaitsOn, m.Attention = buildWaits(src, recs, m)
-	m.Remaining = buildRemaining(src, recs, m)
+	m.WaitsOn, m.Attention = buildWaits(src, recs, m, priorHolds)
+	m.Health.Verdict = buildVerdict(src, m)
+	m.Remaining = buildRemaining(src, m)
 	return m
 }
 
@@ -178,51 +276,114 @@ func buildLiveness(src Sources) Liveness {
 	return l
 }
 
-// absorbedTicks is the set of tick ids the run itself created by absorbing a
-// finding into the epic it was running — the mid-run shape change the
-// absorption records exist to make reconstructible.
-func absorbedTicks(absorptions []runstate.Absorption) map[string]bool {
-	out := map[string]bool{}
-	for _, a := range absorptions {
-		if a.TickID != "" && a.Gating {
-			out[a.TickID] = true
+// buildRunElapsed measures the epic's whole span from the records the model
+// merges: the earliest dispatch any tick's try history states, to the
+// model's own now — frozen at the run's end when the run's own records say
+// it ended. The header's clock was once a renderer derivation (the exact
+// defect tick e6g absorbed): measured here, one field carries it to every
+// surface, and the freeze lands with the measurement instead of never.
+func buildRunElapsed(src Sources, merged *mergedRuns, recs Records) *int64 {
+	start := time.Time{}
+	for _, markers := range merged.markers {
+		for _, marker := range markers {
+			at, err := time.Parse(time.RFC3339, marker.DispatchedAt)
+			if err != nil {
+				continue
+			}
+			if start.IsZero() || at.Before(start) {
+				start = at
+			}
 		}
 	}
-	return out
+	if start.IsZero() {
+		return nil
+	}
+	end := src.Now
+	if stopped, ok := runEndedAt(src, recs); ok && stopped.Before(end) {
+		end = stopped
+	}
+	if end.Before(start) {
+		return nil
+	}
+	elapsed := int64(end.Sub(start).Round(time.Second).Seconds())
+	return &elapsed
+}
+
+// endedRunReason is the sentence and the moment the run's own ending stated:
+// the terminal checkpoint's own reason and updated_at, else the terminal
+// line's own detail and its own stamp. The state word the ending was
+// classified by is cut from the front of whichever sentence it leads, so
+// the wait words it once — the sentence is the run's own either way. Both
+// empty when neither record states them — a reason nobody wrote is never
+// invented.
+func endedRunReason(src Sources, recs Records, ending string) (string, string) {
+	if recs.Checkpoint != nil && recs.Checkpoint.State.Terminal() {
+		return strings.TrimSpace(strings.TrimPrefix(recs.Checkpoint.Reason, ending+":")),
+			recs.Checkpoint.UpdatedAt
+	}
+	if line := lastTerminalLine(src.Feed); line != nil {
+		reason := strings.TrimSpace(strings.TrimPrefix(line.Detail, ending+":"))
+		return reason, line.At
+	}
+	return "", ""
+}
+
+// runEndedAt answers when the run's own records say it ended. A run's end is
+// its own word, in the order of the authorities: the terminal checkpoint it
+// wrote (the moment of the state change is its own updated_at), else its own
+// terminal line — run_finished or run_died — when no resume stands after it
+// in the feed, because the feed is append-only per run id and a resumed run
+// still carries its previous incarnation's terminal line as history. No
+// end is answered for a run whose records state none: a run that died
+// without a word has an end nobody measured, and an elapsed nobody measured
+// is an elapsed nobody prints.
+func runEndedAt(src Sources, recs Records) (time.Time, bool) {
+	if recs.Checkpoint != nil && recs.Checkpoint.State.Terminal() {
+		if at, err := time.Parse(time.RFC3339, recs.Checkpoint.UpdatedAt); err == nil {
+			return at, true
+		}
+	}
+	terminal := lastTerminalLine(src.Feed)
+	if terminal == nil {
+		return time.Time{}, false
+	}
+	at, err := time.Parse(time.RFC3339, terminal.At)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return at, true
 }
 
 // buildWaves lays the epic out as the tracker itself layers it, with every
-// tick's state from the durable records. The wave states are derived, not
-// stored: a wave is done when every tick in it is closed, and the first
-// wave that is not done is the frontier the run works on.
-func buildWaves(src Sources, recs Records, absorbed map[string]bool) (*[]Wave, Progress) {
+// tick's state from the durable records of every run that worked the epic:
+// the subject run's own where it has one, the chronologically last run that
+// touched the tick where it does not, the tracker's closed status behind
+// them both. The wave
+// states are derived, not stored: a wave is done when every tick in it is
+// closed, and the first wave that is not done is the frontier the run works
+// on. Duplicates — ticks closed as the duplicate of another — get rows like
+// any tick, but no place in the progress counts: they are not work the epic
+// still owes.
+func buildWaves(src Sources, merged *mergedRuns, absorbed map[string]bool) (*[]Wave, Progress) {
 	progress := Progress{}
 	if src.Graph == nil || len(src.Graph.Waves) == 0 {
 		return nil, progress
 	}
 
-	// The checkpoint's own tick states, by id.
-	states := map[string]runstate.TickState{}
-	if recs.Checkpoint != nil {
-		for _, ts := range recs.Checkpoint.Ticks {
-			states[ts.TickID] = ts
-		}
-	}
-	// The attempt markers grouped per tick: the dispatches that happened.
-	attemptsByTick := map[string][]runstate.Attempt{}
-	for _, a := range recs.Attempts {
-		attemptsByTick[a.TickID] = append(attemptsByTick[a.TickID], a)
-	}
 	// The gate evidence grouped per (tick, attempt): what each try produced.
+	// The owner run's evidence only — attempt numbers are per run.
 	evidenceByTry := map[string][]runstate.Evidence{}
-	for _, e := range recs.Evidence {
-		if e.Provenance.TickID == nil || e.Provenance.Attempt == nil {
-			continue
+	for _, evidence := range merged.evidence {
+		for _, e := range evidence {
+			if e.Provenance.TickID == nil || e.Provenance.Attempt == nil {
+				continue
+			}
+			key := fmt.Sprintf("%s#%d", *e.Provenance.TickID, *e.Provenance.Attempt)
+			evidenceByTry[key] = append(evidenceByTry[key], e)
 		}
-		key := fmt.Sprintf("%s#%d", *e.Provenance.TickID, *e.Provenance.Attempt)
-		evidenceByTry[key] = append(evidenceByTry[key], e)
 	}
-	// Which (tick, attempt) pairs still stand: the census's own answer.
+	// Which (tick, attempt) pairs still stand: the census's own answer. The
+	// census is the subject run's; another run's attempts never stand here.
 	standing := map[string]bool{}
 	for _, a := range src.Standing {
 		standing[fmt.Sprintf("%s#%d", a.TickID, a.Attempt)] = true
@@ -235,15 +396,20 @@ func buildWaves(src Sources, recs Records, absorbed map[string]bool) (*[]Wave, P
 		wave := Wave{Wave: w.Wave, Ticks: []Tick{}}
 		waveDone := true
 		for _, task := range w.Tasks {
-			state, attempt := tickStateOf(task, states)
-			t := buildTick(src, task, state, attempt, attemptsByTick[task.ID],
-				evidenceByTry, standing, absorbed[task.ID])
+			state, attempt, owner := merged.stateOf(task)
+			t := buildTick(src, merged, task, state, attempt, owner, absorbed[task.ID],
+				evidenceByTry, standing)
+			t.DuplicateOf = duplicateOf(task)
 			if t.State != tickClosed {
+				// A duplicate that is not closed is a dedup the epic has not
+				// done yet: it is still work, and it holds the wave open.
 				waveDone = false
 			}
-			tickProgress.Total++
-			if t.State == tickClosed {
-				tickProgress.Closed++
+			if t.DuplicateOf == nil {
+				tickProgress.Total++
+				if t.State == tickClosed {
+					tickProgress.Closed++
+				}
 			}
 			wave.Ticks = append(wave.Ticks, t)
 		}
@@ -265,32 +431,17 @@ func buildWaves(src Sources, recs Records, absorbed map[string]bool) (*[]Wave, P
 	return &waves, progress
 }
 
-// tickStateOf reads one tick's state and current attempt from the durable
-// records: the checkpoint's own row where it has one, the tracker's closed
-// status where it does not. A tick the checkpoint never mentioned is ready —
-// the run has not touched it.
-func tickStateOf(task tk.GraphTask, states map[string]runstate.TickState) (string, *int) {
-	if ts, ok := states[task.ID]; ok {
-		if ts.Attempt > 0 {
-			attempt := ts.Attempt
-			return ts.State, &attempt
-		}
-		return ts.State, nil
-	}
-	if task.Status == "closed" {
-		return tickClosed, nil
-	}
-	return tickReady, nil
-}
-
 // buildTick assembles one tick's whole entry: state, try history, the
-// current attempt's provenance and its elapsed time.
-func buildTick(src Sources, task tk.GraphTask, state string, attempt *int, attempts []runstate.Attempt,
-	evidenceByTry map[string][]runstate.Evidence, standing map[string]bool, absorbed bool) Tick {
+// current attempt's provenance and its elapsed time — read from the LAST
+// run that has records for the tick, never across runs (attempt numbers are
+// per run, so the same number in two runs names two dispatches).
+func buildTick(src Sources, merged *mergedRuns, task tk.GraphTask, state string, attempt *int, owner int,
+	absorbed bool, evidenceByTry map[string][]runstate.Evidence, standing map[string]bool) Tick {
 
 	t := Tick{
 		TickID:   task.ID,
 		Title:    task.Title,
+		Gloss:    task.Gloss,
 		Role:     task.Role,
 		State:    state,
 		Absorbed: absorbed,
@@ -298,7 +449,7 @@ func buildTick(src Sources, task tk.GraphTask, state string, attempt *int, attem
 	}
 
 	// The dispatches that happened, in order — the try history's spine.
-	sort.Slice(attempts, func(i, j int) bool { return attempts[i].Attempt < attempts[j].Attempt })
+	attempts := merged.markersOf(task.ID)
 	numbers := make([]int, 0, len(attempts))
 	byNumber := map[int]runstate.Attempt{}
 	for _, a := range attempts {
@@ -306,8 +457,8 @@ func buildTick(src Sources, task tk.GraphTask, state string, attempt *int, attem
 		byNumber[a.Attempt] = a
 	}
 
-	// The current attempt: the checkpoint's own row names it; a tick the
-	// checkpoint no longer mentions keeps its highest recorded dispatch.
+	// The current attempt: the owning run's own row names it; a tick the
+	// owning run no longer mentions keeps its highest recorded dispatch.
 	current := 0
 	if attempt != nil {
 		current = *attempt
@@ -318,7 +469,7 @@ func buildTick(src Sources, task tk.GraphTask, state string, attempt *int, attem
 	for rank, n := range numbers {
 		outcome := tryOutcome(state, current, n,
 			evidenceByTry[fmt.Sprintf("%s#%d", task.ID, n)],
-			standing[fmt.Sprintf("%s#%d", task.ID, n)] && n == current)
+			standing[fmt.Sprintf("%s#%d", task.ID, n)])
 		t.Tries = append(t.Tries, Try{
 			Try:          rank + 1,
 			Attempt:      n,
@@ -333,14 +484,36 @@ func buildTick(src Sources, task tk.GraphTask, state string, attempt *int, attem
 		t.Attempt = &current
 		if a, ok := byNumber[current]; ok {
 			t.Tier, t.Model, t.Executor = a.Provenance.Tier, a.Provenance.Model, a.Provenance.Executor
+			// Elapsed measures a LIVE attempt only: the subject run's own
+			// in-flight work, or an attempt the census says stands. An
+			// attempt whose run is not the subject's — a run this surface
+			// does not watch — is history, and a duration from its stamp to
+			// now would be a countdown nobody asked for.
 			if at, err := time.Parse(time.RFC3339, a.DispatchedAt); err == nil &&
-				isLive(state, standing[fmt.Sprintf("%s#%d", task.ID, current)]) {
+				isLiveAttempt(state, owner, merged.subjectRun(), standing[fmt.Sprintf("%s#%d", task.ID, current)]) {
 				elapsed := int64(src.Now.Sub(at).Round(time.Second).Seconds())
 				t.ElapsedSeconds = &elapsed
 			}
 		}
 	}
 	return t
+}
+
+// isLiveAttempt says whether the tick's current attempt is one the epic is
+// still working: an attempt the subject run's census says stands, or one
+// the SUBJECT run dispatched or reported while it is not over. A state
+// the subject run wrote is that run's own present tense; the same state in
+// another run's records is history — that run's attempt is not live here,
+// whatever its own census would have said when it ran (tick c9n: the
+// subject is not necessarily the chronologically newest run).
+func isLiveAttempt(state string, owner, subject int, stands bool) bool {
+	if stands {
+		return true
+	}
+	if owner != subject {
+		return false
+	}
+	return state == tickDispatched || state == tickReported
 }
 
 // rankOf is a dispatch number's try rank among the numbers the records show
@@ -354,13 +527,6 @@ func rankOf(n int, numbers []int) int {
 		}
 	}
 	return len(numbers) + 1
-}
-
-// isLive says whether the tick's current attempt is one the run is still
-// working: the checkpoint's state says dispatched or reported, or a standing
-// worktree answers for it.
-func isLive(state string, stands bool) bool {
-	return stands || state == tickDispatched || state == tickReported
 }
 
 // tryOutcome resolves one dispatch's outcome from the durable records
@@ -456,27 +622,6 @@ func buildWorkers(src Sources, recs Records) *[]Worker {
 	return &workers
 }
 
-// buildHealth counts the run's own typed statements about its health — the
-// remote retries, the interventions it resumed by itself, the stall
-// warnings, the wall clock firings. Counts of lines, never parses of prose.
-func buildHealth(feed []runfeed.Event) Health {
-	h := Health{}
-	for _, e := range feed {
-		switch e.Stage {
-		case reconcile.StageRemoteRetried:
-			h.RemoteRetries++
-		case reconcile.StageResumedAutomatically:
-			h.Interventions++
-		case reconcile.StageStallWarned:
-			h.StallWarnings++
-		case reconcile.StageWallClock:
-			h.WallClocksFired++
-		}
-	}
-	h.Pushes, h.PeakPushesPerMinute, h.GitHubErrors = PushHealth(feed)
-	return h
-}
-
 // PushHealth counts a run's pushes, its peak pushes in any sixty seconds and
 // its GitHub errors by class, from the typed lines the push queue and the
 // remote runners wrote (tick rlp). A line whose time does not parse counts
@@ -516,9 +661,10 @@ func PushHealth(feed []runfeed.Event) (pushes, peak int, errs GitHubErrors) {
 	return pushes, peak, errs
 }
 
-// buildGates carries the run's gate evidence per check per head, keyed by the
-// SOURCE the check ran on — the rule the gate's own evidence learned the
-// hard way (a run writes .ticfac/ to the branch it gates).
+// buildGates carries the epic's gate evidence per check per head, merged
+// per tick across runs — keyed by the SOURCE the check ran on, the rule the
+// gate's own evidence learned the hard way (a run writes .ticfac/ to the
+// branch it gates).
 func buildGates(evidence []runstate.Evidence) []Gate {
 	gates := []Gate{}
 	for _, e := range evidence {
@@ -559,26 +705,6 @@ func buildCI(input *CIInput) *CI {
 		checks = []CheckState{}
 	}
 	return &CI{State: input.State, PR: input.PR, Checks: checks}
-}
-
-// buildCost sums what the records state about money: the decision records'
-// own usage, the only cost any record carries. The basis names the coverage
-// so the number cannot quietly claim more than the records do.
-func buildCost(recs Records) Cost {
-	cost := Cost{
-		Attempts: len(recs.Attempts),
-		Basis:    "usage recorded on decision records; worker jobs record no cost",
-	}
-	for _, d := range recs.Decisions {
-		usage, ok := d.Response["usage"].(map[string]any)
-		if !ok {
-			continue
-		}
-		if usd, ok := usage["cost_usd"].(float64); ok {
-			cost.RecordedUSD += usd
-		}
-	}
-	return cost
 }
 
 // buildLifecycle derives where the epic stands, and each phase's state, from
@@ -654,12 +780,12 @@ func buildLifecycle(src Sources, recs Records, m Model) Lifecycle {
 	}
 
 	lifecycle := Lifecycle{Phases: phases}
-	switch {
-	case recs.Checkpoint != nil && recs.Checkpoint.State == "failed":
+	switch ending := runEnding(src, recs); {
+	case ending == endFailed:
 		lifecycle.Phase = PhaseFailed
-	case recs.Checkpoint != nil && recs.Checkpoint.State == "cancelled":
+	case ending == endCancelled:
 		lifecycle.Phase = PhaseCancelled
-	case runCompleted(src, recs):
+	case ending == endCompleted:
 		// The run's own work is finished. What is left is the person's: the
 		// merge while the PR stands open, and nothing once it is gone.
 		if mergeState == PhaseStateActive {
@@ -668,6 +794,11 @@ func buildLifecycle(src Sources, recs Records, m Model) Lifecycle {
 			lifecycle.Phase = PhaseDone
 		}
 	default:
+		// A run that has not ended by its own word — going, dead without a
+		// terminal word, or ended by the factory's own "stopped" word, an
+		// ending that is no phase of the epic's: the phase is where the
+		// EPIC stands (tick jkb), never a terminal answer the run did not
+		// write.
 		for _, p := range phases {
 			if p.State != PhaseStateDone {
 				lifecycle.Phase = p.Phase
@@ -746,27 +877,103 @@ func latestStage(feed []runfeed.Event, tickID, stage string) *runfeed.Event {
 	return latest
 }
 
-// runCompleted says whether the run's own records say it finished: the
-// checkpoint's terminal completion, or its own run_finished line. The
-// feed's own LAST run_finished line is the run's word, and only its word
-// (tick bkg): a failed run is resumable under the same run id, so a resumed
-// run's feed still carries the failed incarnation's run_finished, and ANY
-// line would read a run that stopped failed and just began again as
-// finished — surfacing a person's merge wait for work that is still going.
-// The reconciler writes the line's detail LED by the runstate word it
-// checkpointed ("failed: the integrated gate refused ...", "completed:
-// every tick closed ..."), the same authority `ticfac watch`'s own
-// ended-failed question reads, so a line that names a failure is an ending
-// that is not a completion.
+// The run's own ending vocabulary, as its durable records spell it: the
+// state word a terminal checkpoint leads with, or the one a terminal feed
+// line leads with. Empty is "no end stated" — a run that is going, or one
+// whose ending nobody recorded (tick jkb). The words overlap runstate's
+// own closed vocabulary, and the one that does not — "stopped" — is the
+// cloud factory's own word for a deliberate stop, the same word its
+// finalize writes to the run_finished stage every surface reads.
+const (
+	endCompleted = string(runstate.StateCompleted)
+	endFailed    = string(runstate.StateFailed)
+	endCancelled = string(runstate.StateCancelled)
+	endStopped   = "stopped"
+)
+
+// runEnding answers how the run's own records say it ended, by the order of
+// the authorities: the terminal checkpoint it wrote, else its own terminal
+// line — run_finished or run_died — when no resume stands after it in the
+// feed, because the feed is append-only per run id and a resumed run still
+// carries its previous incarnation's terminal line as history (the same
+// position rule runEndedAt holds). The line's DETAIL is classified by the
+// state word it leads with — the vocabulary the reconciler and the factory
+// both write, never prose to parse. A detail no closed word leads is no
+// end stated: the OLD rule read any run_finished not naming a failure as a
+// completion, and the factory's "stopped: …" line made every
+// operator-stopped run a finished one — phase done, merge done, a healthy
+// verdict and an ETA beside 33 open ticks (tick jkb). An ending is now a
+// POSITIVE reading of the run's own word.
+func runEnding(src Sources, recs Records) string {
+	if recs.Checkpoint != nil && recs.Checkpoint.State.Terminal() {
+		switch recs.Checkpoint.State {
+		case runstate.StateCompleted:
+			return endCompleted
+		case runstate.StateFailed:
+			return endFailed
+		case runstate.StateCancelled:
+			return endCancelled
+		}
+	}
+	line := lastTerminalLine(src.Feed)
+	if line == nil {
+		return ""
+	}
+	return classifyEnding(line.Stage, line.Detail)
+}
+
+// lastTerminalLine is the run's own last terminal word that no resume
+// answered — the position rule itself lives in runfeed.StandingTerminal,
+// shared with the WRITER: the incarnation that resumes over a standing
+// terminal line asks this same question to decide whether to state itself
+// (tick 7l6), and a reader and a writer each holding their own copy of the
+// rule is exactly the drift that left a restarted live run reading as its
+// previous incarnation's death.
+func lastTerminalLine(feed []runfeed.Event) *runfeed.Event {
+	return runfeed.StandingTerminal(feed)
+}
+
+// classifyEnding reads the state word a terminal line leads with — the same
+// closed vocabulary `ticfac watch`'s own ended classifiers read, so no two
+// surfaces answer one ending with different words. A death (run_died) is
+// the failed class unless its line carries the cancelled word (a person's
+// SIGINT, tick vqc); run_finished carries the reconciler's own state words,
+// the resume path's "the run is already <state>: …" replays, and the
+// factory's "stopped:". A line no closed word leads states no ending.
+func classifyEnding(stage, detail string) string {
+	switch stage {
+	case reconcile.StageRunDied:
+		if strings.HasPrefix(detail, endCancelled+":") {
+			return endCancelled
+		}
+		return endFailed
+	case reconcile.StageRunFinished:
+		switch {
+		case strings.HasPrefix(detail, endFailed+":"),
+			strings.HasPrefix(detail, "the run is already "+endFailed+":"):
+			return endFailed
+		case strings.HasPrefix(detail, endCancelled+":"),
+			strings.HasPrefix(detail, "the run is already "+endCancelled+":"):
+			return endCancelled
+		case strings.HasPrefix(detail, endStopped+":"):
+			return endStopped
+		case strings.HasPrefix(detail, endCompleted+":"),
+			strings.HasPrefix(detail, "the run is already "+endCompleted+":"):
+			return endCompleted
+		}
+	}
+	return ""
+}
+
+// runCompleted says whether the run's own records say it finished its work:
+// the ending word "completed", by the derivation above. The feed's own LAST
+// terminal line is the run's word, and only its word (tick bkg): a failed
+// run is resumable under the same run id, so a resumed run's feed still
+// carries the failed incarnation's ending, and ANY line would read a run
+// that stopped failed and just began again as finished — surfacing a
+// person's merge wait for work that is still going.
 func runCompleted(src Sources, recs Records) bool {
-	if recs.Checkpoint != nil && recs.Checkpoint.State == "completed" {
-		return true
-	}
-	last := latestStage(src.Feed, "", reconcile.StageRunFinished)
-	if last == nil {
-		return false
-	}
-	return !strings.HasPrefix(last.Detail, string(runstate.StateFailed)+":")
+	return runEnding(src, recs) == endCompleted
 }
 
 // buildWaits states what the run is blocked on, and everything a person must
@@ -775,7 +982,7 @@ func runCompleted(src Sources, recs Records) bool {
 // a person's by design, the close-out's CI gate, and the ordinary wait on
 // live workers. The attention list carries every person-needing fact beside
 // it, findings triage included.
-func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
+func buildWaits(src Sources, recs Records, m Model, priorHolds []PriorHold) (*Wait, []Attention) {
 	attention := []Attention{}
 	claim := func(w Wait) {
 		if m.WaitsOn == nil {
@@ -785,6 +992,25 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 			attention = append(attention, Attention(w))
 		}
 	}
+	// The run id the current run's own store lives at: the id its durable
+	// records were written under, falling back to the id the surface names
+	// when the records name none. This is the store the run's untriaged
+	// findings settle in — the same derivation the prior-runs half reads
+	// from each holding run's checkpoint (tick z3p) — and NOT always the id
+	// the surface names: a cloud run is addressed by the factory's run_<hex>
+	// (tick ulw) and writes its records under that same id, so the bare
+	// triage command's default (the local spelling epic-<epic-id>) names a
+	// store a cloud run never wrote (tick q8m). A run whose records were
+	// read under an older layout's epic spelling is addressed by that
+	// spelling — the spelling its store actually lives at.
+	ownRunID := m.RunID
+	if recs.Checkpoint != nil && recs.Checkpoint.RunID != "" {
+		ownRunID = recs.Checkpoint.RunID
+	}
+
+	// The run's own ending word, computed once for every wait below to
+	// read: one derivation, never two that could disagree (tick jkb).
+	ending := runEnding(src, recs)
 
 	// A run whose process is gone without its own terminal record: nothing
 	// advances it, and only a person can say whether it resumes. The
@@ -794,8 +1020,11 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 	// checkout that cannot read that record fails to hold. Without this, the
 	// factory's finished runs — the ones this checkout holds no run state
 	// for at all, because they belong to other projects — were every one of
-	// them "dead" on the surface that aggregates every run (tick 2qz).
-	if !src.Liveness.Alive && !runTerminal(recs) && !livenessNamesAnEnd(src.Liveness.State) {
+	// them "dead" on the surface that aggregates every run (tick 2qz). A
+	// run whose own ending IS stated — failed, stopped — is not this
+	// wait's either: the ended-run wait below words the same stop from the
+	// ending's own sentence, never twice over one ending.
+	if !src.Liveness.Alive && ending == "" && !livenessNamesAnEnd(src.Liveness.State) {
 		w := Wait{
 			Kind:        WaitDeadRun,
 			What:        fmt.Sprintf("run %s is %s: %s", m.RunID, src.Liveness.State, src.Liveness.Reason),
@@ -804,9 +1033,9 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 		// The resume is named by the host the run lives on (tick gtk): a
 		// cloud run's is a new submission to its factory — run --cloud —
 		// because run-epic here would restart the epic LOCALLY, in the
-		// foreground, on the machine that happens to be reading.
-		unblock := ResumeCommand(m.Host, m.EpicID)
-		w.UnblockCommand = &unblock
+		// foreground, on the machine that happens to be reading. An epic
+		// the model cannot state names no command (tick mwt).
+		w.UnblockCommand = commandOrNil(ResumeCommand(m.Host, m.EpicID))
 		claim(w)
 	}
 
@@ -817,8 +1046,8 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 	// already settled by resuming the run must not read as standing — the
 	// same rule the watch's subscription start made for lines (tick usx),
 	// stated here once for every surface that renders the model.
-	if held := latestStage(src.Feed, "", reconcile.StageRunHeld); held != nil &&
-		!holdSettledByAResume(src.Feed) {
+	if holds := unansweredHolds(src.Feed); len(holds) > 0 {
+		held := holds[len(holds)-1]
 		w := Wait{
 			Kind:        WaitHeldForPerson,
 			What:        held.Detail,
@@ -826,25 +1055,97 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 		}
 		since := held.At
 		w.Since = &since
-		// The command is named by WHAT the run is holding, not by the line's
-		// own shape (tick gtk): the close-out's untriaged-findings hold is
-		// cleared by triage — settle releases an attempt, and this hold
-		// holds a person's decision about findings, not an attempt; the
-		// close-out's unconfirmed-amendments hold is cleared the same way,
-		// by the amendments surface (tick 7sn). Every other hold is the
-		// settle command the run-wide dispatch number addresses — the same
+		// The command is named by WHAT the run is holding, one decision per
+		// hold kind (tick gf0, the same decision the watch's hold alert and
+		// the rows' next steps read): the close-out's untriaged-findings hold
+		// and the absorption bound's are cleared by the triage addressed to
+		// the run's own store (tick q8m) — settle releases an attempt, and
+		// these holds hold a person's decision, not one; the close-out's
+		// unconfirmed-amendments hold by the amendments surface (tick 7sn),
+		// for the same reason; the holds about the
+		// world — the width, a foreign claim — by the run again, addressed by
+		// the host (tick gtk), because they fire before the tick's first
+		// dispatch, end when the world does, and no release clears them; the
+		// final-review hold by the same run again (tick quz), because although
+		// it fires after the close-out's dispatch and its line carries that
+		// attempt, releasing it clears nothing — the hold is the review's
+		// NOT READY verdict on the PR, which a resume re-reads, and the
+		// refusal's own moves (fix and run again, merge the PR by hand, close
+		// it) end at a resume or never need the run again; every other hold is
+		// the settle command the run-wide dispatch number addresses — the same
 		// sentence `ticfac watch` prints.
-		if strings.HasPrefix(held.Detail, reconcile.RefusedFindingUntriaged+":") {
-			unblock := TriageCommand(m.EpicID)
-			w.UnblockCommand = &unblock
-		} else if strings.HasPrefix(held.Detail, reconcile.RefusedEpicAmendmentUnconfirmed+":") {
-			unblock := AmendmentsCommand(m.EpicID)
-			w.UnblockCommand = &unblock
-		} else if held.TickID != nil && held.Attempt != nil {
-			unblock := fmt.Sprintf("ticfac settle %s %s %d --release \"<who>\"", m.EpicID, *held.TickID, *held.Attempt)
-			w.UnblockCommand = &unblock
+		if command := HoldClearingCommand(m.EpicID, m.Host, ownRunID, m.RunID, held); command != nil {
+			w.UnblockCommand = command
 		}
 		claim(w)
+	}
+
+	// Prior runs' holds (tick z3p), answered by standingPriorHolds — the
+	// same function decorateTicks handed the pipeline index, so the header
+	// and the rows cannot disagree about which hold stands and what clears
+	// it (tick eli). This loop only words the waits the answer carries.
+	for _, held := range priorHolds {
+		w := Wait{
+			Kind:        WaitHeldForPerson,
+			NeedsPerson: true,
+		}
+		if held.TickID != "" {
+			w.What = fmt.Sprintf("run %s held %s for a person: %s", held.RunID, held.TickID, held.Event.Detail)
+		} else {
+			w.What = fmt.Sprintf("run %s held for a person: %s", held.RunID, held.Event.Detail)
+		}
+		since := held.Event.At
+		w.Since = &since
+		if command := priorHoldCommand(m.EpicID, m.Host, held); command != nil {
+			w.UnblockCommand = command
+		}
+		claim(w)
+	}
+
+	// A run that ended by its own word and is not going — it failed, or the
+	// factory stopped it — holds one thing only: the resume, a person's
+	// decision nothing makes for them (tick jkb). The dead-run wait below
+	// once starved exactly these runs: runTerminal exempted a failed run on
+	// the grounds that its own word was terminal, and the frame said "needs
+	// you: nothing" beside a stopped verdict for an epic only a person can
+	// start again. The wait lands AFTER the holds, current and prior: a
+	// standing hold is the harder stop, the same rule the rows' next steps
+	// hold — a resume replays a hold rather than clearing it — and the
+	// needs-you list carries both entries either way. A cancelled run is
+	// deliberately quiet (its own terminal answer stands), and a completed
+	// one waits on the merge below.
+	//
+	// The wait is stated only where this checkout could read the run's own
+	// durable records (a checkpoint it holds, terminal or not — the same
+	// boundary the dead-run wait's liveness exemption holds for a foreign
+	// cloud run): the command it names is one THIS checkout types, and a run
+	// whose records live on another project's origin is not this checkout's
+	// to resume — the ending is still stated (the phase, the verdict), but
+	// no wait of this repo's commands may claim a person for it.
+	if !src.Liveness.Alive {
+		if recs.Checkpoint != nil && (ending == endFailed || ending == endStopped) {
+			reason, since := endedRunReason(src, recs, ending)
+			w := Wait{Kind: WaitDeadRun, NeedsPerson: true}
+			switch {
+			case reason == "" && ending == endFailed:
+				w.What = fmt.Sprintf("run %s failed", m.RunID)
+			case reason == "":
+				w.What = fmt.Sprintf("run %s is stopped", m.RunID)
+			case ending == endFailed:
+				w.What = fmt.Sprintf("run %s failed: %s", m.RunID, reason)
+			default:
+				w.What = fmt.Sprintf("run %s is stopped: %s", m.RunID, reason)
+			}
+			if since != "" {
+				w.Since = &since
+			}
+			// The resume is named by the host the run lives on (tick gtk): a
+			// cloud run's is a new submission to its factory, because
+			// run-epic here would restart the epic LOCALLY. An epic the
+			// model cannot state names no command (tick mwt).
+			w.UnblockCommand = commandOrNil(ResumeCommand(m.Host, m.EpicID))
+			claim(w)
+		}
 	}
 
 	// A completed run's open PR is the person's to merge.
@@ -881,6 +1182,26 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 
 	// Untriaged findings beside a run that cannot triage them itself: a
 	// person's decision, attention even when something else blocks harder.
+	// EVERY run's drafts, not only the newest run's (tick d23): a run that
+	// died before its close-out raised no run_held line — the hold the
+	// close-out's findings gate would have raised never happened — so its
+	// untriaged drafts are invisible to a block that read only the newest
+	// run's records, although a person's decision about them is standing.
+	// Each prior run's attention names the run, and the triage command is
+	// addressed to IT (TriageCommandForRun): the drafts live in that run's
+	// own records, so they settle in its store, never the one the bare
+	// command's default spells — and they are a question regardless of the
+	// newest run's liveness, because a prior run cannot triage its own
+	// drafts whatever the newest run is doing.
+	//
+	// A finding is one record across runs, keyed by content, so the copies
+	// dedupe NEWEST-FIRST: a key a newer run's records carry — adopted into
+	// the live run's own store, or decided, its decision standing — answers
+	// for every older run's copy of it, and the older copy is history. The
+	// newest run's own drafts stay the newest run's question, asked only
+	// when it can no longer triage them itself: while it runs, they are its
+	// own close-out's to decide or hold.
+	seen := map[string]bool{}
 	if !src.Liveness.Alive {
 		untriaged, earliest := 0, ""
 		for _, f := range recs.Findings {
@@ -905,13 +1226,183 @@ func buildWaits(src Sources, recs Records, m Model) (*Wait, []Attention) {
 			// The command that settles the findings, not the one that only
 			// lists them (tick gtk): `ticfac findings` walks away having
 			// changed nothing, and a person following it finds the close-out
-			// still held.
-			unblock := TriageCommand(m.EpicID)
-			w.UnblockCommand = &unblock
+			// still held. Addressed to the run's own store (tick q8m): the
+			// drafts live where the run's records were written. An epic the
+			// model cannot state names no command (tick mwt).
+			w.UnblockCommand = commandOrNil(TriageCommandForCurrentRun(m.EpicID, ownRunID))
 			attention = append(attention, Attention(w))
 		}
 	}
+	for _, f := range recs.Findings {
+		seen[f.Key] = true
+	}
+	for i := len(src.PriorRecords) - 1; i >= 0; i-- {
+		prior := src.PriorRecords[i]
+		// A run whose records name no run id cannot be triaged and answers
+		// for no other run's copy: there is no command to spell for it, and
+		// an unnamed word settles nothing.
+		if prior.Checkpoint == nil || prior.Checkpoint.RunID == "" {
+			continue
+		}
+		untriaged, earliest := 0, ""
+		for _, f := range prior.Findings {
+			if f.Status == runstate.FindingProposed && !seen[f.Key] {
+				untriaged++
+				if earliest == "" || (f.ProposedAt != "" && f.ProposedAt < earliest) {
+					earliest = f.ProposedAt
+				}
+			}
+		}
+		if untriaged > 0 {
+			w := Wait{
+				Kind: WaitFinding,
+				What: fmt.Sprintf("run %s has %d untriaged finding(s) awaiting triage",
+					prior.Checkpoint.RunID, untriaged),
+				NeedsPerson: true,
+			}
+			if earliest != "" {
+				since := earliest
+				w.Since = &since
+			}
+			// The triage addressed to the holding run's own store: the
+			// drafts are that run's records, and the bare command's default
+			// spells this run's — the same address rule the prior holds
+			// keep (z3p). An epic the model cannot state names no command
+			// (tick mwt).
+			w.UnblockCommand = commandOrNil(TriageCommandForRun(m.EpicID, prior.Checkpoint.RunID))
+			attention = append(attention, Attention(w))
+		}
+		for _, f := range prior.Findings {
+			seen[f.Key] = true
+		}
+	}
 	return m.WaitsOn, attention
+}
+
+// PriorHold is one prior run's hold that still stands: the run that holds,
+// the tick it holds (empty for a hold the run left on itself, which no row
+// can carry), and the run_held line itself — the record the wait's words and
+// its clearing command read.
+type PriorHold struct {
+	RunID  string
+	TickID string
+	Event  runfeed.Event
+}
+
+// standingPriorHolds answers which of the prior runs' holds still stand, by
+// the same rules the waits have always applied them (tick z3p): a hold an
+// earlier run left — an attempt struck out for a person, findings nobody
+// triaged — stands until somebody answers it, and the newest run's own feed
+// says nothing about whether anyone did. A newest run that failed at boot
+// writes no run_held line of its own, so without this a person's decision
+// that is actually standing answers "nothing needs you". The records say the
+// tick was rejected; only the FEED says the run held it FOR A PERSON — so
+// the answer reads each prior run's feed the same way it reads the newest
+// run's, newest run first: the newest unanswered word about a tick's held
+// state is the live one, and a hold behind it (an earlier run's, or an older
+// line of the same run's) is history. Per tick, one hold: the last one the
+// run left unanswered.
+//
+// The answer is computed ONCE and given to both of its readers — buildWaits,
+// which words the header's needs-you entries from it, and the pipeline
+// index, which lets a standing hold outrank the generic non-newest-owner
+// resume line in a try's next step (tick eli) — so the two surfaces are two
+// renderings of one derivation, never two derivations that can drift.
+// stateOf is the merged tick state (mergedStateOf's answer): the epic having
+// moved past a tick closes any hold on it.
+func standingPriorHolds(src Sources, stateOf func(string) string) []PriorHold {
+	holds := []PriorHold{}
+	// Which ticks the newest run's own feed speaks of — it dispatched, held
+	// or saw the attempt settled. Its word about a tick is the live one.
+	held := map[string]bool{}
+	for i := range src.Feed {
+		line := &src.Feed[i]
+		if line.TickID == nil {
+			continue
+		}
+		switch line.Stage {
+		case reconcile.StageDispatched, reconcile.StageRedispatched, reconcile.StageRepairDispatched,
+			reconcile.StageRunHeld, reconcile.StageSettled:
+			held[*line.TickID] = true
+		}
+	}
+	for i := len(src.PriorRecords) - 1; i >= 0; i-- {
+		prior := src.PriorRecords[i]
+		if prior.Checkpoint == nil || prior.Checkpoint.RunID == "" {
+			continue
+		}
+		feed := src.PriorFeeds[prior.Checkpoint.RunID]
+		if len(feed) == 0 {
+			continue
+		}
+		// Per tick, the last hold the run left unanswered: a resume standing
+		// after a hold means the run continued past it — the hold it
+		// answered is history (the same position rule the newest run's own
+		// wait reads). An earlier unanswered line of the same tick is
+		// superseded by the later one.
+		byTick := map[string]runfeed.Event{}
+		var order []string
+		for _, hold := range unansweredHolds(feed) {
+			id := ""
+			if hold.TickID != nil {
+				id = *hold.TickID
+			}
+			if _, seen := byTick[id]; !seen {
+				order = append(order, id)
+			}
+			byTick[id] = hold
+		}
+		for _, id := range order {
+			hold := byTick[id]
+			if id != "" {
+				if held[id] {
+					continue
+				}
+				// The epic moved past the hold: the merged records close
+				// the tick, so whatever decision the hold waited on was
+				// made or overtaken.
+				if stateOf(id) == tickClosed {
+					held[id] = true
+					continue
+				}
+				// The person already released the attempt: the settlement
+				// the release recorded, read from the holding run's own
+				// records — the only store a release can land in, since
+				// attempt numbers are per run.
+				if hold.Attempt != nil && settledByRelease(prior.Decisions, id, *hold.Attempt) {
+					held[id] = true
+					continue
+				}
+			}
+			holds = append(holds, PriorHold{RunID: prior.Checkpoint.RunID, TickID: id, Event: hold})
+		}
+		// This run's own words about a tick are newer than any older run's:
+		// a tick it dispatched, held or saw settled is answered or taken up
+		// from here back.
+		for j := range feed {
+			line := &feed[j]
+			if line.TickID == nil {
+				continue
+			}
+			switch line.Stage {
+			case reconcile.StageDispatched, reconcile.StageRedispatched, reconcile.StageRepairDispatched,
+				reconcile.StageRunHeld, reconcile.StageSettled:
+				held[*line.TickID] = true
+			}
+		}
+	}
+	return holds
+}
+
+// priorHoldCommand is the unblock command a standing prior hold carries, in
+// the header's needs-you entry and in the try's next step alike: named by
+// WHAT the run held — the same per-kind decision the newest run's own hold
+// answers with (HoldClearingCommand) — and by WHICH run holds it, because
+// the drafts and the attempt numbers are per run, so the clearing command
+// addresses the holding run, never the run the model answers for. Nil when
+// nothing a command addresses is named.
+func priorHoldCommand(epicID, host string, hold PriorHold) *string {
+	return HoldClearingCommand(epicID, host, hold.RunID, hold.RunID, hold.Event)
 }
 
 // holdSettledByAResume answers whether a resume made the newest run_held
@@ -934,13 +1425,73 @@ func holdSettledByAResume(feed []runfeed.Event) bool {
 	return lastHold >= 0 && lastResume > lastHold
 }
 
-// runTerminal says whether the run's own records say it ended by its own
-// word — the states a run only reaches by writing them.
-func runTerminal(recs Records) bool {
-	if recs.Checkpoint == nil {
-		return false
+// unansweredHolds is every run_held line no resume answers, oldest first:
+// position in the feed is the clock (the file is append-only), so the holds
+// standing after the last resume line are the ones nobody has settled by
+// resuming the run — and everything before it is history. This is the one
+// rule the waits read holds by, for the run's own feed and for a prior
+// run's alike (tick z3p); holdSettledByAResume is its boolean for the
+// newest line alone.
+func unansweredHolds(feed []runfeed.Event) []runfeed.Event {
+	lastResume := -1
+	for i := range feed {
+		switch feed[i].Stage {
+		case reconcile.StageResumed, reconcile.StageResumedAutomatically:
+			lastResume = i
+		}
 	}
-	return recs.Checkpoint.State.Terminal()
+	holds := []runfeed.Event{}
+	for i := lastResume + 1; i < len(feed); i++ {
+		if feed[i].Stage == reconcile.StageRunHeld {
+			holds = append(holds, feed[i])
+		}
+	}
+	return holds
+}
+
+// settledByRelease says whether a person's release answers one (tick,
+// attempt) of the run whose decisions are given: the settlement decision
+// the release recorded, which only ever lands in the holding run's own
+// records — attempt numbers are per run, so a release addressed to another
+// run's number finds no dispatch under it and refuses. The decision's
+// fields are read as FIELDS, never matched in prose (settle.go's own rule),
+// and a JSON number decodes as a float64.
+func settledByRelease(decisions []runstate.Decision, tickID string, attempt int) bool {
+	for _, d := range decisions {
+		if op, _ := d.Request["op"].(string); op != reconcile.SettleOp {
+			continue
+		}
+		if tick, _ := d.Request["tick_id"].(string); tick != tickID {
+			continue
+		}
+		switch value := d.Request["attempt"].(type) {
+		case float64:
+			if int(value) == attempt {
+				return true
+			}
+		case int:
+			if value == attempt {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// mergedStateOf is one tick's state as the merged waves already state it:
+// the newest run's own row where it has one, the last run that touched the
+// tick where it does not, the tracker's closed status behind them both.
+// Empty when no wave named the tick — a tracker that did not read answers
+// nothing, and the hold is then judged without it.
+func mergedStateOf(m Model, tickID string) string {
+	for _, w := range deref(m.Waves) {
+		for _, t := range w.Ticks {
+			if t.TickID == tickID {
+				return t.State
+			}
+		}
+	}
+	return ""
 }
 
 // livenessNamesAnEnd says whether the liveness state IS the run's own
@@ -958,44 +1509,35 @@ func livenessNamesAnEnd(state string) bool {
 }
 
 // buildRemaining estimates the time left ONLY where measured tick durations
-// support it: the median of what closed ticks measurably took (dispatch
-// marker to last gate evidence), times the ticks still open. Fewer than
-// three measured closes support nothing, and the estimate names its basis.
-func buildRemaining(src Sources, recs Records, m Model) *Remaining {
+// support it AND the run is still going: the median of what the epic's
+// closed ticks measurably took — each row's own duration, the last run that
+// touched it, dispatch to gate — times the ticks still open. Fewer than three
+// measured closes support nothing, and the estimate names its basis. A run
+// that ended by its own word supports nothing either (ticks jkb, onv): the
+// estimate is the GOING run's answer to "how long is left", and a run that
+// failed or was stopped will finish nothing in the time it states — an ETA
+// beside "● stopped" is the same lie a phase of done was, read forward. The
+// ending is the one derivation every wait reads ([runEnding]), and the
+// probe's end-word vocabulary ends the promise on its own when the
+// checkpoint lags the end.
+func buildRemaining(src Sources, m Model) *Remaining {
 	if m.Progress.Ticks == nil || m.Progress.Ticks.Open == 0 {
 		return nil
 	}
-	attemptsByKey := map[string]time.Time{}
-	for _, a := range recs.Attempts {
-		if at, err := time.Parse(time.RFC3339, a.DispatchedAt); err == nil {
-			attemptsByKey[fmt.Sprintf("%s#%d", a.TickID, a.Attempt)] = at
-		}
+	recs := Records{}
+	if src.Records != nil {
+		recs = *src.Records
 	}
-	finishedByKey := map[string]time.Time{}
-	for _, e := range recs.Evidence {
-		if e.Provenance.TickID == nil || e.Provenance.Attempt == nil || e.FinishedAt == "" {
-			continue
-		}
-		finished, err := time.Parse(time.RFC3339, e.FinishedAt)
-		if err != nil {
-			continue
-		}
-		key := fmt.Sprintf("%s#%d", *e.Provenance.TickID, *e.Provenance.Attempt)
-		if prior, ok := finishedByKey[key]; !ok || finished.After(prior) {
-			finishedByKey[key] = finished
-		}
+	if runEnding(src, recs) != "" || livenessNamesAnEnd(src.Liveness.State) {
+		return nil
 	}
 	durations := []time.Duration{}
 	for _, w := range deref(m.Waves) {
 		for _, t := range w.Ticks {
-			if t.State != tickClosed || t.Attempt == nil {
+			if t.State != tickClosed || t.DurationSeconds == nil || t.DuplicateOf != nil {
 				continue
 			}
-			started, ok := attemptsByKey[fmt.Sprintf("%s#%d", t.TickID, *t.Attempt)]
-			finished, ok2 := finishedByKey[fmt.Sprintf("%s#%d", t.TickID, *t.Attempt)]
-			if ok && ok2 && finished.After(started) {
-				durations = append(durations, finished.Sub(started))
-			}
+			durations = append(durations, time.Duration(*t.DurationSeconds)*time.Second)
 		}
 	}
 	if len(durations) < 3 {

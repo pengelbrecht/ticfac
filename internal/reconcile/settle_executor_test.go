@@ -1,8 +1,10 @@
 package reconcile
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -125,7 +127,7 @@ func TestADispatchRebuiltFromAMarkerRoutesThroughTheMarkersExecutor(t *testing.T
 	// naming a --profiles the record already implies.
 	marker := attemptHandle{
 		Executor: "herdr", JobID: "epic-6in/823/attempt-9", Attempt: 9, TickID: "823",
-		Role: "review-epic", StateRoot: t.TempDir(),
+		Role: "review-epic", StateRoot: stateWithAttemptRecord(t),
 	}
 	dispatch, err := r.dispatchFor(marker)
 	if err != nil {
@@ -137,7 +139,7 @@ func TestADispatchRebuiltFromAMarkerRoutesThroughTheMarkersExecutor(t *testing.T
 	}
 
 	// And settle's own path asks the factory for THAT executor.
-	_, _, _, _ = r.addressForSettlement(marker)
+	_, _, _, _ = r.addressForSettlement(context.Background(), marker)
 	if len(built) == 0 || built[len(built)-1] != "herdr" {
 		t.Errorf("settle asked the executor factory for %v, want herdr — the executor the marker names", built)
 	}
@@ -159,6 +161,19 @@ func TestADispatchRebuiltFromAMarkerRoutesThroughTheMarkersExecutor(t *testing.T
 			}
 		}
 	}
+}
+
+// stateWithAttemptRecord is a state root this host can find an attempt in:
+// the file every executor's state directory is discovered by
+// (findAttemptState), so the settle path that requires this host to hold the
+// attempt's state — building its executor — reaches the build.
+func stateWithAttemptRecord(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "attempt.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
 }
 
 func mustReadSource(t *testing.T, name string) string {

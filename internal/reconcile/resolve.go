@@ -188,22 +188,21 @@ func (r *Reconciler) resolveConflict(ctx context.Context, marker attemptHandle, 
 					"recorded outcome is %q and its work is on %s (every resolve of this tick since it was last "+
 					"released: %s). A second conflict on the same tick is the stop, as it always was: read the "+
 					"recorded resolve and take its merge by hand, or release the attempt to try the tick again "+
-					"with a fresh resolve — `ticfac settle %s %s %d --release \"<who>\" --carry-work` — and run "+
-					"the epic again",
+					"with a fresh resolve — `%s --carry-work` — and run the epic again",
 				r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, status, branch,
 				describeJobs(append(append([]runstate.Decision{}, ledger.operational...), ledger.spent...),
 					"resolve_branch"),
-				r.opts.EpicID, tick, marker.Attempt)
+				r.settleCommand(tick, marker.Attempt))
 		}
 		if ledger.exhausted() {
 			return "", nil, r.refuse(RefusedMerge, tick,
 				"%s does not merge onto %s (%s) and %d resolve-conflict jobs for this tick failed without "+
 					"delivering a resolution: %s. %d retries after the first is the bound, so the tick is neither "+
 					"resolved nor re-dispatched: read why the jobs did not answer, then release the attempt — "+
-					"`ticfac settle %s %s %d --release \"<who>\" --carry-work` — and run the epic again",
+					"`%s --carry-work` — and run the epic again",
 				r.attemptName(tick, marker.Attempt), r.branch, conflict.Detail, len(ledger.operational),
 				describeJobs(ledger.operational, "resolve_branch"), maxOperationalRetries,
-				r.opts.EpicID, tick, marker.Attempt)
+				r.settleCommand(tick, marker.Attempt))
 		}
 		merged, finalize, retry, err := r.dispatchResolve(ctx, marker, head, epicHead, conflict, baseJobID, ledger)
 		if retry {
@@ -822,9 +821,8 @@ func (r *Reconciler) mintResolveMerge(resolveHead, head, epicHead string, marker
 	if err != nil {
 		return "", fmt.Errorf("read the tree the resolve-conflict job resolved to: %w", err)
 	}
-	message := fmt.Sprintf("Merge the resolve-conflict job's resolution of %s into %s\n\nticfac run %s: tick %s "+
-		"attempt %d conflicted and was resolved by the resolve-conflict job",
-		marker.TickID, r.branch, r.runID, marker.TickID, marker.Attempt)
+	message := fmt.Sprintf("Merge the resolve-conflict job's resolution of %s into %s\n\n%s conflicted and was resolved by the resolve-conflict job",
+		marker.TickID, r.branch, AttemptMergeNeedle(r.runID, marker.TickID, marker.Attempt))
 	merged, err := r.git.run("", "commit-tree", tree, "-p", resolvedOver, "-p", head, "-m", message)
 	if err != nil {
 		return "", fmt.Errorf("mint the merge of the resolve-conflict job's resolution: %w", err)
@@ -850,9 +848,8 @@ func (r *Reconciler) mergeResolutionOnto(resolution, resolvedOver, epicHead stri
 	}
 	defer remove()
 
-	message := fmt.Sprintf("Merge the resolve-conflict job's resolution of %s into %s\n\nticfac run %s: tick %s "+
-		"attempt %d was resolved against %s; %s has moved to %s since, and the resolution is merged onto it",
-		marker.TickID, r.branch, r.runID, marker.TickID, marker.Attempt, short(resolvedOver), r.branch,
+	message := fmt.Sprintf("Merge the resolve-conflict job's resolution of %s into %s\n\n%s was resolved against %s; %s has moved to %s since, and the resolution is merged onto it",
+		marker.TickID, r.branch, AttemptMergeNeedle(r.runID, marker.TickID, marker.Attempt), short(resolvedOver), r.branch,
 		short(epicHead))
 	if stdout, stderr, unmerged, err := r.mergeKeepingReportsOut(dir, message, resolution); err != nil {
 		return "", r.refuse(RefusedMerge, marker.TickID,

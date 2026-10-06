@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 43,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The run's own local classifier calls (typesafe/jev) already route through the operator's AI Gateway — the live logs fill with them while the run is dispatching — but carry no run-id metadata, so they are unattributable in the gateway's logs and can never be joined per run the way dm2 joins the workers' calls. Tagging them (same cf-aig-metadata mechanism) would make the decisions river's spend attributable from the logs too.\nevidence: live gateway logs 2026-10-05T18:0xZ: typesafe/jev rows, success, cost > 0, metadata run_id absent, while the local run is dispatching\n\nticfac run epic-hn6 created this tick by absorbing the finding 4c30b9f3b102abd6fc71a944b1c26f2cfde2f9ba8a26dcbaaeedcb95c63d327f (reported by run-epic-hn6/tick-dm2/attempt-32): the finding was judged against the epic's definition of done and gates done item A4. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/4c30b9f3b102abd6fc71a944b1c26f2cfde2f9ba8a26dcbaaeedcb95c63d327f.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "24u",
+    "title": "the local jev classifier's gateway calls are untagged (run_id None)"
+  },
+  "response": {
+    "choice": "translation",
+    "confidence": 0.39,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.2,
+      "design": 0.01,
+      "diagnosis": 0.04,
+      "mechanical": 0.23,
+      "translation": 0.52
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1343,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-05T19:44:18Z",
+  "answered_at": "2026-10-05T19:44:18Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "24u",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "9150a734afe41243ceb77b0a71fae3b44e30c4f3",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

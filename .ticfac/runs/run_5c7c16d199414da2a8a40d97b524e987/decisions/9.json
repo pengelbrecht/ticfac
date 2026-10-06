@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 9,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "renderTickView/renderTickContent never cut to the pane's width (unlike renderWatchFrame and renderFeedView, which truncate), so a long report summary, try reason or finding title is written to the terminal unbounded. In the live view a line wider than the pane wraps, pushes the block down rows the redraw's cursor arithmetic does not know about, and the next frame draws over the block's own rows — the same corruption family this tick fixed for the dashboard and the kept alerts, one seam over. Verified: a fixture with a 200-cell report summary renders a 200-cell line in an 80-column pane.\nevidence: internal/cli/watch_drill.go:37-108 (renderTickView/renderTickContent: no width truncation; the try lines, report summary, gate rows and finding titles are appended unbounded)\n\nticfac run run_5c7c16d199414da2a8a40d97b524e987 created this tick by absorbing the finding 47b6e6284fae1a71872c116acb40af2aa82666cb0e739f93adf3ce8eda9ba964 (reported by run-run_5c7c16d199414da2a8a40d97b524e987/tick-r3x/attempt-7): the finding was judged against the epic's definition of done and gates done item A3. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/run_5c7c16d199414da2a8a40d97b524e987/absorptions/47b6e6284fae1a71872c116acb40af2aa82666cb0e739f93adf3ce8eda9ba964.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "aro",
+    "title": "Tick drill-in view (enter) renders lines wider than the pane"
+  },
+  "response": {
+    "choice": "translation",
+    "confidence": 0.51,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.08,
+      "design": 0,
+      "diagnosis": 0.16,
+      "mechanical": 0.15,
+      "translation": 0.61
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1468,
+      "output_tokens": 56
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T02:02:36Z",
+  "answered_at": "2026-10-04T02:02:36Z",
+  "provenance": {
+    "run_id": "run_5c7c16d199414da2a8a40d97b524e987",
+    "tick_id": "aro",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "7f13ef5fadb37ebcd915ab237ec0664e831481d0",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:6f1d9cc5e7bfb270c7208df82a8f6bcad971758a662a453659f8b94b74515413",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

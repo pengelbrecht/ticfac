@@ -1,0 +1,14 @@
+{
+  "id": "w12",
+  "title": "cno's tracker-closed demotion ignores a dead run with a 'running' checkpoint",
+  "description": "mergedRuns.stateOf lets an ended run's row give way to the tracker's closed status only when runEnded is true. runEnded reads a terminal checkpoint state alone. A run stopped by a signal or a host death leaves state \"running\" (run_08f5, the case in cno's own evidence). Failing input: an older subject run with a running checkpoint and dead liveness, no later sibling run, and the tick closed in the tracker by a person. The tick reads state=dispatched with pipeline review:active and a growing elapsed time. The live hn6 case reads right only because c9n puts a later run's closed row on top. cno's test uses State \"failed\", a state real stopped runs don't have; with c9n present, removing cno's guard still passes its main subtest. Fix: treat a run with a dead liveness as ended here too, and test with a running checkpoint plus dead liveness.\nevidence: internal/statusmodel/epic.go:237-258\n\nticfac run epic-hn6 filed this backlog tick from the finding 21ccda0228ef9e1843b4076024f4517dc51798f990c36303233e0e9e62b269ea (reported by run-epic-hn6/tick-pv7/attempt-42): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/21ccda0228ef9e1843b4076024f4517dc51798f990c36303233e0e9e62b269ea.json on the run branch.",
+  "notes": "2026-10-06 01:20 - ticfac run epic-hn6: created by absorbing finding 21ccda0228ef9e1843b4076024f4517dc51798f990c36303233e0e9e62b269ea — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-hn6/absorptions/21ccda0228ef9e1843b4076024f4517dc51798f990c36303233e0e9e62b269ea.json on epic/hn6, and it says: the classifier put 0.34 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-pv7/attempt-42",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T23:20:20Z",
+  "updated_at": "2026-10-05T23:20:28.034125Z"
+}

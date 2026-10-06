@@ -468,7 +468,7 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 		// cost — with liveness at the top so the questions an unattended
 		// factory is glanced at with keep their order. The exit code stays
 		// liveness's alone.
-		model := localStatusModel(ctx, *repo, runID, status, modelGatherers{graph: epicGraph, ci: statusCI})
+		model := localStatusModel(ctx, *repo, runID, status, modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost})
 		if err := printStatusModel(stdout, stderr, model); err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
 			return 2
@@ -583,7 +583,7 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 		// unread for it (tick nyi): the model says so in its degraded list.
 		repoProject, _ := cloudProjectOf(repo)
 		model := cloudStatusModel(ctx, client, repo, runID, record, answer, stderr,
-			modelGatherers{graph: epicGraph, ci: statusCI},
+			modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost},
 			cloudRecordBelongsToRepo(repoProject, record.Project))
 		if err := printStatusModel(stdout, stderr, model); err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)

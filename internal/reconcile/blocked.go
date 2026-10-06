@@ -241,9 +241,8 @@ func (r *Reconciler) answerBlocked(ctx context.Context, entry planEntry, marker 
 	return r.refuse(holdReason, tick,
 		"%s answered %s: %s. The question holds for a person because %s. Its work is on %s and is NOT merged, and "+
 			"the tick is NOT closed; the run keeps working every tick that does not wait behind it, and the epic PR "+
-			"lists the question. Answer it on the tick, then release the attempt with `ticfac settle %s %s %d "+
-			"--release \"<who>\" --carry-work` and run the epic again",
-		name, answer.Status, question, why, branchOf(marker.WriteRef), r.opts.EpicID, tick, marker.Attempt)
+			"lists the question. Answer it on the tick, then release the attempt with `%s --carry-work` and run the epic again",
+		name, answer.Status, question, why, branchOf(marker.WriteRef), r.settleCommand(tick, marker.Attempt))
 }
 
 // recordBlockedAnswer lands one stopped worker's answer and the run's step as
@@ -470,16 +469,14 @@ func (r *Reconciler) heldQuestion(entry planEntry, attempts []runstate.Attempt, 
 		// question — a redispatch would only ask it again.
 		return r.refuse(reason, tick,
 			"%s answered %s: %s. The question still holds for a person because %s; it committed nothing. "+
-				"Answer it on the tick, then release the attempt with `ticfac settle %s %s %d --release \"<who>\"` "+
+				"Answer it on the tick, then release the attempt with `%s` "+
 				"and run the epic again",
-			label, blocked.Status, blocked.Question, why, r.opts.EpicID, tick, existing.Attempt)
+			label, blocked.Status, blocked.Question, why, r.settleCommand(tick, existing.Attempt))
 	}
 	return r.refuse(reason, tick,
 		"%s answered %s: %s. The question still holds for a person because %s; its work is on %s (%s) and is "+
-			"NOT merged. Answer it on the tick, then release the attempt with `ticfac settle %s %s %d --release "+
-			"\"<who>\" --carry-work` and run the epic again",
-		label, blocked.Status, blocked.Question, why, branchOf(marker.WriteRef), short(head), r.opts.EpicID, tick,
-		existing.Attempt)
+			"NOT merged. Answer it on the tick, then release the attempt with `%s --carry-work` and run the epic again",
+		label, blocked.Status, blocked.Question, why, branchOf(marker.WriteRef), short(head), r.settleCommand(tick, existing.Attempt))
 }
 
 // closeoutDecidesItself says a close-out's held question is the run's to

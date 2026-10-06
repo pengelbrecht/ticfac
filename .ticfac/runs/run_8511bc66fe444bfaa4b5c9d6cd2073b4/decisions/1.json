@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "[1] decorateTicks fills pipeline, parent_tick_id, duration_seconds, findings and try tier/reason/next_step per the rules in the description; `go test -short -timeout 20m -run 'TestPipeline|TestTheContract' ./internal/statusmodel/` passes all nine cases. [2] A rejected try with a feed line carries its reason, and the last rejected try carries a next step; no reason is invented when no line exists. [3] `make gate` passes.",
+    "description": "Epic hn6, wave 2: fill `decorateTicks` in internal/statusmodel/pipeline.go. It derives each tick's pipeline cell, its parent row, its duration, its findings, and each try's tier, reason and next step. The derivation is PURE and reads only Sources (Graph, Records, Feed) and the Model built so far.\n\nThe fields and their vocabularies were declared by the wave-1 contract tick. Read their doc comments in internal/statusmodel/statusmodel.go (types Tick, Try, PipelineStage) and the \"dashboard\" golden in internal/statusmodel/contract.json before starting. The rules from the hn6 spec this implements:\n- Rule 1: rows never move, and the PIPELINE cell fills left to right (claim ▸ work ▸ gate ▸ merged/closed). Role ticks show their own stages.\n- The first-use bug: \"v7z rejected x\" must show the reason and the next step.\n\nDerivation (feed stage names are the constants in internal/reconcile, e.g. reconcile.StageGateStarted; grep `Stage[A-Z].* = \"` in internal/reconcile):\n- claim: done once any dispatch marker (recs.Attempts) or a `claimed` feed line exists for the tick; else pending.\n- work (and review, for role review): active while the current attempt is in flight (tick state dispatched, or a standing attempt). Done once the tick state is reported, integrated or closed, or a `collected` line exists for the current attempt. Failed when the current try's outcome is rejected with no later dispatch.\n- gate: active after `gate_started`/`gate_running` for the current attempt. Done on `gate_passed`. Failed on `gate_failed`, or on a rejection whose detail begins \"gate_failed\".\n- ci (closeout only): active while the lifecycle phase `ci` is active. Done when the lifecycle marks ci done. Failed when m.CI.State is \"failure\".\n- merged / closed: done when the checkpoint or tracker says closed (or integrated, for merged).\nEvery stage after the first non-done stage is pending. At most one stage is active.\n- parent_tick_id: the graph task's Parent, when it is not the epic itself. Otherwise, for an absorbed tick, the source tick its absorption record names (runstate.Absorption: find the field that names the source; if none does, leave it null). Null otherwise.\n- duration_seconds: from the tick's earliest DispatchedAt to its close. Close is the latest gate evidence FinishedAt, or else the `closed` feed line time; while the tick is open, measure to src.Now. Null when no dispatch time parses.\n- findings: recs.Findings whose DiscoveredFrom names this tick (shape `run-<run>/tick-<tick>/attempt-<n>`). The title is the finding's own title field if it has one, else \"\". gating comes from the matching absorption's Gating, when one exists.\n- Try.tier: the attempt record's Provenance.Tier (runstate.Provenance).\n- Try.reason: for outcome rejected or gate-failed, the detail of the latest `rejected` or `gate_failed` feed line for that (tick, attempt), cut to its first 160 characters on a word boundary. Null when no line exists: never invent a reason.\n- Try.next_step: for the LAST try only, when its outcome is rejected or gate-failed:\n  - \"retrying (try N+1)\" when a later dispatch exists;\n  - the unblock command of the model's attention entry naming this tick, when one exists;\n  - \"held — see needs-you\" when the tick has a held-for-person wait;\n  - otherwise \"the run will retry or escalate the tier\".\n  Null for every other try.\n\nFiles: internal/statusmodel/pipeline.go and a new internal/statusmodel/pipeline_test.go. Nothing else. (build.go, statusmodel.go and contract.json belong to other ticks in this wave, or to the finished wave 1.)\n\nTests: table-driven, named TestPipeline*. The cases:\n(a) a closed implement tick → claim, work, gate and merged all done;\n(b) in flight with gate_started → claim and work done, gate active, merged pending;\n(c) rejected on gate_failed with no redispatch → gate failed, and the try's reason is the line's detail (truncated) with next_step \"the run will retry or escalate the tier\";\n(d) rejected then redispatched → the first try's next_step is null and the last try's is null, because the last try is in flight;\n(e) closeout during phase ci → [claim done, work done, ci active, closed pending];\n(f) a review tick → [claim, review, closed];\n(g) an absorbed repair tick → parent_tick_id set;\n(h) no dispatch → every stage pending, duration null;\n(i) a finding discovered by attempt 2 of the tick → listed under the tick.\nAlso assert the Build output of each case still validates against the contract. Reuse the contract_test.go helper that validates a Build output (TestTheContractBindsTheBuilder shows how).\n\nRun: `go test -short -timeout 20m -run 'TestPipeline|TestTheContract' ./internal/statusmodel/`. Must still pass: `go test -short -timeout 20m ./internal/statusmodel/ ./internal/cli/`, and then `make gate`.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "3gk",
+    "title": "Status model derives each tick's pipeline, parent, tries and findings"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.99,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.99,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.01,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 2305,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-09-30T06:56:53Z",
+  "answered_at": "2026-09-30T06:56:53Z",
+  "provenance": {
+    "run_id": "run_8511bc66fe444bfaa4b5c9d6cd2073b4",
+    "tick_id": "3gk",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "cacfad3ec633f39619c41ee5e2a14f57204335b0",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

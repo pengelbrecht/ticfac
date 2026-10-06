@@ -1,0 +1,56 @@
+{
+  "schema_version": 3,
+  "decision": 10,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 4,
+    "attempt_head": "b60ef973d88af83a35a3e24b7f2b4c0d862f49d6",
+    "conflict_files": [
+      "RESULT-378.md"
+    ],
+    "conflicting_ticks": [
+      "378"
+    ],
+    "epic_id": "hn6",
+    "job_id": "run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-378/resolve-4-r2",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "resolve_branch": "ticfac/run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-378/resolve-4-r2",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "378"
+  },
+  "response": {
+    "conflict_detail": "1 conflict: content in RESULT-378.md",
+    "conflict_files": [
+      "RESULT-378.md"
+    ],
+    "failure": "operational",
+    "job_id": "run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-378/resolve-4-r2",
+    "merge": "",
+    "reason": "378 try 2 (run dispatch #4) does not merge onto epic/hn6 (1 conflict: content in RESULT-378.md) and the resolve-conflict job run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-378/resolve-4-r2 could not be started: the sandbox dispatch door refused (500 door_fault): the sandbox dispatch door failed while answering this request (SandboxSecurityError: Sandbox ID must be 1-63 characters long.); whatever it had started is under this attempt's identity, so asking again adopts it rather than booting a rival",
+    "resolve_head": "",
+    "status": "failed"
+  },
+  "validated": true,
+  "requested_at": "2026-10-01T04:06:19Z",
+  "answered_at": "2026-10-01T04:06:19Z",
+  "provenance": {
+    "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
+    "tick_id": "378",
+    "attempt": 4,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "c727bb640919a94b668f900049950e1010ab590f",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

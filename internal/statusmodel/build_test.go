@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -81,21 +82,27 @@ func evidence(key, check, tickID string, attempt int, result, phase, sourceSHA, 
 }
 
 // testGraph is the epic's own layering: three waves, a review and a closeout
-// behind them, one absorbed tick inside wave 2.
+// behind them, one absorbed tick inside wave 2 — and the epic's own title
+// and every task's gloss, the fields the dashboard copies straight off the
+// graph (hn6 wave 1).
 func testGraph() *tk.Graph {
 	return &tk.Graph{
+		Epic: tk.GraphEpic{
+			ID:    "2jn",
+			Title: "ticfac devex: one command to run, watch and triage an epic",
+		},
 		Waves: []tk.GraphWave{
 			{Wave: 1, Tasks: []tk.GraphTask{
-				{ID: "nwj", Title: "The command surface on cobra + fang", Status: "closed"},
-				{ID: "6dh", Title: "ticfac status --json: one model of every run", Status: "open"},
+				{ID: "nwj", Title: "The command surface on cobra + fang", Gloss: "cobra+fang command surface", Status: "closed"},
+				{ID: "6dh", Title: "ticfac status --json: one model of every run", Gloss: "one model of every run", Status: "open"},
 			}},
 			{Wave: 2, Tasks: []tk.GraphTask{
-				{ID: "89m", Title: "ticfac watch", Status: "open"},
-				{ID: "152", Title: "go.mod's go directive is now 1.24.2", Status: "open"},
+				{ID: "89m", Title: "ticfac watch", Gloss: "the whole epic at a glance", Status: "open"},
+				{ID: "152", Title: "go.mod's go directive is now 1.24.2", Gloss: "go directive bump", Status: "open"},
 			}},
 			{Wave: 3, Tasks: []tk.GraphTask{
-				{ID: "xbp", Title: "Final review of the 2jn diff", Status: "open", Role: "review"},
-				{ID: "rrl", Title: "Close out 2jn", Status: "open", Role: "closeout"},
+				{ID: "xbp", Title: "Final review of the 2jn diff", Gloss: "final review", Status: "open", Role: "review"},
+				{ID: "rrl", Title: "Close out 2jn", Gloss: "close out the epic", Status: "open", Role: "closeout"},
 			}},
 		},
 	}
@@ -359,12 +366,27 @@ func TestTheModelDerivesTheWorkers(t *testing.T) {
 }
 
 // TestTheModelCountsHealthFromTheFeed: retries, interventions, stall
-// warnings and firings are counts of the run's own typed lines.
+// warnings and firings are counts of the run's own typed lines, and the
+// verdict beside them (wave 2, tick 7uv) is derived from the same lines and
+// the model built around them: healthy here — the fixture's one stall
+// warning is ninety minutes old, outside the window that still reads — with
+// what the run got past listed as calm.
 func TestTheModelCountsHealthFromTheFeed(t *testing.T) {
 	t.Parallel()
 	model := Build(runningEpicSources())
-	want := Health{RemoteRetries: 1, Interventions: 1, StallWarnings: 1, WallClocksFired: 1}
-	if model.Health != want {
+	want := Health{
+		RemoteRetries: 1, Interventions: 1, StallWarnings: 1, WallClocksFired: 1,
+		Verdict: HealthVerdict{
+			State:   VerdictHealthy,
+			Summary: VerdictHealthy,
+			Recovered: []Recovery{
+				{What: "net", Count: 1},
+				{What: "interventions", Count: 1},
+				{What: "wall clocks", Count: 1},
+			},
+		},
+	}
+	if !reflect.DeepEqual(model.Health, want) {
 		t.Errorf("the health counts are %+v, want %+v", model.Health, want)
 	}
 }
@@ -402,7 +424,7 @@ func TestTheModelCarriesGatesPerCheckPerHead(t *testing.T) {
 func TestTheModelSumsTheRecordedCost(t *testing.T) {
 	t.Parallel()
 	model := Build(runningEpicSources())
-	if model.Cost.RecordedUSD != 0.04 {
+	if model.Cost.RecordedUSD == nil || *model.Cost.RecordedUSD != 0.04 {
 		t.Errorf("the recorded cost is %v, want 0.04 from the one decision that carries usage", model.Cost.RecordedUSD)
 	}
 	if model.Cost.Attempts != 3 {
@@ -443,6 +465,38 @@ func TestAHeldRunNamesTheCommandThatReleasesIt(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("a held attempt is not in the attention list: %+v", model.Attention)
+	}
+}
+
+// TestAHeldRunWhoseIDIsNotTheEpicSpellingNamesIt (tick ulw): a run whose
+// records live under a run id other than epic-<epic-id> — today's cloud
+// runs, whose orchestrator execs run-epic --run-id <factory run id> — must
+// name that id in the release command, because settle without --run-id
+// defaults to the epic spelling and the store under IT carries no such
+// attempt: the command the needs-you line gives would refuse. A run under
+// the epic spelling keeps the bare spelling — the flag would name the run
+// the command already addresses (TestAHeldRunNamesTheCommandThatReleasesIt).
+func TestAHeldRunWhoseIDIsNotTheEpicSpellingNamesIt(t *testing.T) {
+	t.Parallel()
+	cloud := "run_1a2b3c4d5e6f"
+	src := runningEpicSources()
+	src.RunID = cloud
+	src.Records.Checkpoint.RunID = cloud
+	four := 4
+	src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), cloud, "6dh", &four,
+		reconcile.StageRunHeld, "attempt 3 of 6dh struck out: the refusal the run recorded"))
+	model := Build(src)
+
+	if model.RunID != cloud {
+		t.Fatalf("the model answers for run %q, want %q", model.RunID, cloud)
+	}
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+		t.Fatalf("a run holding an attempt waits on %+v, want held-for-person", model.WaitsOn)
+	}
+	if model.WaitsOn.UnblockCommand == nil ||
+		*model.WaitsOn.UnblockCommand != `ticfac settle 2jn 6dh 4 --run-id `+cloud+` --release "<who>"` {
+		t.Errorf("the unblocking command is %+v, want the settle command addressed to the holding run",
+			model.WaitsOn.UnblockCommand)
 	}
 }
 
@@ -493,6 +547,189 @@ func TestAHoldAResumeSettledIsHistory(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("the current incarnation's hold is not in the attention list: %+v", model.Attention)
+	}
+}
+
+// TestAHoldAboutTheWorldNamesTheRunAgainCommand (tick gf0): the holds that
+// fire before the tick's first dispatch — the width, a foreign claim —
+// carry a NULL attempt, so the settle command cannot address them ("-" is
+// not an attempt number) and a release would not clear them anyway: they
+// are facts about the world that end when the holder's tick closes or a
+// slot frees. The needs-you command is the RESUME, named by the host the run
+// lives on — the same command a dead run's wait carries — never a settle.
+func TestAHoldAboutTheWorldNamesTheRunAgainCommand(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the width", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "w9b", nil,
+			reconcile.StageRunHeld, "claim_width: the width 2jn declares is already full of claims this run does not hold"))
+		model := Build(src)
+		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+			t.Fatalf("a width hold waits on %+v, want held-for-person", model.WaitsOn)
+		}
+		if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run-epic 2jn" {
+			t.Errorf("the width hold's command is %+v, want the run-again command a resume addresses",
+				model.WaitsOn.UnblockCommand)
+		}
+	})
+
+	t.Run("a foreign claim", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "w9b", nil,
+			reconcile.StageRunHeld, "foreign_claim: w9b is claimed by run run-epic-xte, whose records do not read finished"))
+		model := Build(src)
+		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+			t.Fatalf("a foreign-claim hold waits on %+v, want held-for-person", model.WaitsOn)
+		}
+		if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run-epic 2jn" {
+			t.Errorf("the foreign-claim hold's command is %+v, want the run-again command a resume addresses",
+				model.WaitsOn.UnblockCommand)
+		}
+	})
+
+	t.Run("a foreign claim a cloud run holds", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Host = HostCloud
+		src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "w9b", nil,
+			reconcile.StageRunHeld, "foreign_claim: w9b is claimed by run run-epic-xte, whose records do not read finished"))
+		model := Build(src)
+		if model.WaitsOn == nil || model.WaitsOn.UnblockCommand == nil {
+			t.Fatalf("the cloud foreign-claim hold carries no command: %+v", model.WaitsOn)
+		}
+		if *model.WaitsOn.UnblockCommand != "ticfac run 2jn --cloud" {
+			t.Errorf("the cloud world hold's command is %q, want the factory resubmission a resume on the cloud host is",
+				*model.WaitsOn.UnblockCommand)
+		}
+	})
+}
+
+// TestAnAbsorptionBoundHoldNamesTheFindingsDecision (tick gf0): the bound's
+// hold asks a person to judge the chain the refusal carries, and the finding
+// it refused to absorb is still theirs to decide — so the needs-you command
+// is the triage, the one command that decides a finding; the refusal's own
+// message names the raise with --absorption-depth as the other road. It
+// carries no attempt any more than the world holds do — and even the line
+// that does is not released: deciding the finding is the move, never a
+// release of the attempt that reported it.
+func TestAnAbsorptionBoundHoldNamesTheFindingsDecision(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	five := 5
+	src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "nwj", &five,
+		reconcile.StageRunHeld, "absorption_depth_exceeded: absorbing the finding \"c0ffee\" would be the 4th "+
+			"absorption of ONE chain that already carries 3 and the bound is 3 (tick qjj)"))
+	model := Build(src)
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+		t.Fatalf("the bound's hold waits on %+v, want held-for-person", model.WaitsOn)
+	}
+	if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac triage 2jn" {
+		t.Errorf("the bound's hold command is %+v, want the triage that decides the finding",
+			model.WaitsOn.UnblockCommand)
+	}
+}
+
+// TestAFinalReviewHoldNamesTheRunAgainCommand (tick quz): the final-review
+// hold is the one hold that fires AFTER an attempt was dispatched — the
+// close-out's — so its run_held line CARRIES an attempt, and the per-kind
+// decision used to name the settle that attempt addresses. Releasing it
+// clears nothing: the hold is the review's NOT READY verdict recorded on
+// the PR, which the next resume re-reads and holds on again. The moves are
+// the refusal's own — fix what it names and run the epic again, merge the
+// PR by hand to accept it (a re-run then finds it merged), or close it —
+// so the command is the run again, the same shape the world holds got: the
+// reason decides, never the attempt the line happens to carry.
+func TestAFinalReviewHoldNamesTheRunAgainCommand(t *testing.T) {
+	t.Parallel()
+
+	finalReviewHold := func(at time.Time) runfeed.Event {
+		attempt := 2
+		return runfeed.NewEvent(at, "epic-2jn", "rrl", &attempt, reconcile.StageRunHeld,
+			"land_review_not_ready: the run does not merge the epic 2jn: its final review (decision 3) still judges "+
+				"it NOT READY after 2 review round(s), the bound being 2. The verdict is on the epic PR, and accepting "+
+				"work the run's own review rejected is a person's judgement: fix what it names and run the epic again, "+
+				"merge the PR by hand to accept it (a re-run then finds it merged), or close it")
+	}
+
+	t.Run("a local run's final-review hold", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Feed = append(src.Feed, finalReviewHold(testNow.Add(-10*time.Minute)))
+		model := Build(src)
+		if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+			t.Fatalf("the final-review hold waits on %+v, want held-for-person", model.WaitsOn)
+		}
+		if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run-epic 2jn" {
+			t.Errorf("the final-review hold's command is %+v, want the run-again command: releasing the attempt "+
+				"the line carries clears nothing, the verdict on the PR is what it holds", model.WaitsOn.UnblockCommand)
+		}
+	})
+
+	t.Run("a cloud run's final-review hold", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Host = HostCloud
+		src.Feed = append(src.Feed, finalReviewHold(testNow.Add(-10*time.Minute)))
+		model := Build(src)
+		if model.WaitsOn == nil || model.WaitsOn.UnblockCommand == nil {
+			t.Fatalf("the cloud final-review hold carries no command: %+v", model.WaitsOn)
+		}
+		if *model.WaitsOn.UnblockCommand != "ticfac run 2jn --cloud" {
+			t.Errorf("the cloud final-review hold's command is %q, want the factory resubmission a resume on "+
+				"the cloud host is", *model.WaitsOn.UnblockCommand)
+		}
+	})
+
+	t.Run("a prior run's final-review hold", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.PriorRecords = []Records{{Checkpoint: priorCheckpoint("run_prior", "failed")}}
+		src.PriorFeeds = map[string][]runfeed.Event{"run_prior": {finalReviewHold(testNow.Add(-2 * time.Hour))}}
+		model := Build(src)
+		var attention *Attention
+		for i := range model.Attention {
+			if model.Attention[i].Kind == WaitHeldForPerson && strings.Contains(model.Attention[i].What, "run_prior") {
+				attention = &model.Attention[i]
+			}
+		}
+		if attention == nil {
+			t.Fatalf("the prior run's final-review hold is not attention: %+v", model.Attention)
+		}
+		if attention.UnblockCommand == nil || *attention.UnblockCommand != "ticfac run-epic 2jn" {
+			t.Errorf("the prior run's final-review hold command is %+v, want the run-again command a resume "+
+				"addresses", attention.UnblockCommand)
+		}
+	})
+}
+
+// TestAPriorRunsWorldHoldNamesTheRunAgainCommand: a hold an earlier run left
+// about the world clears by the same per-kind decision the newest run's own
+// hold answers with — the run again, never a settle the dash attempt would
+// refuse — in the header's needs-you entry and the try's next step alike.
+func TestAPriorRunsWorldHoldNamesTheRunAgainCommand(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.PriorRecords = []Records{{Checkpoint: priorCheckpoint("run_prior", "failed")}}
+	src.PriorFeeds = map[string][]runfeed.Event{"run_prior": {
+		runfeed.NewEvent(testNow.Add(-2*time.Hour), "run_prior", "w9b", nil, reconcile.StageRunHeld,
+			"claim_width: the width 2jn declares is already full of claims this run does not hold"),
+	}}
+	model := Build(src)
+	var attention *Attention
+	for i := range model.Attention {
+		if model.Attention[i].Kind == WaitHeldForPerson && strings.Contains(model.Attention[i].What, "run_prior") {
+			attention = &model.Attention[i]
+		}
+	}
+	if attention == nil {
+		t.Fatalf("the prior run's width hold is not attention: %+v", model.Attention)
+	}
+	if attention.UnblockCommand == nil || *attention.UnblockCommand != "ticfac run-epic 2jn" {
+		t.Errorf("the prior run's width hold command is %+v, want the run-again command a resume addresses",
+			attention.UnblockCommand)
 	}
 }
 
@@ -567,6 +804,132 @@ func TestAFinishedCloudRunIsNotADeadRun(t *testing.T) {
 	if model := Build(src); model.WaitsOn == nil || model.WaitsOn.Kind != WaitDeadRun {
 		t.Errorf("a local run gone without a terminal record waits on %+v, want dead-run", model.WaitsOn)
 	}
+}
+
+// TestAStoppedRunReadsWhereItStandsWithTheResumeAndNoETA: the finding's own
+// live case (tick jkb): a cloud run the operator stopped, its feed carrying
+// the factory's own "stopped: …" terminal line, an open epic behind it and
+// a stale running checkpoint. The old runCompleted read the line as a
+// completion, and every downstream answer lied — phase done, merge done, a
+// healthy verdict, needs you: nothing, and an ETA for work nothing would
+// finish. The honest frame: the phase is where the EPIC stands, the verdict
+// says stopped, the resume is the person's, and no time is stated.
+func TestAStoppedRunReadsWhereItStandsWithTheResumeAndNoETA(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Host = HostCloud
+	src.RunID = "run_08f5a3f10c9d2e4b6a7c8d9e0f1a2b3c"
+	src.Standing, src.StandingRead, src.Session = nil, false, nil
+	// Three measured closes behind the open ticks — the estimate the old
+	// model stated for this very run.
+	src.Records.Checkpoint.Ticks = append(src.Records.Checkpoint.Ticks,
+		runstate.TickState{TickID: "89m", State: "closed", Attempt: 4})
+	src.Records.Attempts = append(src.Records.Attempts,
+		attemptMarker(4, "89m", "2026-09-27T04:40:00Z", "strong", "m", "cloudflare-sandbox"))
+	src.Records.Evidence = append(src.Records.Evidence,
+		evidence("gate-6dh-3-go", "go", "6dh", 3, "pass", "integrated", "aa", "2026-09-27T04:50:00Z", "2026-09-27T05:00:00Z"),
+		evidence("gate-89m-4-go", "go", "89m", 4, "pass", "integrated", "bb", "2026-09-27T05:10:00Z", "2026-09-27T05:20:00Z"))
+	// The stale running checkpoint the factory's stop never rewrote, and
+	// the factory's own terminal line — the word its finalize writes to the
+	// same run_finished stage the local reconciler writes.
+	src.Records.Checkpoint.State = "running"
+	src.Records.Checkpoint.Reason = "6dh is dispatched"
+	src.Records.Checkpoint.Ticks[1] = runstate.TickState{TickID: "6dh", State: "closed", Attempt: 3}
+	src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-35*time.Minute), src.RunID, "", nil,
+		reconcile.StageRunFinished, "stopped: the operator stopped the run: 2 of 35 ticks still open"))
+	src.Liveness = LivenessInput{
+		Alive: false, State: "stopped",
+		Reason: "the factory's record says stopped — the operator stopped the run",
+		Source: "workflow-record",
+	}
+	model := Build(src)
+
+	if model.Lifecycle.Phase != PhaseWaves {
+		t.Errorf("the stopped run reads phase %q, want waves: the phase is where the epic stands, never a terminal answer the run did not write", model.Lifecycle.Phase)
+	}
+	for _, p := range model.Lifecycle.Phases {
+		if p.Phase == PhaseMerge && p.State != PhaseStatePending {
+			t.Errorf("the merge phase reads %q, want pending: a stopped run has no PR to merge", p.State)
+		}
+	}
+	if model.Health.Verdict.State != VerdictStopped {
+		t.Errorf("the stopped run's verdict is %q, want stopped", model.Health.Verdict.State)
+	}
+	if !strings.Contains(model.Health.Verdict.Summary, "stopped") {
+		t.Errorf("the stopped summary reads %q, want the run's own word for the stop", model.Health.Verdict.Summary)
+	}
+	var resume *Attention
+	for i := range model.Attention {
+		if model.Attention[i].Kind == WaitDeadRun {
+			resume = &model.Attention[i]
+		}
+	}
+	if resume == nil {
+		t.Fatalf("the stopped run needs no person: %+v — only a person starts the epic again", model.Attention)
+	}
+	if !strings.Contains(resume.What, "stopped") || !strings.Contains(resume.What, "the operator stopped the run") {
+		t.Errorf("the resume entry reads %q, want the run's own stop sentence", resume.What)
+	}
+	if resume.UnblockCommand == nil || *resume.UnblockCommand != "ticfac run 2jn --cloud" {
+		t.Errorf("the resume entry's command is %+v, want the cloud resume", resume.UnblockCommand)
+	}
+	if model.Remaining != nil {
+		t.Errorf("the stopped run states an ETA of %+v, want none: nothing is going to finish in that time", model.Remaining)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}
+
+// TestAFailedRunNeedsAPersonToResumeIt: the dead-run wait once starved the
+// run whose own word says it failed — runTerminal exempted it — and the
+// frame said "needs you: nothing" beside the stopped verdict (tick jkb).
+// The failure's own reason is the wait's sentence, the resume is the
+// person's, the phase and verdict keep their words, and the ended run
+// states no ETA.
+func TestAFailedRunNeedsAPersonToResumeIt(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Standing, src.StandingRead, src.Session = nil, false, nil
+	src.Liveness = LivenessInput{
+		Alive: false, State: "dead",
+		Reason: "pid 4242 is gone and never released the run: it died",
+		Source: "run.pid",
+	}
+	src.Records.Checkpoint.State = "failed"
+	src.Records.Checkpoint.Reason = "the integrated gate refused attempt 2 of 6dh: go test failed"
+	src.Records.Checkpoint.UpdatedAt = testNow.Add(-30 * time.Minute).Format(time.RFC3339)
+	// Three measured closes, so the estimate would otherwise fire.
+	src.Records.Checkpoint.Ticks = append(src.Records.Checkpoint.Ticks,
+		runstate.TickState{TickID: "89m", State: "closed", Attempt: 4})
+	src.Records.Attempts = append(src.Records.Attempts,
+		attemptMarker(4, "89m", "2026-09-27T04:40:00Z", "strong", "m", "local-subprocess"))
+	src.Records.Checkpoint.Ticks[1] = runstate.TickState{TickID: "6dh", State: "closed", Attempt: 3}
+	src.Records.Evidence = append(src.Records.Evidence,
+		evidence("gate-6dh-3-go", "go", "6dh", 3, "pass", "integrated", "aa", "2026-09-27T04:50:00Z", "2026-09-27T05:00:00Z"),
+		evidence("gate-89m-4-go", "go", "89m", 4, "pass", "integrated", "bb", "2026-09-27T05:10:00Z", "2026-09-27T05:20:00Z"))
+	model := Build(src)
+
+	if model.Lifecycle.Phase != PhaseFailed {
+		t.Errorf("the failed run reads phase %q, want failed", model.Lifecycle.Phase)
+	}
+	if model.Health.Verdict.State != VerdictStopped {
+		t.Errorf("the failed run's verdict is %q, want stopped", model.Health.Verdict.State)
+	}
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitDeadRun {
+		t.Fatalf("the failed run waits on %+v, want its own resume", model.WaitsOn)
+	}
+	if want := "run epic-2jn failed: the integrated gate refused attempt 2 of 6dh: go test failed"; model.WaitsOn.What != want {
+		t.Errorf("the resume entry reads %q, want the checkpoint's own reason worded once:\n%q", model.WaitsOn.What, want)
+	}
+	if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run-epic 2jn" {
+		t.Errorf("the resume entry's command is %+v, want the resume", model.WaitsOn.UnblockCommand)
+	}
+	if model.WaitsOn.Since == nil || *model.WaitsOn.Since != src.Records.Checkpoint.UpdatedAt {
+		t.Errorf("the resume entry reads since %+v, want the checkpoint's own updated_at", model.WaitsOn.Since)
+	}
+	if model.Remaining != nil {
+		t.Errorf("the failed run states an ETA of %+v, want none: nothing is going to finish in that time", model.Remaining)
+	}
+	assertValidatesAgainstTheContract(t, model)
 }
 
 // TestACompletedRunWithAnOpenPRWaitsOnTheMerge: the merge is a person's,
@@ -647,6 +1010,240 @@ func TestTheUntriagedFindingWaitIsClearedByTriage(t *testing.T) {
 	t.Errorf("the untriaged finding is not attention: %+v", model.Attention)
 }
 
+// TestACloudRunsOwnFindingHoldNamesTheRunItsStoreLivesAt (tick q8m): a
+// hold the CURRENT run left is cleared by triage addressed to THAT run's
+// own store. A cloud run is addressed by the factory's run_<hex> (tick
+// ulw) and writes its records — its drafted findings included — under that
+// id, so the bare command's default (the local spelling epic-<epic-id>)
+// names a store a cloud run never wrote: a person following it finds no
+// findings and the hold stands. Local runs keep the bare spelling — that
+// half is pinned by TestAFindingHoldIsClearedByTriage above.
+func TestACloudRunsOwnFindingHoldNamesTheRunItsStoreLivesAt(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Host = HostCloud
+	src.RunID = "run_a1b2c3d4e5"
+	src.Records.Checkpoint.RunID = "run_a1b2c3d4e5"
+	four := 4
+	src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "run_a1b2c3d4e5", "rrl", &four,
+		reconcile.StageRunHeld, "finding_untriaged: 1 finding(s) this run drafted are still waiting for a person"))
+	model := Build(src)
+
+	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitHeldForPerson {
+		t.Fatalf("a run holding for triage waits on %+v, want held-for-person", model.WaitsOn)
+	}
+	if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac triage 2jn --run-id run_a1b2c3d4e5" {
+		t.Errorf("the cloud finding hold's unblocking command is %+v, want the triage addressed to the run's own store",
+			model.WaitsOn.UnblockCommand)
+	}
+}
+
+// TestACloudRunsUntriagedFindingsWaitNamesTheRunItsStoreLivesAt (tick
+// q8m): the WaitFinding attention for a dead run's own drafts names the
+// triage command addressed to the store those drafts were read from — for
+// a cloud run, the factory's run_<hex>, never the bare command's local
+// default.
+func TestACloudRunsUntriagedFindingsWaitNamesTheRunItsStoreLivesAt(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Host = HostCloud
+	src.RunID = "run_a1b2c3d4e5"
+	src.Records.Checkpoint.RunID = "run_a1b2c3d4e5"
+	src.Liveness.Alive = false
+	src.Liveness.State = "not_running"
+	src.Liveness.Reason = "no process holds this run: the last one released it, or none has claimed it here"
+	src.Session = nil
+	src.Standing = nil
+	model := Build(src)
+
+	for _, a := range model.Attention {
+		if a.Kind != WaitFinding {
+			continue
+		}
+		if a.UnblockCommand == nil || *a.UnblockCommand != "ticfac triage 2jn --run-id run_a1b2c3d4e5" {
+			t.Errorf("the cloud run's untriaged finding's unblocking command is %+v, want the triage addressed to the run's own store",
+				a.UnblockCommand)
+		}
+		return
+	}
+	t.Errorf("the untriaged finding is not attention: %+v", model.Attention)
+}
+
+// priorCheckpoint is an earlier run's checkpoint as the records read it:
+// one run of this epic, in the state it ended (or stands) in.
+func priorCheckpoint(runID, state string) *runstate.Checkpoint {
+	return &runstate.Checkpoint{
+		SchemaVersion: runstate.SchemaVersion,
+		RunID:         runID,
+		EpicID:        "2jn",
+		Sequence:      4,
+		State:         runstate.State(state),
+		Reason:        "the run died before its close-out",
+		UpdatedAt:     testNow.Add(-2 * time.Hour).Format(time.RFC3339),
+	}
+}
+
+// priorFinding is one earlier run's draft as the records read it: the
+// attempt that discovered it names the run it belongs to.
+func priorFinding(key, runID, tickID, at string) runstate.Finding {
+	return runstate.Finding{
+		SchemaVersion:  runstate.SchemaVersion,
+		Key:            key,
+		Source:         "ticfac-worker",
+		DiscoveredFrom: "run-" + runID + "/tick-" + tickID + "/attempt-1",
+		Kind:           "defect",
+		Title:          "A finding only an earlier run found",
+		Body:           "Discovered beside the work, reported mechanically.",
+		Severity:       "medium",
+		TickID:         tickID,
+		Attempt:        1,
+		Status:         runstate.FindingProposed,
+		ProposedAt:     at,
+		Provenance: runstate.Provenance{
+			RunID: runID, SourceRef: "refs/heads/epic/2jn",
+			SourceSHA: "0fc09212e0e8f96fc3fdc87c2f681519bb0d191a", Phase: runstate.PhaseWorker,
+		},
+	}
+}
+
+// TestPriorRunUntriagedFindingsReachNeedsYou (tick d23): a run that died
+// before its close-out raised no run_held line — the hold the close-out's
+// findings gate would have raised never happened — so its untriaged drafts
+// are invisible to a WaitFinding block that reads only the newest run's
+// records, although a person's decision about them is standing. Every
+// run's drafts reach needs-you, each with the triage command addressed to
+// the run whose own records hold them; a prior run whose records name no
+// run id is skipped — there is no command to spell for a run nobody can
+// address, and it answers for no other run's copy either.
+func TestPriorRunUntriagedFindingsReachNeedsYou(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.PriorRecords = []Records{
+		{
+			Checkpoint: priorCheckpoint("run_prior", "failed"),
+			Findings: []runstate.Finding{priorFinding(
+				"c0ffee0000000000000000000000000000000000000000000000000000000001",
+				"run_prior", "89m", "2026-09-27T02:00:00Z")},
+		},
+		{
+			// A run the records cannot name: no triage command exists for it.
+			Findings: []runstate.Finding{priorFinding(
+				"c0ffee0000000000000000000000000000000000000000000000000000000002",
+				"run_nameless", "152", "2026-09-26T02:00:00Z")},
+		},
+	}
+	model := Build(src)
+
+	finding := 0
+	var attention *Attention
+	for i := range model.Attention {
+		if model.Attention[i].Kind != WaitFinding {
+			continue
+		}
+		finding++
+		if strings.Contains(model.Attention[i].What, "run_prior") {
+			attention = &model.Attention[i]
+		}
+	}
+	if attention == nil {
+		t.Fatalf("the dead run's untriaged draft is not attention: %+v", model.Attention)
+	}
+	if finding != 1 {
+		t.Errorf("the finding attention appears %d times, want once: a run the records cannot name must not "+
+			"raise one beside it: %+v", finding, model.Attention)
+	}
+	if !attention.NeedsPerson {
+		t.Error("a prior run's untriaged draft does not need a person")
+	}
+	if attention.UnblockCommand == nil ||
+		*attention.UnblockCommand != "ticfac triage 2jn --run-id run_prior" {
+		t.Errorf("the prior run's triage command is %+v, want the one addressed to its own store",
+			attention.UnblockCommand)
+	}
+	if attention.Since == nil || *attention.Since != "2026-09-27T02:00:00Z" {
+		t.Errorf("the prior run's findings attention reads since %+v, want the draft's own proposal",
+			attention.Since)
+	}
+}
+
+// TestANewerRunsFindingCopyAnswersForTheOlderRuns: a finding is one record
+// across runs, keyed by content — the funnel's own identity — so the copies
+// dedupe NEWEST-FIRST through needs-you. The newest run's own copy, whatever
+// its status, answers for every older run's copy (adopted into the live run's
+// store, or decided, its decision standing), and among prior runs the newest
+// proposed copy is the one a person is asked to triage: triaging an older
+// run's copy settles nothing the newer word still owns.
+func TestANewerRunsFindingCopyAnswersForTheOlderRuns(t *testing.T) {
+	t.Parallel()
+	// The running fixture's own draft key: the newest run carries it
+	// proposed in its own records.
+	const newestKey = "46b634a4f894acc04534dd6e9b70b677d68c39f3b66b98e820613ac7dd8c6ce2"
+
+	t.Run("the newest run's own copy owns the finding", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.PriorRecords = []Records{{
+			Checkpoint: priorCheckpoint("run_prior", "failed"),
+			Findings:   []runstate.Finding{priorFinding(newestKey, "run_prior", "89m", "2026-09-26T02:00:00Z")},
+		}}
+		model := Build(src)
+		for _, a := range model.Attention {
+			if a.Kind == WaitFinding {
+				t.Errorf("an older run's copy of a finding the newest run owns raised attention: %+v", a)
+			}
+		}
+	})
+
+	t.Run("a newer prior run's decision stands", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Records.Findings = nil // the newest run carries no copy of the key
+		decided := priorFinding(newestKey, "run_decider", "89m", "2026-09-26T02:00:00Z")
+		decided.Status = runstate.FindingDiscarded
+		decided.TriagedAt = "2026-09-26T06:00:00Z"
+		decided.TriagedBy = "an operator"
+		src.PriorRecords = []Records{
+			{ // oldest first: its proposed copy is the older word
+				Checkpoint: priorCheckpoint("run_older", "failed"),
+				Findings:   []runstate.Finding{priorFinding(newestKey, "run_older", "89m", "2026-09-26T01:00:00Z")},
+			},
+			{Checkpoint: priorCheckpoint("run_decider", "failed"), Findings: []runstate.Finding{decided}},
+		}
+		model := Build(src)
+		for _, a := range model.Attention {
+			if a.Kind == WaitFinding {
+				t.Errorf("a decided finding raised attention from an older run's copy: %+v", a)
+			}
+		}
+	})
+
+	t.Run("the newest prior run's proposed copy is the one to triage", func(t *testing.T) {
+		t.Parallel()
+		src := runningEpicSources()
+		src.Records.Findings = nil
+		src.PriorRecords = []Records{
+			{Checkpoint: priorCheckpoint("run_older", "failed"),
+				Findings: []runstate.Finding{priorFinding(newestKey, "run_older", "89m", "2026-09-26T01:00:00Z")}},
+			{Checkpoint: priorCheckpoint("run_newer", "failed"),
+				Findings: []runstate.Finding{priorFinding(newestKey, "run_newer", "152", "2026-09-27T01:00:00Z")}},
+		}
+		model := Build(src)
+		var attentions []Attention
+		for _, a := range model.Attention {
+			if a.Kind == WaitFinding {
+				attentions = append(attentions, a)
+			}
+		}
+		if len(attentions) != 1 || !strings.Contains(attentions[0].What, "run_newer") {
+			t.Fatalf("the finding's attention is %+v, want one addressed to the newest prior run", attentions)
+		}
+		if attentions[0].UnblockCommand == nil ||
+			*attentions[0].UnblockCommand != "ticfac triage 2jn --run-id run_newer" {
+			t.Errorf("the command is %+v, want the newer prior run's own triage", attentions[0].UnblockCommand)
+		}
+	})
+}
+
 // TestADeadCloudRunResumesThroughTheFactory: the dead-run resume is named
 // by the host the run lives on. A cloud run's resume is a new submission to
 // its factory — `ticfac run <epic> --cloud` — because `run-epic` here would
@@ -673,6 +1270,56 @@ func TestADeadCloudRunResumesThroughTheFactory(t *testing.T) {
 	if model.WaitsOn.UnblockCommand == nil || *model.WaitsOn.UnblockCommand != "ticfac run 2jn --cloud" {
 		t.Errorf("the dead cloud run's unblock command is %+v, want ticfac run 2jn --cloud",
 			model.WaitsOn.UnblockCommand)
+	}
+}
+
+// TestALiveRunRestatedOverItsOwnRunDiedIsTheEpicAgain: the incident of tick
+// 7l6, exactly as the records read. A run died by SIGINT — run_died led by
+// the cancelled word — and was restarted under the same run id with a
+// NON-TERMINAL checkpoint standing, so the only thing separating "a run that
+// was cancelled" from "a run that is working" is the resume line the
+// restart's writer records over its previous incarnation's death. With it,
+// the death is history: the phase is the EPIC's and no ending is stated — the
+// empty ending is what lets buildRemaining keep the ETA a live run owes.
+// Without it — the writer's defect, repaired on the reconciler's side — the
+// same model reads phase cancelled and suppresses the estimate beside a run
+// whose liveness is alive, which is what `ticfac status` printed on the live
+// incident.
+func TestALiveRunRestatedOverItsOwnRunDiedIsTheEpicAgain(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	// The interrupted incarnation's death, and the restart's resume over it,
+	// appended at the feed's end: position in the file is the clock.
+	death := runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "", nil,
+		reconcile.StageRunDied, "cancelled: stopped by a signal (interrupt) before the run finished")
+	restated := runfeed.NewEvent(testNow.Add(-9*time.Minute), "epic-2jn", "", nil,
+		reconcile.StageResumed, "the run was interrupted at running and is resumed under the same run id: 6dh is dispatched — "+
+			"this resume answers the previous incarnation's run_died line, which is that incarnation's ending and not this one's")
+
+	// Without the resume, the same records are the incident's own reading:
+	// phase cancelled, the death still the run's last word.
+	unstated := runningEpicSources()
+	unstated.Feed = append(append([]runfeed.Event{}, src.Feed...), death)
+	model := Build(unstated)
+	if model.Lifecycle.Phase != PhaseCancelled {
+		t.Fatalf("the fixture's own control reads phase %q, want cancelled: without the resume line this test proves nothing about one",
+			model.Lifecycle.Phase)
+	}
+	if ending := runEnding(unstated, *unstated.Records); ending != endCancelled {
+		t.Fatalf("the unanswered run_died classifies the ending as %q, want %q", ending, endCancelled)
+	}
+
+	// With the restart's own statement, the death is the previous
+	// incarnation's: the run states no ending, the phase is where the EPIC
+	// stands, and the ending being empty is what keeps the estimate standing.
+	src.Feed = append(append([]runfeed.Event{}, src.Feed...), death, restated)
+	model = Build(src)
+	if model.Lifecycle.Phase != PhaseWaves {
+		t.Errorf("the restated live run reads phase %q, want waves: the previous incarnation's run_died is not the live run's ending",
+			model.Lifecycle.Phase)
+	}
+	if ending := runEnding(src, *src.Records); ending != "" {
+		t.Errorf("the answered run_died still states the run's ending as %q; an empty ending is what keeps the ETA standing beside a live run", ending)
 	}
 }
 
@@ -769,8 +1416,26 @@ func TestTheFeedLastRunFinishedLineIsTheRunsOwnWord(t *testing.T) {
 	if w := mergeWait([]runfeed.Event{failed, completed}); w == nil || w.Kind != WaitMerge {
 		t.Errorf("a run whose last run_finished names its completion waits on %+v, want the merge", w)
 	}
+	// A failed ending is not a completion — no merge wait — and with no
+	// record this checkout could read, no person's wait either: the
+	// command a resume names is one this checkout types, and a run whose
+	// records it cannot read is not its to command (tick jkb). The ending
+	// is still stated — the phase, the verdict — below, in the same test.
 	if w := mergeWait([]runfeed.Event{failed}); w != nil {
-		t.Errorf("a run whose only run_finished names a failure waits on %+v, want nothing: a failed ending is not a completion", w)
+		t.Errorf("a run whose only run_finished names a failure waits on %+v, want nothing: a failed ending is not a completion, and a run this checkout cannot read is not its to resume", w)
+	}
+	src := runningEpicSources()
+	src.Records = &Records{}
+	src.Feed = []runfeed.Event{failed}
+	src.Standing, src.StandingRead, src.Session = nil, false, nil
+	src.Liveness = LivenessInput{Alive: false, State: "failed",
+		Reason: "the factory's record says failed", Source: "workflow-record"}
+	model := Build(src)
+	if model.Lifecycle.Phase != PhaseFailed {
+		t.Errorf("a run whose own last word says failed reads phase %q, want failed: the ending is stated even where the wait is not", model.Lifecycle.Phase)
+	}
+	if model.Health.Verdict.State != VerdictStopped {
+		t.Errorf("a failed run's verdict is %q, want stopped", model.Health.Verdict.State)
 	}
 }
 

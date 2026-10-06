@@ -1,0 +1,58 @@
+{
+  "schema_version": 3,
+  "decision": 5,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 2,
+    "attempt_head": "f7f17aed81281a6175119e2ea875d93088d0a489",
+    "conflict_files": [
+      "internal/statusmodel/build_dashboard_test.go"
+    ],
+    "conflicting_ticks": [
+      "7uv",
+      "3gk",
+      "ltg"
+    ],
+    "epic_id": "hn6",
+    "job_id": "run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-7uv/resolve-2",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (cloudflare-sandbox/pi, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:2ec895ee2ea6b5afe4e77460bd5ea6902c6c290544d45c7d10f95905341927cb",
+    "resolve_branch": "ticfac/run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-7uv/resolve-2",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "7uv"
+  },
+  "response": {
+    "conflict_detail": "1 conflict: content in internal/statusmodel/build_dashboard_test.go",
+    "conflict_files": [
+      "internal/statusmodel/build_dashboard_test.go"
+    ],
+    "job_id": "run-run_ee8ebb4fe13d4311b8f9be6f66db69d4/tick-7uv/resolve-2",
+    "merge": "54f654ae92900e5090b753ce44098d0bdecb760b",
+    "resolve_head": "8bafb01a5293e25dca54f55eee8e3a8ec6fb13a4",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-10-01T03:35:54Z",
+  "answered_at": "2026-10-01T03:35:54Z",
+  "provenance": {
+    "run_id": "run_ee8ebb4fe13d4311b8f9be6f66db69d4",
+    "tick_id": "7uv",
+    "attempt": 2,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "f393155b0c96359a1fd4953fc6924c35a53f5b89",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "strong",
+    "profile_digest": "sha256:2ec895ee2ea6b5afe4e77460bd5ea6902c6c290544d45c7d10f95905341927cb",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

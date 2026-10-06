@@ -498,7 +498,7 @@ func massAnswer(tick string, choice runconfig.WorkType, probabilities map[runcon
 		Classifications: map[string]jev.Classification{tick: {
 			TickID: tick, Choice: choice, Confidence: 0.9, Probabilities: probabilities,
 		}},
-		Model: "jev-1", Usage: jev.Usage{InputTokens: 1200, OutputTokens: 40, CostUSD: 0.00005},
+		Model: "jev-1", Usage: jev.Usage{InputTokens: 1200, OutputTokens: 40, CostUSD: runstate.Ptr(0.00005)},
 	}
 }
 

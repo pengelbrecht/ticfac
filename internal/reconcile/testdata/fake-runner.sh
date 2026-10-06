@@ -613,6 +613,50 @@ tracker_edit | tracker_edit_drop)
 		} > "$TICFAC_RESULT_PATH"
 	fi
 	;;
+tracker_edit_blocked | tracker_edit_blocked_drop | tracker_edit_blocked_ask)
+	# The blocked shape this tick answers (hn6 l89): b1's deliverable IS a
+	# tracker edit, the boundary forbids a worker writing it, and the worker
+	# answers BLOCKED with the exact edit proposed in the typed block — the
+	# yjq shape. The run applies the proposal itself and closes the tick,
+	# instead of dispatching the question up the blocked ladder.
+	# tracker_edit_blocked_drop has the blocked answer propose an edit that
+	# drops an item the record marks: the run refuses it, and the ladder —
+	# not the apply — answers the question. tracker_edit_blocked_ask names a
+	# question the standing orders reserve for a person (credentials) beside
+	# a named edit that is valid: the question still holds, and no edit is
+	# written — an always-ask question is a person's whatever else the
+	# report carries. Every try of the ask mode answers the same, so the
+	# hold is the only place it can end.
+	if [ "$TICFAC_TICK" != "b1" ]; then
+		commit
+		report
+	elif [ "$mode" != "tracker_edit_blocked_ask" ] && [ "$TICFAC_TRY" != "1" ]; then
+		# A later try: the ladder dispatched it with the question (only the
+		# refused shape reaches one), and the worker does its work.
+		commit
+		report
+	else
+		value='[A1] Every tick closes behind a green gate;\n[A2] The fixture epic carries a second item.'
+		detail='the fix is the epic record itself, which the boundary does not let me write; the edit is proposed above for the run to apply'
+		if [ "$mode" = "tracker_edit_blocked_drop" ]; then
+			value='[A1] Every tick closes behind a green gate.'
+		fi
+		if [ "$mode" = "tracker_edit_blocked_ask" ]; then
+			detail='the migration needs the production credential nobody gave me; the epic acceptance re-flow above is ready to apply'
+		fi
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf 'The fix is the epic record itself; proposed for the run to apply.\n\n'
+			printf '%s\n' '```tracker-edits'
+			printf '[{"tick": "qeu", "field": "acceptance_criteria", "value": "%s"},\n' "$value"
+			printf '%s\n' ' {"tick": "b1", "field": "notes", "value": "re-flowed the epic acceptance one item per line"}]'
+			printf '%s\n' '```'
+			printf '\n%s\n%s\n%s\n\n' '```findings v2' '[]' '```'
+			printf 'STATUS: BLOCKED — %s\n' "$detail"
+		} > "$TICFAC_RESULT_PATH"
+	fi
+	;;
 tracker_edit_finding)
 	# The triage half: a1 does its own work and reports a finding whose
 	# whole fix is a tracker edit, with the exact change — the run applies

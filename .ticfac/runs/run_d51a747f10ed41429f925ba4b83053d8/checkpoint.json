@@ -1,0 +1,98 @@
+{
+  "schema_version": 3,
+  "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
+  "epic_id": "hn6",
+  "sequence": 88,
+  "state": "running",
+  "reason": "stopped by terminated: the container was evicted mid-run; the run is resumable",
+  "updated_at": "2026-10-01T10:20:57Z",
+  "ticks": [
+    {
+      "tick_id": "0rx",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "378",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "fq0",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "u5n",
+      "state": "closed",
+      "attempt": 9
+    },
+    {
+      "tick_id": "yjq",
+      "state": "rejected",
+      "attempt": 12
+    },
+    {
+      "tick_id": "zl1",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "3rc",
+      "state": "closed",
+      "attempt": 13
+    },
+    {
+      "tick_id": "c2u",
+      "state": "closed",
+      "attempt": 14
+    },
+    {
+      "tick_id": "u4l",
+      "state": "dispatched",
+      "attempt": 15
+    },
+    {
+      "tick_id": "v16",
+      "state": "ready"
+    },
+    {
+      "tick_id": "qjl",
+      "state": "ready"
+    },
+    {
+      "tick_id": "lh4",
+      "state": "closed",
+      "attempt": 7
+    },
+    {
+      "tick_id": "l89",
+      "state": "dispatched",
+      "attempt": 10
+    },
+    {
+      "tick_id": "lkq",
+      "state": "dispatched",
+      "attempt": 16
+    }
+  ],
+  "provenance": {
+    "run_id": "run_d51a747f10ed41429f925ba4b83053d8",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "8ee9435bf267944982f0f1b4a53274cef4e72ef6",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:821c4e63d77afb972bfa85aafd09fb4e6200dacb6ca0ce6c8545b60f4e3f225a",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

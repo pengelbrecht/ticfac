@@ -1,0 +1,14 @@
+{
+  "id": "esk",
+  "title": "Every status/watch/overview call leaks refs/ticfac/peek/runscan refs",
+  "description": "mwt's epic-of-run resolution fetches all of origin's epic/* branches into refs/ticfac/peek/runscan/\u003cpid\u003e-\u003cn\u003e/ and never deletes them. The main checkout already holds 55 such refs, about 11 more per bare ticfac, status or watch call that resolves an unhinted run_* id. This sits on top of an older leak of the same kind (refs/ticfac/peek/status). It also puts a network fetch on the overview's cheap path. Fix: delete the refs after the read, or read the remote-tracking refs without a fetch.\nevidence: internal/cli/epic_of_run.go:84-87; git for-each-ref refs/ticfac/peek/runscan | wc -l\n\nticfac run epic-hn6 filed this backlog tick from the finding c1d7d55ea4617441068249ce131083eacf6ce7a1b89819e7c714b6465e1e77ae (reported by run-epic-hn6/tick-pv7/attempt-42): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-hn6/absorptions/c1d7d55ea4617441068249ce131083eacf6ce7a1b89819e7c714b6465e1e77ae.json on the run branch.",
+  "notes": "2026-10-06 01:22 - ticfac run epic-hn6: created by absorbing finding c1d7d55ea4617441068249ce131083eacf6ce7a1b89819e7c714b6465e1e77ae — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-hn6/absorptions/c1d7d55ea4617441068249ce131083eacf6ce7a1b89819e7c714b6465e1e77ae.json on epic/hn6, and it says: the classifier put 0.02 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-hn6/tick-pv7/attempt-42",
+  "created_by": "ticfac run epic-hn6",
+  "created_at": "2026-10-05T23:21:47Z",
+  "updated_at": "2026-10-05T23:22:04.059851Z"
+}

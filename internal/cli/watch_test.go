@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"testing"
@@ -44,7 +46,11 @@ func TestWatchSurfacesARunThatEndedHoldingAnAttempt(t *testing.T) {
 	// and says what moves the hold on, carry and all. The settle command is
 	// addressed by the run's own epic id — a placeholder a person would
 	// still have to fill in is not a command.
-	for _, want := range []string{"nkf try 1 (run dispatch #3)", "settle r-1 nkf 3 ", "attempt_unaddressed", "--carry-work", "settle"} {
+	for _, want := range []string{"nkf try 1 (run dispatch #3)", "settle r-1 nkf 3 ", "attempt_unaddressed", "--carry-work", "settle",
+		// The release command names the run whose store carries the attempt
+		// (tick qxj): this run's records live under r-1, not under the epic
+		// spelling a settle without --run-id opens.
+		"--run-id r-1 --release"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Errorf("the alert does not name %q: %q", want, stderr.String())
 		}
@@ -81,8 +87,135 @@ func TestWatchHoldAlertNamesTheEpicNotAPlaceholder(t *testing.T) {
 	if !strings.Contains(stderr.String(), "ticfac settle 2jn t1 2 --release") {
 		t.Errorf("the alert does not name the settle command addressed by the epic id: %q", stderr.String())
 	}
+	// A run under the epic spelling is the one run the bare command already
+	// addresses: its alert spells no --run-id (tick qxj).
+	if strings.Contains(stderr.String(), "--run-id") {
+		t.Errorf("the alert adds --run-id to a command that already defaults to this run's store: %q",
+			stderr.String())
+	}
 	if strings.Contains(stderr.String(), "<epic-id>") {
 		t.Errorf("the alert still prints a placeholder instead of the epic id: %q", stderr.String())
+	}
+}
+
+// writeRunCheckpoint writes one run's durable checkpoint record into a
+// checkout's working tree — the directory `statusRecords` reads when the
+// run id spells no epic hint — carrying an epic id the run id itself does
+// not spell. It is how a run started as `ticfac run <epic> --run-id <other>`
+// keeps its epic findable: the checkpoint names it, not the id.
+func writeRunCheckpoint(t *testing.T, repo, runID, epicID string) {
+	t.Helper()
+	dir := filepath.Join(repo, runstate.Root, "runs", runID)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.MarshalIndent(runstate.Checkpoint{
+		SchemaVersion: runstate.SchemaVersion,
+		RunID:         runID,
+		EpicID:        epicID,
+		Sequence:      1,
+		State:         runstate.StateRunning,
+		Reason:        "t1 is dispatched",
+		UpdatedAt:     time.Date(2026, 10, 4, 11, 0, 0, 0, time.UTC).UTC().Format(time.RFC3339),
+	}, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal the checkpoint: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "checkpoint.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The stream path's hold alert reads the run's CHECKPOINT for the epic a
+// non-epic-shaped local run id hides (tick fub): a run started as
+// `ticfac run <epic> --run-id run-p` spells its epic nowhere in its id, and
+// an alert that guesses the id spells `ticfac settle run-p …` — a command
+// that refuses (no branch, no epic run-p) while the model path, reading the
+// same checkpoint, spells the real epic. Two renderers naming two epics is
+// exactly what the one-model rule (hn6 rule 8) forbids.
+func TestWatchHoldAlertReadsTheCheckpointForANonEpicRunID(t *testing.T) {
+	repo := t.TempDir()
+	writeRunCheckpoint(t, repo, "run-p", "pip")
+	at := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+	attempt := 2
+	writeFeedEvent(t, repo, "run-p", runfeed.NewEvent(
+		at, "run-p", "t1", &attempt, "dispatched", "t1 try 1 dispatched"))
+	writeFeedEvent(t, repo, "run-p", runfeed.NewEvent(
+		at.Add(time.Second), "run-p", "t1", &attempt, reconcile.StageRunHeld,
+		"attempt_unaddressed: nobody can say whether the attempt is running"))
+	writeFeedEvent(t, repo, "run-p", runfeed.NewEvent(
+		at.Add(2*time.Second), "run-p", "", nil, reconcile.StageRunFinished,
+		"failed: t1 did not pass"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "run-p"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	// The release command is addressed by the CHECKPOINT's epic — the one
+	// the model path spells — with the run's own store beside it.
+	want := statusmodel.SettleCommandForCurrentRun("pip", "t1", 2, "run-p")
+	if !strings.Contains(stderr.String(), want) {
+		t.Errorf("the alert does not name the checkpoint's epic %q: %q", want, stderr.String())
+	}
+	guessed := statusmodel.SettleCommandForCurrentRun("run-p", "t1", 2, "run-p")
+	if strings.Contains(stderr.String(), guessed) {
+		t.Errorf("the alert still guesses the epic from the run id, spelling the command that refuses: %q",
+			stderr.String())
+	}
+}
+
+// The same read serves the whole stream path's clearing commands: the
+// untriaged-findings hold's triage and a failed end's resume are addressed
+// by the checkpoint's epic too, or the one fix leaves two of its three
+// commands guessing (tick fub).
+func TestWatchStreamReadsTheCheckpointForEveryCommandANonEpicRunIDNeeds(t *testing.T) {
+	for _, why := range []struct {
+		hold   bool
+		detail string
+	}{
+		{true, "finding_untriaged: 1 finding(s) this run drafted are still waiting for a person"},
+		{false, "failed: t1 did not pass: the integrated gate refused the work"},
+	} {
+		repo := t.TempDir()
+		writeRunCheckpoint(t, repo, "run-p", "pip")
+		at := time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC)
+		if why.hold {
+			writeFeedEvent(t, repo, "run-p", runfeed.NewEvent(
+				at, "run-p", "rrl", nil, reconcile.StageRunHeld, why.detail))
+		}
+		writeFeedEvent(t, repo, "run-p", runfeed.NewEvent(
+			at.Add(time.Second), "run-p", "", nil, reconcile.StageRunFinished, why.detail))
+
+		var stdout, stderr syncBuffer
+		code := Run([]string{"watch", "--repo", repo, "run-p"}, &stdout, &stderr)
+		want := ExitHeld
+		if !why.hold {
+			want = exitGeneric
+		}
+		if code != want {
+			t.Fatalf("%s: exit code %d, want %d; stderr %q", why.detail, code, want, stderr.String())
+		}
+		var command string
+		if why.hold {
+			command = statusmodel.TriageCommandForCurrentRun("pip", "run-p")
+		} else {
+			command = statusmodel.ResumeCommand(statusmodel.HostLocal, "pip")
+		}
+		if !strings.Contains(stderr.String(), command) {
+			t.Errorf("%s: the command is not addressed by the checkpoint's epic %q: %q",
+				why.detail, command, stderr.String())
+		}
+		guessed := "run-p"
+		if why.hold {
+			guessed = statusmodel.TriageCommandForCurrentRun("run-p", "run-p")
+		} else {
+			guessed = statusmodel.ResumeCommand(statusmodel.HostLocal, "run-p")
+		}
+		if strings.Contains(stderr.String(), guessed) {
+			t.Errorf("%s: the command is still addressed by the guessed id %q: %q",
+				why.detail, guessed, stderr.String())
+		}
 	}
 }
 
@@ -109,6 +242,304 @@ func TestWatchHoldAlertNamesTriageForAFindingHold(t *testing.T) {
 	if strings.Contains(stderr.String(), "ticfac settle") {
 		t.Errorf("the finding hold's alert names settle, a command that releases an attempt and refuses this hold: %q",
 			stderr.String())
+	}
+}
+
+// The alert addresses the run whose store carries the drafts (tick q8m):
+// a cloud run is named by the factory's run_<hex>, and its untriaged
+// findings live in ITS store — the bare command's default (epic-<epic-id>,
+// the local id) names a store a cloud run never wrote, so a person
+// following it finds nothing while the hold stands.
+func TestWatchHoldAlertForACloudRunNamesTheRunItsStoreLivesAt(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	cloudRun := cloudRunIDOf("e777")
+
+	at := time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC)
+	feed := feedLine(t, runfeed.NewEvent(at, cloudRun, "rrl", nil, reconcile.StageRunHeld,
+		"finding_untriaged: 1 finding(s) this run drafted are still waiting for a person"))
+	feed += feedLine(t, runfeed.NewEvent(at.Add(time.Second), cloudRun, "", nil, reconcile.StageRunFinished,
+		"holding: the close-out waits on untriaged findings"))
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch request.Path {
+		case "/api/runs":
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}}
+		case "/api/runs/" + cloudRun:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}
+		case "/api/runs/" + cloudRun + "/events":
+			return 200, map[string]any{
+				"run_id": cloudRun, "state": "completed",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, cloudRun}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ticfac triage epic1 --run-id "+cloudRun) {
+		t.Errorf("the cloud finding hold's alert does not name the triage addressed to the run's own store: %q",
+			stderr.String())
+	}
+}
+
+// The settle branch of the same alert gets its own test against a cloud run
+// id (tick v2f, the finding of q8m): an attempt hold's release is addressed
+// by the run whose store carries the attempt — the factory's run_<hex> —
+// spelled as the flag, because the bare command's default (epic-<epic-id>)
+// opens a store a cloud run never wrote, and the attempt it names is not
+// there, so the command a person copies refuses while the hold stands. The
+// epic id comes off the factory's record, never a placeholder.
+func TestWatchHoldAlertForACloudAttemptNamesTheRunItsStoreLivesAt(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	cloudRun := cloudRunIDOf("e778")
+
+	at := time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC)
+	attempt := 2
+	feed := feedLine(t, runfeed.NewEvent(at, cloudRun, "rrl", &attempt, "dispatched",
+		"attempt 2 started as run-x/tick-rrl/attempt-2"))
+	feed += feedLine(t, runfeed.NewEvent(at.Add(time.Second), cloudRun, "rrl", &attempt, reconcile.StageRunHeld,
+		"attempt_unaddressed: nobody can say whether the attempt is running"))
+	feed += feedLine(t, runfeed.NewEvent(at.Add(2*time.Second), cloudRun, "", nil, reconcile.StageRunFinished,
+		"failed: rrl did not pass"))
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch request.Path {
+		case "/api/runs":
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}}
+		case "/api/runs/" + cloudRun:
+			return 200, map[string]any{"run": map[string]any{
+				"run_id": cloudRun, "epic": "epic1", "project": "acme/project", "state": "completed",
+			}}
+		case "/api/runs/" + cloudRun + "/events":
+			return 200, map[string]any{
+				"run_id": cloudRun, "state": "completed",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, cloudRun}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	// The release command carries the factory's own run id: the attempt lives
+	// in ITS store, not in the one the bare spelling defaults to.
+	release := fmt.Sprintf("ticfac settle epic1 rrl 2 --run-id %s --release", cloudRun)
+	if !strings.Contains(stderr.String(), release) {
+		t.Errorf("the cloud attempt hold's alert does not name the release addressed to the run's own store: %q",
+			stderr.String())
+	}
+	// The bare spelling is the refusal the alert exists to avoid: without the
+	// flag the command defaults to the epic's local store, and there is no
+	// such attempt in it.
+	if strings.Contains(stderr.String(), "ticfac settle epic1 rrl 2 --release") {
+		t.Errorf("the cloud attempt hold's alert names the bare settle, a command addressed to a store the "+
+			"attempt was never recorded under: %q", stderr.String())
+	}
+	// The sentence still leads with the tick's try and says why it is held.
+	if !strings.Contains(stderr.String(), "rrl try 1 (run dispatch #2)") ||
+		!strings.Contains(stderr.String(), "attempt_unaddressed") {
+		t.Errorf("the alert does not name the held attempt and why: %q", stderr.String())
+	}
+}
+
+// The holds that fire before the tick's first dispatch — the width, a
+// foreign claim, the absorption bound — carry a NULL attempt, and the
+// alert's settle branch used to fall to its inline format over that dash
+// and name `ticfac settle <epic> <tick> - --release "<who>"`, a command
+// the settle CLI refuses ("-" is not an attempt number). Worse than the
+// refusal, it was the wrong verb: these holds are facts about the world and
+// the bound, not attempts a person releases — a foreign claim clears when
+// the holder's tick closes, the width when a slot frees, the bound when a
+// person judges the chain. Each names the command that actually moves it
+// on (tick gf0), spelled by the one shared decision the model's needs-you
+// reads too — never a settle addressed by a dash.
+func TestWatchHoldAlertForAWidthHoldNamesTheRunAgainCommand(t *testing.T) {
+	repo := t.TempDir()
+	// The finding's own repro: tick w9b, null attempt.
+	writeFeedEvent(t, repo, "epic-wne", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC), "epic-wne", "w9b", nil, reconcile.StageRunHeld,
+		"claim_width: the width wne declares is already full of claims this run does not hold: the graph counts 3 "+
+			"in dispatch.in_flight_ids (0ju, mrn, keh)"))
+	writeFeedEvent(t, repo, "epic-wne", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "epic-wne", "", nil, reconcile.StageRunFinished,
+		"failed: w9b did not pass"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-wne"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	// The width hold clears when a slot frees and the run again re-derives —
+	// the one command the alert names, addressed by the epic.
+	if !strings.Contains(stderr.String(), "ticfac run-epic wne") {
+		t.Errorf("the width hold's alert does not name the run-again command: %q", stderr.String())
+	}
+	// And never a settle: no attempt stands behind the hold, so the command
+	// the old inline fallback spelled would refuse — and a release would not
+	// clear the hold anyway.
+	if strings.Contains(stderr.String(), "ticfac settle") {
+		t.Errorf("the width hold's alert names a settle command for a hold no attempt stands behind: %q",
+			stderr.String())
+	}
+	// The hold's own reason and the tick are read off the line's fields.
+	if !strings.Contains(stderr.String(), "claim_width") || !strings.Contains(stderr.String(), "tick w9b") {
+		t.Errorf("the alert does not name the hold's reason and tick: %q", stderr.String())
+	}
+}
+
+// The foreign-claim hold is the width's twin with its own clearing sentence:
+// the claim ends when the HOLDER's tick closes (or the holder's run stops),
+// and the run again re-derives and proceeds the moment it does — never a
+// release, which is what makes it a hold at all.
+func TestWatchHoldAlertForAForeignClaimHoldNamesTheRunAgainCommand(t *testing.T) {
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "epic-wne", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC), "epic-wne", "w9b", nil, reconcile.StageRunHeld,
+		"foreign_claim: w9b is claimed by run run-epic-xte, whose records on the integration branch do not "+
+			"read finished, and which is alive"))
+	writeFeedEvent(t, repo, "epic-wne", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "epic-wne", "", nil, reconcile.StageRunFinished,
+		"failed: w9b did not pass"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-wne"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ticfac run-epic wne") {
+		t.Errorf("the foreign-claim hold's alert does not name the run-again command: %q", stderr.String())
+	}
+	if strings.Contains(stderr.String(), "ticfac settle") {
+		t.Errorf("the foreign-claim hold's alert names a settle command for a hold no attempt stands behind: %q",
+			stderr.String())
+	}
+}
+
+// The absorption bound's hold asks a person to judge the CHAIN the line
+// carries: the finding the bound refused to absorb is still theirs to
+// decide — so the alert names the triage, the one command that decides it —
+// and says the raise the line's own message names as the other road.
+func TestWatchHoldAlertForAnAbsorptionBoundHoldNamesTheFindingsDecision(t *testing.T) {
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC), "epic-2jn", "v2f", nil, reconcile.StageRunHeld,
+		"absorption_depth_exceeded: absorbing the finding \"fb1910\" would be the 4th absorption of ONE chain "+
+			"that already carries 3 and the bound is 3 (tick qjj). Raise the bound with --absorption-depth and "+
+			"run the epic again instead"))
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "epic-2jn", "", nil, reconcile.StageRunFinished,
+		"failed: v2f did not pass"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-2jn"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ticfac triage 2jn") {
+		t.Errorf("the absorption bound's alert does not name the command that decides the finding: %q",
+			stderr.String())
+	}
+	if strings.Contains(stderr.String(), "ticfac settle") {
+		t.Errorf("the absorption bound's alert names a settle command for a hold no attempt stands behind: %q",
+			stderr.String())
+	}
+	// The raise is the other road, and the alert says it — the flag the
+	// refusal's own escape hatch names.
+	if !strings.Contains(stderr.String(), "--absorption-depth") {
+		t.Errorf("the absorption bound's alert does not name the raise the line itself offers: %q", stderr.String())
+	}
+}
+
+// The final-review hold (tick quz) is the one hold that fires AFTER an
+// attempt was dispatched — the close-out's — so its line CARRIES an attempt
+// and the alert's default branch used to name the settle that attempt
+// addresses. Releasing it clears nothing: the hold is the review's NOT READY
+// verdict recorded on the PR, which the next resume re-reads and holds on
+// again. The moves are the refusal's own — fix what the review names and run
+// the epic again, merge the PR by hand to accept it (a re-run then finds it
+// merged), or close it — so the alert names the run again, never a settle.
+func TestWatchHoldAlertForAFinalReviewHoldNamesTheRunAgainCommand(t *testing.T) {
+	repo := t.TempDir()
+	// The hold's own shape: the close-out tick, its attempt carried on the
+	// line — the number a settle would happily take and the release of which
+	// answers nothing.
+	attempt := 2
+	writeFeedEvent(t, repo, "epic-qeu", runfeed.NewEvent(
+		time.Date(2026, 10, 4, 12, 0, 0, 0, time.UTC), "epic-qeu", "co7", &attempt, reconcile.StageRunHeld,
+		"land_review_not_ready: the run does not merge the epic qeu: its final review (decision 3) still judges it "+
+			"NOT READY after 2 review round(s), the bound being 2. What the review says would make it ready: the Phase 4 "+
+			"gate still never ran. The verdict is on the epic PR, and accepting work the run's own review rejected is a "+
+			"person's judgement: fix what it names and run the epic again, merge the PR by hand to accept it (a re-run "+
+			"then finds it merged), or close it"))
+	writeFeedEvent(t, repo, "epic-qeu", runfeed.NewEvent(
+		time.Date(2026, 10, 4, 12, 0, 1, 0, time.UTC), "epic-qeu", "", nil, reconcile.StageRunFinished,
+		"failed: the epic PR is not ready"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-qeu"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	// The run again is the one command the alert names: a resume is the move
+	// after every one of the refusal's own roads — the fix, the hand-merge
+	// (a re-run then finds it merged) and the close all end at running the
+	// epic again or never needing to.
+	if !strings.Contains(stderr.String(), "ticfac run-epic qeu") {
+		t.Errorf("the final-review hold's alert does not name the run-again command: %q", stderr.String())
+	}
+	// And never a settle: the attempt the line carries is the close-out's,
+	// and releasing it clears nothing — the next resume re-reads the verdict
+	// off the PR and holds again on it.
+	if strings.Contains(stderr.String(), "ticfac settle") {
+		t.Errorf("the final-review hold's alert names a settle for an attempt whose release clears nothing: %q",
+			stderr.String())
+	}
+	// The hold's own reason and the attempt it happens to carry are read off
+	// the line's fields.
+	if !strings.Contains(stderr.String(), "land_review_not_ready") ||
+		!strings.Contains(stderr.String(), "co7") {
+		t.Errorf("the alert does not name the hold's reason and tick: %q", stderr.String())
+	}
+}
+
+// A hold the closed set does not know — no reason it recognises, no attempt
+// behind it — answers with no command rather than a wrong one: the dash
+// settle the inline fallback used to spell is exactly a command a person
+// copies and the CLI refuses. The alert still says the hold and why.
+func TestWatchHoldAlertForAnUnrecognisedHoldWithNoAttemptNamesNoCommand(t *testing.T) {
+	repo := t.TempDir()
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 3, 0, time.UTC), "epic-2jn", "t1", nil, reconcile.StageRunHeld,
+		"some_future_hold: a hold kind the alert's decision does not know"))
+	writeFeedEvent(t, repo, "epic-2jn", runfeed.NewEvent(
+		time.Date(2026, 9, 27, 12, 41, 4, 0, time.UTC), "epic-2jn", "", nil, reconcile.StageRunFinished,
+		"failed: t1 did not pass"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-2jn"}, &stdout, &stderr)
+	if code != ExitHeld {
+		t.Fatalf("exit code %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "ticfac settle") || strings.Contains(stderr.String(), "ticfac triage") {
+		t.Errorf("the unrecognised hold's alert names a command the decision does not carry: %q", stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "some_future_hold") {
+		t.Errorf("the alert does not say the hold's own reason: %q", stderr.String())
 	}
 }
 
@@ -445,13 +876,21 @@ func TestWatchExitsFailedWhenTheRunEndedFailed(t *testing.T) {
 		t.Errorf("a run that failed holding nothing raised the hold alert: %q", stderr.String())
 	}
 	// The resume it names is a command a person can paste (tick gtk): the
-	// one statusmodel spells for the run's host, addressed by a real id —
-	// never a `<epic-id>` placeholder.
+	// one statusmodel spells, addressed by a real id — never a `<epic-id>`
+	// placeholder. And an id nothing RESOLVES names no command at all (tick
+	// ziy): the ending used to build it from epicOf(), whose fallback IS the
+	// run id, so this run printed `ticfac run-epic r-1` — a command that
+	// names a run id where an epic belongs. The plain sentence is the
+	// honest answer for a run nothing resolves (tick mwt's rule, applied to
+	// the stream path).
 	if strings.Contains(stderr.String(), "<epic-id>") {
 		t.Errorf("the failed end names a placeholder, not a command: %q", stderr.String())
 	}
-	if want := statusmodel.ResumeCommand(statusmodel.HostLocal, "r-1"); !strings.Contains(stderr.String(), want) {
-		t.Errorf("the failed end does not name the resume %q: %q", want, stderr.String())
+	if bad := statusmodel.ResumeCommand(statusmodel.HostLocal, "r-1"); strings.Contains(stderr.String(), bad) {
+		t.Errorf("the failed end names the resume %q by the run id itself, which nothing resolved:\n%s", bad, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "Nothing is held for a person") {
+		t.Errorf("the failed end does not say nothing is held for the person reading the stream: %q", stderr.String())
 	}
 	// The terminal line still prints — the last line says why, and the exit
 	// code says which class of ending it was.
@@ -610,6 +1049,74 @@ func TestWatchExitsCancelledWhenTheRunEndedCancelled(t *testing.T) {
 	// stopped, and the exit code says which class of ending it was.
 	if !strings.Contains(stdout.String(), "run_finished") {
 		t.Errorf("the terminal line never printed: %q", stdout.String())
+	}
+}
+
+// The stream's cancelled end names the resume the model's needs-you line
+// names (tick 3yx): the factory's own stop word — "stopped:" — is a
+// dead-run RESUME in the model's attention, the same attention a frame
+// renders as "needs you" and the alert prints "is holding for a person …
+// move it on" — so the pipe's ending must not answer the same deliberate
+// stop with "nothing is held for a person" and no command. One deliberate
+// stop, one answer, on both watch paths.
+func TestWatchStreamEndsCancelledNamingTheResume(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+
+	writeFeedEvent(t, repo, "epic-rmod", runfeed.NewEvent(now, "epic-rmod", "", nil,
+		reconcile.StageRunFinished, "stopped: stop requested by the operator"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-rmod"}, &stdout, &stderr)
+	if code != exitCancelled {
+		t.Fatalf("exit code %d, want %d (the cancelled class) for a stopped run; stderr %q", code, exitCancelled, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended CANCELLED") {
+		t.Errorf("the cancelled end is not said to the person reading the stream: %q", stderr.String())
+	}
+	resume := statusmodel.ResumeCommand(statusmodel.HostLocal, "rmod")
+	if !strings.Contains(stderr.String(), resume) {
+		t.Errorf("the cancelled end does not name the resume %q the model's attention holds: %q", resume, stderr.String())
+	}
+	if strings.Contains(stderr.String(), "nothing is held for a person") {
+		t.Errorf("the end said nothing is held while the model's attention holds the resume: %q", stderr.String())
+	}
+}
+
+// The stream's failed end names the resume the model's needs-you line
+// names (tick ziy, the failed sibling of 3yx's cancelled fix): a run whose
+// terminal line says it FAILED is a dead-run RESUME in the model's
+// attention, the same attention a frame renders as "needs you" and the
+// alert prints "is holding for a person … move it on" — so the pipe's
+// ending must not answer the same failure with "nothing is held for a
+// person" and no command. One failed run, one answer, on both watch paths.
+func TestWatchStreamEndsFailedNamingTheResume(t *testing.T) {
+	now := time.Now()
+	repo, home := modelFixture(t, now)
+
+	fakeTheTracker(t, threeWaveGraph())
+	t.Setenv("HOME", home)
+
+	writeFeedEvent(t, repo, "epic-rmod", runfeed.NewEvent(now, "epic-rmod", "t2", nil,
+		reconcile.StageRunFinished, "failed: t2 did not pass: the integrated gate refused the work"))
+
+	var stdout, stderr syncBuffer
+	code := Run([]string{"watch", "--repo", repo, "epic-rmod"}, &stdout, &stderr)
+	if code != exitGeneric {
+		t.Fatalf("exit code %d, want %d (the failed class) for a run whose own last line says failed; stderr %q", code, exitGeneric, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "ended FAILED") {
+		t.Errorf("the failed end is not said to the person reading the stream: %q", stderr.String())
+	}
+	resume := statusmodel.ResumeCommand(statusmodel.HostLocal, "rmod")
+	if !strings.Contains(stderr.String(), resume) {
+		t.Errorf("the failed end does not name the resume %q the model's attention holds: %q", resume, stderr.String())
+	}
+	if strings.Contains(strings.ToLower(stderr.String()), "nothing is held for a person") {
+		t.Errorf("the end said nothing is held while the model's attention holds the resume: %q", stderr.String())
 	}
 }
 

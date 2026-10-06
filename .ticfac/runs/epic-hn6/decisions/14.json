@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 14,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "renderOverview lays dashboardHeadline out at full width then indents it by two spaces; the phase line pads to exactly width, so 'needs you' wraps. TestTheBareOverviewHeadlineMatchesWatch pins the 102-cell form at width 100.\nevidence: internal/cli/overview.go:850-853; internal/cli/watch_view.go:308\n\nticfac run epic-hn6 created this tick by absorbing the finding dbbcff7c07cc735cc8f9ea8110e25dd8d3983a68dbb75919eb4c79af9b043a06 (reported by run-epic-hn6/tick-v16/attempt-1): the finding was judged against the epic's definition of done and gates done item A2. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-hn6/absorptions/dbbcff7c07cc735cc8f9ea8110e25dd8d3983a68dbb75919eb4c79af9b043a06.json on the run branch.",
+    "epic_id": "hn6",
+    "role": "classify-tick",
+    "tick_id": "kce",
+    "title": "Bare overview headline overflows the terminal by 2 cells"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.29,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.17,
+      "design": 0.01,
+      "diagnosis": 0.39,
+      "mechanical": 0.42,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": 0,
+      "input_tokens": 1280,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-04T18:56:22Z",
+  "answered_at": "2026-10-04T18:56:22Z",
+  "provenance": {
+    "run_id": "epic-hn6",
+    "tick_id": "kce",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/hn6",
+    "source_sha": "5955c47e5ab8b27de40c651eebe513231d0a5bd3",
+    "integration_ref": "refs/heads/epic/hn6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:813c4958d476d263a5f3d92eb1ec8e688ba0f0a0a9d275c775266207957b4dc8",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
