@@ -85,9 +85,9 @@ type Phase struct {
 	Workflow *Workflow `json:"workflow"`
 }
 
-// Image is the orchestrator container image a run actually booted. The digest
-// is here because a rollout is asynchronous, and an invisible digest turns
-// "the fix was never running" into "the fix did not work" (tick z1b).
+// Image is the container image a run actually booted. The digest is what
+// turns "the fix was never running" into "the fix did not work" when two
+// runs produce identical output across a deploy (tick z1b).
 type Image struct {
 	Ref    string `json:"image_ref"`
 	Digest string `json:"image_digest"`

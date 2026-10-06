@@ -1,0 +1,14 @@
+{
+  "id": "dob",
+  "title": "Retire the sdk0 opt-out and the residual Sandbox class once the 0.x app is gone",
+  "description": "The cutover keeps TICFAC_CLOUD_SUBSTRATE=sdk0 as an explicit opt-out, and the 0.x Sandbox class with its SANDBOXES binding for pre-cutover records — both meaningful only while the 0.x application exists. The first post-merge deploy deletes ticks-orchestrator (behind the live-run guard), after which a run that asks for sdk0 is still accepted at submit but its containers can no longer boot, and the failure lands at ignition, after the boundary is pushed. A tick should refuse sdk0 submissions once the application is gone, and later drop the residual class and binding once no pre-cutover run can exist; dax's report named both halves as the next tick's business.\nevidence: internal/cli/run_cloud.go:244 (the opt-out documented as \"while a deployment still serves it\"); cloudflare/src/run-substrate.ts:27 (sdk0 routing to the legacy binding); cloudflare/wrangler.toml:60,110 (the Sandbox class and SANDBOXES binding stay for pre-cutover records); RESULT-dax.md, \"What the next tick has to know\" and \"Residual seams\"\n\nticfac run run_7445005ff17447c3ae351f5ba99ea01d filed this backlog tick from the finding 6e10e232d5de401115466cdc7115454edfa2358766678e2008e2e932e5efc53d (reported by run-run_7445005ff17447c3ae351f5ba99ea01d/tick-rlx/attempt-3) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/6e10e232d5de401115466cdc7115454edfa2358766678e2008e2e932e5efc53d.json on the run branch.",
+  "notes": "2026-10-06 15:58 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: created by absorbing finding 6e10e232d5de401115466cdc7115454edfa2358766678e2008e2e932e5efc53d — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/6e10e232d5de401115466cdc7115454edfa2358766678e2008e2e932e5efc53d.json on epic/umq, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-run_7445005ff17447c3ae351f5ba99ea01d/tick-rlx/attempt-3",
+  "created_by": "ticfac run run_7445005ff17447c3ae351f5ba99ea01d",
+  "created_at": "2026-10-06T15:58:50Z",
+  "updated_at": "2026-10-06T15:58:56.187018838Z"
+}

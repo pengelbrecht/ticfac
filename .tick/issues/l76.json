@@ -1,10 +1,11 @@
 {
   "id": "l76",
   "title": "Final review of the SDK 1.0 migration diff",
-  "status": "open",
+  "notes": "2026-10-06 14:16 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: l76 try 1 (run dispatch #2) reported a finding the run itself decided — defect \"run_image stamp names the deployment's image, not the image the run pinned\" (key 1cab71b78ffeb441c7043bb7c3323e662f264d79eb145cfd966a7085fef4ebab, severity low, for this repository) is promoted to a backlog tick with an owner, xtd; the decision record is on the run branch at .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/1cab71b78ffeb441c7043bb7c3323e662f264d79eb145cfd966a7085fef4ebab.json, and the draft is triaged as promoted.\n2026-10-06 14:17 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: l76 try 1 (run dispatch #2) reported a finding the run itself decided — defect \"the deploy's Go SQL restates the Worker's run states with nothing pinning them\" (key 8f1b1e0d3f700a3846f6b54ce9b8ccf469100c978585c0a616b158a4a5be903a, severity low, for this repository) is promoted to a backlog tick with an owner, oyn; the decision record is on the run branch at .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/8f1b1e0d3f700a3846f6b54ce9b8ccf469100c978585c0a616b158a4a5be903a.json, and the draft is triaged as promoted.\n2026-10-06 14:17 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: l76 try 1 (run dispatch #2) reported a finding the run itself decided — defect \"backlog tick 8ct still reads open though its fix landed inside epic umq\" (key 287edb27013f4dae0c2b70b2ac315ba6b4f5b7ec594c45da86d512fa1ce2b8d6, severity low, for this repository) is promoted to a backlog tick with an owner, 2b2; the decision record is on the run branch at .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/287edb27013f4dae0c2b70b2ac315ba6b4f5b7ec594c45da86d512fa1ce2b8d6.json, and the draft is triaged as promoted.\n2026-10-06 14:17 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: the review-epic job, l76 try 1 (run dispatch #2), returned a validated ticfac.job-result.review-epic.v1 envelope at c6b0d67c17f9 — DONE: DONE (READY)",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "dax"
   ],
@@ -12,5 +13,6 @@
   "role": "review",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-01T08:24:24.739238Z",
-  "updated_at": "2026-10-01T08:24:24.739238Z"
+  "updated_at": "2026-10-06T14:17:28.04148675Z",
+  "closed_at": "2026-10-06T14:17:28.04148675Z"
 }

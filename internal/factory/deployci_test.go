@@ -144,27 +144,21 @@ func TestCIDeploysMainOnlyAfterCIPassed(t *testing.T) {
 	workflowMustContain(t, workflow, "factory_deployment",
 		"the path check diffs against the commit the factory actually runs, so a superseded or skipped deploy is not lost")
 
-	// No live-run wait: the rollout grace period is what keeps a deploy off a
-	// live run's containers, and the deploy names the runs holding the old
-	// image instead. The guard that waited up to an hour checked once, before
-	// a rollout that outlived it, and could not see --cloud-workers runs.
+	// No live-run wait, and none needed: on the durable_object scheduling
+	// policy (the only container application since tick dax) a deploy has no
+	// rollout to hold off — a running container keeps the image it started on,
+	// and a new one boots the image the deploy pushed. The guard that waited
+	// up to an hour checked once, before a rollout that outlived it, and
+	// could not see --cloud-workers runs; the grace period that replaced it is
+	// gone with the 0.x application.
 	workflowMustNotContain(t, workflow, "ticfac cloud status --json",
-		"the deploy must not wait on live runs: rollout_active_grace_period protects their containers, and the wait only delayed deploys")
-	workflowMustContain(t, workflow, "rollout_active_grace_period",
-		"the workflow must say what protects a live run now that it does not wait for one")
-	workflowMustContain(t, workflow, "held by live run",
-		"the summary must name the runs still holding instances on the previous image")
-	root, err := contracts.RepoRoot()
-	if err != nil {
-		t.Fatal(err)
-	}
-	toml, err := os.ReadFile(filepath.Join(root, "cloudflare", "wrangler.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(toml), "\nrollout_active_grace_period = 86400\n") {
-		t.Error("cloudflare/wrangler.toml no longer sets rollout_active_grace_period = 86400 — the deploy workflow " +
-			"deploys under live runs on the strength of it; restore it or restore a live-run wait")
+		"the deploy must not wait on live runs: the durable_object application leaves every live container untouched, and the wait only delayed deploys")
+	// No rollout machinery either: on the durable_object application there is
+	// nothing to confirm, wait for, or hold. These are the concrete phrases
+	// the old summary and escape hatch carried.
+	for _, gone := range []string{"--skip-rollout-wait", "Factory deployed at", "rollout confirmed", "held by live run"} {
+		workflowMustNotContain(t, workflow, gone,
+			"there is no container rollout on the durable_object application: nothing in the deploy workflow should claim, confirm, or wait for one")
 	}
 	workflowMustNotContain(t, workflow, "WRANGLER_DOCKER_BIN:",
 		"the deploy sets wrangler's docker to the bundle's shim itself (dockershim.go); a workflow override would bypass it")

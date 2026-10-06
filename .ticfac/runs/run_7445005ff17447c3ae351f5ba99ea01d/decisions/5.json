@@ -1,0 +1,72 @@
+{
+  "schema_version": 3,
+  "decision": 5,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "umq",
+    "job_id": "run-run_7445005ff17447c3ae351f5ba99ea01d/tick-a6b/attempt-4",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (cloudflare-sandbox/pi-durable, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:c64677c8ed510391d85d8f252dd964bff0cfa948806715fd644320ecb29e56ea",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "c78d987c304c6d0b9c757fafcb5ce496a98c5a0a",
+    "tick_id": "a6b"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "Tick dax deleted the `[[containers]]` block for the Sandbox class but left its comment paragraph in place, so the FactorySandbox block's comment now opens with \"The container application the Sandbox class runs\" and describes an `image =` key no block carries, directly above text saying it is the ONLY container application — internally contradictory, in the file a deploy operator edits first. Delete or rewrite the orphaned paragraph (the image path it explains lives on in the `[containers.images.factory]` comment).\nevidence: cloudflare/wrangler.toml:92-98 (the orphaned head of the deleted block, now merged into the FactorySandbox comment)",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "wrangler.toml keeps the deleted 0.x application's comment above the new block"
+      },
+      {
+        "body": "Two consecutive doc comments precede lastStop() in factory-sandbox.ts; the closer one wins, so runningImage() — the method umq [A2] names as the deploy-did-not-move-it proof — carries no doc, and a reader of lastStop() first sees an image doc that does not describe it. Move the five-line comment down to runningImage().\nevidence: cloudflare/src/factory-sandbox.ts:688-704 (the runningImage doc block immediately above lastStop's own)",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "runningImage()'s doc comment sits above lastStop() and is orphaned"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/umq/attempt-4/a6b",
+      "commits": 1,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/umq/attempt-4/a6b:RESULT-a6b.md",
+      "review_verdict": "READY",
+      "review_verdict_detail": ""
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "round-2 re-review of epic umq at the rlx close-out head: the delta since the READY review (l76) is the retro document and run bookkeeping only, and the integrated tree satisfies [A1]–[A5] on my own re-run (go and the full 1783-test cloudflare suite green, CI green on both integration heads) and on live in-container evidence; two low-severity comment defects filed as backlog."
+  },
+  "validated": true,
+  "requested_at": "2026-10-06T17:02:17Z",
+  "answered_at": "2026-10-06T17:02:17Z",
+  "provenance": {
+    "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
+    "tick_id": "a6b",
+    "attempt": 4,
+    "source_ref": "refs/heads/epic/umq",
+    "source_sha": "c78d987c304c6d0b9c757fafcb5ce496a98c5a0a",
+    "integration_ref": "refs/heads/epic/umq",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:c64677c8ed510391d85d8f252dd964bff0cfa948806715fd644320ecb29e56ea",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

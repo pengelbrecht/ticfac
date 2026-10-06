@@ -91,9 +91,14 @@ setInterval(() => {}, 60000);
 	return tree
 }
 
+// gone answers whether the process is DEAD, which a zombie is. The tool's
+// child dies with its group and is reparented to PID 1, and the factory
+// container's PID 1 is no init — it never reaps, so the corpse answers
+// signal 0 forever (zombie_linux.go, tick 8ct). processAlive is the question
+// this test has to ask: existence alone would read the killed child as one
+// that outlived the interrupt, inside the very host the interrupt ran on.
 func gone(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	return err == syscall.ESRCH
+	return !processAlive(pid)
 }
 
 // A hung tool is found by the group it leads under the runner, and nothing

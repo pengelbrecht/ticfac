@@ -476,7 +476,7 @@ func (r *StatusReport) writeDeployed(w io.Writer) {
 	fmt.Fprintf(w, "  worker        %s\n", worker)
 	image := d.ImageDigest
 	if image == "" {
-		image = "unconfirmed — no deploy has confirmed a container rollout"
+		image = "unrecorded — no deploy has recorded a container image"
 	}
 	fmt.Fprintf(w, "  image         %s\n", image)
 }

@@ -5,9 +5,11 @@
  * ## What happened
  *
  * Every container this factory boots — a run's orchestrator and each of its
- * workers — is one instance of the one `[[containers]]` application, and the
- * account runs at most `max_instances` (mirrored as FACTORY_MAX_INSTANCES,
- * tick b6e) of them at once. The run's orchestrator plus two workers held all
+ * workers — is one instance of the one `[[containers]]` application, and it
+ * ran at most `max_instances` (mirrored as FACTORY_MAX_INSTANCES, tick b6e)
+ * of them at once — a platform ceiling the `durable_object` policy has since
+ * abolished (tick dax), leaving FACTORY_MAX_INSTANCES as the factory's own
+ * limit. The run's orchestrator plus two workers held all
  * three. Starting a third worker through the dispatch door addressed its
  * container, the platform queued it for a slot that could not free, and the
  * door sat inside that wait until the orchestrator's client timed out —
@@ -35,12 +37,14 @@
  *    container whose run is not live, which is what a finalize that never ran
  *    (or ran before this code existed) leaves behind.
  *
- * Asking a container anything boots it when it is not running (the SDK
- * starts a container on any call), and a boot waits for a slot. So the
- * reclaim addresses a container's processes only while its boot is recent
- * enough for it to be up (RECLAIM_LOOKBACK_MS), and every such question is
- * bounded; anything older, or anything that does not answer in time, is
- * destroyed without being asked — `destroy` never boots one.
+ * Asking a container anything no longer boots it: on the durable_object
+ * substrate (the only one now, tick dax) `get` addresses the object and every
+ * question but `startProcess` answers from a running container or not at all
+ * (factory-sandbox.ts) — the 0.x behavior the reclaim used to work around,
+ * where the SDK started a container on any call and the boot queued for a
+ * platform slot. What remains here is the discipline, not the workaround:
+ * every question is bounded, `isRunning` is asked before anything that could
+ * start work, and `destroy` never starts one.
  */
 
 import { ACTIVE_RUN_STATES } from "./runs";
@@ -53,9 +57,10 @@ import { defaultSleeper, type Sleeper } from "./worker-dispatch";
 // ------------------------------------------------------------- the ceiling ---
 
 /**
- * The ceiling when the deployment states none: `[[containers]] max_instances`
- * as wrangler.toml ships it. A deployment always states FACTORY_MAX_INSTANCES
- * (the deploy refuses a config without it), so this is a floor for a
+ * The ceiling when the deployment states none: the number wrangler.toml's
+ * `[vars] FACTORY_MAX_INSTANCES` ships (its single declaration since tick
+ * dax — the `durable_object` policy has no platform `max_instances` for a
+ * deploy to refuse). A deployment always states it, so this is a floor for a
  * misconfiguration, not a choice.
  */
 export const DEFAULT_FACTORY_MAX_INSTANCES = 12;
@@ -67,10 +72,11 @@ export function factoryMaxInstances(env: { FACTORY_MAX_INSTANCES?: string }): nu
 }
 
 /**
- * How far back a boot can still be holding a container. A worker's wall is
- * bounded by the run's (RUN_MAX_WALL_CLOCK_MS, a day at most), and an
- * unwatched worker container idles out after SANDBOX_SLEEP_AFTER; a boot
- * older than this is not counted, and is destroyed without being asked.
+ * How far back a boot can still be holding a container, for the count and for
+ * the sweep's re-checks. A worker's wall is bounded by the run's
+ * (RUN_MAX_WALL_CLOCK_MS, a day at most), and an unwatched worker container
+ * idles out after its inactivity timeout; a boot older than this is not
+ * counted, and a reclaim recorded before it is not re-checked.
  */
 export const RECLAIM_LOOKBACK_MS = 24 * 60 * 60 * 1000;
 
@@ -321,7 +327,6 @@ async function reclaimBoots(
   const graceMs = Math.max(options.graceMs ?? DEFAULT_RECLAIM_GRACE_MS, 0);
   const pollMs = Math.max(options.pollMs ?? RECLAIM_POLL_MS, 1);
   const askTimeout = options.askTimeoutMs ?? RECLAIM_ASK_TIMEOUT_MS;
-  const recentSince = now().getTime() - RECLAIM_LOOKBACK_MS;
 
   type Pending = {
     boot: JobBoot;
@@ -333,9 +338,12 @@ async function reclaimBoots(
   };
   const pending: Pending[] = [];
 
-  // 1. Ask. A settled job's container was reclaimed at settlement, and an
-  //    old boot's has idled out: neither is asked anything (asking would boot
-  //    it), both are destroyed below as the backstop.
+  // 1. Ask. No question here boots a container on the durable_object
+  //    substrate — `get` and `isRunning` read state, and only a live one is
+  //    asked anything further (tick dax: the 0.x lookback guess that kept the
+  //    reclaim from cold-booting a container is gone with the 0.x behavior it
+  //    worked around). A settled job's container was reclaimed at settlement;
+  //    it and an old boot's are destroyed below as the backstop.
   for (const boot of boots) {
     const name = attemptSandboxNameForSlot(boot.run_id, boot.tick_id, boot.attempt, boot.job);
     const entry: Pending = { boot, name, sandbox: null, work: null, salvaged: false, detail: "" };
@@ -379,13 +387,10 @@ async function reclaimBoots(
     } catch (error) {
       entry.detail += `its WorkerAgent could not be stopped (${String(error)}); `;
     }
-    if (Date.parse(boot.at) < recentSince) {
-      entry.detail += "booted too long ago to be running; destroyed without being asked";
-      continue;
-    }
     try {
-      // A container that is not up has nothing to push, and asking it for its
-      // processes would start it just to be destroyed.
+      // A container that is not up has nothing to push: `isRunning` is the
+      // one question that answers without starting anything, and the salvage
+      // start below is the one call that could.
       if (entry.sandbox.isRunning !== undefined) {
         const up = await bounded(entry.sandbox.isRunning(), askTimeout);
         if (up === false) {

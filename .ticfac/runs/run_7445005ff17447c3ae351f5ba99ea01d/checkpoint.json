@@ -1,0 +1,50 @@
+{
+  "schema_version": 3,
+  "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
+  "epic_id": "umq",
+  "sequence": 30,
+  "state": "gating",
+  "reason": "running the integrated gate for rlx on f2c322ffb827",
+  "updated_at": "2026-10-06T17:02:44Z",
+  "ticks": [
+    {
+      "tick_id": "dax",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "l76",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "rlx",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "a6b",
+      "state": "closed",
+      "attempt": 4
+    }
+  ],
+  "provenance": {
+    "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/umq",
+    "source_sha": "f2c322ffb827909533de869c1ae387bc4e8b4436",
+    "integration_ref": "refs/heads/epic/umq",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:0fd84feaa6def26de94fef1a4da33b194dfa9b1fa1c66cc1c31a8a555019f2a4",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

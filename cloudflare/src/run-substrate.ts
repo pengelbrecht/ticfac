@@ -1,14 +1,16 @@
 /**
  * Which container substrate a run is on, and the binding that routes each of
- * its containers there (epic umq, tick 1hq).
+ * its containers there (epic umq, ticks 1hq and dax).
  *
  * A run is submitted on one substrate and stays on it (migration 0023): the
- * Sandbox SDK 0.x `Sandbox` class (SANDBOXES — every run before umq, and
- * every run that does not ask) or FactorySandbox on the `durable_object`
- * policy (SANDBOXES_V1, `substrate: "do_v1"`). The same container name
- * addresses a different Durable Object in each namespace, so the choice is
- * read per RUN, never per request: a run whose later boot looked in the other
- * namespace would find none of its live containers.
+ * Sandbox SDK 0.x `Sandbox` class (SANDBOXES — every run submitted before the
+ * cutover, and every run that explicitly asked for it) or FactorySandbox on
+ * the `durable_object` policy (SANDBOXES_V1, `substrate: "do_v1"`), which is
+ * the default a new submission gets (tick dax: the cutover; the 0.x
+ * application exists only until the last pre-cutover run ends). The same
+ * container name addresses a different Durable Object in each namespace, so
+ * the choice is read per RUN, never per request: a run whose later boot
+ * looked in the other namespace would find none of its live containers.
  *
  * The routing is done once, under the seam, by container NAME: every name the
  * factory boots begins with its run id (`run_<hex>`, which has no `-`), then
@@ -21,12 +23,19 @@
 import type { FactorySandboxNamespace, InstanceSize } from "./factory-sandbox";
 import type { Env } from "./index";
 import type { OrchestratorSandbox, SandboxBinding } from "./sandbox";
-
-/** The substrates a run can be on. `sdk0` is the default and has no row. */
+/** The substrates a run can be on. `sdk0` has no row. */
 export type RunSubstrate = "sdk0" | "do_v1";
 
 /** FactorySandbox on the durable_object policy (SANDBOXES_V1). */
 export const DO_V1: RunSubstrate = "do_v1";
+
+/**
+ * The substrate a NEW run gets when its submission names none (tick dax):
+ * FactorySandbox, the durable_object-policy application the 0.x class's is
+ * deleted beside. Recorded at submit, so the default a run got is a fact
+ * about the run, not about the deployment reading it later.
+ */
+export const DEFAULT_RUN_SUBSTRATE: RunSubstrate = DO_V1;
 
 export function isRunSubstrate(value: unknown): value is RunSubstrate {
   return value === "sdk0" || value === "do_v1";

@@ -7,7 +7,7 @@
 // mechanics, the credential ladder's GitHub device flow and App identity, the
 // factory's bearer-token auth, the Workers AI billing assertion, and the pin
 // that says which ticks the orchestrator image builds its tk from. The deploy
-// and read paths themselves (deploy.go, setup.go, status.go, rollout.go,
+// and read paths themselves (deploy.go, setup.go, status.go, containers.go,
 // migrate.go, the wrangler/docker drivers, the dashboard) land with ticks b3a
 // and 0e1.
 //

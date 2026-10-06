@@ -47,33 +47,29 @@ func newFactoryDeployCommand(stdout, stderr io.Writer) *cobra.Command {
 		bundleDir   = fs.String("bundle-dir", "", "stage the embedded bundle here")
 		rotateToken = fs.Bool("rotate-token", false, "mint a new factory token instead of reusing the stored one")
 		url         = fs.String("url", "", "the factory's base endpoint, when wrangler's output does not name it")
-		skipRollout = fs.Bool("skip-rollout-wait", false, "accept an unconfirmed container rollout")
-		skipPrune   = fs.Bool("skip-image-prune", false, "leave old ticks-orchestrator images in the managed registry (by default all but the newest few and the served one are deleted)")
-		keepImages  = fs.Int("keep-images", 0, "how many of the newest ticks-orchestrator images a prune keeps besides the served one (default 5)")
+		skipPrune   = fs.Bool("skip-image-prune", false, "leave old FactorySandbox images in the managed registry (by default all but the newest few, and every digest a live run pins, are deleted)")
 		asJSON      = fs.Bool("json", false, "print one versioned document (ticfac.factory-deploy.v1) with the deployment's facts; the token is never in it")
 	)
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(factoryDeploy(args, bundleDir, rotateToken, url, skipRollout, skipPrune, keepImages, asJSON, stdout, stderr))
+		return codeToErr(factoryDeploy(args, bundleDir, rotateToken, url, skipPrune, asJSON, stdout, stderr))
 	}
 	return cmd
 }
 
-func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *string, skipRollout, skipPrune *bool, keepImages *int, asJSON *bool, stdout, stderr io.Writer) int {
+func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *string, skipPrune *bool, asJSON *bool, stdout, stderr io.Writer) int {
 	if len(args) != 0 {
 		fmt.Fprintf(stderr, "ticfac factory deploy: takes no positional arguments\n")
 		return 2
 	}
 
 	result, err := factory.Deploy(context.Background(), factory.Options{
-		Version:         Version,
-		BundleDir:       *bundleDir,
-		RotateToken:     *rotateToken,
-		URL:             *url,
-		Out:             stdout,
-		SkipRolloutWait: *skipRollout,
-		SkipImagePrune:  *skipPrune,
-		ImageKeep:       *keepImages,
+		Version:        Version,
+		BundleDir:      *bundleDir,
+		RotateToken:    *rotateToken,
+		URL:            *url,
+		Out:            stdout,
+		SkipImagePrune: *skipPrune,
 	})
 	if err != nil {
 		// Every failure is a stop with an explanation the operator can act
@@ -89,28 +85,26 @@ func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *str
 		// transcript carried for free.
 		doc := struct {
 			agentDoc
-			URL              string `json:"url"`
-			Version          string `json:"version"`
-			SourceRef        string `json:"source_ref"`
-			BundleSHA        string `json:"bundle_sha"`
-			ImageRef         string `json:"image_ref"`
-			ImageDigest      string `json:"image_digest"`
-			WorkerVersionID  string `json:"worker_version_id"`
-			RolloutConfirmed bool   `json:"rollout_confirmed"`
-			Rotated          bool   `json:"token_rotated"`
-			ConfigPath       string `json:"credentials_path"`
+			URL             string `json:"url"`
+			Version         string `json:"version"`
+			SourceRef       string `json:"source_ref"`
+			BundleSHA       string `json:"bundle_sha"`
+			ImageRef        string `json:"image_ref"`
+			ImageDigest     string `json:"image_digest"`
+			WorkerVersionID string `json:"worker_version_id"`
+			Rotated         bool   `json:"token_rotated"`
+			ConfigPath      string `json:"credentials_path"`
 		}{
-			agentDoc:         agentDoc{Schema: agentSchemaID("factory-deploy"), State: agentStateDone},
-			URL:              result.URL,
-			Version:          result.Version,
-			SourceRef:        result.SourceRef,
-			BundleSHA:        result.BundleSHA,
-			ImageRef:         result.ImageRef,
-			ImageDigest:      result.ImageDigest,
-			WorkerVersionID:  result.WorkerVersionID,
-			RolloutConfirmed: result.RolloutConfirmed,
-			Rotated:          result.Rotated,
-			ConfigPath:       result.ConfigPath,
+			agentDoc:        agentDoc{Schema: agentSchemaID("factory-deploy"), State: agentStateDone},
+			URL:             result.URL,
+			Version:         result.Version,
+			SourceRef:       result.SourceRef,
+			BundleSHA:       result.BundleSHA,
+			ImageRef:        result.ImageRef,
+			ImageDigest:     result.ImageDigest,
+			WorkerVersionID: result.WorkerVersionID,
+			Rotated:         result.Rotated,
+			ConfigPath:      result.ConfigPath,
 		}
 		if err := emitAgentJSON(stdout, doc); err != nil {
 			fmt.Fprintf(stderr, "ticfac factory deploy: %v\n", err)
@@ -119,13 +113,12 @@ func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *str
 		return 0
 	}
 
-	// "Ready" is a claim about what a run started now would boot, so it is
-	// only made when the container rollout was actually confirmed.
-	if result.RolloutConfirmed {
-		fmt.Fprintf(stdout, "\nFactory ready at %s\n", result.URL)
-	} else {
-		fmt.Fprintf(stdout, "\nFactory deployed at %s — container rollout NOT confirmed\n", result.URL)
-	}
+	// "Ready" is a claim about what a run started now would boot. On the
+	// durable_object application there is no rollout whose convergence a wait
+	// could confirm — the endpoint is verified, the image was prepared inside
+	// `wrangler deploy`, and a new container boots exactly what this deploy
+	// pushed — so a deploy that verified is a deploy that is ready.
+	fmt.Fprintf(stdout, "\nFactory ready at %s\n", result.URL)
 	fmt.Fprintf(stdout, "  ticfac:      %s\n", result.Version)
 	fmt.Fprintf(stdout, "  image tk:    built from %s\n", result.SourceRef)
 	if result.WorkerVersionID != "" {
@@ -133,9 +126,6 @@ func factoryDeploy(args []string, bundleDir *string, rotateToken *bool, url *str
 	}
 	if result.ImageDigest != "" {
 		fmt.Fprintf(stdout, "  image:       %s\n", result.ImageDigest)
-	}
-	if !result.RolloutConfirmed {
-		fmt.Fprintf(stdout, "  rollout:     unconfirmed — a run started now may still boot the previous image\n")
 	}
 	fmt.Fprintf(stdout, "  credentials: %s\n", result.ConfigPath)
 	if result.Rotated {

@@ -114,14 +114,12 @@ jobs:
        github.event.workflow_run.head_branch == 'main' &&
        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-24.04
-    # The deploy takes ~10 minutes (image build and push, then a rollout wait
-    # of up to 10 — up to 60 while the platform still reports the rollout in
-    # progress and nothing shows it serving new instances yet, as when fresh
-    # layers pull slowly: 23-48 minute rollouts on 2026-09-30). A slow push
-    # adds its retries, and so does a durable_object image Cloudflare has not
-    # prepared inside wrangler's 15 minutes (up to three `wrangler deploy`
-    # attempts; internal/factory/wrangler.go). There is no wait for live runs
-    # (see "Live runs" below).
+    # The deploy takes ~10 minutes (image build and push, then the Worker
+    # upload). A slow push adds its retries, and so does a durable_object
+    # image Cloudflare has not prepared inside wrangler's 15 minutes (up to
+    # three `wrangler deploy` attempts; internal/factory/wrangler.go). There
+    # is no wait for live runs and no rollout to wait for (see "Live runs"
+    # below).
     timeout-minutes: 150
     concurrency:
       # One deploy at a time: two deploys racing one Cloudflare account is the
@@ -322,26 +320,25 @@ jobs:
           umask 077
           printf 'factory_token=%s\n' "$TICFAC_FACTORY_TOKEN" > ~/.ticfacrc
 
-      # Live runs. There is deliberately no wait for them. A container rollout
-      # cannot take a live run's container: cloudflare/wrangler.toml sets
-      # rollout_active_grace_period to a day, so the platform replaces an
-      # instance only once it has been connected to its Durable Object that
-      # long, and a run holds its instances on the image they booted while
-      # every new instance boots the new one. The deploy reports exactly that
-      # — which runs still hold instances on the previous image — instead of
-      # waiting for them. The live-run guard that stood here (wait up to 60
-      # minutes while `ticfac cloud status` showed a run live) could not do the
-      # job the grace period now does: it checked once, before a rollout that
-      # outlives it (run_911b, 2026-09-30: the guard passed at 11:57, the
-      # rollout it let through reached 100% at 13:31 and took a run started at
-      # 12:11), it deployed anyway after 60 minutes (the 2026-09-29 12:49 deploy
-      # did), it cannot see a run whose orchestrator runs on the operator's
-      # machine (`ticfac run --cloud-workers`), and on 2026-09-29/30 it held
-      # deploys for 36 and 60 minutes to protect nothing it could protect.
+      # Live runs. There is deliberately no wait for them, and since the
+      # SDK 1.0 migration (tick dax) there is no rollout to wait out either:
+      # the one container application is on the `durable_object` scheduling
+      # policy, where a running container keeps the image it started on
+      # through every later deploy and a new one boots the image this deploy
+      # pushed. Nothing a deploy does can take a live run's container, so a
+      # deploy during a run is safe by construction — which is what the
+      # rollout wait and the grace period used to approximate on the 0.x
+      # application (the live-run guard that stood here before either waited
+      # up to 60 minutes while `ticfac cloud status` showed a run live, and
+      # held deploys for 36 and 60 minutes on 2026-09-29/30 to protect
+      # nothing it could protect). The deploy also deletes the 0.x container
+      # application the migration retired, once no pre-cutover run is still
+      # live — a deletion held back is reported, and the next deploy retries.
 
       # The deploy itself, with no flags: it builds and pushes the sandbox
       # image from this build's embedded context, applies migrations, deploys
-      # the Worker, verifies the endpoint and waits for the container rollout.
+      # the Worker and verifies the endpoint. There is no container rollout
+      # for it to wait for (see "Live runs" above).
       # Its output is kept for the summary and filtered on its way to the
       # public log: any workers.dev host becomes <factory>, whatever the mask
       # above did or did not catch. ticfac streams wrangler's output as it is
@@ -378,8 +375,8 @@ jobs:
             | sed -u -E 's#https?://[A-Za-z0-9.-]+\.workers\.dev#<factory>#g'
 
       # What was deployed, where the operator looks for it: the commit, the
-      # Worker version wrangler created, and the image digest the container
-      # rollout was confirmed serving. Written on failure too, so a failed
+      # Worker version wrangler created, and the image digest the deployment
+      # starts containers on. Written on failure too, so a failed
       # deploy's summary says how far it got.
       - name: Record the deployment in the job summary
         if: always() && steps.decide.outputs.deploy == 'true'
@@ -389,13 +386,8 @@ jobs:
           worker="$(sed -nE 's/^[[:space:]]*(worker:|Current Version ID:)[[:space:]]*([0-9A-Za-z-]+)[[:space:]]*$/\2/p' "$log" | tail -n1)"
           image="$(sed -nE 's/^[[:space:]]*image:[[:space:]]*(sha256:[0-9a-f]+).*$/\1/p' "$log" | tail -n1)"
           version="$(git describe --tags --match 'v*' --always --long --abbrev=12)"
-          held="$(sed -nE 's/^.*held by live run\(s\): (.*)$/\1/p' "$log" | tail -n1)"
-          if grep -q '^Factory ready at' "$log" && [ -n "$held" ]; then
-            outcome="deployed, new instances serve the new image; instances held by live runs ($held) keep the previous one until each run lets go"
-          elif grep -q '^Factory ready at' "$log"; then
-            outcome="deployed, container rollout confirmed"
-          elif grep -q '^Factory deployed at' "$log"; then
-            outcome="deployed, container rollout NOT confirmed"
+          if grep -q '^Factory ready at' "$log"; then
+            outcome="deployed"
           else
             outcome="FAILED (retry with workflow_dispatch)"
           fi

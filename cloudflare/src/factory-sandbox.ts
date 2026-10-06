@@ -1,15 +1,16 @@
 /**
  * FactorySandbox — the factory's own container Durable Object on the
- * `durable_object` scheduling policy (epic umq, tick nmd).
+ * `durable_object` scheduling policy (epic umq, ticks nmd and dax).
  *
  * ## Why this exists
  *
  * Sandbox SDK 0.x (the `Sandbox` class src/sandbox.ts adapts) runs on the
  * `default` scheduling policy: ONE image per container application, rolled out
  * application-wide on every deploy. That rollout is what took epic hn6's
- * orchestrator mid-run, and what `rollout_active_grace_period` and
- * internal/factory/rollout_held.go exist to fence. SDK 1.0 requires the
- * `durable_object` policy, and 0.x gets fixes only through 2026-12-31.
+ * orchestrator mid-run, and what the `rollout_active_grace_period` and the
+ * deploy's rollout machinery existed to fence — all of which the cutover
+ * deleted, with the 0.x application. SDK 1.0 requires the `durable_object`
+ * policy, and 0.x gets fixes only through 2026-12-31.
  *
  * Under `durable_object` the Durable Object starts its own container through
  * `this.ctx.container.start({ image, instance, ... })`: a running container
@@ -42,8 +43,9 @@
  *    0.x container this replaces had Internet access (the clone, the gateway,
  *    the git door, package registries).
  *
- * It is OFF by default: the binding is SANDBOXES_V1 and nothing routes a run
- * through it until a run is submitted on that substrate (tick 1hq).
+ * Every new run is submitted on this substrate (tick dax): the default at
+ * submit is `do_v1`, and runs before the cutover keep the 0.x route their
+ * records name.
  */
 
 import { DurableObject } from "cloudflare:workers";

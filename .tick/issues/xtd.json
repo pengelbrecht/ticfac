@@ -1,0 +1,14 @@
+{
+  "id": "xtd",
+  "title": "run_image stamp names the deployment's image, not the image the run pinned",
+  "description": "A run's containers now start on the digest pinned in run_substrate at submit, but stampRunImage still writes the deployment-level factory_deployment_image row at ignition, so `ticfac cloud status`'s image line can name an image the run did not boot when a deploy lands between submit and ignition, and a deploy that resolved no image leaves no stamp at all even though the run booted a real one. Stamp from the run's pin first, falling back to the deployment record.\nevidence: cloudflare/src/runs.ts:808 (stampRunImage reads getDeploymentImage); cloudflare/src/run-substrate.ts (the pin recorded at submit); internal/cli/cloud.go (cloudRunImage, reported so a fix that never ran is not read as one that did not work)\n\nticfac run run_7445005ff17447c3ae351f5ba99ea01d filed this backlog tick from the finding 1cab71b78ffeb441c7043bb7c3323e662f264d79eb145cfd966a7085fef4ebab (reported by run-run_7445005ff17447c3ae351f5ba99ea01d/tick-l76/attempt-2) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/1cab71b78ffeb441c7043bb7c3323e662f264d79eb145cfd966a7085fef4ebab.json on the run branch.",
+  "notes": "2026-10-06 14:16 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: created by absorbing finding 1cab71b78ffeb441c7043bb7c3323e662f264d79eb145cfd966a7085fef4ebab — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/1cab71b78ffeb441c7043bb7c3323e662f264d79eb145cfd966a7085fef4ebab.json on epic/umq, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-run_7445005ff17447c3ae351f5ba99ea01d/tick-l76/attempt-2",
+  "created_by": "ticfac run run_7445005ff17447c3ae351f5ba99ea01d",
+  "created_at": "2026-10-06T14:16:33Z",
+  "updated_at": "2026-10-06T14:16:38.739069669Z"
+}
