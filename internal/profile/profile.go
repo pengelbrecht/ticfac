@@ -195,6 +195,17 @@ type Options struct {
 	// close-out profiles ARE claude processes, and that fall back is how a
 	// cloud run reaches one nobody chose.
 	Substrate string
+
+	// Config selects one of the runners files' named run configs
+	// ([configs.<name>], tick tda): the config's cells are applied as the
+	// LAST overlay over the roles this resolution reads, so one epic runs on
+	// GLM and another on claude from the same repository. Empty applies no
+	// selection — the historical view, and the one a run that never selected
+	// resolves. A name the runners files do not declare is the config
+	// reader's refusal (runconfig.ErrNoSuchConfig), never a fall back to the
+	// file's own cells: an operator who asked for claude and silently got GLM
+	// would be an operator whose epic ran on a routing nobody chose.
+	Config string
 }
 
 // Provenance is where a resolved profile came from. It travels into the attempt
@@ -218,6 +229,13 @@ type Provenance struct {
 	// review and a local one are different judgements, and an attempt record
 	// that could not tell them apart would be evidence about neither.
 	Substrate string
+
+	// Config is the named run config the routing resolved under (tick tda),
+	// empty when none was selected. It travels beside Tier and Substrate for
+	// the same reason: a review on the claude config and one on GLM are
+	// different judgements at different prices, and an attempt record that
+	// could not tell them apart would be evidence about neither.
+	Config string
 
 	// Digest is over what was RESOLVED — role, version and the four fields —
 	// so two runs of the same profile file under different routing do not
@@ -343,6 +361,7 @@ func Resolve(role string, opts Options) (*Profile, error) {
 			PromptSource: path.Join(base, decoded.Prompt),
 			Tier:         opts.Tier,
 			Substrate:    opts.Substrate,
+			Config:       opts.Config,
 		},
 	}
 
@@ -410,7 +429,7 @@ func route(p *Profile, opts Options) error {
 		}
 		return nil
 	}
-	roles, err := ReadRolesFor(opts.RunnersConfig, runconfig.Substrate(opts.Substrate))
+	roles, err := ReadRolesForConfig(opts.RunnersConfig, runconfig.Substrate(opts.Substrate), opts.Config)
 	if err != nil {
 		return fmt.Errorf("profile %s: %w", p.Role, err)
 	}
@@ -477,7 +496,7 @@ func route(p *Profile, opts Options) error {
 				return fmt.Errorf("profile %s: %w: %s declares no [roles.%s] cell — a cloud run refuses rather than falling back to the role's own %q/%q",
 					p.Role, ErrNoCloudRouting, runconfig.OverrideFileName(runconfig.SubstrateCloud), name, role.Kind, role.Model)
 			}
-		} else {
+			} else {
 			apply(overlay.Kind, overlay.Model)
 			routed = append(routed, fmt.Sprintf("%s [roles.%s]", role.OverrideFile, name))
 			if opts.Tier != "" {
@@ -487,6 +506,13 @@ func route(p *Profile, opts Options) error {
 				}
 			}
 		}
+	}
+	// A named config was selected (tick tda): its cells applied as the LAST
+	// overlay — over the role, every tier and the substrate override — so the
+	// provenance names it last, and the cells a reader must edit are the
+	// config's own.
+	if role.SelectedConfig != "" {
+		routed = append(routed, fmt.Sprintf("[configs.%s.roles.%s]", role.SelectedConfig, name))
 	}
 	p.Routed = strings.Join(routed, " + ")
 	return nil
