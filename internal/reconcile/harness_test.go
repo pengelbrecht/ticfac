@@ -986,8 +986,10 @@ type fixtureOptions struct {
 	guardsOff map[string]bool
 	stopAfter func(Event) bool
 	repo      *testRepo
-	budget    float64
-	ceiling   float64
+	// keepRemoteRefs: the run's end leaves its refs on origin (Options.keepRemoteRefs).
+	keepRemoteRefs bool
+	budget         float64
+	ceiling        float64
 
 	// pullRequests is the code-hosting surface behind the PR + CI close-out
 	// rule (tick 0iz): the fake forge a test that declares the rule supplies.
@@ -1225,6 +1227,7 @@ func (f *fixture) options(repo *testRepo, opts fixtureOptions) Options {
 		GateHeartbeatEvery:      opts.gateHeartbeat,
 		Sleep:                   func(time.Duration) { time.Sleep(5 * time.Millisecond) },
 		guardsOff:               opts.guardsOff,
+		keepRemoteRefs:          opts.keepRemoteRefs,
 		stopAfter:               opts.stopAfter,
 		NewExecutor:             f.newExecutor,
 		NewSweeper:              f.newSweeper,

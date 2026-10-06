@@ -792,6 +792,12 @@ type Options struct {
 	// control. Names are contracts/lifecycle-invariants.json's guard names.
 	guardsOff map[string]bool
 
+	// keepRemoteRefs leaves a completed run's refs on origin (tick 6is's
+	// run-end retirement off), for the tests whose premise is an attempt
+	// branch still on origin after its run completed. Nothing in production
+	// sets it: `ticfac sweep refs` and the run end both retire.
+	keepRemoteRefs bool
+
 	// proseFindingsForAPerson restores the pre-epic-6in answer to a finding
 	// against a prose acceptance — left untriaged, for a person — and nothing
 	// in production sets it. It exists for the tests of the machinery that
@@ -932,6 +938,12 @@ type Reconciler struct {
 	sleep func(time.Duration)
 
 	guardsOff map[string]bool
+	// keepRemoteRefs is Options.keepRemoteRefs.
+	keepRemoteRefs bool
+	// replayingTerminal is set while a re-entered TERMINAL run takes down
+	// what its end left: the retirement still deletes what it can, but a ref
+	// it keeps again is not news, and a replay says nothing it did not do.
+	replayingTerminal bool
 
 	// The lifecycle machinery. Every one of these is read by Run.
 	step       *Step
@@ -1675,6 +1687,7 @@ func New(opts Options) (*Reconciler, error) {
 	r.now = opts.Now
 	r.sleep = r.waitSleep(opts.Sleep)
 	r.guardsOff = opts.guardsOff
+	r.keepRemoteRefs = opts.keepRemoteRefs
 	r.lastPolled = map[string]time.Time{}
 	r.liveness = map[string]string{}
 	r.holds = map[string]*hold{}
@@ -2029,7 +2042,9 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			// Nothing is restarted, but what the finished run left — a
 			// teardown its end could not complete — is still this run's to
 			// take down, and a re-run is the retry (sweep.go).
+			r.replayingTerminal = true
 			r.sweepClosed(ctx, checkpoint.State == runstate.StateCompleted)
+			r.replayingTerminal = false
 			r.record("", StageRunFinished, "the run is already %s: %s", checkpoint.State, checkpoint.Reason)
 			return r.result(checkpoint.State, checkpoint.Reason), nil
 		}

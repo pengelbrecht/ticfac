@@ -245,7 +245,7 @@ func (r *Reconciler) sweepLeftovers(ctx context.Context, tick string, sweepable 
 // closed for the grace. A failure is recorded and left for the next pass; it
 // never refuses the run.
 func (r *Reconciler) retireRemoteRefs(ctx context.Context) {
-	if r.git == nil || r.git.remote == "" || r.opts.Repo == "" || r.runID == "" {
+	if r.git == nil || r.git.remote == "" || r.opts.Repo == "" || r.runID == "" || r.keepRemoteRefs {
 		return
 	}
 	say := func(format string, args ...any) { r.record("", StageCleanedUp, format, args...) }
@@ -290,7 +290,9 @@ func (r *Reconciler) retireRemoteRefs(ctx context.Context) {
 			kept++
 		}
 	}
-	if kept > 0 {
+	// Idempotent in what it says: a replay of a terminal run that keeps the
+	// same refs again has done nothing, and a replay says only what it did.
+	if kept > 0 && !r.replayingTerminal {
 		say("kept: %d of the run's refs on %s hold commits %s does not have; `ticfac sweep refs` retires them "+
 			"once the epic has been closed for the grace", kept, r.git.remote, r.branch)
 	}
