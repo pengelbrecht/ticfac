@@ -78,9 +78,11 @@ sha that is skipped or cancelled is normal: deploy-factory deploys the newest
 green main head and a newer commit's deploy supersedes yours, carrying your
 fix with it. A loop keyed to your sha's own run never ends in that case
 (several did, for hours, on 2026-10-01). Check the factory read-only with
-`ticfac factory status`. A deploy does not wait for live runs:
-`rollout_active_grace_period` keeps a rollout off their containers, and the
-run's summary names any run still holding the previous image. Retry a failed
+`ticfac factory status`. A deploy does not wait for live runs, and there is no
+rollout to wait out: the one container application is on the `durable_object`
+scheduling policy, where a deploy cannot take a running container (each keeps
+the image it started on), and a new container boots the image the deploy
+pushed. Retry a failed
 deploy with `gh workflow run deploy-factory.yml`. A local `ticfac factory deploy` is the fallback only
 (first install, token rotation, CI unable to deploy): from this Mac it builds
 an emulated amd64 image and is fragile. The repository is public: never paste

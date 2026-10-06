@@ -15,14 +15,14 @@ func TestDeployRunsWranglerAgainWhenOnlyTheImagePreparationTimedOut(t *testing.T
 	h := newHarness(t)
 	t.Setenv("FAKE_WRANGLER_PREPARATION_TIMEOUTS", "2")
 	var out bytes.Buffer
-	opts := h.rolloutOptions()
+	opts := h.options()
 	opts.Out = &out
 	result, err := Deploy(context.Background(), opts)
 	if err != nil {
 		t.Fatalf("Deploy: %v\n%s", err, out.String())
 	}
-	if !result.RolloutConfirmed {
-		t.Error("the retried deploy did not confirm its rollout")
+	if result.ImageDigest == "" {
+		t.Error("the retried deploy did not resolve the image it pushed")
 	}
 	if n := countLines(h.logLines(), "deploy"); n != 3 {
 		t.Errorf("wrangler deploy ran %d times, want 3 (two timeouts, then success):\n%s", n, h.log())
@@ -36,7 +36,7 @@ func TestDeployRunsWranglerAgainWhenOnlyTheImagePreparationTimedOut(t *testing.T
 func TestDeployGivesUpOnTheImagePreparationAfterItsAttempts(t *testing.T) {
 	h := newHarness(t)
 	t.Setenv("FAKE_WRANGLER_PREPARATION_TIMEOUTS", "9")
-	opts := h.rolloutOptions()
+	opts := h.options()
 	_, err := Deploy(context.Background(), opts)
 	if err == nil || !strings.Contains(err.Error(), imagePreparationTimeout) {
 		t.Fatalf("Deploy error = %v, want the preparation timeout", err)

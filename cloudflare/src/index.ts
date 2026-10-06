@@ -1787,8 +1787,8 @@ export default {
     }
 
     // What this factory actually runs (GET /api/deployment): the deploy's own
-    // record, the image its container rollout was confirmed serving, and the
-    // Worker version answering this request. `ticfac factory status` reads it
+    // record, the image the deployment starts containers on, and the Worker
+    // version answering this request. `ticfac factory status` reads it
     // so the operator sees the factory's answer, not the laptop's memory of
     // its own last deploy — CI deploys most of them now.
     if (segments[0] === "api" && segments[1] === "deployment" && segments.length === 2) {

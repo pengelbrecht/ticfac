@@ -15,9 +15,11 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/httpnet"
 )
 
-// Old orchestrator images are pruned from the managed registry by the deploy.
+// FactorySandbox images are pruned from the managed registry by the deploy,
+// and the 0.x repository's images are deleted wholesale with the 0.x
+// application (legacyapp.go).
 //
-// Every deploy pushes a new ticks-orchestrator image under a new tag (wrangler
+// Every deploy pushes a new FactorySandbox image under a new tag (wrangler
 // tags it with the Worker version), and nothing ever removed one. CI builds
 // the image on a fresh runner with no layer cache, so about 0.8 GB of each
 // ~1.2 GB image is layers no earlier image shares: on 2026-09-30 the registry
@@ -25,38 +27,27 @@ import (
 // against Cloudflare's 50 GB per-account image storage limit — one or two
 // deploys from a limit that rejects pushes or pulls. (It was the first suspect
 // when rollouts failed with ImagePullError that day; it was not the cause —
-// rollout.go has what was — but nothing bounded it either.)
+// the rollout machinery has since been deleted with the 0.x application — but
+// nothing bounded it either.)
 //
-// So a deploy keeps the registry bounded itself:
-//
-//   - BEFORE `wrangler deploy`, so a registry that is already full makes room
-//     for the image this deploy is about to push (the recovery path: a deploy
-//     that failed because storage ran out heals on its retry), protecting the
-//     image the application serves right now;
-//   - AFTER a confirmed rollout, protecting the new image and the one it
-//     replaced (the rollback target).
-//
-// Both keep the newest imageKeepNewest tags besides. The selection is a pure
-// function (selectImagesToPrune) because deleting the wrong image is the one
-// mistake here that cannot be undone: a container application whose image is
-// gone cannot start an instance.
+// So the deploy keeps the registry bounded itself: after it pushes, it keeps
+// the newest few tags besides every digest a live run pins. The selection is a
+// pure function (selectImagesToPrune) because deleting the wrong image is the
+// one mistake here that cannot be undone: a container that boots that digest
+// again would find it gone.
 //
 // Pruning never fails a deploy. A registry that cannot be read or an image that
 // cannot be deleted is a warning naming what happened; the deploy's own verdict
-// is the rollout's.
+// is the Worker's.
 
 const (
-	// imageKeepNewest is how many of the most recent orchestrator images a
-	// prune keeps, on top of the protected ones. Five covers the last few
-	// Worker versions for a rollback while bounding storage to a few GB.
-	imageKeepNewest = 5
 	// imageKeepFloor is the least a caller can ask to keep.
 	imageKeepFloor = 2
 
 	// imageStorageLimitBytes is Cloudflare's total image storage per account
 	// (developers.cloudflare.com/containers/platform-details/limits).
 	imageStorageLimitBytes int64 = 50_000_000_000
-	// imageStorageWarnBytes is where a deploy starts saying the orchestrator
+	// imageStorageWarnBytes is where a deploy starts saying the FactorySandbox
 	// images alone are close to it. The limit is account-wide, so other
 	// repositories share the remainder.
 	imageStorageWarnBytes int64 = 35_000_000_000
@@ -64,7 +55,7 @@ const (
 	registryDomain = "registry.cloudflare.com"
 )
 
-// registryImage is one tag of the orchestrator repository.
+// registryImage is one tag of a managed-registry repository.
 type registryImage struct {
 	Tag    string
 	Digest string
@@ -277,32 +268,6 @@ func (c *registryClient) listImages(ctx context.Context, repo string) ([]registr
 	return images, nil
 }
 
-// pruneOrchestratorImages deletes the orchestrator images selectImagesToPrune
-// picks and reports the repository's storage. It never returns an error: every
-// failure is a warning in the deploy's output (see the file comment).
-func pruneOrchestratorImages(ctx context.Context, w *wrangler, out io.Writer, opts Options, protected ...string) {
-	if opts.SkipImagePrune {
-		return
-	}
-	var live []string
-	for _, d := range protected {
-		if d != "" {
-			live = append(live, d)
-		}
-	}
-	if len(live) == 0 {
-		// Never prune without knowing what the application serves.
-		fmt.Fprintf(out, "WARNING: not pruning %s images: the image the application serves is unknown\n",
-			ContainerAppName)
-		return
-	}
-	keep := opts.ImageKeep
-	if keep == 0 {
-		keep = imageKeepNewest
-	}
-	pruneRepositoryImages(ctx, w, out, opts, ContainerAppName, keep, live, "the served image")
-}
-
 // FactorySandboxImageRepo is the registry repository of FactorySandbox's
 // named image `factory` (epic umq): wrangler names it
 // <worker>-<class, lowercased>-<image name>. A durable_object-policy
@@ -315,7 +280,8 @@ const FactorySandboxImageRepo = "ticks-factory-factorysandbox-factory"
 // factorySandboxKeepNewest is how many of the newest FactorySandbox images a
 // prune keeps besides every pinned one: the deployment's current image and
 // one or two to roll back to. Lean on purpose — the account's 50 GB image
-// storage is shared with the 0.x repository until it is deleted (dax).
+// storage is shared with the 0.x repository until the deploy deletes it
+// (legacyapp.go, tick dax).
 const factorySandboxKeepNewest = 3
 
 // livePinsSQL selects the image every live run pinned (migration 0023, the
@@ -394,16 +360,7 @@ func pruneRepositoryImages(ctx context.Context, w *wrangler, out io.Writer, opts
 	}
 	before := uniqueLayerBytes(images)
 	prune := selectImagesToPrune(images, keep, live)
-
-	deleted := map[string]bool{}
-	var failed []string
-	for _, img := range prune {
-		if _, err := w.run(ctx, "", "containers", "images", "delete", repo+":"+img.Tag, "--skip-confirmation"); err != nil {
-			failed = append(failed, img.Tag)
-			continue
-		}
-		deleted[img.Tag] = true
-	}
+	deleted, failed := deleteTags(ctx, w, repo, prune)
 	var remaining []registryImage
 	for _, img := range images {
 		if !deleted[img.Tag] {
@@ -414,15 +371,82 @@ func pruneRepositoryImages(ctx context.Context, w *wrangler, out io.Writer, opts
 
 	fmt.Fprintf(out, "%s images: %d tags, %s of layers; pruned %d (keeping the newest %d and %s), %s remain\n",
 		repo, len(images), gigabytes(before), len(deleted), keep, protectedLabel, gigabytes(after))
-	if len(failed) > 0 {
-		fmt.Fprintf(out, "WARNING: could not delete %d %s image(s): %s\n",
-			len(failed), repo, strings.Join(failed, ", "))
-	}
+	reportFailedTags(out, repo, failed)
 	if after >= imageStorageWarnBytes {
 		fmt.Fprintf(out, "WARNING: %s images still hold %s of the account's %s image storage limit; "+
 			"a push past the limit fails the rollout with ImagePullError\n",
 			repo, gigabytes(after), gigabytes(imageStorageLimitBytes))
 	}
+}
+
+// deleteRepositoryImages deletes EVERY tag of one repository and reports it.
+// It is how the deploy empties the 0.x repository once the 0.x application is
+// deleted (legacyapp.go): with no application serving an image, no image in
+// the repository is protected, and the ~45 GB it held was the bulk of the
+// account's image storage. There is no keep-back: a rollback to the 0.x path
+// rebuilds and re-pushes its image, it does not resurrect old tags.
+// Never an error — every failure is a warning, like every prune.
+func deleteRepositoryImages(ctx context.Context, w *wrangler, out io.Writer, opts Options, repo string) {
+	client, err := newRegistryClient(ctx, w, opts.registryBaseURL, opts.HTTPClient)
+	if err != nil {
+		fmt.Fprintf(out, "WARNING: not deleting %s images: %v\n", repo, err)
+		return
+	}
+	images, err := client.listImages(ctx, repo)
+	if err != nil {
+		fmt.Fprintf(out, "WARNING: not deleting %s images: %v\n", repo, err)
+		return
+	}
+	before := uniqueLayerBytes(images)
+	deleted, failed := deleteTags(ctx, w, repo, images)
+	var remaining []registryImage
+	for _, img := range images {
+		if !deleted[img.Tag] {
+			remaining = append(remaining, img)
+		}
+	}
+	after := uniqueLayerBytes(remaining)
+
+	fmt.Fprintf(out, "%s images: %d tags, %s of layers; deleted %d, %s remain\n",
+		repo, len(images), gigabytes(before), len(deleted), gigabytes(after))
+	reportFailedTags(out, repo, failed)
+}
+
+// reportFailedTags prints the tags a deletion could not remove. Sorted, so a
+// report is reproducible from the same failures.
+func reportFailedTags(out io.Writer, repo string, failed map[string]bool) {
+	if len(failed) == 0 {
+		return
+	}
+	tags := make([]string, 0, len(failed))
+	for tag := range failed {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
+	fmt.Fprintf(out, "WARNING: could not delete %d %s image(s): %s\n",
+		len(tags), repo, strings.Join(tags, ", "))
+}
+
+// deleteTags deletes the named tags of a repository with wrangler, and
+// returns which ones went and which could not. Deleting a tag can delete the
+// manifest under it, so a tag that shares a digest with a kept image must
+// never reach here — the selection (selectImagesToPrune) is responsible for
+// that, and the whole-repository deletion is responsible for having no kept
+// image.
+func deleteTags(ctx context.Context, w *wrangler, repo string, prune []registryImage) (deleted, failed map[string]bool) {
+	deleted = map[string]bool{}
+	failed = map[string]bool{}
+	for _, img := range prune {
+		if deleted[img.Tag] || failed[img.Tag] {
+			continue
+		}
+		if _, err := w.run(ctx, "", "containers", "images", "delete", repo+":"+img.Tag, "--skip-confirmation"); err != nil {
+			failed[img.Tag] = true
+			continue
+		}
+		deleted[img.Tag] = true
+	}
+	return deleted, failed
 }
 
 func gigabytes(n int64) string { return fmt.Sprintf("%.1f GB", float64(n)/1e9) }

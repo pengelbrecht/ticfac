@@ -1,6 +1,5 @@
 #!/bin/sh
-# A stand-in for the real `wrangler`, used by internal/factory's tests and by
-# scripts/verify-factory-deploy.sh.
+# A stand-in for the real `wrangler`, used by internal/factory's tests.
 #
 # It is deliberately stateful: buckets and databases it "creates" are recorded
 # under $FAKE_WRANGLER_STATE, so a second `tk factory deploy` sees the same
@@ -16,26 +15,20 @@
 #   FAKE_WRANGLER_NO_INFO when non-empty, `r2 bucket info` is an unknown
 #                         subcommand (an older wrangler), exercising the fallback
 #
-# Container application (the half `wrangler deploy` does not wait for):
+# Container application (the image the deploy resolves and the legacy app the
+# deploy deletes):
 #   FAKE_WRANGLER_PUSH_DIGEST   digest `deploy` reports pushing (default: a new one)
-#   FAKE_WRANGLER_SERVING_DIGEST digest the application reports before the
-#                         rollout lands (default: an "old image" digest)
-#   FAKE_WRANGLER_ROLLOUT_LAG   how many `containers list` calls still report the
-#                         old digest before the new one appears (default 0)
-#   FAKE_WRANGLER_ROLLOUT_STUCK when non-empty, the rollout never lands
+#   FAKE_WRANGLER_SERVING_DIGEST digest the applications report before the
+#                         deploy that pushed the new one (default: an "old image" digest)
 #   FAKE_WRANGLER_NO_PUSH when non-empty, `deploy` reports that the image
 #                         already exists remotely and emits no image block
 #   FAKE_WRANGLER_NO_CONTAINER_BLOCK when non-empty, `deploy` prints no container
 #                         application block, so no digest can be read from it
 #   FAKE_WRANGLER_NO_CONTAINERS when non-empty, `containers` is an unknown
 #                         subcommand (an older wrangler)
-#   FAKE_WRANGLER_NO_SUCH_APP   when non-empty, the listing has other applications
-#                         but not this one
-#   FAKE_WRANGLER_HEALTH_ERROR  JSON list items `containers info` reports as
-#                         health.errors; unset, `containers info` is unsupported
-#   FAKE_WRANGLER_ROLLOUT_ACTIVE when non-empty, `containers info` reports a rollout in progress
-#   FAKE_WRANGLER_INSTANCES     JSON `containers instances <app> --json` prints;
-#                         unset, that command is unsupported
+#   FAKE_WRANGLER_NO_APP when non-empty, the listing has other applications but
+#                         not the FactorySandbox one
+#   FAKE_WRANGLER_NO_LEGACY_APP when non-empty, the account has no 0.x application
 #   FAKE_WRANGLER_REGISTRY_HOST registry host `containers registries credentials`
 #                         names; unset, that command is unsupported (no prune)
 #                         `containers images delete` appends to
@@ -52,6 +45,9 @@ url=${FAKE_WRANGLER_URL:-https://ticks-factory.acme.workers.dev}
 old_digest=${FAKE_WRANGLER_SERVING_DIGEST:-sha256:1111111111111111111111111111111111111111111111111111111111111111}
 new_digest=${FAKE_WRANGLER_PUSH_DIGEST:-sha256:2222222222222222222222222222222222222222222222222222222222222222}
 registry=registry.cloudflare.com/acct
+FACTORY_APP=ticks-factory-sandbox
+FACTORY_REPO=ticks-factory-factorysandbox-factory
+LEGACY_APP=ticks-orchestrator
 
 case "${1:-}" in
   --version)
@@ -140,7 +136,33 @@ case "${1:-}" in
       execute)
         # Record the SQL so the harness can prove the version row was written.
         printf '%s\n' "$*" >>"$FAKE_WRANGLER_STATE/execute.log"
-        echo "🚣 Executed 1 command"
+        if [ "${5:-}" = "--json" ]; then
+          # The two reads the deploy makes with --json, answered from state
+          # files so a test can set the account's condition:
+          #   - the legacy-run count (legacyapp.go): the number of live runs
+          #     still on the 0.x application, from `legacy-runs` (default 0);
+          #   - the live pins (prune.go): the images live runs pin, from
+          #     `pins.json` when present, none when not.
+          case "$*" in
+            *"COUNT(*) AS n"*)
+              n=0
+              [ -s "$FAKE_WRANGLER_STATE/legacy-runs" ] && n=$(cat "$FAKE_WRANGLER_STATE/legacy-runs")
+              echo "[{\"results\":[{\"n\":$n}],\"success\":true,\"meta\":{}}]"
+              ;;
+            *"run_substrate"*)
+              if [ -s "$FAKE_WRANGLER_STATE/pins.json" ]; then
+                cat "$FAKE_WRANGLER_STATE/pins.json"
+              else
+                echo "[{\"results\":[],\"success\":true,\"meta\":{}}]"
+              fi
+              ;;
+            *)
+              echo "[{\"results\":[],\"success\":true,\"meta\":{}}]"
+              ;;
+          esac
+        else
+          echo "🚣 Executed 1 command"
+        fi
         ;;
       *)
         echo "fake wrangler: unsupported d1 command: $*" >&2
@@ -184,11 +206,10 @@ case "${1:-}" in
       echo "Image already exists remotely, skipping push"
     elif [ -z "${FAKE_WRANGLER_NO_CONTAINER_BLOCK:-}" ]; then
       printf '%s' "$new_digest" >"$FAKE_WRANGLER_STATE/container-target"
-      : >"$FAKE_WRANGLER_STATE/containers-list-count"
       echo "╭ Deploy a container application"
-      echo "├ EDIT ticks-orchestrator"
-      echo "-   image = \"$registry/ticks-orchestrator@$old_digest\""
-      echo "+   image = \"$registry/ticks-orchestrator@$new_digest\""
+      echo "├ EDIT ticks-factory-sandbox"
+      echo "-   image = \"$registry/$FACTORY_REPO@$old_digest\""
+      echo "+   image = \"$registry/$FACTORY_REPO@$new_digest\""
       echo "╰ Applied changes"
     fi
     echo "Total Upload: 12.34 KiB / gzip: 3.21 KiB"
@@ -204,47 +225,50 @@ case "${1:-}" in
     fi
     case "${2:-}" in
       list)
-        count_file="$FAKE_WRANGLER_STATE/containers-list-count"
-        calls=0
-        [ -s "$count_file" ] && calls=$(cat "$count_file")
-        calls=$((calls + 1))
-        printf '%s' "$calls" >"$count_file"
+        # The account's applications: the FactorySandbox one always (unless a
+        # test removes it), the 0.x one until the deploy deletes it. The 0.x
+        # marker is created lazily so a fresh state starts where the live
+        # account is — with the legacy application still there.
+        legacy_marker="$FAKE_WRANGLER_STATE/legacy-app"
+        gone_marker="$FAKE_WRANGLER_STATE/legacy-app-gone"
+        if [ -n "${FAKE_WRANGLER_NO_LEGACY_APP:-}" ]; then
+          touch "$gone_marker"
+        elif [ ! -f "$legacy_marker" ] && [ ! -f "$gone_marker" ]; then
+          touch "$legacy_marker"
+        fi
 
         serving=$old_digest
-        if [ -z "${FAKE_WRANGLER_ROLLOUT_STUCK:-}" ] \
-          && [ -f "$FAKE_WRANGLER_STATE/container-target" ] \
-          && [ "$calls" -gt "${FAKE_WRANGLER_ROLLOUT_LAG:-0}" ]; then
+        if [ -f "$FAKE_WRANGLER_STATE/container-target" ]; then
           serving=$(cat "$FAKE_WRANGLER_STATE/container-target")
         fi
 
         printf '['
-        printf '{"id":"other-1","name":"someone-elses-app","state":"ready","instances":0,'
-        printf '"image":"%s/someone-elses-app@%s","version":1,' "$registry" "$old_digest"
-        printf '"updated_at":"2026-08-20T00:00:00Z","created_at":"2026-08-01T00:00:00Z"}'
-        if [ -z "${FAKE_WRANGLER_NO_SUCH_APP:-}" ]; then
-          printf ','
-          printf '{"id":"app-1","name":"ticks-orchestrator","state":"ready","instances":0,'
-          printf '"image":"%s/ticks-orchestrator@%s","version":7,' "$registry" "$serving"
+        if [ -z "${FAKE_WRANGLER_NO_APP:-}" ]; then
+          printf '{"id":"0123456789abcdef0123456789abcdef","name":"%s","state":"ready","instances":0,' "$FACTORY_APP"
+          printf '"image":"%s/%s@%s","version":7,' "$registry" "$FACTORY_REPO" "$serving"
+          printf '"updated_at":"2026-08-20T00:00:00Z","created_at":"2026-08-01T00:00:00Z"}'
+        fi
+        if [ -f "$legacy_marker" ]; then
+          if [ -z "${FAKE_WRANGLER_NO_APP:-}" ]; then printf ','; fi
+          printf '{"id":"fedcba9876543210fedcba9876543210","name":"%s","state":"ready","instances":0,' "$LEGACY_APP"
+          printf '"image":"%s/%s@%s","version":1,' "$registry" "$LEGACY_APP" "$old_digest"
           printf '"updated_at":"2026-08-20T00:00:00Z","created_at":"2026-08-01T00:00:00Z"}'
         fi
         printf ']\n'
         ;;
-      info)
-        if [ -z "${FAKE_WRANGLER_HEALTH_ERROR:-}" ] && [ -z "${FAKE_WRANGLER_ROLLOUT_ACTIVE:-}" ]; then
-          echo "fake wrangler: unsupported containers command: $*" >&2
-          exit 64
+      delete)
+        # `wrangler containers delete <application-id>`: the deploy deletes the
+        # 0.x application by its listing id. Deleting the 0.x app clears its
+        # marker, so a later listing does not show it.
+        if [ "${3:-}" = "fedcba9876543210fedcba9876543210" ]; then
+          rm -f "$FAKE_WRANGLER_STATE/legacy-app"
+          touch "$FAKE_WRANGLER_STATE/legacy-app-gone"
+          printf '%s\n' "$3" >>"$FAKE_WRANGLER_STATE/deleted-apps"
+          echo "Your container has been deleted"
+        else
+          echo "fake wrangler: refusing to delete unknown application ${3:-}" >&2
+          exit 1
         fi
-        rollout=null
-        [ -n "${FAKE_WRANGLER_ROLLOUT_ACTIVE:-}" ] && rollout='"rollout-1"'
-        printf '{"id":"%s","name":"ticks-orchestrator","account_id":"acct","active_rollout_id":%s,"health":{"errors":[%s],"instances":{"starting":1}}}\n' \
-          "${3:-}" "$rollout" "${FAKE_WRANGLER_HEALTH_ERROR:-}"
-        ;;
-      instances)
-        if [ -z "${FAKE_WRANGLER_INSTANCES:-}" ]; then
-          echo "fake wrangler: unsupported containers command: $*" >&2
-          exit 64
-        fi
-        printf '%s\n' "$FAKE_WRANGLER_INSTANCES"
         ;;
       registries)
         # `containers registries credentials <domain> --pull --json`: only

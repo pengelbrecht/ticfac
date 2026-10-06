@@ -3,7 +3,8 @@
 -- A run with no row here is on the Sandbox SDK 0.x `Sandbox` class (the
 -- SANDBOXES binding, the `default`-policy application) — which is every run
 -- submitted before this table existed, and every run submitted without
--- asking. A row with substrate `do_v1` routes the run's containers through
+-- asking; since tick dax, new runs default to `do_v1` and are recorded. A
+-- row with substrate `do_v1` routes the run's containers through
 -- FactorySandbox (SANDBOXES_V1, the `durable_object`-policy application).
 --
 -- Written once, at submit, before the Run Workflow exists, and never changed:

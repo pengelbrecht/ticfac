@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -104,17 +103,22 @@ func TestUniqueLayerBytesCountsASharedLayerOnce(t *testing.T) {
 	}
 }
 
-// fakeRegistry serves the orchestrator repository's tags, manifests and config
-// blobs the way the managed registry does, digest pseudo-tags included.
+// fakeRegistry serves a managed-registry repository's tags, manifests and
+// config blobs the way the registry does, digest pseudo-tags included.
 type fakeRegistry struct {
 	images []registryImage
+	repo   string
 	server *httptest.Server
 }
 
 func newFakeRegistry(t *testing.T, images []registryImage) *fakeRegistry {
+	return newFakeRegistryFor(t, LegacyContainerAppName, images)
+}
+
+func newFakeRegistryFor(t *testing.T, repo string, images []registryImage) *fakeRegistry {
 	t.Helper()
-	r := &fakeRegistry{images: images}
-	prefix := "/v2/acct/" + ContainerAppName + "/"
+	r := &fakeRegistry{images: images, repo: repo}
+	prefix := "/v2/acct/" + repo + "/"
 	r.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		if user, pass, ok := req.BasicAuth(); !ok || user != "v1" || pass != "fake-registry-password" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
@@ -162,79 +166,59 @@ func newFakeRegistry(t *testing.T, images []registryImage) *fakeRegistry {
 	return r
 }
 
-// A deploy prunes the registry before it pushes — keeping the served image and
-// the newest five — so a registry already at the storage limit makes room for
-// the image the deploy is about to push.
-func TestDeployPrunesOldOrchestratorImages(t *testing.T) {
-	h := newHarness(t)
-	served := digestOf('1') // the fake application's serving digest
+// A deploy deletes the 0.x repository's images wholesale when it deletes the
+// 0.x application — no keep-back, because with no application serving an
+// image none is protected, and the ~45 GB it held was the bulk of the
+// account's image storage.
+func TestDeployEmptiesTheLegacyImageRepository(t *testing.T) {
 	var images []registryImage
 	for i, tag := range []string{"t0", "t1", "t2", "t3", "t4", "t5", "t6", "t7"} {
-		im := registryImage{
+		images = append(images, registryImage{
 			Tag:     tag,
 			Digest:  digestOf(byte('a' + i)),
 			Created: time.Date(2026, 9, 1+i, 0, 0, 0, 0, time.UTC),
-			Layers:  []registryBlob{{"sha256:base", 400_000_000}, {"sha256:own-" + tag, 800_000_000}},
-		}
-		images = append(images, im)
+			Layers:  []registryBlob{{"sha256:own-" + tag, 800_000_000}},
+		})
 	}
-	oldest := images[0]
-	oldest.Tag, oldest.Digest, oldest.Created = "served", served, time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-	images = append(images, oldest)
 	reg := newFakeRegistry(t, images)
 	t.Setenv("FAKE_WRANGLER_REGISTRY_HOST", strings.TrimPrefix(reg.server.URL, "http://"))
+	stateDir := t.TempDir()
+	t.Setenv("FAKE_WRANGLER_STATE", stateDir)
+	t.Setenv("FAKE_WRANGLER_LOG", filepath.Join(stateDir, "wrangler.log"))
+	w := &wrangler{bin: filepath.Join(testdataDir, "fake-wrangler.sh"), dir: t.TempDir(), out: io.Discard}
 
 	var out bytes.Buffer
-	opts := h.rolloutOptions()
-	opts.Out = &out
-	opts.registryBaseURL = reg.server.URL
-	if _, err := Deploy(context.Background(), opts); err != nil {
-		t.Fatalf("Deploy: %v\n%s", err, out.String())
-	}
+	deleteRepositoryImages(context.Background(), w, &out, Options{registryBaseURL: reg.server.URL}, LegacyContainerAppName)
 
-	raw, err := os.ReadFile(filepath.Join(h.stateDir, "deleted-images"))
+	if !strings.Contains(out.String(), "deleted 8") {
+		t.Errorf("the deletion is not reported:\n%s", out.String())
+	}
+	raw, err := os.ReadFile(filepath.Join(stateDir, "deleted-images"))
 	if err != nil {
 		t.Fatalf("no image was deleted: %v\n%s", err, out.String())
 	}
-	deleted := strings.Fields(string(raw))
-	sort.Strings(deleted)
-	// The fake registry does not forget deleted tags, so the post-rollout
-	// prune asks again for the same three: what matters is which ones.
-	uniq := map[string]bool{}
-	for _, d := range deleted {
-		uniq[d] = true
-	}
-	var got []string
-	for d := range uniq {
-		got = append(got, d)
-	}
-	sort.Strings(got)
-	want := []string{"ticks-orchestrator:t0", "ticks-orchestrator:t1", "ticks-orchestrator:t2"}
-	if fmt.Sprint(got) != fmt.Sprint(want) {
-		t.Errorf("deleted %v, want %v (never the served image, never the newest five)", got, want)
-	}
-	if !strings.Contains(out.String(), "pruned 3") {
-		t.Errorf("the prune is not reported:\n%s", out.String())
+	if got := len(strings.Fields(string(raw))); got != len(images) {
+		t.Errorf("deleted %d tags, want %d", got, len(images))
 	}
 	if strings.Contains(out.String(), "fake-registry-password") {
 		t.Error("the registry password reached the deploy's output")
 	}
 }
 
-// A registry that cannot be read is a warning, never a failed deploy, and
+// A repository that cannot be read is a warning, never a failed deploy, and
 // nothing is deleted.
-func TestDeployWithoutRegistryAccessWarnsAndDeletesNothing(t *testing.T) {
-	h := newHarness(t)
+func TestDeleteRepositoryImagesWithoutRegistryAccessWarnsAndDeletesNothing(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv("FAKE_WRANGLER_STATE", stateDir)
+	t.Setenv("FAKE_WRANGLER_LOG", filepath.Join(stateDir, "wrangler.log"))
+	w := &wrangler{bin: filepath.Join(testdataDir, "fake-wrangler.sh"), dir: t.TempDir(), out: io.Discard}
+
 	var out bytes.Buffer
-	opts := h.rolloutOptions()
-	opts.Out = &out
-	if _, err := Deploy(context.Background(), opts); err != nil {
-		t.Fatalf("Deploy: %v", err)
+	deleteRepositoryImages(context.Background(), w, &out, Options{}, LegacyContainerAppName)
+	if !strings.Contains(out.String(), "WARNING: not deleting "+LegacyContainerAppName+" images") {
+		t.Errorf("the skipped deletion is not reported:\n%s", out.String())
 	}
-	if !strings.Contains(out.String(), "WARNING: not pruning") {
-		t.Errorf("the skipped prune is not reported:\n%s", out.String())
-	}
-	if _, err := os.Stat(filepath.Join(h.stateDir, "deleted-images")); err == nil {
+	if _, err := os.Stat(filepath.Join(stateDir, "deleted-images")); err == nil {
 		t.Error("an image was deleted without a readable registry")
 	}
 }
@@ -245,21 +229,22 @@ func TestPruneFlagsStorageNearTheLimit(t *testing.T) {
 	t.Setenv("FAKE_WRANGLER_STATE", stateDir)
 	t.Setenv("FAKE_WRANGLER_LOG", filepath.Join(stateDir, "wrangler.log"))
 	var images []registryImage
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 4; i++ {
 		tag := fmt.Sprintf("t%d", i)
 		images = append(images, registryImage{
 			Tag: tag, Digest: digestOf(byte('a' + i)),
 			Created: time.Date(2026, 9, 1+i, 0, 0, 0, 0, time.UTC),
-			Layers:  []registryBlob{{"sha256:own-" + tag, 8_000_000_000}},
+			Layers:  []registryBlob{{"sha256:own-" + tag, 10_000_000_000}},
 		})
 	}
-	reg := newFakeRegistry(t, images)
+	reg := newFakeRegistryFor(t, FactorySandboxImageRepo, images)
 	t.Setenv("FAKE_WRANGLER_REGISTRY_HOST", "registry.test")
 	w := &wrangler{bin: filepath.Join(testdataDir, "fake-wrangler.sh"), dir: t.TempDir(), out: io.Discard}
 
 	var out bytes.Buffer
-	pruneOrchestratorImages(context.Background(), w, &out, Options{registryBaseURL: reg.server.URL}, digestOf('e'))
-	if !strings.Contains(out.String(), "WARNING: ticks-orchestrator images still hold 40.0 GB") {
+	pruneRepositoryImages(context.Background(), w, &out, Options{registryBaseURL: reg.server.URL},
+		FactorySandboxImageRepo, factorySandboxKeepNewest, []string{digestOf('a')}, "the pinned image")
+	if !strings.Contains(out.String(), "WARNING: "+FactorySandboxImageRepo+" images still hold 40.0 GB") {
 		t.Errorf("storage near the limit is not flagged:\n%s", out.String())
 	}
 	if _, err := os.Stat(filepath.Join(stateDir, "deleted-images")); err == nil {

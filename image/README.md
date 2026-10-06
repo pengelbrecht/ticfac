@@ -218,8 +218,10 @@ touch no dependencies, and says so loudly in the boot log.
 
 Two related facts about fan-out that are not this script's to fix: the caches
 every toolchain is pointed at are per-sandbox unless the control plane keeps a
-shared tree warm, and Cloudflare's `max_instances` silently *serialises* a wave
-wider than it (3 at the time of writing).
+shared tree warm, and the deployment's own container ceiling
+(`FACTORY_MAX_INSTANCES`) silently *serialises* a wave wider than it (12 at
+the time of writing; on the `durable_object` policy this is the factory's own
+limit — there is no platform `max_instances` to narrow it further).
 
 ### The harness bound, and why it exists
 
@@ -528,7 +530,7 @@ starts a command in a sandbox.
 | `TICKS_FEED_NOTES` | no | Where the orchestrator boot keeps its lifecycle feed lines before relaying them. Defaults to a file under `$TMPDIR`, outside the checkout. |
 | `TICKS_GITHUB_TOKEN_URL` | no | The factory's GitHub token door (`POST /api/github/token`), set only on the factory's **GitHub App rung** (epic dm6) and only for a `write`-grade run. `GITHUB_TOKEN` is then an installation token that dies an hour after it was minted, so the credential helper asks this URL — with `TICKS_FACTORY_TOKEN` — for the current token every time a password is needed, and falls back to `GITHUB_TOKEN` only when the door cannot answer; `ticfac`'s forge asks the same door for its REST calls. Unset, `GITHUB_TOKEN` is the only token the container gets. |
 | `TICKS_FACTORY_PROJECT` | no | Canonical `owner/repo` for the RunRoom; defaults to the checked-out Git remote when omitted. |
-| `TICKS_FACTORY_MAX_INSTANCES` | no | The account's container ceiling (the factory's `FACTORY_MAX_INSTANCES`, mirroring `[[containers]] max_instances`). `ticfac run-epic` keeps at most this many worker containers, less the orchestrator's own, live at once, so a start never waits in the dispatch door for a slot. Unset, the door's immediate `503 no_capacity` answer is the only bound, and the run waits through it. |
+| `TICKS_FACTORY_MAX_INSTANCES` | no | The deployment's container ceiling (`FACTORY_MAX_INSTANCES`, the single declaration since tick dax — there is no platform `max_instances` on the `durable_object` policy to mirror). `ticfac run-epic` keeps at most this many worker containers, less the orchestrator's own, live at once, so a start never waits in the dispatch door for a slot. Unset, the door's immediate `503 no_capacity` answer is the only bound, and the run waits through it. |
 | `GITHUB_TOKEN` | no | Clone/push credential, wired into a git credential helper. **Not always a GitHub token** (D11, tick pzf): a `write`-grade run gets the operator's, and its `TICKS_REPO_URL` is github.com; a `read_only` run gets its own `tkr_` run token, and `TICKS_REPO_URL` points at the factory's read-only `/api/git` door. The helper answers for any host, so the container needs no knowledge of which it holds — and a read-only run holds nothing github.com would accept. The helper only fires when the remote **challenges** for Basic: git picks its auth scheme from the 401's `WWW-Authenticate` header, so a 401 without one means the token never leaves this container (tick jwd). `explain_git_refusal` probes for exactly that when a fetch fails, because git's own `fatal: Authentication failed` cannot tell the two apart. |
 | `TICKS_GIT_NAME`, `TICKS_GIT_EMAIL` | no | Commit identity for tracker writes. |
 | `TICKS_TK_VERSION` | baked | The tk version the image pins; the entrypoint refuses a different `tk` on PATH. |

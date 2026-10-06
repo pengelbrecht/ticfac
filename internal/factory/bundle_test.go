@@ -1,7 +1,6 @@
 package factory
 
 import (
-	"fmt"
 	"io/fs"
 	"os"
 	"path"
@@ -335,8 +334,11 @@ func TestBundleDeclaresTheContainerBinding(t *testing.T) {
 	for _, want := range []string{
 		`name = "SANDBOXES"`,
 		`class_name = "Sandbox"`,
+		`name = "SANDBOXES_V1"`,
+		`class_name = "FactorySandbox"`,
 		"[[containers]]",
 		`new_sqlite_classes = ["Sandbox"]`,
+		`new_sqlite_classes = ["FactorySandbox"]`,
 	} {
 		if !strings.Contains(toml, want) {
 			t.Errorf("wrangler.toml does not declare %s:\n%s", want, toml)
@@ -344,60 +346,70 @@ func TestBundleDeclaresTheContainerBinding(t *testing.T) {
 	}
 }
 
-// The committed config's two declarations of the sandbox capacity —
-// `[[containers]] max_instances`, the account-level ceiling Cloudflare enforces
-// on concurrent containers, and `[vars] FACTORY_MAX_INSTANCES`, the mirror a
-// cloud wave's dispatch width is bounded by because wrangler does not hand a
-// container application's own config back to the Worker at runtime — must say
-// one number (tick 7fl). Two numbers that must agree and are maintained
-// separately drift, and the failure when they do is a wave that books more
-// containers than the account can host, surfacing as sandbox creation
-// failures attributed to whichever tick happened to be fourth, never as a
-// capacity message. This is the content half of the check: the deploy's
-// refusal to ship a disagreement is covered in deploy_test.go.
-func TestCommittedCapacityNumbersAgree(t *testing.T) {
+// The FactorySandbox application is the ONLY container application now (tick
+// dax): the 0.x one is deleted from the config, with the rollout machinery it
+// required, and the deploy deletes the application from the account. What
+// remains must be exactly one [[containers]] block — the durable_object one —
+// and none of the 0.x machinery: no `max_instances` (the policy refuses one;
+// the ceiling lives in [vars] FACTORY_MAX_INSTANCES alone) and no
+// `rollout_active_grace_period` (there is no rollout to keep off a live
+// run's containers).
+func TestBundleDeclaresOnlyTheFactorySandboxApplication(t *testing.T) {
 	requireEmbeddedPayload(t)
 	data, err := ReadBundleFile(WranglerConfigFile)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := VerifyContainerCapacity(data); err != nil {
-		t.Errorf("the committed wrangler.toml's capacity numbers disagree: %v", err)
+	toml := string(data)
+
+	var blocks []string
+	var withoutComments []string
+	for _, line := range strings.Split(toml, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		withoutComments = append(withoutComments, line)
+	}
+	clean := strings.Join(withoutComments, "\n")
+	for _, block := range strings.Split(clean, "[[containers]]")[1:] {
+		blocks = append(blocks, strings.SplitN(block, "\n[", 2)[0])
+	}
+	if len(blocks) != 1 {
+		t.Fatalf("wrangler.toml declares %d [[containers]] blocks, want exactly one:\n%s", len(blocks), toml)
+	}
+	for _, want := range []string{
+		`class_name = "FactorySandbox"`,
+		`name = "` + FactorySandboxAppName + `"`,
+		`scheduling_policy = "durable_object"`,
+	} {
+		if !strings.Contains(blocks[0], want) {
+			t.Errorf("the [[containers]] block does not declare %s:\n%s", want, blocks[0])
+		}
+	}
+	for _, banned := range []string{"max_instances", "rollout_active_grace_period", `name = "ticks-orchestrator"`} {
+		if strings.Contains(toml, banned+" =") || strings.Contains(toml, banned+" = ") {
+			t.Errorf("wrangler.toml still declares %s — 0.x machinery that has no application left to configure:\n%s", banned, toml)
+		}
 	}
 }
 
-// The mechanics of the check, on bytes written for the purpose: an agreeing
-// pair passes, and a disagreement, a missing ceiling or a missing mirror is a
-// stop that names both numbers — never a shrug that lets a deploy proceed on
-// half a check.
-func TestVerifyContainerCapacityNamesEveryStop(t *testing.T) {
-	const pair = "[[containers]]\nmax_instances = %s\n[vars]\nFACTORY_MAX_INSTANCES = \"%s\"\n"
+// The deployment's container ceiling is declared once, in [vars]
+// FACTORY_MAX_INSTANCES (tick dax: no `[[containers]] max_instances` exists
+// for it to mirror, the durable_object policy refusing one). The number itself
+// is the Worker's business, not the deploy's — this only checks that the one
+// declaration is present, since a config without it would leave every cap
+// check to the Worker's compiled fallback.
+var committedCeilingPattern = regexp.MustCompile(`(?m)^\s*FACTORY_MAX_INSTANCES\s*=\s*"([0-9]+)"\s*(?:#.*)?$`)
 
-	agreeing := fmt.Sprintf(pair, "3", "3")
-	if err := VerifyContainerCapacity([]byte(agreeing)); err != nil {
-		t.Errorf("an agreeing pair was refused: %v", err)
+func TestCommittedConfigStatesTheContainerCeiling(t *testing.T) {
+	requireEmbeddedPayload(t)
+	data, err := ReadBundleFile(WranglerConfigFile)
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	disagreeing := fmt.Sprintf(pair, "3", "2")
-	err := VerifyContainerCapacity([]byte(disagreeing))
-	if err == nil {
-		t.Fatalf("max_instances = 3 against FACTORY_MAX_INSTANCES = \"2\" was accepted")
-	}
-	for _, want := range []string{"max_instances = 3", `FACTORY_MAX_INSTANCES = "2"`} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("the disagreement stop does not name %s: %v", want, err)
-		}
-	}
-
-	for name, missing := range map[string]string{
-		"no [[containers]] max_instances": "[vars]\nFACTORY_MAX_INSTANCES = \"3\"\n",
-		"no [vars] FACTORY_MAX_INSTANCES": "[[containers]]\nmax_instances = 3\n",
-	} {
-		if err := VerifyContainerCapacity([]byte(missing)); err == nil {
-			t.Errorf("wrangler.toml with %s was accepted:\n%s", name, missing)
-		} else if !strings.Contains(err.Error(), name) {
-			t.Errorf("the %s stop does not say so: %v", name, err)
-		}
+	if !committedCeilingPattern.Match(data) {
+		t.Errorf("the committed wrangler.toml declares no [vars] FACTORY_MAX_INSTANCES ceiling:\n%s", data)
 	}
 }
 
@@ -483,7 +495,12 @@ func TestCommittedImagePathResolvesInTheRepository(t *testing.T) {
 // literal line, and a parser here would be a second grammar to keep honest.
 func containerImagePath(t *testing.T, toml string) string {
 	t.Helper()
-	match := regexp.MustCompile(`(?m)^image\s*=\s*"([^"]+)"`).FindStringSubmatch(toml)
+	// The FactorySandbox application declares its image as a NAMED image
+	// table (`[containers.images.factory]`, whose key is `dockerfile`); the
+	// 0.x application it replaced declared it inline (`image =`). Both forms
+	// name a path relative to the bundle directory, which is what matters
+	// here.
+	match := regexp.MustCompile(`(?m)^(?:image|dockerfile)\s*=\s*"([^"]+)"`).FindStringSubmatch(toml)
 	if match == nil {
 		t.Fatalf("wrangler.toml declares no container image:\n%s", toml)
 	}

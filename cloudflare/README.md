@@ -393,32 +393,35 @@ tk factory deploy
 
 It creates or reuses `ticks-factory` (D1) and `ticks-factory-artifacts` (R2),
 rewrites `database_id` in its own staged copy of `wrangler.toml`, installs the
-bundle's runtime dependencies, builds and pushes the orchestrator image, applies
+bundle's runtime dependencies, builds and pushes the container image, applies
 `migrations/`, deploys, pushes `FACTORY_TOKEN_HASH`, writes `factory_url` /
 `factory_token` / `factory_version` into `~/.ticksrc`, and then proves the
 result by calling `/health` — which must report the `sandboxes` binding — and
 making one authenticated request. Re-running upgrades in place and keeps the
 token unless `--rotate-token` is passed.
 
-The last step is the container rollout, and it is the one `wrangler deploy` does
-not perform: wrangler builds the image, pushes it, asks Cloudflare to roll it
-out and returns as soon as the rollout has been *created*, so the Worker goes
-live while the container application is still serving the previous image and a
-run started in that window boots the old code. `tk factory deploy` polls
-`wrangler containers list --json` until the `ticks-orchestrator` application
-reports the digest it just pushed, and exits nonzero naming both digests if it
-cannot confirm that (`--skip-rollout-wait` opts out and says so). The confirmed
-digest lands in `factory_deployment_image`, and each run is stamped with it in
-`run_image` as it ignites, which is what `tk cloud status <run>` reports as the
-image that run booted.
+There is no rollout to wait for: the one container application is on the
+`durable_object` scheduling policy (the SDK 1.0 migration, tick dax), where a
+running container keeps the image it started on through every later deploy and
+a new one boots the image this deploy pushed. The deploy records the image it
+serves — the one wrangler's output names, or, when an unchanged image was not
+pushed again, the one the application report names — in
+`factory_deployment_image`, and each run is stamped with it in `run_image` as
+it ignites, which is what `tk cloud status <run>` reports as the image that run
+booted.
 
-Every deploy pushes a new ~1.2 GB `ticks-orchestrator` image, and the account's
-managed registry holds at most 50 GB of images. So the deploy prunes: before it
-pushes and again after a confirmed rollout, it deletes all but the newest five
-orchestrator images, never the one the application serves (nor the one a new
-rollout replaced), and warns when what remains is still near the limit.
-`--keep-images N` changes the five; `--skip-image-prune` opts out (2026-09-30:
-59 tags, 45 GB, nothing had ever been deleted).
+It also deletes the 0.x container application the migration retired
+(`ticks-orchestrator`) and its images — on the first deploy after the last run
+submitted before the cutover has ended. A run still live holds the application
+open, and so does anything the deploy could not read; the deploy reports what
+held it and the next deploy retries.
+
+Every deploy pushes a new ~1.2 GB image, and the account's managed registry
+holds at most 50 GB of images. So the deploy prunes after it pushes: it deletes
+all but the newest few images, never one a live run pins (each run's record
+names the image its containers start on), and warns when what remains is still
+near the limit. `--skip-image-prune` opts out (2026-09-30: 59 tags, 45 GB,
+nothing had ever been deleted).
 
 A deploy should push only what changed. The ticfac pins (`TICFAC_VERSION` and
 the binaries' checksums), which change on every deploy, are declared at the end
@@ -432,13 +435,18 @@ registry with a fresh 120-minute credential before each push attempt, on a
 laptop too: wrangler's own login lasts 15 minutes, and a slow push outlived it. Before both fixes, each
 deploy pushed ~0.8 GB of new layers (22 of 46).
 
-The rollout wait is 10 minutes, extended once by up to 50 while the platform
-still reports the rollout in progress, and a rollout it cannot confirm names
-the application's health errors. On 2026-09-30 the managed registry served
-each freshly pushed ~200 MB layer at under 0.2 MB/s for its first half hour or
-so; the runtime gave up each pull at exactly 10 minutes (`ImagePullError: the
-runtime couldn't pull the image due to an internal issue`), retried, and the
-rollouts landed after 23-48 minutes.
+The deploy is fast now that there is nothing to wait for after the push (the
+rollout wait it used to have — 10 minutes, extended by up to 50 while a
+rollout was still in progress — went with the 0.x application, tick dax). The
+slow parts it still has: the image build and push, and a durable_object image
+Cloudflare has not prepared inside wrangler's 15 minutes, which fails the
+deploy and is retried (three attempts, internal/factory/wrangler.go). The old
+wait existed because on 2026-09-30 the managed registry served each freshly
+pushed ~200 MB layer at under 0.2 MB/s for its first half hour or so; the
+runtime gave up each pull at exactly 10 minutes (`ImagePullError: the runtime
+couldn't pull the image due to an internal issue`), retried, and the rollouts
+landed after 23-48 minutes — a slowness the durable_object policy inherits,
+which is why the image-preparation retry is still there.
 
 Three prerequisites, each a stop with its own message rather than a deploy that
 half-works: a logged-in **wrangler**, a running **Docker** (the image), and
@@ -451,8 +459,8 @@ The bundle is staged in `~/.tick/factory/ticfac/cloudflare` (override with
 (`../image/Dockerfile`, the image context having moved to `image/` with SPEC
 §12 Phase 4 item 4) means the same thing there as it does in this repository. Both directories are tk's, rewritten on every deploy, and are
 where to look to see exactly what was uploaded. The Go side of the deploy lives in
-`internal/factory`; `scripts/verify-factory-deploy.sh` exercises it end to end
-against a stateful wrangler stand-in, since CI has no Cloudflare account.
+`internal/factory`, whose tests exercise it end to end against a stateful
+wrangler stand-in, since CI has no Cloudflare account.
 
 ### By hand
 

@@ -1127,14 +1127,11 @@ describe("request validation", () => {
 });
 
 /**
- * The image a run booted (tick z1b).
+ * The image a run booted.
  *
- * A container rollout is asynchronous: `wrangler deploy` creates it and
- * returns, so the Worker can be new while the container application still
- * serves the previous image. `tk factory deploy` now waits for that rollout and
- * records the image it confirmed; a run stamps itself with that image at
- * ignition so the operator can tell a fix that did not work from a fix that was
- * never running.
+ * The deploy records the image it serves in `factory_deployment_image`; a run
+ * stamps itself with that image at ignition so the operator can tell a fix
+ * that did not work from a fix that was never running.
  */
 describe("a run records the orchestrator image it booted", () => {
   const DIGEST = `sha256:${"b".repeat(64)}`;
@@ -1191,7 +1188,7 @@ describe("a run records the orchestrator image it booted", () => {
     expect(body.image?.image_digest).toBe(DIGEST);
   });
 
-  it("reports no image for a factory whose rollout was never confirmed", async () => {
+  it("reports no image for a factory that recorded none", async () => {
     const project = await enrolled("image-unconfirmed");
 
     const started = await post("/api/runs", submission(project));

@@ -172,7 +172,11 @@ describe("the deployment's sandboxBinding", () => {
     );
   });
 
-  it("records nothing for a 0.x run, and reads it back as sdk0", async () => {
+  it("records nothing for a run that named no substrate, and reads a run with no row as sdk0", async () => {
+    // The row records the run's substrate at submit; a run with no row — one
+    // submitted before the table existed, or an explicit 0.x ask — reads as
+    // the 0.x substrate, which is what keeps pre-cutover records on the
+    // binding they were submitted to.
     const runID = `run_${crypto.randomUUID().replaceAll("-", "")}`;
     await recordRunSubstrate(env.DB, runID, "sdk0");
     expect(await readRunSubstrate(env.DB, runID)).toEqual({ substrate: "sdk0", image: null });
@@ -186,15 +190,24 @@ describe("parseSubmission: substrate", () => {
     const v1 = parseSubmission({ ...base, substrate: "do_v1" });
     const sdk0 = parseSubmission({ ...base, substrate: "sdk0" });
     expect(v1.ok && v1.submission.substrate).toBe("do_v1");
-    expect(sdk0.ok && sdk0.submission.substrate).toBeUndefined();
+    expect(sdk0.ok && sdk0.submission.substrate).toBe("sdk0");
     const none = parseSubmission(base);
     expect(none.ok && none.submission.substrate).toBeUndefined();
   });
 
-  it("refuses an unknown substrate and a queued do_v1 run", () => {
+  it("refuses an unknown substrate and a queued 0.x run", () => {
     expect(parseSubmission({ ...base, substrate: "v2" })).toMatchObject({ ok: false });
-    expect(parseSubmission({ ...base, substrate: "do_v1", queue: true })).toMatchObject({
+    // A queued run ignites on the deployment's default substrate (do_v1 since
+    // tick dax): the parked submission carries no substrate, so an explicit
+    // 0.x ask cannot be honored and is refused rather than silently moved.
+    expect(parseSubmission({ ...base, substrate: "sdk0", queue: true })).toMatchObject({
       ok: false,
+    });
+    // The default asks for nothing, so queueing it is fine: ignition applies
+    // the same default the submission would have.
+    expect(parseSubmission({ ...base, queue: true })).toMatchObject({ ok: true });
+    expect(parseSubmission({ ...base, substrate: "do_v1", queue: true })).toMatchObject({
+      ok: true,
     });
   });
 });
@@ -265,12 +278,15 @@ describe("a run submitted on do_v1", () => {
     return ((await res.json()) as { run: { run_id: string } }).run.run_id;
   }
 
-  it("is recorded before its Workflow exists, and a plain run is not", async () => {
+  it("records its substrate — the do_v1 default included — before its Workflow exists", async () => {
     const v1 = await submit({ substrate: "do_v1" });
     const plain = await submit({});
 
     expect(await readRunSubstrate(env.DB, v1)).toEqual({ substrate: DO_V1, image: null });
-    expect(await readRunSubstrate(env.DB, plain)).toEqual({ substrate: "sdk0", image: null });
+    // A run that asked for nothing still gets the submit-time default (tick
+    // dax): the substrate it runs on is a fact about the run, recorded at
+    // submit, never guessed from its age later.
+    expect(await readRunSubstrate(env.DB, plain)).toEqual({ substrate: DO_V1, image: null });
   });
 
   it("pins the deployment's FactorySandbox image in its record at submit (v1d)", async () => {
@@ -288,10 +304,11 @@ describe("a run submitted on do_v1", () => {
       const runID = await submit({ substrate: "do_v1" });
       expect(await readRunSubstrate(env.DB, runID)).toEqual({ substrate: DO_V1, image: pinned });
       expect(asked).toEqual(["image-ref"]);
-      // A plain run asks nothing and records nothing.
+      // The default ride gets the same pin: every new run is recorded at
+      // submit, whatever its submission named.
       const plain = await submit({});
-      expect(asked).toHaveLength(1);
-      expect((await readRunSubstrate(env.DB, plain)).image).toBeNull();
+      expect(await readRunSubstrate(env.DB, plain)).toEqual({ substrate: DO_V1, image: pinned });
+      expect(asked).toEqual(["image-ref", "image-ref"]);
     } finally {
       (env as unknown as Record<string, unknown>).SANDBOXES_V1 = real;
     }

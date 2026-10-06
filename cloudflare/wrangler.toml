@@ -98,61 +98,25 @@ new_sqlite_classes = ["FactorySandbox"]
 # the operator's own managed registry before it uploads the Worker (D16 — the
 # factory runs in the operator's account or not at all), so a deploy without a
 # working Docker is a stop, not a Worker that refuses every run.
-[[containers]]
-class_name = "Sandbox"
-name = "ticks-orchestrator"
-image = "../image/Dockerfile"
-# Every container this factory boots counts here: each run's orchestrator AND
-# each of its per-tick worker containers (the dispatch door's). 12 is sized as
-# the orchestrator + a full wave (max_parallel 4) + the overlap a reboot
-# creates (the replacement is addressed before the dead one is destroyed) + a
-# second concurrent run (operator decision, 2026-09-30, after hn6's cloud run
-# filled a ceiling of 3 with its orchestrator and two workers). The account's
-# own limit is far above it — about 750 standard-3 instances by vCPU (1,500
-# vCPU / 6 TiB / 30 TB per account) — but that is shared with the operator's
-# other container apps. Raising it is a deployment decision bounded by the
-# account's container limits, not a code change: the orchestrator reads the
-# mirror below and keeps its live workers under it, and the door answers
-# `503 no_capacity` rather than queue a start past it (container-capacity.ts).
-#
-# This is the SOURCE for [vars] FACTORY_MAX_INSTANCES below — the one copy a
-# maintainer raises (tick 7fl). The agreement is not a comment to remember:
-# `ticfac factory deploy` refuses to ship a config where the two disagree, and
-# the suite pins the mirror (and the Worker's compiled default) to this
-# number.
-max_instances = 12
-# standard-3: 2 vCPU, 8 GiB memory, 16 GB disk. Disk is the binding constraint —
-# the batteries-included image is multi-GB before a checkout, a module cache or
-# a node_modules tree exists.
-instance_type = "standard-3"
-# A container rollout must never take a LIVE run's container. The platform's
-# rule: during a rollout, an instance may be replaced only once it has been
-# connected to its Durable Object for at least this many seconds — so the
-# default of 0 lets a rollout take any live orchestrator or worker. Epic
-# hn6's cloud run (2026-09-30) died that way: a deploy's rollout could not pull
-# its image, so it was still in progress when the run started ten minutes
-# later (the deploy's live-run guard had checked before the rollout began),
-# and when it advanced to 100% of instances at 13:31Z it replaced the run's
-# orchestrator at 13:38Z. The grace is one day — RUN_MAX_WALL_CLOCK_MS, the
-# longest any run may live — so an instance is replaced only once no run can
-# still be using it; idle instances roll at once. The suite pins the two.
-rollout_active_grace_period = 86400
-
 # The factory's own container class on the `durable_object` scheduling policy
-# (epic umq, tick nmd): src/factory-sandbox.ts. A SECOND application beside
-# `ticks-orchestrator` above, never a change to it — the policy of an existing
-# application cannot change, and the 0.x `Sandbox` class keeps every run that
-# was submitted on it (a run never straddles the two; tick 1hq routes a run by
-# the substrate its record names). Off by default: nothing addresses
-# SANDBOXES_V1 until a run is submitted on it.
+# (epic umq, ticks nmd and dax): src/factory-sandbox.ts. It is the ONLY
+# container application now. The 0.x `Sandbox` class's application
+# (`ticks-orchestrator`: one image per application, rolled out
+# application-wide by every deploy) is gone — tick dax deleted its
+# configuration along with the rollout machinery it required (the
+# `rollout_active_grace_period` that kept a rollout off a live run's
+# containers, and the deploy's rollout wait), and the deploy removes the
+# application from the account once no run submitted before the cutover is
+# still live. The SANDBOXES binding above and the class stay: pre-cutover run
+# records route there (a run never straddles the two namespaces; tick 1hq),
+# and the Durable Object migration history cannot be unwound.
 #
-# What the policy changes: a running container keeps the image it STARTED on
+# What the policy gives: a running container keeps the image it STARTED on
 # through every later deploy (no application-wide rollout exists to take it),
 # the class picks the image and the instance size per start, and there is no
 # `max_instances` — the policy refuses one, so container-capacity.ts's count
-# is the only cap. The application `name` must be new and must not contain
-# `ticks-orchestrator` (internal/factory/rollout.go reads the 0.x image's
-# digest out of the deploy output by that name).
+# is the only cap.
+
 [[durable_objects.bindings]]
 name = "SANDBOXES_V1"
 class_name = "FactorySandbox"
@@ -163,8 +127,9 @@ name = "ticks-factory-sandbox"
 scheduling_policy = "durable_object"
 
 # The image a FactorySandbox starts on unless the run pinned another
-# (`ctx.container.images.factory`). The same image context as the 0.x
-# application's: `ticfac factory deploy` stages it beside this bundle.
+# (`ctx.container.images.factory`). The image context `ticfac factory deploy`
+# stages beside this bundle — the same tree the deleted 0.x application's
+# `image` path used to name.
 [containers.images.factory]
 dockerfile = "../image/Dockerfile"
 
@@ -298,17 +263,24 @@ RUN_MAX_COST_USD = "250"
 # to the run branch — but a tick that is one commit from done deserves it.
 RUN_STOP_GRACE_MS = "300000"
 
-# The account's container ceiling, mirrored (tick b6e): must equal
-# `[[containers]] max_instances` above. Wrangler does not hand a container
-# application's own config back to the Worker at runtime, so a cloud wave's
-# dispatch width — bounded so it never books more concurrent containers than
-# the account can actually run — needs its own copy of the number. The two are
-# not kept in step by hand (tick 7fl): `ticfac factory deploy` refuses to ship
-# a config where they disagree, and the suite pins this mirror to the ceiling,
-# so a wave wider than the account can host is a deploy-time stop naming both
-# numbers — never the silent serialization wave 3 measured for Phase 1.
-# Raise the ceiling, then this mirror, bounded by the account's real container
-# limit.
+# The account's container ceiling: the most containers this factory runs at
+# once. Every container counts here — each run's orchestrator AND each of its
+# per-tick worker containers (the dispatch door's). 12 is sized as the
+# orchestrator + a full wave (max_parallel 4) + the overlap a reboot creates
+# (the replacement is addressed before the dead one is destroyed) + a second
+# concurrent run (operator decision, 2026-09-30, after hn6's cloud run filled
+# a ceiling of 3 with its orchestrator and two workers).
+#
+# On the durable_object scheduling policy this is a SELF-IMPOSED ceiling, not
+# a platform one: the policy refuses a `[[containers]] max_instances`, so
+# container-capacity.ts's count is the only cap, and the door answers
+# `503 no_capacity` rather than start past it. It is declared here (and not in
+# code) so raising it is a deployment decision bounded by the account's real
+# container limits — about 750 standard-3 instances by vCPU (1,500 vCPU / 6
+# TiB / 30 TB per account), shared with the operator's other container apps —
+# rather than a code change. The suite pins this number to the Worker's
+# compiled fallback, so the two cannot drift apart (tick 7fl's rule, kept
+# where its subject moved).
 FACTORY_MAX_INSTANCES = "12"
 
 # Which harness and model the cloud runs (tick 1cd added the vars; tick uqi

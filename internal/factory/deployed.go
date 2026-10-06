@@ -23,7 +23,7 @@ import (
 // that knows what it runs, so status and doctor ask it: GET /api/deployment
 // answers the deploy's own D1 record (the ticfac version that deployed, which
 // CI stamps with `git describe` so it names the commit), the image the
-// container rollout was confirmed serving, and the Worker version serving the
+// deployment starts containers on, and the Worker version serving the
 // request.
 
 // deployedPath is the factory route that answers what it runs.
@@ -37,8 +37,8 @@ var errNoDeployedRoute = errors.New("this factory predates GET /api/deployment â
 var ErrNoFactory = errors.New("no factory is configured")
 
 // DeployedFacts is the factory's answer. Every field may be empty: a factory
-// no deploy has recorded, a rollout nobody confirmed, a runtime without the
-// version-metadata binding.
+// no deploy has recorded, an image no deploy could determine, a runtime
+// without the version-metadata binding.
 type DeployedFacts struct {
 	Version                string `json:"version"`
 	BundleSHA              string `json:"bundle_sha256"`
