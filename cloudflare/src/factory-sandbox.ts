@@ -47,6 +47,7 @@
  */
 
 import { DurableObject } from "cloudflare:workers";
+import { CLAUDE_SUB_HOST } from "./claude-sub";
 import type { Env } from "./index";
 import type {
   OrchestratorSandbox,
@@ -168,6 +169,8 @@ const STORAGE = {
   failedPrefix: "failed:",
   /** When the starting container must have answered by. */
   readyBy: "ready_by",
+  /** The claude subscription this container's job leased (tick jvj): its interception's label. */
+  claudeSub: "claude_sub",
 } as const;
 
 // --------------------------------------------------------------- types ---
@@ -191,7 +194,23 @@ export type FactoryBootOptions = {
    * current {@link FACTORY_IMAGE_NAME}.
    */
   pinnedImage?: string;
+  /**
+   * The claude subscription this job leased (tick jvj, src/claude-sub.ts):
+   * the container's traffic to api.anthropic.com is intercepted and
+   * authenticated with that subscription's token, which never enters the
+   * container. Bound once per container: a job never switches tokens.
+   */
+  claudeSub?: { label: string; jobId: string };
 };
+
+/**
+ * Installs a job's claude-sub interception on a container (the DO class's
+ * half: it needs `ctx.exports`, which the core does not see).
+ */
+export type ClaudeSubInterceptor = (
+  container: DoContainer,
+  sub: { label: string; jobId: string },
+) => Promise<void>;
 
 /**
  * The subset of `ctx.container` this class uses, declared structurally so a
@@ -222,6 +241,8 @@ export type DoContainer = {
   destroy(reason?: unknown): Promise<void>;
   setInactivityTimeout(durationMs: number): Promise<void>;
   inspect?(): Promise<{ image: string; labels: Record<string, string> } | null>;
+  interceptOutboundHttp?(addr: string, binding: Fetcher): Promise<void>;
+  interceptOutboundHttps?(addr: string, binding: Fetcher): Promise<void>;
 };
 
 export type DoExecProcess = {
@@ -436,6 +457,7 @@ export class FactorySandboxCore {
   constructor(
     private readonly ctx: SandboxState,
     private readonly now: () => number = Date.now,
+    private readonly claudeSub?: ClaudeSubInterceptor,
   ) {
     // A deploy restarts every Durable Object, and an inactivity timeout does
     // not survive the restart: a container still running under a fresh
@@ -667,6 +689,7 @@ export class FactorySandboxCore {
     await this.failPending("the container was destroyed before it answered");
     await this.ctx.storage.delete(STORAGE.keepAlive);
     await this.ctx.storage.deleteAlarm();
+    await this.ctx.storage.delete(STORAGE.claudeSub);
     const container = this.container();
     if (container?.running) await container.destroy();
   }
@@ -830,6 +853,20 @@ export class FactorySandboxCore {
           "[[containers]] application is not configured on this deployment",
       );
     }
+    const boundSub = await this.ctx.storage.get<{ label: string; jobId: string }>(
+      STORAGE.claudeSub,
+    );
+    if (
+      container.running &&
+      options.claudeSub !== undefined &&
+      boundSub !== undefined &&
+      (boundSub.label !== options.claudeSub.label || boundSub.jobId !== options.claudeSub.jobId)
+    ) {
+      throw new Error(
+        `factory sandbox: this container's job is bound to claude subscription ${boundSub.label} ` +
+          `(job ${boundSub.jobId}); a job never switches tokens — destroy it first`,
+      );
+    }
     if (!container.running) {
       const image = options.pinnedImage ?? container.images?.[FACTORY_IMAGE_NAME];
       if (image === undefined || image === "") {
@@ -838,6 +875,10 @@ export class FactorySandboxCore {
             `[containers.images.${FACTORY_IMAGE_NAME}] and the boot pinned none`,
         );
       }
+      // A new container starts with no subscription bound; the interception
+      // is installed BEFORE its first process can make a request.
+      await this.ctx.storage.delete(STORAGE.claudeSub);
+      if (options.claudeSub !== undefined) await this.bindClaudeSub(container, options.claudeSub);
       container.start({
         image,
         instance: options.instance ?? DEFAULT_INSTANCE,
@@ -851,6 +892,8 @@ export class FactorySandboxCore {
       // Every new container is watched from its start, so a start that fails
       // (a bad image, an entrypoint that exits) leaves its reason behind.
       this.watch(container);
+    } else if (options.claudeSub !== undefined && boundSub === undefined) {
+      await this.bindClaudeSub(container, options.claudeSub);
     }
     const keepAlive =
       options.keepAlive === true ||
@@ -872,6 +915,34 @@ export class FactorySandboxCore {
     return container;
   }
 
+  /**
+   * Installs the job's claude-sub interception and records it. Refused when
+   * this deployment cannot intercept (no interceptor wired, or a runtime
+   * without per-host interception): a claude-sub job on a container whose
+   * traffic is not intercepted would run with no credential at all, so it
+   * fails here, at boot, with the reason.
+   */
+  private async bindClaudeSub(
+    container: DoContainer,
+    sub: { label: string; jobId: string },
+  ): Promise<void> {
+    if (this.claudeSub === undefined) {
+      throw new Error(
+        "factory sandbox: a claude-sub boot on a deployment that wires no interception " +
+          "(src/claude-sub.ts is off here)",
+      );
+    }
+    await this.claudeSub(container, sub);
+    await this.ctx.storage.put(STORAGE.claudeSub, sub);
+  }
+
+  /** The claude subscription this container's job is bound to, or null. */
+  async boundClaudeSub(): Promise<{ label: string; jobId: string } | null> {
+    return (
+      (await this.ctx.storage.get<{ label: string; jobId: string }>(STORAGE.claudeSub)) ?? null
+    );
+  }
+
   /** The constructor's half of the lifetime: re-arm what a restart dropped. */
   private async rearm(container: DoContainer): Promise<void> {
     const timeout = (await this.ctx.storage.get<number>(STORAGE.inactivityMs)) ?? IDLE_TIMEOUT_MS;
@@ -879,6 +950,18 @@ export class FactorySandboxCore {
       await container.setInactivityTimeout(timeout);
     } catch (error) {
       console.error(`factory sandbox: could not re-arm the inactivity timeout: ${String(error)}`);
+    }
+    // A restarted object re-installs its job's interception (same
+    // subscription: the binding is the job's, never re-leased here).
+    const sub = await this.ctx.storage.get<{ label: string; jobId: string }>(STORAGE.claudeSub);
+    if (sub !== undefined && this.claudeSub !== undefined) {
+      try {
+        await this.claudeSub(container, sub);
+      } catch (error) {
+        console.error(
+          `factory sandbox: could not re-install the claude-sub interception: ${String(error)}`,
+        );
+      }
     }
     // A restart can land between a pending process and its alarm; the alarm
     // is what starts it, so it must exist.
@@ -925,7 +1008,9 @@ export class FactorySandbox extends DurableObject<Env> {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
-    this.core = new FactorySandboxCore(ctx as unknown as SandboxState);
+    this.core = new FactorySandboxCore(ctx as unknown as SandboxState, Date.now, (container, sub) =>
+      installClaudeSubInterception(ctx, container, sub),
+    );
   }
 
   startProcess(
@@ -969,9 +1054,43 @@ export class FactorySandbox extends DurableObject<Env> {
   runningImage(): Promise<string | null> {
     return this.core.runningImage();
   }
+  boundClaudeSub(): Promise<{ label: string; jobId: string } | null> {
+    return this.core.boundClaudeSub();
+  }
   override alarm(): Promise<void> {
     return this.core.alarm();
   }
+}
+
+/**
+ * The claude-sub interception (tick jvj): the container's HTTP and HTTPS to
+ * api.anthropic.com go to the main module's `ClaudeSubProxy` entrypoint, its
+ * props naming the job's subscription. A main module that does not export it
+ * (production today) refuses here, so claude-sub is off there.
+ */
+async function installClaudeSubInterception(
+  ctx: DurableObjectState,
+  container: DoContainer,
+  sub: { label: string; jobId: string },
+): Promise<void> {
+  const exports = (ctx as unknown as { exports?: Record<string, unknown> }).exports;
+  const entry = exports?.ClaudeSubProxy as
+    | ((options: { props: { label: string; jobId: string } }) => Fetcher)
+    | undefined;
+  if (typeof entry !== "function") {
+    throw new Error(
+      "factory sandbox: claude-sub needs ClaudeSubProxy exported from the main module",
+    );
+  }
+  if (
+    container.interceptOutboundHttp === undefined ||
+    container.interceptOutboundHttps === undefined
+  ) {
+    throw new Error("factory sandbox: this runtime has no per-host outbound interception");
+  }
+  const fetcher = entry({ props: { label: sub.label, jobId: sub.jobId } });
+  await container.interceptOutboundHttp(CLAUDE_SUB_HOST, fetcher);
+  await container.interceptOutboundHttps(CLAUDE_SUB_HOST, fetcher);
 }
 
 /** Runs a short command to completion and returns its output. */
