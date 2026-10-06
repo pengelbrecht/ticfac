@@ -68,11 +68,13 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -152,7 +154,9 @@ var statusPushSetup = func() *cloudClient {
 // stopped by [statusPusher.Stop] which then pushes once more — the ending
 // snapshot, taken when the run's terminal record exists.
 type statusPusher struct {
-	client *cloudClient
+	// trimNoted says the label trim was already said once.
+	trimNoted bool
+	client    *cloudClient
 	// path is the door this pusher talks to: the operator's snapshot door
 	// for a local run, the run-credential relay for a cloud one.
 	path string
@@ -281,7 +285,14 @@ func (p *statusPusher) Stop() {
 // push gathers and POSTs one snapshot. Best-effort by construction: every
 // failure is a line to the log and nothing else.
 func (p *statusPusher) push(ctx context.Context) {
-	snapshot := statusSnapshotFor(ctx, p.repo, p.runID, p.host)
+	snapshot, dropped := statusSnapshotTrimmed(ctx, p.repo, p.runID, p.host)
+	if dropped > 0 && !p.trimNoted {
+		// Said once per pusher: the snapshot still goes, with the bare ids
+		// of the ticks past the bound.
+		p.trimNoted = true
+		fmt.Fprintf(p.warn, "ticfac: the status snapshot for %s names %d more tick(s) than the factory's %d labels; "+
+			"those are shown by id only\n", p.runID, dropped, statusLabelsMax)
+	}
 	if _, err := p.client.request(ctx, http.MethodPost, p.path, snapshot); err != nil {
 		fmt.Fprintf(p.warn, "ticfac: the status snapshot for %s could not be pushed to the factory: %v\n", p.runID, err)
 	}
@@ -299,16 +310,82 @@ var runlifeProbeOf = runlife.Probe
 // commands the model spells are the host's (a cloud run's resume is a new
 // submission to its factory).
 func statusSnapshotFor(ctx context.Context, repo, runID, host string) statusSnapshotEnvelope {
+	envelope, _ := statusSnapshotTrimmed(ctx, repo, runID, host)
+	return envelope
+}
+
+// statusSnapshotTrimmed is statusSnapshotFor, plus how many labels the
+// envelope left out to stay inside the factory's bound.
+func statusSnapshotTrimmed(ctx context.Context, repo, runID, host string) (statusSnapshotEnvelope, int) {
 	if host == "" {
 		host = statusmodel.HostLocal
 	}
 	model := localStatusModelHosted(ctx, repo, runID, runlifeProbeOf(repo, runID, time.Now()), modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost}, host)
+	labels, dropped := labelsForModel(model, tickLabels(ctx, repo))
 	return statusSnapshotEnvelope{
 		SchemaVersion: statusPushEnvelopeVersion,
 		RunID:         model.RunID,
 		Host:          host,
 		PushedAt:      time.Now().UTC().Format(time.RFC3339),
 		Model:         model,
-		TickLabels:    tickLabels(ctx, repo),
+		TickLabels:    labels,
+	}, dropped
+}
+
+// statusLabelsMax is the factory door's bound on one snapshot's label map
+// (cloudflare/src/status.ts parseSnapshotEnvelope, pinned to it by
+// TestStatusLabelsMaxIsTheFactoryDoorsBound). A map past it is refused
+// whole — the push with it — so the sender never sends one.
+const statusLabelsMax = 64
+
+// labelsForModel is the label map one snapshot carries: only the ticks the
+// model itself names — a label is how the page and the alerts name a tick
+// the snapshot shows, and nothing else is ever looked up — and at most
+// statusLabelsMax of them, the earliest the model names first (run_7445005f:
+// the whole tracker's labels, every tick it ever had, made every push of a
+// long-lived repository a 400 and its remote view went dark for the run's
+// life). Returns how many named ticks did not fit.
+func labelsForModel(model statusmodel.Model, all map[string]string) (map[string]string, int) {
+	if len(all) == 0 {
+		return all, 0
 	}
+	raw, err := json.Marshal(model)
+	if err != nil {
+		return nil, 0
+	}
+	type named struct {
+		id string
+		at int
+	}
+	seen := map[string]bool{}
+	var order []named
+	text := string(raw)
+	start := -1
+	for i := 0; i <= len(text); i++ {
+		word := i < len(text) && isTickIDByte(text[i])
+		if word && start < 0 {
+			start = i
+		}
+		if !word && start >= 0 {
+			id := text[start:i]
+			if _, ok := all[id]; ok && !seen[id] {
+				seen[id] = true
+				order = append(order, named{id, start})
+			}
+			start = -1
+		}
+	}
+	sort.SliceStable(order, func(a, b int) bool { return order[a].at < order[b].at })
+	out := make(map[string]string, min(len(order), statusLabelsMax))
+	for _, n := range order {
+		if len(out) == statusLabelsMax {
+			break
+		}
+		out[n.id] = all[n.id]
+	}
+	return out, len(order) - len(out)
+}
+
+func isTickIDByte(c byte) bool {
+	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_'
 }
