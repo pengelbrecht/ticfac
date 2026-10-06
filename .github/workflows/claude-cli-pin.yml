@@ -1,0 +1,99 @@
+name: claude CLI pin bump
+
+# The claude-sub rung's models are the claude CLI's VERSIONLESS aliases
+# (sonnet, opus), and an alias resolves INSIDE the pinned CLI binary: CLI
+# 2.1.227 (the image's pin when tick 6fv landed) maps `opus` to
+# claude-opus-5, while current releases map it to 5.5. So the aliases only
+# track the latest models if CLAUDE_CODE_VERSION moves, and a pin nobody
+# bumps is a rung quietly frozen on last year's models. This job makes the
+# bump routine: weekly, it asks npm what the latest release is and — when
+# the pin differs — moves CLAUDE_CODE_VERSION in image/Dockerfile and opens
+# a PR. A dependency update like any other: reviewed, merged, deployed by the
+# ordinary deploy-factory run that follows.
+#
+# It never force-pushes, never merges, and never touches anything but the
+# one ARG line. An operator who wants to hold the pin back closes the PR;
+# the next week's run sees the pin still behind and asks again — the alias
+# question is a review's, not a workflow's, to settle.
+
+on:
+  schedule:
+    # Mondays 05:17 UTC, before the day's work: a bump PR is waiting when
+    # the first person looks, and a week is the cadence a CLI that releases
+    # roughly daily makes useful without being noisy.
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: claude-cli-pin
+  cancel-in-progress: false
+
+jobs:
+  bump-the-pin:
+    name: move CLAUDE_CODE_VERSION to the latest release
+    # The pin is meaningless outside this repository's own factory image.
+    if: github.repository == 'pengelbrecht/ticfac'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Read the pinned CLI version
+        id: pinned
+        run: |
+          pin="$(sed -n 's/^ARG CLAUDE_CODE_VERSION=//p' image/Dockerfile)"
+          if [ -z "$pin" ]; then
+            echo "image/Dockerfile no longer pins CLAUDE_CODE_VERSION" >&2
+            exit 1
+          fi
+          echo "version=$pin" >> "$GITHUB_OUTPUT"
+
+      - name: Ask npm for the latest @anthropic-ai/claude-code release
+        id: latest
+        run: |
+          latest="$(npm view @anthropic-ai/claude-code version)"
+          if [ -z "$latest" ]; then
+            echo "npm did not answer a version for @anthropic-ai/claude-code" >&2
+            exit 1
+          fi
+          echo "version=$latest" >> "$GITHUB_OUTPUT"
+
+      # The whole point: when the pin already answers the registry, the job
+      # ends here and opens nothing — a week with no release costs no PR.
+      - name: Move the pin in image/Dockerfile
+        if: steps.pinned.outputs.version != steps.latest.outputs.version
+        run: |
+          sed -i "s/^ARG CLAUDE_CODE_VERSION=.*/ARG CLAUDE_CODE_VERSION=${{ steps.latest.outputs.version }}/" image/Dockerfile
+          grep -q "^ARG CLAUDE_CODE_VERSION=${{ steps.latest.outputs.version }}$" image/Dockerfile
+
+      - name: Open the bump PR
+        if: steps.pinned.outputs.version != steps.latest.outputs.version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PINNED: ${{ steps.pinned.outputs.version }}
+          LATEST: ${{ steps.latest.outputs.version }}
+        run: |
+          branch="chore/claude-cli-pin-${LATEST}"
+          title="claude CLI ${PINNED} -> ${LATEST}: keep the rung's aliases current"
+          body="The claude-sub rung's models are the claude CLI's versionless aliases (sonnet, opus), and an alias resolves INSIDE the pinned CLI binary. This moves CLAUDE_CODE_VERSION from ${PINNED} to ${LATEST}, the latest release npm answers, so the aliases keep resolving to the latest models rather than freezing on the ones the pinned CLI knew.
+
+          Review it like any dependency bump: the image builds with the new CLI, the Dockerfile's green-start assertions run at build time, and the deploy that carries it is the ordinary deploy-factory run after this merges."
+          git config user.name "ticfac pin bot"
+          git config user.email "ticks-sandbox@ticks.invalid"
+          git switch -c "$branch"
+          git add image/Dockerfile
+          git commit -m "$title"
+          git push -u origin "$branch"
+          # A bump PR for this version may already be open (a previous run
+          # opened it and nobody has merged it); opening a second would only
+          # fail the job. The stale one for an OLDER version stays for a
+          # person to close — the workflow never closes or edits a PR.
+          if gh pr list --head "$branch" --state open | grep -q .; then
+            echo "a bump PR is already open for $branch; not opening another"
+          else
+            gh pr create --title "$title" --body "$body"
+          fi
