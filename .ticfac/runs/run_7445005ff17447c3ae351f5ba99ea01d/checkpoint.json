@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_7445005ff17447c3ae351f5ba99ea01d",
   "epic_id": "umq",
-  "sequence": 12,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for l76",
-  "updated_at": "2026-10-06T14:16:23Z",
+  "sequence": 13,
+  "state": "publishing",
+  "reason": "closing l76 behind its validated review-epic answer",
+  "updated_at": "2026-10-06T14:17:26Z",
   "ticks": [
     {
       "tick_id": "dax",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "l76",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 2
     },
     {
