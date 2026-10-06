@@ -2,7 +2,7 @@
   "id": "a6b",
   "title": "Re-review umq: its tree changed since its READY final review (round 2)",
   "description": "Review the epic umq again, AS INTEGRATED, before the run lands it: its final review (l76, decision 3) judged it READY at c6b0d67c17f9, and the epic branch has changed since — now at 69c9077eab2b, with work that review never saw (a tick closed or a commit pushed after it). This is review round 2, made only because the tree changed; the run lands on YOUR verdict, not the earlier one.\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what blocks it.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -10,5 +10,6 @@
   "role": "review",
   "created_by": "ticfac run run_7445005ff17447c3ae351f5ba99ea01d",
   "created_at": "2026-10-06T16:11:10Z",
-  "updated_at": "2026-10-06T16:11:10Z"
+  "updated_at": "2026-10-06T16:11:18.967300615Z",
+  "started_at": "2026-10-06T16:11:18.967299765Z"
 }
