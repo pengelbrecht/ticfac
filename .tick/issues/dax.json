@@ -4,7 +4,7 @@
   "gloss": "cut over + delete 0.x",
   "description": "Only after the last 0.x run has ended. Delete rollout_active_grace_period + its pin test, internal/factory/rollout_held.go, most of rollout.go's confirm wait, deploy-factory.yml rollout wait, max_instances mirror check, container-capacity's don't-boot workaround; wrangler containers delete the old app.",
   "notes": "2026-10-06 11:41 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: dax try 1 (run dispatch #1) reported a finding the run itself decided — defect \"Subprocess interrupt tests fail at base in Linux containers\" (key 94a4781f1164ab36fe444229aa76ed97d22abebc70738d60b58af3221a06bb79, severity low, for this repository) is promoted to a backlog tick with an owner, 8ct; the decision record is on the run branch at .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/94a4781f1164ab36fe444229aa76ed97d22abebc70738d60b58af3221a06bb79.json, and the draft is triaged as promoted.\n2026-10-06 11:41 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: dax try 1 (run dispatch #1) reported a finding the run itself decided — proposed-tick \"Declared-image check still names the deleted 0.x application\" (key 9ec9061eb8256b025121362a4e60ba5fc87a514c07dadb9454e99045264a8fa3, severity low, for this repository) is promoted to a backlog tick with an owner, oog; the decision record is on the run branch at .ticfac/runs/run_7445005ff17447c3ae351f5ba99ea01d/absorptions/9ec9061eb8256b025121362a4e60ba5fc87a514c07dadb9454e99045264a8fa3.json, and the draft is triaged as promoted.\n2026-10-06 13:00 - ticfac run run_7445005ff17447c3ae351f5ba99ea01d: dax try 1 (run dispatch #1) merged into epic/umq as 41553f3957fe; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -15,6 +15,6 @@
   "acceptance_criteria": "[A3] holds; deploy summary still correct",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-10-01T08:24:24.711093Z",
-  "updated_at": "2026-10-06T13:00:31.670459877Z",
-  "started_at": "2026-10-06T04:38:58.205330667Z"
+  "updated_at": "2026-10-06T13:00:31.910096903Z",
+  "closed_at": "2026-10-06T13:00:31.910096903Z"
 }
