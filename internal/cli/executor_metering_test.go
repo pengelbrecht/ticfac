@@ -78,6 +78,11 @@ func TestTheLocalMeteringJoinNeedsBothHalvesOfTheHostCredential(t *testing.T) {
 	if m.RunID != "epic-hn6" {
 		t.Errorf("the join attributes to run id %q, want the dispatch's own", m.RunID)
 	}
+	// A dispatch that states no tick and no attempt joins by the run id
+	// alone: the names are omitempty, never invented (tick kf4).
+	if m.TickID != "" || m.Attempt != 0 {
+		t.Errorf("the join names tick %q attempt %d, want neither: this dispatch states none", m.TickID, m.Attempt)
+	}
 	// The resolved join must itself be a usable override: the executor
 	// writes it into the attempt state dir.
 	path, err := m.WriteExtension(t.TempDir())
@@ -182,5 +187,10 @@ func TestTheFactoryHandsTheLocalSubprocessExecutorTheJoin(t *testing.T) {
 	}
 	if m.RunID != "epic-hn6" {
 		t.Errorf("the join attributes to run id %q, want the dispatch's own", m.RunID)
+	}
+	// The join names the dispatch's own tick and attempt (tick kf4): the
+	// reader joins them back to WHICH attempts a gateway number measured.
+	if m.TickID != "gzv" || m.Attempt != 38 {
+		t.Errorf("the join names tick %q attempt %d, want the dispatch's own gzv/38", m.TickID, m.Attempt)
 	}
 }
