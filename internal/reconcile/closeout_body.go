@@ -73,7 +73,12 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 // again CONDENSED — first without each finding's text (each finding keeps its
 // identity line and title, which the close-out's read-back check counts on,
 // and a pointer to the record its full text lives in), then also with the
-// absorption decisions reduced to counts. The head — where to look first,
+// absorption decisions reduced to counts, then also without each amendment's
+// full value (each amendment keeps its status line — headline, proposing
+// attempt, the operator's decision — and a pointer to the record its value
+// lives in; tick 8wa: without this level a run with long worker-proposed
+// notes fell to the forge's last-resort fit, which truncates the tail where
+// the readiness section sits). The head — where to look first,
 // the epic's summary, its done, the review's verdict — is never condensed.
 // The forge fits whatever still overflows as its last resort.
 func (r *Reconciler) composePRBody(readinessSection string) (string, int, error) {
@@ -106,11 +111,13 @@ func condensePRBody(budget int, compose func(condense int) (string, int, error))
 const prBodyBudget = 60000
 
 // The condensation levels composePRBodyAt knows: 0 is the full body, 1 omits
-// each finding's text, 2 also reduces the absorption decisions to counts.
+// each finding's text, 2 also reduces the absorption decisions to counts, 3
+// also omits each amendment's full value.
 const (
-	prBodyOmitFindingText  = 1
-	prBodyCountAbsorptions = 2
-	prBodyMostCondensed    = prBodyCountAbsorptions
+	prBodyOmitFindingText   = 1
+	prBodyCountAbsorptions  = 2
+	prBodyOmitAmendmentText = 3
+	prBodyMostCondensed     = prBodyOmitAmendmentText
 )
 
 func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (string, int, error) {
@@ -339,7 +346,12 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 	// the close-out's amendments gate holds the hand-over on, and this is the
 	// text the operator reads to decide. Full text, like the findings: a
 	// decision made against a summary is a decision made against prose
-	// nobody scored.
+	// nobody scored. Except at the most condensed level (tick 8wa), which
+	// drops the value's full text — the operator's decision surface survives
+	// the condensation as the headline, key and decision the status line
+	// carries — because a body over the budget falls to the forge's
+	// last-resort fit and that truncates the tail, where the readiness
+	// section sits.
 	body.WriteString("\n## Amendments to the epic's record\n\n")
 	if len(amendments) == 0 {
 		// The absence is stated from the RECORD's view, and says so: a worker's
@@ -355,6 +367,12 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 			"from — applied by the run, and waiting for or carrying the operator's decision. A worker's words on " +
 			"it are a claim, never the operator's word: the close-out does not hand over while one is undecided " +
 			"(confirm lets it stand as the operator's own, reject disowns it).\n")
+		if condense >= prBodyOmitAmendmentText {
+			fmt.Fprintf(&body, "**Each amendment's full value is omitted here** to keep this body under GitHub's "+
+				"limit on a PR body: the worker's own words live in the run's record at "+
+				"`.ticfac/runs/%s/amendments/<key>.json` on %s, named by the full key beside each amendment.\n",
+				r.runID, r.branch)
+		}
 		for _, amendment := range amendments {
 			switch amendment.Status {
 			case runstate.AmendmentConfirmed:
@@ -371,6 +389,14 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 					"operator — confirm with `ticfac amendment %s %s --confirm --by <who>`, reject with --reject\n",
 					amendment.FirstLine(), amendment.Key, amendment.Field,
 					r.attemptName(amendment.ProposedBy, amendment.Attempt), r.opts.EpicID, amendment.Key)
+			}
+			if condense >= prBodyOmitAmendmentText {
+				// The value's full text is omitted at the most condensed
+				// level (tick 8wa); the record file, named by its full key,
+				// is where the operator reads the worker's own words before
+				// deciding.
+				fmt.Fprintf(&body, "  key %s\n", amendment.Key)
+				continue
 			}
 			fmt.Fprintf(&body, "\n  %s\n", strings.ReplaceAll(amendment.Value, "\n", "\n  "))
 		}
