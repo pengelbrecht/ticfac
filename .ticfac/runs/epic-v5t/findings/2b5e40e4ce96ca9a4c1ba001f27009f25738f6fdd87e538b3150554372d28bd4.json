@@ -12,8 +12,11 @@
   "attempt": 8,
   "done_item": "A1",
   "demonstrating_check": "cd cloudflare && pnpm vitest run test/sandbox-dispatch.test.ts -t 'steps a rung dispatch down'",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T03:29:54Z",
+  "triaged_at": "2026-10-07T03:30:10Z",
+  "triaged_by": "ticfac run epic-v5t absorbing bw7",
+  "promoted_as": "bw7",
   "provenance": {
     "run_id": "epic-v5t",
     "tick_id": "yhe",
