@@ -2,7 +2,7 @@
   "id": "z6t",
   "title": "Re-review ilz: its tree changed since its READY final review (round 2)",
   "description": "Review the epic ilz again, AS INTEGRATED, before the run lands it: its final review (lpl, decision 1) judged it READY at f0361100656d, and the epic branch has changed since — now at 027c4e3d60d6, with work that review never saw (a tick closed or a commit pushed after it). This is review round 2, made only because the tree changed; the run lands on YOUR verdict, not the earlier one.\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what blocks it.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -10,5 +10,6 @@
   "role": "review",
   "created_by": "ticfac run run_18eafdaa047544be9a196d913fb08a30",
   "created_at": "2026-10-07T10:33:01Z",
-  "updated_at": "2026-10-07T10:33:01Z"
+  "updated_at": "2026-10-07T10:33:09.665465416Z",
+  "started_at": "2026-10-07T10:33:09.665464246Z"
 }
