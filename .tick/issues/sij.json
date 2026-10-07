@@ -2,6 +2,7 @@
   "id": "sij",
   "title": "The full reconcile suite cannot fit one local run under the host-shared flags",
   "description": "AGENTS.md prescribes GOTEST_PARALLEL=4 GOFLAGS=-p=2 for heavy local commands on this shared host, and at those flags a single-process `go test ./internal/reconcile/` blew both a 40m and a 55m -timeout with tests still backlogged (the two running tests at the 55m alarm had started 41s earlier). The only shape that fits locally is CI's sharding (.github/scripts/go-test-shard.sh): the three shards at the Makefile's own -parallel 12 took 914s/927s/670s. A worker following the instruction faithfully cannot produce the single-invocation full-suite pass the tick's acceptance names; worth either sharding `make test` for this package locally or documenting the shard command as the local full-suite invocation.\nevidence: go test ./internal/reconcile/ -timeout 55m at GOTEST_PARALLEL=4 GOFLAGS=-p=2: `panic: test timed out after 55m0s` with TestARestartMidRepairFinishesTheRepairAndClosesTheTick/fresh_clone (41s) and TestARejectedAttemptWhoseBranchIsGoneButWhoseHeadIsIntegratedIsFinished/fresh_clone (41s) still running; both pass in shard 2 and shard 3 (914s/927s/670s, exit 0)\n\nticfac run epic-t8u filed this backlog tick from the finding 4d9214177db22c9dad45ddbe3b126ce19de7348b48336cd3151c74095e9324b8 (reported by run-epic-t8u/tick-krh/attempt-8) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/4d9214177db22c9dad45ddbe3b126ce19de7348b48336cd3151c74095e9324b8.json on the run branch.",
+  "notes": "2026-10-07 21:18 - ticfac run epic-t8u: created by absorbing finding 4d9214177db22c9dad45ddbe3b126ce19de7348b48336cd3151c74095e9324b8 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/4d9214177db22c9dad45ddbe3b126ce19de7348b48336cd3151c74095e9324b8.json on epic/t8u, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-t8u/tick-krh/attempt-8",
   "created_by": "ticfac run epic-t8u",
   "created_at": "2026-10-07T19:18:23Z",
-  "updated_at": "2026-10-07T19:18:23Z"
+  "updated_at": "2026-10-07T19:18:28.606198Z"
 }
