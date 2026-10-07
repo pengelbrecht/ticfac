@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 52,
-  "state": "dispatching",
-  "reason": "dispatching 8rm as attempt 9",
-  "updated_at": "2026-10-07T03:38:50Z",
+  "sequence": 53,
+  "state": "running",
+  "reason": "8rm is running as attempt 9",
+  "updated_at": "2026-10-07T03:39:04Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -43,7 +43,8 @@
     },
     {
       "tick_id": "8rm",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 9
     }
   ],
   "provenance": {
