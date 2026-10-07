@@ -142,6 +142,14 @@ func parseConfigLabels(epicID string, labels []string) (string, error) {
 	return chosen, nil
 }
 
+// EpicConfigLabel is the config an epic's own `config:` labels name — ""
+// when it carries none — and an error when two disagree: the label half of
+// the precedence, for a surface that answers the selection a run WILL make
+// before the run exists (the cloud submission preflight).
+func EpicConfigLabel(epicID string, labels []string) (string, error) {
+	return parseConfigLabels(epicID, labels)
+}
+
 // selectRunConfig resolves the precedence for one run: the flag over the
 // epic's label over the default. The named configs it chooses between are
 // the merged document's own — the common file with the substrate's override

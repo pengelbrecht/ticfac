@@ -183,7 +183,7 @@ func runCloudCommand(ctx context.Context, epicID, repo string, fl *runFlags, std
 		fmt.Fprintf(prose, "no cloud run for epic %s in the factory — starting one\n", epicID)
 	}
 
-	runID, queued, err := submitCloudRun(ctx, client, repo, epicID, "", prose)
+	runID, queued, err := submitCloudRun(ctx, client, repo, epicID, "", "", prose)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run %s --cloud: %v\n", epicID, err)
 		return finish(action, agentStateFailed, "", err.Error())
@@ -260,11 +260,16 @@ func cloudSubstrate() string { return strings.TrimSpace(os.Getenv(CloudSubstrate
 // orchestrator is where the run's orchestrator runs: "" is the factory's own
 // container, "local" is `run --cloud-workers` (this machine), which the
 // factory records so it boots no orchestrator container for the run.
-func submitCloudRun(ctx context.Context, client *cloudClient, repo, epicID, orchestrator string, stdout io.Writer) (runID string, queued bool, err error) {
+//
+// runConfig is the --config a `run --cloud-workers` forwards to the
+// orchestrator it starts here ("" for `run --cloud`, which carries none):
+// the preflight asks the subscription question of the config the run will
+// select.
+func submitCloudRun(ctx context.Context, client *cloudClient, repo, epicID, orchestrator, runConfig string, stdout io.Writer) (runID string, queued bool, err error) {
 	// The harness preflight (tick kkt): refuse a submission whose every
 	// container would die at boot, BEFORE anything is pushed or parked behind
 	// a lease — the refusal costs nothing and names the runbook's order.
-	if err := preflightCloudHarness(ctx, client, repo, stdout); err != nil {
+	if err := preflightCloudHarness(ctx, client, repo, epicID, runConfig, stdout); err != nil {
 		return "", false, err
 	}
 	baseSHA, project, requestedBy, err := prepareCloudSubmission(ctx, repo, epicID)

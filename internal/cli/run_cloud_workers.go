@@ -224,7 +224,7 @@ func runCloudWorkersCommand(ctx context.Context, epicID, repo string, fl *runFla
 	}
 
 	if credential == nil {
-		runID, _, err := submitCloudRun(ctx, client, repo, epicID, "local", prose)
+		runID, _, err := submitCloudRun(ctx, client, repo, epicID, "local", *fl.config, prose)
 		if err != nil {
 			return fail(action, err)
 		}

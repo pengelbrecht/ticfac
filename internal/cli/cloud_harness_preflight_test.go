@@ -523,16 +523,30 @@ step = 2
 `
 }
 
+// labelEpic gives the fixture's epic1 a `config:` label at HEAD — the
+// boundary the factory clones and the submission preflight reads.
+func labelEpic(t *testing.T, repo, label string) {
+	t.Helper()
+	writeCloudTickFixture(t, repo, cloudTickFixture{
+		ID: "epic1", Title: "Cloud test epic", Type: "epic",
+		Owner: "operator", CreatedBy: "operator", Labels: []string{label},
+	})
+	execTestCmd(t, repo, "git", "add", ".tick")
+	execTestCmd(t, repo, "git", "commit", "-m", "label the epic")
+	execTestCmd(t, repo, "git", "push", "origin", "main")
+}
+
 // TestRunCloudRefusesAClaudeConfigWithNoSubscription is the acceptance's own
-// refusal: a cloud config riding the claude-sub rung and a factory holding
-// no subscription token — a run on that config would silently step every
-// dispatch down to Workers AI. The submission is refused naming the config,
-// the rung and the `wrangler secret put` that turns the rung on, and the
-// only factory traffic is the reads.
+// refusal: an epic on a cloud config riding the claude-sub rung and a
+// factory holding no subscription token — a run on that config would
+// silently step every dispatch down to Workers AI. The submission is
+// refused naming the config, the rung and the `wrangler secret put` that
+// turns the rung on, and the only factory traffic is the reads.
 func TestRunCloudRefusesAClaudeConfigWithNoSubscription(t *testing.T) {
 	stubCloudTk(t)
 	repo, _, _ := setupCloudRepo(t, true)
 	commitPreflightConfig(t, repo, preflightCommonRunners, preflightConfiguredOverlay())
+	labelEpic(t, repo, "config: claude")
 
 	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
 		switch {
@@ -576,6 +590,42 @@ func TestRunCloudRefusesAClaudeConfigWithNoSubscription(t *testing.T) {
 	}
 }
 
+// TestRunCloudSubmitsAGLMEpicBesideAnUnservedClaudeConfig: the same branch
+// and the same factory with the rung off, and an epic that says nothing — so
+// it runs on the declared default, glm, which rides no rung. The claude
+// config the branch also declares is doctor's to hold to the subscription,
+// not a reason to refuse an epic that will never ride it: "another epic
+// runs on the default GLM config", unchanged.
+func TestRunCloudSubmitsAGLMEpicBesideAnUnservedClaudeConfig(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	commitPreflightConfig(t, repo, preflightCommonRunners, preflightConfiguredOverlay())
+	started := cloudRunIDOf("ff66")
+
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+			return 200, map[string]any{"runs": []any{}}
+		case request.Method == http.MethodGet && request.Path == "/api/deployment":
+			return deploymentAnswerWithSubscriptions("v1.0.0-7-gdeadbeef0123",
+				[]string{"omp", "claude", "pi-durable"}, []string{})
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			return 201, map[string]any{"run": map[string]any{"run_id": started, "state": "starting"}}
+		}
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+	rec := recordCloudAttach(t)
+
+	code, stdout, stderr := runRunCloud(t, repo, "epic1")
+	if code != exitSuccess {
+		t.Fatalf("exit %d, want the GLM epic submitted:\nstdout:\n%s\nstderr:\n%s", code, stdout.String(), stderr.String())
+	}
+	if len(rec.runIDs) != 1 || rec.runIDs[0] != started {
+		t.Errorf("attached to %v, want [%s]", rec.runIDs, started)
+	}
+}
+
 // TestRunCloudSubmitsAClaudeConfigWithASubscription: the same branch, the same
 // factory, one difference — the factory holds a subscription token, so the
 // rung is on and the config can be served. The preflight passes silently and
@@ -585,6 +635,7 @@ func TestRunCloudSubmitsAClaudeConfigWithASubscription(t *testing.T) {
 	stubCloudTk(t)
 	repo, _, _ := setupCloudRepo(t, true)
 	commitPreflightConfig(t, repo, preflightCommonRunners, preflightConfiguredOverlay())
+	labelEpic(t, repo, "config: claude")
 	started := cloudRunIDOf("ee55")
 
 	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
