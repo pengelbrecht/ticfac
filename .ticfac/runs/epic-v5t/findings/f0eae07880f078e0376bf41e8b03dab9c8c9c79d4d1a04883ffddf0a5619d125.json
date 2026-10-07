@@ -10,8 +10,11 @@
   "target": "pengelbrecht/ticks",
   "tick_id": "tda",
   "attempt": 2,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T00:56:42Z",
+  "triaged_at": "2026-10-07T00:56:55Z",
+  "triaged_by": "ticfac run epic-v5t filing pengelbrecht/ticks:gnw",
+  "promoted_as": "pengelbrecht/ticks:gnw",
   "provenance": {
     "run_id": "epic-v5t",
     "tick_id": "tda",
