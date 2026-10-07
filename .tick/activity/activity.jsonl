@@ -3076,3 +3076,4 @@
 {"ts":"2026-10-07T06:07:47.401737858Z","tick":"56z","action":"start","actor":"cloud:orchestrator","epic":"ilz","data":{"title":"Write docs/claude-sub-operator.md and link it from README"}}
 {"ts":"2026-10-07T07:01:00.829094352Z","tick":"56z","action":"note","actor":"cloud:orchestrator","epic":"ilz","data":{"note":"2026-10-07 07:01 - ticfac run run_4d92bab25a7341d3bba01691779168a0: 56z try 1 (run dispatch #1) merged into epic/ilz as f05bb24b0f5f; the integrated gate (go, ts) passed.","title":"Write docs/claude-sub-operator.md and link it from README"}}
 {"ts":"2026-10-07T07:01:01.11326652Z","tick":"56z","action":"close","actor":"cloud:orchestrator","epic":"ilz","data":{"title":"Write docs/claude-sub-operator.md and link it from README"}}
+{"ts":"2026-10-07T07:01:19.789907462Z","tick":"yaz","action":"start","actor":"cloud:orchestrator","epic":"ilz","data":{"title":"Final review of the claude-sub operator guide"}}

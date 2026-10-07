@@ -1,10 +1,10 @@
 {
   "id": "yaz",
   "title": "Final review of the claude-sub operator guide",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "blocked_by": [
     "56z"
   ],
@@ -12,5 +12,6 @@
   "role": "review",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T06:06:13.122727Z",
-  "updated_at": "2026-10-07T06:06:13.122727Z"
+  "updated_at": "2026-10-07T07:01:19.789534991Z",
+  "started_at": "2026-10-07T07:01:19.789533971Z"
 }
