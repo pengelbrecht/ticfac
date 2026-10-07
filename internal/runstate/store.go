@@ -111,7 +111,7 @@ type Store struct {
 	// between this store's read and its write. The guards for that contract
 	// used to spray a fetch in an unthrottled loop for the length of the test
 	// and hope one landed inside the window where it is dangerous, which
-	// saturated a core for half a minute per test and still caught each
+	// saturated a core for up to half a minute per test and still caught each
 	// regression only some runs (tick 1qy). Armed here instead, a guard
 	// performs each competing action at the instant named below — which is
 	// deterministic, near-instant, and immune to machine load.
