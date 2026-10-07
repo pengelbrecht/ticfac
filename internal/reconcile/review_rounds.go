@@ -86,6 +86,9 @@ type reviewRounds struct {
 	// findings name.
 	finalDrift bool
 	driftPaths []string
+	// inherited is the EARLIER run of this epic whose review decision final
+	// is — "" when final is this run's own. See inheritedReviews.
+	inherited string
 }
 
 // counted is the rounds that count toward maxReviewRounds.
@@ -136,7 +139,34 @@ func (r *Reconciler) readReviewRounds() (reviewRounds, error) {
 		}
 	}
 	out.rounds = len(latest)
-	if out.rounds < 2 {
+	// The newest ended earlier run of the epic's reviews (inheritedReviews):
+	// its rounds count with this run's, so a resume under a new run id counts
+	// them the way a resume under the same id always has, and its final
+	// review is the final one while this run has none of its own. Its rounds
+	// are not read for drift: decision numbers order one run's decisions, not
+	// two runs'.
+	sibling, theirs, err := r.inheritedReviews()
+	if err != nil {
+		return out, err
+	}
+	if sibling != "" {
+		var theirFinal *runstate.Decision
+		counted := map[string]bool{}
+		for i := range theirs {
+			if theirFinal == nil || theirs[i].Decision > theirFinal.Decision {
+				theirFinal = &theirs[i]
+			}
+			tick, _ := theirs[i].Request["tick_id"].(string)
+			if latest[tick] == nil && !counted[tick] {
+				counted[tick] = true
+				out.rounds++
+			}
+		}
+		if out.final == nil {
+			out.final, out.inherited = theirFinal, sibling
+		}
+	}
+	if len(latest) < 2 {
 		return out, nil
 	}
 	ordered := make([]*runstate.Decision, 0, len(latest))
@@ -194,6 +224,89 @@ func (r *Reconciler) readReviewRounds() (reviewRounds, error) {
 // drift, and a base that did not move excuses nothing. The backstop is
 // maxDriftReviewRounds: a base that moves under every round is excused that
 // many times, and after that its rounds count again and the bound holds.
+
+// A final review recorded by an EARLIER run of the epic (epic ilz,
+// 2026-10-07).
+//
+// WHAT WAS WRONG. ilz's cloud run held land_review_not_ready: every tick
+// closed, the close-out closed, the epic PR held on a NOT READY final review.
+// The operator fixed the doc the review named and ran the epic again — the
+// hold's own instruction. A cloud resume is a NEW submission, so it runs under
+// a new run id, and every review rule read only the new run's own decisions:
+// it found no review at all, so nothing asked whether the tree had changed
+// since the NOT READY; it found no close-out of its own, so nothing was left
+// to ready; and with every tick closed the run stopped over "epic ilz has no
+// dispatchable tick" — an unclassified stop. The operator filed a review tick
+// and reopened the close-out by hand.
+//
+// THE RULE. The review rules read the final review where it was recorded: a
+// run with no review decision of its own takes the newest ENDED earlier run of
+// its epic's final review as the final one (inheritedReviews), and counts that
+// run's rounds with its own. An inherited verdict is never absorbed again — the
+// run that recorded it already acted on it — so a NOT READY inherited is the
+// spent-bound case whatever the count: a tree changed since it judged gets one
+// more review, and its close-out after it (reopened when this run has none of
+// its own to land with); an unchanged tree holds with the land hold's message.
+
+// inheritedReviews is the earlier run of this epic whose review decisions the
+// review rules read: among the runs on the integration branch whose checkpoint
+// names this epic, the one whose newest review-epic decision answered last —
+// taken only when that run has ENDED (its checkpoint is terminal, or its host
+// says it is gone), because a live run's verdict is its own to act on. It
+// answers "" when there is none.
+func (r *Reconciler) inheritedReviews() (string, []runstate.Decision, error) {
+	runs, err := r.inheritedRuns()
+	if err != nil {
+		return "", nil, err
+	}
+	best, bestAt := "", ""
+	var bestReviews []runstate.Decision
+	for _, runID := range runs {
+		checkpoint, ok, err := r.store.ForeignCheckpoint(runID)
+		if err != nil || !ok || checkpoint.EpicID != r.opts.EpicID {
+			// An unreadable checkpoint says nothing about whose run it is
+			// (the boot sweep says so once, inherit.go); it is not this
+			// epic's verdict to take.
+			continue
+		}
+		decisions, err := r.store.ForeignDecisions(runID)
+		if err != nil {
+			continue
+		}
+		var reviews []runstate.Decision
+		at := ""
+		for _, d := range decisions {
+			if d.Role != "review-epic" {
+				continue
+			}
+			reviews = append(reviews, d)
+			if d.AnsweredAt > at {
+				at = d.AnsweredAt
+			}
+		}
+		if len(reviews) == 0 || (best != "" && at <= bestAt) {
+			continue
+		}
+		var answer HolderState
+		if !checkpoint.State.Terminal() && r.opts.ClaimHolder != nil {
+			answer = r.opts.ClaimHolder(context.Background(), runID)
+		}
+		if _, ended := r.endedRun(checkpoint, answer); !ended {
+			continue
+		}
+		best, bestAt, bestReviews = runID, at, reviews
+	}
+	return best, bestReviews, nil
+}
+
+// inheritedFrom names the earlier run a final review was recorded by, for a
+// record line: "" when it is the run's own.
+func inheritedFrom(rounds reviewRounds) string {
+	if rounds.inherited == "" {
+		return ""
+	}
+	return ", recorded by " + rounds.inherited + ", an earlier run of the epic"
+}
 
 // baseHeadForFolds is the base's head as origin has it now, for telling a
 // fold of the base from the epic's own merges; "" when the base cannot be
@@ -406,6 +519,11 @@ func (r *Reconciler) answerNotReadyReview(ctx context.Context) (bool, error) {
 	}
 	final := *rounds.final
 	reviewed, _ := final.Request["tick_id"].(string)
+	if rounds.inherited != "" {
+		// An earlier run's verdict (epic ilz): that run acted on it, so
+		// nothing is absorbed here — the tree decides, as past the bound.
+		return r.reviewIfTreeChanged(ctx, durable, rounds)
+	}
 	if rounds.spent() {
 		// The bound is spent. Past it nothing is absorbed — the run does not
 		// argue with its review — but a tree that changed since the final
@@ -847,13 +965,76 @@ func (r *Reconciler) reviewIfTreeChanged(ctx context.Context, durable *durableTr
 	if err != nil || !changed {
 		return false, err
 	}
+	// A run with no close-out of its own has nothing to land the new review's
+	// READY with (epic ilz: the close-out was an earlier run's), so the
+	// epic's closed close-out is reopened behind the review. Asked before the
+	// step, because the step holds the store's writes.
+	co, err := r.closeoutForLanding()
+	if err != nil {
+		return false, err
+	}
+	reopen := co == nil
 	acted := false
 	err = r.heldStep(func() error {
 		var stepErr error
-		acted, stepErr = r.placeChangedTreeReview(ctx, durable, rounds, final, reviewed, head)
+		acted, stepErr = r.placeChangedTreeReview(ctx, durable, rounds, final, reviewed, head, reopen)
 		return stepErr
 	})
 	return acted, err
+}
+
+// closeoutBehindReview places the epic's close-out behind a review the run
+// just placed: the open one, or — when reopen is set and the close-out is
+// closed — the closed one, reopened first, so the land runs a close-out of
+// this run's own after the review's verdict. It answers the close-out placed,
+// "" when there is none.
+func (r *Reconciler) closeoutBehindReview(ctx context.Context, durable *durableTracker, open, review string,
+	reopen bool) (string, error) {
+	closeout := open
+	if closeout == "" && reopen {
+		closed, err := r.closedCloseout(ctx)
+		if err != nil {
+			return "", err
+		}
+		if closed != "" {
+			if _, err := durable.Reopen(ctx, closed); err != nil {
+				return "", fmt.Errorf("reopen the close-out %s behind the review %s: %w", closed, review, err)
+			}
+			note := fmt.Sprintf("ticfac run %s: reopened behind the review %s — the epic %s is reviewed again over "+
+				"a tree that changed since its final review, and this run has no close-out of its own to land the "+
+				"new verdict with (the one that closed was an earlier run's), so the close-out runs again after it.",
+				r.runID, review, r.opts.EpicID)
+			if _, err := r.tracker.Note(ctx, closed, note); err != nil {
+				return "", fmt.Errorf("note the reopening of %s: %w", closed, err)
+			}
+			closeout = closed
+		}
+	}
+	if closeout == "" {
+		return "", nil
+	}
+	if err := durable.BlockOn(ctx, closeout, review); err != nil {
+		return "", fmt.Errorf("place the close-out %s behind the re-review %s: %w", closeout, review, err)
+	}
+	return closeout, nil
+}
+
+// closedCloseout is the epic's closed close-out tick, "" when it has none:
+// read off the graph with its closed tasks (graphWithClosed), since `tk graph`
+// alone lists the open ones.
+func (r *Reconciler) closedCloseout(ctx context.Context) (string, error) {
+	graph, err := r.graphWithClosed(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read the epic graph of %s for its close-out: %w", r.opts.EpicID, err)
+	}
+	for _, wave := range graph.Waves {
+		for _, task := range wave.Tasks {
+			if task.Role == "closeout" && task.Status == "closed" {
+				return task.ID, nil
+			}
+		}
+	}
+	return "", nil
 }
 
 // placeChangedTreeReview is the held step of a review over a changed tree:
@@ -861,7 +1042,7 @@ func (r *Reconciler) reviewIfTreeChanged(ctx context.Context, durable *durableTr
 // when an earlier incarnation already made it), behind every open work tick
 // of the epic, and placed before the close-out when that is still open.
 func (r *Reconciler) placeChangedTreeReview(ctx context.Context, durable *durableTracker, rounds reviewRounds,
-	final runstate.Decision, reviewed, head string) (bool, error) {
+	final runstate.Decision, reviewed, head string, reopen bool) (bool, error) {
 	judged, _ := final.Request["source_sha"].(string)
 	rereview, closeout, err := r.openReReview(ctx, reviewed)
 	if err != nil {
@@ -869,7 +1050,7 @@ func (r *Reconciler) placeChangedTreeReview(ctx context.Context, durable *durabl
 	}
 	round := rounds.rounds + 1
 	if reviewVerdictOf(final.Response) == subprocess.ReviewVerdictReady {
-		return r.placeReviewAfterReady(ctx, durable, final, reviewed, judged, head, rereview, closeout, round)
+		return r.placeReviewAfterReady(ctx, durable, final, reviewed, judged, head, rereview, closeout, round, reopen)
 	}
 	if rereview == "" {
 		description := fmt.Sprintf(
@@ -892,17 +1073,16 @@ func (r *Reconciler) placeChangedTreeReview(ctx context.Context, durable *durabl
 	if err := r.placeBehindOpenWork(ctx, durable, rereview, reviewed); err != nil {
 		return false, err
 	}
-	if closeout != "" {
-		if err := durable.BlockOn(ctx, closeout, rereview); err != nil {
-			return false, fmt.Errorf("place the close-out %s behind the re-review %s: %w", closeout, rereview, err)
-		}
+	if _, err := r.closeoutBehindReview(ctx, durable, closeout, rereview, reopen); err != nil {
+		return false, err
 	}
 	r.record(reviewed, StageReviewRound,
-		"the final review (decision %d) judged %s NOT READY — %s — after %d review round(s), the bound being %d; "+
+		"the final review (decision %d%s) judged %s NOT READY — %s — after %d review round(s), the bound being %d; "+
 			"but the epic branch changed since the tree it judged (%s, now %s) with more than run state and "+
 			"tracker records, so the review it holds on is about a tree that no longer exists. The run reviews "+
 			"the tree as it stands: %s (round %d). Nothing is absorbed past the bound",
-		final.Decision, r.opts.EpicID, notReadyReasons(final), rounds.rounds, maxReviewRounds, short(judged),
+		final.Decision, inheritedFrom(rounds), r.opts.EpicID, notReadyReasons(final), rounds.rounds, maxReviewRounds,
+		short(judged),
 		short(head), rereview, round)
 	return true, nil
 }
@@ -910,7 +1090,7 @@ func (r *Reconciler) placeChangedTreeReview(ctx context.Context, durable *durabl
 // placeReviewAfterReady is placeChangedTreeReview for a READY final review:
 // the review the land waits on.
 func (r *Reconciler) placeReviewAfterReady(ctx context.Context, durable *durableTracker, final runstate.Decision,
-	reviewed, judged, head, rereview, closeout string, round int) (bool, error) {
+	reviewed, judged, head, rereview, closeout string, round int, reopen bool) (bool, error) {
 	if rereview == "" {
 		description := fmt.Sprintf(
 			"Review the epic %s again, AS INTEGRATED, before the run lands it: its final review (%s, decision %d) "+
@@ -930,10 +1110,8 @@ func (r *Reconciler) placeReviewAfterReady(ctx context.Context, durable *durable
 	if err := r.placeBehindOpenWork(ctx, durable, rereview, reviewed); err != nil {
 		return false, err
 	}
-	if closeout != "" {
-		if err := durable.BlockOn(ctx, closeout, rereview); err != nil {
-			return false, fmt.Errorf("place the close-out %s behind the re-review %s: %w", closeout, rereview, err)
-		}
+	if _, err := r.closeoutBehindReview(ctx, durable, closeout, rereview, reopen); err != nil {
+		return false, err
 	}
 	r.record(reviewed, StageReviewRound,
 		"the final review (decision %d) judged %s READY, but the epic branch changed since the tree it judged (%s, "+

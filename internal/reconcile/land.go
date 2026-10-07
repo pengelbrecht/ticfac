@@ -9,6 +9,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
+	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
 // The READY epic PR, and — where the repository opts in — its merge
@@ -218,6 +219,59 @@ func (r *Reconciler) finishReadying(ctx context.Context, done string) (*Result, 
 	}
 	r.record("", StageRunFinished, "%s: %s", runstate.StateCompleted, reason)
 	return r.result(runstate.StateCompleted, reason), nil
+}
+
+// finishWithNothingToDispatch is how a run ends that finds every tick of its
+// epic closed and no close-out of its own to resume the readying at (epic
+// ilz, 2026-10-07: a cloud resume runs under a new run id, so the close-out
+// that ran was an earlier run's). Two answers, both CLASSIFIED stops:
+//
+//   - a final review — this run's or an earlier run's (readReviewRounds) —
+//     that still judges the epic NOT READY over a tree unchanged since it
+//     judged (a changed one was handed a new review before the plan was read)
+//     holds for a person with the land hold's own message;
+//   - anything else is RefusedNothingToDispatch, naming what the epic holds.
+func (r *Reconciler) finishWithNothingToDispatch(graph tk.Graph) (*Result, error) {
+	closed := 0
+	for _, wave := range graph.Waves {
+		closed += len(wave.Tasks)
+	}
+	done := fmt.Sprintf("every tick of %s is closed", r.opts.EpicID)
+	if r.store != nil {
+		refusal, err := r.landingReviewHold("")
+		if err != nil {
+			return nil, err
+		}
+		if refusal != nil {
+			r.failure = refusal
+			r.record(refusal.TickID, StageRunHeld, "%s: %s", refusal.Reason, refusal.Message)
+			reason := fmt.Sprintf("%s, and the epic PR is not ready: %s. Running the epic again after the tree "+
+				"changes reviews it again", done, refusal.Error()) + autoResumeNote(r.priorResumes)
+			if _, err := r.checkpoint(runstate.StateFailed, reason); err != nil {
+				return nil, err
+			}
+			r.record("", StageRunFinished, "%s: %s", runstate.StateFailed, reason)
+			return r.result(runstate.StateFailed, reason), nil
+		}
+	}
+	holds := "it has no open child tick"
+	if closed > 0 {
+		holds = fmt.Sprintf("the tracker answers %d task(s) for it and none is open", closed)
+	}
+	refusal := r.refuse(RefusedNothingToDispatch, "",
+		"epic %s has no dispatchable tick: %s, this run (%s) ran no close-out of its own — so there is no epic PR "+
+			"for it to keep ready — and no final review holds the epic NOT READY. There is nothing for a run to do: "+
+			"if the epic's work is done, merge its PR or close the epic by hand; if it is not, file or reopen the "+
+			"tick that is missing (a review, the close-out, the work) under the epic and run it again",
+		r.opts.EpicID, holds, r.runID)
+	r.failure = refusal
+	r.recordRefusal("", refusal)
+	reason := refusal.Error() + autoResumeNote(r.priorResumes)
+	if _, err := r.checkpoint(runstate.StateFailed, reason); err != nil {
+		return nil, err
+	}
+	r.record("", StageRunFinished, "%s: %s", runstate.StateFailed, reason)
+	return r.result(runstate.StateFailed, reason), nil
 }
 
 // readyEpic brings the epic PR to READY and keeps it there — and, where the
@@ -512,15 +566,15 @@ func (r *Reconciler) landingReviewHold(tick string) (*Refusal, error) {
 		why += fmt.Sprintf(" (%d of them excused as the base moving under the epic, the most the run excuses "+
 			"being %d)", rounds.drift, maxDriftReviewRounds)
 	}
-	if !rounds.spent() {
+	if !rounds.spent() && rounds.inherited == "" {
 		why = "and it named no blocking finding the run could absorb and fix"
 	}
 	return r.refuse(RefusedLandReviewNotReady, tick,
-		"the run does not merge the epic %s: its final review (decision %d) still judges it NOT READY %s. What "+
+		"the run does not merge the epic %s: its final review (decision %d%s) still judges it NOT READY %s. What "+
 			"the review says would make it ready: %s. The verdict is on the epic PR, and accepting work the run's own "+
 			"review rejected is a person's judgement: fix what it names and run the epic again, merge the PR by hand "+
 			"to accept it (a re-run then finds it merged), or close it",
-		r.opts.EpicID, final.Decision, why, notReadyReasons(final)), nil
+		r.opts.EpicID, final.Decision, inheritedFrom(rounds), why, notReadyReasons(final)), nil
 }
 
 // landingAttemptHead is what the readying's gate fingerprint names as the

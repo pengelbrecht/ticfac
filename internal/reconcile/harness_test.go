@@ -679,6 +679,17 @@ func (f *fakeTracker) CloseWithReason(_ context.Context, tickID, reason string) 
 	})
 }
 
+// ReopenTick is the fake's half of the reopen seam (review_rounds.go): a
+// closed tick made open again, mirrored to the checkout like every write.
+func (f *fakeTracker) ReopenTick(_ context.Context, tickID string) (tk.Tick, error) {
+	f.tally("reopen:" + tickID)
+	return f.mutate(tickID, func(tick *tk.Tick) {
+		if tick.Status == "closed" {
+			tick.Status, tick.ClosedReason = "open", ""
+		}
+	})
+}
+
 func (f *fakeTracker) mutate(tickID string, apply func(*tk.Tick)) (tk.Tick, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
