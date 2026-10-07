@@ -369,6 +369,15 @@ export type WorkerBootInput = {
    * enters the container. Absent: a Workers AI (or stepped-down) worker.
    */
   claude_sub?: { label: string; jobId: string };
+  /**
+   * Why a dispatch that resolved the claude-sub rung was stepped down to the
+   * Workers AI pair instead (no subscription configured, every one benched,
+   * every one at its cap), and when the earliest benched one comes back
+   * (epoch ms). Never reaches the container: it is the door's to SAY, on the
+   * handle it answers with, so a run reads "claude-sub exhausted until <reset>;
+   * on Workers AI" rather than a model it did not expect.
+   */
+  claude_sub_stepped_down?: { reason: "none" | "exhausted" | "busy"; retry_at: number | null };
   github_token?: string;
   /** Where `github_token` is refreshed on the App rung; see sandbox.ts. */
   github_token_url?: string;

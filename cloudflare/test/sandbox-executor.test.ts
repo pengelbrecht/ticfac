@@ -301,11 +301,14 @@ class FakeBootRecord implements SandboxBootRecord {
 }
 
 /** The executor under test, wired over the fakes. */
-function makeExecutor() {
+function makeExecutor(overrides: Partial<SandboxExecutorDeps> = {}) {
   const binding = new FakeSandboxes();
   const collector = new FakeCollector();
   const refs = new FakeRefWriter();
   const boots = new FakeBootRecord();
+  // The claude-sub pool's release half, recorded: which job ids a lease was
+  // handed back for (tick 6fv).
+  const released: string[] = [];
   const deps: SandboxExecutorDeps = {
     binding,
     collector,
@@ -315,9 +318,28 @@ function makeExecutor() {
     // No wall clock: the fake containers answer the probes instantly, and
     // nothing here should ever depend on real waiting.
     spawn: { sleep: async () => {} },
+    claudeSub: {
+      async release(jobId: string) {
+        released.push(jobId);
+      },
+    },
+    ...overrides,
   };
-  return { binding, collector, refs, boots, executor: sandboxExecutor(deps) };
+  return { binding, collector, refs, boots, released, executor: sandboxExecutor(deps) };
 }
+
+/** A boot that leased subscription MAX1 for the attempt's own job id. */
+function leasedBoot(spec: AttemptSpec): WorkerBootInput {
+  return {
+    ...bootInput(spec),
+    harness: "claude",
+    model: "sonnet",
+    claude_sub: { label: "MAX1", jobId: SPEC_JOB_ID },
+  };
+}
+
+/** The attempt's own job id, as specJobID mints it for SPEC. */
+const SPEC_JOB_ID = `run-${RUN_ID}/tick-k4s/attempt-3`;
 
 /** Unwraps a handle into this executor's own shape. */
 function asHandle(handle: unknown): SandboxJobHandle {
@@ -902,6 +924,89 @@ describe("cancel", () => {
     handle.handle.process_id = null;
     await executor.cancel(handle);
     expect(binding.named("run-x-k4s-3").destroyed).toBe(true);
+  });
+});
+
+// ------------------------------------------------- the claude-sub lease ---
+
+describe("the claude-sub lease around start and cancel", () => {
+  it("hands the lease back when a start that leased one throws before a worker holds it", async () => {
+    const boots = new FakeBootRecord();
+    boots.record = async () => {
+      throw new Error("D1 is down");
+    };
+    const { released, executor } = makeExecutor({ boot: async (s) => leasedBoot(s), boots });
+    await expect(executor.start(SPEC)).rejects.toThrow("D1 is down");
+    expect(released).toEqual([SPEC_JOB_ID]);
+  });
+
+  it("hands the lease back when an adoption cannot name the running model", async () => {
+    const { boots, released, executor } = makeExecutor({
+      boot: async (s) => leasedBoot(s),
+    });
+    await executor.start(SPEC);
+    expect(released).toEqual([]);
+    boots.forget();
+    await expect(executor.start(SPEC)).rejects.toBeInstanceOf(AdoptionModelUnknownError);
+    expect(released).toEqual([SPEC_JOB_ID]);
+  });
+
+  it("releases nothing for a start that throws without having leased", async () => {
+    const boots = new FakeBootRecord();
+    boots.record = async () => {
+      throw new Error("D1 is down");
+    };
+    const { released, executor } = makeExecutor({ boots });
+    await expect(executor.start(SPEC)).rejects.toThrow("D1 is down");
+    expect(released).toEqual([]);
+  });
+
+  it("releases the lease on cancel even when the salvage throws", async () => {
+    let boots = 0;
+    const { released, executor } = makeExecutor({
+      boot: async (s) => {
+        boots += 1;
+        if (boots > 1) throw new Error("the cancel's boot could not be composed");
+        return leasedBoot(s);
+      },
+    });
+    const handle = await executor.start(SPEC);
+    await expect(executor.cancel(handle)).rejects.toThrow("could not be composed");
+    expect(released).toEqual([SPEC_JOB_ID]);
+  });
+
+  it("names the leased subscription on the handle", async () => {
+    const { executor } = makeExecutor({ boot: async (s) => leasedBoot(s) });
+    const handle = asHandle(await executor.start(SPEC));
+    expect(handle.handle.claude_sub).toEqual({ state: "leased", label: "MAX1" });
+  });
+
+  it("says on the handle why the rung stepped down, and until when", async () => {
+    const retry = Date.parse("2026-10-07T13:00:00Z");
+    const { executor } = makeExecutor({
+      boot: async (s) => ({
+        ...bootInput(s),
+        harness: "pi-durable",
+        model: "workers-ai/@cf/zai-org/glm-5.3",
+        claude_sub_stepped_down: { reason: "exhausted", retry_at: retry },
+      }),
+    });
+    const handle = asHandle(await executor.start(SPEC));
+    expect(handle.handle.claude_sub).toEqual({
+      state: "stepped_down",
+      reason: "exhausted",
+      retry_at: "2026-10-07T13:00:00.000Z",
+    });
+    expect(handle.handle.detail).toContain(
+      "claude-sub stepped down: every subscription is exhausted until 2026-10-07T13:00:00.000Z; on Workers AI",
+    );
+    // Still the contract's handle: the payload is open, the top level closed.
+    const errors = validate(
+      jobHandleSchema,
+      protocolDefs,
+      handle as unknown as Record<string, unknown>,
+    );
+    expect(errors).toEqual([]);
   });
 });
 

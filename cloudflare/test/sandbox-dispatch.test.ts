@@ -518,6 +518,32 @@ describe("start", () => {
     expect((await pool.snapshot())[0]!.active_leases).toEqual([]);
   });
 
+  // A start that throws after its boot leased a subscription starts nothing,
+  // so the cap slot goes back with it — before, it sat held until the TTL.
+  it("hands the lease back when the platform refuses the container after the lease", async () => {
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+    binding.failWith = new Error("the platform could not place a container");
+    const response = await postStart(runToken, startBody({ harness: "claude", model: "sonnet" }));
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    const pool = claudeSubPool(env as unknown as Parameters<typeof claudeSubPool>[0])!;
+    expect((await pool.snapshot())[0]!.active_leases).toEqual([]);
+  });
+
+  // The step-down is said where a run reads it: on the handle, with the
+  // reason and when the earliest subscription comes back.
+  it("names the step-down's reason on the handle a rung dispatch is answered with", async () => {
+    const response = await postStart(runToken, startBody({ harness: "claude", model: "sonnet" }));
+    const body = (await response.json()) as { handle: SandboxJobHandle };
+    expect(body.handle.handle.claude_sub).toEqual({
+      state: "stepped_down",
+      reason: "none",
+      retry_at: null,
+    });
+    expect(body.handle.handle.detail).toContain(
+      "claude-sub stepped down: no subscription is configured",
+    );
+  });
+
   it("starts the attempt in a sandbox NAMED BY ITS IDENTITY and returns a handle without waiting", async () => {
     const response = await postStart(runToken, startBody());
     expect(response.status).toBe(201);
