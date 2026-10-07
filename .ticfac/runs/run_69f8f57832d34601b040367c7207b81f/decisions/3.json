@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "This is the second time in this epic that the per-tick integrated gate passed while CI on the epic branch went red on a shorttest.EndToEnd test (enb: cloud runner fixtures; now: the classification pin after a profile edit). The pin's only moving part from a profile edit is profile_digest. A short (non-EndToEnd) test that compares profileSetDigest of the embedded profiles against the pinned record's profile_digest would fail the gate at the tick that edits a profile, not hours later on the epic branch.\nevidence: internal/reconcile/harness_test.go:1065 (newFixture calls shorttest.EndToEnd); internal/reconcile/reconcile.go:1613 (profileSetDigest)\n\nticfac run epic-43y filed this backlog tick from the finding c23a820dd7b23ed180f7e1170f73d65156afbe077625e45e76d05d036959c260 (reported by run-epic-43y/tick-o68/attempt-66): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/c23a820dd7b23ed180f7e1170f73d65156afbe077625e45e76d05d036959c260.json on the run branch.",
+    "epic_id": "ex6",
+    "role": "classify-tick",
+    "tick_id": "3sd",
+    "title": "Pin the classification profile digest in a short test so make gate catches it"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.25,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.39999999999999997,
+      "design": 0.01,
+      "diagnosis": 0.01,
+      "mechanical": 0.31,
+      "translation": 0.27
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1365,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T13:49:00Z",
+  "answered_at": "2026-10-07T13:49:00Z",
+  "provenance": {
+    "run_id": "run_69f8f57832d34601b040367c7207b81f",
+    "tick_id": "3sd",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "465155ae892e28b3dca67123f0d4d162223adc50",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:0fd84feaa6def26de94fef1a4da33b194dfa9b1fa1c66cc1c31a8a555019f2a4",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
