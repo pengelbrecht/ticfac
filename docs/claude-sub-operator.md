@@ -69,21 +69,28 @@ active leases, benches and last-seen rate-limit headers.
   attempt's own job id, under a per-subscription concurrency cap
   (`CLAUDE_SUB_MAX_CONCURRENT`, default 2). The lease picks the *usable*
   subscription (not benched, under its cap) with the fewest live leases.
-- **Sticky per attempt job id.** A lease is sticky: a job that already holds
-  a lease gets the same subscription back on every later ask, benched or
-  not, because its container's outbound interception is bound to that
-  subscription's label the moment it is installed and cannot be swapped
-  mid-flight. **A running job never switches subscription.**
-- **Bench on a quota rejection, until the unified reset.** Every answer from
-  Anthropic that classifies as a quota rejection — a 429 where the
+- **Sticky per attempt job id, while the lease is live.** A lease is sticky:
+  a job that already holds a lease gets the same subscription back on every
+  later ask, benched or not, because its container's outbound interception
+  is bound to that subscription's label the moment it is installed and
+  cannot be swapped mid-flight — but only while the lease stays within
+  `LEASE_TTL_MS` (2 hours) of when it was first taken (`ClaudeSubPoolCore.
+  lease` in `claude-sub.ts`). **A running job never switches subscription
+  mid-ask; a job whose lease goes stale past 2 hours is treated as new on
+  its next ask and may be handed a different one.**
+- **Bench on a quota rejection, until the unified reset.** A 429 classifies as
+  a quota rejection — as opposed to server-side throttling — when the
   `anthropic-ratelimit-unified-status` header (or one of its per-window
-  variants) says `rejected` — benches that subscription until the reset
-  time the response names (`anthropic-ratelimit-unified-reset`, falling
-  back to `retry-after`, or one second out if neither is usable).
-  A 429 that is *not* a quota rejection (server-side throttling) benches the
-  subscription only briefly (60 seconds). A 401/403 (the token itself is
-  refused) benches it for 24 hours — until someone rotates it
-  (`classifyAnswer` in `claude-sub.ts`).
+  variants, excluding any matching `overage`) says `rejected`, **or** when
+  the header is absent but the answer still carries a parseable unified
+  reset. A quota rejection benches that subscription until the reset time
+  the response names (`anthropic-ratelimit-unified-reset`, falling back to
+  `retry-after`, or 60 seconds out if neither is usable — never less than
+  one second out, which is only a floor). A 429 that is *not* a quota
+  rejection (server-side throttling) benches the subscription until
+  `retry-after` if the answer carries one, else 60 seconds. A 401/403 (the
+  token itself is refused) benches it for 24 hours — until someone rotates
+  it (`classifyAnswer` in `claude-sub.ts`).
 - **The retry leases another subscription.** Benching never blocks the job
   that triggered it: that job's own answer (its 429 or its error) is
   returned to the container, and it is the *next* lease — a retry, or a
