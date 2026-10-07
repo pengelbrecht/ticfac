@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 52,
-  "state": "running",
-  "reason": "ncr is running as attempt 10",
-  "updated_at": "2026-10-07T18:30:47Z",
+  "sequence": 53,
+  "state": "collecting",
+  "reason": "collecting 89g attempt 5",
+  "updated_at": "2026-10-07T19:02:35Z",
   "ticks": [
     {
       "tick_id": "pqs",
