@@ -251,7 +251,13 @@ func newGitDoor(t *testing.T, repo, token string, challenge bool) *gitDoor {
 
 func gitHTTPBackend(t *testing.T) string {
 	t.Helper()
-	backend := filepath.Join(doorGit(t, t.TempDir(), "", "--exec-path"), "git-http-backend")
+	home := t.TempDir()
+	// --exec-path is a global query that reads no repository, so the
+	// directory is irrelevant to the answer — but it is stated anyway
+	// (tick pqs): a git started with an inherited working directory is one
+	// checkout away from reading one, and the door's own rule is no
+	// exception.
+	backend := filepath.Join(doorGit(t, home, home, "--exec-path"), "git-http-backend")
 	if _, err := os.Stat(backend); err != nil {
 		t.Skipf("no git-http-backend in this git installation: %v", err)
 	}
