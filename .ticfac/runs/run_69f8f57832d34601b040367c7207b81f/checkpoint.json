@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 113,
-  "state": "dispatching",
-  "reason": "dispatching qzg as attempt 23",
-  "updated_at": "2026-10-07T21:28:21Z",
+  "sequence": 114,
+  "state": "running",
+  "reason": "qzg is running as attempt 23",
+  "updated_at": "2026-10-07T21:28:30Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -54,8 +54,8 @@
     },
     {
       "tick_id": "qzg",
-      "state": "ready",
-      "attempt": 22
+      "state": "dispatched",
+      "attempt": 23
     },
     {
       "tick_id": "0rt",
