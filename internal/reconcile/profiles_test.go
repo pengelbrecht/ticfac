@@ -674,3 +674,31 @@ func TestProvenanceNamesTheMarkerExecutorNotTheReResolvedProfile(t *testing.T) {
 		t.Errorf("provenance names tier %v, want the marker's %q", *provenance.Tier, marker.Tier)
 	}
 }
+
+// A cloud attempt's settle is typed on a laptop whose run resolves the LOCAL
+// profile set, and the rebuilt dispatch must route through a profile naming
+// the executor the marker recorded — cloudflare-sandbox — from the cloud set
+// this build carries, without the person adding `--profiles
+// profiles-cloudflare-sandbox` (tick w5u: settle refused "ran on executor
+// cloudflare-sandbox, and no profile set this build carries resolves one
+// naming it", because the embedded cloud set was never walked).
+func TestARecordedCloudExecutorResolvesFromTheEmbeddedCloudSet(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{})
+	opts := f.options(f.Repo, fixtureOptions{})
+	opts.Executors = []KnownExecutor{
+		{Name: subprocess.ExecutorName, Runners: subprocess.KnownRunners(), AcceptsModel: subprocess.RunnerAcceptsModel},
+		{Name: profile.EmbeddedCloud, Runners: profile.CloudAllowedHarnesses(), AcceptsModel: func(string) bool { return true }},
+	}
+	r, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := r.profileForRecordedExecutor("implement-tick", "", profile.EmbeddedCloud)
+	if err != nil {
+		t.Fatalf("a cloud attempt's recorded executor resolved no profile from the sets this build carries: %v", err)
+	}
+	if p.Executor != profile.EmbeddedCloud {
+		t.Errorf("resolved a profile naming executor %q, want %q", p.Executor, profile.EmbeddedCloud)
+	}
+}
