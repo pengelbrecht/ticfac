@@ -91,6 +91,97 @@ export function isSubscriptionRung(
 export const OAUTH_BETA = "oauth-2025-04-20";
 
 /**
+ * What the proxy forwards with the subscription's token: the inference calls a
+ * `claude -p` worker makes, and the startup reads the pinned CLI makes before
+ * them — and NOTHING else. The token is the operator's whole subscription, so
+ * the interception is an allowlist, never a pass-through: a request the list
+ * does not name is refused 403 (and its path logged) before the token is ever
+ * attached.
+ *
+ * The startup half was observed, not guessed: the pinned CLI (2.1.227) run the
+ * way a worker runs it — `-p`, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1, the
+ * placeholder OAuth token, no base URL — against a fake api.anthropic.com
+ * behind a test CA called HEAD /api/hello, GET /api/claude_code/policy_limits,
+ * GET /api/claude_code/settings and POST /v1/messages?beta=true. HEAD
+ * /api/hello — the CLI's connectivity check, sent on every start with no
+ * credential — showed only inside the Linux container (the image's real-CLI
+ * smoke test, internal/sandboximage/claude_cli_smoke_test.go, which holds a
+ * pin bump to this list); a proxy without it refused every claude-sub start.
+ *
+ * Only `inference` answers say anything about the subscription's quota or
+ * token ({@link classifyAnswer}); a startup read's 401/403/429 is that
+ * endpoint's own, and never benches a subscription. A `connectivity` check is
+ * forwarded WITHOUT the token: the CLI sends it unauthenticated, and the
+ * token goes nowhere it is not needed.
+ */
+export type ClaudeSubRouteKind = "inference" | "startup" | "connectivity";
+export const CLAUDE_SUB_ROUTES: readonly {
+  method: string;
+  path: string;
+  kind: ClaudeSubRouteKind;
+}[] = [
+  { method: "POST", path: "/v1/messages", kind: "inference" },
+  { method: "POST", path: "/v1/messages/count_tokens", kind: "inference" },
+  { method: "GET", path: "/api/claude_code/policy_limits", kind: "startup" },
+  { method: "GET", path: "/api/claude_code/settings", kind: "startup" },
+  { method: "HEAD", path: "/api/hello", kind: "connectivity" },
+];
+
+/** The allowlisted route a request is, or null when the proxy must refuse it. */
+export function allowedRoute(method: string, pathname: string): ClaudeSubRouteKind | null {
+  const verb = method.toUpperCase();
+  const route = CLAUDE_SUB_ROUTES.find((r) => r.method === verb && r.path === pathname);
+  return route?.kind ?? null;
+}
+
+/**
+ * Betas the proxy refuses: each one bills outside the subscription's own
+ * quota. The 1M-token context window is charged as Extra Usage (per token) on
+ * a subscription — the one billing the cloud must never draw.
+ */
+export const REFUSED_BETAS: readonly RegExp[] = [/^context-1m-/i];
+
+/**
+ * Betas the proxy STRIPS rather than refuses: ones the pinned CLI sends on
+ * every request of a rung (so refusing them would refuse the rung) whose
+ * billing is not shown to stay inside the subscription. 2.1.227 sends
+ * `fallback-credit-2026-06-01` on every opus request (the image's real-CLI
+ * smoke test saw it); a credit-backed fallback is exactly the per-token
+ * drawing the cloud must never do, and without the beta the request is the
+ * plain subscription one.
+ */
+export const STRIPPED_BETAS: readonly RegExp[] = [/^fallback-credit-/i];
+
+/** The first beta of a request the proxy refuses, or null. */
+export function refusedBeta(header: string | null): string | null {
+  for (const beta of (header ?? "").split(",").map((b) => b.trim())) {
+    if (beta !== "" && REFUSED_BETAS.some((re) => re.test(beta))) return beta;
+  }
+  return null;
+}
+
+/**
+ * Whether a Messages request's model is one the subscription bills: a concrete
+ * claude model id, which is what the CLI resolves `sonnet`/`opus` to before it
+ * sends (2.1.227: claude-sonnet-5, claude-opus-5). Anything else — an absent
+ * model, another vendor's, a `[1m]` suffix that escaped the CLI — has no
+ * business on the operator's token.
+ */
+export function subscriptionModel(model: unknown): model is string {
+  return typeof model === "string" && /^claude-[a-z0-9.-]+$/i.test(model);
+}
+
+/**
+ * Whether an answer says the subscription is drawing USAGE CREDITS: its
+ * window is spent and Anthropic served the request as Extra Usage, billed per
+ * token. The operator's rule is no per-token billing in the cloud, so this is
+ * a quota answer however the request itself fared.
+ */
+export function overageInUse(headers: Headers): boolean {
+  return (headers.get("anthropic-ratelimit-unified-overage-in-use") ?? "").toLowerCase() === "true";
+}
+
+/**
  * Where Containers puts the ephemeral CA that HTTPS interception signs with
  * (it exists only at runtime; never bake it into the image).
  */
@@ -101,10 +192,33 @@ export const DEFAULT_MAX_CONCURRENT = 2;
 
 /**
  * A lease nobody released stops counting after this long — the backstop for a
- * job whose container died without its caller releasing (a review-epic job is
- * well under it).
+ * job whose container died without its caller releasing. A job that is still
+ * talking to Anthropic keeps its lease fresh ({@link LEASE_REFRESH_MS}), so the
+ * TTL measures SILENCE, not the job's length: a worker may run for hours (its
+ * wall is the dispatch's), and a lease that lapsed under a live job would hand
+ * its cap slot to another one.
  */
 export const LEASE_TTL_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * How often, at most, the proxy refreshes a job's lease as its traffic passes:
+ * once a minute per job is plenty against a two-hour TTL, and keeps the pool's
+ * Durable Object out of the per-request path.
+ */
+export const LEASE_REFRESH_MS = 60 * 1000;
+
+/**
+ * How long the pool remembers that a JOB's own answer was a quota answer (its
+ * subscription spent mid-job): long enough for the orchestrator's collect to
+ * ask, which follows the job's end by minutes, not days.
+ */
+export const JOB_QUOTA_TTL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How long a subscription drawing usage credits is benched when the answer
+ * names no reset: the five-hour window, the shortest a subscription has.
+ */
+export const OVERAGE_BENCH_FALLBACK_MS = 5 * 60 * 60 * 1000;
 
 /** How long a 429 that is NOT a quota answer (server-side throttling) benches a subscription. */
 export const THROTTLE_COOLDOWN_MS = 60 * 1000;
@@ -139,6 +253,35 @@ export type SubscriptionView = {
   last_status: number | null;
   /** The last `anthropic-ratelimit-unified-*` headers seen, verbatim. */
   last_limits: Record<string, string>;
+  /**
+   * Per allowlisted path (`POST /v1/messages`, …): how many answers and the
+   * last status — so a startup read failing reads apart from inference.
+   */
+  routes: Record<string, { requests: number; last_status: number }>;
+  /**
+   * The concrete models the CLI sent, counted: what `sonnet`/`opus`
+   * resolved to inside the pinned CLI (2.1.227: claude-sonnet-5,
+   * claude-opus-5), stated rather than inferred from the pin.
+   */
+  models: Record<string, number>;
+  last_model: string | null;
+};
+
+/**
+ * One job's quota answer, remembered for the job's collect (finding: a job
+ * whose subscription ran out MID-JOB is infrastructure, not a failed attempt
+ * at the tick — the collect asks the pool, which saw the wire).
+ */
+export type JobQuota = { label: string; bench: Bench; at: number };
+
+/** What one answer through the proxy was, for the pool's per-path stats. */
+export type Observation = {
+  status: number;
+  limits: Record<string, string>;
+  /** `METHOD /path` of the allowlisted route. */
+  route?: string;
+  /** The concrete model a Messages request named. */
+  model?: string;
 };
 
 export type LeaseOutcome =
@@ -201,12 +344,29 @@ export function limitHeaders(headers: Headers): Record<string, string> {
  *  - 429 with the unified limiter rejecting (`anthropic-ratelimit-unified-
  *    status: rejected`, or a unified reset): the subscription's quota is
  *    spent — benched until the reset it names (or retry-after).
+ *  - any answer — a 200 included — with `overage-in-use: true`: the window
+ *    is spent and the request was served on usage credits, per token. That
+ *    is the quota too (the operator's rule: no per-token billing in the
+ *    cloud), benched until the window's reset.
  *  - any other 429: throttling, not the quota — benched briefly.
  *  - 401/403: the token itself is refused — benched until rotated.
+ *
+ * The caller classifies INFERENCE answers only ({@link allowedRoute}): a
+ * startup read's status is that endpoint's, never the subscription's.
  */
 export function classifyAnswer(status: number, headers: Headers, now: number): Bench | null {
   if (status === 401 || status === 403) {
     return { until: now + AUTH_BENCH_MS, reason: "auth", detail: `HTTP ${status}` };
+  }
+  if (overageInUse(headers)) {
+    const reset =
+      parseReset(headers.get("anthropic-ratelimit-unified-reset")) ??
+      parseReset(headers.get("anthropic-ratelimit-unified-overage-reset"));
+    return {
+      until: Math.max(reset ?? now + OVERAGE_BENCH_FALLBACK_MS, now + 1000),
+      reason: "quota",
+      detail: `HTTP ${status}, overage in use: the window is spent and the answer drew usage credits`,
+    };
   }
   if (status !== 429) return null;
   const unified = (headers.get("anthropic-ratelimit-unified-status") ?? "").toLowerCase();
@@ -218,6 +378,11 @@ export function classifyAnswer(status: number, headers: Headers, now: number): B
   // reset alone proves nothing: only a rejection — overall or of one window
   // (`-5h-status`, `-7d-status`) — is the quota. A 429 the limiter allowed is
   // throttling.
+  // A window's rejection — `-5h-status`, `-7d-status` — is the quota on a
+  // 429. The overage half rejected is NOT, alone: an org with overage
+  // disabled carries `overage-status: rejected` on every answer (staging,
+  // 2026-10-06), so it says only that no credits back the window. With the
+  // window itself rejected (above), it is the quota either way.
   let windowRejected = false;
   headers.forEach((value, key) => {
     if (/^anthropic-ratelimit-unified-[a-z0-9_]+-status$/i.test(key) && /^rejected$/i.test(value)) {
@@ -254,7 +419,7 @@ export function parseReset(raw: string | null): number | null {
  * host over HTTPS, its credentials replaced by the subscription token, the
  * OAuth beta guaranteed.
  */
-export function upstreamRequest(request: Request, token: string): Request {
+export function upstreamRequest(request: Request, token: string | null, body?: string): Request {
   const url = new URL(request.url);
   url.protocol = "https:";
   url.host = CLAUDE_SUB_HOST;
@@ -262,18 +427,24 @@ export function upstreamRequest(request: Request, token: string): Request {
   const headers = new Headers(request.headers);
   headers.delete("x-api-key");
   headers.delete("host");
-  headers.set("authorization", `Bearer ${token}`);
-  const betas = (headers.get("anthropic-beta") ?? "")
-    .split(",")
-    .map((b) => b.trim())
-    .filter((b) => b !== "");
-  if (!betas.includes(OAUTH_BETA)) betas.push(OAUTH_BETA);
-  headers.set("anthropic-beta", betas.join(","));
+  if (token === null) {
+    // A connectivity check: the CLI sends it with no credential, and it
+    // travels upstream with none — the token goes nowhere it is not needed.
+    headers.delete("authorization");
+  } else {
+    headers.set("authorization", `Bearer ${token}`);
+    const betas = (headers.get("anthropic-beta") ?? "")
+      .split(",")
+      .map((b) => b.trim())
+      .filter((b) => b !== "" && !STRIPPED_BETAS.some((re) => re.test(b)));
+    if (!betas.includes(OAUTH_BETA)) betas.push(OAUTH_BETA);
+    headers.set("anthropic-beta", betas.join(","));
+  }
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
   return new Request(url.toString(), {
     method: request.method,
     headers,
-    ...(hasBody ? { body: request.body } : {}),
+    ...(hasBody ? { body: body ?? request.body } : {}),
     redirect: "manual",
   });
 }
@@ -304,6 +475,9 @@ type Stats = {
   limited: number;
   last_status: number | null;
   last_limits: Record<string, string>;
+  routes?: Record<string, { requests: number; last_status: number }>;
+  models?: Record<string, number>;
+  last_model?: string | null;
 };
 
 const KEY = {
@@ -311,6 +485,8 @@ const KEY = {
   leasePrefix: "lease:",
   bench: (label: string) => `bench:${label}`,
   stats: (label: string) => `stats:${label}`,
+  jobQuota: (jobId: string) => `jobquota:${jobId}`,
+  jobQuotaPrefix: "jobquota:",
 } as const;
 
 /** The pool's behaviour over a {@link PoolStorage} (tested directly). */
@@ -364,6 +540,43 @@ export class ClaudeSubPoolCore {
     await this.storage.delete(KEY.lease(jobId));
   }
 
+  /**
+   * Keeps a LIVE job's lease from lapsing: its proxy calls this as the job's
+   * traffic passes ({@link LEASE_REFRESH_MS}), so the TTL only ever reclaims
+   * a lease whose job has gone silent. A released lease stays released —
+   * a straggling request after the job's end must not resurrect a cap slot —
+   * and a refresh within the interval writes nothing.
+   */
+  async touch(jobId: string): Promise<void> {
+    const now = this.now();
+    const held = await this.storage.get<Lease>(KEY.lease(jobId));
+    if (held === undefined || now - held.at < LEASE_REFRESH_MS) return;
+    await this.storage.put(KEY.lease(jobId), { label: held.label, at: now } satisfies Lease);
+  }
+
+  /**
+   * Remembers that `jobId`'s own answer benched its subscription on the quota
+   * — the wire truth its collect reads ({@link jobQuota}) to tell a job the
+   * subscription ran out under from one that failed at its tick. The first
+   * record stands: it is the moment the job's quota ended.
+   */
+  async recordJobQuota(jobId: string, label: string, bench: Bench): Promise<void> {
+    const now = this.now();
+    for (const [key, record] of await this.storage.list<JobQuota>({
+      prefix: KEY.jobQuotaPrefix,
+    })) {
+      if (now - record.at >= JOB_QUOTA_TTL_MS) await this.storage.delete(key);
+    }
+    if ((await this.jobQuota(jobId)) !== null) return;
+    await this.storage.put(KEY.jobQuota(jobId), { label, bench, at: now } satisfies JobQuota);
+  }
+
+  /** The quota answer `jobId` ran into, or null (none, or long forgotten). */
+  async jobQuota(jobId: string): Promise<JobQuota | null> {
+    const record = await this.storage.get<JobQuota>(KEY.jobQuota(jobId));
+    return record !== undefined && this.now() - record.at < JOB_QUOTA_TTL_MS ? record : null;
+  }
+
   /** Benches `label` until `bench.until` — never shortens a longer bench. */
   async benchLabel(label: string, bench: Bench): Promise<void> {
     const current = await this.storage.get<Bench>(KEY.bench(label));
@@ -376,8 +589,12 @@ export class ClaudeSubPoolCore {
     await this.storage.delete(KEY.bench(label));
   }
 
-  /** Counts one answer for `label`, keeping its last limit headers. */
-  async observe(label: string, status: number, limits: Record<string, string>): Promise<void> {
+  /**
+   * Counts one answer for `label`: its status, its last limit headers, its
+   * route and the concrete model the request named.
+   */
+  async observe(label: string, observation: Observation): Promise<void> {
+    const { status, limits, route, model } = observation;
     const stats = (await this.storage.get<Stats>(KEY.stats(label))) ?? {
       requests: 0,
       limited: 0,
@@ -388,6 +605,17 @@ export class ClaudeSubPoolCore {
     if (status === 429) stats.limited += 1;
     stats.last_status = status;
     if (Object.keys(limits).length > 0) stats.last_limits = limits;
+    if (route !== undefined) {
+      const routes = stats.routes ?? {};
+      routes[route] = { requests: (routes[route]?.requests ?? 0) + 1, last_status: status };
+      stats.routes = routes;
+    }
+    if (model !== undefined) {
+      const models = stats.models ?? {};
+      models[model] = (models[model] ?? 0) + 1;
+      stats.models = models;
+      stats.last_model = model;
+    }
     await this.storage.put(KEY.stats(label), stats);
   }
 
@@ -406,6 +634,9 @@ export class ClaudeSubPoolCore {
         limited: stats?.limited ?? 0,
         last_status: stats?.last_status ?? null,
         last_limits: stats?.last_limits ?? {},
+        routes: stats?.routes ?? {},
+        models: stats?.models ?? {},
+        last_model: stats?.last_model ?? null,
       });
     }
     return views;
@@ -460,8 +691,17 @@ export class ClaudeSubPool extends DurableObject<ClaudeSubEnv> {
   unbench(label: string): Promise<void> {
     return this.core.unbench(label);
   }
-  observe(label: string, status: number, limits: Record<string, string>): Promise<void> {
-    return this.core.observe(label, status, limits);
+  observe(label: string, observation: Observation): Promise<void> {
+    return this.core.observe(label, observation);
+  }
+  touch(jobId: string): Promise<void> {
+    return this.core.touch(jobId);
+  }
+  recordJobQuota(jobId: string, label: string, bench: Bench): Promise<void> {
+    return this.core.recordJobQuota(jobId, label, bench);
+  }
+  jobQuota(jobId: string): Promise<JobQuota | null> {
+    return this.core.jobQuota(jobId);
   }
   snapshot(): Promise<SubscriptionView[]> {
     return this.core.snapshot(subscriptionLabels(this.env as Record<string, unknown>));
@@ -549,50 +789,205 @@ export async function claudeSubRoute(request: Request, env: ClaudeSubEnv): Promi
 
 // ----------------------------------------------------------- the proxy ---
 
+/** The pool's half the proxy reports to (the Durable Object's stub, or a test's). */
+export type ProxyPool = {
+  bench(label: string, bench: Bench): Promise<void>;
+  observe(label: string, observation: Observation): Promise<void>;
+  touch(jobId: string): Promise<void>;
+  recordJobQuota(jobId: string, label: string, bench: Bench): Promise<void>;
+};
+
+/** What {@link proxyClaudeSub} runs on: the token, the wire, the pool, a clock. */
+export type ProxyDeps = {
+  /** The leased subscription's token, normalized, or null when none is set. */
+  token: string | null;
+  upstream: (request: Request) => Promise<Response>;
+  pool: ProxyPool | null;
+  now: () => number;
+  /** Background work the answer must not wait for (the pool's bookkeeping). */
+  waitUntil: (work: Promise<unknown>) => void;
+  log: (line: string) => void;
+  /** When each job's lease was last refreshed from this isolate. */
+  touched: Map<string, number>;
+};
+
+/** Refreshes per isolate are remembered for this many jobs at most. */
+const TOUCHED_CAP = 1000;
+
+/** The isolate's memory of lease refreshes, shared by every proxy call in it. */
+const isolateTouched = new Map<string, number>();
+
+/**
+ * An answer in the Messages API's own error shape, so the CLI prints the
+ * proxy's sentence rather than a bare status.
+ */
+function refusal(
+  status: number,
+  type: string,
+  message: string,
+  headers: Record<string, string> = {},
+): Response {
+  return new Response(JSON.stringify({ type: "error", error: { type, message } }), {
+    status,
+    headers: { "content-type": "application/json", ...headers },
+  });
+}
+
+/**
+ * One request from a job's container to {@link CLAUDE_SUB_HOST}, as the proxy
+ * answers it:
+ *
+ *  1. refused unless it is an allowlisted route ({@link CLAUDE_SUB_ROUTES}),
+ *     carries no beta that bills per token ({@link REFUSED_BETAS}) and — for
+ *     inference — names a claude model; the refusal is logged by path, and
+ *     the token is never attached to it;
+ *  2. the job's lease refreshed, at most once a minute ({@link LEASE_REFRESH_MS});
+ *  3. forwarded with the subscription's token;
+ *  4. an INFERENCE answer classified ({@link classifyAnswer}) — a startup
+ *     read's never is — and a bench reported to the pool; a quota bench is
+ *     also remembered against THIS job, for its collect;
+ *  5. an answer served on usage credits (overage in use) is not handed back:
+ *     the job gets a 429 instead, so it stops drawing per-token billing at
+ *     the first answer that did.
+ */
+export async function proxyClaudeSub(
+  request: Request,
+  props: ClaudeSubProps,
+  deps: ProxyDeps,
+): Promise<Response> {
+  const { label, jobId } = props;
+  const url = new URL(request.url);
+  if (url.hostname.toLowerCase() !== CLAUDE_SUB_HOST) {
+    return new Response(`claude-sub proxies ${CLAUDE_SUB_HOST} only`, { status: 403 });
+  }
+  const route = `${request.method.toUpperCase()} ${url.pathname}`;
+  const kind = allowedRoute(request.method, url.pathname);
+  const refuse = (why: string, message: string) => {
+    deps.log(JSON.stringify({ claude_sub: "refused", label, job: jobId, route, why }));
+    return refusal(403, "permission_error", `claude-sub proxy: ${message}`);
+  };
+  if (kind === null) {
+    return refuse(
+      "not_allowlisted",
+      `${route} is not a route this proxy forwards on a subscription token`,
+    );
+  }
+  const beta = refusedBeta(request.headers.get("anthropic-beta"));
+  if (beta !== null) {
+    return refuse(
+      "refused_beta",
+      `the ${beta} beta bills per token outside the subscription, and the cloud never draws per-token billing`,
+    );
+  }
+  let body: string | undefined;
+  let model: string | undefined;
+  if (kind === "inference") {
+    body = await request.text();
+    let named: unknown;
+    try {
+      named = (JSON.parse(body) as { model?: unknown }).model;
+    } catch {
+      named = undefined;
+    }
+    if (!subscriptionModel(named)) {
+      return refuse(
+        "refused_model",
+        `the request names model ${JSON.stringify(named ?? null)}, not a claude model the subscription bills`,
+      );
+    }
+    model = named;
+  }
+  if (deps.token === null && kind !== "connectivity") {
+    return new Response(`claude-sub: no token for subscription ${label}`, { status: 503 });
+  }
+
+  const now = deps.now();
+  const pool = deps.pool;
+  if (pool !== null && now - (deps.touched.get(jobId) ?? 0) >= LEASE_REFRESH_MS) {
+    if (deps.touched.size >= TOUCHED_CAP) deps.touched.clear();
+    deps.touched.set(jobId, now);
+    deps.waitUntil(pool.touch(jobId).catch(() => {}));
+  }
+
+  const response = await deps.upstream(
+    upstreamRequest(request, kind === "connectivity" ? null : deps.token, body),
+  );
+  const limits = limitHeaders(response.headers);
+  const bench =
+    kind === "inference" ? classifyAnswer(response.status, response.headers, now) : null;
+  if (bench !== null) {
+    // The token never reaches a log; the label and the answer's shape do.
+    deps.log(
+      JSON.stringify({
+        claude_sub: "benched",
+        label,
+        job: jobId,
+        route,
+        status: response.status,
+        ...bench,
+        limits,
+      }),
+    );
+  }
+  if (pool !== null) {
+    deps.waitUntil(
+      (async () => {
+        if (bench !== null) {
+          await pool.bench(label, bench);
+          if (bench.reason === "quota") await pool.recordJobQuota(jobId, label, bench);
+        }
+        await pool.observe(label, {
+          status: response.status,
+          limits,
+          route,
+          ...(model === undefined ? {} : { model }),
+        });
+      })().catch(() => {}),
+    );
+  }
+  if (kind === "inference" && overageInUse(response.headers) && bench !== null) {
+    // Served on usage credits: the answer is dropped, never relayed, and the
+    // job sees the quota it ran into. Its retry-after names the reset, so the
+    // CLI stops rather than asking again (2.1.227 exits on such a 429).
+    await response.body?.cancel().catch(() => {});
+    const retryAfter = Math.max(1, Math.ceil((bench.until - now) / 1000));
+    return refusal(
+      429,
+      "rate_limit_error",
+      `claude-sub proxy: subscription ${label}'s usage window is spent and Anthropic served this ` +
+        `request on usage credits (per token); the cloud never draws per-token billing, so the ` +
+        `subscription is benched until ${new Date(bench.until).toISOString()} and this job stops here`,
+      {
+        "anthropic-ratelimit-unified-status": "rejected",
+        "anthropic-ratelimit-unified-reset": String(Math.floor(bench.until / 1000)),
+        "retry-after": String(retryAfter),
+      },
+    );
+  }
+  return response;
+}
+
 /**
  * The container's traffic to {@link CLAUDE_SUB_HOST}, authenticated with the
- * subscription the job leased (its props), and every answer reported to the
- * pool: a quota answer benches the subscription until its reset. The answer
- * itself goes back to the container unchanged — the job sees its own 429 and
- * ends; it is the NEXT lease that steps down, never this job.
+ * subscription the job leased (its props) — {@link proxyClaudeSub} is the
+ * whole of what it does, over the deployment's own token, wire and pool.
+ * The answer goes back to the container unchanged (but for an overage answer,
+ * which is withheld) — the job sees its own 429 and ends; it is the NEXT
+ * lease that steps down, never this job.
  */
 export class ClaudeSubProxy extends WorkerEntrypoint<ClaudeSubEnv, ClaudeSubProps> {
   override async fetch(request: Request): Promise<Response> {
-    const { label, jobId } = this.ctx.props;
-    const host = new URL(request.url).hostname.toLowerCase();
-    if (host !== CLAUDE_SUB_HOST) {
-      return new Response(`claude-sub proxies ${CLAUDE_SUB_HOST} only`, { status: 403 });
-    }
-    const token = normalizeToken(
-      (this.env as Record<string, unknown>)[`${TOKEN_SECRET_PREFIX}${label}`],
-    );
-    if (token === null) {
-      return new Response(`claude-sub: no token for subscription ${label}`, { status: 503 });
-    }
-    const response = await fetch(upstreamRequest(request, token));
-    const pool = claudeSubPool(this.env);
-    const bench = classifyAnswer(response.status, response.headers, Date.now());
-    const limits = limitHeaders(response.headers);
-    if (bench !== null) {
-      // The token never reaches a log; the label and the answer's shape do.
-      console.log(
-        JSON.stringify({
-          claude_sub: "benched",
-          label,
-          job: jobId,
-          status: response.status,
-          ...bench,
-          limits,
-        }),
-      );
-    }
-    if (pool !== null) {
-      const report = (async () => {
-        if (bench !== null) await pool.bench(label, bench);
-        await pool.observe(label, response.status, limits);
-      })();
-      this.ctx.waitUntil(report.catch(() => {}));
-    }
-    return response;
+    const { label } = this.ctx.props;
+    return proxyClaudeSub(request, this.ctx.props, {
+      token: normalizeToken(
+        (this.env as Record<string, unknown>)[`${TOKEN_SECRET_PREFIX}${label}`],
+      ),
+      upstream: (r) => fetch(r),
+      pool: claudeSubPool(this.env),
+      now: Date.now,
+      waitUntil: (work) => this.ctx.waitUntil(work),
+      log: (line) => console.log(line),
+      touched: isolateTouched,
+    });
   }
 }

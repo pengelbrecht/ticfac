@@ -124,8 +124,7 @@ func (r *Reconciler) answerInfrastructure(marker attemptHandle, handle *subproce
 	if err := r.rejectDurably(marker, collected.Verdict, collected.Message); err != nil {
 		return err
 	}
-	r.disposeRejected(handle, executor, marker, fmt.Sprintf("%s never reached its harness: its boot stopped on %s",
-		name, failure.Service))
+	r.disposeRejected(handle, executor, marker, infrastructureStop(name, failure))
 
 	if failure.Persistent {
 		// The environment itself is wrong, so every container of the run
@@ -139,6 +138,24 @@ func (r *Reconciler) answerInfrastructure(marker attemptHandle, handle *subproce
 			name, failure.Service, failure.ExitCode, collected.Message, infrastructureRemedy(failure))
 	}
 	n, again := r.infrastructure.take(tick)
+	if failure.MidJob {
+		// The service gave out DURING the job (a claude-sub job's
+		// subscription quota, cloudflaresandbox): the harness ran, so "never
+		// reached its harness" would be a lie in the feed. The rule is the
+		// same — same tier, no rung — and so is the bound.
+		if again {
+			r.record(tick, StageInfrastructureRedispatched,
+				"%s. That is %s, not the tick, so it is dispatched again at the same tier (%s) and spends no "+
+					"rung of the ladder (%d of at most %d such redispatches). %s",
+				infrastructureStop(name, failure), failure.Service, tierOrUnchanged(marker.Tier), n,
+				maxInfrastructureRedispatches, collected.Message)
+			return r.refuse(RefusedInfrastructureRedispatch, tick,
+				"%s; the tick is dispatched again at the same tier", infrastructureStop(name, failure))
+		}
+		return r.refuse(RefusedInfrastructure, tick,
+			"%s, and that is %d jobs of %s in a row. The run stops here; no rung of the ladder was spent: %s",
+			infrastructureStop(name, failure), n, tick, infrastructureRemedy(failure))
+	}
 	if again {
 		tier := marker.Tier
 		if tier == "" {
@@ -158,6 +175,40 @@ func (r *Reconciler) answerInfrastructure(marker attemptHandle, handle *subproce
 			"that is %d jobs of %s in a row. The run stops here rather than paying for containers that die in "+
 			"their boot. Nothing about the tick was tried and no rung of its ladder was spent: %s",
 		name, failure.Service, failure.ExitCode, n, tick, infrastructureRemedy(failure))
+}
+
+// infrastructureRecord is one recorded infrastructure failure, as the
+// redispatch walk reads it back.
+type infrastructureRecord struct {
+	service string
+	midJob  bool
+}
+
+// infrastructureResponse is the decision record's response half. `mid_job`
+// is written only when true, so every record from before it reads the same.
+func infrastructureResponse(failure *subprocess.InfrastructureFailure) map[string]any {
+	response := map[string]any{"service": failure.Service, "exit_code": failure.ExitCode}
+	if failure.MidJob {
+		response["mid_job"] = true
+	}
+	return response
+}
+
+// infrastructureStop says what stopped a job, in the words its kind earns: a
+// boot that stopped on a service, or a service that gave out mid-job.
+func infrastructureStop(name string, failure *subprocess.InfrastructureFailure) string {
+	if failure.MidJob {
+		return fmt.Sprintf("%s stopped mid-job: %s ran out under it (exit %d)", name, failure.Service, failure.ExitCode)
+	}
+	return fmt.Sprintf("%s never reached its harness: its boot stopped on %s", name, failure.Service)
+}
+
+// tierOrUnchanged names a marker's tier for a sentence.
+func tierOrUnchanged(tier string) string {
+	if tier == "" {
+		return "unchanged"
+	}
+	return tier
 }
 
 // roleJobBootFault is the stop for a job the run dispatches for itself — a
@@ -225,7 +276,7 @@ func (r *Reconciler) recordInfrastructure(marker attemptHandle, failure *subproc
 			"kind": infrastructureKind, "tick_id": marker.TickID, "attempt": marker.Attempt,
 			"job_id": marker.JobID, "tier": marker.Tier,
 		},
-		Response:    map[string]any{"service": failure.Service, "exit_code": failure.ExitCode},
+		Response:    infrastructureResponse(failure),
 		Validated:   true,
 		RequestedAt: stamp,
 		AnsweredAt:  stamp,
@@ -241,8 +292,8 @@ func (r *Reconciler) recordInfrastructure(marker attemptHandle, failure *subproc
 // infrastructure failure, by attempt number, naming the service. A record that
 // cannot be read answers nothing: the walk then counts the attempt toward the
 // ladder, the conservative reading.
-func (r *Reconciler) infrastructureFailures(tick string) map[int]string {
-	out := map[int]string{}
+func (r *Reconciler) infrastructureFailures(tick string) map[int]infrastructureRecord {
+	out := map[int]infrastructureRecord{}
 	if r.store == nil {
 		return out
 	}
@@ -258,8 +309,9 @@ func (r *Reconciler) infrastructureFailures(tick string) map[int]string {
 			continue
 		}
 		service, _ := d.Response["service"].(string)
+		midJob, _ := d.Response["mid_job"].(bool)
 		if attempt := decisionAttemptOf(d); attempt >= 1 {
-			out[attempt] = service
+			out[attempt] = infrastructureRecord{service: service, midJob: midJob}
 		}
 	}
 	return out

@@ -1,0 +1,12 @@
+{
+  "id": "7r4",
+  "title": "Run the real-CLI claude-sub smoke test on every CLAUDE_CODE_VERSION bump",
+  "description": "internal/sandboximage TestTheRealClaudeCLIOnTheSubscriptionRoute runs the pinned claude CLI as root in docker against a fake api.anthropic.com (the interception mechanism: CA via NODE_EXTRA_CA_CERTS, no ANTHROPIC_BASE_URL). It is opt-in (TICFAC_LIVE_CLAUDE_CLI=1) because it needs docker and the network, so nothing runs it today. Wire it into CI for PRs that touch image/Dockerfile's CLAUDE_CODE_VERSION (the claude-cli-pin workflow's bump PRs): a pin bump that adds a startup endpoint the claude-sub proxy's allowlist (cloudflare/src/claude-sub.ts CLAUDE_SUB_ROUTES, Go copy claudeSubRoutes) does not carry would otherwise 403 live jobs. Also consider a multi-turn tool-use phase so mid-session endpoints (compaction, count_tokens) are observed too.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T06:43:23.160124Z",
+  "updated_at": "2026-10-07T06:43:23.160124Z"
+}

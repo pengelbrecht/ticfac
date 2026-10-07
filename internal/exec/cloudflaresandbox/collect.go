@@ -229,6 +229,15 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 			code = stoppedCode
 		}
 		if fault := bootFault(code); fault != nil {
+			if code == sandboximage.ExitGatewayUnavailable && record.Harness == claudeSubHarness {
+				// On the claude harness the boot's "gateway" is the
+				// subscription's route: image/common.sh's claude-sub probe
+				// exits 14 when api.anthropic.com, through the factory's
+				// interception, answered only 429/5xx or nothing at all.
+				fault.Service = "the claude subscription's route (api.anthropic.com through the factory's interception)"
+				fault.Fix = "check the subscription's bench and limits (`/api/claude-sub`) and Anthropic's status; " +
+					"a spent window resets on its own, then run the epic again"
+			}
 			result.FailureClass = subprocess.FailureInfrastructure
 			collected.Infrastructure = fault
 			if fault.Persistent {
@@ -253,6 +262,28 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 					"; the reason is on " + sandboximage.WorkerBootStoppedBranch(record.Branch)
 			}
 		}
+	}
+
+	// A claude-sub job whose subscription ran out of quota under it (Inspect
+	// marked it from the door's claude_sub_quota observation): the harness
+	// died because the operator's subscription is spent, which says nothing
+	// about the tick. Carried as a transient infrastructure failure, so the
+	// run dispatches the tick again at the same tier — where the next lease
+	// steps down to Workers AI — instead of counting a failed attempt that
+	// climbs the ladder (sonnet to opus, and on to the ceiling with every
+	// subscription benched). A boot fault already read above wins: it is the
+	// container's own account of where it stopped.
+	if collected.Verdict != subprocess.VerdictReadyToMerge && collected.Infrastructure == nil &&
+		st.exists(fileClaudeSubQuota) {
+		var marked struct {
+			Detail   string `json:"detail"`
+			ExitCode int    `json:"exit_code"`
+		}
+		_ = st.readJSON(fileClaudeSubQuota, &marked)
+		result.FailureClass = subprocess.FailureInfrastructure
+		collected.Infrastructure = claudeSubQuotaFault(marked.ExitCode)
+		collected.Message = "the claude subscription ran out of quota during the job, so its harness stopped " +
+			"mid-job — the subscription, not the tick: " + marked.Detail
 	}
 
 	// A PREVENTED boundary attempt is invisible in the diff — the container's

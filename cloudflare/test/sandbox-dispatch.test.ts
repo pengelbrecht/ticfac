@@ -518,6 +518,77 @@ describe("start", () => {
     expect((await pool.snapshot())[0]!.active_leases).toEqual([]);
   });
 
+  // A job whose own answer benched its subscription on the quota ended
+  // because the subscription ran out, not because it failed at its tick:
+  // the terminal status says so, in the contract's own vocabulary.
+  it("says on a failed claude-sub job's status that its subscription ran out under it", async () => {
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+    const start = await postStart(runToken, startBody({ harness: "claude", model: "sonnet" }));
+    expect(start.status).toBe(201);
+    const pool = claudeSubPool(env as unknown as Parameters<typeof claudeSubPool>[0])!;
+    const until = Date.now() + 3600_000;
+    await pool.recordJobQuota(attemptJobID(RUN_ID, TICK, 1), "MAX1", {
+      until,
+      reason: "quota",
+      detail: "HTTP 429, unified rejected",
+    });
+    binding
+      .named(attemptSandboxName(RUN_ID, TICK, 1))
+      .workProcess()!
+      .finish(1);
+    const state = await getState(runToken, TICK, 1);
+    const status = (await state.json()) as Record<string, unknown> & {
+      state: string;
+      observations: Array<{ kind: string; detail: string }>;
+    };
+    expect(status.state).toBe("failed");
+    expect(status.observations.map((o) => o.kind)).toEqual(["exited", "claude_sub_quota"]);
+    expect(status.observations[1]!.detail).toContain(
+      `claude subscription MAX1 ran out of quota during this job (HTTP 429, unified rejected); benched until ${new Date(until).toISOString()}`,
+    );
+    const errors = validate(jobStatusSchema, protocolDefs, status);
+    expect(errors, `job_status must satisfy the pinned contract: ${errors.join("; ")}`).toEqual([]);
+  });
+
+  it("says nothing of the quota for a claude-sub job the pool saw no quota answer for", async () => {
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+    await postStart(runToken, startBody({ harness: "claude", model: "sonnet" }));
+    binding
+      .named(attemptSandboxName(RUN_ID, TICK, 1))
+      .workProcess()!
+      .finish(1);
+    const status = (await (await getState(runToken, TICK, 1)).json()) as {
+      observations: Array<{ kind: string }>;
+    };
+    expect(status.observations.map((o) => o.kind)).toEqual(["exited"]);
+  });
+
+  // A start that throws after its boot leased a subscription starts nothing,
+  // so the cap slot goes back with it — before, it sat held until the TTL.
+  it("hands the lease back when the platform refuses the container after the lease", async () => {
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+    binding.failWith = new Error("the platform could not place a container");
+    const response = await postStart(runToken, startBody({ harness: "claude", model: "sonnet" }));
+    expect(response.status).toBeGreaterThanOrEqual(500);
+    const pool = claudeSubPool(env as unknown as Parameters<typeof claudeSubPool>[0])!;
+    expect((await pool.snapshot())[0]!.active_leases).toEqual([]);
+  });
+
+  // The step-down is said where a run reads it: on the handle, with the
+  // reason and when the earliest subscription comes back.
+  it("names the step-down's reason on the handle a rung dispatch is answered with", async () => {
+    const response = await postStart(runToken, startBody({ harness: "claude", model: "sonnet" }));
+    const body = (await response.json()) as { handle: SandboxJobHandle };
+    expect(body.handle.handle.claude_sub).toEqual({
+      state: "stepped_down",
+      reason: "none",
+      retry_at: null,
+    });
+    expect(body.handle.handle.detail).toContain(
+      "claude-sub stepped down: no subscription is configured",
+    );
+  });
+
   it("starts the attempt in a sandbox NAMED BY ITS IDENTITY and returns a handle without waiting", async () => {
     const response = await postStart(runToken, startBody());
     expect(response.status).toBe(201);

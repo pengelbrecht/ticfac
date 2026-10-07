@@ -367,8 +367,10 @@
             "credential_issued",
             "credential_revoked",
             "cancel_requested",
-            "exited"
-          ]
+            "exited",
+            "claude_sub_quota"
+          ],
+          "$comment": "claude_sub_quota (2.3.0): the factory's claude-sub proxy saw THIS job's own answer bench its subscription on the quota (the window spent, or usage credits drawn) — the wire truth that the job's end is the subscription running out mid-job, not a failed attempt at the tick. Carried beside the `exited` observation of a terminal failed status; the detail names the subscription and its reset."
         },
         "detail": { "type": "string" }
       }

@@ -308,6 +308,10 @@ const (
 	ObsCredentialRevoked = "credential_revoked"
 	ObsCancelRequested   = "cancel_requested"
 	ObsExited            = "exited"
+	// ObsClaudeSubQuota (job-protocol 2.3.0): the factory's claude-sub proxy
+	// saw this job's own answer bench its subscription on the quota — the
+	// job ended because the subscription ran out under it, not at its tick.
+	ObsClaudeSubQuota = "claude_sub_quota"
 )
 
 // JobStatus reports what the executor can SEE, not what the reconciler

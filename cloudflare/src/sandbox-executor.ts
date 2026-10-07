@@ -321,6 +321,16 @@ export type SandboxHandlePayload = {
    * the door's client accepts exactly that one mismatch.
    */
   harness: string;
+  /**
+   * The claude-sub rung's answer for this job ({@link claudeSubNote}): the
+   * subscription it leased, or why the rung was stepped down to Workers AI
+   * and when the earliest benched subscription comes back (RFC3339, or null).
+   * Absent for a dispatch that never resolved the rung. Open-payload: the Go
+   * client reads it leniently.
+   */
+  claude_sub?:
+    | { state: "leased"; label: string }
+    | { state: "stepped_down"; reason: "none" | "exhausted" | "busy"; retry_at: string | null };
 };
 
 /**
@@ -725,6 +735,45 @@ async function startNamedAttemptUnchecked(
   const hosting = deps.agents === undefined ? null : await deps.agents(spec.run_id);
   const boot = await deps.boot(spec);
 
+  // The boot may have LEASED a subscription (claudeSubLeaseForBoot), and
+  // everything below can throw before a worker holds it — an adoption with no
+  // recorded model, the boot record's write, the platform refusing the
+  // container, the interception's install. A start that throws starts
+  // nothing, so the lease goes back with it; before this, each such throw
+  // held a cap slot until the lease's TTL.
+  try {
+    return withClaudeSubNote(
+      await startBootedAttempt(deps, spec, hosting, boot, {
+        jobID,
+        slot,
+        name,
+        landing,
+        payload,
+      }),
+      boot,
+    );
+  } catch (error) {
+    if (boot.claude_sub !== undefined) {
+      await deps.claudeSub?.release(boot.claude_sub.jobId).catch(() => {});
+    }
+    throw error;
+  }
+}
+
+async function startBootedAttempt(
+  deps: SandboxExecutorDeps,
+  spec: AttemptSpec,
+  hosting: Awaited<ReturnType<WorkerAgentResolver>>,
+  boot: WorkerBootInput,
+  ids: {
+    jobID: string;
+    slot: string | undefined;
+    name: string;
+    landing: string;
+    payload: Omit<SandboxHandlePayload, "process_id" | "launched" | "detail" | "model" | "harness">;
+  },
+): Promise<{ handle: SandboxJobHandle; adopted: boolean }> {
+  const { jobID, slot, name, landing, payload } = ids;
   if (hosting !== null) {
     const agent = hosting.agent(name);
     const state = await agent.state();
@@ -1548,6 +1597,18 @@ async function collectAttemptInner(
  * to end; one that only asked would leave the container on the clock.
  */
 async function cancelAttempt(deps: SandboxExecutorDeps, handle: SandboxJobHandle) {
+  // The attempt is cancelled: its claude-sub lease ends with it (tick 6fv),
+  // whether or not the salvage and teardown below succeed — a cancel whose
+  // salvage threw used to skip the release and hold the cap slot until the
+  // lease's TTL.
+  try {
+    await cancelAttemptInner(deps, handle);
+  } finally {
+    await deps.claudeSub?.release(handle.job_id).catch(() => {});
+  }
+}
+
+async function cancelAttemptInner(deps: SandboxExecutorDeps, handle: SandboxJobHandle) {
   const payload = handle.handle;
   const boot = await deps.boot({
     run_id: payload.run_id,
@@ -1573,8 +1634,6 @@ async function cancelAttempt(deps: SandboxExecutorDeps, handle: SandboxJobHandle
     ...(deps.spawn?.sleep === undefined ? {} : { sleep: deps.spawn.sleep }),
   });
   await teardownWorker(deps.binding, payload.sandbox, payload.process_id);
-  // The attempt is cancelled: its claude-sub lease ends with it (tick 6fv).
-  await deps.claudeSub?.release(handle.job_id).catch(() => {});
 }
 
 // --------------------------------------------------------------- the whole ---
@@ -1827,7 +1886,11 @@ async function claudeSubLeaseForBoot(
   spec: AttemptSpec,
 ): Promise<
   | { claude_sub: { label: string; jobId: string }; harness: string; model: string }
-  | { harness: string; model: string }
+  | {
+      harness: string;
+      model: string;
+      claude_sub_stepped_down?: NonNullable<WorkerBootInput["claude_sub_stepped_down"]>;
+    }
 > {
   const harness = workerHarness(spec.harness ?? null, textVar(env, "RUN_WORKER_HARNESS"));
   const model = workerModel(spec.model ?? null, textVar(env, "RUN_WORKER_MODEL"));
@@ -1855,6 +1918,57 @@ async function claudeSubLeaseForBoot(
   return {
     harness: workerHarness(null, textVar(env, "RUN_WORKER_HARNESS")),
     model: workerModel(null, textVar(env, "RUN_WORKER_MODEL")),
+    claude_sub_stepped_down: { reason: lease.reason, retry_at: lease.retry_at },
+  };
+}
+
+/**
+ * The claude-sub half of a start's answer (finding: the step-down's reason
+ * was a console line only): the handle names the subscription a job leased,
+ * or why the rung was stepped down and until when, in a field a client reads
+ * and in the detail a person does. The Go client turns a step-down into the
+ * run feed's `claude_sub_stepped_down` line, so `ticfac watch` shows
+ * "claude-sub exhausted until <reset>; on Workers AI".
+ */
+export function claudeSubNote(boot: WorkerBootInput): {
+  field?: SandboxHandlePayload["claude_sub"];
+  detail?: string;
+} {
+  if (boot.claude_sub !== undefined) {
+    return { field: { state: "leased", label: boot.claude_sub.label } };
+  }
+  const down = boot.claude_sub_stepped_down;
+  if (down === undefined) return {};
+  const until = down.retry_at === null ? null : new Date(down.retry_at).toISOString();
+  const why =
+    down.reason === "none"
+      ? "no subscription is configured"
+      : down.reason === "busy"
+        ? "every subscription is at its concurrency cap"
+        : `every subscription is exhausted${until === null ? "" : ` until ${until}`}`;
+  return {
+    field: { state: "stepped_down", reason: down.reason, retry_at: until },
+    detail: `claude-sub stepped down: ${why}; on Workers AI (${bootedHarness(boot)} on ${bootedModel(boot)})`,
+  };
+}
+
+function withClaudeSubNote(
+  started: { handle: SandboxJobHandle; adopted: boolean },
+  boot: WorkerBootInput,
+): { handle: SandboxJobHandle; adopted: boolean } {
+  const note = claudeSubNote(boot);
+  if (note.field === undefined) return started;
+  const payload = started.handle.handle;
+  return {
+    ...started,
+    handle: {
+      ...started.handle,
+      handle: {
+        ...payload,
+        claude_sub: note.field,
+        ...(note.detail === undefined ? {} : { detail: `${payload.detail} — ${note.detail}` }),
+      },
+    },
   };
 }
 
