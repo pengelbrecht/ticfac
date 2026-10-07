@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 48,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for vnp",
-  "updated_at": "2026-10-07T09:06:38Z",
+  "sequence": 49,
+  "state": "publishing",
+  "reason": "closing vnp behind its validated review-epic answer",
+  "updated_at": "2026-10-07T09:07:23Z",
   "ticks": [
     {
       "tick_id": "56z",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "vnp",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 7
     }
   ],
