@@ -3179,3 +3179,4 @@
 {"ts":"2026-10-07T13:48:29.701277509Z","tick":"2p3","action":"start","actor":"cloud:orchestrator","epic":"ex6","data":{"title":"runners.toml implement cell still describes the deleted pi CLI"}}
 {"ts":"2026-10-07T13:48:49.347400928Z","tick":"2pn","action":"start","actor":"cloud:orchestrator","epic":"ex6","data":{"title":"Put the harness package's suites in the per-tick gate"}}
 {"ts":"2026-10-07T13:49:07.534077344Z","tick":"3sd","action":"start","actor":"cloud:orchestrator","epic":"ex6","data":{"title":"Pin the classification profile digest in a short test so make gate catches it"}}
+{"ts":"2026-10-07T13:49:26.525433272Z","tick":"8gd","action":"start","actor":"cloud:orchestrator","epic":"ex6","data":{"title":"Host the cloud PR-review boot on pi-durable, or operator confirms its omp floor"}}
