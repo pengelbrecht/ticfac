@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 21,
-  "state": "dispatching",
-  "reason": "dispatching 0n3 as attempt 4",
-  "updated_at": "2026-10-07T07:39:35Z",
+  "sequence": 22,
+  "state": "running",
+  "reason": "0n3 is running as attempt 4",
+  "updated_at": "2026-10-07T07:39:54Z",
   "ticks": [
     {
       "tick_id": "56z",
@@ -28,7 +28,8 @@
     },
     {
       "tick_id": "0n3",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 4
     }
   ],
   "provenance": {
