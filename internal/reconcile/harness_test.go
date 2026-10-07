@@ -1000,6 +1000,14 @@ type fixture struct {
 	// to see the ORDER the reconciler asks for operations in.
 	wrap func(Executor) Executor
 
+	// pushInterval is the supervisor's durability push interval this
+	// fixture's attempts get (Appendix A #5). Zero is the fixture's own one
+	// second — the harness's cadence, not the production minute. A test that
+	// must own every push to an attempt's branch itself sets one no attempt
+	// can outlive: the evacuation's ref-lock test silences the supervisor so
+	// the only pushes its origin sees are the ones it schedules.
+	pushInterval time.Duration
+
 	// sweeper is the substrate half of the run's leftover sweep, for a test
 	// that stands one in (sweep_test.go). Nil is the local executor's
 	// answer: it makes nothing outside git.
@@ -1291,6 +1299,13 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, Substrate, error) {
 		}
 		model, rolePrompt = d.Profile.Model, d.Profile.Prompt
 	}
+	// The supervisor's durability interval, this fixture's own unless the
+	// test named one: one second is the harness's cadence, not the
+	// production minute.
+	pushInterval := f.pushInterval
+	if pushInterval <= 0 {
+		pushInterval = time.Second
+	}
 	executor, err := subprocess.New(subprocess.Options{
 		Repo:           d.Repo,
 		StateDir:       d.StateDir,
@@ -1302,7 +1317,7 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, Substrate, error) {
 		Remote:         d.Remote,
 		Attempt:        d.Attempt,
 		Try:            d.Try,
-		PushInterval:   time.Second,
+		PushInterval:   pushInterval,
 		// What the tick's earlier attempts found (tick nvn), forwarded the
 		// way the production factories forward it.
 		PriorReports: d.PriorReports,
