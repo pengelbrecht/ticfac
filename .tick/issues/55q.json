@@ -1,0 +1,13 @@
+{
+  "id": "55q",
+  "title": "Lease TTL of 2h is shorter than a worker's 8h wall clock",
+  "description": "LEASE_TTL_MS is 2 hours (cloudflare/src/claude-sub.ts:107), and its comment reasons about a review-epic job being well under it. A cloud implement worker's wall clock is 8 hours (TICKS_WORKER_TIMEOUT=28740; this run's own attempt record carries wall_seconds 28800), so a long implement job's lease stops counting in activeLeases while the job is still live and still billing the subscription. CLAUDE_SUB_MAX_CONCURRENT is then no longer the cap it reads as: a third job can be handed a subscription that already has two live jobs on it, which is exactly the quota-budget overrun the cap was chosen to prevent. Worth a tick to either raise the TTL above the worker wall clock or refresh the lease while the container lives. Not a reason this epic is not ready — it is pre-existing behaviour and no claim in the new doc depends on it.\nevidence: cloudflare/src/claude-sub.ts:107,420-432 against .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/attempts/1.json wall_seconds 28800\n\nticfac run run_4d92bab25a7341d3bba01691779168a0 filed this backlog tick from the finding ce21f359ff2a97aca336fb30f9eca238a03835f7e86af356afde9ab3035cd6f0 (reported by run-run_4d92bab25a7341d3bba01691779168a0/tick-yaz/attempt-2) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/ce21f359ff2a97aca336fb30f9eca238a03835f7e86af356afde9ab3035cd6f0.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_4d92bab25a7341d3bba01691779168a0/tick-yaz/attempt-2",
+  "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
+  "created_at": "2026-10-07T07:12:49Z",
+  "updated_at": "2026-10-07T07:12:49Z"
+}
