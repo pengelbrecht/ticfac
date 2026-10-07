@@ -4,7 +4,7 @@
   "gloss": "vitest in the integrated gate",
   "description": "From yoh final-review finding dfae216d (cs1). The ts gate in .tick/runners.toml runs format, lint, contracts and tsc, but no vitest, so a TS behaviour change merges without its tests running in the gate (mn7's worker ran them; the gate did not). Add the vitest suite to the ts gate once the suite is deterministic under load (3cq and the slot-refused fix were the known flakes); watch its wall time against the gate bound.",
   "notes": "2026-09-26 10:14 - Same gap for Go (2026-09-26): the per-tick gate runs go test -short, CI runs the full suite. gvc's epic PR went red on TestTheClassificationRecordIsPinnedAsItIsWritten (a non-short pin test) after jlv changed a profile; no per-tick gate had run it. Either run the pin tests in the gate, or have the gate run the same test set as CI.\n2026-10-07 16:31 - ticfac run epic-t8u: tc9 try 1 (run dispatch #2) reported a finding the run itself decided — proposed-tick \"The ts gate does not run cloudflare's contracts:test and operator-strings\" (key 59d5e2b0a15a41b5133f4edcd4a492aebc6c21f68313abb59a2d578c3a116c64, severity low, for this repository) is promoted to a backlog tick with an owner, a06; the decision record is on the run branch at .ticfac/runs/epic-t8u/absorptions/59d5e2b0a15a41b5133f4edcd4a492aebc6c21f68313abb59a2d578c3a116c64.json, and the draft is triaged as promoted.\n2026-10-07 16:36 - ticfac run epic-t8u: tc9 try 1 (run dispatch #2) merged into epic/t8u as 96d1b8e31726; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -12,6 +12,6 @@
   "acceptance_criteria": "The ts gate runs the vitest suite; it passes deterministically on this host and in CI across several runs; the Makefile gate parity test still holds",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-24T12:12:09.649879Z",
-  "updated_at": "2026-10-07T14:36:06.214374Z",
-  "started_at": "2026-10-07T13:45:19.840295Z"
+  "updated_at": "2026-10-07T14:36:06.585652Z",
+  "closed_at": "2026-10-07T14:36:06.585652Z"
 }
