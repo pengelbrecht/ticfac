@@ -3,7 +3,7 @@
   "title": "Re-review ilz: its tree changed since its READY final review (round 2)",
   "description": "Review the epic ilz again, AS INTEGRATED, before the run lands it: its final review (lpl, decision 1) judged it READY at f0361100656d, and the epic branch has changed since — now at 027c4e3d60d6, with work that review never saw (a tick closed or a commit pushed after it). This is review round 2, made only because the tree changed; the run lands on YOUR verdict, not the earlier one.\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what blocks it.",
   "notes": "2026-10-07 10:48 - ticfac run run_18eafdaa047544be9a196d913fb08a30: the review-epic job, z6t try 1 (run dispatch #3), returned a validated ticfac.job-result.review-epic.v1 envelope at 0821a25dc190 — DONE: reviewed epic/ilz as integrated at 0821a25d against its base e684dfec; re-derived every guide claim against claude-sub.ts, sandbox-executor.ts and runconfig_select.go, checked the rewritten close-out record citation by citation, ran `make gate` (exit 0) and confirmed this dispatch's own claude-sub lease; verdict READY, no findings.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "role": "review",
   "created_by": "ticfac run run_18eafdaa047544be9a196d913fb08a30",
   "created_at": "2026-10-07T10:33:01Z",
-  "updated_at": "2026-10-07T10:48:39.618743978Z",
-  "started_at": "2026-10-07T10:33:09.665464246Z"
+  "updated_at": "2026-10-07T10:48:39.784531809Z",
+  "closed_at": "2026-10-07T10:48:39.784531809Z"
 }
