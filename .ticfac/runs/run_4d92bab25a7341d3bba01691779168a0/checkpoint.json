@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 4,
-  "state": "collecting",
-  "reason": "collecting 56z attempt 1",
-  "updated_at": "2026-10-07T06:45:31Z",
+  "sequence": 5,
+  "state": "integrating",
+  "reason": "integrating 56z attempt 1 into epic/ilz",
+  "updated_at": "2026-10-07T06:45:37Z",
   "ticks": [
     {
       "tick_id": "56z",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
