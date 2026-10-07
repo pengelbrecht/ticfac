@@ -2,6 +2,7 @@
   "id": "ksq",
   "title": "hegel panics at init without a user cache dir, blocking any HOME-stripped gate",
   "description": "Under HOME=\u003cempty\u003e every test in internal/forge and internal/profile panics at init: 'write libhegel: resolve user cache dir: $HOME is not defined'. The property-test library resolves a user cache dir at package init, before any test can construct a condition. This is why the gate's stripped environment is git-scoped rather than the note's original HOME=\u003cempty\u003e recipe; it would also block anyone taking the gate further.\nevidence: env HOME= go test ./internal/forge/ — panic in hegel.dev/go/hegel/internal/libhegel init.func1, libhegel.go:558\n\nticfac run epic-t8u filed this backlog tick from the finding ddfe2182e7373243ac096bfafee93b4239eed21644fc734c17bbef2898558db1 (reported by run-epic-t8u/tick-pqs/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/ddfe2182e7373243ac096bfafee93b4239eed21644fc734c17bbef2898558db1.json on the run branch.",
+  "notes": "2026-10-07 20:12 - ticfac run epic-t8u: created by absorbing finding ddfe2182e7373243ac096bfafee93b4239eed21644fc734c17bbef2898558db1 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/ddfe2182e7373243ac096bfafee93b4239eed21644fc734c17bbef2898558db1.json on epic/t8u, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-t8u/tick-pqs/attempt-1",
   "created_by": "ticfac run epic-t8u",
   "created_at": "2026-10-07T18:12:20Z",
-  "updated_at": "2026-10-07T18:12:20Z"
+  "updated_at": "2026-10-07T18:12:27.620896Z"
 }
