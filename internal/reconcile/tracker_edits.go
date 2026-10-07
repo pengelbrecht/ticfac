@@ -299,7 +299,13 @@ func (r *Reconciler) integrateTrackerEdits(ctx context.Context, marker attemptHa
 	r.setTick(marker.TickID, "integrated")
 	r.record(marker.TickID, StageIntegrated, "%s's delivery is its tracker edits, applied onto %s at %s",
 		r.attemptName(marker.TickID, marker.Attempt), r.branch, short(head))
-	return true, merge{AttemptHead: attemptHead, EpicHead: head, GateSHA: head, Merged: false}, nil
+	// A tracker-edit delivery has no commits of its own, so it names no
+	// touched diff: the gate runs over the branch with the edits on it, and
+	// the edits' files (.tick/issues/*.json, through the run's own writer)
+	// belong to no Go package. Empty in both is the pair saying exactly that
+	// (gate_touched.go).
+	return true, merge{AttemptHead: attemptHead, EpicHead: head, GateSHA: head, Merged: false,
+		TouchedBase: "", TouchedHead: ""}, nil
 }
 
 // applyTrackerEdits applies proposals through the run's durable tracker

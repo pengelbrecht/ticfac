@@ -405,8 +405,10 @@ func (r *Reconciler) startGateCommand(command GateCommand, key string,
 	}
 	// The slot's lock goes to the shell as well as staying here: a gate that
 	// outlives the reconciler that started it must keep holding the directory
-	// it is running in (gatedir.go).
-	shell, err := startShell(dir, command.Command, r.opts.GateTimeout, r.now(), lock)
+	// it is running in (gatedir.go). The exported pair — the tick's touched
+	// diff, the one thing about the merge the commands could not otherwise
+	// see — rides with it (gate_touched.go).
+	shell, err := startShell(dir, command.Command, r.opts.GateTimeout, r.now(), lock, gateTouchedEnv(merged))
 	if err != nil {
 		remove()
 		return nil, nil, err
@@ -1101,7 +1103,10 @@ var errGateKilled = errors.New("the gate command was killed before it reported a
 // is passed to the shell so that the kernel keeps holding it for as long as
 // anything this gate started is alive — including a shell that outlived the
 // reconciler. Nothing reads fd 3; being open is the whole job. See gatedir.go.
-func startShell(dir, command string, timeout time.Duration, now time.Time, hold *os.File) (*gateShell, error) {
+// extraEnv is appended after the gate's own names — the exported touched pair
+// (gate_touched.go) — so a command's own contract never has to know the order
+// the gate pins its environment in.
+func startShell(dir, command string, timeout time.Duration, now time.Time, hold *os.File, extraEnv []string) (*gateShell, error) {
 	scratch, removeScratch, err := tempdir.Make("ticfac-gate-io-")
 	if err != nil {
 		return nil, fmt.Errorf("prepare the gate's output files: %w", err)
@@ -1155,6 +1160,7 @@ func startShell(dir, command string, timeout time.Duration, now time.Time, hold 
 	env, _, _ = runenv.HidePath(env)
 	cmd.Env = append(env, "TICFAC_GATE=1", "GIT_TERMINAL_PROMPT=0",
 		"TICFAC_GATE_COMMAND="+command, "TICFAC_GATE_DONE="+s.donePath, "TMPDIR="+tmp)
+	cmd.Env = append(cmd.Env, extraEnv...)
 	cmd.SysProcAttr = gateProcessGroup()
 	cmd.Stdout, cmd.Stderr = out, errOut
 	if hold != nil {
@@ -1321,9 +1327,9 @@ func readGateOutput(path string) string {
 // runShell runs one declared gate command to completion. It is the blocking
 // driver over the start-and-poll pair above, for the callers that have nothing
 // else to do while a gate runs — and it is what the process-group kill is
-// proved through.
-func runShell(ctx context.Context, dir, command string, timeout time.Duration) (stdout, stderr string, code int, err error) {
-	s, err := startShell(dir, command, timeout, time.Now(), nil)
+// proved through. extraEnv is what startShell's is.
+func runShell(ctx context.Context, dir, command string, timeout time.Duration, extraEnv []string) (stdout, stderr string, code int, err error) {
+	s, err := startShell(dir, command, timeout, time.Now(), nil, extraEnv)
 	if err != nil {
 		return "", "", -1, err
 	}

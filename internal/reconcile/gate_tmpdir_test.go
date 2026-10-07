@@ -24,7 +24,7 @@ import (
 // answers with its stdout.
 func gateOnce(t *testing.T, dir, command string) string {
 	t.Helper()
-	shell, err := startShell(dir, command, time.Minute, time.Now(), nil)
+	shell, err := startShell(dir, command, time.Minute, time.Now(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestAGateKilledAtItsBoundLeavesNothingInItsTempDir(t *testing.T) {
 	defer release()
 
 	shell, err := startShell(dir, `mkdir -p "$TMPDIR/TestKilled1/001" && touch "$TMPDIR/started" && sleep 60`,
-		time.Hour, time.Now(), lock)
+		time.Hour, time.Now(), lock, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

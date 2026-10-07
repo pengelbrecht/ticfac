@@ -43,7 +43,7 @@ func TestAGateThatOutlivesItsReconcilerKeepsHoldingItsSlot(t *testing.T) {
 	if lock == nil {
 		t.Fatal("the gate was handed no slot lock, so there is nothing to hand to the gate it starts")
 	}
-	shell, err := startShell(dir, "sleep 60", time.Hour, time.Now(), lock)
+	shell, err := startShell(dir, "sleep 60", time.Hour, time.Now(), lock, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestAGateWhoseKillMissesAMemberReleasesItsSlotAnyway(t *testing.T) {
 	// delivered, and in it afterwards, holding the slot the whole time.
 	out, goMark := filepath.Join(root, "out"), filepath.Join(root, "go")
 	command := fmt.Sprintf("%s %s %s & sleep 120", gateJoinerBinary(t), out, goMark)
-	shell, err := startShell(tree, command, time.Hour, time.Now(), lock)
+	shell, err := startShell(tree, command, time.Hour, time.Now(), lock, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
