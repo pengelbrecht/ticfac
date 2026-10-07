@@ -122,7 +122,7 @@ import {
   unverifiedProgress,
 } from "./progress";
 import { readDeclaredSandboxImage } from "./repo-config";
-import { DONE_EVENT_TYPE, type DoneSignal, readDoneSignal } from "./run-done";
+import { DONE_EVENT_TYPE, type DoneOutcome, type DoneSignal, readDoneSignal } from "./run-done";
 import { epicCompleted, epicStarted, publishRunEvents } from "./run-events";
 import {
   appendFeed,
@@ -247,6 +247,28 @@ export const DEFAULT_MAX_COST_USD = 25;
 export const DEFAULT_STOP_GRACE_MS = 300_000; // 5 minutes
 
 /**
+ * How long an orchestrator that has REPORTED its end (a done signal carrying
+ * its outcome) has to actually exit before the watch stops it (tick 1y4).
+ *
+ * `ticfac run-epic` posts the done door from inside the process, before its
+ * last deferred cleanup (the final status push, the pidfile release), so the
+ * look the signal wakes routinely still sees the process running. Before this
+ * bound that look went back to the full cadence — up to five minutes — and on
+ * epic ilz's cloud run (run_4d92bab2, run_e5375707, 2026-10-07) two halted
+ * runs sat `running` on a `work:signal` step for ten minutes after their
+ * supervision_halted line, long enough for an operator to hard-stop them and
+ * pay the stop grace on top. Now the watch looks again on a short cadence
+ * ({@link DONE_SETTLE_LOOK_MS}) and, once this window has passed with the
+ * process still alive, stops it and concludes the boot as the exit the
+ * orchestrator reported — so a halted run ends within a minute of its halt
+ * line even if the process were to linger.
+ */
+export const DEFAULT_DONE_SETTLE_MS = 30_000;
+
+/** The look cadence while a signalled orchestrator settles (tick 1y4). */
+export const DONE_SETTLE_LOOK_MS = 10_000;
+
+/**
  * Observation cadence. Fast at first — a broken boot, a missing toolchain and
  * the first harness output all happen early — then backing off to a cadence a
  * multi-hour run can afford within `MAX_OBSERVATIONS` looks.
@@ -325,6 +347,12 @@ export type RunConfig = {
   /** Whether the deployment explicitly supplied a cost budget override. */
   cost_budget_configured: boolean;
   stop_grace_ms: number;
+  /**
+   * How long a signalled orchestrator has to exit ({@link DEFAULT_DONE_SETTLE_MS}).
+   * Optional because a run whose context was checkpointed before tick 1y4
+   * replays without it, and takes the default.
+   */
+  done_settle_ms?: number;
   /** A fixed cadence when the deployment asks for one; else the backoff above. */
   poll_interval_ms: number | null;
   /**
@@ -436,6 +464,7 @@ export function runConfig(env: Env, override: RunBudgetOverride = {}): RunConfig
     // it spend unmeasured.
     cost_budget_configured: hasPositiveVar(env, "RUN_MAX_COST_USD", false) || cost.applied,
     stop_grace_ms: positiveVar(env, "RUN_STOP_GRACE_MS", DEFAULT_STOP_GRACE_MS, true),
+    done_settle_ms: positiveVar(env, "RUN_DONE_SETTLE_MS", DEFAULT_DONE_SETTLE_MS, true),
     poll_interval_ms: pollInterval,
     max_observations: positiveVar(
       env,
@@ -1377,6 +1406,11 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
   };
 }
 
+/** Whether a look saw the orchestrator's process over: exited, or gone. */
+function processEnded(state: ObservedProcessState): boolean {
+  return state === "completed" || state === "failed" || state === "gone";
+}
+
 /**
  * One wait between looks (ticks 7eq and cr4): the completion signal when it
  * lands, the poll cadence otherwise.
@@ -1969,16 +2003,30 @@ async function supervisePass(
        * flickered through a transient.
        */
       let unasked = 0;
+      /**
+       * The orchestrator's own report of its end, once a done signal carried
+       * one, and the look time it was first seen still running after it
+       * (tick 1y4). From then on the watch looks on the short settle cadence,
+       * and a process still alive past the settle window is stopped and
+       * concluded as the exit it reported. Both come from checkpointed step
+       * results, so a replay recomputes the same decision.
+       */
+      let reported: { outcome: DoneOutcome; since_ms: number | null } | null = null;
+      const settleMs = context.config.done_settle_ms ?? DEFAULT_DONE_SETTLE_MS;
 
       for (let look = 0; look < context.config.max_observations; look++) {
         // Paced by the looks left (hn6): the last one lands on the deadline,
         // so a healthy orchestrator meets its wall clock, never this loop's end.
-        const pollMs = pollDelay(
+        // An orchestrator that has reported its end is looked at on the
+        // settle cadence instead (tick 1y4): its exit is seconds away, and the
+        // full cadence is minutes.
+        const paced = pollDelay(
           context.config,
           look,
           { now_ms: lastAt, deadline_ms: cadenceDeadline, spend },
           context.config.max_observations - look,
         );
+        const pollMs = reported === null ? paced : Math.min(paced, DONE_SETTLE_LOOK_MS, settleMs);
         // The wait for THIS look (ticks cr4 and 7eq): `step.waitForEvent` on
         // the orchestrator's completion signal, with the poll cadence as its
         // timeout — whichever lands first. The container's own "I am done"
@@ -2004,9 +2052,15 @@ async function supervisePass(
             });
             return { heard: signal };
           });
+          // Only a signal that carries the run's own outcome starts the
+          // settle window: a bare wake-up (an older client) says nothing about
+          // how the process will exit, so it is never a reason to stop one.
+          if (reported === null && signal.outcome !== undefined) {
+            reported = { outcome: signal.outcome, since_ms: null };
+          }
         }
 
-        const seen = await step.do(
+        let seen = await step.do(
           `${options.label}:watch:${attempt}:${look}`,
           OBSERVE_RETRIES,
           async () =>
@@ -2051,7 +2105,14 @@ async function supervisePass(
           // keeper pushes as the run works, and `ticfac run-epic`'s own SIGTERM
           // path commits and pushes on the way out — so the branch is the
           // run's state, and no replacement is booted (tick dl8).
-          await step.sleep(`${options.label}:grace:${attempt}`, context.config.stop_grace_ms);
+          //
+          // An orchestrator that has ALREADY EXITED has nothing in flight, so
+          // it gets no window (tick 1y4): epic ilz's halted runs were
+          // hard-stopped after their processes had ended and each still sat
+          // out five minutes of grace on a dead process.
+          if (!processEnded(seen.process)) {
+            await step.sleep(`${options.label}:grace:${attempt}`, context.config.stop_grace_ms);
+          }
           await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
             drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
           );
@@ -2106,8 +2167,32 @@ async function supervisePass(
         }
         unasked = 0;
 
+        // The linger (tick 1y4): the orchestrator said it was done, with its
+        // outcome, and is still running a settle window later. Whatever keeps
+        // it alive — a hung final push, a child it is waiting on — is not
+        // work: run-epic posts the door only after Supervise has returned and
+        // the feed relay has drained. So it is stopped, and the boot is
+        // concluded as the exit it reported, through exactly the
+        // classification below (a halt is still a halt, a terminal code still
+        // terminal) — never left to the next full-cadence look.
+        let lingered = false;
+        if (reported !== null && seen.process === "running") {
+          reported.since_ms ??= seen.at_ms;
+          if (seen.at_ms - reported.since_ms >= settleMs) {
+            await step.do(`${options.label}:linger:${attempt}`, OBSERVE_RETRIES, () =>
+              drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
+            );
+            seen = { ...seen, process: "completed", exit_code: reported.outcome.exit_code ?? null };
+            lingered = true;
+          }
+        }
+        const lingerNote = lingered
+          ? `; it had not exited ${Math.round(settleMs / 1000)}s after reporting its end on the done ` +
+            "door, so it was stopped"
+          : "";
+
         if (seen.process === "completed" && (seen.exit_code ?? 0) === 0) {
-          bootEnded = `the orchestrator exited 0 (boot ${boot})`;
+          bootEnded = `the orchestrator exited 0 (boot ${boot})${lingerNote}`;
           return { kind: "completed", boots: counter.next - 1 };
         }
 
@@ -2116,7 +2201,7 @@ async function supervisePass(
           lastDetail =
             seen.process === "gone"
               ? orchestratorContainerGone(boot)
-              : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})`;
+              : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})${lingerNote}`;
           bootEnded = lastDetail;
           // An orchestrator that EXITED after its supervisor halted is a
           // decision, not a death (epic hn6's cloud run: boots 1 and 2 both
@@ -2138,7 +2223,8 @@ async function supervisePass(
             if (halted.detail !== null) {
               const detail =
                 `the orchestrator stopped deliberately (boot ${boot}, exit ${code ?? "unknown"}): its ` +
-                `supervisor halted rather than continue — ${halted.detail} — so no sandbox was rebooted`;
+                `supervisor halted rather than continue — ${halted.detail} — so no sandbox was rebooted` +
+                lingerNote;
               bootEnded = detail;
               return { kind: "failed", detail, boots: counter.next - 1 };
             }

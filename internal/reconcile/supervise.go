@@ -186,6 +186,10 @@ const StoppedLeaseTaken = "lease_taken"
 //     tick closed and brought ticks the run never planned (refresh_defer.go).
 //     The tree changed — the fold is on it — and the next incarnation plans
 //     them from it; nobody has anything to decide.
+//   - RefusedLandFoldReview: the readying's fold brought in a path the epic
+//     is about after its READY final review (review_rounds.go). The tree
+//     changed — the fold is on it — and the next incarnation reviews it
+//     before it lands; nobody has anything to decide.
 //
 // And one hold is continued when the stopped incarnation finds the run can
 // decide it (supervisedStop.Decides): a close-out's RefusedRoleAnswer over a
@@ -203,7 +207,7 @@ func resumesWithoutAPerson(reason string) bool {
 	switch reason {
 	case RefusedCollect, RefusedClaimWidth, RefusedForeignClaim, RefusedStale, StoppedRemoteTransient, RefusedCloseoutOverRedCI,
 		RefusedBlockedRedispatch, RefusedRejectedRedispatch, RefusedClaimHolderUnknown, RefusedNoCapacity,
-		StoppedRemoteTokenRefused, RefusedFoldReplan, RefusedInfrastructureRedispatch:
+		StoppedRemoteTokenRefused, RefusedFoldReplan, RefusedInfrastructureRedispatch, RefusedLandFoldReview:
 		return true
 	}
 	return waitsOnCI(reason)

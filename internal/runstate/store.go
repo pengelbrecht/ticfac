@@ -844,6 +844,29 @@ func (s *Store) ForeignCheckpoint(runID string) (*Checkpoint, bool, error) {
 	return &c, true, nil
 }
 
+// ForeignDecisions returns another run's decisions, in decision order, as
+// this writer last fetched them: how a run resumed under a NEW run id — every
+// cloud resume is one — reads the verdicts an earlier run of its epic
+// recorded (the final review's, above all) rather than acting as if nobody had
+// judged the epic. Reads only, the run id validated as ForeignCheckpoint's is.
+func (s *Store) ForeignDecisions(runID string) ([]Decision, error) {
+	if err := checkSegment("run id", runID); err != nil {
+		return nil, fmt.Errorf("runstate: %w", err)
+	}
+	out := []Decision{}
+	for _, n := range s.numberedOf(runID, "decisions") {
+		var d Decision
+		ok, err := s.load(DecisionPath(runID, n), &d)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			out = append(out, d)
+		}
+	}
+	return out, nil
+}
+
 // EvidenceKeys returns the keys of the run's evidence, sorted.
 func (s *Store) EvidenceKeys() []string {
 	prefix := RunDir(s.runID) + "/evidence/"
@@ -860,7 +883,11 @@ func (s *Store) EvidenceKeys() []string {
 }
 
 func (s *Store) numbered(dir string) []int {
-	prefix := RunDir(s.runID) + "/" + dir + "/"
+	return s.numberedOf(s.runID, dir)
+}
+
+func (s *Store) numberedOf(runID, dir string) []int {
+	prefix := RunDir(runID) + "/" + dir + "/"
 	numbers := []int{}
 	for path := range s.view {
 		name, ok := strings.CutPrefix(path, prefix)

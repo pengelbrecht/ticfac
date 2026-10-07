@@ -3,12 +3,14 @@
   "title": "A held cloud run's own 'run the epic again' only re-attaches: resume must supersede the waiting Workflow",
   "gloss": "held cloud rerun only attaches",
   "description": "Incident 2026-10-07, epic ilz: the cloud run halted on land_review_not_ready and told the operator to fix the doc and 'run the epic again with ticfac run ilz --cloud'. After the fix was pushed to epic/ilz, that command found the Workflow still running (parked on work:signal waiting for an answer) and merely attached, replaying the old halt; nothing re-reviewed. The only way forward was ticfac cloud stop --now, waiting out the work:grace step (5m), then a new submission. Fix: when a run is held for a person and the operator re-runs the epic (and the epic branch moved since the hold, or always), the submit supersedes the parked Workflow — signal it to end cleanly and start the resume submission — instead of attaching; or the halt message names the command that actually works. Test: a held cloud run + rerun produces a new submission that re-reads the review.",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "bug",
   "owner": "ticks-sandbox@ticks.invalid",
   "acceptance_criteria": "ticfac run \u003cepic\u003e --cloud on a held cloud run resumes it (new submission) without a manual stop; test covers it; make gate passes",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T09:15:04.02955Z",
-  "updated_at": "2026-10-07T09:15:04.02955Z"
+  "updated_at": "2026-10-07T09:57:59.898689Z",
+  "closed_at": "2026-10-07T09:57:59.898689Z",
+  "closed_reason": "fixed by PR #256 (91fc04c): rerun supersedes a held cloud run; resume re-reviews a changed tree; nothing-to-dispatch is a named stop"
 }

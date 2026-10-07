@@ -325,6 +325,51 @@ func TestStatusSnapshotForCarriesTheLabelMap(t *testing.T) {
 	}
 }
 
+// TestPusherStopIsBoundedWhenTheDoorNeverAnswers is tick 1y4's Go half: the
+// ending push runs after run-epic has posted its done signal, so a push that
+// never returns keeps a finished orchestrator alive. Stop must return within
+// the push bound however the door behaves.
+func TestPusherStopIsBoundedWhenTheDoorNeverAnswers(t *testing.T) {
+	quietForge(t)
+	previous := statusPushTimeout
+	statusPushTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { statusPushTimeout = previous })
+
+	// A door that takes the request and never answers it — until the client
+	// gives up (or the test ends).
+	release := make(chan struct{})
+	hung := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	t.Cleanup(func() {
+		close(release)
+		hung.Close()
+	})
+	overridePushSetup(t, snapshotClient(hung, "tkf_testtoken"))
+
+	var warned strings.Builder
+	pusher := startStatusPusher(t.TempDir(), "epic-1y4", &warned, true)
+	if pusher == nil {
+		t.Fatal("an opted-in run started no pusher")
+	}
+	stopped := make(chan struct{})
+	go func() {
+		pusher.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Stop hung on a door that never answers: the orchestrator outlives its done signal")
+	}
+	if !strings.Contains(warned.String(), "could not be pushed") {
+		t.Errorf("a push that timed out said nothing: %q", warned.String())
+	}
+}
+
 func TestPushFailureIsALineNeverAnExit(t *testing.T) {
 	quietForge(t)
 	// A factory that refuses everything: the pusher must say so and carry on.

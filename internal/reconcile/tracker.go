@@ -517,6 +517,18 @@ func (d *durableTracker) Graph(ctx context.Context, epicID string) (tk.Graph, er
 	return d.inner.Graph(ctx, epicID)
 }
 
+// GraphAll is the graph with the epic's CLOSED tasks, where the tracker
+// underneath can list them (tk's `graph --all`), and its Graph otherwise.
+func (d *durableTracker) GraphAll(ctx context.Context, epicID string) (tk.Graph, error) {
+	if err := d.tree.sync(); err != nil {
+		return tk.Graph{}, err
+	}
+	if all, ok := d.inner.(graphAller); ok {
+		return all.GraphAll(ctx, epicID)
+	}
+	return d.inner.Graph(ctx, epicID)
+}
+
 func (d *durableTracker) Show(ctx context.Context, tickID string) (tk.Tick, error) {
 	if err := d.tree.sync(); err != nil {
 		return tk.Tick{}, err
@@ -543,6 +555,44 @@ func (d *durableTracker) Close(ctx context.Context, tickID string) (tk.Tick, err
 	return d.write(tickID, "close "+tickID, func() (tk.Tick, error) {
 		return d.inner.Close(ctx, tickID)
 	})
+}
+
+// tickReopener is the tracker's half of reopening a closed tick
+// (review_rounds.go: a close-out run again behind a review of a changed tree).
+// A test tracker implements it; for the tk client the durable wrapper rewrites
+// the record itself, the way it adopts, places and edits — so the run adds no
+// tk command line to the contract the factory pins.
+type tickReopener interface {
+	ReopenTick(ctx context.Context, tickID string) (tk.Tick, error)
+}
+
+// Reopen reopens a closed tick durably: the write, then the commit and push.
+// Idempotent: an open tick is left as it is.
+func (d *durableTracker) Reopen(ctx context.Context, tickID string) (tk.Tick, error) {
+	return d.write(tickID, "reopen "+tickID, func() (tk.Tick, error) {
+		if w, ok := d.inner.(tickReopener); ok {
+			return w.ReopenTick(ctx, tickID)
+		}
+		return reopenTickRecord(d.tree, tickID, time.Now().UTC().Format(time.RFC3339))
+	})
+}
+
+// reopenTickRecord rewrites one record as open, for the tracker that has no
+// verb of its own for it here.
+func reopenTickRecord(tree *trackerTree, tickID, at string) (tk.Tick, error) {
+	raw, err := os.ReadFile(trackerRecordPath(tree.dir, tickID))
+	if err != nil {
+		return tk.Tick{}, fmt.Errorf("read %s to reopen it: %w", tickID, err)
+	}
+	var tick tk.Tick
+	if err := json.Unmarshal(raw, &tick); err != nil {
+		return tk.Tick{}, fmt.Errorf("the record of %s does not read back as a tick: %w", tickID, err)
+	}
+	if tick.Status != "closed" {
+		return tick, nil
+	}
+	tick.Status, tick.ClosedAt, tick.ClosedReason, tick.UpdatedAt = "open", "", "", at
+	return tick, writeTrackerRecord(tree, tick)
 }
 
 // write is the one shape every tracker write has: read origin, make the write,

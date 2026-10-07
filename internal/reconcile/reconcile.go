@@ -2308,7 +2308,7 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 			return r.finishReadying(ctx, fmt.Sprintf("every tick of %s is closed behind the integrated gate",
 				r.opts.EpicID))
 		}
-		return nil, fmt.Errorf("reconcile: epic %s has no dispatchable tick", r.opts.EpicID)
+		return r.finishWithNothingToDispatch(graph)
 	}
 	r.seedTicks(plan)
 	r.seedTitles(plan)
@@ -3183,6 +3183,16 @@ const (
 	//     unattended factory can give: green over a goal nobody reached.
 	RefusedTickBlocked          = "tick_blocked_open"      // an open blocker the run cannot close
 	RefusedCloseoutChildrenOpen = "closeout_children_open" // a child of the epic is still open at the close-out
+
+	// RefusedNothingToDispatch is an epic with nothing for the run to do:
+	// no open child to work, no close-out of this run's own to keep the epic
+	// PR ready by, and no final review whose verdict is the reason (that one
+	// is the land hold). It was an UNCLASSIFIED error until epic ilz
+	// (2026-10-07), where the supervisor halted over "a stop this run has no
+	// classification for" — now it is a typed stop whose message says what
+	// the epic holds and what moves it on. Not a hold, and not resumable
+	// without a person: re-running an unchanged epic finds the same nothing.
+	RefusedNothingToDispatch = "epic_nothing_to_dispatch"
 )
 
 // refuse names a refusal AND says which problem it is, because Appendix A #9

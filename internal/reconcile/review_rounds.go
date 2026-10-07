@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -64,13 +65,54 @@ import (
 // (placeChangedTreeReview).
 const maxReviewRounds = 2
 
+// maxDriftReviewRounds bounds the rounds a run EXCUSES from maxReviewRounds
+// because the base moved under the epic (baseDriftCaused). It is the backstop
+// for a base that never stops moving: past it, a drift-caused NOT READY counts
+// like any other, and the bound ends the run's rounds as it always did.
+const maxDriftReviewRounds = 2
+
 // reviewRounds is the run's review decisions, read for the rounds rule.
 type reviewRounds struct {
 	// final is the latest review-epic decision, nil when no review answered.
 	final *runstate.Decision
 	// rounds is how many review ticks have a recorded decision.
 	rounds int
+	// drift is how many of those rounds are excused from the bound: NOT READY
+	// rounds caused by the base moving under the epic (baseDriftCaused), the
+	// first maxDriftReviewRounds of them.
+	drift int
+	// finalDrift says the final review is one of the excused rounds, and
+	// driftPaths is what the folds before it brought in that its blocking
+	// findings name.
+	finalDrift bool
+	driftPaths []string
+	// inherited is the EARLIER run of this epic whose review decision final
+	// is — "" when final is this run's own. See inheritedReviews.
+	inherited string
 }
+
+// counted is the rounds that count toward maxReviewRounds.
+func (rr reviewRounds) counted() int { return rr.rounds - rr.drift }
+
+// driftNote is what a record says about the rounds excused as the base
+// moving: "" when none was.
+func (rr reviewRounds) driftNote() string {
+	switch {
+	case rr.finalDrift:
+		return fmt.Sprintf(". This NOT READY does not count toward the bound: the base moved under the epic since "+
+			"the previous review — its folds brought in %s, which every blocking finding names — so it is about "+
+			"the base, not the epic's own work (%d of at most %d such rounds excused)",
+			strings.Join(rr.driftPaths, ", "), rr.drift, maxDriftReviewRounds)
+	case rr.drift > 0:
+		return fmt.Sprintf(" (%d earlier NOT READY %s about the base moving under the epic, excused from the "+
+			"bound; at most %d are)", rr.drift, plural(rr.drift, "round was", "rounds were"), maxDriftReviewRounds)
+	}
+	return ""
+}
+
+// spent says the bound is spent for the final review: the run absorbs no
+// more of its findings. An excused final review never spends it.
+func (rr reviewRounds) spent() bool { return !rr.finalDrift && rr.counted() >= maxReviewRounds }
 
 // readReviewRounds reads the review decisions off origin.
 func (r *Reconciler) readReviewRounds() (reviewRounds, error) {
@@ -82,7 +124,8 @@ func (r *Reconciler) readReviewRounds() (reviewRounds, error) {
 	if err != nil {
 		return out, fmt.Errorf("read the run's decisions for the final review's verdict: %w", err)
 	}
-	ticks := map[string]bool{}
+	// One round per review tick, its latest decision, in decision order.
+	latest := map[string]*runstate.Decision{}
 	for i := range decisions {
 		if decisions[i].Role != "review-epic" {
 			continue
@@ -91,10 +134,308 @@ func (r *Reconciler) readReviewRounds() (reviewRounds, error) {
 			out.final = &decisions[i]
 		}
 		tick, _ := decisions[i].Request["tick_id"].(string)
-		ticks[tick] = true
+		if prev := latest[tick]; prev == nil || decisions[i].Decision > prev.Decision {
+			latest[tick] = &decisions[i]
+		}
 	}
-	out.rounds = len(ticks)
+	out.rounds = len(latest)
+	// The newest ended earlier run of the epic's reviews (inheritedReviews):
+	// its rounds count with this run's, so a resume under a new run id counts
+	// them the way a resume under the same id always has, and its final
+	// review is the final one while this run has none of its own. Its rounds
+	// are not read for drift: decision numbers order one run's decisions, not
+	// two runs'.
+	sibling, theirs, err := r.inheritedReviews()
+	if err != nil {
+		return out, err
+	}
+	if sibling != "" {
+		var theirFinal *runstate.Decision
+		counted := map[string]bool{}
+		for i := range theirs {
+			if theirFinal == nil || theirs[i].Decision > theirFinal.Decision {
+				theirFinal = &theirs[i]
+			}
+			tick, _ := theirs[i].Request["tick_id"].(string)
+			if latest[tick] == nil && !counted[tick] {
+				counted[tick] = true
+				out.rounds++
+			}
+		}
+		if out.final == nil {
+			out.final, out.inherited = theirFinal, sibling
+		}
+	}
+	if len(latest) < 2 {
+		return out, nil
+	}
+	ordered := make([]*runstate.Decision, 0, len(latest))
+	for _, d := range latest {
+		ordered = append(ordered, d)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Decision < ordered[j].Decision })
+	baseHead := ""
+	for i := 1; i < len(ordered); i++ {
+		if reviewVerdictOf(ordered[i].Response) != subprocess.ReviewVerdictNotReady {
+			continue
+		}
+		if baseHead == "" {
+			if baseHead = r.baseHeadForFolds(); baseHead == "" {
+				// No base, no fold to tell apart: every round counts.
+				break
+			}
+		}
+		paths, caused := r.baseDriftCaused(*ordered[i-1], *ordered[i], baseHead)
+		if !caused || out.drift >= maxDriftReviewRounds {
+			continue
+		}
+		out.drift++
+		if ordered[i] == out.final {
+			out.finalDrift, out.driftPaths = true, paths
+		}
+	}
 	return out, nil
+}
+
+// A NOT READY caused by the base moving is not a round (epic ilz, 2026-10-07).
+//
+// WHAT WAS WRONG. Epic ilz wrote an operator guide to cloudflare/src/claude-
+// sub.ts while four PRs rewrote that file on main. Each time the run folded
+// main in, the reviewer — correctly — found the guide's claims stale against
+// the code at the integration head; the run fixed it, and the next round found
+// the next main merge's drift. Every round counted toward maxReviewRounds, so
+// after three the run held for a person over a defect the epic never made:
+// "Guide's failover claims went stale when main merged under the epic".
+//
+// THE RULE. A NOT READY round is CAUSED BY THE BASE (baseDriftCaused) when,
+// mechanically:
+//
+//   - between the tree the previous review judged and the tree this one
+//     judged, the epic branch's first-parent line carries a FOLD of the base
+//     (a merge whose second parent is on the base, as treeChangedSinceReview
+//     reads it) that brought in paths outside the run's bookkeeping; and
+//   - EVERY blocking finding of this review names one of those paths — by its
+//     repository path, or by its file name with an extension.
+//
+// Such a round does not count toward maxReviewRounds: its blocking findings
+// are absorbed and the epic reviewed again, as for round 1. A blocking finding
+// that names nothing the base brought in is the epic's own, and the round
+// counts — so a reviewer cannot excuse its epic's defects by calling them
+// drift, and a base that did not move excuses nothing. The backstop is
+// maxDriftReviewRounds: a base that moves under every round is excused that
+// many times, and after that its rounds count again and the bound holds.
+
+// A final review recorded by an EARLIER run of the epic (epic ilz,
+// 2026-10-07).
+//
+// WHAT WAS WRONG. ilz's cloud run held land_review_not_ready: every tick
+// closed, the close-out closed, the epic PR held on a NOT READY final review.
+// The operator fixed the doc the review named and ran the epic again — the
+// hold's own instruction. A cloud resume is a NEW submission, so it runs under
+// a new run id, and every review rule read only the new run's own decisions:
+// it found no review at all, so nothing asked whether the tree had changed
+// since the NOT READY; it found no close-out of its own, so nothing was left
+// to ready; and with every tick closed the run stopped over "epic ilz has no
+// dispatchable tick" — an unclassified stop. The operator filed a review tick
+// and reopened the close-out by hand.
+//
+// THE RULE. The review rules read the final review where it was recorded: a
+// run with no review decision of its own takes the newest ENDED earlier run of
+// its epic's final review as the final one (inheritedReviews), and counts that
+// run's rounds with its own. An inherited verdict is never absorbed again — the
+// run that recorded it already acted on it — so a NOT READY inherited is the
+// spent-bound case whatever the count: a tree changed since it judged gets one
+// more review, and its close-out after it (reopened when this run has none of
+// its own to land with); an unchanged tree holds with the land hold's message.
+
+// inheritedReviews is the earlier run of this epic whose review decisions the
+// review rules read: among the runs on the integration branch whose checkpoint
+// names this epic, the one whose newest review-epic decision answered last —
+// taken only when that run has ENDED (its checkpoint is terminal, or its host
+// says it is gone), because a live run's verdict is its own to act on. It
+// answers "" when there is none.
+func (r *Reconciler) inheritedReviews() (string, []runstate.Decision, error) {
+	runs, err := r.inheritedRuns()
+	if err != nil {
+		return "", nil, err
+	}
+	best, bestAt := "", ""
+	var bestReviews []runstate.Decision
+	for _, runID := range runs {
+		checkpoint, ok, err := r.store.ForeignCheckpoint(runID)
+		if err != nil || !ok || checkpoint.EpicID != r.opts.EpicID {
+			// An unreadable checkpoint says nothing about whose run it is
+			// (the boot sweep says so once, inherit.go); it is not this
+			// epic's verdict to take.
+			continue
+		}
+		decisions, err := r.store.ForeignDecisions(runID)
+		if err != nil {
+			continue
+		}
+		var reviews []runstate.Decision
+		at := ""
+		for _, d := range decisions {
+			if d.Role != "review-epic" {
+				continue
+			}
+			reviews = append(reviews, d)
+			if d.AnsweredAt > at {
+				at = d.AnsweredAt
+			}
+		}
+		if len(reviews) == 0 || (best != "" && at <= bestAt) {
+			continue
+		}
+		var answer HolderState
+		if !checkpoint.State.Terminal() && r.opts.ClaimHolder != nil {
+			answer = r.opts.ClaimHolder(context.Background(), runID)
+		}
+		if _, ended := r.endedRun(checkpoint, answer); !ended {
+			continue
+		}
+		best, bestAt, bestReviews = runID, at, reviews
+	}
+	return best, bestReviews, nil
+}
+
+// inheritedFrom names the earlier run a final review was recorded by, for a
+// record line: "" when it is the run's own.
+func inheritedFrom(rounds reviewRounds) string {
+	if rounds.inherited == "" {
+		return ""
+	}
+	return ", recorded by " + rounds.inherited + ", an earlier run of the epic"
+}
+
+// baseHeadForFolds is the base's head as origin has it now, for telling a
+// fold of the base from the epic's own merges; "" when the base cannot be
+// read, which leaves every merge the epic's.
+func (r *Reconciler) baseHeadForFolds() string {
+	base := r.prBase()
+	if base == "" || base == r.branch || r.git.fetch(base) != nil {
+		return ""
+	}
+	head, _ := r.git.remoteHead(base)
+	return head
+}
+
+// baseDriftCaused says whether the review `cur`, a NOT READY, is about the
+// base moving under the epic since the review `prev` (the rule above), and
+// the folded paths its blocking findings name.
+func (r *Reconciler) baseDriftCaused(prev, cur runstate.Decision, baseHead string) ([]string, bool) {
+	from, _ := prev.Request["source_sha"].(string)
+	to, _ := cur.Request["source_sha"].(string)
+	if strings.TrimSpace(from) == "" || strings.TrimSpace(to) == "" || from == to || baseHead == "" {
+		return nil, false
+	}
+	blocking := blockingFindingsOf(cur)
+	if len(blocking) == 0 {
+		return nil, false
+	}
+	if r.git.fetch(r.branch) != nil {
+		return nil, false
+	}
+	folded := r.foldedPaths(from, to, baseHead)
+	if len(folded) == 0 {
+		return nil, false
+	}
+	named := map[string]bool{}
+	for _, f := range blocking {
+		hit := false
+		for _, path := range folded {
+			if namesPath(f.Title+"\n"+f.Body, path) {
+				named[path], hit = true, true
+			}
+		}
+		if !hit {
+			return nil, false
+		}
+	}
+	paths := make([]string, 0, len(named))
+	for path := range named {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	return paths, true
+}
+
+// foldedPaths is every path outside the bookkeeping that a fold of the base
+// on the first-parent line from `from` to `to` brought in, each fold read
+// against its first parent.
+func (r *Reconciler) foldedPaths(from, to, baseHead string) []string {
+	out, err := r.git.run("", "log", "--first-parent", "--merges", "--format=%H %P", from+".."+to)
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var paths []string
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 3 || !r.git.contains(fields[2], baseHead) {
+			continue
+		}
+		changed, err := r.git.run("", "diff", "--name-only", fields[1], fields[0])
+		if err != nil {
+			continue
+		}
+		for _, path := range strings.Split(changed, "\n") {
+			path = strings.TrimSpace(path)
+			if path == "" || seen[path] || underReviewBookkeeping(path) {
+				continue
+			}
+			seen[path] = true
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+// namesPath says whether a finding's text names a path: the path itself, or
+// its file name when that has an extension, standing as a word of its own
+// ("claude-sub.ts:208" names cloudflare/src/claude-sub.ts; "sub.tsx" does not).
+func namesPath(text, path string) bool {
+	if strings.Contains(text, path) {
+		return true
+	}
+	name := path[strings.LastIndex(path, "/")+1:]
+	if !strings.Contains(name, ".") || strings.HasPrefix(name, ".") {
+		return false
+	}
+	for at := 0; ; {
+		i := strings.Index(text[at:], name)
+		if i < 0 {
+			return false
+		}
+		start, end := at+i, at+i+len(name)
+		if (start == 0 || !pathWordByte(text[start-1], true)) && (end == len(text) || !pathWordByte(text[end], false)) {
+			return true
+		}
+		at = start + 1
+	}
+}
+
+// pathWordByte is a byte that continues a file name: before it, a letter,
+// digit, '_', '-' or '.'; after it, the same but '.', which ends a sentence.
+func pathWordByte(b byte, before bool) bool {
+	switch {
+	case b >= 'a' && b <= 'z', b >= 'A' && b <= 'Z', b >= '0' && b <= '9', b == '_', b == '-':
+		return true
+	case b == '.':
+		return before
+	}
+	return false
+}
+
+// underReviewBookkeeping says a path is the run's or the tracker's own
+// record, never the epic's work (reviewBookkeepingPrefixes).
+func underReviewBookkeeping(path string) bool {
+	for _, prefix := range reviewBookkeepingPrefixes {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // reviewFindingsOf is the findings a recorded review decision carries, read
@@ -178,7 +519,12 @@ func (r *Reconciler) answerNotReadyReview(ctx context.Context) (bool, error) {
 	}
 	final := *rounds.final
 	reviewed, _ := final.Request["tick_id"].(string)
-	if rounds.rounds >= maxReviewRounds {
+	if rounds.inherited != "" {
+		// An earlier run's verdict (epic ilz): that run acted on it, so
+		// nothing is absorbed here — the tree decides, as past the bound.
+		return r.reviewIfTreeChanged(ctx, durable, rounds)
+	}
+	if rounds.spent() {
 		// The bound is spent. Past it nothing is absorbed — the run does not
 		// argue with its review — but a tree that changed since the final
 		// review judged it is a tree no review has judged (epic-hn6): it is
@@ -290,11 +636,11 @@ func (r *Reconciler) absorbNotReadyFindings(ctx context.Context, durable *durabl
 	if rereview == "" {
 		description := fmt.Sprintf(
 			"Review the epic %s again, AS INTEGRATED, now that the blocking findings of its NOT READY review are "+
-				"fixed. This is review round %d of at most %d.\n\nThe previous review (%s, decision %d) judged it NOT "+
-				"READY: %s.\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY "+
-				"naming what still blocks it. A NOT READY at this round is not reviewed again by the run unless the "+
-				"tree changes after it: it holds for a person with your reasons.",
-			r.opts.EpicID, round, maxReviewRounds, reviewed, final.Decision, notReadyReasons(final))
+				"fixed. This is review round %d; %d count toward the bound of %d.\n\nThe previous review (%s, decision "+
+				"%d) judged it NOT READY: %s.\n\nJudge the tree as it stands: READY when the epic does what it said it "+
+				"would, NOT READY naming what still blocks it. A NOT READY that spends the bound is not reviewed again "+
+				"by the run unless the tree changes after it: it holds for a person with your reasons.",
+			r.opts.EpicID, round, rounds.counted()+1, maxReviewRounds, reviewed, final.Decision, notReadyReasons(final))
 		rereview, err = r.createReReview(ctx, durable,
 			fmt.Sprintf("Re-review %s after its NOT READY review's blocking findings (round %d)", r.opts.EpicID, round),
 			description)
@@ -314,9 +660,9 @@ func (r *Reconciler) absorbNotReadyFindings(ctx context.Context, durable *durabl
 	}
 	r.record(reviewed, StageReviewRound,
 		"the final review (decision %d) judged %s NOT READY — %s. The run acts on it: %s absorbed into the epic, "+
-			"and the re-review %s (round %d of %d) runs once %s closed",
+			"and the re-review %s (round %d; the bound is %d) runs once %s closed%s",
 		final.Decision, r.opts.EpicID, notReadyReasons(final), strings.Join(absorbed, ", "), rereview, round,
-		maxReviewRounds, plural(len(absorbed), "it is", "they are"))
+		maxReviewRounds, plural(len(absorbed), "it is", "they are"), rounds.driftNote())
 	return true, nil
 }
 
@@ -453,24 +799,55 @@ var reviewBookkeepingPrefixes = []string{runStatePrefix, ".tick/"}
 // answers CHANGED: a commit the branch can no longer show is not a tree
 // anybody can say the review judged, and the review that answers it records
 // the head it judged, so the next comparison is readable.
-func (r *Reconciler) treeChangedSinceReview(ctx context.Context, decision runstate.Decision) (string, bool, error) {
+//
+// A fold IS counted when it brought in a path the epic is ABOUT
+// (foldsTouchingEpic, epic ilz): the second answer names those paths.
+func (r *Reconciler) treeChangedSinceReview(ctx context.Context, decision runstate.Decision) (string, []string,
+	bool, error) {
 	judged, _ := decision.Request["source_sha"].(string)
 	if strings.TrimSpace(judged) == "" {
-		return "", false, nil
+		return "", nil, false, nil
 	}
 	if err := r.git.fetch(r.branch); err != nil {
-		return "", false, fmt.Errorf("fetch %s to compare it with the tree the final review judged: %w", r.branch, err)
+		return "", nil, false, fmt.Errorf("fetch %s to compare it with the tree the final review judged: %w",
+			r.branch, err)
 	}
 	head, err := r.git.remoteHead(r.branch)
 	if err != nil {
-		return "", false, err
+		return "", nil, false, err
 	}
 	if head == "" || head == judged {
-		return head, false, nil
+		return head, nil, false, nil
 	}
-	graph, err := r.tracker.Graph(ctx, r.opts.EpicID)
+	// The close-out's ticks, CLOSED ones included: the close-out runs after
+	// the final review and closes before the land asks, and `tk graph` lists
+	// open tasks alone. Reading the open graph left the closed close-out out,
+	// so its own merge (its retro) read as work no review had judged and
+	// bought one more review: epic ilz's round 3 (2026-10-07). The fake
+	// tracker's graph lists closed tasks, which is why no test saw it.
+	closeouts, err := r.closeoutTicks(ctx)
 	if err != nil {
-		return "", false, fmt.Errorf("read the epic graph of %s for its close-out: %w", r.opts.EpicID, err)
+		return "", nil, false, err
+	}
+	// The base's head, for telling a fold from the epic's own merges. A base
+	// that cannot be read leaves every merge counted: the conservative side
+	// is a review, never a merge nobody judged.
+	baseHead := r.baseHeadForFolds()
+	if r.changedOutsideBookkeeping(judged, head, baseHead, closeouts) {
+		return head, nil, true, nil
+	}
+	about, err := r.foldsTouchingEpic(ctx, judged, head, baseHead, closeouts)
+	if err != nil {
+		return "", nil, false, err
+	}
+	return head, about, len(about) > 0, nil
+}
+
+// closeoutTicks is the epic's close-out ticks, closed ones included.
+func (r *Reconciler) closeoutTicks(ctx context.Context) ([]string, error) {
+	graph, err := r.graphWithClosed(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read the epic graph of %s for its close-out: %w", r.opts.EpicID, err)
 	}
 	var closeouts []string
 	for _, wave := range graph.Waves {
@@ -480,14 +857,191 @@ func (r *Reconciler) treeChangedSinceReview(ctx context.Context, decision runsta
 			}
 		}
 	}
-	// The base's head, for telling a fold from the epic's own merges. A base
-	// that cannot be read leaves every merge counted: the conservative side
-	// is a review, never a merge nobody judged.
-	baseHead := ""
-	if base := r.prBase(); base != "" && r.git.fetch(base) == nil {
-		baseHead, _ = r.git.remoteHead(base)
+	return closeouts, nil
+}
+
+// A fold of the base that changes what the epic is ABOUT is reviewed (epic
+// ilz, 2026-10-07).
+//
+// WHAT WAS WRONG. ilz wrote docs/claude-sub-operator.md, a guide to
+// cloudflare/src/claude-sub.ts. Main changed claude-sub.ts after ilz's READY
+// review, and the fold that brought it in was not reviewed — a fold of the
+// base is not the epic's work (treeChangedSinceReview) — so the run would have
+// landed a guide stale against the code it landed beside. The close-out's
+// retro found it (finding xe9, high), but a close-out's findings go to the
+// backlog: the land had nothing to wait on.
+//
+// THE RULE. A fold of the base between the tree the final review judged and
+// the branch's head is a change the review is owed when it brought in a path
+// the epic is ABOUT, mechanically:
+//
+//   - a path the epic's own diff touches: the epic branch against its merge
+//     base with the base, at the judged tree or at the head; or
+//   - a path the epic's acceptance criteria name, matched the way a blocking
+//     finding is matched to a folded path (namesPath).
+//
+// A fold that touches nothing of the epic stays unreviewed, as before. A round
+// such a fold buys is an ordinary round: its NOT READY, when every blocking
+// finding names a path the base brought in, is excused from the bound as the
+// base moving (baseDriftCaused). The backstop for a base that keeps changing
+// the epic's files is maxDriftReviewRounds again: once that many of the run's
+// rounds were bought by folds alone (foldReviewRounds), a fold buys no more,
+// and the land goes ahead on the latest verdict.
+//
+// It is asked wherever the tree-changed rule is, and at the land too: the
+// land's own fold comes after the last of those asks, so a readying whose fold
+// brought in what the epic is about stops — resumably, needing nobody
+// (RefusedLandFoldReview) — and the next incarnation reviews the folded tree
+// before it lands.
+
+// RefusedLandFoldReview is the readying's stop when its own fold brought in a
+// path the epic is about after a READY final review: the next incarnation
+// reviews the folded tree, and nobody has anything to decide.
+const RefusedLandFoldReview = "land_fold_review"
+
+// foldsTouchingEpic is the paths a fold of the base on the first-parent line
+// from `judged` to `head` brought in that the epic is about (the rule above),
+// sorted; nil when there are none, or once the backstop is reached.
+func (r *Reconciler) foldsTouchingEpic(ctx context.Context, judged, head, baseHead string,
+	closeouts []string) ([]string, error) {
+	if baseHead == "" {
+		return nil, nil
 	}
-	return head, r.changedOutsideBookkeeping(judged, head, baseHead, closeouts), nil
+	folded := r.foldedPaths(judged, head, baseHead)
+	if len(folded) == 0 {
+		return nil, nil
+	}
+	own := map[string]bool{}
+	for _, at := range []string{judged, head} {
+		for _, path := range r.epicDiffPaths(at, baseHead) {
+			own[path] = true
+		}
+	}
+	epic, err := r.tracker.Show(ctx, r.opts.EpicID)
+	if err != nil {
+		return nil, fmt.Errorf("read the epic %s for the paths its acceptance names: %w", r.opts.EpicID, err)
+	}
+	var about []string
+	for _, path := range folded {
+		if own[path] || namesPath(epic.AcceptanceCriteria, path) {
+			about = append(about, path)
+		}
+	}
+	if len(about) == 0 || r.foldReviewRounds(baseHead, closeouts) >= maxDriftReviewRounds {
+		return nil, nil
+	}
+	sort.Strings(about)
+	return about, nil
+}
+
+// epicDiffPaths is the paths outside the bookkeeping that the epic branch at
+// `at` changes against its merge base with the base.
+func (r *Reconciler) epicDiffPaths(at, baseHead string) []string {
+	mergeBase, err := r.git.run("", "merge-base", at, baseHead)
+	if err != nil || strings.TrimSpace(mergeBase) == "" {
+		return nil
+	}
+	out, err := r.git.run("", "diff", "--name-only", strings.TrimSpace(mergeBase), at)
+	if err != nil {
+		return nil
+	}
+	var paths []string
+	for _, path := range strings.Split(out, "\n") {
+		if path = strings.TrimSpace(path); path != "" && !underReviewBookkeeping(path) {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+// foldReviewRounds is how many of this run's review rounds were bought by
+// folds alone: rounds whose tree differs from the previous round's by
+// nothing but folds of the base, the close-out's merges and bookkeeping.
+func (r *Reconciler) foldReviewRounds(baseHead string, closeouts []string) int {
+	if r.store == nil {
+		return 0
+	}
+	decisions, err := r.store.Decisions()
+	if err != nil {
+		return 0
+	}
+	latest := map[string]runstate.Decision{}
+	for _, d := range decisions {
+		if d.Role != "review-epic" {
+			continue
+		}
+		tick, _ := d.Request["tick_id"].(string)
+		if prev, ok := latest[tick]; !ok || d.Decision > prev.Decision {
+			latest[tick] = d
+		}
+	}
+	ordered := make([]runstate.Decision, 0, len(latest))
+	for _, d := range latest {
+		ordered = append(ordered, d)
+	}
+	sort.Slice(ordered, func(i, j int) bool { return ordered[i].Decision < ordered[j].Decision })
+	n := 0
+	for i := 1; i < len(ordered); i++ {
+		from, _ := ordered[i-1].Request["source_sha"].(string)
+		to, _ := ordered[i].Request["source_sha"].(string)
+		if strings.TrimSpace(from) == "" || strings.TrimSpace(to) == "" || from == to {
+			continue
+		}
+		if !r.changedOutsideBookkeeping(from, to, baseHead, closeouts) {
+			n++
+		}
+	}
+	return n
+}
+
+// landFoldOwesReview is the land's ask of the rule above, once its own fold
+// made `folded`: the refusal that stops the readying, resumably, when a READY
+// final review never judged what the fold brought in that the epic is about;
+// nil when the land may go on.
+func (r *Reconciler) landFoldOwesReview(ctx context.Context, tick, base, baseHead, folded string) (*Refusal,
+	error) {
+	rounds, err := r.readReviewRounds()
+	if err != nil || rounds.final == nil || reviewVerdictOf(rounds.final.Response) != subprocess.ReviewVerdictReady {
+		return nil, err
+	}
+	judged, _ := rounds.final.Request["source_sha"].(string)
+	if strings.TrimSpace(judged) == "" || judged == folded {
+		return nil, nil
+	}
+	closeouts, err := r.closeoutTicks(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// The fold may carry a base newer than the head the pass read: the base
+	// as origin has it now tells every fold apart.
+	if now := r.baseHeadForFolds(); now != "" {
+		baseHead = now
+	}
+	about, err := r.foldsTouchingEpic(ctx, judged, folded, baseHead, closeouts)
+	if err != nil || len(about) == 0 {
+		return nil, err
+	}
+	return r.refuse(RefusedLandFoldReview, tick,
+		"the run does not merge the epic %s yet: the fold of %s (at %s) into %s brought in %s, which the epic is "+
+			"about (its own diff or its acceptance names it), after its READY final review (decision %d%s) judged "+
+			"%s. The next incarnation reviews the folded tree before it lands; nobody has anything to decide",
+		r.opts.EpicID, base, short(baseHead), r.branch, strings.Join(about, ", "), rounds.final.Decision,
+		inheritedFrom(rounds), short(judged)), nil
+}
+
+// graphAller is a tracker that can list an epic's CLOSED tasks too: tk's
+// `graph --all` (tk.Client.GraphAll), which the durable tracker passes on.
+type graphAller interface {
+	GraphAll(ctx context.Context, epicID string) (tk.Graph, error)
+}
+
+// graphWithClosed is the epic's graph with its closed tasks where the
+// tracker can list them, and its graph as it answers otherwise.
+func (r *Reconciler) graphWithClosed(ctx context.Context) (tk.Graph, error) {
+	if all, ok := r.tracker.(graphAller); ok {
+		return all.GraphAll(ctx, r.opts.EpicID)
+	}
+	return r.tracker.Graph(ctx, r.opts.EpicID)
 }
 
 // changedOutsideBookkeeping is treeChangedSinceReview's history read: one git
@@ -515,18 +1069,7 @@ func (r *Reconciler) changedOutsideBookkeeping(from, to, baseHead string, closeo
 			continue
 		}
 		for _, path := range strings.Split(paths, "\n") {
-			path = strings.TrimSpace(path)
-			if path == "" {
-				continue
-			}
-			under := false
-			for _, prefix := range reviewBookkeepingPrefixes {
-				if strings.HasPrefix(path, prefix) {
-					under = true
-					break
-				}
-			}
-			if !under {
+			if path = strings.TrimSpace(path); path != "" && !underReviewBookkeeping(path) {
 				return true
 			}
 		}
@@ -595,7 +1138,7 @@ func (r *Reconciler) reviewOverChangedTree(ctx context.Context) (bool, error) {
 	switch reviewVerdictOf(rounds.final.Response) {
 	case subprocess.ReviewVerdictReady:
 	case subprocess.ReviewVerdictNotReady:
-		if rounds.rounds < maxReviewRounds {
+		if !rounds.spent() {
 			return false, nil
 		}
 	default:
@@ -609,17 +1152,80 @@ func (r *Reconciler) reviewOverChangedTree(ctx context.Context) (bool, error) {
 func (r *Reconciler) reviewIfTreeChanged(ctx context.Context, durable *durableTracker, rounds reviewRounds) (bool, error) {
 	final := *rounds.final
 	reviewed, _ := final.Request["tick_id"].(string)
-	head, changed, err := r.treeChangedSinceReview(ctx, final)
+	head, folded, changed, err := r.treeChangedSinceReview(ctx, final)
 	if err != nil || !changed {
 		return false, err
 	}
+	// A run with no close-out of its own has nothing to land the new review's
+	// READY with (epic ilz: the close-out was an earlier run's), so the
+	// epic's closed close-out is reopened behind the review. Asked before the
+	// step, because the step holds the store's writes.
+	co, err := r.closeoutForLanding()
+	if err != nil {
+		return false, err
+	}
+	reopen := co == nil
 	acted := false
 	err = r.heldStep(func() error {
 		var stepErr error
-		acted, stepErr = r.placeChangedTreeReview(ctx, durable, rounds, final, reviewed, head)
+		acted, stepErr = r.placeChangedTreeReview(ctx, durable, rounds, final, reviewed, head, folded, reopen)
 		return stepErr
 	})
 	return acted, err
+}
+
+// closeoutBehindReview places the epic's close-out behind a review the run
+// just placed: the open one, or — when reopen is set and the close-out is
+// closed — the closed one, reopened first, so the land runs a close-out of
+// this run's own after the review's verdict. It answers the close-out placed,
+// "" when there is none.
+func (r *Reconciler) closeoutBehindReview(ctx context.Context, durable *durableTracker, open, review string,
+	reopen bool) (string, error) {
+	closeout := open
+	if closeout == "" && reopen {
+		closed, err := r.closedCloseout(ctx)
+		if err != nil {
+			return "", err
+		}
+		if closed != "" {
+			if _, err := durable.Reopen(ctx, closed); err != nil {
+				return "", fmt.Errorf("reopen the close-out %s behind the review %s: %w", closed, review, err)
+			}
+			note := fmt.Sprintf("ticfac run %s: reopened behind the review %s — the epic %s is reviewed again over "+
+				"a tree that changed since its final review, and this run has no close-out of its own to land the "+
+				"new verdict with (the one that closed was an earlier run's), so the close-out runs again after it.",
+				r.runID, review, r.opts.EpicID)
+			if _, err := r.tracker.Note(ctx, closed, note); err != nil {
+				return "", fmt.Errorf("note the reopening of %s: %w", closed, err)
+			}
+			closeout = closed
+		}
+	}
+	if closeout == "" {
+		return "", nil
+	}
+	if err := durable.BlockOn(ctx, closeout, review); err != nil {
+		return "", fmt.Errorf("place the close-out %s behind the re-review %s: %w", closeout, review, err)
+	}
+	return closeout, nil
+}
+
+// closedCloseout is the epic's closed close-out tick, "" when it has none:
+// read off the graph with its closed tasks (graphWithClosed), since `tk graph`
+// alone lists the open ones.
+func (r *Reconciler) closedCloseout(ctx context.Context) (string, error) {
+	graph, err := r.graphWithClosed(ctx)
+	if err != nil {
+		return "", fmt.Errorf("read the epic graph of %s for its close-out: %w", r.opts.EpicID, err)
+	}
+	for _, wave := range graph.Waves {
+		for _, task := range wave.Tasks {
+			if task.Role == "closeout" && task.Status == "closed" {
+				return task.ID, nil
+			}
+		}
+	}
+	return "", nil
 }
 
 // placeChangedTreeReview is the held step of a review over a changed tree:
@@ -627,26 +1233,30 @@ func (r *Reconciler) reviewIfTreeChanged(ctx context.Context, durable *durableTr
 // when an earlier incarnation already made it), behind every open work tick
 // of the epic, and placed before the close-out when that is still open.
 func (r *Reconciler) placeChangedTreeReview(ctx context.Context, durable *durableTracker, rounds reviewRounds,
-	final runstate.Decision, reviewed, head string) (bool, error) {
+	final runstate.Decision, reviewed, head string, folded []string, reopen bool) (bool, error) {
 	judged, _ := final.Request["source_sha"].(string)
+	saw := "with work that review never saw (a commit closed or pushed since, a person's fix among them perhaps)"
+	if len(folded) > 0 {
+		saw = foldedAboutEpic(folded)
+	}
 	rereview, closeout, err := r.openReReview(ctx, reviewed)
 	if err != nil {
 		return false, err
 	}
 	round := rounds.rounds + 1
 	if reviewVerdictOf(final.Response) == subprocess.ReviewVerdictReady {
-		return r.placeReviewAfterReady(ctx, durable, final, reviewed, judged, head, rereview, closeout, round)
+		return r.placeReviewAfterReady(ctx, durable, final, reviewed, judged, head, folded, rereview, closeout, round,
+			reopen)
 	}
 	if rereview == "" {
 		description := fmt.Sprintf(
 			"Review the epic %s again, AS INTEGRATED: its final review (%s, decision %d) judged it NOT READY at "+
 				"%s, after the %d review rounds the run makes by itself, and the epic branch has changed since — "+
-				"now at %s, with work that review never saw (a commit closed or pushed since, a person's fix among "+
-				"them perhaps). This is review round %d, and it is made only because the tree changed.\n\nThat "+
+				"now at %s, %s. This is review round %d, and it is made only because the tree changed.\n\nThat "+
 				"review's reasons: %s.\n\nJudge the tree as it stands: READY when the epic does what it said it "+
 				"would, NOT READY naming what still blocks it. A NOT READY here holds for a person with your "+
 				"reasons unless the tree changes again.",
-			r.opts.EpicID, reviewed, final.Decision, short(judged), maxReviewRounds, short(head), round,
+			r.opts.EpicID, reviewed, final.Decision, short(judged), maxReviewRounds, short(head), saw, round,
 			notReadyReasons(final))
 		rereview, err = r.createReReview(ctx, durable,
 			fmt.Sprintf("Re-review %s: its tree changed since its NOT READY final review (round %d)", r.opts.EpicID,
@@ -658,17 +1268,16 @@ func (r *Reconciler) placeChangedTreeReview(ctx context.Context, durable *durabl
 	if err := r.placeBehindOpenWork(ctx, durable, rereview, reviewed); err != nil {
 		return false, err
 	}
-	if closeout != "" {
-		if err := durable.BlockOn(ctx, closeout, rereview); err != nil {
-			return false, fmt.Errorf("place the close-out %s behind the re-review %s: %w", closeout, rereview, err)
-		}
+	if _, err := r.closeoutBehindReview(ctx, durable, closeout, rereview, reopen); err != nil {
+		return false, err
 	}
 	r.record(reviewed, StageReviewRound,
-		"the final review (decision %d) judged %s NOT READY — %s — after %d review round(s), the bound being %d; "+
+		"the final review (decision %d%s) judged %s NOT READY — %s — after %d review round(s), the bound being %d; "+
 			"but the epic branch changed since the tree it judged (%s, now %s) with more than run state and "+
 			"tracker records, so the review it holds on is about a tree that no longer exists. The run reviews "+
 			"the tree as it stands: %s (round %d). Nothing is absorbed past the bound",
-		final.Decision, r.opts.EpicID, notReadyReasons(final), rounds.rounds, maxReviewRounds, short(judged),
+		final.Decision, inheritedFrom(rounds), r.opts.EpicID, notReadyReasons(final), rounds.rounds, maxReviewRounds,
+		short(judged),
 		short(head), rereview, round)
 	return true, nil
 }
@@ -676,15 +1285,20 @@ func (r *Reconciler) placeChangedTreeReview(ctx context.Context, durable *durabl
 // placeReviewAfterReady is placeChangedTreeReview for a READY final review:
 // the review the land waits on.
 func (r *Reconciler) placeReviewAfterReady(ctx context.Context, durable *durableTracker, final runstate.Decision,
-	reviewed, judged, head, rereview, closeout string, round int) (bool, error) {
+	reviewed, judged, head string, folded []string, rereview, closeout string, round int, reopen bool) (bool, error) {
+	saw := "with work that review never saw (a tick closed or a commit pushed after it)"
+	changed := "with more than run state, tracker records and the close-out's merge"
+	if len(folded) > 0 {
+		saw, changed = foldedAboutEpic(folded), foldedAboutEpic(folded)
+	}
 	if rereview == "" {
 		description := fmt.Sprintf(
 			"Review the epic %s again, AS INTEGRATED, before the run lands it: its final review (%s, decision %d) "+
-				"judged it READY at %s, and the epic branch has changed since — now at %s, with work that review "+
-				"never saw (a tick closed or a commit pushed after it). This is review round %d, made only because "+
+				"judged it READY at %s, and the epic branch has changed since — now at %s, %s. This is review "+
+				"round %d, made only because "+
 				"the tree changed; the run lands on YOUR verdict, not the earlier one.\n\nJudge the tree as it "+
 				"stands: READY when the epic does what it said it would, NOT READY naming what blocks it.",
-			r.opts.EpicID, reviewed, final.Decision, short(judged), short(head), round)
+			r.opts.EpicID, reviewed, final.Decision, short(judged), short(head), saw, round)
 		var err error
 		rereview, err = r.createReReview(ctx, durable,
 			fmt.Sprintf("Re-review %s: its tree changed since its READY final review (round %d)", r.opts.EpicID, round),
@@ -696,17 +1310,23 @@ func (r *Reconciler) placeReviewAfterReady(ctx context.Context, durable *durable
 	if err := r.placeBehindOpenWork(ctx, durable, rereview, reviewed); err != nil {
 		return false, err
 	}
-	if closeout != "" {
-		if err := durable.BlockOn(ctx, closeout, rereview); err != nil {
-			return false, fmt.Errorf("place the close-out %s behind the re-review %s: %w", closeout, rereview, err)
-		}
+	if _, err := r.closeoutBehindReview(ctx, durable, closeout, rereview, reopen); err != nil {
+		return false, err
 	}
 	r.record(reviewed, StageReviewRound,
 		"the final review (decision %d) judged %s READY, but the epic branch changed since the tree it judged (%s, "+
-			"now %s) with more than run state, tracker records and the close-out's merge: the READY is about a tree "+
-			"that no longer exists, so the run reviews the tree as it stands before it lands — %s (round %d)",
-		final.Decision, r.opts.EpicID, short(judged), short(head), rereview, round)
+			"now %s) %s: the READY is about a tree that no longer exists, so the run reviews the tree as it stands "+
+			"before it lands — %s (round %d)",
+		final.Decision, r.opts.EpicID, short(judged), short(head), changed, rereview, round)
 	return true, nil
+}
+
+// foldedAboutEpic says what a fold the epic is about brought in, for a
+// re-review's description and record.
+func foldedAboutEpic(paths []string) string {
+	return fmt.Sprintf("with a fold of the base that brought in %s, which the epic is about (its own diff "+
+		"touches it, or its acceptance names it), so the epic is judged against the base as it now is",
+		strings.Join(paths, ", "))
 }
 
 // placeBehindOpenWork blocks a review on every open work tick of the epic —

@@ -1,0 +1,16 @@
+{
+  "id": "1y4",
+  "title": "A halted cloud orchestrator lingers ~10 min and the Workflow never sees it end",
+  "gloss": "halted orchestrator lingers",
+  "description": "Epic ilz, 2026-10-07: after supervision_halted the in-container orchestrator did not exit for ~10 minutes and no completion signal reached the Workflow, which stayed 'running' (parked on work:signal). PR #256 works around it (rerun supersedes a held run), but the root cause is open: find why the orchestrator process lingers after the halt line and why the Workflow does not end on it; make the Workflow end (or record held) promptly on the halt line even if the process lingers.",
+  "status": "closed",
+  "priority": 2,
+  "type": "bug",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "a halted cloud run's Workflow leaves running within a minute of the halt line; test reproduces the linger; make gate passes",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T09:58:00.005611Z",
+  "updated_at": "2026-10-07T10:13:02.569526Z",
+  "closed_at": "2026-10-07T10:13:02.569526Z",
+  "closed_reason": "Root cause: not a lingering process — the Workflow. run-epic posts the done door before its deferred cleanup, so the look the signal woke saw the process running and the watch fell back to the full cadence (up to 5 min); a stop that then tripped slept the full 5-min grace on an already-exited process. Fix: settle window (RUN_DONE_SETTLE_MS, 30s, 10s looks) after an outcome-bearing done signal, then kill and conclude as the reported exit (halt stays a halt); no stop grace for an exited process; status push bounded to 20s."
+}
