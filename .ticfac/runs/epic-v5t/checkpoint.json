@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 13,
-  "state": "collecting",
-  "reason": "collecting tda attempt 2",
-  "updated_at": "2026-10-07T00:56:12Z",
+  "sequence": 14,
+  "state": "dispatching",
+  "reason": "dispatching tda as attempt 3",
+  "updated_at": "2026-10-07T00:57:28Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "tda",
-      "state": "dispatched",
+      "state": "ready",
       "attempt": 2
     },
     {
