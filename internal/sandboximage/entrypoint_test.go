@@ -352,6 +352,33 @@ func (f *fixture) command() *exec.Cmd {
 	return cmd
 }
 
+// runWithArgs runs the entrypoint with arguments — the hosted review's
+// --boot/--finish halves are the only arguments it takes.
+func (f *fixture) runWithArgs(args ...string) (string, int) {
+	f.t.Helper()
+	script, err := Path(EntrypointScript)
+	if err != nil {
+		f.t.Fatalf("locating %s: %v", EntrypointScript, err)
+	}
+	cmd := exec.Command("bash", append([]string{script}, args...)...)
+	cmd.Dir = f.root
+	env := []string{}
+	for k, v := range f.env {
+		env = append(env, k+"="+v)
+	}
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	code := 0
+	if err != nil {
+		exit, ok := err.(*exec.ExitError)
+		if !ok {
+			f.t.Fatalf("running the entrypoint: %v\n%s", err, out)
+		}
+		code = exit.ExitCode()
+	}
+	return string(out), code
+}
+
 func (f *fixture) run() (string, int) {
 	f.t.Helper()
 	out, err := f.command().CombinedOutput()

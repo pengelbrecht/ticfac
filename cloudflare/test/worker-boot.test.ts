@@ -3,7 +3,14 @@ import contract from "../../contracts/worker-boot-contract.json";
 import {
   attemptLandingBranch,
   ORCHESTRATOR_COMMAND,
+  REVIEW_BOOT_ARG,
+  REVIEW_BOOT_COMMAND,
+  REVIEW_BOOT_MARKER,
+  REVIEW_BOOT_PROMPT_BEGIN,
+  REVIEW_BOOT_PROMPT_END,
   REVIEW_DEFAULT_HARNESS,
+  REVIEW_FINISH_ARG,
+  REVIEW_FINISH_COMMAND,
   reviewHarness,
   WORKER_ACTOR,
   WORKER_BOOT_ARG,
@@ -87,6 +94,19 @@ describe("the worker boot contract", () => {
     // reason as the phases above.
     expect(WORKER_SETUP_ARG).toBe(contract.setup_arg);
     expect(WORKER_SETUP_COMMAND).toBe(contract.setup_command);
+    // The review's own halves (tick 8gd): the PR-review job's conversation is
+    // hosted on the run's WorkerAgent like every worker's, and the review
+    // container runs the orchestrator image's --boot/--finish instead. The
+    // spellings are the contract's, for the same reason as every reader
+    // above: a host that invents its own second spelling drifts the way the
+    // probe marker once nearly did.
+    expect(REVIEW_BOOT_ARG).toBe(contract.review_boot_arg);
+    expect(REVIEW_BOOT_COMMAND).toBe(contract.review_boot_command);
+    expect(REVIEW_BOOT_MARKER).toBe(contract.review_boot_marker);
+    expect(REVIEW_BOOT_PROMPT_BEGIN).toBe(contract.review_boot_prompt_begin);
+    expect(REVIEW_BOOT_PROMPT_END).toBe(contract.review_boot_prompt_end);
+    expect(REVIEW_FINISH_ARG).toBe(contract.review_finish_arg);
+    expect(REVIEW_FINISH_COMMAND).toBe(contract.review_finish_command);
     expect(WORKER_ACTOR).toBe(contract.worker_actor);
     expect(WORKER_BRANCH_PREFIX).toBe(contract.branch_prefix);
     // The boundary guard's two strings (tick dxk). The refusal is the
@@ -272,16 +292,19 @@ describe("the boot environment", () => {
     });
   });
 
-  // The review's own floor (epic 43y, tick jhp): the review is the one cloud
-  // boot that still runs a CLI harness in its container, and the pi CLI is
-  // deleted — so an unset ladder must fall to omp, the CLI that reaches the
-  // review's Workers AI route, never to the worker ladder's hosted kind (a
-  // review container would refuse pi-durable at boot) and never to a
-  // harness the image no longer ships.
+  // The review's ladder (epic 43y, tick jhp; hosted since tick 8gd): on a
+  // deployment that hosts NO conversations, the review is the one cloud boot
+  // that still runs a CLI harness in its container — the pi CLI is deleted,
+  // so an unset ladder must fall to omp, the CLI that reaches the review's
+  // Workers AI route, never to the worker ladder's hosted kind (which only a
+  // hosting deployment can serve) and never to a harness the image no
+  // longer ships. With hosting, the hosted kind IS servable: an explicit
+  // pi-durable rung is honored and the floor is the hosted kind too.
   describe("the review's own harness floor (epic 43y, tick jhp)", () => {
-    it("falls to omp, and never to the worker ladder's hosted kind", () => {
+    it("falls to omp on a deployment that hosts nothing, and never to the hosted kind", () => {
       expect(REVIEW_DEFAULT_HARNESS).toBe("omp");
       expect(reviewHarness(null, null)).toBe("omp");
+      expect(reviewHarness(null, null, false)).toBe("omp");
       // The run and deployment rungs still outrank it, spelled exactly as
       // the worker ladder's do.
       expect(reviewHarness("codex", null)).toBe("codex");
@@ -289,16 +312,32 @@ describe("the boot environment", () => {
       expect(reviewHarness("   ", "omp")).toBe("omp");
     });
 
-    it("passes over a rung naming the hosted kind or the deleted pi CLI", () => {
-      // What production actually hands it: the run's profile runner ("pi"
-      // until the cloud profiles flip, "pi-durable" after) and the
-      // deployment's RUN_WORKER_HARNESS, which wrangler.toml pins to
-      // pi-durable. A review container refuses both at boot, so neither is
-      // a review harness — the next rung, or the floor, is.
-      expect(reviewHarness("pi", "pi-durable")).toBe("omp");
-      expect(reviewHarness("pi-durable", "pi-durable")).toBe("omp");
-      expect(reviewHarness("pi-durable", "claude")).toBe("claude");
+    it("passes over a rung naming the deleted pi CLI wherever it sits", () => {
+      // A stale profile or rung can still name the deleted CLI ("pi");
+      // no container in the image can run it, so it is passed over —
+      // the next rung, or the floor.
+      expect(reviewHarness("pi", null)).toBe("omp");
+      expect(reviewHarness("pi", "pi-durable", true)).toBe("pi-durable");
       expect(reviewHarness(" pi ", null)).toBe("omp");
+    });
+
+    it("serves the hosted kind only where conversations are hosted (tick 8gd)", () => {
+      // An explicit hosted rung is honored on a hosting deployment...
+      expect(reviewHarness("pi-durable", null, true)).toBe("pi-durable");
+      expect(reviewHarness(null, "pi-durable", true)).toBe("pi-durable");
+      // ...and what production actually hands it: nothing pinned on the
+      // run, RUN_WORKER_HARNESS pinned pi-durable on the deployment, hosts
+      // true — the hosted kind, like every other cloud boot.
+      expect(reviewHarness(null, "pi-durable", true)).toBe("pi-durable");
+      // ...and with nothing pinned at all, the floor IS the hosted kind
+      // there: the review routes like every other worker.
+      expect(reviewHarness(null, null, true)).toBe("pi-durable");
+      // While a deployment that hosts nothing falls back to the CLI floor
+      // even for an explicit hosted rung — a container would refuse it.
+      expect(reviewHarness("pi-durable", "pi-durable")).toBe("omp");
+      expect(reviewHarness("pi-durable", "pi-durable", false)).toBe("omp");
+      // A CLI rung outranks the hosted floor wherever the deployment hosts.
+      expect(reviewHarness(null, "claude", true)).toBe("claude");
     });
   });
 

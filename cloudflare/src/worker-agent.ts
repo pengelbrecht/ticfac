@@ -93,6 +93,11 @@ import {
 import type { SandboxOutput } from "./sandbox";
 import { isSandboxNamespace, type SdkSandboxDoor, sdkBootOptions, sdkSandboxDoor } from "./sandbox";
 import {
+  REVIEW_BOOT_COMMAND,
+  REVIEW_BOOT_MARKER,
+  REVIEW_BOOT_PROMPT_BEGIN,
+  REVIEW_BOOT_PROMPT_END,
+  REVIEW_FINISH_COMMAND,
   WORKER_BOOT_COMMAND,
   WORKER_BOOT_MARKER,
   WORKER_BOOT_PROMPT_BEGIN,
@@ -572,6 +577,11 @@ export class WorkerAgent extends DurableObject<Env> {
           "SANDBOXES_V1 (a run on the do_v1 substrate) or SANDBOXES (one on sdk0)",
       );
     }
+    // The container half of the contract follows the attempt's kind (tick
+    // 8gd): a worker boots and finishes through ticks-worker, a review
+    // through ticks-orchestrator's review halves -- each side's own pinned
+    // markers, one contract file (contracts/worker-boot-contract.json).
+    const review = (spec.kind ?? "worker") === "review";
     this.host = new WorkerAttemptHost({
       door,
       storage: () => openDurableObjectStorage(this.ctx.storage),
@@ -582,12 +592,15 @@ export class WorkerAgent extends DurableObject<Env> {
       },
       log: (text) => this.appendLog(text),
       protocol: {
-        bootCommand: WORKER_BOOT_COMMAND,
-        finishCommand: WORKER_FINISH_COMMAND,
+        bootCommand: review ? REVIEW_BOOT_COMMAND : WORKER_BOOT_COMMAND,
+        finishCommand: review ? REVIEW_FINISH_COMMAND : WORKER_FINISH_COMMAND,
+        // A review restores no workspace, so it never runs the setup entry;
+        // the field is required by the protocol's shape, so the worker's
+        // command stands in, never called for a review.
         setupCommand: WORKER_SETUP_COMMAND,
-        bootMarker: WORKER_BOOT_MARKER,
-        promptBegin: WORKER_BOOT_PROMPT_BEGIN,
-        promptEnd: WORKER_BOOT_PROMPT_END,
+        bootMarker: review ? REVIEW_BOOT_MARKER : WORKER_BOOT_MARKER,
+        promptBegin: review ? REVIEW_BOOT_PROMPT_BEGIN : WORKER_BOOT_PROMPT_BEGIN,
+        promptEnd: review ? REVIEW_BOOT_PROMPT_END : WORKER_BOOT_PROMPT_END,
       },
       ...(seams?.pollMs === undefined ? {} : { pollMs: seams.pollMs, bashPollMs: seams.pollMs }),
       onReport: (error) => {

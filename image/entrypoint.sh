@@ -127,6 +127,19 @@ git_identity_email="ticks-orchestrator@ticks.invalid"
 # durable thing a read-only run produces — does not exist.
 readonly EXIT_REVIEW=12
 
+# The review's own boot/finish halves (tick 8gd), pinned in
+# contracts/worker-boot-contract.json beside the worker's: a review whose
+# conversation is HOSTED on the run's WorkerAgent (epic ex6 — the same shape
+# epic 43y gave the workers) runs `--boot` here to set up and hand off the
+# prompt, and `--finish` afterwards to post the findings file. The markers are
+# the review's own so a reader can tell a review handoff from a worker's; the
+# marker line carries the same two fields the worker's carries, spelled for
+# what they mean here: branch= is the ref that was reviewed, result= the
+# findings path the finish posts.
+readonly REVIEW_BOOT_MARKER="ticks-review-boot-ok"
+readonly REVIEW_BOOT_PROMPT_BEGIN="ticks-review-boot-prompt-begin"
+readonly REVIEW_BOOT_PROMPT_END="ticks-review-boot-prompt-end"
+
 require_inputs() {
 	require_common_inputs
 	# An unknown phase is a control-plane bug, and a control-plane bug must not
@@ -575,6 +588,36 @@ PROMPT
 	esac
 }
 
+# The hosted review's finish half (tick 8gd): post the findings the
+# conversation wrote, and exit with the post's own status. It needs the
+# inputs (the same review facts the boot was given) and the checkout the boot
+# left — nothing else: no clone, no probes, no harness. A findings file that
+# is not there is the finish failing with EXIT_REVIEW, and that is the honest
+# answer: the conversation wrote nothing durable (its file lives in this
+# container's /tmp), so this run produced nothing and the review can be
+# requested again.
+finish_review_phase() {
+	require_inputs
+	[[ -d $workdir ]] ||
+		die $EXIT_CLONE "no checkout at ${workdir} — the finish phase runs after a boot in the same container, and this one booted elsewhere or not at all"
+	local status=0
+	say "posting the findings of the review of pull request #${review_pr}"
+	post_review_findings || status=$?
+	exit "$status"
+}
+
+# The hosted review's boot half (tick 8gd): the handoff. The prompt the host
+# submits to the conversation follows the marker between the review's own
+# prompt markers, whole and verbatim — the same shape the worker boot hands
+# its host, with the review's own markers and fields (the ref that was
+# reviewed, the findings path the finish posts).
+print_review_handoff() {
+	say "${REVIEW_BOOT_MARKER} branch=${review_ref} result=${review_output}"
+	printf '%s\n' "$REVIEW_BOOT_PROMPT_BEGIN"
+	harness_prompt
+	printf '%s\n' "$REVIEW_BOOT_PROMPT_END"
+}
+
 start_harness() {
 	# The run's control plane, not the machine's: a gate's command and a test
 	# binary never inherit these (internal/runenv names the list, and its test
@@ -727,8 +770,42 @@ feed_note_exit() {
 }
 
 main() {
+	local arg="${1:-}"
+	case "$arg" in
+	"")
+		# A hosted review with no argument would fall through to a CLI harness
+		# it does not have (the empty-cmd trap): refused here, before any boot
+		# work pays for it.
+		if [[ $phase == "review" && $harness == "pi-durable" ]]; then
+			die $EXIT_CONFIG "the pi-durable harness is hosted, not a CLI in this container — a review dispatched on it runs --boot here while its conversation runs in the factory's WorkerAgent, and --finish posts what the conversation wrote; there is no CLI harness to run all-in-one (epic 43y, tick jhp; epic ex6, tick 8gd)"
+		fi
+		;;
+	--boot | --finish) ;;
+	*)
+		die $EXIT_CONFIG "unknown argument '${arg}' — this entrypoint takes an optional --boot or --finish, the hosted review's two halves (the review boot contract); a bare boot runs its job all-in-one"
+		;;
+esac
 	say "run ${run_id}: epic ${epic} at ${base_sha} (harness ${harness}, phase ${phase})$(trace_note)"
 	trap feed_note_exit EXIT
+	# The two halves are the HOSTED review's (tick 8gd): the conversation runs
+	# in the factory's WorkerAgent, and these are the only commands the host
+	# ever runs in this container. Each is checked here, before any real work,
+	# so a routing mistake stops at the door with the config class instead of
+	# half-running a job it was never meant to run.
+	case "$arg" in
+	--boot)
+		[[ $phase == "review" ]] ||
+			die $EXIT_CONFIG "--boot is the hosted review's boot half; this boot is phase ${phase}"
+		[[ $harness == "pi-durable" ]] ||
+			die $EXIT_CONFIG "--boot is the hosted review's boot half; this review runs the '${harness}' CLI harness all-in-one, which needs no handoff"
+		;;
+	--finish)
+		[[ $phase == "review" ]] ||
+			die $EXIT_CONFIG "--finish is the hosted review's finish half; this boot is phase ${phase}"
+		finish_review_phase
+		return
+		;;
+	esac
 	boot_step="checking its inputs"
 	require_inputs
 	require_gateway
@@ -773,11 +850,18 @@ main() {
 	fi
 	select_model_route
 	probe_model
-	# The gateway answers. Now prove THIS harness can reach it: the credential
-	# it reads, the provider it names, and one real round-trip through both.
-	select_harness_route
-	configure_harness_provider
-	probe_harness
+	if [[ $phase == "review" && $harness == "pi-durable" ]]; then
+		# The hosted review (tick 8gd): its conversation runs in the factory's
+		# WorkerAgent on the gateway route this boot just proved from inside the
+		# container — the same reasoning worker.sh's boot phase applies, and the
+		# reason the image can carry no CLI for the hosted kind at all. There is
+		# no provider to configure and no CLI to prove a round-trip through.
+		say "harness pi-durable is hosted: no CLI harness to route or probe in this container; the conversation runs in the factory's WorkerAgent"
+	else
+		select_harness_route
+		configure_harness_provider
+		probe_harness
+	fi
 	feed_note container "probes green: model ${model:-?} via ${model_provider:-?}, harness ${harness}"
 	# Everything below this line exists so a container can BUILD and TEST the
 	# repository, and a review does neither: it reads a diff and writes prose.
@@ -788,6 +872,15 @@ main() {
 	# command runs at all, so there is nothing for a hostile change to a
 	# tracked config file to reach.
 	if [[ $phase == "review" ]]; then
+		if [[ $harness == "pi-durable" ]]; then
+			# The hosted review's boot half (tick 8gd): the handoff, then the
+			# conversation owns the rest. The host runs --finish when it settles,
+			# and that is what posts the findings. Reaching here with the hosted
+			# kind means the top of main validated --boot; a bare boot was
+			# refused before any of this work.
+			print_review_handoff
+			return
+		fi
 		start_harness
 		return
 	fi
