@@ -1,7 +1,7 @@
 {
   "id": "9uc",
   "title": "Close out claude-sub per epic: retro, then the next feasible epic",
-  "notes": "2026-10-07 05:53 - ticfac run epic-v5t: 9uc try 1 (run dispatch #10) reported a finding the run itself decided — proposed-tick \"Next epic: claude-sub's first live cloud run, post-merge proof of v5t [A1]\" (key bff9784462c61271de907efa2ddf20b78156d29a38d84f9ea66214ffdce63e9e, severity medium, for this repository) is promoted to a backlog tick with an owner, osf; the decision record is on the run branch at .ticfac/runs/epic-v5t/absorptions/bff9784462c61271de907efa2ddf20b78156d29a38d84f9ea66214ffdce63e9e.json, and the draft is triaged as promoted.",
+  "notes": "2026-10-07 05:53 - ticfac run epic-v5t: 9uc try 1 (run dispatch #10) reported a finding the run itself decided — proposed-tick \"Next epic: claude-sub's first live cloud run, post-merge proof of v5t [A1]\" (key bff9784462c61271de907efa2ddf20b78156d29a38d84f9ea66214ffdce63e9e, severity medium, for this repository) is promoted to a backlog tick with an owner, osf; the decision record is on the run branch at .ticfac/runs/epic-v5t/absorptions/bff9784462c61271de907efa2ddf20b78156d29a38d84f9ea66214ffdce63e9e.json, and the draft is triaged as promoted.\n2026-10-07 05:54 - ticfac run epic-v5t: 9uc try 1 (run dispatch #10) reported a finding the run itself decided — proposed-tick \"Fold a NOT READY review's blocking findings that share a seam into one tick\" (key 2a6753969b52c91b8e0b9841ae33c20ef53b26515a28c0d5f9046a4091952c60, severity medium, for this repository) is promoted to a backlog tick with an owner, 8ja; the decision record is on the run branch at .ticfac/runs/epic-v5t/absorptions/2a6753969b52c91b8e0b9841ae33c20ef53b26515a28c0d5f9046a4091952c60.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -14,6 +14,6 @@
   "role": "closeout",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-06T17:13:35.995598Z",
-  "updated_at": "2026-10-07T03:53:47.368896Z",
+  "updated_at": "2026-10-07T03:54:15.782483Z",
   "started_at": "2026-10-07T03:47:35.493423Z"
 }
