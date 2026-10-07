@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 83,
-  "state": "running",
-  "reason": "gzw is closed",
-  "updated_at": "2026-10-07T17:34:56Z",
+  "sequence": 84,
+  "state": "dispatching",
+  "reason": "dispatching m1w as attempt 17",
+  "updated_at": "2026-10-07T17:35:10Z",
   "ticks": [
     {
       "tick_id": "2p3",
