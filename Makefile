@@ -91,6 +91,22 @@ test-race:
 gate:
 	gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.useConfigOnly GIT_CONFIG_VALUE_0=true go test -short -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
 
+# The touched half of the Go gate (tick r1f): the FULL — non-short — suites
+# of the Go packages whose files the gated tick changed, plus every package
+# whose code or tests import them. The recipe is byte-identical to the
+# declared gate's `go-touched` command (.tick/runners.toml), as `gate` is
+# to `go`: this is what a person runs, that is what the integrated gate
+# runs, and TestTheGateTargetMatchesTheDeclaredGate holds the two together.
+#
+# Without a gate above it the command diffs the working branch against
+# origin/main — so `make gate gate-touched` before a push runs the same two
+# halves over your branch that the per-tick gate will run over its merge.
+# The reconciler exports the pair a TICK's gate is about
+# (TICFAC_GATE_TOUCHED_BASE/HEAD, internal/reconcile/gate_touched.go); the
+# selection is internal/gatescope's.
+gate-touched:
+	go run ./cmd/gate-touched -timeout 45m -parallel 12
+
 # The TypeScript half of the gate (tick odc). Kept as its own target, and its
 # own [testing.commands] entry, so each check records its own evidence and a
 # reader can see which half refused a tick.

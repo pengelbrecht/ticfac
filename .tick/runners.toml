@@ -189,6 +189,57 @@ file = true
 # and useConfigOnly keeps the identity half honest.
 go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.useConfigOnly GIT_CONFIG_VALUE_0=true go test -short -timeout 45m -parallel 12 ./...", description = "Go: gofmt, vet and tests, as CI runs them" }
 
+# The touched half of the Go gate (tick r1f): the FULL — non-short — test
+# suites of the Go packages whose files the gated tick changed, plus every
+# package whose code or TESTS import them, transitively. The selection and
+# the rule live in internal/gatescope (cmd/gate-touched is the thin command);
+# the import graph is one `go list` invocation, so the reverse closure is as
+# cheap as the tick asked it to be.
+#
+# Why this is declared here and not built into the reconciler: the reconciler
+# is repo-neutral — it cannot know that a repository has Go packages at all.
+# What it exports is neutral and is this check's whole input: the two commits
+# whose three-dot diff is the tick's own change, TICFAC_GATE_TOUCHED_BASE
+# and TICFAC_GATE_TOUCHED_HEAD, both always present, empty when this gate
+# has no such diff (the close-out's fold, whose full suite is the CI the
+# close-out already waits for on the PR head). What a repository does with
+# that pair is the repository's own declaration, which is what this table
+# is. Run by a person with no gate above it, the command diffs the working
+# branch against origin/main — the same question for the tree a person is
+# about to push.
+#
+# What it is for: dz1's regression — a pinned-version change broke four
+# internal/reconcile end-to-end tests, the short suite skipped every one of
+# them, and the break surfaced at the epic's close-out in CI's full suite,
+# costing a repair and two ~30-minute CI cycles. The packages a tick's diff
+# reaches are exactly the ones whose behaviour that tick changed, and the
+# reverse-dep edge is the one dz1 rode in on: the tick touched internal/tk,
+# the tests that broke lived in internal/reconcile, which imports it.
+#
+# THE BOUND, decided and justified (the tick asked for one):
+#   - go test's own -timeout, 45m, PER PACKAGE BINARY — the whole-repo
+#     suite's number, for the Makefile's own stated reason: a loaded or
+#     slower host must fail on its own merits, never on go's 10m default.
+#   - The check's outer cap is the gate's existing harness bound (60m), the
+#     same one that bounds every declared check — including the short-suite
+#     half above, measured taking 37 minutes under someone else's load and
+#     still inside it. A second, smaller bound here would refuse exactly the
+#     slow-but-honest suite cy2 spent this epic defending; what bounds the
+#     WORK is the selection, not a clock: only the packages the tick's diff
+#     reaches run.
+#   - The worst selection on this repository is a tick that touches a
+#     foundational package (internal/gitbin, internal/shorttest), whose
+#     reverse closure is ~34 packages — measured [MEASURED-WORST] on this
+#     host, inside the harness bound; a typical tick's closure is ~10
+#     packages — measured [MEASURED-TYPICAL]. Those numbers are this epic's
+#     to shrink: they are the same suites [A1] halves.
+#   - Without -count=1, deliberately: a package among the selection whose
+#     inputs did not change — the re-gate over a repair that fixed the
+#     TypeScript half, say — answers from go's own test cache, which the mbv
+#     audit demonstrated is a true statement about this tree. That is what
+#     keeps a repair's re-gate from paying for the whole selection twice.
+go-touched = { command = "go run ./cmd/gate-touched -timeout 45m -parallel 12", description = "Go: the full (non-short) suites of the packages this tick touched, and of the packages that import them" }
+
 # The TypeScript half, added by tick odc. Until it, NOTHING ran cloud/factory's
 # tests — not this gate, not CI — and the cost of that silence was tick b9w: the
 # control plane sat pinned to contract bundle 3.0.0 against a 5.2.0 bundle,

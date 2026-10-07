@@ -7,11 +7,15 @@ and `make gate`. That is the bar to merge for most PRs: PR CI is advisory,
 not a required check, so you do not wait for it.
 
 **Exception: a PR that touches `internal/reconcile/` waits for its PR CI to be
-green before you merge it.** The full reconcile suite only runs in CI, and
+green before you merge it.** The full reconcile suite runs in CI, and since
+tick r1f also in the per-tick gate of any tick whose diff reaches it — the
 three merges that skipped it turned main red within two days (#225, #226,
-#233), blocking every other agent's deploy. Operator decision, 2026-10-06. Don't run the full `internal/reconcile`
+#233), blocking every other agent's deploy. Operator decision, 2026-10-06.
+Don't run the full `internal/reconcile`
 suite locally as a matter of course: it takes 20-30 minutes and this host is
-shared with live runs and other agents. Run heavy local commands at low
+shared with live runs and other agents — and the run's own gates now pay for
+it where the tick's diff says it must, so a person rarely needs to. Run heavy
+local commands at low
 priority (GOTEST_PARALLEL=4, GOFLAGS=-p=2).
 
 ## What CI runs, and where it must be green
@@ -43,7 +47,11 @@ obvious.
 ## Before you push: run `make gate`, not just your package
 
 `make gate` is gofmt, `go vet ./...` and the short suite across the whole
-repository: exactly what a ticfac run's per-tick gate runs. A package-scoped
+repository — the short half of what a ticfac run's per-tick gate runs. The
+other Go half (tick r1f) is `make gate-touched`: the FULL, non-short suites
+of the packages your branch's diff touches, plus the packages that import
+them, so `make gate gate-touched` before a push runs over your branch the
+two halves the per-tick gate will run over its merge. A package-scoped
 `go test ./internal/reconcile/` is not enough. Some tests guard the repository
 rather than a package, and they only run in a whole-repo pass. The one that
 catches people is `internal/shorttest`: every end-to-end test must call

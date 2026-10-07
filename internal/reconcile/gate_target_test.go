@@ -45,8 +45,9 @@ func TestTheGateTargetMatchesTheDeclaredGate(t *testing.T) {
 	// how cloud/factory's suite came to be unrun for two major bundle versions
 	// (ticks odc and b9w).
 	targets := map[string]string{
-		"go": "gate",
-		"ts": "ts-gate",
+		"go":         "gate",
+		"go-touched": "gate-touched",
+		"ts":         "ts-gate",
 	}
 	if len(declared) != len(targets) {
 		t.Fatalf("this repository declares %d gate command(s) and this test knows %d: add the new one to "+
