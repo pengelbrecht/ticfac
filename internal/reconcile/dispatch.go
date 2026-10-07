@@ -1635,9 +1635,10 @@ func (r *Reconciler) rejectDurably(marker attemptHandle, verdict, message string
 	return err
 }
 
-// recordCollectVerdict makes the ready-to-merge verdict of this collect
-// durable in the run's own records, on origin, BEFORE the attempt's worker is
-// released (tick o3q).
+// recordCollectVerdict is the collect's own checkpoint, written at the
+// ruling: it states the run's state (collecting) and, in its reason, the
+// verdict this collect ruled for the attempt — durable on origin BEFORE the
+// attempt's worker is released (tick o3q).
 //
 // The release is a Cancel, and a reported worker that is still running past
 // its grace is stopped and durably cancelled by it (#141) — the run's own
@@ -1645,11 +1646,12 @@ func (r *Reconciler) rejectDurably(marker attemptHandle, verdict, message string
 // `ready-to-merge`. Rejections have always had their verdict recorded
 // (rejectDurably, read back by disposition); the positive verdict had none,
 // so a restart re-collected the attempt and took the executor's word for it
-// again. Recorded here, the verdict is what a resume reads FIRST
+// again. Recorded here — one write, one push, the announce it replaced
+// folded in (tick f61) — the verdict is what a resume reads FIRST
 // (readRecordedVerdictFirst), and the release's own cancellation cannot
 // override the work it is the record of.
 func (r *Reconciler) recordCollectVerdict(marker attemptHandle) error {
-	_, err := r.checkpoint(runstate.StateRunning,
+	_, err := r.checkpoint(runstate.StateCollecting,
 		fmt.Sprintf("%s is collected (%s)", r.attemptName(marker.TickID, marker.Attempt),
 			subprocess.VerdictReadyToMerge))
 	return err
@@ -3299,9 +3301,6 @@ func (r *Reconciler) dispatchedAt(marker attemptHandle) (time.Time, bool) {
 // ---------------------------------------------------------- the collect ---
 
 func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subprocess.JobHandle, executor Executor, marker attemptHandle, status *subprocess.JobStatus) (*subprocess.Collection, error) {
-	if _, err := r.checkpoint(runstate.StateCollecting, fmt.Sprintf("collecting %s attempt %d", marker.TickID, marker.Attempt)); err != nil {
-		return nil, err
-	}
 	collected, err := r.collectDetail(executor, handle, marker.TickID)
 	if err != nil {
 		return nil, fmt.Errorf("collect %s: %w", marker.TickID, err)
@@ -3532,18 +3531,23 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 		// that asks is not answered by merging what it wrote.
 		return nil, r.answerBlocked(ctx, entry, marker, answer, RefusedNeedsHuman)
 	}
-	// The verdict is RECORDED, on origin, before the attempt's worker is
-	// released (tick o3q). The release is a Cancel, and a reported worker that
-	// is still running past its grace is stopped and durably cancelled by it —
-	// the run's own release, naming `cancelled` an attempt this run has just
-	// judged `ready-to-merge`. Rejections have always had their verdict
-	// recorded (rejectDurably, read back by disposition); the positive verdict
-	// had nowhere, so a restart re-collected the attempt and took the
-	// executor's word for it again, and the release's own cancellation renamed
-	// the work `cancelled` for the resume that rejected and redid it. The
-	// verdict is durable HERE — before anything releases the worker — so a
-	// resume reads it first (readRecordedVerdictFirst) and the release's own
-	// cancellation cannot override the work it is the record of.
+	// The collect's own checkpoint lands HERE, at the ruling, stating the
+	// verdict it ruled (tick o3q) — not before the executor is read, as the
+	// announce it replaces did: the collect is one step, and a step's records
+	// land as one push (tick f61), so a second checkpoint beside the verdict
+	// would be a second push per tick. The verdict is durable BEFORE the
+	// worker is released below — the release is a Cancel, and a reported
+	// worker still running past its grace is stopped and durably cancelled by
+	// it, so this is the last moment the run's own records can state what
+	// they ruled before the executor's state can be renamed `cancelled`
+	// under them. Rejections have always had their verdict recorded
+	// (rejectDurably, read back by disposition); the positive verdict had
+	// nowhere, so a restart re-collected the attempt and took the executor's
+	// word for it again, and the release's own cancellation renamed the work
+	// `cancelled` for the resume that rejected and redid it. A resume reads
+	// the verdict recorded here first (readRecordedVerdictFirst), and the
+	// release's own cancellation cannot override the work it is the record
+	// of.
 	if err := r.recordCollectVerdict(marker); err != nil {
 		return nil, err
 	}

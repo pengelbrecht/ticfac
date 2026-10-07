@@ -26,7 +26,9 @@ import (
 //
 // The resume must read its own verdict FIRST: the collect's ruling is durable
 // in the run's records, and a cancellation that followed it cannot override it.
-
+//
+// serial: this test states the process environment (LINGER_TICK) for the fake
+// runner's lingering worker, and t.Setenv forbids a parallel test.
 func TestAReleasedWorkerThatOutlivesTheGraceIsNotRejudgedCancelledOnResume(t *testing.T) {
 	shorttest.EndToEnd(t)
 	// a1 is the worker that keeps running past the grace: it reports and then
