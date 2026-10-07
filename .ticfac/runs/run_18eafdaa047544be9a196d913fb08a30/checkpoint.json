@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_18eafdaa047544be9a196d913fb08a30",
   "epic_id": "ilz",
-  "sequence": 4,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for lpl",
-  "updated_at": "2026-10-07T09:41:55Z",
+  "sequence": 5,
+  "state": "publishing",
+  "reason": "closing lpl behind its validated review-epic answer",
+  "updated_at": "2026-10-07T09:42:36Z",
   "ticks": [
     {
       "tick_id": "lpl",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
