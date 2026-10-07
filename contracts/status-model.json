@@ -76,7 +76,7 @@
         "required": [
           "schema_version", "run_id", "epic_id", "host", "generated_at",
           "degraded", "liveness", "lifecycle", "progress", "epic_title",
-          "recent", "waves", "workers", "waits_on", "attention", "health",
+          "run_config", "recent", "waves", "workers", "waits_on", "attention", "health",
           "gates", "ci", "cost", "remaining"
         ],
         "additionalProperties": false,
@@ -91,6 +91,7 @@
           "lifecycle": { "$ref": "#/$defs/lifecycle" },
           "progress": { "$ref": "#/$defs/progress" },
           "epic_title": { "$ref": "#/$defs/nullable_string", "description": "The epic's own title, copied straight off the tracker's graph. Null when the graph could not be read — an unread tracker and a titleless epic are different claims, and only the first is a claim at all." },
+          "run_config": { "$ref": "#/$defs/nullable_string", "description": "The named run config this run routes under (ticfac tick tda) — which [configs.<name>] of the repository's runners files every dispatch resolves against: one epic on GLM, another on claude, from the same repository. Null when the run selected nothing: a repository whose runners files declare no named configs at all (every repository until tick tda), or a feed that could not be read — never a guess. The name is derived from the run's own config_selected feed line, the durable record the reconciler writes at the start of every incarnation, so a resume states the config it still runs on rather than inheriting a line from a feed a fresh clone may not hold. Additive within schema_version 1, the way the dashboard fields were." },
           "recent": { "type": "array", "items": { "$ref": "#/$defs/feed_event" }, "description": "The run's own last words: the last five lines of the feed, oldest first — the tail a dashboard shows where a watcher once drowned in the whole stream. The same event shape liveness.last_event carries. Empty, never null, when the feed is empty or unreadable." },
           "waves": { "$ref": "#/$defs/waves" },
           "workers": { "$ref": "#/$defs/workers" },
@@ -641,6 +642,7 @@
         "run_elapsed_seconds": 7855
       },
       "epic_title": "ticfac devex: one command to run, watch and triage an epic, locally and in the cloud",
+      "run_config": null,
       "recent": [
         {
           "schema_version": 1,
@@ -908,6 +910,7 @@
         "run_elapsed_seconds": null
       },
       "epic_title": "ticfac devex: one command to run, watch and triage an epic, locally and in the cloud",
+      "run_config": null,
       "recent": [
         {
           "schema_version": 1,
@@ -1047,6 +1050,7 @@
         "run_elapsed_seconds": 7740
       },
       "epic_title": "ticfac Phase 7: cut over and simplify ticks",
+      "run_config": "claude",
       "recent": [
         {
           "schema_version": 1,
@@ -1421,6 +1425,7 @@
         "run_elapsed_seconds": 7740
       },
       "epic_title": "ticfac Phase 7: cut over and simplify ticks",
+      "run_config": null,
       "recent": [
         {
           "schema_version": 1,
@@ -1948,6 +1953,7 @@
         "run_elapsed_seconds": 7740
       },
       "epic_title": "ticfac Phase 7: cut over and simplify ticks",
+      "run_config": null,
       "recent": [
         {
           "schema_version": 1,
@@ -2401,6 +2407,7 @@
         "run_elapsed_seconds": 2340
       },
       "epic_title": "The orchestrator runs where git is: ticfac in the container, the Workflow supervising",
+      "run_config": null,
       "recent": [
         {
           "schema_version": 1,

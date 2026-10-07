@@ -42,21 +42,56 @@ func TestTheResolvedHarnessCrossesTheDoorAndTheRecordNamesIt(t *testing.T) {
 // A door that booted the worker on a harness the dispatch did not name is
 // refused, and nothing is recorded: a record naming the requested harness over
 // a container bound to another is the same lie the model cross-check exists to
-// prevent, one field over.
+// prevent, one field over. The door's disagreement is named on a harness the
+// billing rule ADMITS (pi-durable, the hosted name of the same durable
+// harness the runner table spells pi) so the refusal that fires here is the
+// provenance one, not the rule's — the rule's own harness refusal is pinned
+// beside it.
 //
 // short: an httptest door and one state directory.
 func TestAHandleBootedOnAnotherHarnessIsRefused(t *testing.T) {
 	h := newHarness(t)
-	h.door.bootedHarness = "omp"
+	// The dispatch names the HOSTED kind, so the rule admits the pairing and
+	// the refusal that fires is the provenance one: the door booted a
+	// container on the runner table's own name for the same harness. The
+	// hosted exception covers only [WorkerAgentHarness], not every alias of
+	// it.
+	h.newExecutorOnRung(t.TempDir(), "pi-durable", testModel)
+	h.door.bootedHarness = "pi"
 	_, err := h.start("keh")
 	if err == nil {
 		t.Fatal("Start accepted a handle for a worker booted on a harness the dispatch did not name")
 	}
-	if !strings.Contains(err.Error(), "omp") || !strings.Contains(err.Error(), testHarness) {
+	if !strings.Contains(err.Error(), `"pi"`) || !strings.Contains(err.Error(), "pi-durable") {
 		t.Errorf("the refusal does not name both harnesses: %v", err)
 	}
 	if st := newStore(h.ex.stateDirFor(h.spec.JobID, 1)); st.exists(fileAttempt) {
 		t.Error("an attempt record was written for a worker bound to a harness nobody asked for")
+	}
+}
+
+// The billing rule's harness half at the door (tick 6fv): a door that reports
+// a container on a harness the factory's gateway does not serve — omp, a CLI
+// the review path uses outside this door but no Workers AI worker runs on —
+// is refused by the RULE, before the provenance cross-check ever answers,
+// and nothing is recorded.
+//
+// short: an httptest door and one state directory.
+func TestAHandleOnAHarnessTheBillingRuleRefusesIsRefused(t *testing.T) {
+	h := newHarness(t)
+	h.door.bootedHarness = "omp"
+	_, err := h.start("keh")
+	if err == nil {
+		t.Fatal("Start accepted a handle for a worker on a harness the billing rule refuses")
+	}
+	if !strings.Contains(err.Error(), "omp") {
+		t.Errorf("the refusal does not name the harness it refused: %v", err)
+	}
+	if !strings.Contains(err.Error(), "billing rule") {
+		t.Errorf("the refusal does not name the rule that fired: %v", err)
+	}
+	if st := newStore(h.ex.stateDirFor(h.spec.JobID, 1)); st.exists(fileAttempt) {
+		t.Error("an attempt record was written for a worker outside the cloud billing rule")
 	}
 }
 

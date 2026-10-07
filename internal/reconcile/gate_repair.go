@@ -44,8 +44,9 @@ import (
 //
 //   - The job routes at the POLICY'S CEILING TIER, resolved on demand
 //     exactly as the resolve-conflict job's is (locally claude; in the cloud
-//     a Workers AI model — the CloudRule guard refuses anything else, so
-//     the repair never runs claude in the cloud).
+//     a Workers AI model or a subscription rung's versionless alias — the
+//     cloud billing guard refuses anything that bills per token, so the
+//     repair never runs per-token claude in the cloud).
 //
 //   - Its commits are MERGED AND GATED AS USUAL: an ordinary merge onto the
 //     integration branch under the same lease the attempt's merge pushed
@@ -160,6 +161,7 @@ func (r *Reconciler) dispatchRepair(ctx context.Context, entry planEntry, marker
 	}
 	resolved, err := profile.Resolve(RoleRepairGate, profile.Options{
 		Dir: r.opts.ProfileDir, RunnersConfig: r.opts.GateConfig, Tier: tier, Substrate: string(r.substrate),
+		Config: r.runConfig.Name,
 	})
 	if err == nil {
 		err = usableProfile(r.executors, resolved)
@@ -224,6 +226,7 @@ func (r *Reconciler) dispatchRepair(ctx context.Context, entry planEntry, marker
 		Title:        r.repairTitle(tick),
 		Profile:      resolved,
 		Tier:         tier,
+		Config:       r.runConfig.Name,
 		Executor:     resolved.Executor,
 		PriorReports: append([]subprocess.PriorReport{}, r.priorReports(tick, marker.Attempt)...),
 	}

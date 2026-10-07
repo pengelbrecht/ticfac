@@ -1,38 +1,38 @@
 # Learnings
 
 Repo-specific gotchas, Problem → Cause → Rule. Hard cap 150 lines — compact every retro.
-Seeded from ticks' learnings 2026-09-02; last compacted at the hn6 (2026-10-05) and 43y (2026-10-06) close-outs.
+Seeded from ticks' learnings 2026-09-02; last compacted at the 43y (2026-10-06) and v5t (2026-10-07) close-outs.
 
 ## Planning an epic
 
-**Problem:** SIX epics closed without the run their acceptance names (Phase 4, xte, yoh, 2jn, hn6's
-`ticfac watch`; 43y's [A4]/[A2]); 43y's COULD not run in the epic: the factory deploys main only.
-**Rule:** When an epic's gate is a run or a view, the FIRST tick wires the thinnest end-to-end path
-through the PRODUCTION entry point and a named tick INSIDE the epic performs it before the review. A
-clause needing the DEPLOYED factory to carry the epic's code is marked post-merge at planning.
+**Problem:** SEVEN epics closed without the run their acceptance names (Phase 4, xte, yoh, 2jn, hn6's
+`ticfac watch`; 43y's [A4]/[A2]; v5t's [A1]); 43y's and v5t's COULD not: the factory deploys main only.
+v5t's 6fv tested its door with WORKER_AGENTS unbound; production binds it, so the claude rung was dead
+on the real door until the review (yhe). **Rule:** When an epic's gate is a run or a view, the FIRST
+tick wires the thinnest path through the PRODUCTION entry point, its tests binding what production
+binds (wrangler.toml), and a named tick INSIDE the epic performs it; a DEPLOYED-factory clause is post-merge.
 
 **Problem:** gvc absorbed none of 21 findings; 2jn scored none of 30: the data the machinery reads
 was prose. **Rule:** An orchestrator epic names the NEXT run on the rebuilt binary as its demo;
 [A<n>] items AND a command per item land at planning, or the run absorbs on guesses.
 
-**Problem:** hn6 planned 9 ticks and closed 65; ten repairs each fixed ONE pairing of which word
-wins (an earlier run's hold, a stopped cloud run, the tracker's close) across nine runs. **Rule:** An
-epic that renders run state lists the state matrix (running, held, stopped, failed, prior, cloud,
-local …) × every surface at planning, with ONE precedence table tested over it.
+**Problem:** hn6 planned 9 ticks and closed 65: ten repairs each fixed ONE pairing of which word wins
+across nine runs. **Rule:** An epic that renders run state lists the state matrix (running, held,
+stopped, failed, prior, cloud, local …) × every surface at planning, ONE precedence table tested over it.
 
-**Problem:** 2jn's NOT READY review's ten findings each became a parallel tick; three rewrote exit-code
-logic (bot, 4mv, bkg/rix/vqc): 16 ticks, 7 conflict resolves, a silent same-function collision (7o5).
-**Rule:** Fold a NOT READY review's findings by SEAM (one tick owns "exit codes"), not one per finding.
+**Problem:** 2jn's NOT READY review's ten findings each became a parallel tick (16 ticks, 7 resolves, a
+silent same-function collision, 7o5); v5t's two became y38 (Go) and yhe (TS) on ONE step-down seam: a
+resolve and a duplicate high finding (bw7). **Rule:** A reviewer reports ONE blocking finding per SEAM,
+naming every side of it: the run makes one tick per finding, so the report is the only fold there is.
 
 **Problem:** A policy held per layer and failed in the whole: xte checked the cloud overlay, then a tier
 overlay replaced the model; yoh keyed the Workers-AI rule on the substrate, not the executor (78v).
 **Rule:** Check a policy on the FINAL resolved value, keyed on what actually crosses the boundary.
 
-**Problem:** wne put a vocabulary (mrn) and its consumer (0ju) in one wave; mrn died on add/add.
-hn6's wave 1 declared the status contract with HAND-TYPED goldens, and seven repairs (378 oro log dvv
-fq0 lh4 lkq) removed values wave 2's derivation could never produce. **Rule:** A tick that DECLARES a
-vocabulary and one that CONSUMES it are different waves, and the declaring wave's fixtures are
-checked against the builder from day one (TestEveryGoldenAgreesWithThePipelineDerivation's shape).
+**Problem:** wne put a vocabulary (mrn) and its consumer (0ju) in one wave; hn6's wave 1 HAND-TYPED its
+status goldens and seven repairs removed values wave 2 could never produce. **Rule:** DECLARING and
+CONSUMING a vocabulary are different waves, and the declaring wave's fixtures are checked against the
+builder from day one (TestEveryGoldenAgreesWithThePipelineDerivation's shape).
 
 **Problem:** l6t deleted the wave path and four things only it produced; 6in findings named deleted
 verbs; after 43y's jhp deleted the pi CLI, six ticks chased kind "pi" in cells and fixtures (twa's
@@ -59,16 +59,17 @@ in-flight state from durable evidence, never by trusting the claimer.
 A hold that fires when the system does its job (finding things) makes "unattended" impossible; put
 it where a person already is (the PR). A resume replays a recorded decision, never re-buys one.
 
-**Problem:** 6in's close-out took four attempts past its committed retro: a BLOCKED left work no
-rule disposed of (#117), and a re-verify that committed nothing was rejected "no-commits". **Rule:**
-Every honest answer needs a terminal verdict, "nothing new" included; a verifier commits its evidence.
+**Problem:** 6in's close-out took four attempts: a BLOCKED no rule disposed of (#117), a re-verify
+rejected "no-commits". **Rule:** Every honest answer needs a terminal verdict; a verifier commits evidence.
 
 **Problem:** `tk close` usage prints; promotions pointed at uncommitted ticks. **Rule:** Usage is a REFUSAL; a promotion is finished when the tick is COMMITTED.
 
-**Problem:** Ticks changing the ticks repo were undispatchable (ha9: SEVEN dispatches); 43y's twa fix
-was runners.cloud.toml cells outside the boundary (7vp); 8em "closed" an A1 gap by writing an exception
-onto the epic. **Rule:** A tick lives where its CODE is AND its worker can write; another repo's change
-is an `upstream-tick`; a fix that is a decision (an exception, a routing cell) goes to the operator.
+**Problem:** Ticks changing the ticks repo were undispatchable (ha9: SEVEN dispatches); twa's (43y) and
+tda's (v5t) deliverables were runners.cloud.toml cells outside the boundary (7vp, lxo): yck burnt two
+BLOCKED dispatches and a hold before an operator appended it; 8em wrote an exception onto the epic.
+**Rule:** A tick lives where its CODE is AND its worker can write: check every acceptance artifact
+against exemptFromBoundary at PLANNING; another repo's change is an `upstream-tick`; a decision (an
+exception, a routing cell) is a named operator step in the epic, never a dispatched tick.
 
 **Problem:** Two runs died with `conflict_exists` (a watcher's fetch rewrote the shared `FETCH_HEAD`);
 host `rerere.enabled` replayed a person's resolve into a machine merge. **Rule:** Process-global and
@@ -122,9 +123,11 @@ green (#100). **Rule:** A verdict is a typed field, and a skip is not a pass: gr
 ## Fixtures
 
 **Problem:** A lost sandbox handle was green because the fake keyed on job_id; yoh's collect fake put
-work and report in ONE commit; identical fixture commits shared a SHA. **Rule:** A fake demands the
-identity and reproduces the real shape — a more forgiving fake certifies the defect it hides; fix it
-in the same change. Make fixture commits differ; "the tick's first try" keys on `$TICFAC_TRY`.
+work and report in ONE commit; v5t's Go executor said `cloudflare-workers-ai/…` where the door said
+`workers-ai/…`, each green on its own fake (y38). **Rule:** A fake demands the identity and reproduces
+the real shape; fix a forgiving fake in the same change. A TS↔Go seam gets a parity guard over its
+spellings and one Go test driving the REAL door (claude_sub_e2e_test.go's shape). Fixture commits
+differ; "the tick's first try" keys on `$TICFAC_TRY`.
 
 **Problem:** hn6's activity fixture spelled a claude worker's model `claude-opus-5`; real attempts say
 `opus`, so a live claude worker's activity is never read. **Rule:** Copy a fixture's identity
@@ -142,9 +145,6 @@ A redirect-asserting route test passes `redirect: "manual"`.
 GLM; GLM via `cloudflare-workers-ai` leaked `<think>` tags. **Rule:** A bodyless 4xx is REQUEST SHAPE
 until proven otherwise; change one variable at a time. Off-vendor, set `compat.thinkingFormat`.
 
-**Problem:** dm2 blamed two row-less pi runs on pi abandoning the stream after `finish_reason`;
-648 found pi DOES drain it (pi-ai reads the SDK stream to EOF; 4 live pi calls, 4 tagged rows). The
-gateway passes pi's own `Authorization` upstream (a bad key fails 10000 despite a valid
-`cf-aig-authorization`), and the route needs `/workers-ai/v1` (else 7003).
-**Rule:** a gateway route is verified by reading the LOG ROW back, not by the call answering 200;
-a cause is verified by reproducing it, not by the symptom it would explain.
+**Problem:** dm2 blamed row-less pi runs on pi abandoning the stream; 648 showed pi drains it. The
+gateway passes pi's own `Authorization` upstream (a bad key fails 10000) and needs `/workers-ai/v1`.
+**Rule:** Verify a gateway route by reading its LOG ROW back; verify a cause by reproducing it.

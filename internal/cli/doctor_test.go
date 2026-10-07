@@ -44,6 +44,7 @@ type doctorSeams struct {
 	wrangler    func() (string, error)
 	factory     func(context.Context) (string, error)
 	classifier  func(context.Context) (string, error)
+	claudeSub   func() ([]string, error)
 }
 
 // saveDoctorSeams overrides every probe with ok (or with the one missing
@@ -58,6 +59,7 @@ func saveDoctorSeams(t *testing.T, missing string, keepRealHerdr bool) {
 		herdr:       doctorHerdr,
 		github:      doctorGitHub,
 		forgeRemote: doctorForgeRemote,
+		claudeSub:   doctorClaudeSubLabels,
 		gitID:       doctorGitIdentity,
 		docker:      doctorDocker,
 		wrangler:    doctorWrangler,
@@ -69,6 +71,7 @@ func saveDoctorSeams(t *testing.T, missing string, keepRealHerdr bool) {
 			saved.tk, saved.herdr, saved.github, saved.forgeRemote, saved.gitID
 		doctorDocker, doctorWrangler, doctorFactory = saved.docker, saved.wrangler, saved.factory
 		doctorClassifier = saved.classifier
+		doctorClaudeSubLabels = saved.claudeSub
 	})
 	ok := func(name string) func() (string, error) {
 		if name == missing {
@@ -92,6 +95,10 @@ func saveDoctorSeams(t *testing.T, missing string, keepRealHerdr bool) {
 	doctorWrangler = ok("wrangler")
 	doctorFactory = func(context.Context) (string, error) { return ok("factory")() }
 	doctorClassifier = func(context.Context) (string, error) { return ok("classifier")() }
+	// The named-config rung question (tick tda): a factory that holds one
+	// subscription label, so the routing check's ok detail names the configs
+	// and nothing about the rung is missing. The tests that care override it.
+	doctorClaudeSubLabels = func() ([]string, error) { return []string{"max"}, nil }
 }
 
 // errDoctorProbe is the one error shape the table's missing probes report.

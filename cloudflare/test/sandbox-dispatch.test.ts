@@ -23,6 +23,13 @@ import jobProtocol from "../../contracts/job-protocol.json";
 // prompt file's own text, em-dashes and all.
 import IMPLEMENT_TICK_PROFILE from "../../profiles-cloudflare-sandbox/implement-tick.md?raw";
 import { readWorkerLogTail } from "../src/artifacts";
+import {
+  CLAUDE_CODE_OAUTH_TOKEN,
+  CLAUDE_SUB_PLACEHOLDER,
+  claudeSubPool,
+  TICKS_CLAUDE_SUB,
+  TOKEN_SECRET_PREFIX,
+} from "../src/claude-sub";
 import { heldSlots } from "../src/container-capacity";
 import { insertRun, type Run } from "../src/db";
 import { issueWorkerRunToken, revokeRunTokens } from "../src/gateway";
@@ -154,10 +161,18 @@ class FakeSandboxes implements SandboxBinding {
   failWith: Error | null = null;
   /** The names ever addressed with keepAlive: containers whose life is not the observer's. */
   readonly keptAlive = new Set<string>();
+  /** Every claude-sub lease a boot asked the binding to install (tick 6fv). */
+  readonly claudeSubBoots: { name: string; label: string; jobId: string }[] = [];
 
-  async get(name: string, options?: { keepAlive?: boolean }): Promise<OrchestratorSandbox> {
+  async get(
+    name: string,
+    options?: { keepAlive?: boolean; claudeSub?: { label: string; jobId: string } },
+  ): Promise<OrchestratorSandbox> {
     this.addressed.push(name);
     if (options?.keepAlive === true) this.keptAlive.add(name);
+    if (options?.claudeSub !== undefined) {
+      this.claudeSubBoots.push({ name, ...options.claudeSub });
+    }
     if (this.failWith !== null) throw this.failWith;
     // The SDK's own rule (sanitizeSandboxId), so a name the platform would
     // refuse is refused here too rather than booting in a fake (hn6 run_ee8e).
@@ -425,6 +440,84 @@ describe("authorization", () => {
 // ------------------------------------------------------------------- start ---
 
 describe("start", () => {
+  // The claude-sub rung at the WORKER door (tick 6fv): a dispatch that
+  // resolves claude on a versionless alias leases one subscription here, the
+  // container gets only the placeholder (the proxy swaps the real token in
+  // per request, and it never enters the container), and the binding is asked
+  // to install the interception BEFORE the work process starts.
+  it("boots a rung dispatch on the subscription, and the container never sees a token", async () => {
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+    const response = await postStart(runToken, startBody({ harness: "claude", model: "sonnet" }));
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { handle: SandboxJobHandle };
+    expect(body.handle.handle.harness).toBe("claude");
+    expect(body.handle.handle.model).toBe("sonnet");
+
+    const name = attemptSandboxName(RUN_ID, TICK, 1);
+    const work = binding.named(name).workProcess();
+    expect(work?.env.TICKS_HARNESS).toBe("claude");
+    expect(work?.env.TICKS_MODEL).toBe("sonnet");
+    expect(work?.env[CLAUDE_CODE_OAUTH_TOKEN]).toBe(CLAUDE_SUB_PLACEHOLDER);
+    expect(work?.env[TICKS_CLAUDE_SUB]).toBe("1");
+    // The subscription's token is a Worker secret; the container holds the
+    // placeholder only.
+    expect(JSON.stringify(work?.env)).not.toContain("sk-ant");
+
+    // The interception install was asked of the binding, with the lease's
+    // label and the job id the pool keyed the lease under.
+    expect(binding.claudeSubBoots).toEqual([
+      { name, label: "MAX1", jobId: attemptJobID(RUN_ID, TICK, 1) },
+    ]);
+
+    // The lease is live: one job under the subscription, addressed by the
+    // attempt's job id.
+    const pool = claudeSubPool(env as unknown as Parameters<typeof claudeSubPool>[0])!;
+    const snapshot = await pool.snapshot();
+    expect(snapshot[0]!.label).toBe("MAX1");
+    expect(snapshot[0]!.active_leases).toEqual([attemptJobID(RUN_ID, TICK, 1)]);
+
+    // The pool's storage outlives this test: release so the next test's
+    // snapshot sees only its own leases.
+    await pool.release(attemptJobID(RUN_ID, TICK, 1));
+  });
+
+  // No subscription is free — none configured here — and the dispatch does
+  // not wait: THIS job steps down to the deployment's Workers AI pair, the
+  // container carries no claude-sub environment at all, and the next dispatch
+  // asks the pool again.
+  it("steps a rung dispatch down to the Workers AI pair when no subscription is free", async () => {
+    const response = await postStart(runToken, startBody({ harness: "claude", model: "sonnet" }));
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { handle: SandboxJobHandle };
+    expect(body.handle.handle.harness).toBe("pi-durable");
+    expect(body.handle.handle.model).toBe("workers-ai/@cf/zai-org/glm-5.3");
+
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess();
+    expect(work?.env.TICKS_HARNESS).toBe("pi-durable");
+    expect(work?.env[CLAUDE_CODE_OAUTH_TOKEN]).toBeUndefined();
+    expect(work?.env[TICKS_CLAUDE_SUB]).toBeUndefined();
+    expect(binding.claudeSubBoots).toEqual([]);
+  });
+
+  // The settled worker's reclaim is the ending the lease waits for: the state
+  // route destroys the container and the subscription's cap is free again.
+  it("releases the lease when the state route reclaims the settled container", async () => {
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+    const start = await postStart(runToken, startBody({ harness: "claude", model: "opus" }));
+    expect(start.status).toBe(201);
+    const pool = claudeSubPool(env as unknown as Parameters<typeof claudeSubPool>[0])!;
+    expect((await pool.snapshot())[0]!.active_leases).toEqual([attemptJobID(RUN_ID, TICK, 1)]);
+
+    const work = binding.named(attemptSandboxName(RUN_ID, TICK, 1)).workProcess();
+    work!.finish(0);
+    const state = await getState(runToken, TICK, 1);
+    expect(state.status).toBe(200);
+    const status = (await state.json()) as { state: string };
+    expect(status.state).toBe("succeeded");
+
+    expect((await pool.snapshot())[0]!.active_leases).toEqual([]);
+  });
+
   it("starts the attempt in a sandbox NAMED BY ITS IDENTITY and returns a handle without waiting", async () => {
     const response = await postStart(runToken, startBody());
     expect(response.status).toBe(201);

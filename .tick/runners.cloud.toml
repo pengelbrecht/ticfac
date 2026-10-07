@@ -87,3 +87,121 @@ effort = "high"
 kind = "pi"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
+
+# Named run configs (tick tda): one repository, more than one cloud routing.
+# [configs.glm] is the Workers AI routing this file's own cells have always
+# declared — pi on GLM 5.3 / GLM 5.3 Flash, the default, so an epic that says
+# nothing runs exactly as before. [configs.claude] is the claude-sub rung
+# (spike jvj, production wiring 6fv): claude on the CLI's own versionless
+# aliases — implement starts on sonnet and climbs to opus, review and
+# close-out run on opus (operator decision 2026-10-06) — the token injected
+# by the factory's subscription wiring and never in a container, stepping
+# down to GLM 5.3 on Workers AI when no subscription is free (the rung's own
+# fallback, a live fact; a run on a claude config with NO subscription
+# configured is refused at start, at doctor, and at the submission preflight
+# — the rung being off is a defect, not a fallback). A config is a ROUTING
+# and nothing else: the gate, the evidence table, the substrate and the
+# findings routes are this repository's, the same for every run. A run
+# selects by `--config claude`, over the epic's own `config: claude` label,
+# over the declared default — one precedence, resolved once at run start.
+#
+# The claude config's concurrency caps (claude-sub 1–2): opus, the
+# subscription's most expensive rung, one worker at a time; sonnet two.
+# The step-down arithmetic of a busy subscription is the factory's own; what
+# this declares is how much of the subscription THIS repository asks for at
+# once, per tier, exactly the way the Workers AI ladder declares its width.
+[configs]
+default = "glm"
+
+[configs.glm.roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[configs.glm.roles.implement.tiers.economy]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
+effort = "medium"
+
+# The dear rung, named explicitly: GLM 5.3, the same model the role's base
+# cell runs. Both rungs are Workers AI models already proven through pi in
+# the container image.
+[configs.glm.roles.implement.tiers.strong]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[configs.glm.roles.review]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+# The ceiling-tier overlay the on-demand jobs route through (see the review
+# cell's comment below): the glm config's ceiling is strong, so this config's
+# review cell must declare it.
+[configs.glm.roles.review.tiers.strong]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[configs.glm.roles.closeout]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+
+[configs.glm.tier_policy]
+default = "economy"
+ceiling = "strong"
+step = 2
+
+# `args = []` clears the `--approve` the cloud's own implement cell hands pi:
+# a cell that switches kind keeps the argv beneath it unless it says so, and
+# claude does not take pi's flag.
+[configs.claude.roles.implement]
+kind = "claude"
+model = "sonnet"
+effort = "high"
+args = []
+
+# The cloud claude ladder the operator named (2026-10-06): implement starts
+# on sonnet and climbs to opus, step = 2 so one failed attempt goes straight
+# up. The aliases are the claude CLI's own versionless words, so they name
+# the latest model the IMAGE'S PINNED CLI knows — never a pinned model id,
+# which bills per token in the cloud.
+[configs.claude.roles.implement.tiers.economy]
+model = "sonnet"
+effort = "high"
+
+[configs.claude.roles.implement.tiers.strong]
+model = "opus"
+effort = "high"
+
+[configs.claude.roles.review]
+kind = "claude"
+model = "opus"
+effort = "high"
+
+# The ceiling-tier overlay the on-demand jobs (resolve-conflict,
+# plan-repair) route through: the claude config's ceiling is strong, so its
+# review cell declares the strong tier — opus, the judgement rung.
+[configs.claude.roles.review.tiers.strong]
+kind = "claude"
+model = "opus"
+effort = "high"
+
+[configs.claude.roles.closeout]
+kind = "claude"
+model = "opus"
+effort = "high"
+
+[configs.claude.tier_policy]
+default = "economy"
+ceiling = "strong"
+step = 2
+
+# claude-sub 1–2: the subscription's own width, asked per tier — sonnet two
+# at a time, opus one. A lease the factory cannot grant steps the role down
+# to the rung's Workers AI fallback; the cap is what keeps this repository
+# from asking for the whole subscription at once.
+[configs.claude.tier_policy.concurrency]
+economy = 2
+strong = 1
+

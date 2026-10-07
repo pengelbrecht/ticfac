@@ -262,6 +262,13 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 	if n := len(model.Recent); n != 5 {
 		t.Errorf("the golden carries %d recent events, want the full 5-line tail", n)
 	}
+	// The named run config is populated (tick tda): one epic on GLM, another
+	// on claude — the config a run routes under is what its cost and
+	// escalation numbers are read against, and the rendering fixture must
+	// show it named.
+	if model.RunConfig == nil {
+		t.Error("the golden carries no named run config: the fixture that carries every dashboard field populated decayed into valid-but-null")
+	}
 
 	// Agreeing: the closed vocabularies the contract spells and the Go
 	// builder spells are the same sets.

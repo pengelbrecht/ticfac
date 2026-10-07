@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "When no subscription is free, the door boots the deployment's standing pair and returns pi-durable / workers-ai/@cf/zai-org/glm-5.3. cloudflaresandbox.Executor.Start refuses any handle whose model is not the requested one ('sonnet'), so the [A1] fallback can never start a worker. CloudRule.SubscriptionRungs[].Fallback is read only by a test, and it is spelled cloudflare-workers-ai/... while the factory steps down to RUN_WORKER_MODEL (workers-ai/...). Fix: when the request is a subscription-rung pair, accept exactly the rung's declared fallback pair (namespace-normalised), record the pair that ran, and test that both sides agree.\nevidence: internal/exec/cloudflaresandbox/executor.go:445; repro: newExecutorOnRung(claude, sonnet) with door.bootedModel=workers-ai/@cf/zai-org/glm-5.3, bootedHarness=pi-durable -> 'the door booted attempt 1 ... on model \"workers-ai/@cf/zai-org/glm-5.3\", not the \"sonnet\" its dispatch resolved'\n\nticfac run epic-v5t filed this backlog tick from the finding ec931f0beedeba9e30427d9c7ed98118482a127e037b3d0b1708315b93618721 (reported by run-epic-v5t/tick-54l/attempt-6) rather than absorb it into the running epic: its reporter rated it high severity and named the done it breaks, but the epic's work was done when it was reported, so it is deferred to the final reviewer. The decision record is .ticfac/runs/epic-v5t/absorptions/ec931f0beedeba9e30427d9c7ed98118482a127e037b3d0b1708315b93618721.json on the run branch.",
+    "epic_id": "v5t",
+    "role": "classify-tick",
+    "tick_id": "y38",
+    "title": "Go executor refuses the factory's Workers AI step-down of a rung dispatch"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.64,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.27,
+      "design": 0,
+      "diagnosis": 0.01,
+      "mechanical": 0.72,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1475,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T02:15:13Z",
+  "answered_at": "2026-10-07T02:15:13Z",
+  "provenance": {
+    "run_id": "epic-v5t",
+    "tick_id": "y38",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/v5t",
+    "source_sha": "477662dfcd82cd0225f615efcc32a2d98fbf124d",
+    "integration_ref": "refs/heads/epic/v5t",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

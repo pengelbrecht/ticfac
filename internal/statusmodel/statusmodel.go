@@ -212,6 +212,15 @@ type Model struct {
 	// at all.
 	EpicTitle *string `json:"epic_title"`
 
+	// RunConfig is the named run config this run routes under (tick tda) —
+	// which [configs.<name>] of the repository's runners files every dispatch
+	// resolves against: one epic on GLM, another on claude. Null when the
+	// run selected nothing — a repository that declares no named configs at
+	// all, or a feed that could not be read — and never a guess: the name is
+	// derived from the run's own config_selected feed line, the durable
+	// record the reconciler writes at the start of every incarnation.
+	RunConfig *string `json:"run_config"`
+
 	// Recent is the run's own last words: the last five lines of the feed,
 	// oldest first — the tail a dashboard shows where the watch used to
 	// drown the screen in the whole stream. The same event shape

@@ -1140,6 +1140,13 @@ export type FactoryGetOptions = {
   keepAlive?: boolean;
   instance?: InstanceSize;
   pinnedImage?: string;
+  /**
+   * The claude subscription this job leased (tick 6fv, src/claude-sub.ts):
+   * carried into the boot so the interception is installed before the
+   * container starts, binding the container's api.anthropic.com traffic to
+   * that one subscription — a job never switches tokens.
+   */
+  claudeSub?: { label: string; jobId: string };
 };
 
 /**
@@ -1163,6 +1170,7 @@ export function factorySandboxBinding(namespace: FactorySandboxNamespace): Sandb
         ...(options?.keepAlive === true ? { keepAlive: true } : {}),
         ...(options?.instance === undefined ? {} : { instance: options.instance }),
         ...(options?.pinnedImage === undefined ? {} : { pinnedImage: options.pinnedImage }),
+        ...(options?.claudeSub === undefined ? {} : { claudeSub: options.claudeSub }),
       };
       return {
         startProcess: (command, opts) => stub.startProcess(command, opts.env, boot),

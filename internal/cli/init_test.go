@@ -504,18 +504,22 @@ func TestInitOnAPiRepositoryWritesCellsEverySubstrateCanRun(t *testing.T) {
 	constructs("herdr", profile.EmbeddedHerdr)
 }
 
-// TestInitRefusesACloudModelThatIsNotWorkersAI pins the cloud rule at the
-// boundary init writes it: what runs in Cloudflare runs Workers AI models
-// only, and a routing that named anything else is one a run would refuse
-// three ticks into an epic — init refuses it before a word is written.
-func TestInitRefusesACloudModelThatIsNotWorkersAI(t *testing.T) {
+// TestInitRefusesACloudModelTheBillingRuleDoesNotAdmit pins the cloud rule
+// at the boundary init writes it: a cloud-only routing names pi cells, and a
+// model that is not a Workers AI one is a pairing a run would refuse three
+// ticks into an epic — init refuses it before a word is written, in the
+// rule's own sentence (profile.ErrCloudBilling), so the two cannot drift.
+func TestInitRefusesACloudModelTheBillingRuleDoesNotAdmit(t *testing.T) {
 	repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
 	code, _, stderr := runInitOn(t, repo, "", "--yes", "--substrate", "cloud", "--model", "gpt-9-max")
 	if code != exitUsage {
 		t.Fatalf("init on a non-Workers-AI cloud model exits %d, want the usage refusal", code)
 	}
-	if !strings.Contains(stderr, "Workers AI models only") {
+	if !strings.Contains(stderr, "no per-token vendor spend") {
 		t.Errorf("the refusal does not name the rule:\n%s", stderr)
+	}
+	if !strings.Contains(stderr, "Workers AI") {
+		t.Errorf("the refusal does not name the Workers AI half of the rule:\n%s", stderr)
 	}
 	if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(runconfig.FileName))); err == nil {
 		t.Errorf("the refusal still wrote a routing — a refusal must write nothing")

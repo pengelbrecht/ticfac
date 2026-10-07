@@ -10,11 +10,13 @@ import (
 	"hegel.dev/go/hegel"
 )
 
-// The operator's rule as a property (tick 89g): whatever the three config
-// files say — common, cloud override, local override — and whatever tier is
-// asked for, a role that runs IN CLOUDFLARE either refuses to resolve or
-// resolves to a Workers AI model on a harness the gateway serves. Nothing
-// resolves to claude (or any other provider) in a Cloudflare container.
+// The operator's rule as a property (tick 89g; re-flowed for 6fv): whatever
+// the three config files say — common, cloud override, local override — and
+// whatever tier is asked for, a role that runs IN CLOUDFLARE either refuses
+// to resolve or resolves to a worker the CLOUD BILLING RULE admits: a
+// Workers AI model on a harness the gateway serves, or a subscription rung
+// (claude on a versionless alias, tick 6fv). Nothing resolves to a
+// per-token-billed vendor model in a Cloudflare container.
 //
 // Two ways into Cloudflare, both covered: the cloud substrate, and a local
 // substrate whose profiles dispatch through the cloudflare-sandbox executor
@@ -123,7 +125,7 @@ func (g pbtGen) file(common bool) string {
 	return b.String()
 }
 
-func TestPBTNothingInCloudflareResolvesOutsideWorkersAI(t *testing.T) {
+func TestPBTNothingInCloudflareResolvesOutsideTheBillingRule(t *testing.T) {
 	cloudDir := cloudProfileDir(t)
 	// This test's own counts: a fresh set per run, so -count cannot add a
 	// thin run to a fat one.
@@ -160,12 +162,12 @@ func TestPBTNothingInCloudflareResolvesOutsideWorkersAI(t *testing.T) {
 		if !g.mutate {
 			coreResolved++
 		}
-		if !reachesWorkersAI(p.Runner) || !IsWorkersAIModel(p.Model) {
+		if !CloudBillingAllows(p.Runner, p.Model) {
 			var shown strings.Builder
 			for name, body := range files {
 				fmt.Fprintf(&shown, "--- %s\n%s\n", name, body)
 			}
-			ht.Fatalf("role %s at tier %q on substrate %q resolved to %s/%s in Cloudflare, not a Workers AI model on a harness the gateway serves:\n%s",
+			ht.Fatalf("role %s at tier %q on substrate %q resolved to %s/%s in Cloudflare, outside the cloud billing rule (a Workers AI worker on a gateway harness, or a subscription rung):\n%s",
 				role, tier, sub, p.Runner, p.Model, shown.String())
 		}
 	}, hegel.WithTestCases(500))

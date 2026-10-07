@@ -64,14 +64,17 @@ func knownExecutors() []reconcile.KnownExecutor {
 		{
 			// The cloud executor (tick xev): the runner names a KIND the
 			// sandbox image can run a harness for — the DURABLE harness
-			// names of [profile.CloudRule].Harnesses, not runconfig's herdr
-			// kinds (epic 43y, tick uxi): the cloud's routing still spells
-			// kind = "pi" (.tick/runners.cloud.toml, the local runner
-			// table's name for the same durable harness, which applies last
-			// there) and the cloud profile set names the hosted kind
-			// "pi-durable", so both must be admitted — while claude, codex
-			// and opencode never reach a container, per the same rule that
-			// refuses a non-Workers-AI worker in the cloud. The poll cadence
+			// names of [profile.CloudRule].Harnesses plus the subscription
+			// rungs' own harnesses (profile.CloudAllowedHarnesses, tick 6fv),
+			// not runconfig's herdr kinds (epic 43y, tick uxi): the cloud's
+			// routing still spells kind = "pi" (.tick/runners.cloud.toml, the
+			// local runner table's name for the same durable harness, which
+			// applies last there) and the cloud profile set names the hosted
+			// kind "pi-durable", so both must be admitted — and a claude-sub
+			// config resolves kind = "claude" on a versionless alias, a pair
+			// the image runs and the cloud billing rule admits (codex and
+			// opencode still never reach a container; the rule refuses their
+			// pairings at resolution). The poll cadence
 			// is the executor's own five minutes, because on that substrate
 			// the poll IS the keepalive. Any MODEL a profile names is
 			// accepted: the dispatch door carries it (tick a08), the worker
@@ -81,7 +84,7 @@ func knownExecutors() []reconcile.KnownExecutor {
 			// profile's RUNNER and PROMPT ride the same request (tick 9iz),
 			// for the same reason.
 			Name:         cloudflaresandbox.ExecutorName,
-			Runners:      profile.CloudRule.Harnesses,
+			Runners:      profile.CloudAllowedHarnesses(),
 			AcceptsModel: func(string) bool { return true },
 			PollInterval: cloudflaresandbox.PollInterval,
 			// The account's container ceiling less the orchestrator's own
@@ -301,8 +304,12 @@ func spawnArgv(gate string, d reconcile.Dispatch) (*runconfig.Config, []string, 
 		gate = filepath.Join(d.Repo, filepath.FromSlash(runconfig.FileName))
 	}
 	// A herdr dispatch runs on this machine, so runners.local.toml merges
-	// over the common file (tick 5uo) — its tiers are real here.
-	cfg, err := runconfig.LoadFor(gate, runconfig.SubstrateHerdr)
+	// over the common file (tick 5uo) — its tiers are real here — and the
+	// dispatch's selected named config applies over both (tick tda), so the
+	// effort and args the worker is spawned with are the config's own: the
+	// same cells the profile routed on. A dispatch with no selection ("")
+	// reads exactly what a herdr run always read.
+	cfg, err := runconfig.LoadForConfig(gate, runconfig.SubstrateHerdr, d.Config)
 	if err != nil && !os.IsNotExist(err) {
 		// A MISSING file routes nothing — the profile ships as written. A
 		// file that EXISTS and fails validation is a stop, never a silent

@@ -149,6 +149,17 @@ func (r *Reconciler) epicSummary() string {
 	}
 	ctx := context.Background()
 	var b strings.Builder
+	// The named run config every dispatch resolved under (tick tda), named
+	// before the epic's own words: the config is what the run's escalation
+	// and cost are read against — one epic on GLM, another on claude, from
+	// the same repository — and a reviewer comparing this PR with another
+	// epic's needs to know which routing produced this one's numbers. A run
+	// that selected nothing (a repository whose runners files declare no
+	// named configs at all) says nothing, exactly as its runs have always
+	// said nothing about a routing that had no name.
+	if detail := r.runConfig.Detail(); detail != "" {
+		fmt.Fprintf(&b, "%s.\n", strings.ToUpper(detail[:1])+detail[1:])
+	}
 	if epic, err := r.tracker.Show(ctx, r.opts.EpicID); err == nil {
 		fmt.Fprintf(&b, "**%s** (epic %s)\n", strings.TrimSpace(epic.Title), r.opts.EpicID)
 		if description := strings.TrimSpace(epic.Description); description != "" {

@@ -208,6 +208,10 @@ exit "${TICKS_TEST_WORKER_EXIT:-0}"
   printf 'CWD=%s\n' "$PWD"
   printf 'BG=%s\n' "${CLAUDE_CODE_DISABLE_BACKGROUND_TASKS:-unset}"
   for a in "$@"; do printf 'ARG=%s\n' "$a"; done
+  # The claude-sub tests (tick 6fv) read the whole environment the entrypoint
+  # handed the CLI: what must be ABSENT is the point, so the record is the
+  # full export -p, not a list of presences.
+  [ -z "${TICKS_TEST_WORKER_ENV_RECORD:-}" ] || export -p > "$TICKS_TEST_WORKER_ENV_RECORD"
 } > "$TICKS_TEST_RECORD"
 if [ -n "${TICKS_TEST_WORKER_DIRTY:-}" ]; then printf 'half a tick\n' > partial.txt; fi
 if [ -n "${TICKS_TEST_WORKER_SLEEP:-}" ]; then sleep "$TICKS_TEST_WORKER_SLEEP"; fi

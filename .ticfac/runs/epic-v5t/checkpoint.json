@@ -1,0 +1,75 @@
+{
+  "schema_version": 3,
+  "run_id": "epic-v5t",
+  "epic_id": "v5t",
+  "sequence": 71,
+  "state": "running",
+  "reason": "6ne is closed",
+  "updated_at": "2026-10-07T04:07:04Z",
+  "ticks": [
+    {
+      "tick_id": "6fv",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "tda",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "54l",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "9uc",
+      "state": "closed",
+      "attempt": 10
+    },
+    {
+      "tick_id": "yck",
+      "state": "closed",
+      "attempt": 5
+    },
+    {
+      "tick_id": "y38",
+      "state": "closed",
+      "attempt": 7
+    },
+    {
+      "tick_id": "yhe",
+      "state": "closed",
+      "attempt": 8
+    },
+    {
+      "tick_id": "8rm",
+      "state": "closed",
+      "attempt": 9
+    },
+    {
+      "tick_id": "6ne",
+      "state": "closed",
+      "attempt": 11
+    }
+  ],
+  "provenance": {
+    "run_id": "epic-v5t",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/v5t",
+    "source_sha": "1b1621c3605314be5edba2ece36f4107703e4a5b",
+    "integration_ref": "refs/heads/epic/v5t",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "[1] A production cloud run whose config selects claude-sub runs a review on opus via the subscription, token never in the container, falls back to Workers AI when no subscription is free. [2] CloudRule enforces the new rule with tests. [3] A scheduled job keeps the image's claude CLI current. [4] make gate + cloudflare tests pass.",
+    "description": "Follow-up of jvj (docs/spikes/jvj-claude-sub-cloud.md, PR #243), operator 2026-10-06 'yes please': (1) production wiring of the claude-sub rung: Worker secrets CLAUDE_SUB_TOKEN_<LABEL> (operator sets them; deploy/doctor report which labels exist, never values), the per-subscription cap of 2, quota/rate-limit handling and the Workers AI fallback; (2) the cloud routing rule (tick nwn, CloudRule in internal/profile/cloudworker.go) changes from 'Workers AI models only' to 'no per-token billing in the cloud': subscription rungs only with the versionless claude aliases (sonnet, opus) and each naming a Workers AI fallback; (3) the claude CLI in the production worker image, with an automatic pin bump (scheduled CI job/PR that moves CLAUDE_CODE_VERSION to the latest release) so the aliases resolve to the latest models (2.1.227 maps opus to claude-opus-5; current releases map it to 5.5); (4) ladder: implement sonnet → opus, review/closeout opus. Off unless a config selects it (tda).",
+    "epic_id": "v5t",
+    "role": "classify-tick",
+    "tick_id": "6fv",
+    "title": "claude-sub in production: wiring, the cloud routing rule, and a current claude CLI in the image"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.99,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.99,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.01,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1357,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-06T17:14:20Z",
+  "answered_at": "2026-10-06T17:14:20Z",
+  "provenance": {
+    "run_id": "epic-v5t",
+    "tick_id": "6fv",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/v5t",
+    "source_sha": "e31a6520b64280cfd4a9f9902072a44fc4375c05",
+    "integration_ref": "refs/heads/epic/v5t",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 4,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Tick tda's acceptance [1] puts the glm and claude configs in .tick/runners.cloud.toml, but a worker may not write that file, and attempt 2 was refused whole for doing it. The block is internal/runconfig/testdata/runners.cloud.configs.toml, and two repository guards check it against the real files. Until it is appended, a cloud run of an epic labelled config: claude is refused, because the cloud files declare no named configs. Fix: sed -n '/^# Named run configs/,$p' internal/runconfig/testdata/runners.cloud.configs.toml >> .tick/runners.cloud.toml. The guards then hold the real file. This must be done by the operator or the run, not a worker.\nevidence: internal/runconfig/testdata/runners.cloud.configs.toml; internal/reconcile/runconfig_select.go selectRunConfig (a label on a cloud run without configs is refused)\n\nticfac run epic-v5t created this tick by absorbing the finding 1438f03bddefb40102b41cd1183eb6ba63f3a9936d35cf634d496b4598cf2880 (reported by run-epic-v5t/tick-tda/attempt-3): the finding was judged against the epic's definition of done and gates done item A1, as its reporter asserts at high severity. The decision record — item id, verdict, basis — is .ticfac/runs/epic-v5t/absorptions/1438f03bddefb40102b41cd1183eb6ba63f3a9936d35cf634d496b4598cf2880.json on the run branch.",
+    "epic_id": "v5t",
+    "role": "classify-tick",
+    "tick_id": "yck",
+    "title": "Append the two named cloud configs to .tick/runners.cloud.toml"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.98,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.01,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.99,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1416,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T01:28:06Z",
+  "answered_at": "2026-10-07T01:28:06Z",
+  "provenance": {
+    "run_id": "epic-v5t",
+    "tick_id": "yck",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/v5t",
+    "source_sha": "fa5b15dd26c207754832b5b5640e1f263f2e6359",
+    "integration_ref": "refs/heads/epic/v5t",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -135,6 +135,16 @@ pinned_tk="${TICKS_TK_VERSION:-}"
 # image actionable here: the boot is refused rather than continued in an image
 # nobody asked for (check_declared_image).
 booted_image="${TICKS_SANDBOX_IMAGE:-}"
+# The claude-sub marker (tick 6fv): the control plane's statement that THIS
+# job's claude traffic is billed to the operator's Claude subscription — the
+# Worker intercepts the container's api.anthropic.com traffic and swaps the
+# placeholder OAuth token (which the CLI speaks its subscription dialect
+# with) for the subscription's own, held as a Worker secret and never in this
+# container. The pair that makes a claude-sub job is the MARKER plus the
+# placeholder in CLAUDE_CODE_OAUTH_TOKEN, both set by the boot; the aliases
+# the rung admits (sonnet, opus) are the factory's routing rule, mirrored
+# here as the last door: a pinned model id bills per token and is refused.
+claude_sub="${TICKS_CLAUDE_SUB:-}"
 # Cloud-connected operator channel. These are optional so a sandbox can still
 # run a repository whose operator channel is local-only; when present, tk ask
 # mirrors its pending entry into the factory RunRoom and watches that DO for
@@ -215,6 +225,12 @@ require_common_inputs() {
 	omp | claude | pi-durable) ;;
 	*) die $EXIT_CONFIG "unknown harness kind '$harness' (TICKS_HARNESS) — this image carries the omp and claude harnesses and hosts pi-durable worker conversations (--boot/--finish); the pi CLI is deleted (epic 43y, tick jhp)" ;;
 	esac
+	if [[ -n $claude_sub && $harness != "claude" ]]; then
+		die $EXIT_CONFIG "TICKS_CLAUDE_SUB is set but the harness is '$harness', not claude — a claude-sub job is a claude job (the subscription's OAuth dialect is the claude CLI's own); fix the routing that booted this container"
+	fi
+	if [[ -n $claude_sub && -z ${CLAUDE_CODE_OAUTH_TOKEN:-} ]]; then
+		die $EXIT_CONFIG "TICKS_CLAUDE_SUB is set but CLAUDE_CODE_OAUTH_TOKEN is not — the boot that selected the subscription forgot the placeholder, and claude would fall back to per-token spend; fix the factory's claude-sub boot"
+	fi
 	if [[ -z $workdir || $workdir == "/" || $workdir == "$HOME" ]]; then
 		die $EXIT_CONFIG "TICKS_WORKDIR must be a dedicated directory, not '$workdir'"
 	fi
@@ -254,7 +270,16 @@ configure_model_routing() {
 	# AI_GATEWAY_* is the run's control plane (internal/runenv): a gate and a
 	# test binary shed it. The vendor variables below are build environment.
 	export AI_GATEWAY_BASE_URL="$gateway"
-	export ANTHROPIC_BASE_URL="$gateway/anthropic"
+	# On a claude-sub job (tick 6fv) NO Anthropic variable may be exported:
+	# ANTHROPIC_API_KEY wins over the OAuth token (an API key is per-token
+	# spend, exactly what this job exists not to do), ANTHROPIC_BASE_URL
+	# would point the CLI at the gateway, which serves no subscription
+	# alias, and ANTHROPIC_AUTH_TOKEN would hand it the gateway token. The
+	# CLI keeps its own default — api.anthropic.com — which the Worker
+	# intercepts and authenticates with the subscription.
+	if [[ -z $claude_sub ]]; then
+		export ANTHROPIC_BASE_URL="$gateway/anthropic"
+	fi
 	export OPENAI_BASE_URL="$gateway/openai"
 	export OPENROUTER_BASE_URL="$gateway/openrouter"
 	# Workers AI is a route like the others, and it is the one the documented
@@ -268,11 +293,17 @@ configure_model_routing() {
 	# request, and stops answering the moment the run's token is revoked.
 	# Whichever variable a harness reads, it reads the same revocable token.
 	export AI_GATEWAY_TOKEN="$gateway_token"
-	export ANTHROPIC_AUTH_TOKEN="$gateway_token"
-	export ANTHROPIC_API_KEY="$gateway_token"
+	if [[ -z $claude_sub ]]; then
+		export ANTHROPIC_AUTH_TOKEN="$gateway_token"
+		export ANTHROPIC_API_KEY="$gateway_token"
+	fi
 	export OPENAI_API_KEY="$gateway_token"
 	export OPENROUTER_API_KEY="$gateway_token"
-	say "model traffic routed through the AI Gateway at ${gateway#*://} on this run's token"
+	if [[ -n $claude_sub ]]; then
+		say "claude traffic on the subscription: the placeholder OAuth token and the Worker's interception carry it, never the gateway"
+	else
+		say "model traffic routed through the AI Gateway at ${gateway#*://} on this run's token"
+	fi
 }
 
 # The model the harness runs on, from the same role/tier routing every other
@@ -387,6 +418,24 @@ select_model_route() {
 		die $EXIT_MODEL "the claude harness speaks the Anthropic API, but '$model' is served by $model_provider — route the orchestrator to an Anthropic model, or set TICKS_HARNESS=omp, which is cross-provider"
 	fi
 
+	# A claude-sub job runs ONLY the rung's versionless aliases (tick 6fv) —
+	# the factory's routing rule, mirrored here as the last door because this
+	# container is the thing that would spend. A pinned model id bills per
+	# token, and the alias is what makes the rung subscription-billed: the
+	# alias resolves inside the CLI binary to the latest model the pinned CLI
+	# knows, which is why the image's CLAUDE_CODE_VERSION is bumped routinely.
+	# The vendor's own host is the route: the Worker's interception replaces
+	# the placeholder's credentials per request, so the CLI keeps its default
+	# and nothing here points anywhere else.
+	if [[ -n $claude_sub ]]; then
+		case "$model_id" in
+		sonnet | opus) model_base_url="https://api.anthropic.com" ;;
+		*)
+			die $EXIT_MODEL "'$model_id' is not one of the claude subscription rung's versionless aliases (sonnet, opus) — a pinned model id bills per token in the cloud; name the alias in the routing that dispatched this job"
+			;;
+		esac
+	fi
+
 	# Workers AI has no vendor variable of its own that any harness knows to
 	# read; what it has is an OpenAI-compatible endpoint. So when the routed
 	# model is served by Workers AI, the OpenAI-style provider the harness
@@ -454,6 +503,10 @@ record_branch() {
 probe_model() {
 	if ! command -v curl >/dev/null 2>&1; then
 		die $EXIT_MODEL "no curl in the container, so the model route cannot be proved before the harness starts — the image is broken"
+	fi
+	if [[ -n $claude_sub ]]; then
+		say "model probe skipped: this job's model route is the subscription itself, and the harness probe below is the proof of it"
+		return 0
 	fi
 
 	local try=1
@@ -656,7 +709,17 @@ select_harness_route() {
 	esac
 
 	# The run's gateway token, under the name THIS kind reads it by. Same token,
-	# same revocability as every vendor variable above.
+	# same revocability as every vendor variable above — except on a
+	# claude-sub job (tick 6fv): the claude CLI must read NOTHING from here.
+	# Its credentials are the placeholder OAuth token the boot carried in
+	# (which the Worker's interception swaps for the subscription's own) and
+	# the CA the interception signs with; exporting ANTHROPIC_API_KEY beside
+	# the placeholder would put per-token spend on a job selected precisely
+	# not to spend it, because an API key wins over OAuth.
+	if [[ -n $claude_sub ]]; then
+		say "harness $harness on the subscription: no credential exported, the placeholder and the interception carry it"
+		return 0
+	fi
 	export "$harness_credential_env=$gateway_token"
 	say "harness $harness calls the $model_provider route its '$harness_provider' provider, credentialled by \$$harness_credential_env"
 }

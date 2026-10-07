@@ -1067,10 +1067,16 @@ func dashGitHub(m statusmodel.Model, st watchStyles) string {
 // measured number, and "not metered" — dim, secondary text — where nothing
 // measured, never a fabricated $0.00, because an unmetered line wearing a
 // number is a lie with a decimal point. No lines at all and the whole cost
-// says so.
+// says so. The run's named config, when it selected one (tick tda), leads
+// the line: the spend is read beside the config that spent it, so two epics
+// on two configs compare on the line that answers what each cost.
 func dashCost(m statusmodel.Model, st watchStyles) string {
+	config := ""
+	if m.RunConfig != nil {
+		config = "config " + *m.RunConfig + " · "
+	}
 	if len(m.Cost.Lines) == 0 {
-		return st.dim("cost not metered")
+		return config + st.dim("cost not metered")
 	}
 	parts := make([]string, 0, len(m.Cost.Lines))
 	for _, line := range m.Cost.Lines {
@@ -1080,7 +1086,7 @@ func dashCost(m statusmodel.Model, st watchStyles) string {
 			parts = append(parts, dashCostLabel(line.Source)+" "+st.dim("not metered"))
 		}
 	}
-	return "cost " + strings.Join(parts, " · ")
+	return config + "cost " + strings.Join(parts, " · ")
 }
 
 // dashCostLabel is the source's own name as the tick spells it: the rivers

@@ -74,6 +74,12 @@ import {
   writeReconcileRecord,
   writeRunRecord,
 } from "./artifacts";
+import {
+  claudeSubPool,
+  claudeSubProcessEnv,
+  isSubscriptionRung,
+  type LeaseOutcome,
+} from "./claude-sub";
 import { factoryMaxInstances, reclaimRunWorkers } from "./container-capacity";
 import {
   containerGitToken,
@@ -1700,10 +1706,51 @@ async function supervisePass(
             factoryBaseURL(env),
           );
           if (!github.ok) throw new Error(github.denial.detail);
+          // The claude-sub rung (tick 6fv): a REVIEW whose resolved pairing is
+          // the rung — claude on a versionless alias, the config's way of
+          // selecting the operator's subscription — leases one subscription
+          // HERE, at dispatch, under the pool's per-subscription cap. The
+          // lease is sticky per sandbox name, so a replayed step re-asks and
+          // gets the same subscription back. A lease that fails never waits:
+          // THIS job runs on the Workers AI rung instead, the feed line says
+          // so (below), and the pool's snapshot on /api/claude-sub says why.
+          let claudeSub: { label: string; jobId: string } | undefined;
+          let claudeSubNote = "";
+          const reviewRouting =
+            options.job === "review"
+              ? {
+                  harness: reviewHarness(context.config.harness, env.RUN_WORKER_HARNESS),
+                  model: workerModel(context.config.model, env.RUN_WORKER_MODEL),
+                }
+              : undefined;
+          if (
+            reviewRouting !== undefined &&
+            isSubscriptionRung(reviewRouting.harness, reviewRouting.model)
+          ) {
+            const pool = claudeSubPool(env);
+            const lease: LeaseOutcome =
+              pool === null
+                ? { ok: false, reason: "none", retry_at: null }
+                : await pool.lease(name);
+            if (lease.ok) {
+              claudeSub = { label: lease.label, jobId: name };
+              claudeSubNote = ` on claude subscription ${lease.label}`;
+            } else {
+              // The step-down (spike jvj's design): the same ladder with the
+              // rung dropped — the review's own floor and the deployment's
+              // standing model, both Workers AI. For THIS job only; the next
+              // dispatch asks the pool again.
+              reviewRouting.harness = reviewHarness(null, env.RUN_WORKER_HARNESS);
+              reviewRouting.model = workerModel(null, env.RUN_WORKER_MODEL);
+              claudeSubNote = ` — claude-sub ${claudeSubLeaseRefusal(lease)}, so this job steps down to the Workers AI rung (${reviewRouting.harness} on ${reviewRouting.model})`;
+            }
+          }
           // The boot's own line on the run feed, BEFORE the process exists:
           // every line the container relays for this boot sorts after it
           // (src/feed-relay.ts), and a boot that never gets as far as
           // `ticfac run-epic` is still a boot the operator can see starting.
+          // The claude-sub note rides it: a run expected on opus needs to say
+          // which subscription took it, or why none did.
           // Best effort, like every feed append — a replayed step rewrites
           // the same key.
           await appendBootFeed(env, {
@@ -1713,80 +1760,98 @@ async function supervisePass(
             slot: "a",
             event: orchestratorBootFeedEvent(
               params.run_id,
-              `orchestrator boot ${boot} starting (phase ${phase}): booting its container`,
+              `orchestrator boot ${boot} starting (phase ${phase}): booting its container${claudeSubNote}`,
             ),
           });
-          const sandbox = await binding.get(name, { image, keepAlive: true });
+          const sandbox = await binding.get(name, {
+            image,
+            keepAlive: true,
+            ...(claudeSub === undefined ? {} : { claudeSub }),
+          });
           const started = await sandbox.startProcess(ORCHESTRATOR_COMMAND, {
-            env: orchestratorEnv({
-              run_id: params.run_id,
-              epic: params.epic,
-              base_sha: params.base_sha,
-              repo_url: context.repo_url,
-              gateway_base_url: context.gateway_base_url,
-              gateway_token: credential.token,
-              phase,
-              // The chain this container belongs to (tick hyi). Every boot of the
-              // orchestrator carries it, including a reconcile's replacement: the
-              // replacement is the same causal chain as the sandbox it succeeds.
-              ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
-              // The grade's teeth (tick pzf): `operator` hands over the token
-              // that can push, `run` hands over this run's own `tkr_` credential,
-              // which github.com will not accept and this factory's git door will
-              // not forward a push for.
-              github_token: containerGitToken(context.git, github.token, credential.token),
-              ...(github.token_url === undefined ? {} : { github_token_url: github.token_url }),
-              // Which harness and model the container's entrypoint probes before
-              // it starts its job. The two jobs are routed differently (tick dl8):
-              //
-              // - the ORCHESTRATOR container execs `ticfac run-epic`, so its
-              //   harness/model pair only has to satisfy the entrypoint's
-              //   pre-flight probes — the deployment's run-level choice
-              //   (RUN_HARNESS/RUN_MODEL) stands, as wrangler.toml pins it;
-              // - the REVIEW job is routed like every other cloud role, through
-              //   the worker ladder — with the review's own floor (`reviewHarness`,
-              //   epic 43y tick jhp): the workers are hosted on pi-durable and the
-              //   pi CLI is deleted, so the review — the one cloud boot that still
-              //   runs a CLI harness in its container — falls to omp on GLM, never
-              //   the image's own harness selection, which a deployment that
-              //   routes nothing would leave at claude (the xte finding dl8
-              //   absorbed).
-              ...(options.job === "review"
-                ? {
-                    harness: reviewHarness(context.config.harness, env.RUN_WORKER_HARNESS),
-                    model: workerModel(context.config.model, env.RUN_WORKER_MODEL),
-                  }
-                : {
-                    ...(context.config.harness === null ? {} : { harness: context.config.harness }),
-                    ...(context.config.model === null ? {} : { model: context.config.model }),
-                  }),
-              sandbox_image: image,
-              // The account's container ceiling (hn6's cloud run): the run the
-              // orchestrator drives keeps its live workers under it, less the
-              // orchestrator's own container, so it never asks the door for a
-              // slot it can count itself out of.
-              factory_max_instances: factoryMaxInstances(env),
-              // The factory URL is given per BOOT (tick 7eq): every orchestrator
-              // reports its own finish to the done door over it, and the same
-              // URL is what its `ticfac run-epic` hands the per-tick sandbox
-              // door's client — the one dispatch path a container has.
-              ...(factoryBaseURL(env) === null
-                ? {}
-                : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
-              // The review half (tick v7g). Given per BOOT, from the run's own row
-              // — a container is told which pull request it is reading, and there
-              // is no other way for it to find out. The factory URL comes with it
-              // because that is where the findings go; a review container that
-              // could not reach the door would have nowhere to put its one output.
-              ...(context.review === null || factoryBaseURL(env) === null
-                ? {}
-                : {
-                    review_pr: context.review.pr_number,
-                    review_head_sha: context.review.head_sha,
-                    factory_url: factoryBaseURL(env)!,
-                    factory_project: params.project,
-                  }),
-            }),
+            env: {
+              ...orchestratorEnv({
+                run_id: params.run_id,
+                epic: params.epic,
+                base_sha: params.base_sha,
+                repo_url: context.repo_url,
+                gateway_base_url: context.gateway_base_url,
+                gateway_token: credential.token,
+                phase,
+                // The chain this container belongs to (tick hyi). Every boot of the
+                // orchestrator carries it, including a reconcile's replacement: the
+                // replacement is the same causal chain as the sandbox it succeeds.
+                ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
+                // The grade's teeth (tick pzf): `operator` hands over the token
+                // that can push, `run` hands over this run's own `tkr_` credential,
+                // which github.com will not accept and this factory's git door will
+                // not forward a push for.
+                github_token: containerGitToken(context.git, github.token, credential.token),
+                ...(github.token_url === undefined ? {} : { github_token_url: github.token_url }),
+                // Which harness and model the container's entrypoint probes before
+                // it starts its job. The two jobs are routed differently (tick dl8):
+                //
+                // - the ORCHESTRATOR container execs `ticfac run-epic`, so its
+                //   harness/model pair only has to satisfy the entrypoint's
+                //   pre-flight probes — the deployment's run-level choice
+                //   (RUN_HARNESS/RUN_MODEL) stands, as wrangler.toml pins it;
+                // - the REVIEW job is routed like every other cloud role, through
+                //   the worker ladder — with the review's own floor (`reviewHarness`,
+                //   epic 43y tick jhp): the workers are hosted on pi-durable and the
+                //   pi CLI is deleted, so the review — the one cloud boot that still
+                //   runs a CLI harness in its container — falls to omp on GLM, never
+                //   the image's own harness selection, which a deployment that
+                //   routes nothing would leave at claude (the xte finding dl8
+                //   absorbed).
+                ...(options.job === "review"
+                  ? {
+                      // The pair the lease decided on: the rung the config
+                      // selected, or the Workers AI rung a failed lease
+                      // stepped this job down to (never a wait).
+                      harness: reviewRouting!.harness,
+                      model: reviewRouting!.model,
+                    }
+                  : {
+                      ...(context.config.harness === null
+                        ? {}
+                        : { harness: context.config.harness }),
+                      ...(context.config.model === null ? {} : { model: context.config.model }),
+                    }),
+                sandbox_image: image,
+                // The account's container ceiling (hn6's cloud run): the run the
+                // orchestrator drives keeps its live workers under it, less the
+                // orchestrator's own container, so it never asks the door for a
+                // slot it can count itself out of.
+                factory_max_instances: factoryMaxInstances(env),
+                // The factory URL is given per BOOT (tick 7eq): every orchestrator
+                // reports its own finish to the done door over it, and the same
+                // URL is what its `ticfac run-epic` hands the per-tick sandbox
+                // door's client — the one dispatch path a container has.
+                ...(factoryBaseURL(env) === null
+                  ? {}
+                  : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
+                // The review half (tick v7g). Given per BOOT, from the run's own row
+                // — a container is told which pull request it is reading, and there
+                // is no other way for it to find out. The factory URL comes with it
+                // because that is where the findings go; a review container that
+                // could not reach the door would have nowhere to put its one output.
+                ...(context.review === null || factoryBaseURL(env) === null
+                  ? {}
+                  : {
+                      review_pr: context.review.pr_number,
+                      review_head_sha: context.review.head_sha,
+                      factory_url: factoryBaseURL(env)!,
+                      factory_project: params.project,
+                    }),
+              }),
+              // The claude-sub process environment (tick 6fv): the OAuth
+              // PLACEHOLDER that puts the CLI in its subscription dialect, the
+              // interception's CA, and the marker the entrypoint's claude-sub
+              // route keys on. Nothing here is a credential — the subscription
+              // token is a Worker secret the proxy swaps in per request, and it
+              // never enters the container.
+              ...(claudeSub === undefined ? {} : claudeSubProcessEnv()),
+            },
           });
           return { process_id: started.id, at_ms: Date.now() };
         },
@@ -2171,17 +2236,25 @@ async function supervisePass(
       });
       await step.do(`${options.label}:destroy:${attempt}`, OBSERVE_RETRIES, async () => {
         const binding = sandboxBinding(env);
-        if (binding === null) return { destroyed: false };
-        try {
-          const sandbox = await binding.get(name);
-          await sandbox.destroy();
-          return { destroyed: true };
-        } catch (error) {
-          console.error(
-            `factory run-workflow: ${params.run_id} could not destroy sandbox ${boot}: ${String(error)}`,
-          );
-          return { destroyed: false };
+        let destroyed = false;
+        if (binding !== null) {
+          try {
+            const sandbox = await binding.get(name);
+            await sandbox.destroy();
+            destroyed = true;
+          } catch (error) {
+            console.error(
+              `factory run-workflow: ${params.run_id} could not destroy sandbox ${boot}: ${String(error)}`,
+            );
+          }
         }
+        // The claude-sub lease ends with the container (tick 6fv): the job is
+        // over, so the subscription's cap is free for the next one. Releasing
+        // a job that never leased is a no-op, and the lease's TTL is the
+        // backstop for the ending that never reaches here.
+        const pool = claudeSubPool(env);
+        if (pool !== null) await pool.release(name);
+        return { destroyed };
       });
     }
   }
@@ -2191,6 +2264,24 @@ async function supervisePass(
     detail: `${lastDetail}; ${options.max_boots} orchestrator boots were not enough`,
     boots: counter.next - 1,
   };
+}
+
+/**
+ * A claude-sub lease refusal in operator words (tick 6fv): the reason the pool
+ * refused — `none` no token secret is configured, `busy` every usable
+ * subscription is at its cap, `exhausted` every one is benched on its quota —
+ * with the reset the bench named, so the feed line says when the subscription
+ * comes back rather than leaving a reader to guess.
+ */
+function claudeSubLeaseRefusal(lease: Extract<LeaseOutcome, { ok: false }>): string {
+  switch (lease.reason) {
+    case "none":
+      return "has no subscription configured (no CLAUDE_SUB_TOKEN_<LABEL> secret is set)";
+    case "busy":
+      return "found every subscription busy under its cap";
+    case "exhausted":
+      return `found every subscription benched on its quota${lease.retry_at === null ? "" : ` until ${new Date(lease.retry_at).toISOString()}`}`;
+  }
 }
 
 /** Last flush before the orchestrator is killed, so its final words survive. */

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ticks.sh/schemas/runners-config.schema.json",
   "title": "Ticks runners configuration (.tick/runners.toml)",
-  "description": "Configuration for one repo's ticks runs, in `.tick/runners.toml`. Two things live here. ROUTING: which substrate orchestrates a run (herdr panes, a local headless worker, or a cloud worker) and which worker serves each task role and capability tier. A worker is specified along two dimensions — `kind` (the resolved executor's runner/harness name) and `model` + optional `effort` (the capability dimension). Under the herdr executor, ticfac compiles those fields into one of the native argv templates in herdr-kinds.md; the deleted pi-CLI kind is explicitly not one of them. `args` remains the herdr escape hatch appended after compiled flags. SANDBOX: `[sandbox]`, the environment one run is given — the image, the extra toolchain, and the idempotent setup commands that warm it. COMMANDS: the shell a run may execute, split by the phase authorised to execute it — `[testing]` for implementers, `[evidence]` for closeout only, `[environment]` for the run-start pre-flight — plus `[evidence.acceptance]`, the acceptance-item-to-command authorisation table. FINDINGS: `[findings.route.<owner/name>]`, the reviewed allowlist of other repositories a run may file a routed finding into. Parse the TOML file, then validate the resulting object against this schema. This schema validates SHAPE only. Whether a given runner/model pair is usable by the resolved executor is a construction- or spawn-time compatibility check, because runner and model families are open-ended and cannot be enumerated here; and the cross-table command rules (a reference that resolves, a command that belongs to exactly one phase) are loader checks, because JSON Schema has no referential integrity — runners-config.md, 'Caught by the config loader', is normative for those and they fail closed. Not part of the repo's schemas/ codegen set: this config is consumed by ticfac's runconfig reader, never by the Go/TypeScript wire-type generators.",
+  "description": "Configuration for one repo's ticks runs, in `.tick/runners.toml`. Two things live here. ROUTING: which substrate orchestrates a run (herdr panes, a local headless worker, or a cloud worker) and which worker serves each task role and capability tier. A worker is specified along two dimensions — `kind` (the resolved executor's runner/harness name) and `model` + optional `effort` (the capability dimension). Under the herdr executor, ticfac compiles those fields into one of the native argv templates in herdr-kinds.md; the deleted pi-CLI kind is explicitly not one of them. `args` remains the herdr escape hatch appended after compiled flags. SANDBOX: `[sandbox]`, the environment one run is given — the image, the extra toolchain, and the idempotent setup commands that warm it. COMMANDS: the shell a run may execute, split by the phase authorised to execute it — `[testing]` for implementers, `[evidence]` for closeout only, `[environment]` for the run-start pre-flight — plus `[evidence.acceptance]`, the acceptance-item-to-command authorisation table. FINDINGS: `[findings.route.<owner/name>]`, the reviewed allowlist of other repositories a run may file a routed finding into. LADDER: `[tier_policy]`, the evaluated mapping from tick facts to a dispatch tier. CONFIGS: `[configs]`, the named run configs (ticfac tick tda) — more than one complete routing in one repository, one epic on GLM and another on claude, each selecting by `--config`, the epic's own `config:` label, then the declared default. Parse the TOML file, then validate the resulting object against this schema. This schema validates SHAPE only. Whether a given runner/model pair is usable by the resolved executor is a construction- or spawn-time compatibility check, because runner and model families are open-ended and cannot be enumerated here; and the cross-table command rules (a reference that resolves, a command that belongs to exactly one phase) are loader checks, because JSON Schema has no referential integrity — runners-config.md, 'Caught by the config loader', is normative for those and they fail closed. Not part of the repo's schemas/ codegen set: this config is consumed by ticfac's runconfig reader, never by the Go/TypeScript wire-type generators.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -19,6 +19,14 @@
     },
     "roles": {
       "$ref": "#/$defs/Roles"
+    },
+    "tier_policy": {
+      "$ref": "#/$defs/TierPolicy",
+      "description": "The EVALUATED mapping from tick facts to a dispatch tier (ticfac tick 5eq): the tier a FIRST attempt starts at (`default`, required), the named tier escalation never passes (`ceiling`), the rungs one failed attempt earns (`step`), first-attempt start rules, per-process-role tier pins, per-tier concurrency caps, the rate-limit response, and the per-role/tier runaway backstop. Nothing in it is chosen per dispatch; everything in it is a rule a host can point at after the fact. Read by ticfac (internal/runconfig), the execution half's own config, since the roles and tiers tables became ticfac's."
+    },
+    "configs": {
+      "$ref": "#/$defs/Configs",
+      "description": "Named run configs (ticfac tick tda): more than one complete routing in one repository, so one epic can run on GLM through Workers AI and another on claude through the operator's subscription. `default` names the config a run uses when nothing selects; each [configs.<name>] is a ROUTING and nothing else — roles (with tiers) and a tier policy. The gate, the evidence table, the substrate and the findings routes are the repository's rules, the same for every run, and have no place inside a config. A run selects by `--config`, then the epic's own `config:` label, then the default; the named config's cells apply as the LAST overlay over the common file's, the substrate override's and every tier."
     },
     "testing": {
       "$ref": "#/$defs/Testing"
@@ -48,6 +56,105 @@
   },
   "required": ["roles"],
   "$defs": {
+    "TierPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The evaluated tier ladder (ticfac tick 5eq). `default` is required: a policy that cannot say where a first attempt starts cannot refuse one that starts high. Start rules may make a first attempt CHEAPER than the default, never dearer — expense is earned by a failed attempt, not asserted by a rule; the dear_* cells are the one narrowing, letting a RECORDED classification start dear, bounded by the ceiling. The cross-table rules a schema cannot express (a start rule's tier at or below the default, the dear tier above the ceiling, wall_seconds key shapes) are the loader's, fail closed.",
+      "properties": {
+        "default": { "type": "string", "enum": ["economy", "balanced", "strong", "frontier"] },
+        "ceiling": { "type": "string", "enum": ["economy", "balanced", "strong", "frontier"] },
+        "step": { "type": "integer", "minimum": 1 },
+        "label_prefix": { "type": "string" },
+        "start": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "tier": { "type": "string", "enum": ["economy", "balanced", "strong", "frontier"] },
+              "types": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+              "roles": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+              "min_priority": { "type": "integer" },
+              "max_priority": { "type": "integer" },
+              "wave": { "type": "integer", "minimum": 1 },
+              "min_blocks": { "type": "integer", "minimum": 0 },
+              "max_blocks": { "type": "integer", "minimum": 0 }
+            },
+            "required": ["tier"]
+          }
+        },
+        "roles": {
+          "type": "object",
+          "description": "Per-process-role tier pins — implement-tick/implement, review-epic/review, closeout-epic/closeout, plan-epic/plan. An EMPTY value is legal and means the role's own base values, no overlay.",
+          "additionalProperties": { "type": "string", "enum": ["economy", "balanced", "strong", "frontier", ""] }
+        },
+        "concurrency": {
+          "type": "object",
+          "description": "How many dispatches may run at one tier at once — deliberately PER TIER, because a tier names a model and a model names a provider: a subscription's 1–2 caps sit here.",
+          "additionalProperties": { "type": "integer", "minimum": 1 }
+        },
+        "rate_limit": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "response": { "type": "string", "enum": ["backoff-and-retry"] },
+            "max_attempts": { "type": "integer", "minimum": 1 },
+            "max_delay_ms": { "type": "integer", "minimum": 1000 }
+          }
+        },
+        "wall_seconds": {
+          "type": "object",
+          "description": "The runaway backstop per role and/or tier (ticfac tick wv2): a tier ('strong'), a role ('implement'), or 'role.tier', most specific wins. Values are seconds, at least 60.",
+          "additionalProperties": { "type": "integer", "minimum": 60 }
+        },
+        "dear_work_types": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "dear_tier": { "type": "string", "enum": ["economy", "balanced", "strong", "frontier"] },
+        "mass_threshold": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 }
+      },
+      "required": ["default"]
+    },
+    "Configs": {
+      "type": "object",
+      "description": "The named run configs (ticfac tick tda) and the default that names the one used when nothing selects. `default` is required when any config is declared — with more than one routing to choose between, what a run with no selection uses is a choice too. `default` is not itself a config name.",
+      "properties": {
+        "default": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" }
+      },
+      "additionalProperties": { "$ref": "#/$defs/Config" }
+    },
+    "Config": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "description": "One named run config: a complete ROUTING, and nothing else. A config that declares neither roles nor a tier policy is refused by the loader — it would silently run the file's own cells under a name that promises more. The gate, the evidence table, the substrate and the findings routes cannot vary per config.",
+      "properties": {
+        "roles": { "$ref": "#/$defs/ConfigRoles" },
+        "tier_policy": { "$ref": "#/$defs/TierPolicy" }
+      }
+    },
+    "ConfigRoles": {
+      "type": "object",
+      "description": "Task role -> routing, INSIDE a named config. The same cells as $defs/Roles with two differences a config's overlay semantics make: no required `implement` (a config may overlay one role and let the merged document route the rest) and no required `kind` in a role (a config's cell may set only the model, overlaying the merged document's kind).",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      },
+      "additionalProperties": { "$ref": "#/$defs/ConfigRole" }
+    },
+    "ConfigRole": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Routing for one task role inside a named config — the same cells as $defs/Role minus the required `kind`, which a config's cell may inherit from the merged document.",
+      "properties": {
+        "kind": { "$ref": "#/$defs/Kind" },
+        "model": { "$ref": "#/$defs/Model" },
+        "effort": { "$ref": "#/$defs/Effort" },
+        "args": { "$ref": "#/$defs/Args" },
+        "harness": {
+          "$ref": "#/$defs/Harness",
+          "description": "Optional note of which runner adapter this role's kind corresponds to. Purely documentary; routing uses `kind`."
+        },
+        "tiers": { "$ref": "#/$defs/Tiers" }
+      }
+    },
     "Findings": {
       "type": "object",
       "additionalProperties": false,

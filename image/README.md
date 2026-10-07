@@ -684,6 +684,25 @@ section below):
 | `omp` | `openrouter` | `openrouter` | `OPENROUTER_API_KEY` | `openai-completions` |
 | `omp` | `workers-ai` | `cloudflare-ai-gateway` | `CLOUDFLARE_AI_GATEWAY_API_KEY` | `openai-completions` |
 
+#### The claude-sub route (tick 6fv)
+
+A job the control plane marked `TICKS_CLAUDE_SUB=1` — and handed the
+**placeholder** `CLAUDE_CODE_OAUTH_TOKEN` — is billed to the operator's
+Claude **subscription**, not per token through the gateway: the Worker
+intercepts the container's `api.anthropic.com` traffic and swaps the
+placeholder for the subscription's own token, a Worker secret that never
+enters this container. On such a job the entrypoint exports **no
+Anthropic variable at all**: an `ANTHROPIC_API_KEY` would win over the
+placeholder and put per-token spend on a job selected precisely not to
+spend it, and a base URL would point the CLI at the gateway, which serves
+no subscription alias. The model must be one of the rung's versionless
+aliases (`sonnet`, `opus` — they resolve inside the pinned CLI binary,
+which is why `CLAUDE_CODE_VERSION` is bumped routinely by a scheduled
+workflow); a pinned id is refused here as the last door. The gateway's
+model probe is skipped — the harness probe through the real intercepted
+path is the proof — and the harness needs no credential exported: the
+placeholder and the interception carry the authentication.
+
 The credential is only half of it. omp's built-in `cloudflare-ai-gateway`
 provider carries a **placeholder** base URL
 (`https://gateway.ai.cloudflare.com/v1/<account>/<gateway>/…`), so a run with a

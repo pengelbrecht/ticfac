@@ -1,0 +1,14 @@
+{
+  "id": "k20",
+  "title": "runners*.toml comments still state the old cloud rule",
+  "description": "The rule is now 'no per-token billing in the cloud', but the tracked routing files still say 'nothing in the cloud runs claude' / 'the cloud runs Workers AI models only' (.tick/runners.cloud.toml:6-7 and :79, .tick/runners.toml:61, and the [roles.review] frontier-tier comments). The CELLS are correct (the default stays Workers AI; the rung is off unless a config selects it), so nothing behaves wrongly — but a reader of the files that route this repository's own runs is told a rule the code no longer enforces. I did not edit them: .tick/runners.cloud.toml is outside the files a worker may write, and the wording is an operator statement of their own rule.\nevidence: .tick/runners.cloud.toml:6-7,79; .tick/runners.toml:61\n\nticfac run epic-v5t filed this backlog tick from the finding 21a406cfb4198887bdd2a2d35e173affe3db8f490542eea9e5359a0b298d5865 (reported by run-epic-v5t/tick-6fv/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/21a406cfb4198887bdd2a2d35e173affe3db8f490542eea9e5359a0b298d5865.json on the run branch.",
+  "notes": "2026-10-06 23:19 - ticfac run epic-v5t: created by absorbing finding 21a406cfb4198887bdd2a2d35e173affe3db8f490542eea9e5359a0b298d5865 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-v5t/absorptions/21a406cfb4198887bdd2a2d35e173affe3db8f490542eea9e5359a0b298d5865.json on epic/v5t, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-epic-v5t/tick-6fv/attempt-1",
+  "created_by": "ticfac run epic-v5t",
+  "created_at": "2026-10-06T21:19:01Z",
+  "updated_at": "2026-10-06T21:19:10.521153Z"
+}

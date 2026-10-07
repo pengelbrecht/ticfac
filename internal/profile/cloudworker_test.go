@@ -65,10 +65,10 @@ func cloudRuleConfig(t *testing.T, cloudCells string) string {
 func assertCloudRefusal(t *testing.T, err error, wants ...string) {
 	t.Helper()
 	if err == nil {
-		t.Fatal("the cloud substrate resolved a worker that is not a Workers AI model")
+		t.Fatal("the cloud substrate resolved a worker the cloud billing rule refuses")
 	}
-	if !errors.Is(err, ErrNotWorkersAI) {
-		t.Errorf("the refusal is not recognisable as ErrNotWorkersAI: %v", err)
+	if !errors.Is(err, ErrCloudBilling) {
+		t.Errorf("the refusal is not recognisable as ErrCloudBilling: %v", err)
 	}
 	for _, want := range wants {
 		if !strings.Contains(err.Error(), want) {
@@ -77,11 +77,12 @@ func assertCloudRefusal(t *testing.T, err error, wants ...string) {
 	}
 }
 
-// A cloud cell that names claude outright — kind present, model present, the
-// load-time shape checks all green — is refused over the FINAL resolved
-// worker, naming the role, the kind and the model. The same role on a local
-// substrate keeps its claude routing: the rule is the cloud substrate's.
-func TestTheCloudRuleRefusesAFinalWorkerThatIsClaude(t *testing.T) {
+// A cloud cell that names claude on a PINNED model id — kind present, model
+// present, the load-time shape checks all green, but a pinned claude id
+// bills PER TOKEN — is refused over the FINAL resolved worker, naming the
+// role, the kind and the model. The same role on a local substrate keeps its
+// claude routing: the rule is the cloud's billing boundary, not a model ban.
+func TestTheCloudRuleRefusesAFinalWorkerOnAPinnedClaudeModel(t *testing.T) {
 	config := cloudRuleConfig(t, `version = 2
 
 [roles.implement]
@@ -90,18 +91,21 @@ model = "`+glm53+`"
 
 [roles.review]
 kind = "claude"
-model = "opus"
+model = "claude-opus-5-5"
 `)
 
 	_, err := Resolve("review-epic", Options{RunnersConfig: config, Substrate: "cloud"})
-	assertCloudRefusal(t, err, "review", "claude", "opus", "no tier")
+	assertCloudRefusal(t, err, "review", "claude", "claude-opus-5-5", "no tier", "sonnet, opus")
 
 	local, err := Resolve("review-epic", Options{RunnersConfig: config, Substrate: "herdr"})
 	if err != nil {
 		t.Fatalf("the cloud rule reached a herdr resolution: %v", err)
 	}
+	// The cloud overlay is not applied on herdr, so the review keeps the
+	// common file's claude/opus: the rule is the cloud's billing boundary,
+	// never a model ban that reaches a laptop.
 	if local.Runner != "claude" || local.Model != "opus" {
-		t.Errorf("a herdr review routed to %s/%s, want the frontier claude/opus", local.Runner, local.Model)
+		t.Errorf("a herdr review routed to %s/%s, want the common file's claude/opus", local.Runner, local.Model)
 	}
 
 	implement, err := Resolve("implement-tick", Options{RunnersConfig: config, Substrate: "cloud"})
@@ -173,7 +177,7 @@ model = "`+glm53+`"
 
 [roles.review.tiers.frontier]
 kind = "claude"
-model = "opus"
+model = "claude-opus-5-5"
 `)
 
 	base, err := Resolve("review-epic", Options{RunnersConfig: config, Substrate: "cloud"})
@@ -185,7 +189,39 @@ model = "opus"
 	}
 
 	_, err = Resolve("review-epic", Options{RunnersConfig: config, Substrate: "cloud", Tier: "frontier"})
-	assertCloudRefusal(t, err, "review", `tier "frontier"`, "claude", "opus")
+	assertCloudRefusal(t, err, "review", `tier "frontier"`, "claude", "claude-opus-5-5")
+}
+
+// The same tier overlay on the subscription rung: a tier cell that names
+// claude on a VERSIONLESS ALIAS is admitted at the tier, exactly as at a
+// base cell — the rung is the rule's other half, not an exception one layer
+// down. The step-down target is the rung's own Workers AI fallback, decided
+// at dispatch by the factory, never by a config cell.
+func TestTheCloudRuleAdmitsTheSubscriptionRungAtATier(t *testing.T) {
+	config := cloudRuleConfig(t, `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "`+glm53+`"
+
+[roles.implement.tiers.frontier]
+kind = "claude"
+model = "opus"
+`)
+	p, err := Resolve("implement-tick", Options{RunnersConfig: config, Substrate: "cloud", Tier: "frontier"})
+	if err != nil {
+		t.Fatalf("claude on the versionless opus alias was refused at a tier: %v", err)
+	}
+	if p.Runner != "claude" || p.Model != "opus" {
+		t.Errorf("the frontier tier resolved to %s/%s, want the claude/opus subscription rung", p.Runner, p.Model)
+	}
+	base, err := Resolve("implement-tick", Options{RunnersConfig: config, Substrate: "cloud"})
+	if err != nil {
+		t.Fatalf("the base cell, pi on Workers AI, was refused: %v", err)
+	}
+	if base.Runner != "pi" || base.Model != glm53 {
+		t.Errorf("the untiered role resolved to %s/%s, want pi/%s", base.Runner, base.Model, glm53)
+	}
 }
 
 // The COMMON file's tier overlay leaking under a cloud cell that routes only
@@ -297,6 +333,184 @@ model = "`+glm53+`"
 	}
 }
 
+// The subscription rung (tick 6fv): a cloud cell that names a rung harness
+// on a VERSIONLESS alias resolves — claude on sonnet or opus is billed to
+// the operator's Claude subscription, injected by the factory's claude-sub
+// wiring, never per token. This is the rule's OTHER half, admitted at a base
+// cell and at a tier, for every role that can name it.
+func TestTheCloudRuleAdmitsTheClaudeSubscriptionRung(t *testing.T) {
+	config := cloudRuleConfig(t, `version = 2
+
+[roles.implement]
+kind = "claude"
+model = "sonnet"
+
+[roles.review]
+kind = "claude"
+model = "opus"
+
+[roles.closeout]
+kind = "claude"
+model = "opus"
+`)
+
+	all, err := ResolveAll(Options{RunnersConfig: config, Substrate: "cloud"})
+	if err != nil {
+		t.Fatalf("the claude-sub ladder did not resolve on the cloud substrate: %v", err)
+	}
+	if all["implement-tick"].Runner != "claude" || all["implement-tick"].Model != "sonnet" {
+		t.Errorf("implement-tick resolved to %s/%s, want the claude/sonnet rung",
+			all["implement-tick"].Runner, all["implement-tick"].Model)
+	}
+	for _, role := range []string{"review-epic", "closeout-epic"} {
+		p := all[role]
+		if p.Runner != "claude" || p.Model != "opus" {
+			t.Errorf("%s resolved to %s/%s, want the claude/opus rung", role, p.Runner, p.Model)
+		}
+	}
+}
+
+// The rung admits ONLY the versionless aliases: a pinned claude id —
+// claude-opus-5-5, anthropic/claude-opus-4 — bills PER TOKEN wherever it
+// runs, and per-token spend in the cloud is what the rule exists to refuse.
+// The refusal names the aliases, because the fix is a config edit: spell the
+// alias, and the subscription pays.
+func TestTheCloudRuleRefusesAPinnedClaudeModelOnTheRungHarness(t *testing.T) {
+	for _, model := range []string{"claude-opus-5-5", "anthropic/claude-opus-4", "claude-opus-5"} {
+		config := cloudRuleConfig(t, `version = 2
+
+[roles.review]
+kind = "claude"
+model = "`+model+`"
+`)
+		_, err := Resolve("review-epic", Options{RunnersConfig: config, Substrate: "cloud"})
+		assertCloudRefusal(t, err, "review", "claude", model, "sonnet, opus")
+	}
+}
+
+// A subscription alias on a harness that is NOT the rung's does not make a
+// subscription worker: pi cannot speak the subscription's OAuth dialect, so
+// pi on opus is refused as firmly as claude on a Workers AI id is — the rung
+// is the PAIR, never either half alone.
+func TestTheCloudRuleRefusesASubscriptionAliasOnAnotherHarness(t *testing.T) {
+	config := cloudRuleConfig(t, `version = 2
+
+[roles.review]
+kind = "pi"
+model = "opus"
+`)
+	_, err := Resolve("review-epic", Options{RunnersConfig: config, Substrate: "cloud"})
+	assertCloudRefusal(t, err, "review", "pi", "opus")
+}
+
+// The rungs themselves are well-formed: every rung names a harness, every
+// model is a versionless alias (no provider namespace in it — a pinned id
+// must never read as an alias), and every fallback is a Workers AI model the
+// factory can step the role down to. This is the guard that keeps a future
+// edit to CloudRule from admitting per-token spend by accident.
+func TestEverySubscriptionRungIsWellFormed(t *testing.T) {
+	if len(CloudRule.SubscriptionRungs) == 0 {
+		t.Fatal("CloudRule declares no subscription rungs — the claude-sub wiring (tick 6fv) has nothing to admit")
+	}
+	for _, rung := range CloudRule.SubscriptionRungs {
+		if rung.Harness == "" {
+			t.Errorf("a subscription rung with no harness cannot be a rung: %+v", rung)
+		}
+		if len(rung.Models) == 0 {
+			t.Errorf("the %q rung names no aliases: no config could select it", rung.Harness)
+		}
+		for _, model := range rung.Models {
+			if model == "" || strings.ContainsAny(model, "/") {
+				t.Errorf("%q is not a versionless alias — the %q rung must name the CLI's own alias words, never a pinned id", model, rung.Harness)
+			}
+		}
+		if !IsWorkersAIModel(rung.Fallback) {
+			t.Errorf("the %q rung's fallback %q is not a Workers AI model — the step-down target must be one the gateway serves", rung.Harness, rung.Fallback)
+		}
+	}
+}
+
+// The three provider namespaces are three spellings of one provider route,
+// and a model id beneath any of them is ONE model however it is spelled: the
+// rule declares the rung fallback in pi's namespace, the factory's step-down
+// answers in omp's, and the executor's acceptance compares the two — so the
+// core must fold every spelling of one model to one string and keep
+// different models different.
+func TestWorkersAIModelCoreFoldsTheNamespacesToOneModel(t *testing.T) {
+	const core = "zai-org/glm-5.3"
+	for _, id := range []string{
+		"cloudflare-workers-ai/@cf/zai-org/glm-5.3", // pi's spelling
+		"workers-ai/@cf/zai-org/glm-5.3",            // omp's spelling
+		"@cf/zai-org/glm-5.3",                       // Workers AI's own
+	} {
+		if got := WorkersAIModelCore(id); got != core {
+			t.Errorf("WorkersAIModelCore(%q) = %q, want %q — the namespaces are spellings of one route, not different models", id, got, core)
+		}
+		if !IsWorkersAIModel(id) {
+			t.Errorf("%q is not read as a Workers AI model", id)
+		}
+	}
+	// A different model stays different, namespace or none.
+	if got := WorkersAIModelCore("cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"); got != "zai-org/glm-5.3-flash" {
+		t.Errorf("WorkersAIModelCore folded %q onto %q's core: a different model must stay different", got, core)
+	}
+	// And an id in no namespace — a subscription alias, a pinned vendor id —
+	// is its own string, never folded onto a namespaced model's core.
+	if got := WorkersAIModelCore("sonnet"); got != "sonnet" {
+		t.Errorf("WorkersAIModelCore(\"sonnet\") = %q, want it unchanged: an alias is not a namespaced model's core", got)
+	}
+}
+
+// CloudBillingAllows is the rule's ONE predicate, the one the factory's
+// executor and any other consumer answer to: a Workers AI worker (harness the
+// gateway serves, model in a Workers AI namespace) or a subscription rung
+// (rung harness, versionless alias).
+func TestCloudBillingAllows(t *testing.T) {
+	for _, tc := range []struct {
+		harness, model string
+		want           bool
+	}{
+		{"pi", glm53, true},
+		{"pi-durable", glm53Flash, true},
+		{"pi", workersAILlama, true},
+		{"claude", "sonnet", true},
+		{"claude", "opus", true},
+		{"claude", glm53, false},
+		{"claude", "claude-opus-5-5", false},
+		{"claude", "anthropic/claude-opus-4", false},
+		{"pi", "opus", false},
+		{"pi-durable", "opus", false},
+		{"omp", glm53, false},
+		{"claude", "", false},
+	} {
+		if got := CloudBillingAllows(tc.harness, tc.model); got != tc.want {
+			t.Errorf("CloudBillingAllows(%q, %q) = %v, want %v", tc.harness, tc.model, got, tc.want)
+		}
+	}
+}
+
+// The rule's harness allowlist is the union a dispatching executor admits:
+// every harness the gateway serves, plus every subscription rung's. A rung
+// whose harness no executor accepts is a rung no run can dispatch, and an
+// executor list that omits one is a resolution the run refuses twice.
+func TestTheRuleNamesEveryHarnessAWorkerMayRun(t *testing.T) {
+	allowed := CloudAllowedHarnesses()
+	for _, h := range append(append([]string{}, CloudRule.Harnesses...), subscriptionHarnesses()...) {
+		found := false
+		for _, a := range allowed {
+			if a == h {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%q is missing from the rule's harness allowlist %q", h, allowed)
+		}
+	}
+	if len(allowed) != len(CloudRule.Harnesses)+len(subscriptionHarnesses()) {
+		t.Errorf("the allowlist %q is not the union of the gateway harnesses and the rung harnesses", allowed)
+	}
+}
+
 // The rule keys on WHAT RUNS IN CLOUDFLARE (tick 78v), not on the cloud
 // substrate alone: a run whose substrate is LOCAL — herdr, harness, or none
 // named at all — can still select the cloudflare-sandbox executor by pointing
@@ -315,7 +529,7 @@ model = "`+glm53+`"
 
 [roles.implement.tiers.frontier]
 kind = "claude"
-model = "opus"
+model = "claude-opus-5-5"
 `)
 	cloud := cloudProfileDir(t)
 
@@ -333,25 +547,33 @@ model = "opus"
 		}
 	}
 
-	// The tier that leaves Workers AI refuses on every substrate — the local
-	// ones a sandbox-executor run can execute on, and the substrate-blind
-	// resolution alike — naming the role, the tier, the resolved kind and
-	// model, and the file the routing lives in for that substrate.
+	// The tier that leaves the sanctioned rungs refuses on every substrate —
+	// the local ones a sandbox-executor run can execute on (where the COMMON
+	// file's frontier tier is the model that leaks: a pinned Anthropic id on
+	// the durable harness), the substrate-blind resolution alike, and the
+	// cloud substrate's own overlay (whose tier cell names a pinned id too) —
+	// naming the role, the tier, the resolved kind and model, and the file
+	// the routing lives in for that substrate.
 	for _, sub := range []string{"herdr", "harness", ""} {
 		_, err := Resolve("implement-tick", Options{Dir: cloud, RunnersConfig: config, Substrate: sub, Tier: "frontier"})
 		routeFile := ".tick/runners.toml"
 		if sub != "" {
 			routeFile = ".tick/runners.local.toml"
 		}
-		assertCloudRefusal(t, err, "implement", `tier "frontier"`, "claude", "opus", routeFile)
+		assertCloudRefusal(t, err, "implement", `tier "frontier"`, HostedDurableHarness, "anthropic/claude-opus-4", routeFile)
 	}
+	_, err := Resolve("implement-tick", Options{RunnersConfig: config, Substrate: "cloud", Tier: "frontier"})
+	assertCloudRefusal(t, err, "implement", `tier "frontier"`, "claude", "claude-opus-5-5", "runners.cloud.toml")
 }
 
-// The finding's exact shape: the claude tier lives in .tick/runners.local.toml
-// — a laptop's ladder, the file the cloud substrate never reads — and a LOCAL
-// run selecting the cloudflare-sandbox executor would boot its worker in a
-// Cloudflare container on it. The refusal names the local override file, the
-// one an operator reading it can actually edit.
+// The finding's exact shape, updated for the subscription rung: the claude
+// tier lives in .tick/runners.local.toml — a laptop's ladder, the file the
+// cloud substrate never reads — and a LOCAL run selecting the
+// cloudflare-sandbox executor would boot its worker in a Cloudflare container
+// on it. A tier on the versionless alias is the subscription rung and is
+// admitted exactly as it is in the cloud overlay; a tier on a PINNED id bills
+// per token wherever the container boots, and the refusal names the local
+// override file, the one an operator reading it can actually edit.
 func TestTheCloudRuleRefusesTheLocalLadderOnTheSandboxExecutor(t *testing.T) {
 	config := writeConfig(t, `version = 2
 
@@ -363,12 +585,30 @@ model = "`+glm53+`"
 
 [roles.implement.tiers.frontier]
 kind = "claude"
-model = "opus"
+model = "claude-opus-5-5"
 `)
 	cloud := cloudProfileDir(t)
 	for _, sub := range []string{"herdr", "harness"} {
 		_, err := Resolve("implement-tick", Options{Dir: cloud, RunnersConfig: config, Substrate: sub, Tier: "frontier"})
-		assertCloudRefusal(t, err, "implement", `tier "frontier"`, "claude", "opus", "runners.local.toml")
+		assertCloudRefusal(t, err, "implement", `tier "frontier"`, "claude", "claude-opus-5-5", "runners.local.toml")
+	}
+	// The same ladder's versionless alias is the subscription rung: a
+	// sandbox-executor run may climb to claude on the subscription, on every
+	// substrate that can dispatch into Cloudflare.
+	write(t, filepath.Join(filepath.Dir(config), "runners.local.toml"), `version = 2
+
+[roles.implement.tiers.frontier]
+kind = "claude"
+model = "opus"
+`)
+	for _, sub := range []string{"herdr", "harness"} {
+		p, err := Resolve("implement-tick", Options{Dir: cloud, RunnersConfig: config, Substrate: sub, Tier: "frontier"})
+		if err != nil {
+			t.Fatalf("substrate %q refused the claude/opus subscription rung on the sandbox executor: %v", sub, err)
+		}
+		if p.Runner != "claude" || p.Model != "opus" {
+			t.Errorf("substrate %q: the frontier tier resolved to %s/%s, want claude/opus", sub, p.Runner, p.Model)
+		}
 	}
 	// The same ladder on the compiled-in LOCAL set — whose executor is the
 	// local subprocess one, dispatching nothing into Cloudflare — keeps its

@@ -428,6 +428,15 @@ type Dispatch struct {
 	// fact implied by the tier-resolved profile digest.
 	Tier string
 
+	// Config is the named run config this dispatch was routed under (tick
+	// tda), "" when no selection applied. The profile already carries the
+	// config's resolution; this rides the dispatch for the executor's own
+	// re-read of the runners files — the herdr spawn's effort and args come
+	// from the same cells the profile routed on, and a spawn that re-read
+	// them unselected would hand the worker the file's own effort beside the
+	// config's own model.
+	Config string
+
 	// Profile is the resolved role profile this dispatch is made under —
 	// executor, runner, model and prompt, and nothing else (SPEC §4.5). The
 	// factory reads the RUNNER off it, because which agent CLI serves a role is
@@ -719,6 +728,26 @@ type Options struct {
 	// configuration does not declare is refused at construction.
 	Tier string
 
+	// RunConfig selects one of the runners files' named run configs
+	// ([configs.<name>], tick tda) for this run's every dispatch — the
+	// operator's `--config` flag. Empty applies the epic's own `config:`
+	// label, then the [configs] default; a repository whose runners files
+	// declare no named configs at all runs on the merged document's own
+	// cells exactly as before tick tda. The precedence, and every refusal
+	// around it, is selectRunConfig's (runconfig_select.go).
+	RunConfig string
+
+	// SubscriptionTokens answers the LABELS of the subscription tokens the
+	// deployed factory holds — never their values — for the run-start
+	// preflight of a selected config whose workers ride a subscription rung
+	// (tick tda): a config that routes claude and a factory with no
+	// subscription configured is a run that would silently step every
+	// dispatch down to Workers AI, and the preflight refuses it naming the
+	// fix. Nil leaves the check to the surfaces that can ask (doctor, the
+	// cloud submission preflight); an error is the same as nil — a factory
+	// that cannot be asked is not a fact about the config.
+	SubscriptionTokens func() (labels []string, err error)
+
 	// Classifier is the work-type classifier behind the classification exchange
 	// (tick w9b, epic wne): *jev.Client satisfies it, and nil — the default —
 	// means this run classifies nothing and routes every dispatch at the start
@@ -883,6 +912,14 @@ type Reconciler struct {
 	// SET the run was made under.
 	profiles   map[string]*profile.Profile
 	profileSet string
+
+	// runConfig is the named run config this run routes under (tick tda),
+	// and where the choice came from. It is stated in the feed at the start
+	// of every incarnation — the durable record the status model reads the
+	// selection from — and it is what the close-out's PR body names beside
+	// the escalation and cost numbers, so configs can be compared on real
+	// epics. The zero selection is the historical single-routing run.
+	runConfig RunConfigSelection
 
 	// titles is the tick titles the plan carried, keyed by tick id, read at
 	// planning time from the graph. A dispatch rebuilt from a marker (an
@@ -1580,12 +1617,25 @@ func New(opts Options) (*Reconciler, error) {
 		return nil, fmt.Errorf("reconcile: %w", err)
 	}
 
+	// The run's named config (tick tda), selected BEFORE any profile is
+	// resolved — the config's cells are what those resolutions read. One
+	// precedence — the operator's flag over the epic's own label over the
+	// declared default — resolved once here, never per dispatch, and a
+	// selection of a name nobody declared is a refusal here, naming the
+	// declared ones, rather than a silent run on the file's own cells.
+	selection, err := selectRunConfig(opts, substrate, epicConfigLabels(context.Background(), opts),
+		recordedRunConfig(opts.Repo, opts.RunID))
+	if err != nil {
+		return nil, fmt.Errorf("reconcile: %w", err)
+	}
+
 	// The role profiles, resolved BEFORE anything is dispatched. A profile that
 	// does not exist, names an executor this phase does not have or a runner
 	// this host cannot launch is a refusal here — three ticks into an epic is
 	// not when a run should discover it.
 	profiles, err := profile.ResolveAll(profile.Options{
 		Dir: opts.ProfileDir, RunnersConfig: opts.GateConfig, Tier: opts.Tier, Substrate: string(substrate),
+		Config: selection.Name,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("reconcile: %w", err)
@@ -1614,11 +1664,14 @@ func New(opts Options) (*Reconciler, error) {
 	gitbin.SetPushOwner(opts.RunID)
 	r.pinnedTier = opts.Tier
 	r.substrate = substrate
+	r.runConfig = selection
 	if opts.Tier == "" {
 		// The substrate's override file merges over the common one here
-		// (tick 5uo): a ladder declared in runners.local.toml is a local
-		// run's policy and does not exist for a cloud run.
-		cfg, err := runconfig.LoadFor(opts.GateConfig, substrate)
+		// (tick 5uo), and the selected named config applies over both (tick
+		// tda): a ladder declared in runners.local.toml is a local run's
+		// policy and does not exist for a cloud run, and a config's policy is
+		// the whole of the ladder the run climbs.
+		cfg, err := runconfig.LoadForConfig(opts.GateConfig, substrate, selection.Name)
 		if err != nil {
 			return nil, fmt.Errorf("reconcile: %w", err)
 		}
@@ -1639,6 +1692,7 @@ func New(opts Options) (*Reconciler, error) {
 			for tier := range tiers {
 				resolved, err := profile.Resolve(role, profile.Options{
 					Dir: opts.ProfileDir, RunnersConfig: opts.GateConfig, Tier: string(tier), Substrate: string(substrate),
+					Config: selection.Name,
 				})
 				if err != nil {
 					return nil, fmt.Errorf("reconcile: %w", err)
@@ -1656,10 +1710,21 @@ func New(opts Options) (*Reconciler, error) {
 	// resolved then, but whether they CAN route is known now. Epic hn6's run
 	// found out at its first conflict, hours in, and stopped (a cloud ceiling
 	// the review cell declared no tier for): a routing defect is refused here.
+	var onDemand []RoutedJob
 	for _, role := range profile.OnDemandRoles {
-		if _, err := routeOnDemandJob(role, opts.ProfileDir, opts.GateConfig, substrate, r.tierPolicy, opts.Executors); err != nil {
+		resolved, err := routeOnDemandJob(role, opts.ProfileDir, opts.GateConfig, substrate, r.tierPolicy, opts.Executors, selection.Name)
+		if err != nil {
 			return nil, fmt.Errorf("reconcile: %w", err)
 		}
+		onDemand = append(onDemand, RoutedJob{Role: role, Profile: resolved, Config: selection.Name})
+	}
+	// The selected config's own routing preflight (tick tda): the jobs the
+	// construction just resolved, asked one more question — can the config
+	// serve its own rungs? A config whose workers ride a subscription rung a
+	// factory holds no token for is refused here, naming the fix, rather than
+	// silently stepping every dispatch down to Workers AI.
+	if err := checkSelectedConfigCanRoute(opts, substrate, selection, resolvedJobsForPreflight(profiles, r.tierProfiles, onDemand)); err != nil {
+		return nil, fmt.Errorf("reconcile: %w", err)
 	}
 
 	g := &repoGit{dir: opts.Repo, name: "ticfac", email: "ticfac@example.com", remote: opts.Remote,
@@ -1706,6 +1771,18 @@ const NoExecutorMessage = "no executor configured"
 
 // RunID is the run this reconciler reads and writes.
 func (r *Reconciler) RunID() string { return r.runID }
+
+// RunConfig is the named run config this run routes under, and where the
+// choice came from (tick tda) — the zero selection for a repository whose
+// runners files declare none. It is the answer the close-out's PR body and
+// the status model name beside the run's escalation and cost numbers, so
+// configs can be compared on real epics.
+func (r *Reconciler) RunConfig() RunConfigSelection { return r.runConfig }
+
+// Profiles is the resolved role profile per role, as the run's construction
+// resolved them (tick tda: under the selected named config, whatever it
+// was). Read-only for a caller: a run's profiles are a construction fact.
+func (r *Reconciler) Profiles() map[string]*profile.Profile { return r.profiles }
 
 // IntegrationBranch is the EpicRun branch this run integrates on.
 func (r *Reconciler) IntegrationBranch() string { return r.branch }
@@ -1950,6 +2027,20 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	if r.opts.ReleaseOnly {
 		return nil, fmt.Errorf("reconcile: this reconciler was built to release attempts only (ticfac settle), " +
 			"without the close-out's code-hosting surface; it does not run an epic")
+	}
+	// The named config this incarnation routes every dispatch under (tick
+	// tda), stated in the feed at the start of EVERY incarnation: the
+	// selection is a construction fact — the flag, the epic's label or the
+	// declared default — and the status model derives the run's config from
+	// the LAST such line, so a resume states the config it still runs on
+	// rather than inheriting a line from a feed a fresh clone may not hold.
+	// A repository whose runners files declare no named configs at all
+	// selects nothing and the line stays silent — the historical run, exactly
+	// as before, says nothing it has no reason to say — unless the epic's own
+	// label asked for a config this substrate cannot act on, which the line
+	// then says ("none — ...").
+	if detail := r.runConfig.Detail(); detail != "" {
+		r.record("", StageConfigSelected, "%s", detail)
 	}
 	// What the last incarnation was killed in the middle of. Every worktree
 	// this package makes is removed by a defer, and a killed process runs no

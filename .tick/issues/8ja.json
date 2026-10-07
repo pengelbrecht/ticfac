@@ -1,0 +1,14 @@
+{
+  "id": "8ja",
+  "title": "Fold a NOT READY review's blocking findings that share a seam into one tick",
+  "description": "The run makes one tick per blocking finding. v5t's round-1 review named two findings on ONE seam (the claude-sub step-down, Go side and TS side); they became y38 and yhe in parallel, needed a resolve-conflict job on internal/exec/cloudflaresandbox/model_test.go, and yhe filed a duplicate HIGH finding (bw7) for the defect y38 had just fixed, which then needed o3f to close it. 2jn paid the same shape at 16 ticks and 7 resolves. The learning 'fold by seam' exists but nothing applies it mechanically: the run should group a NOT READY's blocking findings whose evidence names overlapping files (or packages on both sides of one contract) into one tick, or at least serialize them.\nevidence: .ticfac/runs/epic-v5t/decisions/7.json (two blocking findings); decisions/10.json (resolve of model_test.go between yhe and y38); .tick/issues/bw7.json, o3f.json\n\nticfac run epic-v5t filed this backlog tick from the finding 2a6753969b52c91b8e0b9841ae33c20ef53b26515a28c0d5f9046a4091952c60 (reported by run-epic-v5t/tick-9uc/attempt-10) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/2a6753969b52c91b8e0b9841ae33c20ef53b26515a28c0d5f9046a4091952c60.json on the run branch.",
+  "notes": "2026-10-07 05:54 - ticfac run epic-v5t: created by absorbing finding 2a6753969b52c91b8e0b9841ae33c20ef53b26515a28c0d5f9046a4091952c60 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-v5t/absorptions/2a6753969b52c91b8e0b9841ae33c20ef53b26515a28c0d5f9046a4091952c60.json on epic/v5t, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-epic-v5t/tick-9uc/attempt-10",
+  "created_by": "ticfac run epic-v5t",
+  "created_at": "2026-10-07T03:54:02Z",
+  "updated_at": "2026-10-07T03:54:10.882631Z"
+}

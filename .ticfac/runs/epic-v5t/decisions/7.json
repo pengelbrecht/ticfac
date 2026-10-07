@@ -1,0 +1,93 @@
+{
+  "schema_version": 3,
+  "decision": 7,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "v5t",
+    "job_id": "run-epic-v5t/tick-54l/attempt-6",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.1.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:b0e2bfa26280693ae2d479fd3dbeec0b99b14f94c04fc3f006ca558fe2e1efc9",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "98d2476f05acefe779e5039b38bc020ab8b8e010",
+    "tick_id": "54l"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "Production binds WORKER_AGENTS, so every worker attempt takes startHostedAttempt. hostedBoot forces harness pi-durable, the agent is started on model 'sonnet', no claudeSub interception is installed, and the container env carries TICKS_CLAUDE_SUB=1 with TICKS_HARNESS=pi-durable, which image/common.sh dies on. The handle names pi-durable/sonnet, which the Go executor refuses under CloudBillingAllows. The lease taken in deps.boot is never released (no collect follows a refused start), so it holds a cap slot until the 2h TTL. Every claude-sub door test sets WORKER_AGENTS undefined, so this path is untested. Fix: route a subscription-rung attempt to a worker that runs the claude CLI under the interception, or make the agent host it. Add a test with WORKER_AGENTS bound that the Go executor accepts end to end.\nevidence: cloudflare/src/sandbox-executor.ts:715 and :959 hostedBoot; cloudflare/src/worker-agent.ts:215; image/common.sh:229; cloudflare/test/sandbox-dispatch.test.ts:367; Go repro: fake door bootedHarness=WorkerAgentHarness on a claude/sonnet start -> 'running on pi-durable/sonnet, which the cloud billing rule refuses'",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Hosted WorkerAgent door ignores the claude-sub rung; every rung job dies"
+      },
+      {
+        "body": "When no subscription is free, the door boots the deployment's standing pair and returns pi-durable / workers-ai/@cf/zai-org/glm-5.3. cloudflaresandbox.Executor.Start refuses any handle whose model is not the requested one ('sonnet'), so the [A1] fallback can never start a worker. CloudRule.SubscriptionRungs[].Fallback is read only by a test, and it is spelled cloudflare-workers-ai/... while the factory steps down to RUN_WORKER_MODEL (workers-ai/...). Fix: when the request is a subscription-rung pair, accept exactly the rung's declared fallback pair (namespace-normalised), record the pair that ran, and test that both sides agree.\nevidence: internal/exec/cloudflaresandbox/executor.go:445; repro: newExecutorOnRung(claude, sonnet) with door.bootedModel=workers-ai/@cf/zai-org/glm-5.3, bootedHarness=pi-durable -> 'the door booted attempt 1 ... on model \"workers-ai/@cf/zai-org/glm-5.3\", not the \"sonnet\" its dispatch resolved'",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Go executor refuses the factory's Workers AI step-down of a rung dispatch"
+      },
+      {
+        "body": "6fv's title promises a current claude CLI in the image, and the operator's note on tda says the aliases resolve to 5.5 today. CLAUDE_CODE_VERSION is still 2.1.227, which maps opus to claude-opus-5 and sonnet to claude-sonnet-5. The weekly workflow only proposes a bump later.\nevidence: image/Dockerfile:53 ARG CLAUDE_CODE_VERSION=2.1.227; docs/spikes/jvj-claude-sub-cloud.md design item 1",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Image still pins claude CLI 2.1.227: opus/sonnet resolve to 5, not 5.5"
+      },
+      {
+        "body": "Each run makes a fresh commit on chore/claude-cli-pin-<ver> and runs a plain git push -u. If last week's PR for the same version is still open, the remote branch exists with a different commit, so the push is rejected as non-fast-forward and the job goes red before the 'already open' check runs.\nevidence: .github/workflows/claude-cli-pin.yml 'Open the bump PR' step",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "claude-cli-pin workflow fails on re-run while its bump PR is open"
+      },
+      {
+        "body": "The worker door's step-down is a console.log in claudeSubLeaseForBoot. Spike jvj asked the run feed to say 'claude-sub exhausted until <reset>; on Workers AI'. Without that line, a claude-config run that quietly ran on GLM reads as a claude run in status and watch.\nevidence: cloudflare/src/sandbox-executor.ts claudeSubLeaseForBoot",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Write a claude-sub step-down to the run feed, not only the Worker console"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-v5t/tick-54l/attempt-6",
+      "commits": 0,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-v5t/54l/RESULT-54l.md",
+      "review_verdict": "NOT READY",
+      "review_verdict_detail": "claude-config workers must actually run on the production hosted (WorkerAgent) door under the subscription interception, and the Go executor must accept the factory's Workers AI step-down, each with a test across the TS/Go seam"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (NOT READY — claude-config workers must actually run on the production hosted (WorkerAgent) door under the subscription interception, and the Go executor must accept the factory's Workers AI step-down, each with a test across the TS/Go seam)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T02:14:23Z",
+  "answered_at": "2026-10-07T02:14:23Z",
+  "provenance": {
+    "run_id": "epic-v5t",
+    "tick_id": "54l",
+    "attempt": 6,
+    "source_ref": "refs/heads/epic/v5t",
+    "source_sha": "98d2476f05acefe779e5039b38bc020ab8b8e010",
+    "integration_ref": "refs/heads/epic/v5t",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:b0e2bfa26280693ae2d479fd3dbeec0b99b14f94c04fc3f006ca558fe2e1efc9",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}

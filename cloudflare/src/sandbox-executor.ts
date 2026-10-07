@@ -59,6 +59,7 @@ import type {
   AttemptSpec,
   AttemptStatus,
 } from "./attempt-protocol";
+import { claudeSubPool, claudeSubRelease, isSubscriptionRung } from "./claude-sub";
 import { containerGitToken, planSandboxGit } from "./credentials";
 import {
   putSandboxJobLogCursor,
@@ -66,6 +67,7 @@ import {
   recordSandboxJobSettled,
   type SandboxAttemptBoot,
   sandboxAttemptBootModel,
+  sandboxAttemptBootOf,
   sandboxJobLogCursor,
   sandboxJobSettled,
 } from "./db";
@@ -498,6 +500,13 @@ export type SandboxExecutorDeps = {
    * WORKER_AGENTS.
    */
   agents?: WorkerAgentResolver;
+  /**
+   * The claude-sub pool's release half (tick 6fv): what collect and cancel
+   * call with the job id whose subscription lease ends with the attempt.
+   * Absent on a deployment that binds no CLAUDE_SUB_POOL — the boot seam
+   * never resolves the rung there either, so no lease exists to release.
+   */
+  claudeSub?: { release(jobId: string): Promise<void> };
 };
 
 // ------------------------------------------------------------ job logs ---
@@ -703,23 +712,138 @@ async function startNamedAttemptUnchecked(
 
   // A run whose workers are WorkerAgents (epic 43y, tick xd3): the attempt
   // is the agent's, addressed by the same name, and the container is only
-  // where its tools run — asked nothing here.
+  // where its tools run — asked nothing here. EXCEPT a claude-sub job (tick
+  // yhe): a boot that resolved the subscription rung and LEASED a
+  // subscription is the container's own all-in-one claude worker under the
+  // interception, because the agent hosts pi-durable conversations on the
+  // factory's gateway — which serves no claude alias — and the container
+  // halves it drives are told the hosted kind, under which image/common.sh
+  // dies on the claude-sub marker. Before this routing, every rung job on a
+  // hosted deployment died at its own boot, its handle named pi-durable on
+  // the alias (a pairing no client's cloud billing rule admits), and the
+  // lease sat holding a cap slot until its TTL.
   const hosting = deps.agents === undefined ? null : await deps.agents(spec.run_id);
+  const boot = await deps.boot(spec);
+
   if (hosting !== null) {
-    return startHostedAttempt(deps, spec, hosting, { jobID, slot, name, payload });
+    const agent = hosting.agent(name);
+    const state = await agent.state();
+    // An attempt the agent holds and has NOT settled is adopted, whatever
+    // this boot resolved: a door retry must never start a second worker —
+    // the hosted one's own conversation or a container CLI one — beside a
+    // running attempt. A settled one is started afresh below, as a fresh
+    // boot under a settled container's name is.
+    if (state.phase !== "absent" && state.phase !== "settled") {
+      // A boot that leased a subscription is not this attempt's to hold:
+      // the attempt the agent holds is a pi-durable conversation, never the
+      // claude-sub job the lease exists for (a step-down start, or one from
+      // before the routing), so the cap slot goes back with the adoption
+      // rather than sitting held until the lease's TTL — best effort, the
+      // TTL is the backstop.
+      if (boot.claude_sub !== undefined) {
+        await deps.claudeSub?.release(boot.claude_sub.jobId).catch(() => {});
+      }
+      const recorded = await deps.boots.modelOf(spec);
+      const runningModel =
+        recorded !== null && recorded.trim() !== "" ? recorded : (state.model ?? "");
+      if (runningModel.trim() === "") throw new AdoptionModelUnknownError(spec);
+      return {
+        handle: hostedHandleOf(
+          spec,
+          { jobID, payload },
+          boot,
+          runningModel,
+          `adopted: this attempt's WorkerAgent already holds it (${state.phase})`,
+        ),
+        adopted: true,
+      };
+    }
+    // No lease on the boot: the agent's to host. A claude-sub job
+    // (claude_sub on the boot) falls through to the container below — its own
+    // all-in-one claude worker, and the agent is never started for it.
+    if (boot.claude_sub === undefined) {
+      return startHostedAttempt(deps, spec, hosting, { jobID, slot, name, payload }, boot);
+    }
   }
 
-  // Adoption first: a container already holding a live work process is this
-  // attempt's, by the name nobody else would boot under, and starting a
-  // second one beside it is how a run pays twice for one tick.
-  //
-  // The model the handle names on this path is the RUNNING container's, read
-  // from the record of the boot that started it (tick dyo) — never the model
-  // THIS request carries. Until that distinction was made, an adoption named
-  // the new dispatch's model over a container some other dispatch booted, and
-  // the caller's model check — the one that holds a container to the model its
-  // dispatch resolved, and with it the Workers-AI-only rule — could never
-  // fire here: the door was echoing the question back as the answer.
+  return startContainerAttempt(deps, spec, { jobID, slot, name, landing, payload }, boot);
+}
+
+/**
+ * The hosted adoption's and fresh start's handle, in one shape: the agent's
+ * own harness, the model the caller names (the recorded boot's for an
+ * adoption, the booted one for a fresh start), and no one container process
+ * — its boot, its tools and its finish are each their own, and the agent
+ * drives them.
+ */
+function hostedHandleOf(
+  spec: AttemptSpec,
+  ids: {
+    jobID: string;
+    payload: Omit<SandboxHandlePayload, "process_id" | "launched" | "detail" | "model" | "harness">;
+  },
+  boot: WorkerBootInput,
+  model: string,
+  detail: string,
+): SandboxJobHandle {
+  return {
+    schema_version: JOB_HANDLE_SCHEMA_VERSION,
+    job_id: ids.jobID,
+    attempt: spec.attempt,
+    executor: SANDBOX_EXECUTOR_NAME,
+    issued_at: new Date().toISOString(),
+    handle: {
+      ...ids.payload,
+      base_sha: boot.base_sha,
+      model,
+      // The harness the ATTEMPT runs on (tick 4uj): the agent's own, never
+      // the container boot env's `TICKS_HARNESS`. The agent drives the
+      // boot, the conversation and the finish whatever harness the
+      // dispatch's profile named for the container its tools run in, so a
+      // handle echoing that name would say the container's harness ran the
+      // attempt — the same lie the cross-check on the client exists to
+      // keep out of a record every trace reads. The container env carries
+      // the hosted kind too since jhp deleted the CLI path (hostedBoot);
+      // the client accepts exactly this one mismatch (workerAgentHarness).
+      harness: WORKER_AGENT_HARNESS,
+      // No one container process is the attempt: its boot, its tools and its
+      // finish are each their own, and the agent drives them.
+      process_id: null,
+      launched: true,
+      detail,
+    },
+  };
+}
+
+/**
+ * Starts one attempt in its own container — the door every worker ran in
+ * before hosting, and the one a claude-sub job runs in even on a deployment
+ * that binds WORKER_AGENTS (tick yhe): the container's own all-in-one worker,
+ * under the interception when the boot leased a subscription.
+ *
+ * Adoption first, for the container path's own reason: a container already
+ * holding a live work process is this attempt's, by the name nobody else
+ * would boot under, and starting a second one beside it is how a run pays
+ * twice for one tick. The model the handle names on that path is the RUNNING
+ * container's, read from the record of the boot that started it (tick dyo) —
+ * never the model THIS request carries; until that distinction was made, an
+ * adoption named the new dispatch's model over a container some other
+ * dispatch booted, and the caller's model check — the one that holds a
+ * container to the model its dispatch resolved — could never fire here.
+ */
+async function startContainerAttempt(
+  deps: SandboxExecutorDeps,
+  spec: AttemptSpec,
+  ids: {
+    jobID: string;
+    slot: string | undefined;
+    name: string;
+    landing: string;
+    payload: Omit<SandboxHandlePayload, "process_id" | "launched" | "detail" | "model" | "harness">;
+  },
+  boot: WorkerBootInput,
+): Promise<{ handle: SandboxJobHandle; adopted: boolean }> {
+  const { jobID, slot, name, landing, payload } = ids;
   const sandbox = await namedSandbox(deps.binding, name);
   const running = await findWorkProcess(sandbox);
   if (running !== null) {
@@ -731,7 +855,6 @@ async function startNamedAttemptUnchecked(
       // holds the attempt — never a guess in a handle.
       throw new AdoptionModelUnknownError(spec);
     }
-    const boot = await deps.boot(spec);
     return {
       handle: {
         schema_version: JOB_HANDLE_SCHEMA_VERSION,
@@ -753,7 +876,6 @@ async function startNamedAttemptUnchecked(
     };
   }
 
-  const boot = await deps.boot(spec);
   // The boot is recorded BEFORE the container is addressed (deps.boot composes
   // inputs; it touches no container), so a live work process can never exist
   // without a durable record of the boot that started it — the record an
@@ -765,11 +887,18 @@ async function startNamedAttemptUnchecked(
     attempt: spec.attempt,
     job: slot ?? "",
     model: bootedModel(boot),
+    // The harness the job RUNS on (tick yhe): the CLI kind this container's
+    // worker was bound to, which a hosted deployment's state read and
+    // reclaim route on to find the job where it actually runs.
+    harness: bootedHarness(boot),
     at: new Date().toISOString(),
   });
   const work = workerWorkSpec(boot);
   const task = { tick_id: spec.tick_id, branch: landing, base_sha: boot.base_sha };
-  const spawned = await spawnWorker(deps.binding, name, task, work, deps.spawn);
+  const spawned = await spawnWorker(deps.binding, name, task, work, {
+    ...deps.spawn,
+    ...(boot.claude_sub === undefined ? {} : { claudeSub: boot.claude_sub }),
+  });
   if (deps.jobLogs !== undefined && spawned.launched && spawned.process_id !== null) {
     // Where the confirm window's copy ended, so the state route continues the
     // stream rather than repeating it (tick 86y). Best effort: a cursor that
@@ -815,12 +944,16 @@ export const WORKER_AGENT_LOG_ID = "worker-agent";
  * boot, conversation and finish are the agent's to drive, and the door
  * returns as soon as the agent has recorded it.
  *
- * An agent that already holds the attempt is an ADOPTION, for the same
- * reason a live work process is one: a door retry must never start a second
- * worker over a running one. Its handle names the model of the recorded boot
- * (tick dyo), and the agent's own record when the boot record is missing.
- * Its harness is the agent's own (tick 4uj), never the container boot env's:
- * the attempt runs on the agent, and the handle names what ran.
+ * The FRESH start only: an attempt the agent already holds is adopted in
+ * [startNamedAttemptUnchecked], before this is reached, for the same reason
+ * a live work process is one — a door retry must never start a second worker
+ * over a running one. The handle names the booted model; its harness is the
+ * agent's own (tick 4uj), never the container boot env's: the attempt runs
+ * on the agent, and the handle names what ran.
+ *
+ * Called only for a boot that leased no subscription (tick yhe): a
+ * claude-sub job is the container's own claude CLI worker, and the caller
+ * routed it there.
  */
 async function startHostedAttempt(
   deps: SandboxExecutorDeps,
@@ -832,57 +965,10 @@ async function startHostedAttempt(
     name: string;
     payload: Omit<SandboxHandlePayload, "process_id" | "launched" | "detail" | "model" | "harness">;
   },
+  composed: WorkerBootInput,
 ): Promise<{ handle: SandboxJobHandle; adopted: boolean }> {
   const agent = hosting.agent(ids.name);
-  const handleOf = (boot: WorkerBootInput, model: string, detail: string): SandboxJobHandle => ({
-    schema_version: JOB_HANDLE_SCHEMA_VERSION,
-    job_id: ids.jobID,
-    attempt: spec.attempt,
-    executor: SANDBOX_EXECUTOR_NAME,
-    issued_at: new Date().toISOString(),
-    handle: {
-      ...ids.payload,
-      base_sha: boot.base_sha,
-      model,
-      // The harness the ATTEMPT runs on (tick 4uj): the agent's own, never
-      // the container boot env's `TICKS_HARNESS`. The agent drives the
-      // boot, the conversation and the finish whatever harness the
-      // dispatch's profile named for the container its tools run in, so a
-      // handle echoing that name would say the container's harness ran the
-      // attempt — the same lie the cross-check on the client exists to
-      // keep out of a record every trace reads. The container env carries
-      // the hosted kind too since jhp deleted the CLI path (hostedBoot);
-      // the client accepts exactly this one mismatch (workerAgentHarness).
-      harness: WORKER_AGENT_HARNESS,
-      // No one container process is the attempt: its boot, its tools and its
-      // finish are each their own, and the agent drives them.
-      process_id: null,
-      launched: true,
-      detail,
-    },
-  });
-
-  const state = await agent.state();
-  // An attempt the agent holds and has NOT settled is adopted; a settled one
-  // is started afresh below, as a fresh boot under a settled container's name
-  // is (its boot record replaces the old one and clears the settlement).
-  if (state.phase !== "absent" && state.phase !== "settled") {
-    const recorded = await deps.boots.modelOf(spec);
-    const runningModel =
-      recorded !== null && recorded.trim() !== "" ? recorded : (state.model ?? "");
-    if (runningModel.trim() === "") throw new AdoptionModelUnknownError(spec);
-    const boot = hostedBoot(await deps.boot(spec));
-    return {
-      handle: handleOf(
-        boot,
-        runningModel,
-        `adopted: this attempt's WorkerAgent already holds it (${state.phase})`,
-      ),
-      adopted: true,
-    };
-  }
-
-  const boot = hostedBoot(await deps.boot(spec));
+  const boot = hostedBoot(composed);
   // Recorded BEFORE the agent is started, as a container boot is: an agent
   // can never hold an attempt with no durable record of what it was booted on.
   await deps.boots.record({
@@ -891,6 +977,10 @@ async function startHostedAttempt(
     attempt: spec.attempt,
     job: ids.slot ?? "",
     model: bootedModel(boot),
+    // The harness the job RUNS on (tick yhe): the agent's own, which a
+    // hosted deployment's state read and reclaim route on to find the job
+    // where it actually runs.
+    harness: WORKER_AGENT_HARNESS,
     at: new Date().toISOString(),
   });
   // The agent's log is one stream per attempt, from its start: the state
@@ -917,7 +1007,9 @@ async function startHostedAttempt(
     boot: hosting.boot(ids.name),
   });
   return {
-    handle: handleOf(
+    handle: hostedHandleOf(
+      spec,
+      ids,
       boot,
       bootedModel(boot),
       "started: the attempt's WorkerAgent drives it on pi-durable — the container's boot phase, " +
@@ -1086,6 +1178,13 @@ export async function namedAttemptStatus(
   records?: SandboxJobRecords,
   logs?: SandboxJobLogs,
   agents?: WorkerAgentResolver,
+  /**
+   * The claude-sub release half (tick 6fv): called with the job id when this
+   * read is the one that ends the job — a settled worker's container
+   * reclaimed, a stopped container settled — so the subscription's cap is
+   * free for the next job. Absent on a deployment that wires no pool.
+   */
+  releaseClaudeSub?: (jobId: string) => Promise<void>,
 ): Promise<AttemptStatus> {
   // The records first, and the container only when they cannot answer
   // (epic hn6's second cloud run). Through the SDK, ANY call on a container
@@ -1110,10 +1209,24 @@ export async function namedAttemptStatus(
   );
   // A hosted attempt (epic 43y, tick xd3) answers from its WorkerAgent, never
   // from its container: the container is only where its tools run, and is
-  // stopped and restored under a live attempt by design.
+  // stopped and restored under a live attempt by design. EXCEPT a job the
+  // start routed to the CONTAINER (tick yhe): a claude-sub job runs the
+  // claude CLI there under the interception — its agent was never started —
+  // and reading it through an agent that holds nothing would answer `lost`
+  // for as long as the worker runs. The boot record states the harness the
+  // job runs on, so the read follows the start's own decision, never the
+  // deployment's shape: the agent's kind for a hosted attempt, anything
+  // else — the CLI kind a container worker bound to — for the container. A
+  // boot with no harness recorded (a row from before the column existed,
+  // migration 0025) reads as hosted, which is what every such row on a
+  // hosted deployment is; a caller with no records seam cannot know, and
+  // keeps the agent answer it always had.
   const hosting = agents === undefined ? null : await agents(identity.run_id);
   if (hosting !== null) {
-    return hostedAttemptStatus(hosting.agent(name), identity, jobID, now, records, logs);
+    const bootHarness = records === undefined ? null : await records.bootHarness(identity);
+    if (bootHarness === null || bootHarness === "" || bootHarness === WORKER_AGENT_HARNESS) {
+      return hostedAttemptStatus(hosting.agent(name), identity, jobID, now, records, logs);
+    }
   }
   const sandbox = await namedSandbox(binding, name);
   // A booted, unsettled job whose container is NOT RUNNING has no work
@@ -1131,6 +1244,9 @@ export async function namedAttemptStatus(
   if (records !== undefined && sandbox.isRunning !== undefined && !(await sandbox.isRunning())) {
     const stopped = { state: "failed" as const, exit_code: null };
     await records.settle(identity, stopped);
+    // The job is settled — over — so its claude-sub lease ends with it
+    // (tick 6fv). Best effort: the lease's TTL is the backstop.
+    await releaseClaudeSub?.(jobID).catch(() => {});
     return statusFromProcess(stopped, jobID, now);
   }
   // The list, never a remembered id — the evidence-gap rule the seam documents
@@ -1174,6 +1290,10 @@ export async function namedAttemptStatus(
         `factory sandbox door: could not reclaim settled container ${name}: ${String(error)}`,
       );
     }
+    // Reclaimed: the container is gone and the job with it, so the
+    // subscription's cap is free for the next job (tick 6fv). Best effort —
+    // the lease's TTL is the backstop.
+    await releaseClaudeSub?.(jobID).catch(() => {});
   }
   return statusFromProcess(settled, jobID, now);
 }
@@ -1236,6 +1356,13 @@ async function hostedAttemptStatus(
  */
 export type SandboxJobRecords = {
   booted(identity: SandboxJobIdentity): Promise<boolean>;
+  /**
+   * The harness the named job's boot recorded it runs on (tick yhe), or null
+   * when no boot was: the fact a hosted deployment's state read routes on —
+   * the agent's kind for a hosted attempt, the CLI kind a container worker
+   * bound to.
+   */
+  bootHarness(identity: SandboxJobIdentity): Promise<string | null>;
   settled(
     identity: SandboxJobIdentity,
   ): Promise<{ state: "completed" | "failed"; exit_code: number | null } | null>;
@@ -1257,7 +1384,10 @@ export function d1JobRecords(db: D1Database): SandboxJobRecords {
   });
   return {
     async booted(identity) {
-      return (await sandboxAttemptBootModel(db, key(identity))) !== null;
+      return (await sandboxAttemptBootOf(db, key(identity))) !== null;
+    },
+    async bootHarness(identity) {
+      return (await sandboxAttemptBootOf(db, key(identity)))?.harness ?? null;
     },
     async settled(identity) {
       return sandboxJobSettled(db, key(identity));
@@ -1356,6 +1486,23 @@ async function collectAttempt(
   deps: SandboxExecutorDeps,
   handle: SandboxJobHandle,
 ): Promise<AttemptReport> {
+  // The attempt is being collected: whatever its outcome, its claude-sub
+  // lease ends here (tick 6fv). Best effort — the lease's TTL backstops a
+  // collect path that never reaches this line.
+  const collected = await (async () => {
+    try {
+      return await collectAttemptInner(deps, handle);
+    } finally {
+      await deps.claudeSub?.release(handle.job_id).catch(() => {});
+    }
+  })();
+  return collected;
+}
+
+async function collectAttemptInner(
+  deps: SandboxExecutorDeps,
+  handle: SandboxJobHandle,
+): Promise<AttemptReport> {
   const payload = handle.handle;
   // The base and run ride the put so it reads the branch the container
   // ACTUALLY pushed — never another run's branch that holds the landing name
@@ -1426,6 +1573,8 @@ async function cancelAttempt(deps: SandboxExecutorDeps, handle: SandboxJobHandle
     ...(deps.spawn?.sleep === undefined ? {} : { sleep: deps.spawn.sleep }),
   });
   await teardownWorker(deps.binding, payload.sandbox, payload.process_id);
+  // The attempt is cancelled: its claude-sub lease ends with it (tick 6fv).
+  await deps.claudeSub?.release(handle.job_id).catch(() => {});
 }
 
 // --------------------------------------------------------------- the whole ---
@@ -1586,6 +1735,12 @@ export function sandboxExecutorDepsFromEnv(
       // Every worker is a WorkerAgent (epic 43y, ticks xd3 and hxd), on
       // whichever substrate the run was submitted on.
       ...(agents === undefined ? {} : { agents }),
+      // The claude-sub pool's release half (tick 6fv): absent when this
+      // deployment wires no pool — and then the boot seam above never
+      // resolves the rung, so no lease exists to release.
+      ...(claudeSubRelease(env) === undefined
+        ? {}
+        : { claudeSub: { release: claudeSubRelease(env)! } }),
       boot: async (spec) => {
         const slot = attemptJobSlot(spec.run_id, spec.tick_id, spec.attempt, spec.job_id);
         // Minted per dispatch, revoking NOTHING (tick 53s): the run's workers
@@ -1619,11 +1774,18 @@ export function sandboxExecutorDepsFromEnv(
           // the harness the caller's profile resolved and the rendered role
           // prompt beside it, and a choice about this attempt outranks the
           // deployment's standing one — the same ladder the model rides.
-          harness: workerHarness(spec.harness ?? null, textVar(env, "RUN_WORKER_HARNESS")),
-          // The dispatch's own model first (tick a08): the door carries the
-          // model the caller's profile resolved, and a choice about this
-          // attempt outranks the deployment's standing one.
-          model: workerModel(spec.model ?? null, textVar(env, "RUN_WORKER_MODEL")),
+          //
+          // The claude-sub rung (tick 6fv): a dispatch that resolves the rung
+          // — claude on a versionless alias — leases one subscription HERE,
+          // under the pool's per-subscription cap, keyed on the attempt's
+          // own job id (sticky, so a re-ask of the same job keeps its
+          // subscription), and the boot carries the lease beside the pair.
+          // A lease that fails never waits: THIS job steps down to the
+          // Workers AI rung — the deployment's standing pair — and the next
+          // dispatch asks the pool again. The step-down is the lease's whole
+          // fallback story: no worker ever queues on a subscription, and
+          // none ever runs claude per-token instead.
+          ...(await claudeSubLeaseForBoot(env, spec)),
           prompt: spec.prompt,
           // A carried attempt's work base (epic hn6, run_3f034e68): the
           // container measures the carried work from it, so a worker that
@@ -1643,6 +1805,56 @@ export function sandboxExecutorDepsFromEnv(
         };
       },
     },
+  };
+}
+
+/**
+ * The claude-sub half of one dispatch's boot (tick 6fv): when the harness and
+ * model this dispatch resolved ARE the subscription rung, lease one
+ * subscription and hand the boot its label — the container's process
+ * environment gains the OAuth placeholder and the interception's CA
+ * ({@link workerBootEnv}), and the spawn installs the interception
+ * (FactorySandbox's claudeSub boot option). A lease that fails (no token
+ * configured, every one busy, every one benched on its quota) overrides the
+ * pair with the Workers AI rung — the deployment's standing choices — and
+ * returns nothing, so the boot is a plain Workers AI worker for THIS job.
+ *
+ * The job id is the attempt's own ([attemptJobIDOf]), so the pool's stickiness
+ * answers a re-ask of the same dispatch with the same subscription.
+ */
+async function claudeSubLeaseForBoot(
+  env: Env,
+  spec: AttemptSpec,
+): Promise<
+  | { claude_sub: { label: string; jobId: string }; harness: string; model: string }
+  | { harness: string; model: string }
+> {
+  const harness = workerHarness(spec.harness ?? null, textVar(env, "RUN_WORKER_HARNESS"));
+  const model = workerModel(spec.model ?? null, textVar(env, "RUN_WORKER_MODEL"));
+  if (!isSubscriptionRung(harness, model)) return { harness, model };
+  const pool = claudeSubPool(env);
+  const lease =
+    pool === null
+      ? ({ ok: false, reason: "none", retry_at: null } as const)
+      : await pool.lease(specJobID(spec));
+  if (lease.ok) {
+    return {
+      harness,
+      model,
+      claude_sub: { label: lease.label, jobId: specJobID(spec) },
+    };
+  }
+  console.log(
+    JSON.stringify({
+      claude_sub: "stepped_down",
+      job: specJobID(spec),
+      reason: lease.reason,
+      retry_at: lease.retry_at,
+    }),
+  );
+  return {
+    harness: workerHarness(null, textVar(env, "RUN_WORKER_HARNESS")),
+    model: workerModel(null, textVar(env, "RUN_WORKER_MODEL")),
   };
 }
 

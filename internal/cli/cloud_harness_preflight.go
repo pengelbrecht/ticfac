@@ -51,6 +51,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -68,7 +69,13 @@ import (
 // may proceed — checked, or honestly unchecked with the warning written to
 // prose naming why. The error names every offending job and the runbook's
 // order for fixing either half.
-func preflightCloudHarness(ctx context.Context, client *cloudClient, repo string, prose io.Writer) error {
+//
+// epicID and runConfig (the --config a `run --cloud-workers` forwards, ""
+// otherwise) say which named config the submitted run will select, so the
+// subscription half refuses only the config this run would ride — a GLM
+// epic is not refused because the branch also declares a claude config the
+// factory cannot serve yet.
+func preflightCloudHarness(ctx context.Context, client *cloudClient, repo, epicID, runConfig string, prose io.Writer) error {
 	// The branch half. HEAD is the pushed boundary; a repo that declares no
 	// runners config there routes on the factory's defaults and is not this
 	// preflight's to check.
@@ -103,6 +110,17 @@ func preflightCloudHarness(ctx context.Context, client *cloudClient, repo string
 	if err != nil {
 		return fmt.Errorf("the cloud routing at HEAD does not resolve: %w — a run would refuse to start on the same question; fix the cell the error names", err)
 	}
+	// Every NAMED config resolves too (tick tda): the branch may declare more
+	// than one complete routing — one epic on GLM, another on claude — and a
+	// config that cannot route is refused here, naming the config, before a
+	// submission can select it. The jobs the check returns carry their
+	// config, so the factory half below answers for the config that routed
+	// each job.
+	_, configJobs, err := reconcile.CheckEveryNamedConfig(profile.EmbeddedCloud, filepath.Join(dir, "runners.toml"), runconfig.SubstrateCloud)
+	if err != nil {
+		return fmt.Errorf("%w — a run selecting it would refuse to start on the same question; fix the cell the error names", err)
+	}
+	jobs = append(jobs, configJobs...)
 
 	// The factory half: its own answer to what its image ships.
 	facts, err := factory.FetchDeployed(ctx, client.http, client.baseURL, client.token)
@@ -132,24 +150,46 @@ func preflightCloudHarness(ctx context.Context, client *cloudClient, repo string
 		if job.Tier != "" {
 			at = fmt.Sprintf("%s (tier %s)", job.Role, job.Tier)
 		}
+		if job.Config != "" {
+			at = fmt.Sprintf("%s [config %s]", at, job.Config)
+		}
 		unshipped = append(unshipped, fmt.Sprintf("%s: %s", at, kind))
 	}
-	if len(unshipped) == 0 {
-		return nil
+	if len(unshipped) > 0 {
+		// The fix is the factory's, never the overlay's: a cloud job resolves
+		// only to the durable harness, and a runner table's `pi` binds to its
+		// hosted kind (profile.HostedDurableHarness, tick twa), so no cell the
+		// branch could flip names a kind an older image ships instead.
+		return fmt.Errorf(
+			"the cloud routing at HEAD names harness kinds this factory%s does not ship — %s:\n  %s\n"+
+				"every container of a run started now would die at boot with \"unknown harness kind\". "+
+				"The image ships %s; a cloud job resolves only to the hosted durable harness (%s — a runner table's \"pi\" binds to it), "+
+				"so the fix is the factory's, not the overlay's. The runbook's order (docs/pi-durable-cloud-run-runbook.md): "+
+				"merge the change that ships the kind, then wait for its deploy with `ticfac factory wait-deployed <merge sha>`",
+			deployedAt(facts), pluralJobs(len(unshipped)), strings.Join(unshipped, "\n  "),
+			strings.Join(facts.HarnessKinds, ", "), profile.HostedDurableHarness,
+		)
 	}
-	// The fix is the factory's, never the overlay's: a cloud job resolves
-	// only to the durable harness, and a runner table's `pi` binds to its
-	// hosted kind (profile.HostedDurableHarness, tick twa), so no cell the
-	// branch could flip names a kind an older image ships instead.
-	return fmt.Errorf(
-		"the cloud routing at HEAD names harness kinds this factory%s does not ship — %s:\n  %s\n"+
-			"every container of a run started now would die at boot with \"unknown harness kind\". "+
-			"The image ships %s; a cloud job resolves only to the hosted durable harness (%s — a runner table's \"pi\" binds to it), "+
-			"so the fix is the factory's, not the overlay's. The runbook's order (docs/pi-durable-cloud-run-runbook.md): "+
-			"merge the change that ships the kind, then wait for its deploy with `ticfac factory wait-deployed <merge sha>`",
-		deployedAt(facts), pluralJobs(len(unshipped)), strings.Join(unshipped, "\n  "),
-		strings.Join(facts.HarnessKinds, ", "), profile.HostedDurableHarness,
-	)
+
+	// The subscription rung's own question (tick tda): a named config whose
+	// workers ride the rung needs the factory to hold at least one
+	// subscription token, and the factory's own answer is already in hand —
+	// the same report the harness half just read, LABELS only, never values.
+	// A run on a claude config with the rung off would silently step every
+	// dispatch down to Workers AI, and the submission preflight is where
+	// that refusal costs nothing. The question is about the config THIS run
+	// selects; doctor is where every declared config is held to it.
+	selected := submissionRunConfig(ctx, repo, filepath.Join(dir, "runners.toml"), epicID, runConfig, prose)
+	if riding := rungRidersByConfig(jobsOfConfig(configJobs, selected)); len(riding) > 0 {
+		if len(facts.ClaudeSubLabels) == 0 {
+			return fmt.Errorf(
+				"%s, and this factory%s holds no subscription token (CLAUDE_SUB_TOKEN_<LABEL>) — "+
+					"a run on that config would silently step every dispatch down to Workers AI. "+
+					"Put the rung on: `wrangler secret put CLAUDE_SUB_TOKEN_<LABEL>` on the factory (a claude-sub token from the subscription)",
+				riding.oneLine(), deployedAt(facts))
+		}
+	}
+	return nil
 }
 
 // deployedAt names the factory's own version when it has one, so a refusal
@@ -167,4 +207,57 @@ func pluralJobs(n int) string {
 		return "1 job routes to a kind it does not ship"
 	}
 	return fmt.Sprintf("%d jobs route to kinds it does not ship", n)
+}
+
+// submissionRunConfig answers the named config a submitted run of epicID
+// will select, by the run's own precedence — the forwarded --config, over
+// the epic's `config:` label as HEAD carries it (the boundary the factory
+// clones), over the declared default. "" means every config: a branch that
+// declares none, or an epic HEAD does not let this read — said in prose,
+// and answered conservatively, because a preflight that cannot tell which
+// config a run rides holds every one it might.
+func submissionRunConfig(ctx context.Context, repo, runners, epicID, flag string, prose io.Writer) string {
+	cfg, err := runconfig.LoadFor(runners, runconfig.SubstrateCloud)
+	if err != nil || len(cfg.NamedConfigNames()) == 0 {
+		return ""
+	}
+	if flag != "" {
+		return flag
+	}
+	raw, err := cloudGit(ctx, repo, "show", "HEAD:.tick/issues/"+epicID+".json")
+	var epic struct {
+		Labels []string `json:"labels"`
+	}
+	if err == nil {
+		err = json.Unmarshal([]byte(raw), &epic)
+	}
+	if err != nil {
+		fmt.Fprintf(prose, "the subscription preflight cannot read epic %s's config: label at HEAD (%v) — holding every named config to it\n", epicID, err)
+		return ""
+	}
+	label, err := reconcile.EpicConfigLabel(epicID, epic.Labels)
+	if err != nil {
+		// Two disagreeing labels: the run refuses at start on the same
+		// question; here every config is held, and the run says why.
+		return ""
+	}
+	if label != "" {
+		return label
+	}
+	return cfg.DefaultConfigName()
+}
+
+// jobsOfConfig narrows per-config routed jobs to one config's, or returns
+// them all for "".
+func jobsOfConfig(jobs []reconcile.RoutedJob, config string) []reconcile.RoutedJob {
+	if config == "" {
+		return jobs
+	}
+	var out []reconcile.RoutedJob
+	for _, job := range jobs {
+		if job.Config == config {
+			out = append(out, job)
+		}
+	}
+	return out
 }

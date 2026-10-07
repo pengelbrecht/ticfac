@@ -15,6 +15,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import jobProtocol from "../../contracts/job-protocol.json";
 import { readWorkerLogTail } from "../src/artifacts";
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
+import {
+  CLAUDE_CODE_OAUTH_TOKEN,
+  CLAUDE_SUB_PLACEHOLDER,
+  claudeSubPool,
+  TICKS_CLAUDE_SUB,
+  TOKEN_SECRET_PREFIX,
+} from "../src/claude-sub";
 import { reclaimRunWorkers } from "../src/container-capacity";
 import { insertRun, type Run } from "../src/db";
 import { issueWorkerRunToken } from "../src/gateway";
@@ -24,9 +31,10 @@ import type {
   OrchestratorSandbox,
   SandboxBinding,
   SandboxOutput,
+  SandboxProcessState,
   SandboxProcessView,
 } from "../src/sandbox";
-import { attemptSandboxName, type SandboxJobHandle } from "../src/sandbox-executor";
+import { attemptJobID, attemptSandboxName, type SandboxJobHandle } from "../src/sandbox-executor";
 import {
   WORKER_AGENT_HARNESS,
   type WorkerAgentState,
@@ -34,7 +42,7 @@ import {
   type WorkerAgentStub,
   workerAgentsFromEnv,
 } from "../src/worker-agent";
-import { WORKER_PUSH_MARGIN_MS } from "../src/worker-boot";
+import { WORKER_COMMAND, WORKER_PROBE_MARKER, WORKER_PUSH_MARGIN_MS } from "../src/worker-boot";
 import { parseDefs, parseSchema, validate } from "./json-schema";
 
 // ------------------------------------------------------------- the fakes ---
@@ -115,34 +123,133 @@ class FakeAgents {
   }
 }
 
-/** A container seam that records every address — a hosted attempt must address none. */
+/** One process inside a fake container. */
+class DoorProcess {
+  constructor(
+    readonly id: string,
+    readonly command: string,
+    readonly env: Record<string, string>,
+  ) {}
+  state: SandboxProcessState = "running";
+  exit_code: number | null = null;
+  output = "";
+
+  /** The harness finished: terminal, with its exit status. */
+  finish(code: number): void {
+    this.state = code === 0 ? "completed" : "failed";
+    this.exit_code = code;
+  }
+
+  get view(): SandboxProcessView {
+    return { id: this.id, state: this.state, exit_code: this.exit_code, command: this.command };
+  }
+}
+
+/**
+ * One fake container: the green-start probe answers its marker and EXITS; the
+ * work process prints and KEEPS RUNNING — the shape a dispatched worker
+ * genuinely mid-tick is, ported from sandbox-dispatch.test.ts's FakeSandbox so
+ * the two suites cannot disagree about what a container's own rules are.
+ */
+class DoorSandbox implements OrchestratorSandbox {
+  readonly processes: DoorProcess[] = [];
+  destroyed = false;
+  running = true;
+  #next = 0;
+
+  constructor(
+    readonly name: string,
+    /** Records the destroy, so a test can assert what was reclaimed. */
+    readonly onDestroy: (name: string) => void,
+  ) {}
+
+  async startProcess(
+    command: string,
+    options?: { env: Record<string, string> },
+  ): Promise<SandboxProcessView> {
+    const process = new DoorProcess(`${this.name}-p${++this.#next}`, command, options?.env ?? {});
+    if (command.includes("--probe")) {
+      // The real probe prints its marker and exits; watchProbe only evaluates
+      // it once terminal.
+      process.output = `${WORKER_PROBE_MARKER}\n`;
+      process.finish(0);
+    } else if (command === WORKER_COMMAND) {
+      process.output = "implementing the tick\n";
+      // Deliberately still `running`: the whole point of the handle.
+    }
+    this.processes.push(process);
+    return process.view;
+  }
+
+  async getProcess(id: string): Promise<SandboxProcessView | null> {
+    const process = this.processes.find((p) => p.id === id);
+    return process === undefined ? null : process.view;
+  }
+
+  async listProcesses(): Promise<SandboxProcessView[]> {
+    if (this.destroyed)
+      throw new Error(`listProcesses cold-booted destroyed container ${this.name}`);
+    if (!this.running) throw new Error(`listProcesses cold-booted stopped container ${this.name}`);
+    return this.processes.map((p) => ({ ...p.view }));
+  }
+
+  async isRunning(): Promise<boolean> {
+    return this.running && !this.destroyed;
+  }
+
+  async readOutput(id: string, offset: number): Promise<SandboxOutput> {
+    const process = this.processes.find((p) => p.id === id);
+    if (process === undefined) return { text: "", offset };
+    return { text: process.output.slice(offset), offset: process.output.length };
+  }
+
+  async killProcess(id: string): Promise<void> {
+    const process = this.processes.find((p) => p.id === id);
+    if (process === undefined) return;
+    process.finish(143);
+  }
+
+  async destroy(): Promise<void> {
+    this.destroyed = true;
+    this.onDestroy(this.name);
+  }
+
+  /** The work process, if this container has one. */
+  workProcess(): DoorProcess | undefined {
+    return this.processes.find((p) => p.command === WORKER_COMMAND);
+  }
+}
+
+/** The binding: containers by name, provisioned on first address. */
 class RecordingSandboxes implements SandboxBinding {
+  readonly #byName = new Map<string, DoorSandbox>();
+  /** The names ever addressed — a second boot of a fresh name is a rival. */
   readonly addressed: string[] = [];
   readonly destroyed: string[] = [];
-  async get(name: string): Promise<OrchestratorSandbox> {
+  /** Every claude-sub lease a boot asked the binding to install (tick 6fv). */
+  readonly claudeSubBoots: { name: string; label: string; jobId: string }[] = [];
+
+  async get(
+    name: string,
+    options?: { keepAlive?: boolean; claudeSub?: { label: string; jobId: string } },
+  ): Promise<OrchestratorSandbox> {
     this.addressed.push(name);
-    const destroyed = this.destroyed;
-    return {
-      async startProcess(command: string): Promise<SandboxProcessView> {
-        return { id: "p1", state: "running", exit_code: null, command };
-      },
-      async getProcess() {
-        return null;
-      },
-      async listProcesses() {
-        return [];
-      },
-      async readOutput(_id: string, offset: number) {
-        return { text: "", offset };
-      },
-      async killProcess() {},
-      async destroy() {
-        destroyed.push(name);
-      },
-      async isRunning() {
-        return false;
-      },
-    };
+    if (options?.claudeSub !== undefined) {
+      this.claudeSubBoots.push({ name, ...options.claudeSub });
+    }
+    let sandbox = this.#byName.get(name);
+    if (sandbox === undefined) {
+      sandbox = new DoorSandbox(name, (destroyed) => this.destroyed.push(destroyed));
+      this.#byName.set(name, sandbox);
+    }
+    return sandbox;
+  }
+
+  /** The named container, or the refusal that no code path may take. */
+  named(name: string): DoorSandbox {
+    const sandbox = this.#byName.get(name);
+    if (sandbox === undefined) throw new Error(`no sandbox named ${name} was addressed`);
+    return sandbox;
   }
 }
 
@@ -380,6 +487,223 @@ describe("the start route on a run whose workers are WorkerAgents", () => {
     const state = await getState();
     expect(state.status).toBe(200);
     expect(((await state.json()) as { state: string }).state).toBe("running");
+  });
+});
+
+// --------------------------------------------------- the claude-sub rung ---
+
+describe("a claude-sub job on a hosted deployment (tick yhe)", () => {
+  // The rung under a bound WORKER_AGENTS (production's shape): a dispatch
+  // that resolves claude on a versionless alias and leases a subscription is
+  // the CONTAINER's own all-in-one claude worker under the interception —
+  // never its agent's. The agent hosts pi-durable conversations on the
+  // factory's gateway, which serves no claude alias, and the container halves
+  // it drives are booted on the hosted kind, which image/common.sh dies on
+  // under the claude-sub marker — so before this routing, every rung job on a
+  // hosted deployment died at its own boot with its handle naming
+  // pi-durable/sonnet, a pairing no client's cloud billing rule admits, and
+  // its lease held a cap slot until the TTL. The Go executor's acceptance is
+  // the pairing this handle must name: claude/sonnet, the rung the door
+  // leased (the client's own predicate is pinned on its side,
+  // TestAStartOnTheSubscriptionRungIsAccepted).
+  it("boots a rung dispatch on the subscription as the container's own claude worker, not its agent", async () => {
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+    const response = await postStart(startBody({ harness: "claude", model: "sonnet" }));
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { handle: SandboxJobHandle; adopted: boolean };
+    expect(body.adopted).toBe(false);
+    expect(validate(jobHandleSchema, protocolDefs, body.handle)).toEqual([]);
+    // The pairing the cloud billing rule admits — the rung's own, never the
+    // agent's harness over an alias the gateway cannot serve.
+    expect(body.handle.handle.harness).toBe("claude");
+    expect(body.handle.handle.model).toBe("sonnet");
+    // The process is the container's, so the handle addresses one.
+    expect(body.handle.handle.process_id).not.toBeNull();
+
+    // The agent was never asked to host it: the door may READ its state for
+    // the adoption check, but no WorkerAgent was STARTED for this attempt —
+    // the subscription's claude CLI runs in the container.
+    expect([...agents.byName.values()].flatMap((agent) => agent.started)).toEqual([]);
+
+    // The container's own worker: the claude CLI under the interception,
+    // with the placeholder only — the subscription's token never enters the
+    // container.
+    const name = attemptSandboxName(RUN_ID, TICK, 1);
+    const work = sandboxesV1.named(name).workProcess();
+    expect(work).toBeDefined();
+    expect(work?.env.TICKS_HARNESS).toBe("claude");
+    expect(work?.env.TICKS_MODEL).toBe("sonnet");
+    expect(work?.env[CLAUDE_CODE_OAUTH_TOKEN]).toBe(CLAUDE_SUB_PLACEHOLDER);
+    expect(work?.env[TICKS_CLAUDE_SUB]).toBe("1");
+    expect(JSON.stringify(work?.env)).not.toContain("sk-ant");
+
+    // The interception install was asked of the binding, with the lease's
+    // label and the job id the pool keyed the lease under.
+    expect(sandboxesV1.claudeSubBoots).toEqual([
+      { name, label: "MAX1", jobId: attemptJobID(RUN_ID, TICK, 1) },
+    ]);
+
+    // The lease is live: one job under the subscription, addressed by the
+    // attempt's job id. The pool's storage outlives this test, so the lease
+    // is released for the next one.
+    const pool = claudeSubPool(env as unknown as Parameters<typeof claudeSubPool>[0])!;
+    const snapshot = await pool.snapshot();
+    expect(snapshot[0]!.label).toBe("MAX1");
+    expect(snapshot[0]!.active_leases).toEqual([attemptJobID(RUN_ID, TICK, 1)]);
+    await pool.release(attemptJobID(RUN_ID, TICK, 1));
+  });
+
+  // No subscription is free — none configured here — and the rung dispatch
+  // steps down to the deployment's Workers AI pair, which IS the agent's to
+  // host: the agent starts on the stepped-down model, its container's halves
+  // are booted on the hosted kind, no claude-sub marker or interception
+  // reaches anything, and the handle names what the agent runs. The routing
+  // must not send a stepped-down boot to the container, whose image dies on
+  // the hosted kind.
+  it("steps a rung dispatch with no free subscription down to the hosted Workers AI pair", async () => {
+    const response = await postStart(startBody({ harness: "claude", model: "sonnet" }));
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as { handle: SandboxJobHandle };
+    expect(body.handle.handle.harness).toBe(WORKER_AGENT_HARNESS);
+    expect(body.handle.handle.model).toBe("workers-ai/@cf/zai-org/glm-5.3");
+
+    const agent = agentOf();
+    expect(agent.started.length).toBe(1);
+    const spec = agent.started[0]!;
+    expect(spec.model).toBe("workers-ai/@cf/zai-org/glm-5.3");
+    expect(spec.env.TICKS_HARNESS).toBe(WORKER_AGENT_HARNESS);
+    expect(spec.env[CLAUDE_CODE_OAUTH_TOKEN]).toBeUndefined();
+    expect(spec.env[TICKS_CLAUDE_SUB]).toBeUndefined();
+
+    // The door asked no container, and no interception was installed.
+    expect(sandboxesV1.addressed).toEqual([]);
+    expect(sandboxesV1.claudeSubBoots).toEqual([]);
+  });
+
+  // An attempt the agent already holds is ADOPTED there, whatever a later
+  // dispatch resolved — never a second worker beside the agent's conversation.
+  // When that later dispatch leased a subscription (one freed up between the
+  // two), the lease is not the attempt's to hold: the agent's attempt is a
+  // pi-durable conversation, not the claude-sub job the lease exists for, so
+  // the cap slot goes back with the refusal-free adoption rather than sitting
+  // held until the lease's TTL.
+  it("adopts the attempt its agent holds even when the re-ask leased a subscription, and gives the cap slot back", async () => {
+    // No subscription configured: the first ask steps down, hosted.
+    expect((await postStart(startBody({ harness: "claude", model: "sonnet" }))).status).toBe(201);
+    const agent = agentOf();
+    expect(agent.started.length).toBe(1);
+
+    // A subscription appears; the same attempt is asked again.
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+    const again = await postStart(startBody({ harness: "claude", model: "sonnet" }));
+    expect(again.status).toBe(200);
+    const body = (await again.json()) as { handle: SandboxJobHandle; adopted: boolean };
+    expect(body.adopted).toBe(true);
+    expect(body.handle.handle.harness).toBe(WORKER_AGENT_HARNESS);
+    expect(body.handle.handle.model).toBe("workers-ai/@cf/zai-org/glm-5.3");
+
+    // One start, one conversation: no second worker beside the agent's, no
+    // container worker booted under this attempt's name.
+    expect(agent.started.length).toBe(1);
+    expect(sandboxesV1.addressed).toEqual([]);
+    expect(sandboxesV1.claudeSubBoots).toEqual([]);
+
+    // And the lease the re-ask took is not held: the attempt it adopted is
+    // not a claude-sub job, so the subscription's cap is free again.
+    const pool = claudeSubPool(env as unknown as Parameters<typeof claudeSubPool>[0])!;
+    expect((await pool.snapshot())[0]!.active_leases).toEqual([]);
+  });
+
+  // A rung worker already running in its container is adopted there, on the
+  // pairing its recorded boot names: the sticky lease answers the re-ask
+  // with the same subscription, and no second worker starts beside the live
+  // one — the rule that held for the container door before hosting, restated
+  // for the one job a hosted deployment still runs in its container.
+  it("adopts a rung worker already running in its container", async () => {
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+    expect((await postStart(startBody({ harness: "claude", model: "sonnet" }))).status).toBe(201);
+    const name = attemptSandboxName(RUN_ID, TICK, 1);
+    const first = sandboxesV1.named(name).workProcess();
+    expect(first).toBeDefined();
+
+    const again = await postStart(startBody({ harness: "claude", model: "sonnet" }));
+    expect(again.status).toBe(200);
+    const body = (await again.json()) as { handle: SandboxJobHandle; adopted: boolean };
+    expect(body.adopted).toBe(true);
+    // The recorded boot's model, the fresh boot's harness: the rung's pair.
+    expect(body.handle.handle.model).toBe("sonnet");
+    expect(body.handle.handle.harness).toBe("claude");
+    expect(body.handle.handle.process_id).toBe(first!.id);
+
+    // Still one work process, and the lease is still held under it.
+    const sandbox = sandboxesV1.named(name);
+    expect(sandbox.processes.filter((p) => p.command === WORKER_COMMAND)).toHaveLength(1);
+    const pool = claudeSubPool(env as unknown as Parameters<typeof claudeSubPool>[0])!;
+    expect((await pool.snapshot())[0]!.active_leases).toEqual([attemptJobID(RUN_ID, TICK, 1)]);
+    await pool.release(attemptJobID(RUN_ID, TICK, 1));
+  });
+
+  // The state route follows the start's routing: a rung job's container is
+  // read as the container it is, never through an agent that holds nothing —
+  // the read that would have answered `lost` for every rung job on a hosted
+  // deployment, for as long as the worker ran.
+  it("reads a rung worker's state from its container: running, then settled, and the lease ends with it", async () => {
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+    expect((await postStart(startBody({ harness: "claude", model: "sonnet" }))).status).toBe(201);
+    const name = attemptSandboxName(RUN_ID, TICK, 1);
+
+    const running = await getState();
+    expect(running.status).toBe(200);
+    const status = (await running.json()) as Record<string, unknown>;
+    expect(validate(jobStatusSchema, protocolDefs, status)).toEqual([]);
+    expect(status.state).toBe("running");
+    expect(status.terminal).toBe(false);
+
+    // The worker settles with a failure: read from the container, with its
+    // own exit code — and the settlement reclaims the container and ends the
+    // lease, exactly as a container job's does on a deployment that binds no
+    // WORKER_AGENTS.
+    sandboxesV1.named(name).workProcess()!.finish(7);
+    const settled = (await (await getState()).json()) as {
+      state: string;
+      terminal: boolean;
+      observations: { detail: string }[];
+    };
+    expect(settled.state).toBe("failed");
+    expect(settled.terminal).toBe(true);
+    expect(settled.observations[0]?.detail).toContain("exited 7");
+    expect(sandboxesV1.destroyed).toContain(name);
+    const pool = claudeSubPool(env as unknown as Parameters<typeof claudeSubPool>[0])!;
+    expect((await pool.snapshot())[0]!.active_leases).toEqual([]);
+  });
+
+  // The run-end reclaim asks the rung worker's container to stop and push —
+  // through the agent only for the attempts the agent hosts. A rung job
+  // destroyed unasked would lose its unpushed tail for no reason: the agent
+  // holds nothing of it, and the container's own salvage door is the one
+  // every container worker gets.
+  it("asks a rung worker's container to stop and push at the run's end, not an agent that holds nothing", async () => {
+    set(`${TOKEN_SECRET_PREFIX}MAX1`, "sk-ant-oat01-not-a-real-token");
+    expect((await postStart(startBody({ harness: "claude", model: "sonnet" }))).status).toBe(201);
+    const name = attemptSandboxName(RUN_ID, TICK, 1);
+
+    const agents = workerAgentsFromEnv(env);
+    const reclaimed = await reclaimRunWorkers(env.DB, sandboxesV1, RUN_ID, {
+      reason: "run_ended:failed",
+      graceMs: 0,
+      ...(agents === undefined ? {} : { agents }),
+    });
+    expect(reclaimed.length).toBe(1);
+    expect(reclaimed[0]?.detail).toContain("asked to stop and push");
+    expect(reclaimed[0]?.detail).not.toContain("WorkerAgent");
+    // The salvage door ran in the container: the cancel command started a
+    // second process beside the live work one.
+    const sandbox = sandboxesV1.named(name);
+    expect(sandbox.processes.some((p) => p.command.includes("--cancel"))).toBe(true);
+    expect(sandbox.destroyed).toBe(true);
+
+    const pool = claudeSubPool(env as unknown as Parameters<typeof claudeSubPool>[0])!;
+    await pool.release(attemptJobID(RUN_ID, TICK, 1));
   });
 });
 

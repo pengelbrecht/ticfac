@@ -53,6 +53,27 @@ loud.
 
 ---
 
+## 2.2.0
+
+MINOR: `status-model.json` gains `run_config` — the named run config the run
+routes under (ticfac tick tda), so one epic can run on GLM and another on
+claude from the same repository and the status, watch and phone surfaces say
+which. Required-and-null like every field that can be genuinely absent: null
+is a repository whose runners files declare no named configs at all (every
+repository until tick tda), or a feed that could not be read — never a guess.
+The name is derived from the run's own `config_selected` feed line, the
+durable record the reconciler writes at the start of every incarnation, so a
+resume states the config it still runs on rather than inheriting a line from a
+feed a fresh clone may not hold. Additive within the model's own
+`schema_version` 1, the way the hn6 dashboard fields were; the model's
+consumers that read fields by name (the phone page's snapshot parser) are
+unchanged and correct, and the ones that want the config — the dashboards that
+compare escalation and cost per config — are the ones the field exists for.
+
+No other fixture changes. Consumers: `cloudflare/contracts.pin.json` moves to
+2.2.0; the Go Model and its builder gained the field in the same commit, and
+the dashboard golden carries it populated.
+
 ## 2.1.0
 
 MINOR: the second fold of main into epic/hn6 — two parallel cuts become one

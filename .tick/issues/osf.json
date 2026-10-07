@@ -1,0 +1,14 @@
+{
+  "id": "osf",
+  "title": "Next epic: claude-sub's first live cloud run, post-merge proof of v5t [A1]",
+  "description": "v5t's [A1] (a config: claude epic runs its workers on sonnet/opus via the subscription in the cloud, stepping down to Workers AI) is built and tested at the seam but has never run: the factory deploys main only. Proposed epic, per the planning learnings: (1) first ticks: 8qi (bump the image's claude CLI so the aliases resolve to 5.5) and a NAMED operator step setting at least one CLAUDE_SUB_TOKEN_\u003cLABEL\u003e Worker secret; (2) uuk (rival worker past the 2h lease TTL) and eov (a claude config with no token passes silently when the factory cannot be asked) before the run; (3) a named tick INSIDE the epic runs a real `config: claude` epic in the cloud and a GLM epic beside it, comparing escalation and cost on status; (4) km9, 5ww, 0iu, lrb, oqn, 2zs, k20, jwq, and o3f closing bw7 as the tail; (5) 7vp/lxo so a routing-file deliverable is never again a dispatched tick. Acceptance: the live claude run completes with workers on the subscription and a forced full pool steps one job down to GLM 5.3, visible in the run feed.\nevidence: image/Dockerfile:53 ARG CLAUDE_CODE_VERSION=2.1.227; .tick/issues/8qi.json, uuk.json, eov.json; docs/v5t-closeout-retro-2026-10-07.md\n\nticfac run epic-v5t filed this backlog tick from the finding bff9784462c61271de907efa2ddf20b78156d29a38d84f9ea66214ffdce63e9e (reported by run-epic-v5t/tick-9uc/attempt-10) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/bff9784462c61271de907efa2ddf20b78156d29a38d84f9ea66214ffdce63e9e.json on the run branch.",
+  "notes": "2026-10-07 05:53 - ticfac run epic-v5t: created by absorbing finding bff9784462c61271de907efa2ddf20b78156d29a38d84f9ea66214ffdce63e9e — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-v5t/absorptions/bff9784462c61271de907efa2ddf20b78156d29a38d84f9ea66214ffdce63e9e.json on epic/v5t, and it says: its severity is medium, not high. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-epic-v5t/tick-9uc/attempt-10",
+  "created_by": "ticfac run epic-v5t",
+  "created_at": "2026-10-07T03:53:33Z",
+  "updated_at": "2026-10-07T03:53:42.493812Z"
+}
