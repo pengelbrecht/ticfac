@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 11,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for yaz",
-  "updated_at": "2026-10-07T07:11:41Z",
+  "sequence": 12,
+  "state": "publishing",
+  "reason": "closing yaz behind its validated review-epic answer",
+  "updated_at": "2026-10-07T07:13:04Z",
   "ticks": [
     {
       "tick_id": "56z",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "yaz",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 2
     },
     {
