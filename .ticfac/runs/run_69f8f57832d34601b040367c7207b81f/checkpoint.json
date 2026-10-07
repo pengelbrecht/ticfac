@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 55,
-  "state": "dispatching",
-  "reason": "dispatching 8wa as attempt 13",
-  "updated_at": "2026-10-07T15:21:44Z",
+  "sequence": 56,
+  "state": "running",
+  "reason": "8wa is running as attempt 13",
+  "updated_at": "2026-10-07T15:21:59Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -29,8 +29,8 @@
     },
     {
       "tick_id": "8wa",
-      "state": "ready",
-      "attempt": 12
+      "state": "dispatched",
+      "attempt": 13
     },
     {
       "tick_id": "96s",
