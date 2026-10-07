@@ -326,6 +326,38 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	held := false
 	terminal := ""
 	terminalDetail := ""
+	// Which of the standing feed's holds a RESUME answered (tick z7w): a run
+	// incarnated again under the same id appends over the previous
+	// incarnation's ending, and the hold that stopped the earlier one is
+	// that incarnation's history — answered, settled, moved past — exactly
+	// as its run_finished line is (runfeed.StandingTerminal's rule, asked
+	// of holds). The replay below re-reads the whole standing feed, so
+	// without this the alert fires for a hold the run itself says is over:
+	// a resumed run that completed would still print "is HOLDING … Nothing
+	// proceeds until somebody decides" beside its own done answer, sending
+	// a person to triage a finding the run already settled. The ordinals are
+	// feed order (the replay's own order, since the feed is append-only),
+	// and a hold answered is one a resume line stands AFTER — the same
+	// direction the resume answers a terminal line in.
+	answeredHolds := map[int]bool{}
+	{
+		lastResume := -1
+		for i := range located {
+			if located[i].Stage == runfeed.StageResumed || located[i].Stage == runfeed.StageResumedAutomatically {
+				lastResume = i
+			}
+		}
+		ordinal := 0
+		for i := range located {
+			if located[i].Stage == reconcile.StageRunHeld {
+				if lastResume > i {
+					answeredHolds[ordinal] = true
+				}
+				ordinal++
+			}
+		}
+	}
+	holdOrdinal := 0
 	// The epic id the clearing commands are addressed by (tick gtk): read
 	// out of the run's own id for a local run, carried by the factory's run
 	// record for a cloud one — never a `<epic-id>` placeholder, which is a
@@ -363,6 +395,23 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 			fmt.Fprintf(stdout, "%s %-12s %s: %s\n", clockOf(event.At), who, event.Stage, event.Detail)
 		}
 		if event.Stage == reconcile.StageRunHeld {
+			// A hold a resume answered is history, not the current alarm (tick
+			// z7w): its alert stays quiet, its line still streams like every
+			// other line, and it does not mark the run held — the run's own
+			// answer is what its last terminal line says. A hold with no resume
+			// after it is the one the alert is for, whether it stood in the
+			// feed before the watch joined or lands while it watches: the
+			// ordinal only names history in the STANDING feed, and a live
+			// hold's ordinal is past the standing count.
+			thisHold := holdOrdinal
+			holdOrdinal++
+			if answeredHolds[thisHold] {
+				// History, answered: end this line's callback here. Nothing
+				// below applies to a hold line (the terminal-word check reads
+				// run_finished and run_died only), so the quiet is the whole of
+				// the difference.
+				return
+			}
 			// The line the whole command exists for, said to a human: which
 			// tick, which attempt, why — all read off the line's own fields,
 			// never out of its prose — and the command that moves the hold on,
