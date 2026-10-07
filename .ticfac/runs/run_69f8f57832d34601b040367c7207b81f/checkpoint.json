@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 26,
-  "state": "failed",
-  "reason": "8gd did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: 8gd try 1 (run dispatch #4) never reached its harness: its boot stopped on the model route (exit 7). Every worker of this run boots the same image on the same repository and would stop the same way at any tier, so the run stops here; nothing about the tick was tried and no rung of its ladder was spent. What the boot said: the container never reached its harness: its boot stopped on the model route (exit 7) — the environment, not the tick, and a retry boots the same one. To fix: the gateway refused the routed model (the reason quotes it): configure the provider behind the gateway with `ticfac factory setup`, or route the role at a model that provider serves in .tick/runners.toml, then run the epic again",
-  "updated_at": "2026-10-07T13:52:33Z",
+  "sequence": 27,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-10-07T13:53:51Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -65,7 +65,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/ex6",
-    "source_sha": "689f623a6f31d5b01f5576d5cda04924ca349cd2",
+    "source_sha": "2a87fd6579957522b8616c32f6161a7585ca9e69",
     "integration_ref": "refs/heads/epic/ex6",
     "phase": "worker",
     "executor": null,
