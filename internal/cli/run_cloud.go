@@ -29,7 +29,9 @@ package cli
 //     a local reconciler does. The liveness that decides attach from resume
 //     is the same answer `ticfac status` gives — the record's state checked
 //     against the Workflow instance — never the record state alone, which is
-//     the one claim a dead run can still make.
+//     the one claim a dead run can still make. A live run whose feed says it
+//     ended HOLDING for a person is resumed too, superseding it (tick kk7,
+//     run_cloud_supersede.go): the rerun is the move its hold names.
 //
 //   - TRIAGE is untouched by this file on purpose: the findings channel is
 //     the integration branch, the same branch on both hosts, so
@@ -165,20 +167,37 @@ func runCloudCommand(ctx context.Context, epicID, repo string, fl *runFlags, std
 		// that never got to write its last word is a run nothing is advancing —
 		// attaching to it forever is the one outcome this decision refuses.
 		liveness := cloudRunLiveness(ctx, existing.RunID, existing.State)
-		if liveness.Alive {
-			fmt.Fprintf(prose, "cloud run %s is alive (%s) — attaching; Ctrl-C detaches without stopping it\n",
-				existing.RunID, liveness.Reason)
-			code := runCloudAttach(ctx, repo, epicID, existing.RunID, prose, stderr)
-			return finish("attached", runAttachState(repo, existing.RunID, code), existing.RunID, "")
-		}
 		// Not alive — never started, finished, or a record frozen at a state
 		// its dead instance no longer holds. All three are one action: a new
 		// submission, which the cloud orchestrator resumes from the integration
 		// branch the way a local reconciler does, and the reason names which of
 		// the three it was, in the liveness answer's own words.
 		action = "resuming"
-		fmt.Fprintf(prose, "cloud run %s is not running — %s — resuming the epic as a new submission\n",
-			existing.RunID, liveness.Reason)
+		switch held, what := cloudHeldIfAlive(ctx, client, epicID, existing.RunID, liveness); {
+		case held:
+			// A run that ended HOLDING for a person (tick kk7): its orchestrator
+			// wrote the hold and halted, and the Workflow still standing is only
+			// the run winding down. Running the epic again is the move the hold
+			// itself names, so it supersedes the parked run — stopped, waited
+			// out, and the epic resumed as a new submission — rather than
+			// attaching and replaying the old halt.
+			fmt.Fprintf(prose, "cloud run %s ended holding for a person (%s) — its orchestrator halted, and its "+
+				"Workflow is only winding down (%s). Running the epic again supersedes it: the held run is stopped, "+
+				"and the epic resumes as a new submission once it has ended\n",
+				existing.RunID, what, liveness.Reason)
+			if note := supersedeHeldCloudRun(ctx, client, epicID, existing.RunID, prose); note != "" {
+				fmt.Fprintf(stderr, "ticfac run %s --cloud: %s\n", epicID, note)
+				return finish(action, agentStateRunning, existing.RunID, note)
+			}
+		case liveness.Alive:
+			fmt.Fprintf(prose, "cloud run %s is alive (%s) — attaching; Ctrl-C detaches without stopping it\n",
+				existing.RunID, liveness.Reason)
+			code := runCloudAttach(ctx, repo, epicID, existing.RunID, prose, stderr)
+			return finish("attached", runAttachState(repo, existing.RunID, code), existing.RunID, "")
+		default:
+			fmt.Fprintf(prose, "cloud run %s is not running — %s — resuming the epic as a new submission\n",
+				existing.RunID, liveness.Reason)
+		}
 	} else {
 		fmt.Fprintf(prose, "no cloud run for epic %s in the factory — starting one\n", epicID)
 	}

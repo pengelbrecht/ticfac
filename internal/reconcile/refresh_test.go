@@ -353,8 +353,13 @@ func TestBothSidesOfTheActivityLogMergeThroughTheTrackersOwnDriver(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.RunProtected(context.Background()); err == nil || !strings.Contains(err.Error(), "no dispatchable tick") {
-		t.Fatalf("the run ended with %v, want the refusal of an epic whose every tick is closed", err)
+	// A classified stop since epic ilz (RefusedNothingToDispatch), never the
+	// bare error the supervisor halted over as "no classification".
+	result, err := r.RunProtected(context.Background())
+	if err != nil || result == nil || result.Failure == nil || result.Failure.Reason != RefusedNothingToDispatch ||
+		!strings.Contains(result.Failure.Message, "no dispatchable tick") {
+		t.Fatalf("the run ended with %+v (%v), want the %s refusal of an epic whose every tick is closed",
+			result, err, RefusedNothingToDispatch)
 	}
 
 	merged := showOnOrigin(t, f, r.IntegrationBranch(), ".tick/activity/activity.jsonl")

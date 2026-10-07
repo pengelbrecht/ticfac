@@ -159,6 +159,10 @@ func TestRunCloudAttachesALiveRunWithoutResubmitting(t *testing.T) {
 	stubCloudTk(t)
 	repo, _, _ := setupCloudRepo(t, true)
 	live := cloudRunIDOf("bb22")
+	// A live run's feed holding nothing: the held question (tick kk7) reads
+	// it, and a run that holds nothing is attached to as it always was.
+	feed := feedLine(t, runfeed.NewEvent(time.Date(2026, 9, 27, 10, 1, 0, 0, time.UTC), live, "epic1", nil,
+		"dispatched", "the run is working"))
 
 	endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
 		switch {
@@ -166,6 +170,11 @@ func TestRunCloudAttachesALiveRunWithoutResubmitting(t *testing.T) {
 			return 200, map[string]any{"runs": []any{map[string]any{
 				"run_id": live, "epic": "epic1", "project": "acme/project", "state": "running", "started_at": "2026-09-27T10:00:00Z",
 			}}}
+		case request.Method == http.MethodGet && request.Path == "/api/runs/"+live+"/events":
+			return 200, map[string]any{
+				"run_id": live, "state": "running",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
 		case request.Method == http.MethodPost:
 			t.Error("a live cloud run was submitted to again")
 			return 409, map[string]any{"error": "lease_held"}
@@ -188,8 +197,162 @@ func TestRunCloudAttachesALiveRunWithoutResubmitting(t *testing.T) {
 	if len(rec.runIDs) != 1 || rec.runIDs[0] != live {
 		t.Fatalf("attached to %v, want the live run %s", rec.runIDs, live)
 	}
-	if len(*requests) != 1 {
-		t.Fatalf("the factory was asked %d times, want the one index read", len(*requests))
+	if len(*requests) != 2 {
+		t.Fatalf("the factory was asked %d times, want the index read and the feed's tail", len(*requests))
+	}
+}
+
+// TestRunCloudRerunOfAHeldRunSupersedesIt (tick kk7, epic ilz): a cloud run
+// that ended HOLDING for a person — its run_held line, then its supervisor's
+// halt — while its Workflow is still standing is not attached to. Running the
+// epic again is the move the hold names, so the command stops the held run
+// cleanly, waits for the factory to say it has ended, and resumes the epic as
+// a new submission, attaching to THAT run — never replaying the old halt.
+func TestRunCloudRerunOfAHeldRunSupersedesIt(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	held, resumed := cloudRunIDOf("ab77"), cloudRunIDOf("cd88")
+	savedPoll := cloudSupersedePoll
+	cloudSupersedePoll = time.Millisecond
+	t.Cleanup(func() { cloudSupersedePoll = savedPoll })
+
+	at := time.Date(2026, 10, 7, 9, 7, 39, 0, time.UTC)
+	feed := feedLine(t, runfeed.NewEvent(at, held, "epic1", nil, reconcile.StageRunHeld,
+		reconcile.RefusedLandReviewNotReady+": the run does not merge the epic epic1: its final review still "+
+			"judges it NOT READY"))
+	feed += feedLine(t, runfeed.NewEvent(at.Add(time.Second), held, "", nil, reconcile.StageRunFinished,
+		"failed: the epic PR is not ready"))
+	feed += feedLine(t, runfeed.NewEvent(at.Add(2*time.Second), held, "", nil, reconcile.StageSupervisionHalted,
+		"the run stopped and will NOT be continued automatically: it needs a person"))
+
+	var mu sync.Mutex
+	stopped, recordReads := false, 0
+	endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": held, "epic": "epic1", "project": "acme/project", "state": "running",
+				"started_at": "2026-10-07T06:33:24Z",
+			}}}
+		case request.Method == http.MethodGet && request.Path == "/api/runs/"+held+"/events":
+			return 200, map[string]any{
+				"run_id": held, "state": "running",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
+			}
+		case request.Method == http.MethodPost && request.Path == "/api/runs/"+held+"/stop":
+			stopped = true
+			return 200, map[string]any{"run": map[string]any{"run_id": held, "state": "stopping"}, "mode": "clean"}
+		case request.Method == http.MethodGet && request.Path == "/api/runs/"+held:
+			// Stopping for a read, then stopped with the lease still its (the
+			// factory writes the state before it releases the lease), then
+			// ended: the resume waits for both.
+			recordReads++
+			state := "stopping"
+			if recordReads > 1 {
+				state = "stopped"
+			}
+			answer := map[string]any{"run": map[string]any{"run_id": held, "epic": "epic1", "state": state}}
+			if recordReads < 3 {
+				answer["lease"] = map[string]any{"run_id": held, "epic": "epic1"}
+			}
+			return 200, answer
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			if !stopped || recordReads < 3 {
+				t.Error("the resume was submitted before the held run had ended: the lease is still its")
+			}
+			return http.StatusCreated, map[string]any{"run": map[string]any{"run_id": resumed, "state": "starting"}}
+		}
+		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+	rec := recordCloudAttach(t)
+
+	code, stdout, stderr := runRunCloud(t, repo, "epic1")
+	if code != exitSuccess {
+		t.Fatalf("exit %d re-running a held cloud run: %s\n%s", code, stderr.String(), stdout.String())
+	}
+	if len(rec.runIDs) != 1 || rec.runIDs[0] != resumed {
+		t.Fatalf("attached to %v, want the resumed run %s — never the held one, whose halt is history", rec.runIDs, resumed)
+	}
+	for _, want := range []string{"ended holding for a person (" + reconcile.RefusedLandReviewNotReady + ")",
+		"cloud run " + held + " is stopping", "cloud run " + held + " has ended"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("stdout does not say %q:\n%s", want, stdout.String())
+		}
+	}
+	var stop *cloudFactoryRequest
+	submissions := 0
+	for i := range *requests {
+		request := (*requests)[i]
+		switch {
+		case request.Method == http.MethodPost && request.Path == "/api/runs/"+held+"/stop":
+			stop = &(*requests)[i]
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			submissions++
+		}
+	}
+	if stop == nil || stop.Body["mode"] != "clean" {
+		t.Fatalf("the held run was not stopped cleanly: %+v", stop)
+	}
+	if submissions != 1 {
+		t.Fatalf("%d submissions, want the one resume", submissions)
+	}
+}
+
+// TestRunCloudHeldRunThatDoesNotEndSubmitsNothing: the wait for the held run
+// to end is bounded, and a run still stopping at the bound is reported as
+// in flight — the running class — with nothing submitted beside it.
+func TestRunCloudHeldRunThatDoesNotEndSubmitsNothing(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	held := cloudRunIDOf("ef99")
+	savedPoll, savedBound := cloudSupersedePoll, cloudSupersedeBound
+	cloudSupersedePoll, cloudSupersedeBound = time.Millisecond, 20*time.Millisecond
+	t.Cleanup(func() { cloudSupersedePoll, cloudSupersedeBound = savedPoll, savedBound })
+
+	at := time.Date(2026, 10, 7, 9, 7, 39, 0, time.UTC)
+	feed := feedLine(t, runfeed.NewEvent(at, held, "epic1", nil, reconcile.StageRunHeld,
+		reconcile.RefusedLandReviewNotReady+": NOT READY"))
+	feed += feedLine(t, runfeed.NewEvent(at.Add(time.Second), held, "", nil, reconcile.StageSupervisionHalted,
+		"the run stopped and will NOT be continued automatically: it needs a person"))
+
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+			return 200, map[string]any{"runs": []any{map[string]any{
+				"run_id": held, "epic": "epic1", "project": "acme/project", "state": "running",
+				"started_at": "2026-10-07T06:33:24Z",
+			}}}
+		case request.Method == http.MethodGet && request.Path == "/api/runs/"+held+"/events":
+			return 200, map[string]any{"run_id": held, "state": "running",
+				"text": feed, "bytes": len(feed), "total_bytes": len(feed)}
+		case request.Method == http.MethodPost && request.Path == "/api/runs/"+held+"/stop":
+			return 200, map[string]any{"run": map[string]any{"run_id": held, "state": "stopping"}, "mode": "clean"}
+		case request.Method == http.MethodGet && request.Path == "/api/runs/"+held:
+			return 200, map[string]any{"run": map[string]any{"run_id": held, "epic": "epic1", "state": "stopping"}}
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			t.Error("a resume was submitted while the held run was still stopping")
+			return 409, map[string]any{"error": "lease_held"}
+		}
+		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+	rec := recordCloudAttach(t)
+
+	code, stdout, stderr := runRunCloud(t, repo, "epic1")
+	if code != exitRunning {
+		t.Fatalf("exit %d, want %d (running) while the held run is still stopping: %s\n%s", code, exitRunning,
+			stderr.String(), stdout.String())
+	}
+	if len(rec.runIDs) != 0 {
+		t.Errorf("attached to %v while superseding a held run that had not ended", rec.runIDs)
+	}
+	if !strings.Contains(stderr.String(), "`ticfac run epic1 --cloud` resumes the epic once it has") {
+		t.Errorf("the note does not say how to come back:\n%s", stderr.String())
 	}
 }
 
@@ -598,6 +761,11 @@ func TestRunCloudJSONAnswersWithTheRunDocument(t *testing.T) {
 			return 200, map[string]any{"runs": []any{map[string]any{
 				"run_id": live, "epic": "epic1", "project": "acme/project", "state": "running", "started_at": "2026-09-27T10:00:00Z",
 			}}}
+		}
+		if request.Method == http.MethodGet && request.Path == "/api/runs/"+live+"/events" {
+			// The held question's read (tick kk7): a run with nothing on its
+			// feed yet holds nothing.
+			return 200, map[string]any{"run_id": live, "state": "running", "text": "", "bytes": 0, "total_bytes": 0}
 		}
 		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
 		return 404, map[string]any{"error": "not_found"}

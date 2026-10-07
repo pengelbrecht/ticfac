@@ -415,3 +415,114 @@ func TestAnExtraReviewRoundStillNotReadyOverAnUnchangedTreeHolds(t *testing.T) {
 		t.Error("main carries the epic: the run merged work its own review still rejects")
 	}
 }
+
+// A held run resumed under a NEW run id (epic ilz, 2026-10-07). A cloud
+// resume is a new submission, so it runs under a new run id; ilz's resume read
+// only its own (empty) decisions, found no review, no close-out of its own and
+// nothing open, and halted over "epic ilz has no dispatchable tick" — an
+// unclassified stop. A person hand-filed a review tick and reopened the
+// close-out. These are the acceptance:
+//
+//  8. a resume under a new run id over a tree CHANGED since the earlier run's
+//     NOT READY final review reviews the tree again, runs the close-out after
+//     it (reopened: the one that closed was the earlier run's) and lands on
+//     the READY — with no person;
+//  9. over an UNCHANGED tree the hold stands with the land hold's own message,
+//     a classified stop, never "no classification".
+
+// storeOfRun opens the run state of one run of the fixture's epic.
+func storeOfRun(t *testing.T, f *fixture, runID string) *runstate.Store {
+	t.Helper()
+	s, err := runstate.Open(runstate.Options{Repo: f.Repo.Dir, Remote: "origin", Branch: "epic/qeu", RunID: runID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Fetch(); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+// 8. THE NEW RUN ID OVER A CHANGED TREE: reviewed again, closed out, landed.
+func TestAResumeUnderANewRunIDReviewsAChangedTreeAgainAndLands(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f, pr := heldAfterTheBound(t)
+	fix := pushOntoTheEpicBranch(t, f, "fixed-by-a-person.txt", "the doc says what the code does\n",
+		"a person fixes what the final review named")
+
+	f.Runner = fakeRunnerArgv(t, "review_not_ready_then_ready")
+	resume := fixtureOptions{mode: "review_not_ready_then_ready", pullRequests: pr, runID: "r-resume"}
+	_, result, err := f.run(f.Repo, resume)
+	if err != nil {
+		t.Fatalf("the resume under a new run id: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the resume ended %s (%+v): a tree changed since an earlier run's NOT READY is reviewed again "+
+			"and landed on its READY, never a stop over nothing to dispatch", result.State, result.Failure)
+	}
+	reviews := reviewDecisions(t, storeOfRun(t, f, "r-resume"))
+	if len(reviews) != 1 {
+		t.Fatalf("the resume recorded %d review decisions, want the one review of the changed tree", len(reviews))
+	}
+	if got := reviewVerdictOf(reviews[0].Response); got != subprocess.ReviewVerdictReady {
+		t.Errorf("the resume's review verdict is %q, want READY", got)
+	}
+	if judged, _ := reviews[0].Request["source_sha"].(string); judged == "" ||
+		!mustRunAllowingFailure(f.Repo.Origin, "git", "merge-base", "--is-ancestor", fix, judged) {
+		t.Errorf("the resume's review judged %q, which does not carry the person's fix %s", judged, fix)
+	}
+	if f.Tracker.count("reopen:co") == 0 {
+		t.Error("the close-out co was never reopened: the resume has no close-out of its own to land with")
+	}
+	co, err := f.Tracker.Show(context.Background(), "co")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if co.Status != "closed" {
+		t.Errorf("the reopened close-out is %s, want closed again by the resume", co.Status)
+	}
+	if !strings.Contains(result.Reason, "merged into main") {
+		t.Errorf("the terminal reason does not say the epic is merged: %q", result.Reason)
+	}
+	if !onOrigin(f, fix, "main") {
+		t.Error("main does not carry the person's fix")
+	}
+}
+
+// 9. THE NEW RUN ID OVER AN UNCHANGED TREE: the hold stands, classified.
+func TestAResumeUnderANewRunIDOverAnUnchangedTreeHoldsClassified(t *testing.T) {
+	t.Parallel()
+	shorttest.EndToEnd(t)
+	f, pr := heldAfterTheBound(t)
+
+	// A review made now would answer READY and land: the hold below is the
+	// rule's, not a third NOT READY's.
+	f.Runner = fakeRunnerArgv(t, "review_not_ready_then_ready")
+	resume := fixtureOptions{mode: "review_not_ready_then_ready", pullRequests: pr, runID: "r-resume"}
+	_, result, err := f.supervise(f.Repo, resume)
+	if err != nil {
+		t.Fatalf("the resume under a new run id ended in an error, not a classified stop: %v", err)
+	}
+	if result.Failure == nil || result.Failure.Reason != RefusedLandReviewNotReady {
+		t.Fatalf("the resume ended %s (%+v), want the %s hold: nothing but run state changed since the earlier "+
+			"run's final review", result.State, result.Failure, RefusedLandReviewNotReady)
+	}
+	for _, want := range []string{"recorded by r-fixture", "after 2 review round(s), the bound being 2",
+		"The Phase 4 gate still never ran after the fix"} {
+		if !strings.Contains(result.Failure.Message, want) {
+			t.Errorf("the hold does not name %q: %s", want, result.Failure.Message)
+		}
+	}
+	if n := len(reviewDecisions(t, storeOfRun(t, f, "r-resume"))); n != 0 {
+		t.Errorf("the resume recorded %d review decisions: an unchanged tree is not reviewed again", n)
+	}
+	for _, event := range feedStages(t, f.Repo.Dir, "r-resume") {
+		if strings.Contains(event.Detail, "no classification") || strings.Contains(event.Detail, "no dispatchable tick") {
+			t.Errorf("the resume's feed carries an unclassified stop: %s: %s", event.Stage, event.Detail)
+		}
+	}
+	if onOrigin(f, originHead(t, f, "epic/qeu"), "main") {
+		t.Error("main carries the epic: the run merged work its own review still rejects")
+	}
+}
