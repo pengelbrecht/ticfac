@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_18eafdaa047544be9a196d913fb08a30",
   "epic_id": "ilz",
-  "sequence": 16,
-  "state": "running",
-  "reason": "CI on the epic PR #254 is pending on the head that includes the close-out's own commits; the close-out of ilz is held",
-  "updated_at": "2026-10-07T10:27:39Z",
+  "sequence": 17,
+  "state": "publishing",
+  "reason": "closing kzs behind the integrated gate on 56fe01e1a5d4",
+  "updated_at": "2026-10-07T10:32:48Z",
   "ticks": [
     {
       "tick_id": "lpl",
