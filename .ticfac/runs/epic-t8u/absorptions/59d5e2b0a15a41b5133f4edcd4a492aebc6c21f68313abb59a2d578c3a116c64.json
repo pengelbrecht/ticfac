@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "key": "59d5e2b0a15a41b5133f4edcd4a492aebc6c21f68313abb59a2d578c3a116c64",
+  "tick_id": "a06",
+  "gating": false,
+  "basis": "backlog-default",
+  "reason": "its severity is low, not high; the epic's acceptance is prose (the acceptance carries no [A<n>]-marked items, so its definition of done is prose: nothing is runnable, nothing can be pointed at, and whether a finding gates it cannot be decided — refusing to absorb rather than guessing. Mark the acceptance into stable [A<n>] items first (ticks goal-design.md, fact sheets), then decide absorption against them.) and the reporter does not claim it breaks the build or CI. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "placement": "backlog",
+  "decided_at": "2026-10-07T14:31:36Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "tc9",
+    "attempt": 2,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "030cd139e13c4ca6fc627822939fc19a47292348",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:7c6b9cdf987505852f3cbe7c7cfc76bfcfc6a162eb7c39285d7377560839cb01",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
