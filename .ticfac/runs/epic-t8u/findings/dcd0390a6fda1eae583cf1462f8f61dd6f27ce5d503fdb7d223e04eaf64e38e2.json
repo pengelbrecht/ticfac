@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "1qy",
   "attempt": 3,
-  "status": "proposed",
+  "status": "fixed",
   "proposed_at": "2026-10-07T14:58:52Z",
+  "triaged_at": "2026-10-07T14:59:06Z",
+  "triaged_by": "ticfac run epic-t8u applying the tracker edit the finding carries",
+  "fixed_as": "eac03b49914297ac094e648d9193cb518f8ff026",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "1qy",
