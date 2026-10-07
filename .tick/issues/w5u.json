@@ -1,0 +1,14 @@
+{
+  "id": "w5u",
+  "title": "ticfac settle: the printed command fails for a cloud attempt, and a --release value with spaces is refused",
+  "gloss": "settle: cloud + spaces",
+  "description": "2026-10-08, settling ex6's held cloud attempts: (1) the hold message prints 'ticfac settle ex6 \u003ctick\u003e \u003cn\u003e --run-id … --release \"\u003cwho\u003e\" --carry-work', which refuses a cloud attempt ('ran on executor cloudflare-sandbox, and no profile set this build carries resolves one naming it') unless --profiles=profiles-cloudflare-sandbox is added; settle should resolve the executor from the attempt record. (2) --release \"two words\" fails with 'exactly one epic id, tick id and attempt number are required' — a flag value containing spaces is split into positionals; --release=operator works. Also: the release is a person's step the mandate wants gone — a held attempt whose cause is fixed on main should be re-dispatchable by the run (kk7-style) without settle.",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "the printed settle command works verbatim for a cloud attempt; --release values with spaces parse; tests; make gate",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T23:25:14.875429Z",
+  "updated_at": "2026-10-07T23:25:14.875429Z"
+}
