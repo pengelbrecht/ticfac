@@ -1,6 +1,7 @@
 {
   "id": "54l",
   "title": "Final review of the claude-sub per-epic diff",
+  "notes": "2026-10-07 04:11 - ticfac run epic-v5t: 54l try 1 (run dispatch #6) reported a finding the run itself decided — defect \"Hosted WorkerAgent door ignores the claude-sub rung; every rung job dies\" (key d7060f572e0ae2275be3d0fb6cb706c6285bab2b902a8a40854e497fae8b19c9, severity high, for this repository) is promoted to a backlog tick with an owner, yhe; the decision record is on the run branch at .ticfac/runs/epic-v5t/absorptions/d7060f572e0ae2275be3d0fb6cb706c6285bab2b902a8a40854e497fae8b19c9.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -13,6 +14,6 @@
   "role": "review",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-06T17:13:35.972432Z",
-  "updated_at": "2026-10-07T02:02:50.517599Z",
+  "updated_at": "2026-10-07T02:11:58.631569Z",
   "started_at": "2026-10-07T02:02:50.517599Z"
 }
