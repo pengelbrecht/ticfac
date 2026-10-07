@@ -1,0 +1,13 @@
+{
+  "id": "lrb",
+  "title": "The cloud submission record cannot carry a selected run config",
+  "description": "tick tda's design names `ticfac run \u003cepic\u003e [--cloud] --config claude`, but the factory's POST /api/runs submission record has no field for a config, so a --cloud run cannot carry the operator's word: this tick refuses the combination honestly, naming what a submitted run selects by (the epic's own config: label and the declared default). Wiring it needs the factory's TypeScript intake (the submission record and the orchestrator hand-off) and the in-factory run-epic invocation — a factory-side tick. Until it lands, only a --cloud-workers run (orchestrator on this machine) can select a config by flag in a cloud-workers run.\nevidence: internal/cli/run.go (the --cloud --config refusal, 'the cloud submission carries no --config'); internal/cli/run_cloud.go submitCloudRun's submission struct (Project/Epic/BaseSHA/RequestedBy/Queue/Orchestrator/Substrate — no config field)\n\nticfac run epic-v5t filed this backlog tick from the finding 001ae33559e7b08e93270582562bae3accb56194ed0e6ea9e05d8550cbc7638a (reported by run-epic-v5t/tick-tda/attempt-2) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/001ae33559e7b08e93270582562bae3accb56194ed0e6ea9e05d8550cbc7638a.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-epic-v5t/tick-tda/attempt-2",
+  "created_by": "ticfac run epic-v5t",
+  "created_at": "2026-10-07T00:56:25Z",
+  "updated_at": "2026-10-07T00:56:25Z"
+}
