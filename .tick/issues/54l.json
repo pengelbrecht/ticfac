@@ -1,10 +1,10 @@
 {
   "id": "54l",
   "title": "Final review of the claude-sub per-epic diff",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "blocked_by": [
     "tda",
     "yck"
@@ -13,5 +13,6 @@
   "role": "review",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-06T17:13:35.972432Z",
-  "updated_at": "2026-10-06T17:13:35.972432Z"
+  "updated_at": "2026-10-07T02:02:50.517599Z",
+  "started_at": "2026-10-07T02:02:50.517599Z"
 }
