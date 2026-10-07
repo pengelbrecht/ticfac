@@ -1,0 +1,13 @@
+{
+  "id": "ta1",
+  "title": "harness's Biome lint and suites are CI-only; the per-tick gate never reads them",
+  "description": "The gate's ts command is `cd cloudflare \u0026\u0026 …` only (tick tc9 moved the factory's own suite into the gate, but harness/ was never added): harness/biome.jsonc, harness's `pnpm lint` and its own vitest suites run nowhere except CI's `harness conformance and replay` job. A tick whose change lands in harness/src can therefore settle with no gate ever formatting, linting or testing it — the same shape as yoh review finding dfae216d (a TypeScript behaviour change settling without its tests in the gate), now for the harness package. Work worth a tick of its own: either fold harness's lint and suites into the gate's ts command (measuring the cost, as tc9 did) or record the split as deliberate in runners.toml with the reasoning. Not this tick: ncr is scoped to cloud/factory, and the harness's Biome predates it.\nevidence: .tick/runners.toml [testing.commands] ts (`cd cloudflare \u0026\u0026 …`, covers cloudflare/ only); .github/workflows/ci.yml's harness job (`pnpm install --frozen-lockfile \u0026\u0026 pnpm lint \u0026\u0026 pnpm typecheck \u0026\u0026 pnpm test`); harness/package.json scripts\n\nticfac run epic-t8u filed this backlog tick from the finding 58c0bc5a21d3b9b81c248b779d244be864ebdd80e30948769d2a6dbdcad14faf (reported by run-epic-t8u/tick-ncr/attempt-10) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/58c0bc5a21d3b9b81c248b779d244be864ebdd80e30948769d2a6dbdcad14faf.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-ncr/attempt-10",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-07T19:24:30Z",
+  "updated_at": "2026-10-07T19:24:30Z"
+}
