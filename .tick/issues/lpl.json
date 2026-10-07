@@ -2,6 +2,7 @@
   "id": "lpl",
   "title": "Re-review ilz after the operator's failover-section fix (round 4)",
   "description": "The round-3 review judged ilz NOT READY because docs/claude-sub-operator.md's failover section went stale when #250-#253 merged under the epic. The operator corrected it in 555253ba9 against cloudflare/src/claude-sub.ts at main. Review the epic's full diff against the integration head; judge READY or name what blocks.",
+  "notes": "2026-10-07 09:42 - ticfac run run_18eafdaa047544be9a196d913fb08a30: lpl try 1 (run dispatch #1) reported a finding the run itself decided — defect \"Close-out retro declares [A1] broken on a head where it is fixed\" (key 4f8befda50c805e6a484e5981865743efb07d12d02c481f42e0621553ea472ca, severity medium, for this repository) is promoted to a backlog tick with an owner, 3gw; the decision record is on the run branch at .ticfac/runs/run_18eafdaa047544be9a196d913fb08a30/absorptions/4f8befda50c805e6a484e5981865743efb07d12d02c481f42e0621553ea472ca.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -10,6 +11,6 @@
   "role": "review",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T09:22:47.404242Z",
-  "updated_at": "2026-10-07T09:31:33.675219385Z",
+  "updated_at": "2026-10-07T09:42:13.549951389Z",
   "started_at": "2026-10-07T09:31:33.675218345Z"
 }
