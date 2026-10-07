@@ -139,13 +139,18 @@ const bootGen = gs.composite<{ halt: string | null; events: BootEvent[] }>((tc) 
         signal: tc2.draw(signalGen),
         look: tc2.draw(lookGen),
       })),
-      { minSize: 0, maxSize: 10 },
+      { minSize: 0, maxSize: 26 },
     ),
   ),
 }));
 
+// The budget spans the whole useful range: a pinned cadence's tight 1-look
+// watch through a derived multi-hour budget's tens of looks. The 10,000-look
+// figure production's step limit allows is the scale probe's, not a
+// property's: a fold at that size is a resource bound, and bounds belong
+// where values are materialized (the probe), not in the drawn domain.
 const configGen = gs.composite<WatchConfig>((tc) => ({
-  max_observations: tc.draw(gs.integers({ minValue: 1, maxValue: 6 })),
+  max_observations: tc.draw(gs.integers({ minValue: 1, maxValue: 24 })),
   settle_ms: tc.draw(gs.integers({ minValue: 1, maxValue: 50 })),
   settle_look_ms: DONE_SETTLE_LOOK_MS,
 }));
