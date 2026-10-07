@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_18eafdaa047544be9a196d913fb08a30",
   "epic_id": "ilz",
-  "sequence": 13,
-  "state": "collecting",
-  "reason": "collecting the closeout-epic job for kzs",
-  "updated_at": "2026-10-07T10:24:20Z",
+  "sequence": 14,
+  "state": "integrating",
+  "reason": "integrating kzs attempt 2 into epic/ilz",
+  "updated_at": "2026-10-07T10:25:02Z",
   "ticks": [
     {
       "tick_id": "lpl",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "kzs",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 2
     }
   ],
