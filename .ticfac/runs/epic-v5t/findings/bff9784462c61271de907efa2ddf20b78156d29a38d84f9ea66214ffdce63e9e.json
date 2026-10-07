@@ -12,8 +12,11 @@
   "attempt": 10,
   "done_item": "A1",
   "demonstrating_check": "ticfac run <an epic labelled config: claude> --cloud (post-merge, on the deployed factory)",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T03:53:24Z",
+  "triaged_at": "2026-10-07T03:53:39Z",
+  "triaged_by": "ticfac run epic-v5t absorbing osf",
+  "promoted_as": "osf",
   "provenance": {
     "run_id": "epic-v5t",
     "tick_id": "9uc",
