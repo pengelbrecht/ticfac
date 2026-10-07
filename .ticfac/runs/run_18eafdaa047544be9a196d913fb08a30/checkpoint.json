@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_18eafdaa047544be9a196d913fb08a30",
   "epic_id": "ilz",
-  "sequence": 23,
-  "state": "running",
-  "reason": "z6t is closed",
-  "updated_at": "2026-10-07T10:48:39Z",
+  "sequence": 24,
+  "state": "gating",
+  "reason": "running the integrated gate for kzs on 1ee46245b7b0",
+  "updated_at": "2026-10-07T10:48:59Z",
   "ticks": [
     {
       "tick_id": "lpl",
@@ -28,7 +28,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/ilz",
-    "source_sha": "f48da0a0614b8bb548ccc4366bfc391ff22b673d",
+    "source_sha": "1ee46245b7b0474187a12306d2da49087a38f0a7",
     "integration_ref": "refs/heads/epic/ilz",
     "phase": "worker",
     "executor": null,
