@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 34,
-  "state": "running",
-  "reason": "54l is running as attempt 6",
-  "updated_at": "2026-10-07T02:02:59Z",
+  "sequence": 35,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for 54l",
+  "updated_at": "2026-10-07T02:11:21Z",
   "ticks": [
     {
       "tick_id": "6fv",
