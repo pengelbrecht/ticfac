@@ -90,12 +90,9 @@ func TestTheSchemaNamesEveryTableTheReaderParses(t *testing.T) {
 // TestThisRepositorysOwnFilesCarryWellFormedNamedConfigs is the validate
 // half for THIS repository's own declaration: the two named cloud configs the
 // acceptance names — glm, the default, and claude, the subscription rung —
-// parse, validate, and select, before the repository's own routing guard
-// (internal/reconcile) resolves every job on them. The declaration is
-// testdata/runners.cloud.configs.toml until it is appended to
-// .tick/runners.cloud.toml (a worker may not write that file), so it is
-// checked appended to a scratch copy of the real files — and the real files
-// are checked the same way once they carry it.
+// parse, validate, and select from .tick/runners.cloud.toml, before the
+// repository's own routing guard (internal/reconcile) resolves every job on
+// them.
 //
 // short: reads this repository's .tick files; no harness, no git.
 func TestThisRepositorysOwnFilesCarryWellFormedNamedConfigs(t *testing.T) {
@@ -104,40 +101,7 @@ func TestThisRepositorysOwnFilesCarryWellFormedNamedConfigs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertWellFormedNamedConfigs(t, withTheDeclaredConfigs(t, root))
-	repoFile := filepath.Join(root, ".tick", "runners.toml")
-	cfg, err := LoadForConfig(repoFile, SubstrateCloud, "")
-	if err != nil {
-		t.Fatalf("the real merged cloud document does not load: %v", err)
-	}
-	if len(cfg.NamedConfigNames()) > 0 {
-		assertWellFormedNamedConfigs(t, repoFile)
-	}
-}
-
-// withTheDeclaredConfigs copies this repository's runners files into a
-// scratch directory with testdata/runners.cloud.configs.toml appended to the
-// cloud file, and returns the scratch runners.toml.
-func withTheDeclaredConfigs(t *testing.T, root string) string {
-	t.Helper()
-	block, err := os.ReadFile(filepath.Join("testdata", "runners.cloud.configs.toml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := t.TempDir()
-	for _, name := range []string{"runners.toml", "runners.local.toml", "runners.cloud.toml"} {
-		data, err := os.ReadFile(filepath.Join(root, ".tick", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if name == "runners.cloud.toml" {
-			data = append(append(data, '\n'), block...)
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), data, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return filepath.Join(dir, "runners.toml")
+	assertWellFormedNamedConfigs(t, filepath.Join(root, ".tick", "runners.toml"))
 }
 
 // assertWellFormedNamedConfigs holds one runners file's merged cloud

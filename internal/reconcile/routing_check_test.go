@@ -94,41 +94,17 @@ func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 	// — glm, the declared default, and claude, the subscription rung — and a
 	// config that cannot route is a config doctor and the submission
 	// preflight refuse, so the repository's own gate must catch it first.
-	// The declaration is internal/runconfig/testdata/runners.cloud.configs.toml
-	// until it is
-	// appended to .tick/runners.cloud.toml (a worker may not write that
-	// file), so the guard checks it appended to a scratch copy of the real
-	// files — and checks the real files themselves once they carry it.
-	assertTheNamedConfigsRoute(t, withTheDeclaredConfigs(t, root))
-	if merged, err := runconfig.LoadFor(config, runconfig.SubstrateCloud); err != nil {
-		t.Fatal(err)
-	} else if len(merged.NamedConfigNames()) > 0 {
-		assertTheNamedConfigsRoute(t, config)
-	}
-}
-
-// withTheDeclaredConfigs copies this repository's runners files into a
-// scratch .tick directory with internal/runconfig/testdata's
-// runners.cloud.configs.toml appended to the cloud file, and returns the
-// scratch runners.toml.
-func withTheDeclaredConfigs(t *testing.T, root string) string {
-	t.Helper()
-	dir := t.TempDir()
-	block, err := os.ReadFile(filepath.Join(root, "internal", "runconfig", "testdata", "runners.cloud.configs.toml"))
+	// The declaration lives in .tick/runners.cloud.toml, so the guard holds
+	// the real files: a repository whose cloud file lost its named configs
+	// fails here, not at a run's start.
+	merged, err := runconfig.LoadFor(config, runconfig.SubstrateCloud)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"runners.toml", "runners.local.toml", "runners.cloud.toml"} {
-		data, err := os.ReadFile(filepath.Join(root, ".tick", name))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if name == "runners.cloud.toml" {
-			data = append(append(data, '\n'), block...)
-		}
-		writeTOML(t, filepath.Join(dir, name), string(data))
+	if len(merged.NamedConfigNames()) == 0 {
+		t.Fatal(".tick/runners.cloud.toml declares no named configs; tick tda's acceptance puts glm and claude there")
 	}
-	return filepath.Join(dir, "runners.toml")
+	assertTheNamedConfigsRoute(t, config)
 }
 
 // assertTheNamedConfigsRoute holds a runners file's named cloud configs to
