@@ -1,0 +1,13 @@
+{
+  "id": "9fn",
+  "title": "cloudflare:test's per-file import is the vitest suite's dominant cost; no tick owns it",
+  "description": "Measured 2026-10-07 on pool-workers 0.22.0 / vitest 4.1.11 at host load ~22: `import` is 135.71s of the suite's 208.84s wall (vitest's own summary), and 58 of the 80 test files pay it to import `cloudflare:test`, which pulls the pool's test-internal module graph (SELF proxy, DO/Workflow wrappers, snapshot environment, queue helpers) into every one of those files' module graphs — the same seam 2b4e3c445 measured at ~650ms for one cold setup file on 0.21.3. uhe's September work named the question ('how the pool serves its own module graph') but no tick owns it, and it is now the largest remaining per-file cost of the `make ts-gate` vitest run that closes every tick in this repo.\nevidence: cloudflare suite Duration line: 'Duration 208.84s (transform 2.74s, setup 1.08s, import 135.71s, tests 50.68s)'; `grep -l 'cloudflare:test' cloudflare/test/*.test.ts | wc -l` → 58\n\nticfac run epic-t8u filed this backlog tick from the finding 351fef2de2be83c6b16decb16941c8c53d389f29296491e83bd4b58bc900b7fd (reported by run-epic-t8u/tick-uhe/attempt-15) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/351fef2de2be83c6b16decb16941c8c53d389f29296491e83bd4b58bc900b7fd.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-uhe/attempt-15",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-07T21:35:11Z",
+  "updated_at": "2026-10-07T21:35:11Z"
+}
