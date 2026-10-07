@@ -3,7 +3,7 @@
   "title": "A worker released after its ready-to-merge verdict is never re-judged as cancelled on resume",
   "gloss": "released worker never re-judged",
   "description": "Follow-up from hol (#141, 2026-09-29): #141 gives a reported worker up to 10s to exit before Cancel records cancel.json. If the run releases a worker (after collecting ready-to-merge) that is still running past that window, the attempt is still recorded cancelled, and a restart re-reads it, finds 'cancelled' and rejects/redoes work the run already judged. Root fix: once the run has recorded an attempt's collect verdict in its own records, resume reads that verdict first and a later executor-side cancel (from the run's own release) cannot override it; a cancel only counts when it precedes the verdict.",
-  "notes": "2026-10-08 00:24 - ticfac run epic-t8u: o3q try 1 (run dispatch #11) reported a finding the run itself decided — proposed-tick \"A carried attempt released past the grace integrates nothing on resume\" (key a7ab854167a79a3201c90b9e499f8d596b7e39fe1df29dbb9501f94df4b1d468, severity low, for this repository) is promoted to a backlog tick with an owner, ka2; the decision record is on the run branch at .ticfac/runs/epic-t8u/absorptions/a7ab854167a79a3201c90b9e499f8d596b7e39fe1df29dbb9501f94df4b1d468.json, and the draft is triaged as promoted.",
+  "notes": "2026-10-08 00:24 - ticfac run epic-t8u: o3q try 1 (run dispatch #11) reported a finding the run itself decided — proposed-tick \"A carried attempt released past the grace integrates nothing on resume\" (key a7ab854167a79a3201c90b9e499f8d596b7e39fe1df29dbb9501f94df4b1d468, severity low, for this repository) is promoted to a backlog tick with an owner, ka2; the decision record is on the run branch at .ticfac/runs/epic-t8u/absorptions/a7ab854167a79a3201c90b9e499f8d596b7e39fe1df29dbb9501f94df4b1d468.json, and the draft is triaged as promoted.\n2026-10-08 00:24 - ticfac run epic-t8u: o3q try 1 (run dispatch #11) reported a finding the run itself decided — proposed-tick \"An evacuated role job that had reported is re-asked, its answer discarded\" (key eef94ca93dd3766e45d0dbf50f1c60a21323a7164b7dfe5b6ff4bc8912e03cc0, severity low, for this repository) is promoted to a backlog tick with an owner, 7vd; the decision record is on the run branch at .ticfac/runs/epic-t8u/absorptions/eef94ca93dd3766e45d0dbf50f1c60a21323a7164b7dfe5b6ff4bc8912e03cc0.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -12,6 +12,6 @@
   "acceptance_criteria": "A test releases a worker that keeps running past the grace, restarts the run, and the attempt is integrated from its recorded verdict, not rejected as cancelled",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-29T16:14:07.698029Z",
-  "updated_at": "2026-10-07T22:24:20.492674Z",
+  "updated_at": "2026-10-07T22:24:36.974654Z",
   "started_at": "2026-10-07T19:18:06.633395Z"
 }
