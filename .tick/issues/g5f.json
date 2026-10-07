@@ -1,0 +1,14 @@
+{
+  "id": "g5f",
+  "title": "ticfac skills diff (or a doctor line): say when an installed skill copy is older than the binary",
+  "gloss": "skills diff",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "parent": "y9v",
+  "acceptance_criteria": "installed copy older than the binary is reported with the upgrade command; test; make gate",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T14:07:25.165607Z",
+  "updated_at": "2026-10-07T14:07:25.165607Z"
+}
