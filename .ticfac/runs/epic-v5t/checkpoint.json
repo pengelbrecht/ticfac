@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 20,
-  "state": "running",
-  "reason": "tda is closed",
-  "updated_at": "2026-10-07T01:27:54Z",
+  "sequence": 21,
+  "state": "dispatching",
+  "reason": "dispatching yck as attempt 4",
+  "updated_at": "2026-10-07T01:28:11Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -23,6 +23,10 @@
     },
     {
       "tick_id": "9uc",
+      "state": "ready"
+    },
+    {
+      "tick_id": "yck",
       "state": "ready"
     }
   ],
