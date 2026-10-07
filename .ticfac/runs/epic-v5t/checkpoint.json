@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 47,
-  "state": "collecting",
-  "reason": "collecting yhe attempt 8",
-  "updated_at": "2026-10-07T03:29:50Z",
+  "sequence": 48,
+  "state": "integrating",
+  "reason": "integrating yhe attempt 8 into epic/v5t",
+  "updated_at": "2026-10-07T03:30:37Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -38,7 +38,7 @@
     },
     {
       "tick_id": "yhe",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 8
     },
     {
