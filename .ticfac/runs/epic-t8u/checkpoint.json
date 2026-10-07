@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 53,
-  "state": "collecting",
-  "reason": "collecting 89g attempt 5",
-  "updated_at": "2026-10-07T19:02:35Z",
+  "sequence": 54,
+  "state": "integrating",
+  "reason": "integrating 89g attempt 5 into epic/t8u",
+  "updated_at": "2026-10-07T19:03:50Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "89g",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 5
     },
     {
