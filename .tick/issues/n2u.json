@@ -2,6 +2,7 @@
   "id": "n2u",
   "title": "Nothing re-opens a prose claim when a merge rewrites its cited source",
   "description": "ilz's whole deliverable was prose whose acceptance is 'every claim checked against' three named source files. The run then merged main into the integration branch, rewriting the first of those files by 503 lines, re-ran the integrated gate (go and ts, both exit 0 on bfedc21) and opened the epic PR — and the guide was never re-read, because no check in this repository reads a document. The gate's ts half is contracts and types by design, so this is not a gap in the gate but a gap in what follows a merge. Worth a tick: when an epic's acceptance names source files a deliverable is checked against, a merge into the integration branch that touches one of them re-opens the check — as a declared close-out step, as a review round, or as a tracked list of (doc, cited file) pairs something can diff.\nevidence: .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/evidence/gate-0n3-4-go.json (exit 0 on bfedc21) against the 503-line claude-sub.ts rewrite that merge carried\n\nticfac run run_4d92bab25a7341d3bba01691779168a0 filed this backlog tick from the finding 24bfb6a367250e489c5554627afddb1dae850ee53a11586820dd39148c497c7f (reported by run-run_4d92bab25a7341d3bba01691779168a0/tick-kzs/attempt-6) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/24bfb6a367250e489c5554627afddb1dae850ee53a11586820dd39148c497c7f.json on the run branch.",
+  "notes": "2026-10-07 08:43 - ticfac run run_4d92bab25a7341d3bba01691779168a0: created by absorbing finding 24bfb6a367250e489c5554627afddb1dae850ee53a11586820dd39148c497c7f — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/24bfb6a367250e489c5554627afddb1dae850ee53a11586820dd39148c497c7f.json on epic/ilz, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_4d92bab25a7341d3bba01691779168a0/tick-kzs/attempt-6",
   "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
   "created_at": "2026-10-07T08:43:37Z",
-  "updated_at": "2026-10-07T08:43:37Z"
+  "updated_at": "2026-10-07T08:43:43.072143065Z"
 }
