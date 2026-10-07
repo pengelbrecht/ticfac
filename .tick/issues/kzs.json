@@ -6,7 +6,8 @@
   "type": "task",
   "owner": "ticks-sandbox@ticks.invalid",
   "blocked_by": [
-    "yaz"
+    "yaz",
+    "0n3"
   ],
   "parent": "ilz",
   "role": "closeout",
