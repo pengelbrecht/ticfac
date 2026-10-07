@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 58,
-  "state": "running",
-  "reason": "CI is green on the epic PR #248; the close-out of v5t is admitted",
-  "updated_at": "2026-10-07T03:47:25Z",
+  "sequence": 59,
+  "state": "dispatching",
+  "reason": "dispatching 9uc as attempt 10",
+  "updated_at": "2026-10-07T03:47:30Z",
   "ticks": [
     {
       "tick_id": "6fv",
