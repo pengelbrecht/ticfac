@@ -3179,3 +3179,4 @@
 {"ts":"2026-10-07T13:45:02.835895Z","tick":"pqs","action":"start","actor":"ticfac","epic":"t8u","data":{"title":"Make the Go test fixtures hermetic: no test reads the host's git, config or working directory"}}
 {"ts":"2026-10-07T13:45:19.840578Z","tick":"tc9","action":"start","actor":"ticfac","epic":"t8u","data":{"title":"The integrated gate runs vitest, so TypeScript behaviour ticks are gated by their tests"}}
 {"ts":"2026-10-07T13:45:47.14037Z","tick":"1qy","action":"start","actor":"ticfac","epic":"t8u","data":{"title":"Replace the spinning watcher in concurrent_fetch tests with a deterministic contention seam"}}
+{"ts":"2026-10-07T13:46:19.674088Z","tick":"3xe","action":"start","actor":"ticfac","epic":"t8u","data":{"title":"Re-measure fileParallelism: the corruption it works around may be fixed"}}
