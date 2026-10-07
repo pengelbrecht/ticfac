@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 118,
-  "state": "publishing",
-  "reason": "closing qzg behind the integrated gate on fab7fe7868a9",
-  "updated_at": "2026-10-07T22:34:57Z",
+  "sequence": 119,
+  "state": "running",
+  "reason": "qzg is closed",
+  "updated_at": "2026-10-07T22:35:00Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -54,7 +54,7 @@
     },
     {
       "tick_id": "qzg",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 23
     },
     {
