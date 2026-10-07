@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "96s",
   "attempt": 16,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T17:35:48Z",
+  "triaged_at": "2026-10-07T17:35:58Z",
+  "triaged_by": "ticfac run run_69f8f57832d34601b040367c7207b81f absorbing ky7",
+  "promoted_as": "ky7",
   "provenance": {
     "run_id": "run_69f8f57832d34601b040367c7207b81f",
     "tick_id": "96s",
