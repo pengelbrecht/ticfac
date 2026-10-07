@@ -1619,15 +1619,11 @@ func New(opts Options) (*Reconciler, error) {
 
 	// The run's named config (tick tda), selected BEFORE any profile is
 	// resolved — the config's cells are what those resolutions read. One
-	// precedence — the operator's flag over the epic's own `config:` label
-	// over the declared default — resolved once here, never per dispatch,
-	// and a selection of a name nobody declared is a refusal here, naming
-	// the declared ones, rather than a silent run on the file's own cells.
-	epLabels, err := epicConfigLabels(context.Background(), opts)
-	if err != nil {
-		return nil, fmt.Errorf("reconcile: %w", err)
-	}
-	selection, err := selectRunConfig(opts, substrate, epLabels)
+	// precedence — the operator's flag over the epic's own label over the
+	// declared default — resolved once here, never per dispatch, and a
+	// selection of a name nobody declared is a refusal here, naming the
+	// declared ones, rather than a silent run on the file's own cells.
+	selection, err := selectRunConfig(opts, substrate, epicConfigLabels(context.Background(), opts))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile: %w", err)
 	}

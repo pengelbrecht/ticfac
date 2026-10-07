@@ -144,14 +144,20 @@ func selectRunConfig(opts Options, substrate runconfig.Substrate, epicLabels []s
 
 // epicConfigLabels reads the epic's own labels through the tracker, at
 // construction, so the selection is a fact about the run before anything is
-// dispatched. A tracker read that fails is a construction refusal: a
-// `config:` label this run cannot read is a selection it cannot resolve.
-func epicConfigLabels(ctx context.Context, opts Options) ([]string, error) {
+// dispatched. The read is DELIBERATELY best-effort — an absent epic is not
+// the selection's failure to make: the run's own plan reads the tracker and
+// stops on an absent epic with its own typed refusal (epic_absent.go), and a
+// construction-time read that refused first would bury that refusal under a
+// label nobody asked to read. A tracker that fails for any other reason is
+// refused the same way it always was — by the graph read the plan performs,
+// with its own message — so the selection reads what is there and stays
+// quiet about what is not.
+func epicConfigLabels(ctx context.Context, opts Options) []string {
 	epic, err := opts.Tracker.Show(ctx, opts.EpicID)
 	if err != nil {
-		return nil, fmt.Errorf("reconcile: read the epic %s for its own config label: %w", opts.EpicID, err)
+		return nil
 	}
-	return epic.Labels, nil
+	return epic.Labels
 }
 
 // StageConfigSelected is the feed line a run's chosen config writes at the
