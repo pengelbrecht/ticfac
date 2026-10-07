@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 50,
-  "state": "running",
-  "reason": "vnp is closed",
-  "updated_at": "2026-10-07T09:07:25Z",
+  "sequence": 51,
+  "state": "failed",
+  "reason": "every tick of ilz is closed behind the integrated gate, and the epic PR is not ready: the run does not merge the epic ilz: its final review (decision 6) still judges it NOT READY after 3 review round(s), the bound being 2. What the review says would make it ready: correct the three stale failover claims in docs/claude-sub-operator.md against cloudflare/src/claude-sub.ts as it stands at the integration head: take the overageInUse arm (any status, including 200, benched until the unified or overage reset and 5 hours otherwise) into the quota bullet, say that an overage answer is withheld and the job handed a synthesized 429, and replace the \"first taken\"/2-hour staleness promise with the lease refresh (LEASE_REFRESH_MS) that makes LEASE_TTL_MS measure silence.; its blocking finding(s): \"Guide's failover claims went stale when main merged under the epic\". The verdict is on the epic PR, and accepting work the run's own review rejected is a person's judgement: fix what it names and run the epic again, merge the PR by hand to accept it (a re-run then finds it merged), or close it. Running the epic again resumes at keeping the PR ready. This incarnation was reached after 1 AUTOMATIC CONTINUATION(S) of this run, each one an intervention nobody typed: the run did not reach here unattended",
+  "updated_at": "2026-10-07T09:07:39Z",
   "ticks": [
     {
       "tick_id": "56z",
