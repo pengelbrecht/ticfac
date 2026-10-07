@@ -101,15 +101,20 @@ export const OAUTH_BETA = "oauth-2025-04-20";
  * The startup half was observed, not guessed: the pinned CLI (2.1.227) run the
  * way a worker runs it — `-p`, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1, the
  * placeholder OAuth token, no base URL — against a fake api.anthropic.com
- * behind a test CA called exactly GET /api/claude_code/policy_limits, GET
- * /api/claude_code/settings and POST /v1/messages?beta=true. The image's
- * real-CLI smoke test (internal/sandboximage) holds a pin bump to this list.
+ * behind a test CA called HEAD /api/hello, GET /api/claude_code/policy_limits,
+ * GET /api/claude_code/settings and POST /v1/messages?beta=true. HEAD
+ * /api/hello — the CLI's connectivity check, sent on every start with no
+ * credential — showed only inside the Linux container (the image's real-CLI
+ * smoke test, internal/sandboximage/claude_cli_smoke_test.go, which holds a
+ * pin bump to this list); a proxy without it refused every claude-sub start.
  *
  * Only `inference` answers say anything about the subscription's quota or
  * token ({@link classifyAnswer}); a startup read's 401/403/429 is that
- * endpoint's own, and never benches a subscription.
+ * endpoint's own, and never benches a subscription. A `connectivity` check is
+ * forwarded WITHOUT the token: the CLI sends it unauthenticated, and the
+ * token goes nowhere it is not needed.
  */
-export type ClaudeSubRouteKind = "inference" | "startup";
+export type ClaudeSubRouteKind = "inference" | "startup" | "connectivity";
 export const CLAUDE_SUB_ROUTES: readonly {
   method: string;
   path: string;
@@ -119,6 +124,7 @@ export const CLAUDE_SUB_ROUTES: readonly {
   { method: "POST", path: "/v1/messages/count_tokens", kind: "inference" },
   { method: "GET", path: "/api/claude_code/policy_limits", kind: "startup" },
   { method: "GET", path: "/api/claude_code/settings", kind: "startup" },
+  { method: "HEAD", path: "/api/hello", kind: "connectivity" },
 ];
 
 /** The allowlisted route a request is, or null when the proxy must refuse it. */
@@ -134,6 +140,17 @@ export function allowedRoute(method: string, pathname: string): ClaudeSubRouteKi
  * a subscription — the one billing the cloud must never draw.
  */
 export const REFUSED_BETAS: readonly RegExp[] = [/^context-1m-/i];
+
+/**
+ * Betas the proxy STRIPS rather than refuses: ones the pinned CLI sends on
+ * every request of a rung (so refusing them would refuse the rung) whose
+ * billing is not shown to stay inside the subscription. 2.1.227 sends
+ * `fallback-credit-2026-06-01` on every opus request (the image's real-CLI
+ * smoke test saw it); a credit-backed fallback is exactly the per-token
+ * drawing the cloud must never do, and without the beta the request is the
+ * plain subscription one.
+ */
+export const STRIPPED_BETAS: readonly RegExp[] = [/^fallback-credit-/i];
 
 /** The first beta of a request the proxy refuses, or null. */
 export function refusedBeta(header: string | null): string | null {
@@ -402,7 +419,7 @@ export function parseReset(raw: string | null): number | null {
  * host over HTTPS, its credentials replaced by the subscription token, the
  * OAuth beta guaranteed.
  */
-export function upstreamRequest(request: Request, token: string, body?: string): Request {
+export function upstreamRequest(request: Request, token: string | null, body?: string): Request {
   const url = new URL(request.url);
   url.protocol = "https:";
   url.host = CLAUDE_SUB_HOST;
@@ -410,13 +427,19 @@ export function upstreamRequest(request: Request, token: string, body?: string):
   const headers = new Headers(request.headers);
   headers.delete("x-api-key");
   headers.delete("host");
-  headers.set("authorization", `Bearer ${token}`);
-  const betas = (headers.get("anthropic-beta") ?? "")
-    .split(",")
-    .map((b) => b.trim())
-    .filter((b) => b !== "");
-  if (!betas.includes(OAUTH_BETA)) betas.push(OAUTH_BETA);
-  headers.set("anthropic-beta", betas.join(","));
+  if (token === null) {
+    // A connectivity check: the CLI sends it with no credential, and it
+    // travels upstream with none — the token goes nowhere it is not needed.
+    headers.delete("authorization");
+  } else {
+    headers.set("authorization", `Bearer ${token}`);
+    const betas = (headers.get("anthropic-beta") ?? "")
+      .split(",")
+      .map((b) => b.trim())
+      .filter((b) => b !== "" && !STRIPPED_BETAS.some((re) => re.test(b)));
+    if (!betas.includes(OAUTH_BETA)) betas.push(OAUTH_BETA);
+    headers.set("anthropic-beta", betas.join(","));
+  }
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
   return new Request(url.toString(), {
     method: request.method,
@@ -874,7 +897,7 @@ export async function proxyClaudeSub(
     }
     model = named;
   }
-  if (deps.token === null) {
+  if (deps.token === null && kind !== "connectivity") {
     return new Response(`claude-sub: no token for subscription ${label}`, { status: 503 });
   }
 
@@ -886,7 +909,9 @@ export async function proxyClaudeSub(
     deps.waitUntil(pool.touch(jobId).catch(() => {}));
   }
 
-  const response = await deps.upstream(upstreamRequest(request, deps.token, body));
+  const response = await deps.upstream(
+    upstreamRequest(request, kind === "connectivity" ? null : deps.token, body),
+  );
   const limits = limitHeaders(response.headers);
   const bench =
     kind === "inference" ? classifyAnswer(response.status, response.headers, now) : null;
