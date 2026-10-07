@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "o3q",
   "attempt": 11,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T22:24:22Z",
+  "triaged_at": "2026-10-07T22:24:32Z",
+  "triaged_by": "ticfac run epic-t8u absorbing 7vd",
+  "promoted_as": "7vd",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "o3q",
