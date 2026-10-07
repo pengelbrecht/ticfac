@@ -3,6 +3,7 @@
   "title": "TestTheEvacuationFlushesInFlightWorkAndWritesTheCheckpoint failed once under load: reproduce and fix",
   "gloss": "evacuation push race",
   "description": "From #68 (2026-09-27): it failed once under -parallel load, with the evacuation output not reporting the attempt-branch push. It was not reproduced in 48 reruns. The suspected cause, the evacuation's branch push racing the supervisor's identical push for the ref lock, got a fallback that is unconfirmed. Flaky means bug: force the interleaving deterministically (block the supervisor's push at the ref lock), confirm or refute the race, and fix the real cause.",
+  "notes": "2026-10-07 18:06 - ticfac run epic-t8u: fn8 try 1 (run dispatch #7) merged into epic/t8u as 9a34b1001b74; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +12,6 @@
   "acceptance_criteria": "The interleaving is reproduced deterministically in a test, the cause is confirmed, and the fix makes that test pass",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-27T11:36:55.842293Z",
-  "updated_at": "2026-10-07T15:02:38.892768Z",
+  "updated_at": "2026-10-07T16:06:19.839089Z",
   "started_at": "2026-10-07T15:02:38.892768Z"
 }
