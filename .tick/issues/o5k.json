@@ -1,0 +1,13 @@
+{
+  "id": "o5k",
+  "title": "runners.toml is boundary-exempt in Go but unwritable by any dispatched worker",
+  "description": "internal/exec/subprocess/report.go's exemptFromBoundary lists .tick/runners.toml as a file a worker may legitimately amend, but this substrate refuses it twice over: the container's pre-commit hook refuses any staged .tick/ path (image/worker.sh install_boundary_guard, tick dxk — this attempt's refusal is recorded in the guard ledger), and the cloud collect returns boundary-violation for any .tick/ diff, discarding the attempt. Tick q6z's whole deliverable is a runners.toml edit, so every dispatched attempt can only end BLOCKED — the same wall z2x recorded for 96s and the mismatch g7p already carries; filed with this attempt's evidence so the BLOCKED names it.\nevidence: .git/hooks/pre-commit (refused the commit; ledger /work/repo.guard/attempts); cloudflare/src/worker-collect.ts:313 and :530; internal/exec/subprocess/report.go:190-194\n\nticfac run run_69f8f57832d34601b040367c7207b81f filed this backlog tick from the finding 2b57d162b73a41d1e7f7ba9a2e0e90efb2904c266cd06c7c68f5d73cc508fa50 (reported by run-run_69f8f57832d34601b040367c7207b81f/tick-q6z/attempt-19) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/2b57d162b73a41d1e7f7ba9a2e0e90efb2904c266cd06c7c68f5d73cc508fa50.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_69f8f57832d34601b040367c7207b81f/tick-q6z/attempt-19",
+  "created_by": "ticfac run run_69f8f57832d34601b040367c7207b81f",
+  "created_at": "2026-10-07T18:48:27Z",
+  "updated_at": "2026-10-07T18:48:27Z"
+}
