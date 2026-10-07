@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 7,
-  "state": "publishing",
-  "reason": "closing 56z behind the integrated gate on f05bb24b0f5f",
-  "updated_at": "2026-10-07T07:00:59Z",
+  "sequence": 8,
+  "state": "running",
+  "reason": "56z is closed",
+  "updated_at": "2026-10-07T07:01:01Z",
   "ticks": [
     {
       "tick_id": "56z",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
