@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 73,
-  "state": "dispatching",
-  "reason": "dispatching r1f as attempt 13",
-  "updated_at": "2026-10-07T19:24:12Z",
+  "sequence": 74,
+  "state": "running",
+  "reason": "r1f is running as attempt 13",
+  "updated_at": "2026-10-07T19:24:17Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -69,7 +69,8 @@
     },
     {
       "tick_id": "r1f",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 13
     },
     {
       "tick_id": "u51",
