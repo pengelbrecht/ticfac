@@ -1,0 +1,14 @@
+{
+  "id": "x5e",
+  "title": "A re-run close-out never re-reads the record its predecessor committed",
+  "description": "Attempt 6 of kzs committed a retro naming [A1] broken on the shipping head; 555253b then fixed all three claims on the same branch, and the committed record stood contradicting its own deliverable until a fourth review round reported it (3gw). The closeout-epic role has no step that reads the retro a prior attempt committed, and nothing else does either: the integrated gate does not read prose, and the attempt is dispatched from a branch that already carries the stale document. This is the sibling of n2u (a fold rewriting a cited source) with a different trigger — the epic's own work landing under a close-out that then runs again. Worth a tick: when a closeout-epic attempt follows a prior attempt that committed a record, name that record as an input the attempt must re-read and re-measure, or make the role's deliverable path something the run diffs against the head it ships.\nevidence: docs/ilz-closeout-retro-2026-10-07.md as it stood at 1ff1dde (lines 64-83, 135-139) against 555253b; the role's commit rule at internal/exec/subprocess/rolecommits.go\n\nticfac run run_18eafdaa047544be9a196d913fb08a30 filed this backlog tick from the finding 26bac4f1798a0459b1d5cfcadfba5350471b76c6fa9cfe8c42e6b93f2574def1 (reported by run-run_18eafdaa047544be9a196d913fb08a30/tick-kzs/attempt-2) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_18eafdaa047544be9a196d913fb08a30/absorptions/26bac4f1798a0459b1d5cfcadfba5350471b76c6fa9cfe8c42e6b93f2574def1.json on the run branch.",
+  "notes": "2026-10-07 10:24 - ticfac run run_18eafdaa047544be9a196d913fb08a30: created by absorbing finding 26bac4f1798a0459b1d5cfcadfba5350471b76c6fa9cfe8c42e6b93f2574def1 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_18eafdaa047544be9a196d913fb08a30/absorptions/26bac4f1798a0459b1d5cfcadfba5350471b76c6fa9cfe8c42e6b93f2574def1.json on epic/ilz, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_18eafdaa047544be9a196d913fb08a30/tick-kzs/attempt-2",
+  "created_by": "ticfac run run_18eafdaa047544be9a196d913fb08a30",
+  "created_at": "2026-10-07T10:24:29Z",
+  "updated_at": "2026-10-07T10:24:35.914331653Z"
+}

@@ -1,0 +1,14 @@
+{
+  "id": "z38",
+  "title": "claude-sub guide names only the factory's concurrency cap, not the config's",
+  "description": "The guide's failover section tells an operator the width of the rung is CLAUDE_SUB_MAX_CONCURRENT, default 2 (docs/claude-sub-operator.md:70). That is the factory's per-subscription lease cap, and it is stated correctly, but it is not what bounds how many claude workers this repository runs at once: .tick/runners.cloud.toml also declares [configs.claude.tier_policy.concurrency] economy = 2, strong = 1, which TierPolicy.WaveWidth (internal/runconfig/tierpolicy.go:533) narrows the wave to. An operator asking the guide why only one opus worker is running is sent to the wrong number, in the wrong place, with no hint the second cap exists. One sentence in the failover or the config-selection section would close it.\nevidence: docs/claude-sub-operator.md:68-71 against .tick/runners.cloud.toml ([configs.claude.tier_policy.concurrency]) and internal/runconfig/tierpolicy.go:515-545\n\nticfac run run_4d92bab25a7341d3bba01691779168a0 filed this backlog tick from the finding dd71e42597ff4b87527055809e7ae7723d854aff4233da2beda6b1493b5c9af6 (reported by run-run_4d92bab25a7341d3bba01691779168a0/tick-0n3/attempt-4) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/dd71e42597ff4b87527055809e7ae7723d854aff4233da2beda6b1493b5c9af6.json on the run branch.",
+  "notes": "2026-10-07 07:50 - ticfac run run_4d92bab25a7341d3bba01691779168a0: created by absorbing finding dd71e42597ff4b87527055809e7ae7723d854aff4233da2beda6b1493b5c9af6 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/dd71e42597ff4b87527055809e7ae7723d854aff4233da2beda6b1493b5c9af6.json on epic/ilz, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_4d92bab25a7341d3bba01691779168a0/tick-0n3/attempt-4",
+  "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
+  "created_at": "2026-10-07T07:50:12Z",
+  "updated_at": "2026-10-07T07:50:18.711835145Z"
+}

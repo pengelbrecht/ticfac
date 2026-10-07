@@ -1,0 +1,14 @@
+{
+  "id": "hbw",
+  "title": "Guide says the repository has one Worker and one wrangler config",
+  "description": "docs/claude-sub-operator.md:37-38 justifies omitting wrangler's -c flag with \"this repository has one Worker, one config\". The repository has several: cloudflare/wrangler.toml (ticks-factory), cloudflare/staging/wrangler.toml (ticks-factory-staging, which also binds CLAUDE_SUB_POOL and is where the rung was first proven), plus cloudflare/staging/agent.wrangler.toml and gateway.wrangler.toml. The command itself is right — from cloudflare/ the default config IS production — so no operator action goes wrong; the stated reason for it is simply false, and it tells an operator that the staging Worker they may also want a token on does not exist.\nevidence: docs/claude-sub-operator.md:37-38 against cloudflare/staging/wrangler.toml:6,20\n\nticfac run run_4d92bab25a7341d3bba01691779168a0 filed this backlog tick from the finding 5369766cf7ce492d8db949ac53b4c96a3396c1e3aad2bc785fc9fedd59acb74f (reported by run-run_4d92bab25a7341d3bba01691779168a0/tick-yaz/attempt-2) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/5369766cf7ce492d8db949ac53b4c96a3396c1e3aad2bc785fc9fedd59acb74f.json on the run branch.",
+  "notes": "2026-10-07 07:12 - ticfac run run_4d92bab25a7341d3bba01691779168a0: created by absorbing finding 5369766cf7ce492d8db949ac53b4c96a3396c1e3aad2bc785fc9fedd59acb74f — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/5369766cf7ce492d8db949ac53b4c96a3396c1e3aad2bc785fc9fedd59acb74f.json on epic/ilz, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_4d92bab25a7341d3bba01691779168a0/tick-yaz/attempt-2",
+  "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
+  "created_at": "2026-10-07T07:12:11Z",
+  "updated_at": "2026-10-07T07:12:17.495180242Z"
+}

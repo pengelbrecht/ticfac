@@ -274,6 +274,11 @@ secrets to enable it. A repository without them skips the deploy with a
 warning naming what is missing — the factory is the operator's opt-in, not a
 service this repository runs.
 
+Running a cloud epic on the operator's own Claude subscription instead of
+Workers AI is the `claude-sub` rung: `docs/claude-sub-operator.md` covers
+adding, rotating and removing a subscription token, how its failover
+behaves, and how a run selects it.
+
 
 ## Following the factory from a phone
 

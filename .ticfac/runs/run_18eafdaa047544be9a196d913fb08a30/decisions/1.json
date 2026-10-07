@@ -1,0 +1,72 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "ilz",
+    "job_id": "run-run_18eafdaa047544be9a196d913fb08a30/tick-lpl/attempt-1",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (cloudflare-sandbox/claude, opus)",
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "f0361100656d48fc9e6d152bcadc4a7588c1b02f",
+    "tick_id": "lpl"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "docs/ilz-closeout-retro-2026-10-07.md ships on the same tree as the fix that answers it: it marks [A1] \"MET AS WRITTEN AND REVIEWED, BROKEN ON THE HEAD THAT SHIPS\", lists the three failover claims as \"now wrong on the integration head\", and closes with \"Two things nothing has answered … the three stale guide claims above, which break [A1] on the head that merges to main\". 555253ba corrected all three before this head, so the integrated tree carries a durable record contradicting its own deliverable. Its supporting numbers moved with the fix too: the contribution stat block says 2 files / 148 insertions against merge base 4cf4d59 (now 3 files / 480 insertions against e684dfec), the guide is 159 lines rather than 143, and its citations of guide lines 72-80, 81-93 and 94-96 point at text the fix rewrote. One dated line saying the claims were corrected in 555253ba would settle it.\nevidence: docs/ilz-closeout-retro-2026-10-07.md:64-83 and :135-139, against 555253ba and docs/claude-sub-operator.md:72-114",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Close-out retro declares [A1] broken on a head where it is fixed"
+      },
+      {
+        "body": "The guide tells an operator that a claude-sub job stopped by its own quota answer \"is redispatched at the same tier rather than climbing the ladder\", with no bound. reconcile's MidJob arm takes from the same counter as every other infrastructure failure, maxInfrastructureRedispatches = 3, and the fourth in a row refuses the run (RefusedInfrastructure) with \"The run stops here; no rung of the ladder was spent\". An operator whose single subscription is spent sees the run stop after three redispatches and has nothing in the guide to read it against.\nevidence: docs/claude-sub-operator.md:111-114 against internal/reconcile/infrastructure.go:86 and :141-156",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Failover section omits the three-redispatch bound on a quota stop"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/ilz/attempt-1/lpl",
+      "commits": 2,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/ilz/attempt-1/lpl:RESULT-lpl.md",
+      "review_verdict": "READY",
+      "review_verdict_detail": ""
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "reviewed epic/ilz at 1ff1dde4 against its base e684dfec, claim by claim against the cited sources; ran `make gate` (exit 0); verdict READY with two non-blocking findings (one medium, one low)."
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T09:42:34Z",
+  "answered_at": "2026-10-07T09:42:34Z",
+  "provenance": {
+    "run_id": "run_18eafdaa047544be9a196d913fb08a30",
+    "tick_id": "lpl",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "f0361100656d48fc9e6d152bcadc4a7588c1b02f",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

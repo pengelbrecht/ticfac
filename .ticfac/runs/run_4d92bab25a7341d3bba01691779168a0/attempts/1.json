@@ -1,0 +1,49 @@
+{
+  "schema_version": 3,
+  "attempt": 1,
+  "tick_id": "56z",
+  "dispatched_at": "2026-10-07T06:35:09Z",
+  "job_handle": {
+    "attempt": 1,
+    "base_sha": "b99b5b0868aa64aacd9ae0cfbf369438fb2e0eb5",
+    "collected_from": null,
+    "executor": "cloudflare-sandbox",
+    "job_id": "run-run_4d92bab25a7341d3bba01691779168a0/tick-56z/attempt-1",
+    "model": "sonnet",
+    "prompt_digest": "sha256:78c2f130895eef9a5d3664e8a4f649073a8c3a7bcb91d2dd615bd1e9380ffa9b",
+    "remote": "origin",
+    "resumed_from": null,
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "taken_over": {
+      "run_id": "run_d2359e149afc4e74a963e7c52644ad53",
+      "evidence": "its checkpoint on the integration branch reads failed"
+    },
+    "tick_id": "56z",
+    "tier": "economy",
+    "touch": null,
+    "try": 1,
+    "wall_seconds": 28800,
+    "write_ref": "refs/heads/ticfac/run-run_4d92bab25a7341d3bba01691779168a0/tick-56z/attempt-1"
+  },
+  "provenance": {
+    "run_id": "run_4d92bab25a7341d3bba01691779168a0",
+    "tick_id": "56z",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "b99b5b0868aa64aacd9ae0cfbf369438fb2e0eb5",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:e2f8e49728ed032c48596c9da4fed8397707a24843abbe67706f35940ed51358",
+    "model": "sonnet",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

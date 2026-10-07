@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "Every statement is checked against the cited source; README links the doc; make gate passes",
+    "description": "Write docs/claude-sub-operator.md for the operator, plain prose, short: (1) make a token: claude setup-token on the subscription's account; (2) add: cd cloudflare && pnpm exec wrangler secret put CLAUDE_SUB_TOKEN_<LABEL> (production config, no -c), label rules from the LABEL regex in cloudflare/src/claude-sub.ts; list: wrangler secret list (names only); rotate: put again; remove: wrangler secret delete; nothing to redeploy, the pool reads secret names at each lease; (3) failover: read ClaudeSubPoolCore.lease, classifyAnswer and claudeSubLeaseForBoot and describe exactly what they do (sticky per attempt job id, cap per subscription, bench on a unified quota rejection until reset, the retry is a new job and leases again, step-down to Workers AI when none is free) — say plainly that a running job never switches subscription; (4) select per epic: the config:claude label, --config claude, the [configs] default, from internal/reconcile/runconfig_select.go and .tick/runners.cloud.toml; (5) observe: whatever route/command shows the pool (find it in cloudflare/src/index.ts; describe without any URL or account id — the repo is public). Add one line linking it from README.md where the factory/cloud docs are. Never paste a token, account id or the factory URL.",
+    "epic_id": "ilz",
+    "role": "classify-tick",
+    "tick_id": "56z",
+    "title": "Write docs/claude-sub-operator.md and link it from README"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.82,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.86,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.12,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1340,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T06:07:41Z",
+  "answered_at": "2026-10-07T06:07:41Z",
+  "provenance": {
+    "run_id": "run_d2359e149afc4e74a963e7c52644ad53",
+    "tick_id": "56z",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "6465a9a8a616806d8aedfce5597a02825d3c33fb",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:010eb649e6e272c231b13167ae23a3f8d2c68432250f86ee24d25a86d302f6d7",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

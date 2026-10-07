@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "key": "c25b88df0e75a744bf182d99ae85116f013b1bfa3f092421145e1e76c1920acb",
+  "tick_id": "5gm",
+  "gating": true,
+  "basis": "reviewer",
+  "reason": "the final review (yaz, decision 2) judged the epic NOT READY and named this finding blocking, so it is the epic's work and is fixed before the re-review. It had been decided before the review named it (basis worker-asserted-high, placed deferred-to-review: the reporter rated it high severity and names done item A1 as the one it breaks, but every implementation tick of the epic is closed: a finding the epic's own work did not need is not absorbed on the reporter's word once that work is done. It is deferred to the final reviewer, who absorbs it only by naming it blocking, and is otherwise listed in the epic PR under deferred findings)",
+  "placement": "before-review",
+  "decided_at": "2026-10-07T07:13:12Z",
+  "provenance": {
+    "run_id": "run_4d92bab25a7341d3bba01691779168a0",
+    "tick_id": "yaz",
+    "attempt": 2,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "86dbb601593ea3e77dc7f146d1a583acffa6ab42",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

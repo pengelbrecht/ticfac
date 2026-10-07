@@ -1,0 +1,38 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "implement-tick",
+  "request": {
+    "attempt": 1,
+    "job_id": "run-run_d2359e149afc4e74a963e7c52644ad53/tick-56z/attempt-1",
+    "kind": "infrastructure_failure",
+    "tick_id": "56z",
+    "tier": "economy"
+  },
+  "response": {
+    "exit_code": 8,
+    "service": "the harness's model wiring"
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T06:13:08Z",
+  "answered_at": "2026-10-07T06:13:08Z",
+  "provenance": {
+    "run_id": "run_d2359e149afc4e74a963e7c52644ad53",
+    "tick_id": "56z",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "eacd901e26f1c80b677c4df6e56538c910f2baa2",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:e2f8e49728ed032c48596c9da4fed8397707a24843abbe67706f35940ed51358",
+    "model": "sonnet",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

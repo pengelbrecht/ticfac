@@ -1,0 +1,45 @@
+{
+  "schema_version": 3,
+  "run_id": "run_18eafdaa047544be9a196d913fb08a30",
+  "epic_id": "ilz",
+  "sequence": 24,
+  "state": "gating",
+  "reason": "running the integrated gate for kzs on 1ee46245b7b0",
+  "updated_at": "2026-10-07T10:48:59Z",
+  "ticks": [
+    {
+      "tick_id": "lpl",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "kzs",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "z6t",
+      "state": "closed",
+      "attempt": 3
+    }
+  ],
+  "provenance": {
+    "run_id": "run_18eafdaa047544be9a196d913fb08a30",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "1ee46245b7b0474187a12306d2da49087a38f0a7",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:010eb649e6e272c231b13167ae23a3f8d2c68432250f86ee24d25a86d302f6d7",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

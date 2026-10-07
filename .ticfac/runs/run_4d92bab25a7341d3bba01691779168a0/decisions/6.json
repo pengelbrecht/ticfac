@@ -1,0 +1,79 @@
+{
+  "schema_version": 3,
+  "decision": 6,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "ilz",
+    "job_id": "run-run_4d92bab25a7341d3bba01691779168a0/tick-vnp/attempt-7",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (cloudflare-sandbox/claude, opus)",
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "d56dedb8dba985927fd50624dd182e383af8902d",
+    "tick_id": "vnp"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "Three claims in docs/claude-sub-operator.md's failover section are wrong on the integration head, after bfedc21 merged main and rewrote cloudflare/src/claude-sub.ts — the first file [A1] requires every claim checked against — with nothing re-reading the guide. (1) The quota test at lines 81-93 is 429-shaped only and omits overageInUse: any answer, a 200 included, carrying anthropic-ratelimit-unified-overage-in-use: true is a quota bench until the unified or overage reset, falling back to OVERAGE_BENCH_FALLBACK_MS = 5 hours, not the 60 seconds the guide names (claude-sub.ts:180-182,221,361-369). (2) Lines 94-98 promise benching never blocks the triggering job and that its own answer reaches the container; for an overage answer the proxy cancels the upstream body and returns a synthesized 429 instead, so a request that SUCCEEDED on credits is handed a failure (claude-sub.ts:948-971, and ClaudeSubProxy's docstring at :975-979). (3) Lines 72-80 measure LEASE_TTL_MS from when the lease was first taken and promise in bold that a lease stale past two hours is treated as new; the proxy now refreshes a live job's lease once a minute (LEASE_REFRESH_MS, claude-sub.ts:208,547-556,906) and the TTL's own comment says it measures SILENCE, not the job's length, so a live job's lease never goes stale. The operator commands are all correct; one re-read of claude-sub.ts against the failover section fixes all three, and should fold the overage arm into the quota bullet rather than leave it unmentioned.\nevidence: docs/claude-sub-operator.md:72-98 against cloudflare/src/claude-sub.ts:180-182,193-201,221,361-369,508,547-556,906,948-979",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Guide's failover claims went stale when main merged under the epic"
+      },
+      {
+        "body": "The guide describes failover as lease, bench, retry, step-down, and never mentions that the proxy is an allowlist that refuses before the token is attached: a non-allowlisted method+path, a per-token-billing beta (REFUSED_BETAS) or a request naming a non-claude model all come back 403 permission_error, and a leased label with no secret value comes back 503 (claude-sub.ts:860-901). It also says flatly that a 401/403 benches the subscription for 24 hours, where only INFERENCE answers are ever classified — a startup read's 401/403 benches nothing (claude-sub.ts:111-115,916-917). An operator whose container's claude CLI is failing on 403s reads a guide that says the only 403 in the rung is a refused token, and reaches for a rotation that will not help.\nevidence: docs/claude-sub-operator.md:61-104 against cloudflare/src/claude-sub.ts:111-128,142,860-901,916-917",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Guide's failover section never mentions the proxy's refusal arms"
+      },
+      {
+        "body": "A1 requires the guide to cover observing the pool, checked against sandbox-executor.ts among others, and the two HTTP surfaces it names are correct — but they show the POOL, never which rung a given attempt actually ran on. claudeSubNote (sandbox-executor.ts:1925-1952) puts claude_sub: {state, label} or {state: stepped_down, reason, retry_at} on the job handle and into the run feed, which is what surfaces 'claude-sub stepped down: every subscription is exhausted until <reset>; on Workers AI' in ticfac watch. That is the answer to the first question an operator of this rung asks — did my run bill the subscription, or quietly step down — and the guide does not point at it. One bullet in Observing the pool closes it.\nevidence: docs/claude-sub-operator.md:130-143 against cloudflare/src/sandbox-executor.ts:1903-1952",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Observing section omits the per-run view of the rung"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/ilz/attempt-7/vnp",
+      "commits": 2,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/ilz/attempt-7/vnp:RESULT-vnp.md",
+      "review_verdict": "NOT READY",
+      "review_verdict_detail": "correct the three stale failover claims in docs/claude-sub-operator.md against cloudflare/src/claude-sub.ts as it stands at the integration head: take the overageInUse arm (any status, including 200, benched until the unified or overage reset and 5 hours otherwise) into the quota bullet, say that an overage answer is withheld and the job handed a synthesized 429, and replace the \"first taken\"/2-hour staleness promise with the lease refresh (LEASE_REFRESH_MS) that makes LEASE_TTL_MS measure silence."
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (NOT READY — correct the three stale failover claims in docs/claude-sub-operator.md against cloudflare/src/claude-sub.ts as it stands at the integration head: take the overageInUse arm (any status, including 200, benched until the unified or overage reset and 5 hours otherwise) into the quota bullet, say that an overage answer is withheld and the job handed a synthesized 429, and replace the \"first taken\"/2-hour staleness promise with the lease refresh (LEASE_REFRESH_MS) that makes LEASE_TTL_MS measure silence.)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T09:07:21Z",
+  "answered_at": "2026-10-07T09:07:21Z",
+  "provenance": {
+    "run_id": "run_4d92bab25a7341d3bba01691779168a0",
+    "tick_id": "vnp",
+    "attempt": 7,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "d56dedb8dba985927fd50624dd182e383af8902d",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

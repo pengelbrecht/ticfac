@@ -1,0 +1,14 @@
+{
+  "id": "3za",
+  "title": "Observing section omits the per-run view of the rung",
+  "description": "A1 requires the guide to cover observing the pool, checked against sandbox-executor.ts among others, and the two HTTP surfaces it names are correct — but they show the POOL, never which rung a given attempt actually ran on. claudeSubNote (sandbox-executor.ts:1925-1952) puts claude_sub: {state, label} or {state: stepped_down, reason, retry_at} on the job handle and into the run feed, which is what surfaces 'claude-sub stepped down: every subscription is exhausted until \u003creset\u003e; on Workers AI' in ticfac watch. That is the answer to the first question an operator of this rung asks — did my run bill the subscription, or quietly step down — and the guide does not point at it. One bullet in Observing the pool closes it.\nevidence: docs/claude-sub-operator.md:130-143 against cloudflare/src/sandbox-executor.ts:1903-1952\n\nticfac run run_4d92bab25a7341d3bba01691779168a0 filed this backlog tick from the finding 2065ad484fe8e1b7e29125c0b63a08017d394a2ad90b9144ab1ad35f0a6d57a2 (reported by run-run_4d92bab25a7341d3bba01691779168a0/tick-vnp/attempt-7) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/2065ad484fe8e1b7e29125c0b63a08017d394a2ad90b9144ab1ad35f0a6d57a2.json on the run branch.",
+  "notes": "2026-10-07 09:07 - ticfac run run_4d92bab25a7341d3bba01691779168a0: created by absorbing finding 2065ad484fe8e1b7e29125c0b63a08017d394a2ad90b9144ab1ad35f0a6d57a2 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/2065ad484fe8e1b7e29125c0b63a08017d394a2ad90b9144ab1ad35f0a6d57a2.json on epic/ilz, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_4d92bab25a7341d3bba01691779168a0/tick-vnp/attempt-7",
+  "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
+  "created_at": "2026-10-07T09:07:08Z",
+  "updated_at": "2026-10-07T09:07:14.721181841Z"
+}

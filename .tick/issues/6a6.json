@@ -1,0 +1,14 @@
+{
+  "id": "6a6",
+  "title": "Guide's failover section never mentions the proxy's refusal arms",
+  "description": "The guide describes failover as lease, bench, retry, step-down, and never mentions that the proxy is an allowlist that refuses before the token is attached: a non-allowlisted method+path, a per-token-billing beta (REFUSED_BETAS) or a request naming a non-claude model all come back 403 permission_error, and a leased label with no secret value comes back 503 (claude-sub.ts:860-901). It also says flatly that a 401/403 benches the subscription for 24 hours, where only INFERENCE answers are ever classified — a startup read's 401/403 benches nothing (claude-sub.ts:111-115,916-917). An operator whose container's claude CLI is failing on 403s reads a guide that says the only 403 in the rung is a refused token, and reaches for a rotation that will not help.\nevidence: docs/claude-sub-operator.md:61-104 against cloudflare/src/claude-sub.ts:111-128,142,860-901,916-917\n\nticfac run run_4d92bab25a7341d3bba01691779168a0 filed this backlog tick from the finding 0d33a9a7af7bb5020148b3ed8766452d571d8b7e15fe3e3043526005c76c6376 (reported by run-run_4d92bab25a7341d3bba01691779168a0/tick-vnp/attempt-7) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/0d33a9a7af7bb5020148b3ed8766452d571d8b7e15fe3e3043526005c76c6376.json on the run branch.",
+  "notes": "2026-10-07 09:06 - ticfac run run_4d92bab25a7341d3bba01691779168a0: created by absorbing finding 0d33a9a7af7bb5020148b3ed8766452d571d8b7e15fe3e3043526005c76c6376 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/0d33a9a7af7bb5020148b3ed8766452d571d8b7e15fe3e3043526005c76c6376.json on epic/ilz, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_4d92bab25a7341d3bba01691779168a0/tick-vnp/attempt-7",
+  "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
+  "created_at": "2026-10-07T09:06:49Z",
+  "updated_at": "2026-10-07T09:06:55.698606101Z"
+}

@@ -1,0 +1,16 @@
+{
+  "id": "vnp",
+  "title": "Re-review ilz: its tree changed since its READY final review (round 3)",
+  "description": "Review the epic ilz again, AS INTEGRATED, before the run lands it: its final review (0n3, decision 4) judged it READY at 72a61b88a0c0, and the epic branch has changed since — now at 7fcffc96624f, with work that review never saw (a tick closed or a commit pushed after it). This is review round 3, made only because the tree changed; the run lands on YOUR verdict, not the earlier one.\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what blocks it.",
+  "notes": "2026-10-07 09:06 - ticfac run run_4d92bab25a7341d3bba01691779168a0: vnp try 1 (run dispatch #7) reported a finding the run itself decided — defect \"Guide's failover section never mentions the proxy's refusal arms\" (key 0d33a9a7af7bb5020148b3ed8766452d571d8b7e15fe3e3043526005c76c6376, severity medium, for this repository) is promoted to a backlog tick with an owner, 6a6; the decision record is on the run branch at .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/0d33a9a7af7bb5020148b3ed8766452d571d8b7e15fe3e3043526005c76c6376.json, and the draft is triaged as promoted.\n2026-10-07 09:07 - ticfac run run_4d92bab25a7341d3bba01691779168a0: vnp try 1 (run dispatch #7) reported a finding the run itself decided — defect \"Observing section omits the per-run view of the rung\" (key 2065ad484fe8e1b7e29125c0b63a08017d394a2ad90b9144ab1ad35f0a6d57a2, severity medium, for this repository) is promoted to a backlog tick with an owner, 3za; the decision record is on the run branch at .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/2065ad484fe8e1b7e29125c0b63a08017d394a2ad90b9144ab1ad35f0a6d57a2.json, and the draft is triaged as promoted.\n2026-10-07 09:07 - ticfac run run_4d92bab25a7341d3bba01691779168a0: the review-epic job, vnp try 1 (run dispatch #7), returned a validated ticfac.job-result.review-epic.v1 envelope at d56dedb8dba9 — DONE: DONE (NOT READY — correct the three stale failover claims in docs/claude-sub-operator.md against cloudflare/src/claude-sub.ts as it stands at the integration head: take the overageInUse arm (any status, including 200, benched until the unified or overage reset and 5 hours otherwise) into the quota bullet, say that an overage answer is withheld and the job handed a synthesized 429, and replace the \"first taken\"/2-hour staleness promise with the lease refresh (LEASE_REFRESH_MS) that makes LEASE_TTL_MS measure silence.)",
+  "status": "closed",
+  "priority": 1,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "ilz",
+  "role": "review",
+  "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
+  "created_at": "2026-10-07T08:51:05Z",
+  "updated_at": "2026-10-07T09:07:25.197330581Z",
+  "closed_at": "2026-10-07T09:07:25.197330581Z"
+}

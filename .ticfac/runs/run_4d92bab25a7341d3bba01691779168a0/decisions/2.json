@@ -1,0 +1,86 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "ilz",
+    "job_id": "run-run_4d92bab25a7341d3bba01691779168a0/tick-yaz/attempt-2",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (cloudflare-sandbox/claude, opus)",
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "86dbb601593ea3e77dc7f146d1a583acffa6ab42",
+    "tick_id": "yaz"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "Three claims in docs/claude-sub-operator.md contradict cloudflare/src/claude-sub.ts, the file A1 requires them to be checked against. (1) Line 82 says a quota bench with neither a usable unified reset nor retry-after lands \"one second out\"; classifyAnswer computes `reset ?? retryAt ?? now + THROTTLE_COOLDOWN_MS` = 60 seconds, and `Math.max(until, now + 1000)` is only a floor, so an operator is told 1s where the pool means 60s. (2) Lines 83-84 say a 429 that is not a quota rejection benches \"only briefly (60 seconds)\"; the throttle arm returns `retryAt ?? now + THROTTLE_COOLDOWN_MS`, so an answer carrying retry-after benches for that instead, which may be far longer than a minute. (3) Lines 73-74 say a job that holds a lease gets the same subscription back \"on every later ask, benched or not\"; ClaudeSubPoolCore.lease only reuses a held lease while `now - held.at < LEASE_TTL_MS` (2 hours), after which the job is treated as new and may be given a different subscription. The same section also describes the quota test as the unified status (or a per-window variant) reading `rejected`, omitting that a 429 with no unified-status header but a parseable unified reset is also treated as quota, and that windows matching /overage/ are excluded. The guide's operator commands are all correct; it is the explanatory numbers in its most operationally load-bearing section that are not.\nevidence: docs/claude-sub-operator.md:73-84 against cloudflare/src/claude-sub.ts:107,110,207-241,329-334",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "claude-sub guide's failover section misstates bench durations and lease TTL"
+      },
+      {
+        "body": "docs/claude-sub-operator.md:37-38 justifies omitting wrangler's -c flag with \"this repository has one Worker, one config\". The repository has several: cloudflare/wrangler.toml (ticks-factory), cloudflare/staging/wrangler.toml (ticks-factory-staging, which also binds CLAUDE_SUB_POOL and is where the rung was first proven), plus cloudflare/staging/agent.wrangler.toml and gateway.wrangler.toml. The command itself is right — from cloudflare/ the default config IS production — so no operator action goes wrong; the stated reason for it is simply false, and it tells an operator that the staging Worker they may also want a token on does not exist.\nevidence: docs/claude-sub-operator.md:37-38 against cloudflare/staging/wrangler.toml:6,20",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Guide says the repository has one Worker and one wrangler config"
+      },
+      {
+        "body": "cloudflare/src/claude-sub.ts:30-32 states that the rung is off unless a deployment binds CLAUDE_SUB_POOL and exports ClaudeSubProxy, and that \"Production does none of these (only cloudflare/staging does)\". Production now does both: cloudflare/wrangler.toml:166 binds CLAUDE_SUB_POOL and cloudflare/src/index.ts:2006 exports ClaudeSubProxy. Pre-existing, not introduced by this epic, but it matters here specifically: it is the module the new operator guide tells its reader to check the guide against, and it contradicts the guide on whether the rung exists in production at all.\nevidence: cloudflare/src/claude-sub.ts:30-32 against cloudflare/wrangler.toml:166 and cloudflare/src/index.ts:2006",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "claude-sub.ts docstring still says production binds no pool"
+      },
+      {
+        "body": "LEASE_TTL_MS is 2 hours (cloudflare/src/claude-sub.ts:107), and its comment reasons about a review-epic job being well under it. A cloud implement worker's wall clock is 8 hours (TICKS_WORKER_TIMEOUT=28740; this run's own attempt record carries wall_seconds 28800), so a long implement job's lease stops counting in activeLeases while the job is still live and still billing the subscription. CLAUDE_SUB_MAX_CONCURRENT is then no longer the cap it reads as: a third job can be handed a subscription that already has two live jobs on it, which is exactly the quota-budget overrun the cap was chosen to prevent. Worth a tick to either raise the TTL above the worker wall clock or refresh the lease while the container lives. Not a reason this epic is not ready — it is pre-existing behaviour and no claim in the new doc depends on it.\nevidence: cloudflare/src/claude-sub.ts:107,420-432 against .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/attempts/1.json wall_seconds 28800",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Lease TTL of 2h is shorter than a worker's 8h wall clock"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/ilz/attempt-2/yaz",
+      "commits": 2,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/ilz/attempt-2/yaz:RESULT-yaz.md",
+      "review_verdict": "NOT READY",
+      "review_verdict_detail": "correct the three failover claims in docs/claude-sub-operator.md to match cloudflare/src/claude-sub.ts: the quota bench with no usable reset header is 60 seconds and not one second, a non-quota 429 benches for retry-after when the answer carries one rather than always 60 seconds, and a held lease is only sticky within its 2-hour LEASE_TTL_MS."
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (NOT READY — correct the three failover claims in docs/claude-sub-operator.md to match cloudflare/src/claude-sub.ts: the quota bench with no usable reset header is 60 seconds and not one second, a non-quota 429 benches for retry-after when the answer carries one rather than always 60 seconds, and a held lease is only sticky within its 2-hour LEASE_TTL_MS.)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T07:13:01Z",
+  "answered_at": "2026-10-07T07:13:01Z",
+  "provenance": {
+    "run_id": "run_4d92bab25a7341d3bba01691779168a0",
+    "tick_id": "yaz",
+    "attempt": 2,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "86dbb601593ea3e77dc7f146d1a583acffa6ab42",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "id": "2x8",
+  "title": "Review and close-out containers get a depth-1 checkout, unannounced",
+  "description": "The cloud checkout is a shallow clone with one commit and no other refs (.git/shallow is present; git rev-list --count HEAD = 1). Round 2 of this epic's review reported it therefore had no boundary diff and read only the integrated tree, while round 1 had compared against origin/epic/ilz and the merge base — the same role, two different pictures of what it could read. `git fetch --unshallow origin` restores the full history in one command; it did so in this close-out container. Nothing in the boot or the prompt tells a review or close-out agent that its checkout is shallow or that unshallowing is available, and image/worker.sh:1112-1126 shows the container already reasons about the shallow boundary for its own counts. Fix: fetch the depth these roles need at boot, or state the shallow checkout and the unshallow command in the roles' prompts.\nevidence: RESULT-0n3.md \"What I could read, and what I could not\" against RESULT-yaz.md \"What I reviewed\"; image/worker.sh:1112-1126\n\nticfac run run_4d92bab25a7341d3bba01691779168a0 filed this backlog tick from the finding a89584fa47edfb6be0538e0a15c518086e10997a409891f9cae75037e31ecf08 (reported by run-run_4d92bab25a7341d3bba01691779168a0/tick-kzs/attempt-5) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/a89584fa47edfb6be0538e0a15c518086e10997a409891f9cae75037e31ecf08.json on the run branch.",
+  "notes": "2026-10-07 08:07 - ticfac run run_4d92bab25a7341d3bba01691779168a0: created by absorbing finding a89584fa47edfb6be0538e0a15c518086e10997a409891f9cae75037e31ecf08 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/a89584fa47edfb6be0538e0a15c518086e10997a409891f9cae75037e31ecf08.json on epic/ilz, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_4d92bab25a7341d3bba01691779168a0/tick-kzs/attempt-5",
+  "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
+  "created_at": "2026-10-07T08:07:15Z",
+  "updated_at": "2026-10-07T08:07:21.397279914Z"
+}

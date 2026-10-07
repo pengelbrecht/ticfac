@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "key": "e72c5de8e84d2837e08ce8888ec19e32a3b8d43de0dae2bb11233a95579c81bf",
+  "tick_id": "xe9",
+  "gating": false,
+  "basis": "worker-asserted-high",
+  "reason": "the reporter rated it high severity and names done item A1 as the one it breaks, but the final review has already run (0n3, decision 4): a finding the epic's own work did not need is not absorbed on the reporter's word once that work is done. It is deferred to the final reviewer, who absorbs it only by naming it blocking, and is otherwise listed in the epic PR under deferred findings",
+  "placement": "deferred-to-review",
+  "decided_at": "2026-10-07T08:43:13Z",
+  "provenance": {
+    "run_id": "run_4d92bab25a7341d3bba01691779168a0",
+    "tick_id": "kzs",
+    "attempt": 6,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "e147ce8fe624696a853192d05552d0478a276eea",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "closeout",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:1be53071db5a958eff89921e78008c0378feac16d1f610fd231690bae24741d6",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "key": "24bfb6a367250e489c5554627afddb1dae850ee53a11586820dd39148c497c7f",
+  "tick_id": "n2u",
+  "gating": false,
+  "basis": "backlog-default",
+  "reason": "its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "placement": "backlog",
+  "decided_at": "2026-10-07T08:43:34Z",
+  "provenance": {
+    "run_id": "run_4d92bab25a7341d3bba01691779168a0",
+    "tick_id": "kzs",
+    "attempt": 6,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "e147ce8fe624696a853192d05552d0478a276eea",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "closeout",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:1be53071db5a958eff89921e78008c0378feac16d1f610fd231690bae24741d6",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
