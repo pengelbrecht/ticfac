@@ -1,0 +1,13 @@
+{
+  "id": "yww",
+  "title": "The reconcile suite needs a load-aware bound, not a fixed -parallel 12",
+  "description": "On a host shared with other agents' live runs (load averages 40-81 against 10 cores), internal/reconcile's full suite at the Makefile's -parallel 12 exceeds the 45-minute per-package timeout — two runs of it timed out here with no test failing on its own merits, and the two wall-clock tests that did fail (TestTheSettlementDeadlineIsSpentInTheRunsOwnClock, TestATicksTerminalRefusalHoldsOnlyThatTick) pass alone in 13-15s under the same stripped environment. The Makefile's -parallel 12 measurement assumed a quiet host; a load-scaled parallelism or a wall-clock bound on the wall-clock-sensitive tests would keep the suite's evidence honest on a busy one. This is the epic t8u's own subject (deterministic contention), not something tick pqs should reach into.\nevidence: make gate's GOTEST_PARALLEL=12 comment (Makefile:20-27); /tmp/pqs-reconcile-full2.log: two timeouts at 2700s with load 40-81, tests passing alone at 13-15s\n\nticfac run epic-t8u filed this backlog tick from the finding 61f5e64bc25dd459bfa6d7ed51e84441a5c3d95dda94d4d3978d197e647e49a9 (reported by run-epic-t8u/tick-pqs/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/61f5e64bc25dd459bfa6d7ed51e84441a5c3d95dda94d4d3978d197e647e49a9.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-pqs/attempt-1",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-07T18:13:09Z",
+  "updated_at": "2026-10-07T18:13:09Z"
+}
