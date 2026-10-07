@@ -1,0 +1,14 @@
+{
+  "id": "0n3",
+  "title": "Re-review ilz after its NOT READY review's blocking findings (round 2)",
+  "description": "Review the epic ilz again, AS INTEGRATED, now that the blocking findings of its NOT READY review are fixed. This is review round 2 of at most 2.\n\nThe previous review (yaz, decision 2) judged it NOT READY: correct the three failover claims in docs/claude-sub-operator.md to match cloudflare/src/claude-sub.ts: the quota bench with no usable reset header is 60 seconds and not one second, a non-quota 429 benches for retry-after when the answer carries one rather than always 60 seconds, and a held lease is only sticky within its 2-hour LEASE_TTL_MS.; its blocking finding(s): \"claude-sub guide's failover section misstates bench durations and lease TTL\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY at this round is not reviewed again by the run unless the tree changes after it: it holds for a person with your reasons.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "ilz",
+  "role": "review",
+  "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
+  "created_at": "2026-10-07T07:13:16Z",
+  "updated_at": "2026-10-07T07:13:16Z"
+}
