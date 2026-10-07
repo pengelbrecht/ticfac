@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 104,
-  "state": "publishing",
-  "reason": "closing r1f behind the integrated gate on 3916603d851a",
-  "updated_at": "2026-10-07T22:23:56Z",
+  "sequence": 105,
+  "state": "running",
+  "reason": "r1f is closed",
+  "updated_at": "2026-10-07T22:23:58Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -69,7 +69,7 @@
     },
     {
       "tick_id": "r1f",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 13
     },
     {
