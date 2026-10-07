@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "0n3",
   "attempt": 4,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T07:50:07Z",
+  "triaged_at": "2026-10-07T07:50:16Z",
+  "triaged_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0 absorbing z38",
+  "promoted_as": "z38",
   "provenance": {
     "run_id": "run_4d92bab25a7341d3bba01691779168a0",
     "tick_id": "0n3",
