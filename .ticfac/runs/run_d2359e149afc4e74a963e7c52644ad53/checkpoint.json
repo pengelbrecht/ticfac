@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_d2359e149afc4e74a963e7c52644ad53",
   "epic_id": "ilz",
-  "sequence": 6,
+  "sequence": 7,
   "state": "failed",
-  "reason": "56z try 1 (run dispatch #1) never reached its harness: its boot stopped on the harness's model wiring (exit 8). Every worker of this run boots the same image on the same repository and would stop the same way at any tier, so the run stops here; nothing about the tick was tried and no rung of its ladder was spent. What the boot said: the container never reached its harness: its boot stopped on the harness's model wiring (exit 8) — the environment, not the tick, and a retry boots the same one. the container's boot stopped before its harness started (exit 8: the harness could not use the model route (the harness probe failed)): the claude harness could not make a model call through the gateway (exit 1).. To fix: the gateway answered and the harness could not use it (the reason quotes it): the harness's provider wiring in the worker image (image/common.sh's kind table) is what fixes it — deploy a factory with it fixed, then run the epic again",
-  "updated_at": "2026-10-07T06:13:11Z",
+  "reason": "56z did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: 56z try 1 (run dispatch #1) never reached its harness: its boot stopped on the harness's model wiring (exit 8). Every worker of this run boots the same image on the same repository and would stop the same way at any tier, so the run stops here; nothing about the tick was tried and no rung of its ladder was spent. What the boot said: the container never reached its harness: its boot stopped on the harness's model wiring (exit 8) — the environment, not the tick, and a retry boots the same one. the container's boot stopped before its harness started (exit 8: the harness could not use the model route (the harness probe failed)): the claude harness could not make a model call through the gateway (exit 1).. To fix: the gateway answered and the harness could not use it (the reason quotes it): the harness's provider wiring in the worker image (image/common.sh's kind table) is what fixes it — deploy a factory with it fixed, then run the epic again",
+  "updated_at": "2026-10-07T06:13:16Z",
   "ticks": [
     {
       "tick_id": "56z",
