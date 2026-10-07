@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "uhe",
   "attempt": 15,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T21:35:04Z",
+  "triaged_at": "2026-10-07T21:35:15Z",
+  "triaged_by": "ticfac run epic-t8u absorbing 9fn",
+  "promoted_as": "9fn",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "uhe",
