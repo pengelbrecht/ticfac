@@ -12,8 +12,11 @@
   "attempt": 6,
   "done_item": "A1",
   "demonstrating_check": "go test -run 'Subscription|StepDown' ./internal/exec/cloudflaresandbox/",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T02:12:03Z",
+  "triaged_at": "2026-10-07T02:12:25Z",
+  "triaged_by": "ticfac run epic-v5t absorbing y38",
+  "promoted_as": "y38",
   "provenance": {
     "run_id": "epic-v5t",
     "tick_id": "54l",
