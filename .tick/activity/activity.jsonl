@@ -3201,3 +3201,4 @@
 {"ts":"2026-10-07T16:06:20.338609Z","tick":"fn8","action":"close","actor":"ticfac","epic":"t8u","data":{"title":"TestTheEvacuationFlushesInFlightWorkAndWritesTheCheckpoint failed once under load: reproduce and fix"}}
 {"ts":"2026-10-07T16:06:42.435384Z","tick":"krh","action":"start","actor":"ticfac","epic":"t8u","data":{"title":"The reconcile test tracker counts a re-claim as a new claim; real tk does not"}}
 {"ts":"2026-10-07T18:10:59.900895Z","tick":"9si","action":"note","actor":"ticfac","epic":"t8u","data":{"note":"2026-10-07 20:10 - ticfac run epic-t8u: 9si try 1 (run dispatch #6) merged into epic/t8u as 13ab3044316e; the integrated gate (go, ts) passed.","title":"A test that holds a gate slot is not flaky under the suite's own -parallel 12"}}
+{"ts":"2026-10-07T18:11:00.627489Z","tick":"9si","action":"close","actor":"ticfac","epic":"t8u","data":{"title":"A test that holds a gate slot is not flaky under the suite's own -parallel 12"}}
