@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 31,
-  "state": "gating",
-  "reason": "running the integrated gate for yck on 1b1621c36053",
-  "updated_at": "2026-10-07T02:00:28Z",
+  "sequence": 32,
+  "state": "admitted",
+  "reason": "the epic graph is read and the run is admitted",
+  "updated_at": "2026-10-07T02:02:35Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -27,7 +27,7 @@
     },
     {
       "tick_id": "yck",
-      "state": "rejected",
+      "state": "closed",
       "attempt": 5
     }
   ],
