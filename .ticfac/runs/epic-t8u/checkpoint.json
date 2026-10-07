@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 85,
-  "state": "publishing",
-  "reason": "closing u51 behind the integrated gate on fe7fea06e56e",
-  "updated_at": "2026-10-07T20:09:00Z",
+  "sequence": 86,
+  "state": "running",
+  "reason": "u51 is closed",
+  "updated_at": "2026-10-07T20:09:02Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -74,7 +74,7 @@
     },
     {
       "tick_id": "u51",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 14
     },
     {
