@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-56z-1-go",
+  "provenance": {
+    "run_id": "run_4d92bab25a7341d3bba01691779168a0",
+    "tick_id": "56z",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "f05bb24b0f5f9110eb118dae7a02a445432096a1",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "integrated",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:e2f8e49728ed032c48596c9da4fed8397707a24843abbe67706f35940ed51358",
+    "model": "sonnet",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "go",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout 45m -parallel 12 ./..."
+    ]
+  },
+  "started_at": "2026-10-07T06:50:50Z",
+  "finished_at": "2026-10-07T06:55:50Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "?   \tgithub.com/pengelbrecht/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/benchmarks/classifiers\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/contracts\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/acceptance\t0.018s\nok  \tgithub.com/pengelbrecht/ticfac/internal/ciwatchdog\t0.291s\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t58.842s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts\t0.185s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t0.209s\nok  \tgithub.com/pengelbrecht/ticfac/internal/escalation\t0.011s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox\t9.754s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t0.066s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t76.186s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t21.648s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/credentials\t0.092s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/dashboard\t0.023s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/jobprotocol\t0.062s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/lifecycle\t0.041s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory/runstate\t0.055s\nok  \tgithub.com/pengelbrecht/ticfac/internal/feedrelay\t0.028s\nok  \tgithub.com/pengelbrecht/ticfac/internal/forge\t0.899s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gatewaytrace\t0.212s\nok  \tgithub.com/pengelbrecht/ticfac/internal/gitbin\t0.436s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/client\t1.867s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/herdtest\t0.012s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/notify\t0.008s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/paint\t0.004s\nok  \tgithub.com/pengelbrecht/ticfac/internal/herd/wirevocab\t0.005s\nok  \tgithub.com/pengelbrecht/ticfac/internal/httpnet\t0.510s\nok  \tgithub.com/pengelbrecht/ticfac/internal/jev\t0.056s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t1.833s\nok  \tgithub.com/pengelbrecht/ticfac/internal/reconcile\t13.149s\nok  \tgithub.com/pengelbrecht/ticfac/internal/refsweep\t3.620s\nok  \tgithub.com/pengelbrecht/ticfac/internal/release\t3.911s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runconfig\t0.302s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runenv\t0.018s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t0.313s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t0.201s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runprogress\t0.086s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runregistry\t0.016s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runregistry/registrytest\t0.008s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runsignal\t0.186s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t2.616s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandbox\t0.235s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboximage\t12.279s\nok  \tgithub.com/pengelbrecht/ticfac/internal/schema\t0.005s\nok  \tgithub.com/pengelbrecht/ticfac/internal/shorttest\t0.134s\n?   \tgithub.com/pengelbrecht/ticfac/internal/skills\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/statusmodel\t1.158s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tempdir\t0.019s\nok  \tgithub.com/pengelbrecht/ticfac/internal/tk\t0.021s\nok  \tgithub.com/pengelbrecht/ticfac/internal/workerview\t0.025s\n",
+    "stderr": "go: downloading github.com/charmbracelet/bubbletea v1.3.5\ngo: downloading github.com/charmbracelet/lipgloss v1.1.0\ngo: downloading github.com/charmbracelet/x/ansi v0.11.5\ngo: downloading hegel.dev/go/hegel v0.9.9\ngo: downloading github.com/BurntSushi/toml v1.6.0\ngo: downloading golang.org/x/term v0.39.0\ngo: downloading golang.org/x/sys v0.44.0\ngo: downloading github.com/charmbracelet/fang v1.0.0\ngo: downloading github.com/muesli/termenv v0.16.0\ngo: downloading github.com/spf13/cobra v1.10.2\ngo: downloading github.com/creack/pty v1.1.24\ngo: downloading github.com/charmbracelet/x/term v0.2.2\ngo: downloading github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6\ngo: downloading github.com/muesli/cancelreader v0.2.2\ngo: downloading golang.org/x/sync v0.20.0\ngo: downloading github.com/charmbracelet/x/cellbuf v0.0.15\ngo: downloading github.com/rivo/uniseg v0.4.7\ngo: downloading github.com/clipperhouse/displaywidth v0.9.0\ngo: downloading github.com/clipperhouse/uax29/v2 v2.5.0\ngo: downloading github.com/lucasb-eyer/go-colorful v1.3.0\ngo: downloading github.com/mattn/go-runewidth v0.0.19\ngo: downloading charm.land/lipgloss/v2 v2.0.0-beta.3.0.20251106193318-19329a3e8410\ngo: downloading github.com/charmbracelet/colorprofile v0.4.1\ngo: downloading github.com/charmbracelet/x/exp/charmtone v0.0.0-20250603201427-c31516f43444\ngo: downloading github.com/muesli/mango-cobra v1.2.0\ngo: downloading github.com/muesli/roff v0.1.0\ngo: downloading github.com/spf13/pflag v1.0.9\ngo: downloading golang.org/x/text v0.24.0\ngo: downloading github.com/aymanbagabas/go-osc52/v2 v2.0.1\ngo: downloading github.com/mattn/go-isatty v0.0.20\ngo: downloading github.com/clipperhouse/stringish v0.1.1\ngo: downloading github.com/muesli/mango v0.1.0\ngo: downloading github.com/muesli/mango-pflag v0.1.0\ngo: downloading github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e\ngo: downloading github.com/charmbracelet/ultraviolet v0.0.0-20251106190538-99ea45596692\ngo: downloading github.com/ebitengine/purego v0.11.0-alpha.6.0.20260707033313-5f49e7c49322\ngo: downloading github.com/charmbracelet/x/termios v0.1.1\ngo: downloading github.com/charmbracelet/x/windows v0.2.2\n",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:146bbf1bcf7f83f62ee3e6b52bd03d8ac74ee4a056bfacee0b924bd680e74ad3",
+  "persistence_uri": "git:refs/heads/epic/ilz:.ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/evidence/gate-56z-1-go.json"
+}
