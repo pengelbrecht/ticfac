@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 53,
-  "state": "running",
-  "reason": "8rm is running as attempt 9",
-  "updated_at": "2026-10-07T03:39:04Z",
+  "sequence": 54,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for 8rm",
+  "updated_at": "2026-10-07T03:44:43Z",
   "ticks": [
     {
       "tick_id": "6fv",
