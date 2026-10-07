@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 46,
-  "state": "integrating",
-  "reason": "integrating pqs attempt 1 into epic/t8u",
-  "updated_at": "2026-10-07T18:13:41Z",
+  "sequence": 47,
+  "state": "gating",
+  "reason": "running the integrated gate for pqs on 50cadcec2dc8",
+  "updated_at": "2026-10-07T18:13:58Z",
   "ticks": [
     {
       "tick_id": "pqs",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 1
     },
     {
