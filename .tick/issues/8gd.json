@@ -3,7 +3,7 @@
   "title": "Host the cloud PR-review boot on pi-durable, or operator confirms its omp floor",
   "description": "[A1] says every worker, implement and role jobs, local and cloud, runs on pi-durable. The cloud PR-review boot still runs omp on GLM: reviewHarness() drops pi-durable and pi and falls back to omp. Its exception was written onto 43y's notes for worker 8em (2026-10-05 18:25), and no amendment record or operator commit confirms it, because .ticfac/runs/epic-43y/amendments/ does not exist. Either the operator confirms the exception on the record, or the review conversation moves onto a hosted WorkerAgent (a review boot/finish contract in the image, the supervisor routed off the CLI floor).\nevidence: cloudflare/src/worker-boot.ts:504 (REVIEW_DEFAULT_HARNESS = \"omp\"), :529 (NOT_A_REVIEW_HARNESS); .tick/issues/43y.json notes 2026-10-05 18:25\n\nticfac run epic-43y created this tick by absorbing the finding d89b47c98c8aba305e706bf59f45aaa3b6f3f22d9ac52428aeabf716fc119c93 (reported by run-epic-43y/tick-j2k/attempt-69): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/d89b47c98c8aba305e706bf59f45aaa3b6f3f22d9ac52428aeabf716fc119c93.json on the run branch.",
   "notes": "2026-10-06 01:35 - ticfac run epic-43y: created by absorbing finding d89b47c98c8aba305e706bf59f45aaa3b6f3f22d9ac52428aeabf716fc119c93 — placed before the close-out, which does not start while it is open; the review had already run. The decision record is .ticfac/runs/epic-43y/absorptions/d89b47c98c8aba305e706bf59f45aaa3b6f3f22d9ac52428aeabf716fc119c93.json on epic/43y, and it says: the classifier put 0.89 of its probability mass on the items rather than on none, at or above the deliberately cheap absorb threshold of 0.35, and named A1: a false positive costs the epic work it did not need, a false negative closes an epic whose goal is unmet in a factory where nobody is watching, and those are not the same cost — the threshold sits on the cheap side\n2026-10-07 16:24 - ticfac run run_69f8f57832d34601b040367c7207b81f: 8gd try 2 (run dispatch #8) reported a finding the run itself decided — proposed-tick \"A hosted review that ends its turn without findings wastes the run\" (key 845f9f10e39898ebedafa198f2caaff0663fda6ce1ebbb700eb3286c4ae1f6e0, severity low, for this repository) is promoted to a backlog tick with an owner, 2ha; the decision record is on the run branch at .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/845f9f10e39898ebedafa198f2caaff0663fda6ce1ebbb700eb3286c4ae1f6e0.json, and the draft is triaged as promoted.\n2026-10-07 16:45 - ticfac run run_69f8f57832d34601b040367c7207b81f: 8gd try 2 (run dispatch #8) merged into epic/ex6 as 9edd748fc6a9; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -11,6 +11,6 @@
   "discovered_from": "run-epic-43y/tick-j2k/attempt-69",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T23:35:03Z",
-  "updated_at": "2026-10-07T16:45:25.817047063Z",
-  "started_at": "2026-10-07T13:49:26.525021072Z"
+  "updated_at": "2026-10-07T16:45:26.03590057Z",
+  "closed_at": "2026-10-07T16:45:26.03590057Z"
 }
