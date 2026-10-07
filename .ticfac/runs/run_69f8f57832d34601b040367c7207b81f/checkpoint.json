@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 45,
-  "state": "publishing",
-  "reason": "closing 3sd behind the integrated gate on aafb2538c2b0",
-  "updated_at": "2026-10-07T14:41:42Z",
+  "sequence": 46,
+  "state": "running",
+  "reason": "3sd is closed",
+  "updated_at": "2026-10-07T14:41:45Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "3sd",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 11
     },
     {
