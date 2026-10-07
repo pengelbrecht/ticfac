@@ -1,5 +1,5 @@
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 // The factory harness mirrors cloud/worker/test in intent — real workerd,
 // bindings read straight from wrangler.toml, so a failure means the deployable
@@ -27,6 +27,14 @@ export default defineConfig(async () => {
     ],
     test: {
       include: ["test/**/*.test.ts"],
+      // The property tests are the plain-Node leg's alone
+      // (vitest.config.hegel.ts, tick p0n): they import @hegeldev/hegel,
+      // whose WASM build does not load under workerd
+      // (test/hegel-probe.test.ts pins the mechanism), and they exercise
+      // pure modules that need no bindings. Left in this include they would
+      // fail at import inside workerd; excluded, a file can never run under
+      // the wrong runtime.
+      exclude: [...configDefaults.exclude, "test/property/**"],
       setupFiles: ["./test/apply-migrations.ts"],
       // A vitest that is SIGKILLed never runs miniflare's exit hook, and the
       // workerd it started outlives it forever (two dozen had piled up on the

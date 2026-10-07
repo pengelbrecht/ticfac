@@ -35,7 +35,14 @@
   // the evidence rather than tidied it. (Biome reformatted
   // omp-tool-call-exchange.json on the first pass here; that was reverted.)
   "files": {
-    "includes": ["src/**", "test/**", "!test/fixtures", "scripts/**", "vitest.config.ts"]
+    "includes": [
+      "src/**",
+      "test/**",
+      "!test/fixtures",
+      "scripts/**",
+      "vitest.config.ts",
+      "vitest.config.hegel.ts"
+    ]
   },
   // Two spaces and double quotes because that is what these 46 modules already
   // are: 17147 space-indented lines against 233 tab-indented, and 504
