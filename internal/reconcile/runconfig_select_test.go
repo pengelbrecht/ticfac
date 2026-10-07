@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
+	"github.com/pengelbrecht/ticfac/internal/runfeed"
 )
 
 // The run's config selection (tick tda): which named run config a run routes
@@ -158,7 +160,7 @@ func TestSelectRunConfigAnswersThePrecedence(t *testing.T) {
 
 	// The flag over the epic's label: a run diagnosing a config's behaviour
 	// wants the other config without editing the tracker.
-	got, err := selectRunConfig(opts("claude"), runconfig.SubstrateCloud, []string{"config: glm"})
+	got, err := selectRunConfig(opts("claude"), runconfig.SubstrateCloud, []string{"config: glm"}, "")
 	if err != nil {
 		t.Fatalf("the flag's selection refused: %v", err)
 	}
@@ -167,7 +169,7 @@ func TestSelectRunConfigAnswersThePrecedence(t *testing.T) {
 	}
 
 	// The epic's own label, when no flag speaks.
-	got, err = selectRunConfig(opts(""), runconfig.SubstrateCloud, []string{"config: claude", "tier: strong"})
+	got, err = selectRunConfig(opts(""), runconfig.SubstrateCloud, []string{"config: claude", "tier: strong"}, "")
 	if err != nil {
 		t.Fatalf("the label's selection refused: %v", err)
 	}
@@ -176,7 +178,7 @@ func TestSelectRunConfigAnswersThePrecedence(t *testing.T) {
 	}
 
 	// The declared default, when neither the flag nor the label speaks.
-	got, err = selectRunConfig(opts(""), runconfig.SubstrateCloud, nil)
+	got, err = selectRunConfig(opts(""), runconfig.SubstrateCloud, nil, "")
 	if err != nil {
 		t.Fatalf("the default's selection refused: %v", err)
 	}
@@ -195,14 +197,14 @@ func TestSelectRunConfigRefusesWhatNobodyDeclared(t *testing.T) {
 
 	// A flag naming a config nobody declared.
 	_, err := selectRunConfig(Options{GateConfig: gate, EpicID: "v5t", RunConfig: "opus-max"},
-		runconfig.SubstrateCloud, nil)
+		runconfig.SubstrateCloud, nil, "")
 	if err == nil || !strings.Contains(err.Error(), `"opus-max" is not one the runners files declare`) {
 		t.Errorf("a flag naming an undeclared config: %v", err)
 	}
 
 	// A label naming one.
 	_, err = selectRunConfig(Options{GateConfig: gate, EpicID: "v5t"},
-		runconfig.SubstrateCloud, []string{"config: sonnet"})
+		runconfig.SubstrateCloud, []string{"config: sonnet"}, "")
 	if err == nil || !strings.Contains(err.Error(), `config: label`) {
 		t.Errorf("a label naming an undeclared config: %v", err)
 	}
@@ -210,7 +212,7 @@ func TestSelectRunConfigRefusesWhatNobodyDeclared(t *testing.T) {
 	// Two labels that disagree: one epic has one config, and a run that had
 	// to guess which would be a run guessing at what the whole epic runs on.
 	_, err = selectRunConfig(Options{GateConfig: gate, EpicID: "v5t"},
-		runconfig.SubstrateCloud, []string{"config: glm", "config: claude"})
+		runconfig.SubstrateCloud, []string{"config: glm", "config: claude"}, "")
 	if err == nil || !strings.Contains(err.Error(), "one epic has one config") {
 		t.Errorf("two disagreeing config labels: %v", err)
 	}
@@ -227,7 +229,7 @@ func TestARepositoryWithoutNamedConfigsSelectsNothing(t *testing.T) {
 
 	// Nothing selecting: the historical single-routing run, exactly as before
 	// tick tda — no config, no source, no error.
-	got, err := selectRunConfig(Options{GateConfig: gate, EpicID: "v5t"}, runconfig.SubstrateCloud, nil)
+	got, err := selectRunConfig(Options{GateConfig: gate, EpicID: "v5t"}, runconfig.SubstrateCloud, nil, "")
 	if err != nil {
 		t.Fatalf("a repository without named configs refused: %v", err)
 	}
@@ -240,15 +242,136 @@ func TestARepositoryWithoutNamedConfigsSelectsNothing(t *testing.T) {
 
 	// A flag against a repository that declares none: the refusal names the
 	// declaration to make, not a silent run on the file's own cells.
-	_, err = selectRunConfig(Options{GateConfig: gate, EpicID: "v5t", RunConfig: "claude"}, runconfig.SubstrateCloud, nil)
+	_, err = selectRunConfig(Options{GateConfig: gate, EpicID: "v5t", RunConfig: "claude"}, runconfig.SubstrateCloud, nil, "")
 	if err == nil || !strings.Contains(err.Error(), "declare no named configs at all") {
 		t.Errorf("a flag against a repository without configs: %v", err)
 	}
 
-	// And the same for the epic's label.
-	_, err = selectRunConfig(Options{GateConfig: gate, EpicID: "v5t"}, runconfig.SubstrateCloud, []string{"config: claude"})
+	// And the same for the epic's label, in the cloud: the label is the only
+	// word a submitted run carries, and one that asked for claude must not
+	// silently get the file's own cells.
+	_, err = selectRunConfig(Options{GateConfig: gate, EpicID: "v5t"}, runconfig.SubstrateCloud, []string{"config: claude"}, "")
 	if err == nil || !strings.Contains(err.Error(), "declare no named configs at all") {
-		t.Errorf("a label against a repository without configs: %v", err)
+		t.Errorf("a label against a cloud without configs: %v", err)
+	}
+}
+
+// TestALocalRunOfACloudConfiguredEpicIsNotRefused: the configs live in
+// .tick/runners.cloud.toml, which a local run never reads, so an epic
+// designed with `config: claude` for the cloud runs locally on the local
+// files' own cells — saying, in its feed, that the label was not acted on —
+// rather than being refused at construction. The flag stays a refusal: it
+// is the operator's word for THIS run.
+//
+// short: pure helpers over temp config files — no harness, no git.
+func TestALocalRunOfACloudConfiguredEpicIsNotRefused(t *testing.T) {
+	t.Parallel()
+	gate := writeSelectRepo(t)
+	for _, sub := range []runconfig.Substrate{runconfig.SubstrateHerdr, runconfig.SubstrateHarness} {
+		got, err := selectRunConfig(Options{GateConfig: gate, EpicID: "v5t"}, sub, []string{"config: claude"}, "")
+		if err != nil {
+			t.Fatalf("%s: a local run of a config: claude epic was refused: %v", sub, err)
+		}
+		if got.Selected() {
+			t.Errorf("%s: a local run selected %+v from configs only the cloud declares", sub, got)
+		}
+		for _, want := range []string{"none — ", "config:claude", "not acted on"} {
+			if !strings.Contains(got.Detail(), want) {
+				t.Errorf("%s: the feed line %q does not say %q", sub, got.Detail(), want)
+			}
+		}
+		if RunConfigFromDetail(got.Detail()) != "" {
+			t.Errorf("%s: the note %q parses as a config name", sub, got.Detail())
+		}
+		_, err = selectRunConfig(Options{GateConfig: gate, EpicID: "v5t", RunConfig: "claude"}, sub, nil, "")
+		if err == nil || !strings.Contains(err.Error(), "declare no named configs at all") {
+			t.Errorf("%s: a --config flag on a substrate without configs: %v", sub, err)
+		}
+	}
+}
+
+// TestAResumeKeepsTheConfigItsRunStartedOn: one run is one config. A resume
+// with no flag keeps the config the run's first incarnation recorded,
+// whatever the label or the default now say; a resume whose flag names
+// another config is refused, naming a new run id as the way to get it.
+//
+// short: pure helpers over temp config files and a temp feed — no harness, no git.
+func TestAResumeKeepsTheConfigItsRunStartedOn(t *testing.T) {
+	t.Parallel()
+	gate := writeSelectRepo(t)
+	opts := Options{GateConfig: gate, EpicID: "v5t", RunID: "epic-v5t"}
+
+	got, err := selectRunConfig(opts, runconfig.SubstrateCloud, []string{"config: glm"}, "claude")
+	if err != nil {
+		t.Fatalf("a resume of a claude run refused: %v", err)
+	}
+	if got.Name != "claude" || !strings.Contains(got.Source, "first selection") {
+		t.Errorf("a resume of a claude run with a glm label selected %+v, want claude kept", got)
+	}
+
+	opts.RunConfig = "claude"
+	if got, err := selectRunConfig(opts, runconfig.SubstrateCloud, nil, "claude"); err != nil || got.Name != "claude" {
+		t.Errorf("a resume repeating its own --config: %+v, %v", got, err)
+	}
+
+	opts.RunConfig = "glm"
+	_, err = selectRunConfig(opts, runconfig.SubstrateCloud, nil, "claude")
+	if err == nil || !strings.Contains(err.Error(), "one run is one config") || !strings.Contains(err.Error(), "--run-id") {
+		t.Errorf("a resume whose flag switches config: %v", err)
+	}
+
+	opts.RunConfig = ""
+	_, err = selectRunConfig(opts, runconfig.SubstrateCloud, nil, "opus-max")
+	if err == nil || !strings.Contains(err.Error(), "no longer declare") {
+		t.Errorf("a resume of a config the files no longer declare: %v", err)
+	}
+
+	// The recorded selection is read from the run's own feed: the LAST
+	// run-level config_selected line, and nothing from a "none — " note.
+	repo := t.TempDir()
+	if got := recordedRunConfig(repo, "epic-v5t"); got != "" {
+		t.Errorf("a run with no feed recorded %q", got)
+	}
+	feed := runfeed.Open(repo, "epic-v5t")
+	at := time.Date(2026, 10, 7, 0, 0, 0, 0, time.UTC)
+	for _, detail := range []string{
+		RunConfigSelection{Name: "glm", Source: "the [configs] default"}.Detail(),
+		RunConfigSelection{Name: "claude", Source: "the --config flag"}.Detail(),
+	} {
+		if err := feed.Append(runfeed.NewEvent(at, "epic-v5t", "", nil, StageConfigSelected, detail)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := recordedRunConfig(repo, "epic-v5t"); got != "claude" {
+		t.Errorf("the recorded config is %q, want the last line's claude", got)
+	}
+}
+
+// TestALocalRunIsNeverAskedForAFactorySubscription: the rung is the
+// factory's subscription lease, a cloud question. A local run's claude cells
+// run on the operator's own CLI login, so the run-start check asks nothing
+// of a local run — not even the network read.
+//
+// short: pure helpers over pre-resolved profiles — no harness, no factory.
+func TestALocalRunIsNeverAskedForAFactorySubscription(t *testing.T) {
+	t.Parallel()
+	gate := writeSelectRepo(t)
+	jobs, err := CheckRoutingConfig(profile.EmbeddedCloud, gate, runconfig.SubstrateCloud, "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked := false
+	opts := Options{SubscriptionTokens: func() ([]string, error) { asked = true; return nil, nil }}
+	for _, sub := range []runconfig.Substrate{runconfig.SubstrateHerdr, runconfig.SubstrateHarness} {
+		if err := checkSelectedConfigCanRoute(opts, sub, RunConfigSelection{Name: "claude"}, jobs); err != nil {
+			t.Errorf("%s: a local run was refused for a factory subscription: %v", sub, err)
+		}
+	}
+	if asked {
+		t.Error("a local run asked the factory for its subscription labels")
+	}
+	if err := checkSelectedConfigCanRoute(opts, runconfig.SubstrateCloud, RunConfigSelection{Name: "claude"}, jobs); err == nil {
+		t.Error("the cloud run on the same jobs was not refused")
 	}
 }
 
@@ -270,20 +393,20 @@ func TestAClaudeConfigWithoutASubscriptionIsRefusedAtRunStart(t *testing.T) {
 
 	// No seam wired (a build that cannot ask the factory): the check leaves
 	// the question to the surfaces that can ask, and refuses nothing.
-	if err := checkSelectedConfigCanRoute(Options{}, selection, jobs); err != nil {
+	if err := checkSelectedConfigCanRoute(Options{}, runconfig.SubstrateCloud, selection, jobs); err != nil {
 		t.Errorf("a nil subscription seam refused the run: %v", err)
 	}
 	// A factory that cannot be asked is not a fact about the config.
 	if err := checkSelectedConfigCanRoute(Options{SubscriptionTokens: func() ([]string, error) {
 		return nil, errors.New("the factory did not answer")
-	}}, selection, jobs); err != nil {
+	}}, runconfig.SubstrateCloud, selection, jobs); err != nil {
 		t.Errorf("an unanswerable factory refused the run: %v", err)
 	}
 	// No subscription configured: the refusal names the config, the rung and
 	// the fix.
 	err = checkSelectedConfigCanRoute(Options{SubscriptionTokens: func() ([]string, error) {
 		return nil, nil
-	}}, selection, jobs)
+	}}, runconfig.SubstrateCloud, selection, jobs)
 	if err == nil {
 		t.Fatalf("a claude config with no subscription configured passed the preflight")
 	}
@@ -295,7 +418,7 @@ func TestAClaudeConfigWithoutASubscriptionIsRefusedAtRunStart(t *testing.T) {
 	// A subscription configured: the rung is on, and the preflight passes.
 	if err := checkSelectedConfigCanRoute(Options{SubscriptionTokens: func() ([]string, error) {
 		return []string{"max"}, nil
-	}}, selection, jobs); err != nil {
+	}}, runconfig.SubstrateCloud, selection, jobs); err != nil {
 		t.Errorf("a claude config with a subscription configured was refused: %v", err)
 	}
 	// The glm config rides no rung: no subscription needed, no question asked.
@@ -305,13 +428,13 @@ func TestAClaudeConfigWithoutASubscriptionIsRefusedAtRunStart(t *testing.T) {
 	}
 	if err := checkSelectedConfigCanRoute(Options{SubscriptionTokens: func() ([]string, error) {
 		return nil, nil
-	}}, RunConfigSelection{Name: "glm"}, glmJobs); err != nil {
+	}}, runconfig.SubstrateCloud, RunConfigSelection{Name: "glm"}, glmJobs); err != nil {
 		t.Errorf("the glm config was refused for a subscription it does not ride: %v", err)
 	}
 	// And a run that selected nothing is not asked at all.
 	if err := checkSelectedConfigCanRoute(Options{SubscriptionTokens: func() ([]string, error) {
 		return nil, nil
-	}}, RunConfigSelection{}, jobs); err != nil {
+	}}, runconfig.SubstrateCloud, RunConfigSelection{}, jobs); err != nil {
 		t.Errorf("a no-selection run was refused by the config preflight: %v", err)
 	}
 }

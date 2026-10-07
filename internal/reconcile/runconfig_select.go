@@ -3,10 +3,12 @@ package reconcile
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
+	"github.com/pengelbrecht/ticfac/internal/runfeed"
 )
 
 // The run's config selection (tick tda): which named run config — one of
@@ -57,9 +59,15 @@ type RunConfigSelection struct {
 	// named configs at all (the historical single-routing file).
 	Name string
 	// Source names where the choice came from, for the feed line and the
-	// status model: "the --config flag", "the epic's config: label", or
-	// "the [configs] default" — "" beside an empty Name.
+	// status model: "the --config flag", "the epic's config: label", "the
+	// [configs] default", or the run's own earlier selection on a resume —
+	// "" beside an empty Name.
 	Source string
+	// Note is what a run that selected nothing has to say about a choice it
+	// did not act on: an epic's `config:` label on a substrate whose runners
+	// files declare no named configs (a label written for the cloud, read by
+	// a local run). "" when there is nothing to say.
+	Note string
 }
 
 // Selected reports whether a named config was selected at all.
@@ -71,9 +79,47 @@ func (s RunConfigSelection) Selected() bool { return s.Name != "" }
 // standing answer (the default).
 func (s RunConfigSelection) Detail() string {
 	if !s.Selected() {
+		if s.Note != "" {
+			return "none — " + s.Note
+		}
 		return ""
 	}
 	return fmt.Sprintf("run config %s — selected by %s", s.Name, s.Source)
+}
+
+// runConfigDetail reads the config's NAME back out of a Detail sentence: the
+// one parse of the line, shared by the status model and a resume, so the
+// writer and its readers cannot drift apart.
+var runConfigDetail = regexp.MustCompile(`^run config ([a-z0-9][a-z0-9_-]*) —`)
+
+// RunConfigFromDetail is the config a config_selected line names, or ""
+// for a line that names none (a "none — " note, or one that does not parse).
+func RunConfigFromDetail(detail string) string {
+	if m := runConfigDetail.FindStringSubmatch(detail); m != nil {
+		return m[1]
+	}
+	return ""
+}
+
+// recordedRunConfig is the config an EARLIER incarnation of this run
+// selected, read from the last config_selected line in the run's own feed —
+// "" when the feed holds none (a first incarnation, or a checkout that never
+// ran it). A run id is one run (the resume rule in Run), so the selection
+// its first incarnation made is the one every later incarnation keeps.
+func recordedRunConfig(repo, runID string) string {
+	if repo == "" || runID == "" {
+		return ""
+	}
+	events, err := runfeed.Read(runfeed.Path(repo, runID))
+	if err != nil {
+		return ""
+	}
+	for i := len(events) - 1; i >= 0; i-- {
+		if events[i].Stage == StageConfigSelected && events[i].TickID == nil {
+			return RunConfigFromDetail(events[i].Detail)
+		}
+	}
+	return ""
 }
 
 // parseConfigLabels reads an epic's `config:<name>` labels: the first one,
@@ -100,7 +146,15 @@ func parseConfigLabels(epicID string, labels []string) (string, error) {
 // epic's label over the default. The named configs it chooses between are
 // the merged document's own — the common file with the substrate's override
 // merged over it, exactly what the run's profile resolutions read.
-func selectRunConfig(opts Options, substrate runconfig.Substrate, epicLabels []string) (RunConfigSelection, error) {
+//
+// recorded is the config an earlier incarnation of this same run selected
+// ([recordedRunConfig]), and it binds: one run, one config. A resume with no
+// flag keeps it whatever the label or the default now say — a run whose
+// first attempts ran on claude and whose later ones ran on GLM is a run
+// whose escalation and cost lines describe neither — and a resume whose
+// flag names another config is refused, naming the way to get one: a new
+// run id.
+func selectRunConfig(opts Options, substrate runconfig.Substrate, epicLabels []string, recorded string) (RunConfigSelection, error) {
 	cfg, err := runconfig.LoadFor(opts.GateConfig, substrate)
 	if err != nil {
 		return RunConfigSelection{}, err
@@ -119,12 +173,36 @@ func selectRunConfig(opts Options, substrate runconfig.Substrate, epicLabels []s
 		switch {
 		case opts.RunConfig != "":
 			return RunConfigSelection{}, fmt.Errorf("reconcile: --config %s names a run config, and the runners files declare no named configs at all — declare [configs.%s] in .tick/runners.toml (or the substrate's override file), or run without the flag", opts.RunConfig, opts.RunConfig)
+		case fromLabel != "" && substrate == runconfig.SubstrateCloud:
+			// In the cloud the label is the only word a submitted run
+			// carries, and a run that asked for claude and silently got the
+			// file's own cells is the failure this whole selection exists
+			// to refuse.
+			return RunConfigSelection{}, fmt.Errorf("reconcile: epic %s carries the label %s%s, and the cloud's runners files declare no named configs at all — declare [configs.%s] in .tick/%s, or remove the label", opts.EpicID, configLabelPrefix, fromLabel, fromLabel, runconfig.OverrideFileName(runconfig.SubstrateCloud))
 		case fromLabel != "":
-			return RunConfigSelection{}, fmt.Errorf("reconcile: epic %s carries the label %s%s, and the runners files declare no named configs at all — declare [configs.%s] in .tick/runners.toml (or the substrate's override file), or remove the label", opts.EpicID, configLabelPrefix, fromLabel, fromLabel)
+			// A local run of an epic designed for a cloud config: the
+			// configs live in the cloud's file, which this substrate never
+			// reads, and the label is the design's word for a world this run
+			// is not in. Refusing would make `config: claude` mean "this
+			// epic can never run locally"; the run says what it did not act
+			// on instead, in its own feed.
+			return RunConfigSelection{Note: fmt.Sprintf("the epic's %s%s label is not acted on: the runners files a %s run reads declare no named configs, so it runs on their own cells", configLabelPrefix, fromLabel, substrate)}, nil
 		}
 		// No configs declared, nothing selecting: the historical
 		// single-routing run, exactly as before tick tda.
 		return RunConfigSelection{}, nil
+	}
+
+	if recorded != "" {
+		if opts.RunConfig != "" && opts.RunConfig != recorded {
+			return RunConfigSelection{}, fmt.Errorf("reconcile: run %s was started on the run config %q, and --config names %q — one run is one config, or its escalation and cost lines describe neither; resume without the flag (or with --config %s), or start the epic on %s under a new --run-id", opts.RunID, recorded, opts.RunConfig, recorded, opts.RunConfig)
+		}
+		if _, ok := cfg.NamedConfig(recorded); !ok {
+			return RunConfigSelection{}, fmt.Errorf("reconcile: run %s was started on the run config %q, which the runners files no longer declare (%s) — restore [configs.%s], or start the epic under a new --run-id", opts.RunID, recorded, strings.Join(declared, ", "), recorded)
+		}
+		if opts.RunConfig == "" {
+			return RunConfigSelection{Name: recorded, Source: "this run's own first selection (a run keeps its config across a resume)"}, nil
+		}
 	}
 
 	chosen, source := "", ""
@@ -183,8 +261,14 @@ const StageConfigSelected = "config_selected"
 // cloud submission preflight, which read the same report for the same
 // reason; the factory's own in-cloud orchestrator is the authority itself
 // and does not preflight its own secrets through a second door.
-func checkSelectedConfigCanRoute(opts Options, selection RunConfigSelection, jobs []RoutedJob) error {
-	if !selection.Selected() {
+//
+// The question is the CLOUD's alone: the rung is the factory's subscription
+// lease, and a local run's claude cells (the operator's blessed review and
+// close-out, the frontier rung) run on the operator's own CLI login, never
+// on a factory token — so a local run is not asked, and costs no network
+// read at construction.
+func checkSelectedConfigCanRoute(opts Options, substrate runconfig.Substrate, selection RunConfigSelection, jobs []RoutedJob) error {
+	if !selection.Selected() || substrate != runconfig.SubstrateCloud {
 		return nil
 	}
 	rungRoles := rungRiders(jobs)

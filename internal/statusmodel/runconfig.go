@@ -1,8 +1,6 @@
 package statusmodel
 
 import (
-	"regexp"
-
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 )
@@ -21,33 +19,28 @@ import (
 // The line's detail is the run's own sentence — "run config claude —
 // selected by the epic's config: label" — and the model keeps only the NAME:
 // the sentence rides in Recent beside it, and a field a program parses is
-// not the place for prose. The parse is a prefix cut on the line the
-// reconciler's own Detail builds, so the two cannot drift apart silently: a
-// detail that stops parsing leaves the field null, and the anchors' test
-// catches it in this repository's own goldens before it reaches a renderer.
+// not the place for prose. The parse is the reconciler's own, over the line
+// its own Detail builds, so the two cannot drift apart silently: a detail
+// that stops parsing leaves the field null, and the anchors' test catches it
+// in this repository's own goldens before it reaches a renderer.
 
 // runConfigLine is the reconciler's stage for the selection line
 // (reconcile.StageConfigSelected), spelled here so this package reads it as
 // a word and not a string nobody owns.
 const runConfigLine = reconcile.StageConfigSelected
 
-// runConfigDetail reads the config's NAME out of the line's detail — the
-// prefix of the sentence reconcile.RunConfigSelection.Detail builds, up to
-// the em dash that starts the sentence's other half.
-var runConfigDetail = regexp.MustCompile(`^run config ([a-z0-9][a-z0-9_-]*) —`)
-
 // selectedRunConfig answers the config the run routes under, from the LAST
 // config_selected line in its own feed, or "" when there is none to read.
+// The name is parsed by the reconciler's own reader of its own sentence
+// (reconcile.RunConfigFromDetail), so writer and reader cannot drift apart.
 func selectedRunConfig(feed []runfeed.Event) string {
 	line := latestStage(feed, "", runConfigLine)
 	if line == nil {
 		return ""
 	}
-	if m := runConfigDetail.FindStringSubmatch(line.Detail); m != nil {
-		return m[1]
-	}
-	// A line this reader cannot parse is a fact about the line, not licence
-	// to guess: the field stays null, and Recent still carries the sentence
-	// for a person to read.
-	return ""
+	// A line that names no config — a "none — " note, or one this reader
+	// cannot parse — is a fact about the line, not licence to guess: the
+	// field stays null, and Recent still carries the sentence for a person
+	// to read.
+	return reconcile.RunConfigFromDetail(line.Detail)
 }

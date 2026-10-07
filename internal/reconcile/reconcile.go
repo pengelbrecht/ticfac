@@ -1623,7 +1623,8 @@ func New(opts Options) (*Reconciler, error) {
 	// declared default — resolved once here, never per dispatch, and a
 	// selection of a name nobody declared is a refusal here, naming the
 	// declared ones, rather than a silent run on the file's own cells.
-	selection, err := selectRunConfig(opts, substrate, epicConfigLabels(context.Background(), opts))
+	selection, err := selectRunConfig(opts, substrate, epicConfigLabels(context.Background(), opts),
+		recordedRunConfig(opts.Repo, opts.RunID))
 	if err != nil {
 		return nil, fmt.Errorf("reconcile: %w", err)
 	}
@@ -1722,7 +1723,7 @@ func New(opts Options) (*Reconciler, error) {
 	// serve its own rungs? A config whose workers ride a subscription rung a
 	// factory holds no token for is refused here, naming the fix, rather than
 	// silently stepping every dispatch down to Workers AI.
-	if err := checkSelectedConfigCanRoute(opts, selection, resolvedJobsForPreflight(profiles, r.tierProfiles, onDemand)); err != nil {
+	if err := checkSelectedConfigCanRoute(opts, substrate, selection, resolvedJobsForPreflight(profiles, r.tierProfiles, onDemand)); err != nil {
 		return nil, fmt.Errorf("reconcile: %w", err)
 	}
 
@@ -2035,7 +2036,9 @@ func (r *Reconciler) Run(ctx context.Context) (*Result, error) {
 	// rather than inheriting a line from a feed a fresh clone may not hold.
 	// A repository whose runners files declare no named configs at all
 	// selects nothing and the line stays silent — the historical run, exactly
-	// as before, says nothing it has no reason to say.
+	// as before, says nothing it has no reason to say — unless the epic's own
+	// label asked for a config this substrate cannot act on, which the line
+	// then says ("none — ...").
 	if detail := r.runConfig.Detail(); detail != "" {
 		r.record("", StageConfigSelected, "%s", detail)
 	}
