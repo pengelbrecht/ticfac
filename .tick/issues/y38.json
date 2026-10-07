@@ -7,8 +7,9 @@
   "priority": 2,
   "type": "task",
   "owner": "ticks-sandbox@ticks.invalid",
+  "parent": "v5t",
   "discovered_from": "run-epic-v5t/tick-54l/attempt-6",
   "created_by": "ticfac run epic-v5t",
   "created_at": "2026-10-07T02:12:20Z",
-  "updated_at": "2026-10-07T02:12:29.15699Z"
+  "updated_at": "2026-10-07T02:14:46Z"
 }
