@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 62,
-  "state": "integrating",
-  "reason": "integrating krh attempt 8 into epic/t8u",
-  "updated_at": "2026-10-07T19:18:57Z",
+  "sequence": 63,
+  "state": "gating",
+  "reason": "running the integrated gate for krh on ad3e150cef04",
+  "updated_at": "2026-10-07T19:19:09Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -44,7 +44,7 @@
     },
     {
       "tick_id": "krh",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 8
     },
     {
