@@ -1,0 +1,13 @@
+{
+  "id": "0iu",
+  "title": "Stuck watch and steer for claude-sub container jobs on a hosted deployment",
+  "description": "The stuck watch and the steer route live in the WorkerAgent. A claude-sub job on a hosted deployment runs in its own container with no agent, so a steer gets 409 not_conversing and nothing nudges or stops a silent claude worker before its wall or harness_budget_ms. Either watch container jobs from the state route's log cursor, or make the Go side's watch treat not_conversing on a rung job as expected.\nevidence: cloudflare/src/sandbox-dispatch.ts:921 steerAgent; cloudflare/src/sandbox-executor.ts startContainerAttempt (no stuck_seconds consumer)\n\nticfac run epic-v5t filed this backlog tick from the finding 6716c8f7638802fbfec66944674b05aa500ff2bf0821538878d8c0d7c94c8ba8 (reported by run-epic-v5t/tick-8rm/attempt-9) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/6716c8f7638802fbfec66944674b05aa500ff2bf0821538878d8c0d7c94c8ba8.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-epic-v5t/tick-8rm/attempt-9",
+  "created_by": "ticfac run epic-v5t",
+  "created_at": "2026-10-07T03:45:53Z",
+  "updated_at": "2026-10-07T03:45:53Z"
+}
