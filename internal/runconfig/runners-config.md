@@ -240,7 +240,10 @@ The rules that keep a config honest:
   the substrate override's and every tier — because the config is the thing a
   run chose, and nothing beneath it may win over it. Its `tier_policy`, when
   it declares one, REPLACES the merged policy: a ladder is a whole thing.
-  Cells the config does not declare keep the merged document's values.
+  Cells the config does not declare keep the merged document's values —
+  field by field, so a config cell that switches `kind` keeps the `args`
+  beneath it unless it says `args = []` (a claude cell over a pi cell would
+  otherwise hand claude pi's `--approve`).
 - **A selection of a name nobody declared is refused** naming the declared
   ones — never a silent run on the file's own cells. An operator who asked
   for `claude` and silently got GLM would be an operator whose epic ran on a
@@ -254,11 +257,21 @@ does — the override's cells over the common file's — so a cloud file can
 declare the configs and the common file the base cells, or the two can split a
 config between them. A config declared only in `runners.cloud.toml` does not
 exist for a local run, exactly as a tier declared only in
-`runners.local.toml` does not exist for a cloud one.
+`runners.local.toml` does not exist for a cloud one. So a local run of an
+epic labelled `config: claude` for the cloud is not refused: when the files
+it reads declare no named configs, it runs on their own cells and says in its
+feed that the label was not acted on. `--config` on such a run, and the label
+on a cloud run whose files declare none, are refused.
+
+**One run is one config.** A resume keeps the config the run's first
+incarnation selected (read from the run's own feed), whatever the label or
+the default say now; a resume whose `--config` names another config is
+refused — start the epic on it under a new `--run-id`.
 
 On the cloud substrate, a config whose workers ride the **claude-sub rung**
 (claude on its versionless `sonnet`/`opus` aliases) needs the factory to hold
-at least one subscription token: doctor, the cloud submission preflight and a
+at least one subscription token: doctor (every declared config), the cloud
+submission preflight (the config the submitted run will select) and a
 selected run's own start all refuse a claude config with the rung off, naming
 the `wrangler secret put CLAUDE_SUB_TOKEN_<LABEL>` that turns it on — a run
 that asked for claude and silently stepped every dispatch down to Workers AI is
