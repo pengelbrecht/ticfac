@@ -3074,3 +3074,5 @@
 {"ts":"2026-10-07T06:06:13.12299Z","tick":"yaz","action":"create","actor":"ticks-sandbox@ticks.invalid","epic":"ilz","data":{"priority":2,"title":"Final review of the claude-sub operator guide","type":"task"}}
 {"ts":"2026-10-07T06:06:13.146725Z","tick":"kzs","action":"create","actor":"ticks-sandbox@ticks.invalid","epic":"ilz","data":{"priority":2,"title":"Close out the claude-sub operator guide epic","type":"task"}}
 {"ts":"2026-10-07T06:43:23.160719Z","tick":"7r4","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"Run the real-CLI claude-sub smoke test on every CLAUDE_CODE_VERSION bump","type":"task"}}
+{"ts":"2026-10-07T07:07:35.155835Z","tick":"po2","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"claude-sub: carry a quota-stopped job's commits into its redispatch","type":"task"}}
+{"ts":"2026-10-07T07:07:35.202166Z","tick":"4s0","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"claude-sub: same lease-leak and observability review for the orchestrator/review boot in run-workflow.ts","type":"task"}}

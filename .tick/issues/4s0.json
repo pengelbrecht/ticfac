@@ -1,0 +1,12 @@
+{
+  "id": "4s0",
+  "title": "claude-sub: same lease-leak and observability review for the orchestrator/review boot in run-workflow.ts",
+  "description": "PR #251 fixed the lease leak on start throw and cancel for WORKER jobs (sandbox-executor.ts). run-workflow.ts (around its claudeSub lease for a review boot, ~line 1709, released ~2251) leases a subscription for the orchestrator/review container on its own path; check it for the same leak (a throw between lease and container start), and surface its step-down the same way (it already writes a note into the boot's progress line). Not covered by the review's findings list.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T07:07:35.201928Z",
+  "updated_at": "2026-10-07T07:07:35.201928Z"
+}

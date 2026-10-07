@@ -1,0 +1,12 @@
+{
+  "id": "po2",
+  "title": "claude-sub: carry a quota-stopped job's commits into its redispatch",
+  "description": "A claude-sub job whose subscription ran out mid-job is now collected as transient MidJob infrastructure (PR fixing finding 2): answerInfrastructure rejects it and redispatches at the same tier. But a long job may have committed real work before the quota ran out, and the infrastructure path disposes the attempt without carrying that work (disposeRejectedWork/rejectionCarries is skipped because answerInfrastructure returns its refusal first). Carry a MidJob infrastructure failure's commits into the next try the way a missing-result rejection's are carried, so hours of subscription work are not redone on Workers AI. Test: a quotaRanOutFor collect with commits on its branch; the redispatched try starts from them.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T07:07:35.155559Z",
+  "updated_at": "2026-10-07T07:07:35.155559Z"
+}
