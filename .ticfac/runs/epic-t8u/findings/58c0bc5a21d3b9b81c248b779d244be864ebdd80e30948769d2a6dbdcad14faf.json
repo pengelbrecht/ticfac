@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "ncr",
   "attempt": 10,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T19:24:24Z",
+  "triaged_at": "2026-10-07T19:24:33Z",
+  "triaged_by": "ticfac run epic-t8u absorbing ta1",
+  "promoted_as": "ta1",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "ncr",
