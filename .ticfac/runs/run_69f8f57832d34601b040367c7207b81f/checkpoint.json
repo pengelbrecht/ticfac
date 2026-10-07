@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 79,
-  "state": "collecting",
-  "reason": "collecting gzw attempt 15",
-  "updated_at": "2026-10-07T17:19:19Z",
+  "sequence": 80,
+  "state": "integrating",
+  "reason": "integrating gzw attempt 15 into epic/ex6",
+  "updated_at": "2026-10-07T17:19:27Z",
   "ticks": [
     {
       "tick_id": "2p3",
