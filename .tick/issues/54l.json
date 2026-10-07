@@ -6,7 +6,8 @@
   "type": "task",
   "owner": "ticks-sandbox@ticks.invalid",
   "blocked_by": [
-    "tda"
+    "tda",
+    "yck"
   ],
   "parent": "v5t",
   "role": "review",
