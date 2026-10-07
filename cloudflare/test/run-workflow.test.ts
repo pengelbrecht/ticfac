@@ -1,4 +1,5 @@
 import { env, introspectWorkflow, runInDurableObject, SELF } from "cloudflare:test";
+import type { WorkerAttemptSpec } from "ticfac-harness";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { type RunRecord, readHarnessOutput, readRunRecord, reconcileKey } from "../src/artifacts";
@@ -2197,15 +2198,19 @@ describe("the pull request review job (tick dl8)", () => {
     commenter = new FakeCommenter();
     set("REVIEW_COMMENTER", commenter);
     // The routing floor has to hold with NOTHING pinned: every harness/model
-    // var unset, so the review job's omp-on-GLM comes from the review ladder's
-    // built-in floor — not from a deployment that happens to pin it. omp is
-    // the review's floor because the review is the one cloud boot that still
-    // runs a CLI harness in its container; the workers are hosted on
-    // pi-durable and the pi CLI is deleted (epic 43y, tick jhp).
+    // var unset, so the review job's route comes from the review ladder's
+    // built-in floor — not from a deployment that happens to pin it. The
+    // tests below cover the CLI half of the ladder (the review on omp, and
+    // on the claude-sub rung), which is what a deployment that hosts NO
+    // conversations gets: WORKER_AGENTS is unbound here so the hosted kind
+    // is not servable and the floor stays omp. The hosted half — the review
+    // on a WorkerAgent, the default this deployment now runs — is the
+    // describe that follows (tick 8gd).
     set("RUN_HARNESS", undefined);
     set("RUN_MODEL", undefined);
     set("RUN_WORKER_HARNESS", undefined);
     set("RUN_WORKER_MODEL", undefined);
+    delete (env as unknown as Record<string, unknown>).WORKER_AGENTS;
   });
 
   /** A review run, dispatched by the real ingestion path on a fresh project. */
@@ -2424,6 +2429,250 @@ describe("the pull request review job (tick dl8)", () => {
     process.exit(0);
     await settled(runID);
     await pool.release("another-job-holding-the-subscription");
+  });
+});
+
+// ------------------------------------------- the hosted review (tick 8gd) --
+
+/**
+ * The review's conversation, hosted on the run's WorkerAgent (tick 8gd): the
+ * same pull request review job, routed to the hosted kind on a deployment
+ * that binds WORKER_AGENTS. The container runs only the review's
+ * --boot/--finish halves, which the agent drives, so nothing here starts a
+ * process — the supervisor watches the agent, and the agent's settlement is
+ * the boot's verdict.
+ *
+ * The agent is a fake at the same seam the real DO occupies (the
+ * `WORKER_AGENTS` binding, structurally `{ agent(name) }` — the shape
+ * `workerAgentsFromEnv` already accepts for tests): its `start` records the
+ * spec the supervisor composed, which is what these tests assert. The agent's
+ * own behavior — boot phase, conversation, finish phase — is the harness
+ * host's, covered in worker-agent.test.ts and the harness suite; what this
+ * file proves is the supervisor's half: the routing, the watch, the
+ * revocation and the evidence.
+ */
+describe("the hosted review (tick 8gd)", () => {
+  /** The agent the fake namespace hands out, one per sandbox name. */
+  class FakeReviewAgent {
+    phase: "absent" | "booting" | "conversing" | "finishing" | "settled" = "absent";
+    exit_code: number | null = null;
+    /** Settle immediately on start, as a conversation that fails fast does. */
+    autoExit: number | null = null;
+    readonly specs: WorkerAttemptSpec[] = [];
+    readonly reclaims: string[] = [];
+
+    async start(spec: WorkerAttemptSpec) {
+      this.specs.push(spec);
+      if (this.autoExit === null) {
+        this.phase = "conversing";
+      } else {
+        this.phase = "settled";
+        this.exit_code = this.autoExit;
+      }
+      return this.state();
+    }
+
+    async state() {
+      return {
+        phase: this.phase,
+        exit_code: this.exit_code,
+        detail: null,
+        settled_at: this.phase === "settled" ? new Date().toISOString() : null,
+        model: null,
+        branch: null,
+        started_at: null,
+        harness: "pi-durable" as const,
+      };
+    }
+
+    async readLog(offset: number) {
+      return { text: "", offset };
+    }
+
+    async steer() {
+      return { ok: false as const, error: "the attempt is not conversing" };
+    }
+
+    async reclaim(reason: string) {
+      this.reclaims.push(reason);
+      this.phase = "settled";
+      this.exit_code = null;
+      return this.state();
+    }
+
+    async release(): Promise<void> {}
+    async fetch(): Promise<Response> {
+      return Response.json({ error: "upgrade_required" }, { status: 426 });
+    }
+  }
+
+  class FakeAgents {
+    readonly byName = new Map<string, FakeReviewAgent>();
+    /** What every NEW agent settles with at start (null: it converses). */
+    autoExit: number | null = null;
+    agent(name: string): FakeReviewAgent {
+      let agent = this.byName.get(name);
+      if (agent === undefined) {
+        agent = new FakeReviewAgent();
+        agent.autoExit = this.autoExit;
+        this.byName.set(name, agent);
+      }
+      return agent;
+    }
+    get all(): FakeReviewAgent[] {
+      return [...this.byName.values()];
+    }
+  }
+
+  class Posted {
+    readonly items: { project: string; number: number; body: string }[] = [];
+    async comment(project: string, number: number, body: string): Promise<{ id: string }> {
+      this.items.push({ project, number, body });
+      return { id: `c${this.items.length}` };
+    }
+  }
+
+  let agents: FakeAgents;
+  let commenter: Posted;
+
+  beforeEach(() => {
+    agents = new FakeAgents();
+    // A deployment that hosts conversations: WORKER_AGENTS bound, shaped the
+    // way the binding is and `workerAgentsFromEnv` accepts.
+    set("WORKER_AGENTS", { agent: (name: string) => agents.agent(name) });
+    commenter = new Posted();
+    set("REVIEW_COMMENTER", commenter);
+    // Nothing pinned: the review's route comes from the ladder's floor, which
+    // on a hosting deployment IS the hosted kind.
+    set("RUN_HARNESS", undefined);
+    set("RUN_MODEL", undefined);
+    set("RUN_WORKER_HARNESS", undefined);
+    set("RUN_WORKER_MODEL", undefined);
+  });
+
+  /** A review run, dispatched by the real ingestion path on a fresh project. */
+  async function igniteHostedReview(): Promise<{ runID: string; project: string; pr: number }> {
+    const project = `example-org/hosted-review-${++counter}`;
+    await enrolProject(env.DB, {
+      project,
+      enrolled_by: "operator@example.com",
+      enrolled_at: new Date().toISOString(),
+    });
+    const dispatched = await ingestPullRequestEvent(env, {
+      action: "opened",
+      repository: { full_name: project },
+      sender: { login: "maintainer" },
+      pull_request: {
+        number: 43,
+        node_id: `PR_kwD0TEST${counter}`,
+        state: "open",
+        draft: false,
+        user: { login: "maintainer" },
+        author_association: "MEMBER",
+        labels: [],
+        head: { sha: "a".repeat(40), repo: { full_name: project } },
+        base: { sha: BASE_SHA },
+      },
+    });
+    expect(dispatched.state).toBe("dispatched");
+    if (dispatched.state !== "dispatched") throw new Error("unreachable");
+    return { runID: dispatched.run_id, project, pr: dispatched.facts.number };
+  }
+
+  it("routes the review to its WorkerAgent: no process, the hosted kind, the review spec", async () => {
+    const { runID, pr } = await igniteHostedReview();
+
+    await waitFor("the review's agent to be started", async () =>
+      agents.all.some((agent) => agent.specs.length > 0) ? agents.all[0] : null,
+    );
+    // No orchestrator process anywhere: the container runs only the halves
+    // the agent drives.
+    expect(sandboxes.booted).toHaveLength(1);
+    expect(sandboxes.booted[0]!.processes).toHaveLength(0);
+
+    const spec = agents.all[0]!.specs[0]!;
+    expect(spec.kind).toBe("review");
+    expect(spec.role).toBe("review");
+    expect(spec.tick).toBe(reviewEpic(pr));
+    expect(spec.model).toBe("workers-ai/@cf/zai-org/glm-5.3");
+    expect(spec.env.TICKS_HARNESS).toBe("pi-durable");
+    expect(spec.env.TICKS_PHASE).toBe("review");
+    expect(spec.env[REVIEW_PR_ENV]).toBe(String(pr));
+    expect(spec.env[REVIEW_HEAD_SHA_ENV]).toBe("a".repeat(40));
+    // A review holds a read-only credential: its clone goes through the
+    // factory's own git door, not github.com with the operator's token.
+    expect(spec.env.TICKS_REPO_URL).toContain(FACTORY);
+    expect(spec.env.TICKS_REPO_URL).not.toContain("github.com");
+    // The run token the conversation spends with is the run's own.
+    expect(spec.env.AI_GATEWAY_TOKEN).toBeTruthy();
+
+    // The comment the finish posted is the evidence; without it the run is
+    // not done. The test plays the finish: post, then settle the agent.
+    const response = await SELF.fetch(`${FACTORY}${REVIEW_PATH}`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${spec.env.TICKS_FACTORY_TOKEN}`,
+        "content-type": "text/markdown",
+      },
+      body: "Hosted review findings:\n- one finding",
+    });
+    expect(response.status).toBe(201);
+
+    agents.all[0]!.phase = "settled";
+    agents.all[0]!.exit_code = 0;
+    const run = await settled(runID);
+    expect(run.state).toBe("completed");
+    expect(await getRunProgress(env.DB, runID)).toMatchObject({ progress: "advanced" });
+    expect(commenter.items).toHaveLength(1);
+    expect(commenter.items[0]!.number).toBe(pr);
+    expect(commenter.items[0]!.body).toContain("- one finding");
+    expect(sandboxes.booted[0]!.destroyed).toBe(true);
+  });
+
+  it("reclaims the hosted conversation when the run trips, and the credential dies with it", async () => {
+    const { runID } = await igniteHostedReview();
+    const agent = await waitFor("the review's agent to be started", async () =>
+      agents.all.some((a) => a.specs.length > 0) ? agents.all[0]! : null,
+    );
+
+    const stopped = await stopRun(env, runID, "operator");
+    expect(stopped.outcome).toBe("stopping");
+
+    const run = await settled(runID);
+    expect(run.state).toBe("stopped");
+    // The conversation was stopped where it stood — no finish phase, and the
+    // run's account of why rides the reclaim.
+    expect(agent.reclaims).toHaveLength(1);
+    expect(agent.exit_code).toBeNull();
+    // Nothing was posted and nothing counts as progress.
+    expect(commenter.items).toHaveLength(0);
+    expect(await getRunProgress(env.DB, runID)).toMatchObject({ progress: "none" });
+    expect(sandboxes.booted[0]!.destroyed).toBe(true);
+  });
+
+  it("reboots a hosted review whose conversation settled without posting, and fails when the boots run out", async () => {
+    const { runID } = await igniteHostedReview();
+
+    await waitFor("the first review's agent to be started", async () =>
+      agents.all.some((a) => a.specs.length > 0) ? agents.all[0]! : null,
+    );
+    // Every boot's conversation settles failed (the finish found nothing to
+    // post): the review is rebooted, each boot on a fresh agent, until the
+    // boots run out.
+    agents.autoExit = 12;
+    // ...including the one already conversing.
+    agents.all[0]!.phase = "settled";
+    agents.all[0]!.exit_code = 12;
+
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    expect(commenter.items).toHaveLength(0);
+    // One agent per boot: a replacement never adopts the failed one's
+    // conversation.
+    expect(agents.all.length).toBe(MAX_SANDBOX_BOOTS);
+    expect(agents.all.map((agent) => agent.specs.length)).toEqual(
+      Array.from({ length: MAX_SANDBOX_BOOTS }, () => 1),
+    );
   });
 });
 

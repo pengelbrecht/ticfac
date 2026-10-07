@@ -308,7 +308,7 @@ FACTORY_MAX_INSTANCES = "12"
 
 # Which harness and model the cloud runs (tick 1cd added the vars; tick uqi
 # pinned them). The built-in defaults live in `src/worker-boot.ts`
-# (`WORKER_DEFAULT_HARNESS` = `pi`, `WORKER_DEFAULT_MODEL` =
+# (`WORKER_DEFAULT_HARNESS` = `pi-durable`, `WORKER_DEFAULT_MODEL` =
 # `workers-ai/@cf/zai-org/glm-5.3`) so an unconfigured deployment still boots
 # a worker that can reach the gateway — the repository's own
 # `[roles.implement]` routes to a vendor a cloud container has no credential
@@ -316,14 +316,28 @@ FACTORY_MAX_INSTANCES = "12"
 # buy is that the choice is no longer a SOURCE EDIT: before them, changing
 # the worker model meant editing TypeScript and redeploying the factory.
 #
-# OPERATOR (ticks uqi, nwn; epic 43y tick jhp): the cloud runs Workers AI
-# models only — nothing in the cloud runs claude. Every factory worker is
-# HOSTED (epic 43y): its conversation runs in the factory's WorkerAgent on
-# pi-durable and its tools run in the container via the --boot/--finish
-# halves, so a worker container's harness kind is pi-durable and the pi CLI
-# is deleted from the image. The review is the one cloud boot that still
-# runs a CLI harness in its container, and omp is the CLI that reaches
-# Workers AI through the gateway; the model may change, the rule does not.
+# OPERATOR (ticks uqi, nwn; epic 43y tick jhp; epic ex6 tick 8gd): the cloud
+# runs Workers AI models only — nothing in the cloud runs claude. Every
+# factory worker is HOSTED (epic 43y): its conversation runs in the factory's
+# WorkerAgent on pi-durable and its tools run in the container via the
+# --boot/--finish halves, so a worker container's harness kind is pi-durable
+# and the pi CLI is deleted from the image. Since tick 8gd the review is
+# hosted the same way — its conversation is a WorkerAgent's, and the review
+# container runs only the review's --boot/--finish halves — so the review
+# routes to the same standing worker harness below and the model may change,
+# the rule does not.
+#
+# RUN_HARNESS is deliberately UNSET here, and the reason is the review's
+# ladder: a review's first rung is this var, and pinning it (as this config
+# once pinned `omp`) would hold the review on that CLI no matter what the
+# worker route says — the review would never reach its hosted kind. Unset,
+# the review falls through to RUN_WORKER_HARNESS (pi-durable, hosted) and the
+# orchestrator container, which needs no harness pin at all (its job is
+# `ticfac run-epic`, and its entrypoint probes default to omp), runs exactly
+# as it did. A deployment that wants the review on a CLI harness — or on the
+# claude-sub rung, claude on a versionless alias — pins RUN_HARNESS itself;
+# that pin is the review's first rung and the orchestrator's probe harness.
+#
 # Pinned explicitly below
 # rather than left to the built-in default, so the deployable config says
 # the rule and no silent default change can decide it: an unset RUN_MODEL
@@ -337,7 +351,6 @@ FACTORY_MAX_INSTANCES = "12"
 #
 #   RUN_WORKER_MODEL = "workers-ai/@cf/zai-org/glm-5.3-flash"
 
-RUN_HARNESS = "omp"
 RUN_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
 RUN_WORKER_HARNESS = "pi-durable"
 RUN_WORKER_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
