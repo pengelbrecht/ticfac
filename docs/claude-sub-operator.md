@@ -69,33 +69,49 @@ active leases, benches and last-seen rate-limit headers.
   attempt's own job id, under a per-subscription concurrency cap
   (`CLAUDE_SUB_MAX_CONCURRENT`, default 2). The lease picks the *usable*
   subscription (not benched, under its cap) with the fewest live leases.
-- **Sticky per attempt job id, while the lease is live.** A lease is sticky:
+- **Sticky per attempt job id, kept alive by traffic.** A lease is sticky:
   a job that already holds a lease gets the same subscription back on every
   later ask, benched or not, because its container's outbound interception
   is bound to that subscription's label the moment it is installed and
-  cannot be swapped mid-flight — but only while the lease stays within
-  `LEASE_TTL_MS` (2 hours) of when it was first taken (`ClaudeSubPoolCore.
-  lease` in `claude-sub.ts`). **A running job never switches subscription
-  mid-ask; a job whose lease goes stale past 2 hours is treated as new on
-  its next ask and may be handed a different one.**
-- **Bench on a quota rejection, until the unified reset.** A 429 classifies as
-  a quota rejection — as opposed to server-side throttling — when the
-  `anthropic-ratelimit-unified-status` header (or one of its per-window
-  variants, excluding any matching `overage`) says `rejected`, **or** when
-  the header is absent but the answer still carries a parseable unified
-  reset. A quota rejection benches that subscription until the reset time
-  the response names (`anthropic-ratelimit-unified-reset`, falling back to
-  `retry-after`, or 60 seconds out if neither is usable — never less than
-  one second out, which is only a floor). A 429 that is *not* a quota
-  rejection (server-side throttling) benches the subscription until
-  `retry-after` if the answer carries one, else 60 seconds. A 401/403 (the
-  token itself is refused) benches it for 24 hours — until someone rotates
-  it (`classifyAnswer` in `claude-sub.ts`).
+  cannot be swapped mid-flight. **A running job never switches
+  subscription.** The proxy refreshes the job's lease as its requests pass,
+  at most once a minute (`LEASE_REFRESH_MS`), so `LEASE_TTL_MS` (2 hours)
+  measures *silence*, not job length: only a lease whose job has sent
+  nothing for 2 hours is reclaimed (`ClaudeSubPoolCore.lease` and the
+  proxy's refresh in `claude-sub.ts`).
+- **Only inference answers judge the subscription.** The proxy forwards an
+  allowlist of routes (`CLAUDE_SUB_ROUTES`) and refuses everything else with
+  a 403, never forwarding it. Of what it forwards, only `/v1/messages*`
+  answers are classified (`classifyAnswer`); a startup read's status is that
+  endpoint's own, never the subscription's.
+- **Bench on the quota, until the unified reset.** Two answers mean the
+  subscription's quota is spent:
+  - a 429 whose `anthropic-ratelimit-unified-status` (or a per-window
+    variant other than `overage`) says `rejected`, or that carries a
+    parseable unified reset with no status — benched until
+    `anthropic-ratelimit-unified-reset`, else `retry-after`, else 60 seconds
+    (`THROTTLE_COOLDOWN_MS`; never less than one second, which is only a
+    floor);
+  - **any** answer, a 200 included, marked overage-in-use (the window is
+    spent and Anthropic served the request on usage credits, per token) —
+    benched until the unified reset, else the overage reset, else 5 hours
+    (`OVERAGE_BENCH_FALLBACK_MS`). That answer is **withheld**: the job is
+    handed a synthesized 429 naming the reset instead, so the cloud never
+    draws per-token billing past the first such answer.
+
+  A 429 that is *not* the quota (server-side throttling) benches the
+  subscription until `retry-after` if the answer carries one, else 60
+  seconds. A 401/403 on an inference route (the token itself is refused)
+  benches it for 24 hours — until someone rotates it.
 - **The retry leases another subscription.** Benching never blocks the job
   that triggered it: that job's own answer (its 429 or its error) is
   returned to the container, and it is the *next* lease — a retry, or a
   different job — that is routed around the benched subscription, to
   whichever other configured subscription is usable.
+  A claude-sub job that stopped because its own answer hit the quota is
+  collected as infrastructure, not as a failed try: the tick is redispatched
+  at the same tier rather than climbing the ladder, and the run feed says the
+  subscription's quota ran out under it.
 - **Workers AI when none is free.** If every configured subscription is
   benched (`exhausted`) or at its concurrency cap (`busy`), or none is
   configured at all (`none`), the lease fails and the boot falls back to
