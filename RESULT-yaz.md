@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ilz/attempt-2/yaz`, base `86dbb601593ea3e77dc7f146d1a583acffa6ab42`, harness `claude` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
 # Tick yaz: final review of epic ilz (claude-sub operator guide)
 
 ## What I reviewed
