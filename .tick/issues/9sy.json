@@ -1,0 +1,13 @@
+{
+  "id": "9sy",
+  "title": "Boundary guard refuses .tick/learnings.md the Go reader exempts",
+  "description": "The closeout-epic role is instructed to compact learnings into .tick/learnings.md, and internal/exec/subprocess/report.go:190 exempts that path from the tracker boundary for exactly that reason. Two other enforcers of the same boundary ignore the exemption: the container's pre-commit hook refuses any staged path under .tick/ (image/worker.sh:534), and the cloud collect makes any .tick/ path a boundary-violation verdict that refuses the whole branch (cloudflare/src/worker-collect.ts:313 and :530) — which would discard the close-out's report along with it. So a cloud close-out cannot perform the one part of its job that writes to the repository; this one did not. report.go:197-204's own comment records that this same drift already cost a whole close-out five attempts, and it was closed on the prompt side only. Fix: honour ExemptFromBoundary() in the hook and in worker-collect.ts, with report.go's list as the single fixture both are tested against.\nevidence: image/worker.sh:534 and cloudflare/src/worker-collect.ts:313,530 against internal/exec/subprocess/report.go:190\n\nticfac run run_4d92bab25a7341d3bba01691779168a0 filed this backlog tick from the finding 9bdc0f0c95e0f6a956de021a93dacbfd5008327c5c9f9bb3d611069fb7c9beb4 (reported by run-run_4d92bab25a7341d3bba01691779168a0/tick-kzs/attempt-5) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/9bdc0f0c95e0f6a956de021a93dacbfd5008327c5c9f9bb3d611069fb7c9beb4.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_4d92bab25a7341d3bba01691779168a0/tick-kzs/attempt-5",
+  "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
+  "created_at": "2026-10-07T08:06:55Z",
+  "updated_at": "2026-10-07T08:06:55Z"
+}
