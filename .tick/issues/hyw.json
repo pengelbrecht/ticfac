@@ -1,0 +1,13 @@
+{
+  "id": "hyw",
+  "title": "Attempt records never name the subscription a claude-sub lease billed",
+  "description": "A dispatch's attempt record (.ticfac/runs/\u003crun\u003e/attempts/\u003cn\u003e.json) carries the executor, harness and model but not the claude-sub label the boot leased, though the boot knows it (sandbox-executor.ts:1788 carries claude_sub: {label, jobId}). An operator asking which subscription paid for which attempt — the question behind rotating or removing one, and behind any quota post-mortem — has no answer in the run's own records; today the rung is only inferable from the harness on the report's container-facts line, which says a lease was granted but not by whom. Recording the label on the attempt record would make that readable, and would make an A4-shaped acceptance item checkable directly instead of by inference.\nevidence: .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/attempts/1.json against cloudflare/src/sandbox-executor.ts:1788\n\nticfac run run_4d92bab25a7341d3bba01691779168a0 filed this backlog tick from the finding bcde4cbea1ba3611a230b4a65cae76229c94fe7ac249c2520069aa5854fa5054 (reported by run-run_4d92bab25a7341d3bba01691779168a0/tick-kzs/attempt-5) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/bcde4cbea1ba3611a230b4a65cae76229c94fe7ac249c2520069aa5854fa5054.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_4d92bab25a7341d3bba01691779168a0/tick-kzs/attempt-5",
+  "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
+  "created_at": "2026-10-07T08:07:53Z",
+  "updated_at": "2026-10-07T08:07:53Z"
+}
