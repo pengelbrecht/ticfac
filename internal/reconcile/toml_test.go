@@ -159,9 +159,10 @@ func TestThisRepositorysGateIsReadable(t *testing.T) {
 		t.Fatal("this repository declares [testing.commands] and the reader found none")
 	}
 	// This repository's gate is no longer Go alone (tick odc): the `ts` check
-	// covers the TypeScript control plane's contracts and types, which nothing
-	// ran until b9w found it two major bundle versions behind. What every check
-	// still owes is a command a reader can see and run.
+	// covers the TypeScript control plane's contracts, types and behaviour
+	// (tick tc9 added the behaviour suite), none of which anything ran until
+	// b9w found it two major bundle versions behind. What every check still
+	// owes is a command a reader can see and run.
 	byName := map[string]string{}
 	for _, command := range got {
 		if strings.TrimSpace(command.Command) == "" {

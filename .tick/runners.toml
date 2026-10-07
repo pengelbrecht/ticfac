@@ -180,20 +180,38 @@ go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./..
 # control plane sat pinned to contract bundle 3.0.0 against a 5.2.0 bundle,
 # wrong about three record shapes, for two major versions.
 #
-# What is here and what is NOT is a measurement, not a preference. On this host:
-# pnpm install from a warm store 1s, contracts:check under 1s, tsc --noEmit 2s,
-# vitest 82s. Gate commands run SERIALLY, so vitest would take the gate from
-# 3m26s to about 4m48s on every tick — and the gate's speed is what made this
-# epic survivable at all.
+# vitest is IN this command now (tick tc9). Until it, the gate took the two
+# cheap checks and CI took behaviour — a split odc measured into being: gate
+# commands run SERIALLY, and 82s of vitest against ~3s of checks was a real
+# cost. The split was also a hole, and the hole had a shape: mn7's worker ran
+# cloud/factory's suite, the gate never did, so a TypeScript behaviour change
+# could settle a tick with no gate ever running its tests (yoh's final-review
+# finding dfae216d, filed as tc9). A gate that does not run the behaviour
+# suite is not a gate on the code a tick changed; it is a gate on the shape
+# of that code.
 #
-# So the gate takes the two cheap checks and CI takes vitest, where it runs as
-# its own job beside the 7m15s Go job and costs no wall clock at all. The split
-# is stated rather than implied: THIS GATE COVERS CONTRACTS AND TYPES, NOT
-# BEHAVIOUR. A behavioural TypeScript regression is caught by CI on the epic PR,
-# before anything reaches main, and never by this line.
+# The condition tc9 set for the move — deterministic under load — is met: both
+# known flakes are fixed (3cq's leaked Workflow booting containers into the
+# next test's sandboxes, #43; the refused publish-slot release, eg9, #21), and
+# what keeps the suite deterministic lives in cloudflare/vitest.config.ts —
+# files run serially (fileParallelism stays off: parallel failed one run in
+# five on exactly this host) and every test and hook is bounded at 30s.
 #
-# contracts:check is the one that earns its place here: it is the check that
-# would have caught b9w's drift the day it happened, and it costs a second.
+# The cost, measured on this host on 2026-10-07 with the machine at load ~5
+# (other runs' workers): 1864 tests in 80 files, three consecutive green runs
+# at 208s, 233s and 353s. The command declares no timeout of its own — vitest
+# has no global bound, and its per-test bounds are set in the config — so the
+# harness bound (60m) is the outer one, and the worst observed run is 6% of
+# it. The ts command goes from ~6s to about 3.5-6m, beside a Go half that
+# still owns the gate's wall clock.
+#
+# The spelling is `vitest run`, the exit-when-done form: bare `vitest` is watch
+# mode, and a gate command that never exits is a gate that holds its harness
+# bound open for the full hour on every tick while refusing nothing.
+#
+# contracts:check is the one that earned its place before all this: it is the
+# check that would have caught b9w's drift the day it happened, and it costs a
+# second.
 #
 # `pnpm lint` is Biome (tick ncr) — this side's gofmt AND its vet, in one Rust
 # binary. It is IN this command rather than a sibling [testing.commands] entry
@@ -208,8 +226,13 @@ go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./..
 # found here — the unused variable, the implicit anys — is warning severity, so
 # without it this half cannot refuse what it was added to catch.
 #
-# This is still CONTRACTS AND TYPES, not behaviour: Biome reads one file at a
-# time and answers about its shape, not about what the Worker does.
+# Biome itself is still shape, not behaviour: it reads one file at a time. The
+# behaviour half of this command is vitest, which is why it is here.
+#
+# What still rides with CI alone: the two node --test suites around the
+# scripts themselves (contracts:test, operator-strings — sub-second each,
+# run by ci.yml's `pnpm test`). The gate takes the behaviour suite the
+# finding was about, not every check that touches cloudflare/.
 #
 # The two-layout fallback is GONE (tick 9a8). It existed only while Phase 4's
 # l9n moved cloud/factory to cloudflare/: this command is read from the RUN'S
@@ -217,7 +240,7 @@ go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./..
 # move the two disagreed and l9n could never have passed the gate whose job it
 # was to move. Phase 4 merged to main on 2026-09-19 and neither cloud/factory
 # nor cloud/sandbox exists any more, so the fallback arm named nothing.
-ts = { command = "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit", description = "TypeScript format, lint, contracts and types" }
+ts = { command = "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit && pnpm exec vitest run", description = "TypeScript format, lint, contracts, types and tests" }
 
 [environment.commands]
 which-go = { command = "which go", description = "Go toolchain on PATH" }

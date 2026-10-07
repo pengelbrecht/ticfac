@@ -80,9 +80,15 @@ gate:
 # own [testing.commands] entry, so each check records its own evidence and a
 # reader can see which half refused a tick.
 #
-# vitest is deliberately NOT here: it is 82s against these two at 3s, gate
-# commands run serially, and CI runs it as its own job beside the Go one for no
-# wall clock at all. This target covers CONTRACTS AND TYPES, not behaviour.
+# vitest IS here (tick tc9): until it, a TypeScript behaviour change could
+# settle a tick without its tests ever running in the gate — the worker ran
+# the suite, the gate did not (yoh review finding dfae216d). The suite is
+# deterministic now (3cq's leaked Workflow and the refused-slot flake are
+# both fixed; cloudflare/vitest.config.ts runs files serially and bounds
+# every test at 30s), and three consecutive runs on this host at load ~5
+# took 208/233/353s. This target now covers CONTRACTS, TYPES AND BEHAVIOUR;
+# the two node --test suites around the scripts themselves still ride with
+# CI's `pnpm test`.
 #
 # `pnpm lint` is Biome (tick ncr), the formatter and linter this side had
 # neither of. It rides inside this one command rather than taking a target of
@@ -96,7 +102,7 @@ gate:
 # optional-chain misses — is warning severity. Without the flag this is a gate
 # that cannot refuse the things it was added to catch.
 ts-gate:
-	cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit
+	cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit && pnpm exec vitest run
 
 # The gate, with the cache refused. Slower and unconditional.
 suite:

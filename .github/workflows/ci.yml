@@ -406,14 +406,19 @@ jobs:
       # against a 5.2.0 bundle, wrong about three record shapes, for two major
       # versions, silently.
       #
-      # vitest is HERE and not in the per-tick gate because it is 82s against
-      # the gate's other TypeScript checks at 3s, and gate commands run
-      # serially: it would take every tick's gate from 3m26s to about 4m48s.
-      # Here it runs beside the Go job, which is several times longer, so it
-      # costs no wall clock at all.
+      # The per-tick gate runs vitest too now (tick tc9): the odc split - the
+      # gate for contracts and types, CI for behaviour - let a TypeScript
+      # change settle a tick without its tests ever running in the gate. So
+      # this step is no longer the only behaviour check. It still carries the
+      # suites the gate does not run (contracts:test and operator-strings, the
+      # node --test suites around the scripts themselves), and a second,
+      # independent run of vitest on a 2-vCPU runner - the environment the
+      # file-parallelism decision in cloudflare/vitest.config.ts says cannot
+      # be settled on a laptop.
       #
-      # The split, stated so neither side can quietly claim the other's work:
-      # the GATE covers contracts and types, THIS covers behaviour.
+      # The split, restated so neither side can quietly claim the other's
+      # work: the GATE covers contracts, types and behaviour; THIS runs the
+      # whole suite on CI's own hardware, before anything reaches main.
       - name: pnpm test
         working-directory: cloudflare
         run: pnpm test
