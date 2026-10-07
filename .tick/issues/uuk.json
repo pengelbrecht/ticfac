@@ -2,6 +2,7 @@
   "id": "uuk",
   "title": "Hosted re-Start of a claude job past its lease TTL boots a rival worker",
   "description": "On a deployment that binds WORKER_AGENTS, startNamedAttemptUnchecked sends a boot without claude_sub to startHostedAttempt whenever the agent's state is absent. A claude-sub container job never has an agent, so its state is always absent. Once the job outlives LEASE_TTL_MS (2h), the sticky lease has lapsed. A re-Start of the same attempt (orchestrator restart or adoption) that finds every subscription busy then steps down and starts a hosted worker on the same container name beside the running claude worker. It also overwrites the boot record's harness with pi-durable, which moves the state route and the reclaim to the agent. Separately, a lapsed lease lets the pool exceed its per-subscription cap while the job still runs. Fix: before routing, consult the recorded boot (deps.boots); an unsettled boot whose harness is not the hosted kind goes to startContainerAttempt and adopts. Also consider renewing the lease while its job is running.\nevidence: cloudflare/src/sandbox-executor.ts:725-766 (routing keyed on boot.claude_sub and agent state only); cloudflare/src/claude-sub.ts:107 LEASE_TTL_MS and :331 sticky lease bounded by the TTL\n\nticfac run epic-v5t filed this backlog tick from the finding 359472e338a57cbbea9e199f555396c141ffe618e2b1fdf94672084a38909bd4 (reported by run-epic-v5t/tick-8rm/attempt-9) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/359472e338a57cbbea9e199f555396c141ffe618e2b1fdf94672084a38909bd4.json on the run branch.",
+  "notes": "2026-10-07 05:45 - ticfac run epic-v5t: created by absorbing finding 359472e338a57cbbea9e199f555396c141ffe618e2b1fdf94672084a38909bd4 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-v5t/absorptions/359472e338a57cbbea9e199f555396c141ffe618e2b1fdf94672084a38909bd4.json on epic/v5t, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-v5t/tick-8rm/attempt-9",
   "created_by": "ticfac run epic-v5t",
   "created_at": "2026-10-07T03:44:56Z",
-  "updated_at": "2026-10-07T03:44:56Z"
+  "updated_at": "2026-10-07T03:45:05.616305Z"
 }
