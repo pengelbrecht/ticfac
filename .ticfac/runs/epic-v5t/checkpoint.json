@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 61,
-  "state": "collecting",
-  "reason": "collecting the closeout-epic job for 9uc",
-  "updated_at": "2026-10-07T03:53:19Z",
+  "sequence": 62,
+  "state": "integrating",
+  "reason": "integrating 9uc attempt 10 into epic/v5t",
+  "updated_at": "2026-10-07T03:55:19Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "9uc",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 10
     },
     {
