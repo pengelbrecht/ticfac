@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "8rm",
   "attempt": 9,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T03:44:47Z",
+  "triaged_at": "2026-10-07T03:45:01Z",
+  "triaged_by": "ticfac run epic-v5t absorbing uuk",
+  "promoted_as": "uuk",
   "provenance": {
     "run_id": "epic-v5t",
     "tick_id": "8rm",
