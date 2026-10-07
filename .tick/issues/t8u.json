@@ -7,8 +7,8 @@
   "priority": 2,
   "type": "epic",
   "owner": "peter@engelbrecht.dk",
-  "acceptance_criteria": "The full gate on an idle machine completes in under half its current wall clock, measured the same way (time the declared command on a quiet host, before and after). No test asserts on a condition it can sample rather than wait for. Every defect class the current suite catches is still caught: the FETCH_HEAD, refmap, peek-ref and ref-lock regressions each still fail their guard when reintroduced. Nothing in the run's durable-evidence semantics changes without its own tick saying so.",
+  "acceptance_criteria": "[A1] The full suite — go test -timeout 45m -parallel 12 ./..., what `make test` runs and CI's go job and epic close-out run — completes in under half its current wall clock on an idle machine, measured the same way (time the command on a quiet host, before and after). The per-tick gate is `go test -short` and has skipped the end-to-end tests since tick miu (2026-09-20), so it is not what this measures: the suite this epic profiles lives in the full run.\n[A2] No test asserts on a condition it can sample rather than wait for.\n[A3] Every defect class the current suite catches is still caught: the FETCH_HEAD, refmap, peek-ref and ref-lock regressions each still fail their guard when reintroduced.\n[A4] Nothing in the run's durable-evidence semantics changes without its own tick saying so.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T06:57:10.170231Z",
-  "updated_at": "2026-09-27T06:30:19.444578Z"
+  "updated_at": "2026-10-07T14:59:02Z"
 }
