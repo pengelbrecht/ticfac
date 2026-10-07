@@ -1,0 +1,13 @@
+{
+  "id": "oqn",
+  "title": "ReattachSettled names the requested pair for a stepped-down rung attempt",
+  "description": "ReattachSettled re-describes a settled attempt from the dispatch when the orchestrator's disk is gone, and its record names Options' Model/Harness — the pair the dispatch RESOLVED, not the pair that ran. Until y38 the two were invariantly equal (Start's model check guaranteed it); since y38's step-down acceptance a rung dispatch may have run the rung's declared Workers AI fallback instead, and the door's status route names no model, so the re-description cannot learn the truth: the record, and the handle it returns, would name claude/\u003calias\u003e over work that ran pi-durable/\u003cfallback\u003e. A fix needs the status route to name the recorded boot's pair (the factory already records it, d1BootRecord.modelOf) and the reattach to prefer it over the dispatch's resolution.\nevidence: internal/exec/cloudflaresandbox/executor.go:684 (ReattachSettled's record names e.opts.Model/e.opts.Harness); the status route's answer carries no model, cloudflare/src/sandbox-dispatch.ts:120\n\nticfac run epic-v5t filed this backlog tick from the finding 0bb964060f652a7fa48ae50c6c704b0eb1ab4caeca049a4ec6c364e7d82efad0 (reported by run-epic-v5t/tick-y38/attempt-7) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/0bb964060f652a7fa48ae50c6c704b0eb1ab4caeca049a4ec6c364e7d82efad0.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-epic-v5t/tick-y38/attempt-7",
+  "created_by": "ticfac run epic-v5t",
+  "created_at": "2026-10-07T03:12:32Z",
+  "updated_at": "2026-10-07T03:12:32Z"
+}
