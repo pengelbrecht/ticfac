@@ -2,6 +2,7 @@
   "id": "lxo",
   "title": "Worker boundary exempts runners.toml but not runners.local/cloud.toml",
   "description": "exemptFromBoundary lets a worker amend .tick/runners.toml (the runner table) but not its substrate overrides, .tick/runners.local.toml and .tick/runners.cloud.toml, which are the same table. A tick whose deliverable is a change to cloud or local routing therefore cannot be delivered by a worker: tda attempt 2 was refused whole for writing runners.cloud.toml. The exemption list, the prompt line built from it, and contracts/lifecycle-invariants.json if it mirrors the list, should name the whole runners-file family.\nevidence: internal/exec/subprocess/report.go:190 exemptFromBoundary; tda attempt 2 result.json boundary_violations [.tick/runners.cloud.toml]\n\nticfac run epic-v5t filed this backlog tick from the finding ad93309e30a9495a63327c862f6e28378433ed1c38fcf4bb2542fdac5b336794 (reported by run-epic-v5t/tick-tda/attempt-3) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/ad93309e30a9495a63327c862f6e28378433ed1c38fcf4bb2542fdac5b336794.json on the run branch.",
+  "notes": "2026-10-07 03:24 - ticfac run epic-v5t: created by absorbing finding ad93309e30a9495a63327c862f6e28378433ed1c38fcf4bb2542fdac5b336794 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-v5t/absorptions/ad93309e30a9495a63327c862f6e28378433ed1c38fcf4bb2542fdac5b336794.json on epic/v5t, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-v5t/tick-tda/attempt-3",
   "created_by": "ticfac run epic-v5t",
   "created_at": "2026-10-07T01:24:12Z",
-  "updated_at": "2026-10-07T01:24:12Z"
+  "updated_at": "2026-10-07T01:24:22.313593Z"
 }
