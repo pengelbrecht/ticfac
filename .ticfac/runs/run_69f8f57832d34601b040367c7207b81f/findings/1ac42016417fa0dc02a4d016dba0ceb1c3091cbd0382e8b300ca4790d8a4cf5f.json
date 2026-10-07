@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "96s",
   "attempt": 14,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T16:51:21Z",
+  "triaged_at": "2026-10-07T16:51:32Z",
+  "triaged_by": "ticfac run run_69f8f57832d34601b040367c7207b81f absorbing knm",
+  "promoted_as": "knm",
   "provenance": {
     "run_id": "run_69f8f57832d34601b040367c7207b81f",
     "tick_id": "96s",
