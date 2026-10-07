@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 16,
-  "state": "running",
-  "reason": "2pn try 1 (run dispatch #2) is rejected (no-commits): the only commit tick/ex6/attempt-2/2pn carries beyond its base (177cfc3965af) is the container's own report at RESULT-2pn.md: the worker committed no work, and a report is not a deliverable",
-  "updated_at": "2026-10-07T13:51:27Z",
+  "sequence": 17,
+  "state": "dispatching",
+  "reason": "dispatching 2pn as attempt 6",
+  "updated_at": "2026-10-07T13:51:34Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "2pn",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 2
     },
     {
