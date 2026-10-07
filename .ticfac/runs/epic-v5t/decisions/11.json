@@ -1,0 +1,86 @@
+{
+  "schema_version": 3,
+  "decision": 11,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "v5t",
+    "job_id": "run-epic-v5t/tick-8rm/attempt-9",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.1.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:b0e2bfa26280693ae2d479fd3dbeec0b99b14f94c04fc3f006ca558fe2e1efc9",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "2b39fdb56da508c50a383ed653f1764d6caf52e3",
+    "tick_id": "8rm"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "On a deployment that binds WORKER_AGENTS, startNamedAttemptUnchecked sends a boot without claude_sub to startHostedAttempt whenever the agent's state is absent. A claude-sub container job never has an agent, so its state is always absent. Once the job outlives LEASE_TTL_MS (2h), the sticky lease has lapsed. A re-Start of the same attempt (orchestrator restart or adoption) that finds every subscription busy then steps down and starts a hosted worker on the same container name beside the running claude worker. It also overwrites the boot record's harness with pi-durable, which moves the state route and the reclaim to the agent. Separately, a lapsed lease lets the pool exceed its per-subscription cap while the job still runs. Fix: before routing, consult the recorded boot (deps.boots); an unsettled boot whose harness is not the hosted kind goes to startContainerAttempt and adopts. Also consider renewing the lease while its job is running.\nevidence: cloudflare/src/sandbox-executor.ts:725-766 (routing keyed on boot.claude_sub and agent state only); cloudflare/src/claude-sub.ts:107 LEASE_TTL_MS and :331 sticky lease bounded by the TTL",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "Hosted re-Start of a claude job past its lease TTL boots a rival worker"
+      },
+      {
+        "body": "The step-down is covered by the parity guard (static) and by a fake httptest door on the Go side, but no test drives the real door through it. A scratch test confirmed it works: hosted harness, fill MAX1's cap with two claude/sonnet starts, and the third start comes back as pi-durable/workers-ai/@cf/zai-org/glm-5.3 and is accepted by the real executor. Commit it beside TestTheRealDoorRunsAClaudeSubJobOnAHostedDeployment, asserting the handle, the record, one agent started, and no new lease. Lowering the cap through a harness binding (CLAUDE_SUB_MAX_CONCURRENT=1) would keep it to two starts.\nevidence: internal/exec/cloudflaresandbox/claude_sub_e2e_test.go (leased path only); internal/exec/cloudflaresandbox/model_test.go TestASteppedDownRungDispatchStartsAndRecordsThePairThatRan (fake door)",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Real-door Go test for the hosted claude-sub step-down"
+      },
+      {
+        "body": "The stuck watch and the steer route live in the WorkerAgent. A claude-sub job on a hosted deployment runs in its own container with no agent, so a steer gets 409 not_conversing and nothing nudges or stops a silent claude worker before its wall or harness_budget_ms. Either watch container jobs from the state route's log cursor, or make the Go side's watch treat not_conversing on a rung job as expected.\nevidence: cloudflare/src/sandbox-dispatch.ts:921 steerAgent; cloudflare/src/sandbox-executor.ts startContainerAttempt (no stuck_seconds consumer)",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Stuck watch and steer for claude-sub container jobs on a hosted deployment"
+      },
+      {
+        "body": "bw7 was reported from yhe attempt 8's base e5b155f, which does not contain the y38 merge 008fce3cf. In the integrated tree, executor.go's bootedOnTheResolvedModelOrTheRungsDeclaredFallback accepts the rung's declared step-down pair. A real-door run (hosted, cap full) shows the stepped-down pi-durable/glm-5.3 handle accepted by the Go executor.\nevidence: internal/exec/cloudflaresandbox/executor.go:527-539; git merge-base --is-ancestor 008fce3cf e5b155fed -> false",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "bw7 is already fixed in the integrated tree by y38; close it"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-v5t/tick-8rm/attempt-9",
+      "commits": 0,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-v5t/8rm/RESULT-8rm.md",
+      "review_verdict": "READY",
+      "review_verdict_detail": ""
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (READY)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T03:46:40Z",
+  "answered_at": "2026-10-07T03:46:40Z",
+  "provenance": {
+    "run_id": "epic-v5t",
+    "tick_id": "8rm",
+    "attempt": 9,
+    "source_ref": "refs/heads/epic/v5t",
+    "source_sha": "2b39fdb56da508c50a383ed653f1764d6caf52e3",
+    "integration_ref": "refs/heads/epic/v5t",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:b0e2bfa26280693ae2d479fd3dbeec0b99b14f94c04fc3f006ca558fe2e1efc9",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}
