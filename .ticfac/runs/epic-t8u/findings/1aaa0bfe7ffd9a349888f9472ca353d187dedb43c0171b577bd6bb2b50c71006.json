@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "pqs",
   "attempt": 1,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T18:11:40Z",
+  "triaged_at": "2026-10-07T18:11:53Z",
+  "triaged_by": "ticfac run epic-t8u absorbing d2t",
+  "promoted_as": "d2t",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "pqs",
