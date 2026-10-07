@@ -125,7 +125,7 @@ func TestTempTreesGoOnEveryPathIncludingTheSignalExit(t *testing.T) {
 	if lock != nil || !strings.HasPrefix(dir, tmp) {
 		t.Fatalf("with every slot held the gate was handed %s, not a throwaway tree", dir)
 	}
-	shell, err := startShell(dir, "true", gateWaitDelay, time.Now(), nil)
+	shell, err := startShell(dir, "true", gateWaitDelay, time.Now(), nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -260,7 +260,7 @@ func (r *Reconciler) dispatchRepair(ctx context.Context, entry planEntry, marker
 		// repair over nothing (roleJobAnsweredNothing).
 		if refusal, ok := subprocess.AsRefusal(err); ok && refusal.Reason == subprocess.RefusedSettled {
 			if remote := r.settledJobHead(branch); remote != "" && !roleJobAnsweredNothing(remote, base, carried, ledger, "repair_head") {
-				return false, r.finishRepairFromBranch(ctx, entry, marker, identity, merged.AttemptHead, remote, g)
+				return false, r.finishRepairFromBranch(ctx, entry, marker, identity, merged, remote, g)
 			}
 		}
 		startErr := r.refuse(RefusedGate, tick,
@@ -329,7 +329,12 @@ func (r *Reconciler) dispatchRepair(ctx context.Context, entry planEntry, marker
 	// its source is the repaired tree: the repair changed what the gate is
 	// ABOUT, not whose work the gate is over, and the freshness check still
 	// watches the attempt branch for exactly the moves it exists to catch.
-	repaired := merge{AttemptHead: merged.AttemptHead, EpicHead: repairMerge, GateSHA: repairMerge, Merged: true}
+	// The touched pair is the union — the tick's base against the repair's
+	// head — so the re-gate still covers the tick's own exposure and not
+	// only the repair's delta (repairTouched, gate_touched.go).
+	base, head := r.repairTouched(marker, merged, repairMerge)
+	repaired := merge{AttemptHead: merged.AttemptHead, EpicHead: repairMerge, GateSHA: repairMerge, Merged: true,
+		TouchedBase: base, TouchedHead: head}
 
 	// The repair's work is merged and its decision is durable BEFORE the gate
 	// re-runs, so a re-gate that fails again re-enters this function and
@@ -472,9 +477,10 @@ func (r *Reconciler) mergeRepair(marker attemptHandle, head string, g *gateProgr
 // durable: an earlier incarnation dispatched the job, the job settled, and
 // the run went down before the merge was pushed. The merge is made from
 // exactly what the branch holds, the decision lands, and the gate re-runs
-// over it — the same ending the dispatched path reaches. `attemptHead` is
-// the tick's own attempt head, the one the re-gate's fingerprint keeps as
-// its attempt_head (see repairFailedGate).
+// over it — the same ending the dispatched path reaches. `merged` is the
+// tick's OWN failed-gate merge — the one the re-gate's fingerprint keeps as
+// its attempt_head (see repairFailedGate) and whose touched pair the re-gate
+// re-covers (repairTouched).
 //
 // `marker` is the TICK'S attempt marker — the one the gate and the close are
 // about. Everything done to the REPAIR (fetch its branch, name it in the
@@ -487,13 +493,18 @@ func (r *Reconciler) mergeRepair(marker attemptHandle, head string, g *gateProgr
 // the tick as rejected work nobody had merged — while its head was on the
 // integration branch all along.
 func (r *Reconciler) finishRepairFromBranch(ctx context.Context, entry planEntry, marker, repairMarker attemptHandle,
-	attemptHead, remote string, g *gateProgress) error {
+	merged merge, remote string, g *gateProgress) error {
 
 	repairMerge, err := r.mergeRepair(repairMarker, remote, g)
 	if err != nil {
 		return err
 	}
-	repaired := merge{AttemptHead: attemptHead, EpicHead: repairMerge, GateSHA: repairMerge, Merged: true}
+	// The re-gate's pair is the tick's base against the repair's head, the
+	// union — so a repair that fixes one check cannot stop the gate from
+	// covering the tick's own exposure (repairTouched, gate_touched.go).
+	base, head := r.repairTouched(marker, merged, repairMerge)
+	repaired := merge{AttemptHead: merged.AttemptHead, EpicHead: repairMerge, GateSHA: repairMerge, Merged: true,
+		TouchedBase: base, TouchedHead: head}
 	if err := r.recordRepairDecision(
 		Dispatch{RunID: r.runID, EpicID: r.opts.EpicID, TickID: marker.TickID, Attempt: marker.Attempt,
 			JobID: repairMarker.JobID, Role: RoleRepairGate, Repo: r.opts.Repo, Remote: r.opts.Remote},
