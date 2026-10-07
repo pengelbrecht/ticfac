@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 11,
-  "state": "collecting",
-  "reason": "collecting 2p3 attempt 1",
-  "updated_at": "2026-10-07T13:50:44Z",
+  "sequence": 12,
+  "state": "running",
+  "reason": "2p3 try 1 (run dispatch #1) is rejected (no-commits): the only commit tick/ex6/attempt-1/2p3 carries beyond its base (88c0ba451b81) is the container's own report at RESULT-2p3.md: the worker committed no work, and a report is not a deliverable",
+  "updated_at": "2026-10-07T13:50:55Z",
   "ticks": [
     {
       "tick_id": "2p3",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 1
     },
     {
