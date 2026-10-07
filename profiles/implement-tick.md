@@ -85,6 +85,15 @@ isolated git worktree that is yours alone. Nobody will answer a question.
   empty branch. A finding whose whole fix is a tracker edit carries the same
   object as its `"tracker_edit"` key, and the run applies it rather than
   filing a tick for it.
+- When the fix is a change to a file under `.tick/` that you may not write —
+  the run's own configuration, such as `.tick/runners.cloud.toml` or
+  `.tick/runners.local.toml` — do not write it, do not answer BLOCKED for a
+  person, and do not leave a `sed` for the operator. Report a v2 finding
+  carrying the exact change as its `"protected_change"` key:
+  `{"path": ".tick/runners.cloud.toml", "append": "<lines to add at the end>"}`
+  (or `"content"` for the whole new file). The run applies it itself onto the
+  epic branch after the close-out, as a labelled commit, and the epic PR
+  lists it for the person who merges. Do the rest of the tick's work as usual.
 - Commit source and tests only — never build output, caches or coverage files.
 - If the task is ambiguous or something you need is missing, say so in the
   report rather than guessing.

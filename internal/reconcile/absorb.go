@@ -80,6 +80,10 @@ type findingDecision struct {
 	// finding was fixed by the run, not absorbed. Empty otherwise.
 	FixedAs string
 	Edit    string
+	// Protected names the protected change the finding carries, which the
+	// run applies at the close-out's close (protected_changes.go): no tick
+	// was created for it. Empty otherwise.
+	Protected string
 }
 
 // findingLeftNote is what the tick whose attempt discovered the finding says
@@ -95,6 +99,14 @@ func (r *Reconciler) findingLeftNote(marker attemptHandle, finding subprocess.Fi
 			"triaged as fixed by that commit.",
 			r.runID, r.attemptName(marker.TickID, marker.Attempt), finding.Kind, finding.Title, key,
 			finding.Severity, decided.Edit, r.branch, short(decided.FixedAs))
+	}
+	if decided.Protected != "" {
+		return fmt.Sprintf("ticfac run %s: %s reported a finding whose fix is %s, a file no worker may write — "+
+			"%s %q (key %s, severity %s). No tick is created for it: the run applies the change itself onto %s "+
+			"after the close-out's reads, as a labelled commit, and the epic PR lists it under protected changes "+
+			"for the merger.",
+			r.runID, r.attemptName(marker.TickID, marker.Attempt), decided.Protected, finding.Kind, finding.Title,
+			key, finding.Severity, r.branch)
 	}
 	if decided.TickID != "" {
 		what := fmt.Sprintf("absorbed into the running epic as tick %s, with nobody triaging", decided.TickID)
@@ -178,6 +190,18 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 	// to satisfy, and gates nothing here.
 	if needsLiveRun(*standing) {
 		return r.decideLiveRunFinding(ctx, marker, *standing, dispatch)
+	}
+
+	// A finding whose deliverable is an edit of a file the worker boundary
+	// refuses is never a worker's tick either (epic-v5t's yck,
+	// protected_changes.go): carrying the change, it is applied by the run at
+	// the close-out's close; naming it only in prose, it is a backlog tick
+	// outside the epic. Neither gates this epic's done.
+	if change, ok := standing.ProtectedChange(); ok {
+		return r.holdProtectedChange(marker, *standing, change), nil
+	}
+	if paths := protectedDeliverable(standing.Title, standing.Body); len(paths) > 0 {
+		return r.decideProtectedEditFinding(ctx, marker, *standing, dispatch, paths)
 	}
 
 	// The epic's own definition of done, decided once: [A<n>] items resolved

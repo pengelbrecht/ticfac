@@ -581,6 +581,14 @@ func (r *Reconciler) absorbNotReadyFindings(ctx context.Context, durable *durabl
 				"it was settled otherwise", key, f.Title)
 			continue
 		}
+		if notAWorkersTick(f) {
+			// A protected edit (protected_changes.go): no worker can make it,
+			// so naming it blocking cannot make it the epic's work — the run
+			// applies a carried change at the close-out, and the merger reads it.
+			r.record(reviewed, StageReviewRound, "blocking finding %s (%q) is an edit of a file no worker may "+
+				"write; it is not absorbed into the epic, and the epic PR carries it for the merger", key, f.Title)
+			continue
+		}
 		if record.Placement == runstate.AbsorptionRouted || record.Target != "" || isLiveRun(*record) {
 			// Another repository's, or a live run's: not a tree this run builds.
 			r.record(reviewed, StageReviewRound, "blocking finding %s (%q) is not this run's to fix (%s); it "+
