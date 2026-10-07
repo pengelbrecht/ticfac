@@ -400,6 +400,15 @@ func (r *Reconciler) readyPass(ctx context.Context, co *landingCloseout, pass in
 			if err != nil || repaired {
 				return readiness{}, false, err
 			}
+			// A fold that brought in what the epic is about is reviewed
+			// before the run merges (review_rounds.go, epic ilz).
+			if lands {
+				if refusal, err := r.landFoldOwesReview(ctx, tick, base, baseHead, folded); err != nil {
+					return readiness{}, false, err
+				} else if refusal != nil {
+					return readiness{}, false, refusal
+				}
+			}
 		}
 	}
 

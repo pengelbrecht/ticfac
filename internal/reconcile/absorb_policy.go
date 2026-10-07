@@ -177,7 +177,9 @@ func (r *Reconciler) epicWorkDone(ctx context.Context) (bool, string, error) {
 				rounds.final.Decision), nil
 		}
 	}
-	graph, err := r.tracker.Graph(ctx, r.opts.EpicID)
+	// The graph with its CLOSED tasks (graphWithClosed): the closed review
+	// this looks for is exactly what `tk graph` alone leaves out.
+	graph, err := r.graphWithClosed(ctx)
 	if err != nil {
 		return false, "", fmt.Errorf("read the epic graph of %s to see whether its work is done: %w",
 			r.opts.EpicID, err)
