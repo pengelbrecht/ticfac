@@ -137,10 +137,12 @@ func TestAReleasedWorkerThatOutlivesTheGraceIsNotRejudgedCancelledOnResume(t *te
 	}
 
 	// And the work the recorded verdict was about is on the integration
-	// branch: the release kept it, the resume merged it.
+	// branch: the release kept it, the resume merged it — a1's OWN first
+	// attempt's work, not a fresh attempt's redo of it.
 	clone := cloneRepo(t, f.Repo.Origin, filepath.Join(f.Root, "read"))
-	if work := readGitBlob(t, clone.Dir, "origin/epic/qeu", "work-a1.txt"); work == "" {
-		t.Error("the integration branch carries none of a1's work: the verdict the resume read recorded a head " +
-			"nothing merged")
+	// readGitBlob trims as every git helper here does, so the expected line
+	// is the file's content without its trailing newline.
+	if work := readGitBlob(t, clone.Dir, "origin/epic/qeu", "work-a1.txt"); work != "tick a1, attempt 1, mode linger-past-grace" {
+		t.Errorf("the integration branch carries %q of a1, want its first attempt's own work", work)
 	}
 }
