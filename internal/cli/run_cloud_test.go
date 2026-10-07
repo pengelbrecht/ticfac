@@ -245,16 +245,21 @@ func TestRunCloudRerunOfAHeldRunSupersedesIt(t *testing.T) {
 			stopped = true
 			return 200, map[string]any{"run": map[string]any{"run_id": held, "state": "stopping"}, "mode": "clean"}
 		case request.Method == http.MethodGet && request.Path == "/api/runs/"+held:
-			// Stopping for a read, then ended: the wait sees the run end
-			// before the resume is submitted.
+			// Stopping for a read, then stopped with the lease still its (the
+			// factory writes the state before it releases the lease), then
+			// ended: the resume waits for both.
 			recordReads++
 			state := "stopping"
 			if recordReads > 1 {
 				state = "stopped"
 			}
-			return 200, map[string]any{"run": map[string]any{"run_id": held, "epic": "epic1", "state": state}}
+			answer := map[string]any{"run": map[string]any{"run_id": held, "epic": "epic1", "state": state}}
+			if recordReads < 3 {
+				answer["lease"] = map[string]any{"run_id": held, "epic": "epic1"}
+			}
+			return 200, answer
 		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
-			if !stopped || recordReads < 2 {
+			if !stopped || recordReads < 3 {
 				t.Error("the resume was submitted before the held run had ended: the lease is still its")
 			}
 			return http.StatusCreated, map[string]any{"run": map[string]any{"run_id": resumed, "state": "starting"}}

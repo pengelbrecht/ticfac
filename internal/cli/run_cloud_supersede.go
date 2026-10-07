@@ -94,6 +94,18 @@ func endedHoldingForAPerson(lines []runfeed.Located) (bool, string) {
 	return true, "a hold"
 }
 
+// readCloudRunStatus is one run's whole answer from the factory: the record
+// and the project's lease beside it.
+func readCloudRunStatus(ctx context.Context, client *cloudClient, runID string) (cloudStatusResponse, error) {
+	data, err := client.request(ctx, http.MethodGet, "/api/runs/"+url.PathEscape(runID), nil)
+	if err != nil {
+		return cloudStatusResponse{}, err
+	}
+	var response cloudStatusResponse
+	err = decodeCloudJSON(data, &response)
+	return response, err
+}
+
 // supersedeHeldCloudRun stops a held cloud run cleanly and waits for the
 // factory to say it has ended. It answers "" when the run has ended and the
 // resume may be submitted, else the note the command ends on: the run is
@@ -112,9 +124,14 @@ func supersedeHeldCloudRun(ctx context.Context, client *cloudClient, epicID, run
 		"included) before the resume is submitted; Ctrl-C leaves it stopping and submits nothing\n", runID)
 	deadline := time.Now().Add(cloudSupersedeBound)
 	for {
-		record, err := readCloudRunRecord(ctx, client, runID)
-		if err == nil && !cloudRunLiveness(ctx, runID, record.State).Alive {
-			fmt.Fprintf(prose, "cloud run %s has ended (%s)\n", runID, record.State)
+		// Ended is the run's record past its last state AND the project's
+		// dispatch lease no longer the run's: the factory writes the state
+		// before it releases the lease, and a resume submitted between the
+		// two is refused lease_held.
+		if status, err := readCloudRunStatus(ctx, client, runID); err == nil &&
+			!cloudRunLiveness(ctx, runID, status.Run.State).Alive &&
+			(status.Lease == nil || status.Lease.RunID != runID) {
+			fmt.Fprintf(prose, "cloud run %s has ended (%s)\n", runID, status.Run.State)
 			return ""
 		}
 		if time.Now().After(deadline) {
