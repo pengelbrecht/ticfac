@@ -3,13 +3,14 @@
   "title": "Property-test the Run Workflow's supervision loop with Hegel (TypeScript)",
   "gloss": "hegel: run workflow state machine",
   "description": "Operator, 2026-09-27: trial Hegel's TypeScript library (@hegeldev/hegel, https://hegel.dev/typescript; Node 20.11+; v0.4.7 adds a WebAssembly build of the engine) on the cloudflare/ side.\n\nFIRST: check whether the WebAssembly build loads under workerd (vitest-pool-workers). If it does not, run these tests under plain-Node vitest over pure modules, and say so.\n\nTargets:\n- The Run Workflow's supervision loop as a state machine: boot, observe, done signal, timeout, reboot, finalize. Properties:\n  - every path reaches finalize (0ye's bug class)\n  - a container that cannot be asked is never read as dead (3ed's class)\n  - two orchestrators never run at once\n- The sandbox dispatch door's request validation.\n- The report-only-worker refusal: the TS collect and the Go executor must agree (the dyo/94u pair).\n- Repo-config parsing.\n- The gateway's Workers-AI-only allow-list.\nLoad hegel-skill (github.com/hegeldev/hegel-skill) when writing these. Report what PBT found.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "t8u",
   "acceptance_criteria": "The workerd/WebAssembly question is answered; Hegel property tests cover the supervision loop as a state machine plus the four other targets; they run in pnpm test and CI; anything found is fixed or recorded with its minimal counterexample",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-27T07:39:07.495131Z",
-  "updated_at": "2026-09-27T07:39:07.495131Z"
+  "updated_at": "2026-10-07T19:21:07.303961Z",
+  "started_at": "2026-10-07T19:21:07.30396Z"
 }
