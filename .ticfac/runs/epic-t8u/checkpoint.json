@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 22,
-  "state": "dispatching",
-  "reason": "dispatching 9si as attempt 6",
-  "updated_at": "2026-10-07T14:53:55Z",
+  "sequence": 23,
+  "state": "running",
+  "reason": "9si is running as attempt 6",
+  "updated_at": "2026-10-07T14:54:09Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -34,7 +34,8 @@
     },
     {
       "tick_id": "9si",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 6
     },
     {
       "tick_id": "fn8",
