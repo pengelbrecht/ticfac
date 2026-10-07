@@ -32,6 +32,10 @@ type cloudFactoryRequest struct {
 	Auth   string
 }
 
+// rawFactoryBody is a fake factory's answer served byte for byte, not
+// JSON-encoded: the non-JSON bodies a real one sometimes answers with.
+type rawFactoryBody string
+
 type cloudRoundTripper func(*http.Request) (*http.Response, error)
 
 func (f cloudRoundTripper) RoundTrip(request *http.Request) (*http.Response, error) {
@@ -77,7 +81,11 @@ func newCloudFactory(t *testing.T, handler func(cloudFactoryRequest) (int, any))
 
 		status, body := handler(request)
 		encoded := []byte{}
-		if body != nil {
+		if raw, ok := body.(rawFactoryBody); ok {
+			// A body served as-is: what a factory (or something in front
+			// of it) answers when it is not answering JSON.
+			encoded = []byte(raw)
+		} else if body != nil {
 			var err error
 			encoded, err = json.Marshal(body)
 			if err != nil {
