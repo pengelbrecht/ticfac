@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "89g",
   "attempt": 5,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T19:03:03Z",
+  "triaged_at": "2026-10-07T19:03:18Z",
+  "triaged_by": "ticfac run epic-t8u absorbing kei",
+  "promoted_as": "kei",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "89g",
