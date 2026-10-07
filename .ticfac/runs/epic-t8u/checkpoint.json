@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 23,
-  "state": "running",
-  "reason": "9si is running as attempt 6",
-  "updated_at": "2026-10-07T14:54:09Z",
+  "sequence": 24,
+  "state": "collecting",
+  "reason": "collecting 1qy attempt 3",
+  "updated_at": "2026-10-07T14:58:50Z",
   "ticks": [
     {
       "tick_id": "pqs",
