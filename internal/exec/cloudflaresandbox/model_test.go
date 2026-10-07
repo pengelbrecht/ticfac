@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/profile"
 )
 
 // The model a dispatch's profile resolved crosses the door (tick a08): the
@@ -260,6 +262,90 @@ func TestAStartOnAPinnedClaudeModelIsRefused(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "billing rule") {
 		t.Errorf("the refusal does not name the rule that fired: %v", err)
+	}
+}
+
+// The factory's step-down of a rung dispatch (tick y38): a dispatch that
+// resolved the claude-sub rung and found no subscription free is not refused
+// by the factory — the job is re-resolved onto the deployment's standing
+// Workers AI pair (cloudflare/src/sandbox-executor.ts, claudeSubLeaseForBoot)
+// and the handle names exactly that pair. The executor accepts it as the
+// rung's declared fallback — the model the rule declares, compared
+// namespace-normalised, because the rule spells it in pi's namespace and
+// the factory's step-down (RUN_WORKER_MODEL) in omp's — and the record names
+// the pair that RAN, never the alias the dispatch asked for: the step-down
+// is a live fact about the worker, not a drift to be refused.
+//
+// short: an httptest door and one state directory.
+func TestASteppedDownRungDispatchStartsAndRecordsThePairThatRan(t *testing.T) {
+	h := newHarness(t)
+	h.newExecutorOnRung(t.TempDir(), "claude", "sonnet")
+	// What the factory's step-down actually answers: the deployment's standing
+	// pair, the model in omp's namespace, the harness the hosted kind names —
+	// the shapes wrangler.toml pins (RUN_WORKER_MODEL, RUN_WORKER_HARNESS).
+	h.door.bootedModel = "workers-ai/@cf/zai-org/glm-5.3"
+	h.door.bootedHarness = WorkerAgentHarness
+
+	handle, err := h.start("keh")
+	if err != nil {
+		t.Fatalf("a rung dispatch the factory stepped down was refused: %v", err)
+	}
+	payload, err := local(handle)
+	if err != nil {
+		t.Fatalf("decode the handle payload: %v", err)
+	}
+	if payload.Model != "workers-ai/@cf/zai-org/glm-5.3" || payload.Harness != WorkerAgentHarness {
+		t.Errorf("the handle names %s/%s, want the stepped-down pair the door answered",
+			payload.Harness, payload.Model)
+	}
+	record, err := newStore(payload.State).readAttempt()
+	if err != nil {
+		t.Fatalf("read the attempt record: %v", err)
+	}
+	// The record names the pair that RAN — the pair a trace reads the
+	// provider from — and the alias the dispatch resolved is nowhere in it.
+	if record.Model != payload.Model || record.Harness != payload.Harness {
+		t.Errorf("the record names %s/%s, want the pair that ran (%s/%s)",
+			record.Harness, record.Model, payload.Harness, payload.Model)
+	}
+	if record.Model == "sonnet" || record.Harness == "claude" {
+		t.Errorf("the record names the alias the dispatch resolved (%s/%s), not the pair that ran",
+			record.Harness, record.Model)
+	}
+	// And the pair the door answered is exactly the rung's declared fallback,
+	// the two spellings of one model: omp's here, pi's in the rule.
+	rung, onRung := profile.SubscriptionRungFor("claude", "sonnet")
+	if !onRung {
+		t.Fatal("claude/sonnet is not a subscription rung pair")
+	}
+	if profile.WorkersAIModelCore(payload.Model) != profile.WorkersAIModelCore(rung.Fallback) {
+		t.Errorf("the stepped-down model %q is not the rung's declared fallback %q",
+			payload.Model, rung.Fallback)
+	}
+}
+
+// The step-down acceptance is EXACT (tick y38): the rung's declared fallback
+// is the one Workers AI model a stepped-down rung dispatch may run on. A door
+// that answers a different Workers AI model — a deployment whose standing
+// model drifted from the rule's declared fallback — is refused as before,
+// because a start that recorded it would name a pairing this run's rule
+// never chose.
+//
+// short: an httptest door and one state directory.
+func TestASteppedDownRungDispatchOnAnotherWorkersAIModelIsRefused(t *testing.T) {
+	h := newHarness(t)
+	h.newExecutorOnRung(t.TempDir(), "claude", "sonnet")
+	h.door.bootedModel = "workers-ai/@cf/zai-org/glm-5.3-flash"
+	h.door.bootedHarness = WorkerAgentHarness
+	_, err := h.start("keh")
+	if err == nil {
+		t.Fatal("a rung dispatch stepped down to a Workers AI model the rung does not declare was accepted")
+	}
+	if !strings.Contains(err.Error(), "glm-5.3-flash") || !strings.Contains(err.Error(), "sonnet") {
+		t.Errorf("the refusal does not name both models: %v", err)
+	}
+	if st := newStore(h.ex.stateDirFor(h.spec.JobID, 1)); st.exists(fileAttempt) {
+		t.Error("an attempt record was written for a worker on a model the rung does not declare")
 	}
 }
 

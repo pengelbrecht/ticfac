@@ -31,9 +31,13 @@ const ExecutorName = "cloudflare-sandbox"
 // the container its tools run in (tick 4uj). A hosted start names it in the
 // handle, and Start accepts exactly that one harness mismatch for the same
 // reason it refuses every other: the record a caller keeps must name the
-// harness that ran. No container boot can produce the name — the
-// container's `TICKS_HARNESS` is the request's own — so a handle carrying it
-// is a hosted answer, never a door that fell back to a standing choice.
+// harness that ran. Since the rung's step-down (tick y38) a CONTAINER boot
+// carries the name too: the factory re-resolves a rung dispatch with no free
+// subscription onto the deployment's standing pair, whose harness wrangler
+// pins to the hosted kind, so a handle naming it is a hosted answer or a
+// rung's declared step-down — never a door that fell back to a choice nobody
+// declared. Start's fallback acceptance answers for the PAIR, and the
+// parity guard in internal/profile holds the standing harness to this kind.
 const WorkerAgentHarness = profile.HostedDurableHarness
 
 // PollInterval is the cadence at which a live job on this executor should be
