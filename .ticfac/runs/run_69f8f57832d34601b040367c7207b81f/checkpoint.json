@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 112,
-  "state": "running",
-  "reason": "qzg try 1 (run dispatch #22) is rejected (no-commits): the only commit tick/ex6/attempt-22/qzg carries beyond its base (b05b072d262a) is the container's own report at RESULT-qzg.md: the worker committed no work, and a report is not a deliverable",
-  "updated_at": "2026-10-07T21:28:15Z",
+  "sequence": 113,
+  "state": "dispatching",
+  "reason": "dispatching qzg as attempt 23",
+  "updated_at": "2026-10-07T21:28:21Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -54,7 +54,7 @@
     },
     {
       "tick_id": "qzg",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 22
     },
     {
