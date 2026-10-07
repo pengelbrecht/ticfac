@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_d2359e149afc4e74a963e7c52644ad53",
   "epic_id": "ilz",
-  "sequence": 4,
-  "state": "collecting",
-  "reason": "collecting 56z attempt 1",
-  "updated_at": "2026-10-07T06:13:04Z",
+  "sequence": 5,
+  "state": "running",
+  "reason": "56z try 1 (run dispatch #1) is rejected (missing-result): the container never reached its harness: its boot stopped on the harness's model wiring (exit 8) — the environment, not the tick, and a retry boots the same one. the container's boot stopped before its harness started (exit 8: the harness could not use the model route (the harness probe failed)): the claude harness could not make a model call through the gateway (exit 1).",
+  "updated_at": "2026-10-07T06:13:10Z",
   "ticks": [
     {
       "tick_id": "56z",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 1
     },
     {
