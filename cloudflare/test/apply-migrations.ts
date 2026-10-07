@@ -1,38 +1,39 @@
 import { env } from "cloudflare:workers";
 
-// This file is vitest `setupFiles`, so it runs once per test file — 53 times a
-// run. Tick uhe went looking for the ~98 s of `setup` that costs, on the theory
-// that it was the sixteen migrations being replayed per file. It is not.
+// This file is vitest `setupFiles`, so it runs once per test file — 80 times a
+// run. Tick uhe went looking for the ~98 s of `setup` the suite reported on
+// the theory that it was the migration set being replayed per file. It was
+// not: the replay cost ~15 ms, and the `cloudflare:test` import this file
+// made cost ~630 ms, once per file, for one helper function. Dropping that
+// import took the suite's reported setup from 97.81 s to ~1 s, where it has
+// stayed (re-measured 2026-10-07 on pool-workers 0.22.0 / vitest 4.1.11:
+// 208.84 s wall, setup 1.08 s, 80 files, 28 migrations).
 //
-// Measured one test file at a time on a quiet machine (vitest's own `setup`):
+// Applying the set per file is now the only shape the runtime offers, and
+// the reason is its isolation model rather than the pool being wasteful:
+// vitest 4 boots a FRESH workerd per test file — one Miniflare per file, an
+// in-memory D1 per instance; NODE_DEBUG=vitest-pool-workers prints
+// "Starting runtime" once per file — so there is no shared database to seed
+// once per run, and the only vitest-level switch that shares a runner across
+// files (`isolate: false`) is exactly the cross-file bleed tick 5qj
+// recorded. That guarantee is now guarded by the suite itself:
+// test/d1-file-isolation-a.test.ts and -b write marker rows and fail the
+// moment one file can see another's.
 //
-//   setup file that is empty                                    ~6 ms
-//   setup file that ONLY imports "cloudflare:test"            ~650 ms
-//   setup file that applies all 16 migrations, no import       ~15 ms
-//   setup file as it was (import + applyD1Migrations)         ~630 ms
+// What the per-file apply costs, measured 2026-10-07 one file at a time at
+// host load ~22 (median of five runs, vitest's own `setup`):
 //
-// So the migrations are ~15 ms and the IMPORT is ~630 ms: pulling
-// `cloudflare:test` into a file's module graph costs most of a second, and this
-// file was doing that to every test file in the suite for one helper function.
-// Sending the migrations as one `db.batch()` rather than the helper's sixteen
-// is worth ~15 ms and was not why this got faster; dropping the import was.
+//   setup file that is empty                                    ~16 ms
+//   setup file that only imports "cloudflare:workers"           ~59 ms
+//   this file, import + one batch of all 28 migrations           ~68 ms
 //
-// It is only a PARTIAL win, and the reason is worth knowing before anyone
-// chases the rest: 36 of the 53 test files import `cloudflare:test` themselves,
-// and for those the cost does not disappear, it MOVES from `setup` to `import`
-// (health.test.ts: setup 602 ms / import 8 ms became setup 14 ms / import
-// 573 ms, total Duration unchanged). Only the 17 files that never name
-// `cloudflare:test` actually stop paying. Making the other 36 stop is a
-// question about how the pool serves its own module graph, not about D1.
-//
-// What did NOT change is that the schema is still built FRESH for every test
-// file. @cloudflare/vitest-pool-workers 0.21 hands each file a D1 with nothing
-// in it — measured, by writing a row in one file and failing to read it in the
-// next — and suites here ask questions of the WHOLE database ("was there
-// anything to say", loop-digest.test.ts) whose answer is wrong the moment
-// another file's rows survive. Seeding once per RUN was the bigger prize and
-// was the thing uhe asked for; at ~15 ms a file there is nothing left to buy
-// with it.
+// The import is the floor — `env` is reachable only through a module import
+// — and all 28 migrations cost ~9 ms on top of it, in ONE db.batch(). The
+// suite's remaining per-file cost is not here: it is `import` (135.71 s of
+// the 208.84 s run), which 58 of the 80 test files pay to pull
+// `cloudflare:test` into their own module graphs (the other 22 never name
+// it). Making that stop is a question about how the pool serves its own
+// module graph, not about D1.
 const MIGRATIONS_TABLE = '"d1_migrations"';
 
 // Reproduces `applyD1Migrations`' bookkeeping exactly, so the helper is still a
