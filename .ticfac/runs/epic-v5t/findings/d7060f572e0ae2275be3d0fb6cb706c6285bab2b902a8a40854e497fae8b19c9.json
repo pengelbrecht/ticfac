@@ -12,8 +12,11 @@
   "attempt": 6,
   "done_item": "A1",
   "demonstrating_check": "cd cloudflare && pnpm vitest run test/sandbox-dispatch.test.ts (with WORKER_AGENTS bound)",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T02:11:26Z",
+  "triaged_at": "2026-10-07T02:11:48Z",
+  "triaged_by": "ticfac run epic-v5t absorbing yhe",
+  "promoted_as": "yhe",
   "provenance": {
     "run_id": "epic-v5t",
     "tick_id": "54l",
