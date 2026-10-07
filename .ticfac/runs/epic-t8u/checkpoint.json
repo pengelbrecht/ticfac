@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 55,
+  "sequence": 56,
   "state": "gating",
-  "reason": "running the integrated gate for 89g on 6fb280ff88bc",
-  "updated_at": "2026-10-07T19:04:10Z",
+  "reason": "running the integrated gate for 89g on b39c204ae760",
+  "updated_at": "2026-10-07T19:16:13Z",
   "ticks": [
     {
       "tick_id": "pqs",
