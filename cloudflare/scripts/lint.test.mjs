@@ -102,10 +102,10 @@ const FINE = `export function fine(name: string): string {
 
 // Badly formatted and nothing else: one tab where the config says two spaces,
 // no quotes, no lint findings — so only the formatter half can refuse it.
-// Tabs are also what a DROPPED config would not catch Biome's own defaults
-// disagreeing with (default indentStyle is space too, measured), which is
-// why the config-is-in-force claim is carried by the nursery rule below and
-// not by this case.
+// Tabs are also refused under Biome's BUILT-IN defaults (default indentStyle
+// is space, measured), so this case proves the formatter refuses, not that
+// THIS config is in force: a dropped config fails the nursery-rule and scope
+// cases below, and those are the ones that carry that claim.
 const MISFORMATTED = `export function indented(): string {
 \treturn "one tab, where this config says two spaces";
 }
