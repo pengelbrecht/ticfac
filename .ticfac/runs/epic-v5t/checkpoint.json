@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 18,
-  "state": "gating",
-  "reason": "running the integrated gate for tda on 3c4a5295b4ff",
-  "updated_at": "2026-10-07T01:25:25Z",
+  "sequence": 19,
+  "state": "publishing",
+  "reason": "closing tda behind the integrated gate on 3c4a5295b4ff",
+  "updated_at": "2026-10-07T01:27:50Z",
   "ticks": [
     {
       "tick_id": "6fv",
