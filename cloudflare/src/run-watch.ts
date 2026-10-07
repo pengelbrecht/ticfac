@@ -399,7 +399,11 @@ export function watchOut(state: WatchState, config: WatchConfig): boolean {
  *
  * `halted` is the supervisor-halt read the caller makes unless the platform
  * answered `gone` (a replaced container cannot have halted deliberately), so
- * `null` here means "asked and none stood" on every path but that one.
+ * `null` here means "asked and none stood" on every path but that one — and
+ * the `gone` rule is enforced HERE rather than only in the caller, so no
+ * caller can hand a halt answer for a replaced container and be believed:
+ * a container the platform took cannot have stopped deliberately, whatever
+ * the halt read says (the property tests pin exactly this).
  */
 export type WatchEndedDecision =
   /** The orchestrator stopped deliberately: a decision, not a death. */
@@ -413,7 +417,7 @@ export function watchEnded(
   ended: Extract<WatchDecision, { kind: "ended" }>,
   halted: string | null,
 ): WatchEndedDecision {
-  if (halted !== null) return { kind: "halted" };
+  if (halted !== null && ended.process !== "gone") return { kind: "halted" };
   if (isTerminalExit(ended.exit_code)) {
     return { kind: "terminal", reason: terminalExitReason(ended.exit_code ?? -1) };
   }

@@ -16,7 +16,8 @@
     "lint": "biome ci --error-on-warnings",
     "format": "biome check --write",
     "typecheck": "pnpm contracts:check && tsc --noEmit",
-    "test": "pnpm contracts:check && pnpm contracts:test && pnpm operator-strings && vitest run",
+    "test:properties": "vitest run --config vitest.config.hegel.ts",
+    "test": "pnpm contracts:check && pnpm contracts:test && pnpm operator-strings && pnpm test:properties && vitest run",
     "test:watch": "pnpm contracts:check && vitest"
   },
   "devDependencies": {
