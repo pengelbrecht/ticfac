@@ -1038,6 +1038,15 @@ type gateShell struct {
 	errPath  string
 	donePath string
 
+	// The slot this gate runs in, when it runs in one: hold is the slot's
+	// lock, the same open file handed to the shell as fd 3 (gatedir.go's
+	// hand-over), kept here so the kill path can let go of the reconciler's
+	// own hold and then ask the SLOT what the group signal cannot say —
+	// whether anything of this gate is still alive. slotLock is that lock's
+	// path, which is what the asking opens.
+	hold     *os.File
+	slotLock string
+
 	// The gate's clock lives HERE, on the shell, and not on the gateCommand
 	// wrapper around it (tick m4n). Two separate reasons, and they want
 	// different clocks:
@@ -1157,6 +1166,10 @@ func startShell(dir, command string, timeout time.Duration, now time.Time, hold 
 		return nil, err
 	}
 	s.cmd = cmd
+	s.hold = hold
+	if hold != nil {
+		s.slotLock = hold.Name()
+	}
 	return s, nil
 }
 
@@ -1179,6 +1192,7 @@ func (s *gateShell) wait() (stdout, stderr string, code int, err error) {
 	_, sentinel := os.Stat(s.donePath)
 	if sentinel != nil && s.cmd.Process != nil {
 		_ = killGateGroup(s.cmd.Process.Pid)
+		s.settleKilledGate()
 	}
 	waitErr := s.cmd.Wait()
 	stdout, stderr = readGateOutput(s.outPath), readGateOutput(s.errPath)
@@ -1198,6 +1212,68 @@ func (s *gateShell) wait() (stdout, stderr string, code int, err error) {
 		return stdout, stderr, s.cmd.ProcessState.ExitCode(), waitErr
 	default:
 		return stdout, stderr, -1, waitErr
+	}
+}
+
+// settleKilledGate closes the race a single group kill leaves open: killpg
+// walks the members that exist at the instant it is delivered, and a fork in
+// flight — the shell's own first child, on a loaded host — joins the group
+// after the walk, unmarked. That member never receives the signal. It survives
+// the bound that was meant to bound it, holding fd 3 (the slot's lock) and
+// running against the gated tree after the verdict is published, and the slot
+// stays held until it dies on its own — for a `sleep 60`, a minute past the
+// refusal; for a server a gate's command left behind, for ever.
+//
+// The measurement that says this is not a theory (2026-10-07, this host, the
+// exact shape of the shell wait starts): a group SIGKILL delivered at random
+// into the shell's first fork left `sleep 60` alive and holding the slot in
+// 1 of 150 trials, and 22 of 30 with the shell forking continuously. It is the
+// same race internal/exec/subprocess measured on attempts (kill_repeat_test.go:
+// 41 of 200) and answered there with killUntilGone; the gate's kill path kept
+// its single signal — and TestAGateThatOutlivesItsReconcilerKeepsHoldingItsSlot
+// was where the gap surfaced, load-flaky (gvc finding 45e76fc4).
+//
+// The answer is the same one the attempts got, pointed at the observable that
+// is the point of the hand-over (gatedir.go): keep killing the group until the
+// SLOT says nothing of this gate is alive. The lock is the honest observable —
+// held exactly as long as any process the gate forked still holds fd 3, and
+// blind to nothing else — so the loop needs no liveness machinery to tell a
+// straggler from the corpses a kill leaves behind.
+//
+// Two rules the loop keeps, both of them another tick's decision restated:
+//
+//   - It lets go of the reconciler's OWN hold first, because that hold would
+//     answer every probe with `held` and blind the loop to its own survivors.
+//     Letting go is safe by the hand-over's design: the shell holds fd 3, so
+//     the slot stays taken while the gate lives, and only frees when nothing
+//     of the gate is left — which is exactly when it may be reused. The
+//     gateWorktree remove() that closes the same file later is a no-op.
+//   - Everything here happens BEFORE the reap. The shell's unreaped corpse is
+//     a zombie, and a zombie's pid is still taken, so no stranger can be
+//     holding the number a signal to the group would be aimed at (tick rmc,
+//     and internal/exec/subprocess's exitwait.go for the same rule on
+//     attempts). After the reap, the number can be handed to anyone.
+//
+// A gate that ran in a THROWAWAY worktree has no slot and nothing to settle:
+// nothing shares that tree, and one signal is all the throwaway ever had.
+func (s *gateShell) settleKilledGate() {
+	if s.hold == nil {
+		return
+	}
+	// The shell and whatever it started are the slot's holders now.
+	_ = s.hold.Close()
+	deadline := time.Now().Add(gateWaitDelay)
+	for gateSlotHeld(s.slotLock) {
+		_ = killGateGroup(s.cmd.Process.Pid)
+		if !time.Now().Before(deadline) {
+			// Give up rather than spin for ever: the slot stays held — the
+			// hand-over's own safe failure, a slot nobody can take wrongly —
+			// and the verdict is `killed` either way, because a member that
+			// a bounded run of kills could not reach has produced no exit
+			// status any more than one that was never signalled.
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
 

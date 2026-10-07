@@ -67,12 +67,21 @@ func TestAGateThatOutlivesItsReconcilerKeepsHoldingItsSlot(t *testing.T) {
 		t.Fatalf("the slot answered %v rather than busy; this test cannot tell the hand-over from a broken lock", err)
 	}
 
-	// And free again once the gate is gone — otherwise the hand-over would
-	// simply burn a slot for the life of the host.
-	if err := killGateGroup(shell.cmd.Process.Pid); err != nil {
-		t.Fatal(err)
+	// The orphan is collected the way a run collects any gate — wait() — whose
+	// kill goes on until nothing of the gate still holds the slot. The FIRST
+	// kill can miss a member forked while it is delivered (gate.go's
+	// settleKilledGate has the measurement), and the slot is what proves whether
+	// one did: hand-rolling killGateGroup here, as this test did before 9si,
+	// measured the race instead of closing it.
+	_, _, _, waitErr := shell.wait()
+	if !errors.Is(waitErr, errGateKilled) {
+		t.Fatalf("the gate was collected with %v rather than killed", waitErr)
 	}
-	_, _ = shell.cmd.Process.Wait()
+
+	// And free again once the gate is gone — otherwise the hand-over would
+	// simply burn a slot for the life of the host. wait() has already waited
+	// for exactly this, so the fast path through the poll is one probe; the
+	// poll is the belt over its give-up bound.
 	var freed *os.File
 	deadline := time.Now().Add(5 * time.Second)
 	for {
