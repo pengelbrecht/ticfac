@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 81,
-  "state": "running",
-  "reason": "u51 is running as attempt 14",
-  "updated_at": "2026-10-07T19:27:13Z",
+  "sequence": 82,
+  "state": "collecting",
+  "reason": "collecting u51 attempt 14",
+  "updated_at": "2026-10-07T20:06:16Z",
   "ticks": [
     {
       "tick_id": "pqs",
