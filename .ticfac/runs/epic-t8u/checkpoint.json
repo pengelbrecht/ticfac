@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 11,
-  "state": "integrating",
-  "reason": "integrating tc9 attempt 2 into epic/t8u",
-  "updated_at": "2026-10-07T14:32:02Z",
+  "sequence": 12,
+  "state": "gating",
+  "reason": "running the integrated gate for tc9 on 96d1b8e31726",
+  "updated_at": "2026-10-07T14:32:17Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "tc9",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 2
     },
     {
