@@ -203,6 +203,23 @@ type cloudflareHandle struct {
 	// TICKS_HARNESS, named back by the door (tick 9iz). Empty on a handle
 	// from a door that predates the field.
 	Harness string `json:"harness,omitempty"`
+	// ClaudeSub is the claude-sub rung's answer for this job, as the door
+	// names it (sandbox-executor.ts claudeSubNote): the subscription it
+	// leased, or why the rung stepped down to Workers AI and until when. Nil
+	// for a dispatch that never resolved the rung, or a door that predates it.
+	ClaudeSub *claudeSubNote `json:"claude_sub,omitempty"`
+}
+
+// claudeSubNote is the door's `claude_sub` handle field.
+type claudeSubNote struct {
+	// State is "leased" or "stepped_down".
+	State string `json:"state"`
+	Label string `json:"label,omitempty"`
+	// Reason is the pool's: "none", "exhausted" or "busy".
+	Reason string `json:"reason,omitempty"`
+	// RetryAt is when the earliest benched subscription comes back (RFC3339),
+	// or empty.
+	RetryAt *string `json:"retry_at,omitempty"`
 }
 
 // local decodes the executor-private half of a handle, refusing one that
@@ -356,6 +373,10 @@ type attemptRecord struct {
 	// ran.
 	Harness string `json:"harness,omitempty"`
 
+	// ClaudeSub is the door's claude-sub answer for this job (see
+	// cloudflareHandle.ClaudeSub).
+	ClaudeSub *claudeSubNote `json:"claude_sub,omitempty"`
+
 	// Prompt is the rendered role prompt the dispatch delivered, in full
 	// (tick 9iz) — the profile's own text, the thing the reconciler's marker
 	// digests into prompt_digest, kept here because the container's own
@@ -411,6 +432,7 @@ func (r *attemptRecord) payload() *cloudflareHandle {
 		Title:     r.Title,
 		Model:     r.Model,
 		Harness:   r.Harness,
+		ClaudeSub: r.ClaudeSub,
 	}
 }
 

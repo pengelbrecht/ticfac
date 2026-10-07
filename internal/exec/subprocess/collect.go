@@ -87,6 +87,11 @@ type InfrastructureFailure struct {
 	Persistent bool
 	// Fix is what a person does about it, for the stop that names it.
 	Fix string
+	// MidJob says the service gave out DURING the job, after its harness had
+	// started — the claude subscription's quota running out under a
+	// claude-sub job — rather than at its boot. Still no verdict on the tick
+	// and no rung earned; only the sentence a person reads differs.
+	MidJob bool
 }
 
 // Collect returns the protocol record.

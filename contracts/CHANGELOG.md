@@ -53,6 +53,22 @@ loud.
 
 ---
 
+## 2.3.0
+
+MINOR: `job-protocol.json`'s observation `kind` gains `claude_sub_quota` — the
+factory's claude-sub proxy saw a job's OWN answer bench its subscription on
+the quota (the window spent, or the answer served on usage credits). The
+sandbox door carries it beside the `exited` observation of a terminal
+`failed` status, and the Go executor collects such a job as a transient
+infrastructure failure: redispatched at the same tier (where the next lease
+steps down to Workers AI) instead of a failed attempt that climbs the tier
+ladder. An unchanged consumer that switches on kind is still correct — it
+ignores a kind it does not know — but no longer complete.
+
+Consumers: `cloudflare/contracts.pin.json` moves to 2.3.0; the door
+(`sandbox-dispatch.ts`) and the Go executor (`internal/exec/cloudflaresandbox`,
+`subprocess.ObsClaudeSubQuota`) gained the kind in the same commit.
+
 ## 2.2.0
 
 MINOR: `status-model.json` gains `run_config` — the named run config the run
