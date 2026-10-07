@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 56,
+  "sequence": 57,
   "state": "running",
-  "reason": "8rm is closed",
-  "updated_at": "2026-10-07T03:46:46Z",
+  "reason": "the epic PR #248 (epic/v5t → main) is open; close-out of v5t waits on CI",
+  "updated_at": "2026-10-07T03:47:06Z",
   "ticks": [
     {
       "tick_id": "6fv",
