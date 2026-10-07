@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 83,
-  "state": "integrating",
-  "reason": "integrating u51 attempt 14 into epic/t8u",
-  "updated_at": "2026-10-07T20:06:50Z",
+  "sequence": 84,
+  "state": "gating",
+  "reason": "running the integrated gate for u51 on fe7fea06e56e",
+  "updated_at": "2026-10-07T20:07:02Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -74,7 +74,7 @@
     },
     {
       "tick_id": "u51",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 14
     },
     {
