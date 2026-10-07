@@ -122,6 +122,12 @@ type harness struct {
 	mode           string // the fake agent's mode
 	agentCmd       *exec.Cmd
 	paneCloseCalls []string // pane ids pane.close accepted, in order (the wall-clock escalation's record)
+	// confirmWaitServed records how long the fake's agent.wait route served
+	// each confirm wait — the gate's acknowledgement call, its only caller —
+	// so a test can assert on the wait's own cost at the server, where the
+	// burn would happen, rather than on a wall clock host load moves for its
+	// own reasons (tick u51).
+	confirmWaitServed []time.Duration
 
 	// The fake agent's process, tracked behind mu: the goroutine that
 	// reaps it (cmd.Wait, launched by the agent.start route) is the only
@@ -538,15 +544,23 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		if p.TimeoutMs != nil {
 			budget = time.Duration(*p.TimeoutMs) * time.Millisecond
 		}
+		served := time.Now()
+		note := func() {
+			h.mu.Lock()
+			h.confirmWaitServed = append(h.confirmWaitServed, time.Since(served))
+			h.mu.Unlock()
+		}
 		deadline := time.Now().Add(budget)
 		for {
 			status := h.currentStatus()
 			for _, want := range p.Until {
 				if want == status {
+					note()
 					return agentInfo(t, req, w)
 				}
 			}
 			if !time.Now().Before(deadline) {
+				note()
 				return herdtest.RespondErr(w, req.ID, "timeout", "agent did not reach "+strings.Join(p.Until, ","))
 			}
 			time.Sleep(25 * time.Millisecond)
@@ -679,6 +693,16 @@ func (h *harness) paneCloses() []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return append([]string(nil), h.paneCloseCalls...)
+}
+
+// confirmWaits lists how long the fake served each agent.wait — the gate's
+// confirm wait, its only caller — so a test can assert on the wait's own
+// cost at the server, where the burn would happen, instead of on a wall
+// clock host load moves for its own reasons.
+func (h *harness) confirmWaits() []time.Duration {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]time.Duration(nil), h.confirmWaitServed...)
 }
 
 // agentProcess answers whether the harness launched the fake agent, and
