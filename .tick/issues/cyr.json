@@ -2,6 +2,7 @@
   "id": "cyr",
   "title": "A byte-slice cut in epicSummary splits a rune and puts invalid UTF-8 on the PR",
   "description": "pr_reviewer.go bounds the epic's description in the PR body with len() and a byte slice: when the 2000-byte boundary falls inside a multi-byte rune the quoted description is invalid UTF-8 (verified: a description 1999 ASCII chars long followed by a two-byte é yields valid=false and a lone 0xc3 byte). The repo's own discipline is to cut by rune — forge.FitBody and the new boundHeadline both do — so this is the one composition site that can hand a malformed character to the forge's write.\nevidence: internal/reconcile/pr_reviewer.go:167 (len(description) \u003e maxEpicDescription, then description[:maxEpicDescription])\n\nticfac run run_69f8f57832d34601b040367c7207b81f filed this backlog tick from the finding 0edf515626a2ce38f6c22515f69bb5f969d15317b2f43f46fe69d322849ceabc (reported by run-run_69f8f57832d34601b040367c7207b81f/tick-8wa/attempt-13) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/0edf515626a2ce38f6c22515f69bb5f969d15317b2f43f46fe69d322849ceabc.json on the run branch.",
+  "notes": "2026-10-07 16:08 - ticfac run run_69f8f57832d34601b040367c7207b81f: created by absorbing finding 0edf515626a2ce38f6c22515f69bb5f969d15317b2f43f46fe69d322849ceabc — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/0edf515626a2ce38f6c22515f69bb5f969d15317b2f43f46fe69d322849ceabc.json on epic/ex6, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_69f8f57832d34601b040367c7207b81f/tick-8wa/attempt-13",
   "created_by": "ticfac run run_69f8f57832d34601b040367c7207b81f",
   "created_at": "2026-10-07T16:07:56Z",
-  "updated_at": "2026-10-07T16:07:56Z"
+  "updated_at": "2026-10-07T16:08:02.905318631Z"
 }
