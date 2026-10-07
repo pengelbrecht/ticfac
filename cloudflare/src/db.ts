@@ -723,6 +723,15 @@ export interface SandboxAttemptBoot {
    */
   job: string;
   model: string;
+  /**
+   * The harness the job RUNS on (tick yhe, migration 0025): the agent's
+   * `pi-durable` for an attempt its WorkerAgent hosts, the CLI kind a
+   * container worker bound to — the fact a hosted deployment's state read
+   * and reclaim route on, because a claude-sub job is the container's own
+   * worker even there. Always stated: the door knows the path before it
+   * records the boot. A row from before the column existed reads ''.
+   */
+  harness: string;
   at: string;
 }
 
@@ -746,10 +755,10 @@ export async function recordSandboxAttemptBoot(
     db
       .prepare(
         `INSERT OR REPLACE INTO sandbox_job_boot
-          (run_id, tick_id, attempt, job, model, "at")
-         VALUES (?, ?, ?, ?, ?, ?)`,
+          (run_id, tick_id, attempt, job, model, harness, "at")
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(boot.run_id, boot.tick_id, boot.attempt, boot.job, boot.model, boot.at),
+      .bind(boot.run_id, boot.tick_id, boot.attempt, boot.job, boot.model, boot.harness, boot.at),
     db
       .prepare(
         "DELETE FROM sandbox_job_settled WHERE run_id = ? AND tick_id = ? AND attempt = ? AND job = ?",
@@ -774,25 +783,42 @@ export async function sandboxAttemptBootModel(
   db: D1Database,
   identity: { run_id: string; tick_id: string; attempt: number; job: string },
 ): Promise<string | null> {
+  return (await sandboxAttemptBootOf(db, identity))?.model ?? null;
+}
+
+/**
+ * Reads the boot recorded for one identity — its model AND its harness (tick
+ * yhe) — or null when none was: the same two tables and the same legacy
+ * fallback as [sandboxAttemptBootModel], in one read, so a caller that needs
+ * both (a hosted deployment deciding which door owns the job) does not ask
+ * twice.
+ */
+export async function sandboxAttemptBootOf(
+  db: D1Database,
+  identity: { run_id: string; tick_id: string; attempt: number; job: string },
+): Promise<{ model: string; harness: string } | null> {
   const row = await db
     .prepare(
-      "SELECT model FROM sandbox_job_boot WHERE run_id = ? AND tick_id = ? AND attempt = ? AND job = ?",
+      "SELECT model, harness FROM sandbox_job_boot WHERE run_id = ? AND tick_id = ? AND attempt = ? AND job = ?",
     )
     .bind(identity.run_id, identity.tick_id, identity.attempt, identity.job)
-    .first<{ model: string }>();
-  if (row !== null) return row.model;
+    .first<{ model: string; harness: string }>();
+  if (row !== null) return row;
   if (identity.job !== "") return null;
   // The attempt's own job may have been booted by the previous release in
   // the window between migration 0018's copy and this release going live,
   // into the table that release still wrote: read it there rather than
-  // refuse an adoption whose boot WAS recorded.
+  // refuse an adoption whose boot WAS recorded. That table predates the
+  // harness column (migration 0025), so its boots read as hosted — the
+  // honest answer for a deployment that binds WORKER_AGENTS, which hosted
+  // everything it booted in that window.
   const legacy = await db
     .prepare(
       "SELECT model FROM sandbox_attempt_boot WHERE run_id = ? AND tick_id = ? AND attempt = ?",
     )
     .bind(identity.run_id, identity.tick_id, identity.attempt)
     .first<{ model: string }>();
-  return legacy === null ? null : legacy.model;
+  return legacy === null ? null : { model: legacy.model, harness: "" };
 }
 
 /** The terminal state one job's worker container settled in (migration 0019). */
