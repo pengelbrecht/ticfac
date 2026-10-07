@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "krh",
   "attempt": 8,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T19:18:17Z",
+  "triaged_at": "2026-10-07T19:18:26Z",
+  "triaged_by": "ticfac run epic-t8u absorbing sij",
+  "promoted_as": "sij",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "krh",
