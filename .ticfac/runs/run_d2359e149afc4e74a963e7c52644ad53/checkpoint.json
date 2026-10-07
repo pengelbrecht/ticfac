@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "run_d2359e149afc4e74a963e7c52644ad53",
   "epic_id": "ilz",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching 56z as attempt 1",
-  "updated_at": "2026-10-07T06:07:44Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "56z is running as attempt 1",
+  "updated_at": "2026-10-07T06:07:59Z",
   "ticks": [
     {
       "tick_id": "56z",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "yaz",
