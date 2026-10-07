@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 30,
-  "state": "failed",
-  "reason": "yck is held on attempt_needs_human (yck try 2 (run dispatch #5) answered BLOCKED: the only deliverable is an append to .tick/runners.cloud.toml, which the worker boundary refuses (report.go:190, re-checked by the installed reconciler at dispatch.go:3541), and no run channel writes repository files; the operator must run: sed -n '/^# Named run configs/,$p' internal/runconfig/testdata/runners.cloud.configs.toml >> .tick/runners.cloud.toml (verified on a scratch copy: 16 config tables; both guards green). The question holds for a person because it is in the always-ask class \"Spending money\" of the standing orders. Its work is on ticfac/run-epic-v5t/tick-yck/attempt-5 and is NOT merged, and the tick is NOT closed; the run keeps working every tick that does not wait behind it, and the epic PR lists the question. Answer it on the tick, then release the attempt with `ticfac settle v5t yck 5 --release \"<who>\" --carry-work` and run the epic again). Nothing of a held tick reached epic/v5t, so the run did not stop at the hold: every tick that does not wait behind it was worked to the end, and the run ends on the hold because nothing else can progress — 54l, 9uc waits behind it and was not dispatched. Running the epic again under this run id resumes it — a held attempt that left nothing is redispatched, an attempt held holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone",
-  "updated_at": "2026-10-07T01:56:13Z",
+  "sequence": 31,
+  "state": "gating",
+  "reason": "running the integrated gate for yck on 1b1621c36053",
+  "updated_at": "2026-10-07T02:00:28Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -36,7 +36,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/v5t",
-    "source_sha": "791d93810752c824dce4955b710684025a0b4e9f",
+    "source_sha": "1b1621c3605314be5edba2ece36f4107703e4a5b",
     "integration_ref": "refs/heads/epic/v5t",
     "phase": "worker",
     "executor": null,
