@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ilz/attempt-4/0n3`, base `72a61b88a0c051599141746d3e703e56db20d733`, harness `claude` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
 # Re-review of epic ilz (round 2), as integrated
 
 The epic said it would ship the operator documentation v5t left out: a guide to
