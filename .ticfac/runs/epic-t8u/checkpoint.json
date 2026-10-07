@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 41,
-  "state": "publishing",
-  "reason": "closing 9si behind the integrated gate on 13ab3044316e",
-  "updated_at": "2026-10-07T18:10:57Z",
+  "sequence": 42,
+  "state": "running",
+  "reason": "9si is closed",
+  "updated_at": "2026-10-07T18:11:01Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "9si",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 6
     },
     {
