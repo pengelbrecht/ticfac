@@ -1,0 +1,13 @@
+{
+  "id": "7vd",
+  "title": "An evacuated role job that had reported is re-asked, its answer discarded",
+  "description": "Role jobs have no recorded verdict at their collect: the decision record is written only after collectRole returns, so an evacuation's Cancel of a role worker that had reported but was still running past the grace leaves a durable cancellation over an answer nobody recorded. The resume collects the job as cancelled — classify puts the cancellation ahead of the report — refuses it as missing-result, and re-asks, paying again for an answer the worker already wrote and that survives archived beside its attempt record. The implement path now records its verdict before the release; the role-job path has nothing equivalent to read back.\nevidence: internal/reconcile/rolejob.go (collectRole's VerdictMissingResult refusal); internal/exec/subprocess/collect.go:278 (classify's cancelled-first case)\n\nticfac run epic-t8u filed this backlog tick from the finding eef94ca93dd3766e45d0dbf50f1c60a21323a7164b7dfe5b6ff4bc8912e03cc0 (reported by run-epic-t8u/tick-o3q/attempt-11) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/eef94ca93dd3766e45d0dbf50f1c60a21323a7164b7dfe5b6ff4bc8912e03cc0.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-o3q/attempt-11",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-07T22:24:29Z",
+  "updated_at": "2026-10-07T22:24:29Z"
+}
