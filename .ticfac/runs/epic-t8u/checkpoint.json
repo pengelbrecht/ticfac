@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 89,
-  "state": "collecting",
-  "reason": "collecting uhe attempt 15",
-  "updated_at": "2026-10-07T21:35:00Z",
+  "sequence": 90,
+  "state": "integrating",
+  "reason": "integrating uhe attempt 15 into epic/t8u",
+  "updated_at": "2026-10-07T21:35:51Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -79,7 +79,7 @@
     },
     {
       "tick_id": "uhe",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 15
     },
     {
