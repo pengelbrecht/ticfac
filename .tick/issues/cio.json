@@ -2,6 +2,7 @@
   "id": "cio",
   "title": "No CI runner installs tk, so every real-binary pin skips in CI",
   "description": "internal/tk's TestManifestCommandsAgainstRealTk and the new real-tk re-claim parity test (TestTheFakeTrackerCountsAReclaimTheWayRealTkDoes) both LookPath(\"tk\") and skip when it is absent, and no CI job installs one — the parity against the real binary is exercised only at close-out, on a host that has a tk. The repo solved the same shape for pi (installed into the job whose packages need it, with the pin asserted) and for the cloudflare workspace (node_modules). CI installs of tk would need a buildable ticks ref; alternatively the close-out suite is the declared home for the pin, and that should be said where AGENTS.md describes what CI runs.\nevidence: .github/workflows/ci.yml installs pi and pnpm workspaces but no tk; internal/tk/tk_real_test.go:26 skips on LookPath failure; internal/reconcile/claim_reclaim_parity_test.go does the same\n\nticfac run epic-t8u filed this backlog tick from the finding d46e0999e61bebadf9d863f2d36e79aca0eace806793fd2da804b4520afe7c0b (reported by run-epic-t8u/tick-krh/attempt-8) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/d46e0999e61bebadf9d863f2d36e79aca0eace806793fd2da804b4520afe7c0b.json on the run branch.",
+  "notes": "2026-10-07 21:18 - ticfac run epic-t8u: created by absorbing finding d46e0999e61bebadf9d863f2d36e79aca0eace806793fd2da804b4520afe7c0b — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/d46e0999e61bebadf9d863f2d36e79aca0eace806793fd2da804b4520afe7c0b.json on epic/t8u, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-t8u/tick-krh/attempt-8",
   "created_by": "ticfac run epic-t8u",
   "created_at": "2026-10-07T19:18:41Z",
-  "updated_at": "2026-10-07T19:18:41Z"
+  "updated_at": "2026-10-07T19:18:46.883191Z"
 }
