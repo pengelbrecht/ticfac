@@ -2,6 +2,7 @@
   "id": "eov",
   "title": "Subscription refusal passes silently when the factory cannot be asked",
   "description": "When the factory can't be asked, nothing refuses a claude config with no subscription token. The run-start check (checkSelectedConfigCanRoute) returns nil on any seam error. Doctor reports routing OK when doctorClaudeSubLabels errors. The cloud submission preflight returns before the subscription question when the factory reports no harness_kinds. Tick tda's [3] says doctor and the preflight refuse an unroutable config, including a claude config with no token; at minimum doctor should warn that the subscription question went unanswered. The tests currently treat this as intended.\nevidence: internal/reconcile/runconfig_select.go checkSelectedConfigCanRoute (err -\u003e nil); internal/cli/doctor.go named-config routing check; internal/cli/cloud_harness_preflight.go len(facts.HarnessKinds)==0 early return\n\nticfac run epic-v5t filed this backlog tick from the finding 17eb713136edaa9f8dbde40ea6f89d09e9cffdb7b28f2d42997c042d7fb8c251 (reported by run-epic-v5t/tick-tda/attempt-3) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/17eb713136edaa9f8dbde40ea6f89d09e9cffdb7b28f2d42997c042d7fb8c251.json on the run branch.",
+  "notes": "2026-10-07 03:24 - ticfac run epic-v5t: created by absorbing finding 17eb713136edaa9f8dbde40ea6f89d09e9cffdb7b28f2d42997c042d7fb8c251 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-v5t/absorptions/17eb713136edaa9f8dbde40ea6f89d09e9cffdb7b28f2d42997c042d7fb8c251.json on epic/v5t, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-v5t/tick-tda/attempt-3",
   "created_by": "ticfac run epic-v5t",
   "created_at": "2026-10-07T01:24:43Z",
-  "updated_at": "2026-10-07T01:24:43Z"
+  "updated_at": "2026-10-07T01:24:53.417357Z"
 }
