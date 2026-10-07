@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 99,
-  "state": "publishing",
-  "reason": "closing p0n behind the integrated gate on ec0c8f176628",
-  "updated_at": "2026-10-07T21:47:40Z",
+  "sequence": 100,
+  "state": "running",
+  "reason": "p0n is closed",
+  "updated_at": "2026-10-07T21:47:43Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -64,7 +64,7 @@
     },
     {
       "tick_id": "p0n",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 12
     },
     {
