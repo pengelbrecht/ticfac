@@ -24,7 +24,11 @@
  * 3. **The submission queue** (D22) — a submission refused by a live lease may
  *    park here instead of bouncing. It ignites on release, is visible to
  *    `status`, and expires on a configurable window, because a queue that
- *    silently ignites work hours later is worse than a refusal. An expiry is
+ *    silently ignites work hours later is worse than a refusal. A submission
+ *    parked without a window of its own waits for the release instead, however
+ *    long the holder runs and however it ends, and its window counts only once
+ *    the slot is free (tick xvk: bo9's `--queue` run expired 30 minutes into a
+ *    seven-hour holder and was never seen again). An expiry is
  *    ANNOUNCED (`queue-expiry.ts`, tick 6tx): the room used to delete the row
  *    and say nothing, which made a PR review starved out by a 90-minute epic
  *    wave indistinguishable, from the pull request, from a review that found
@@ -170,7 +174,17 @@ export type QueuedSubmission = {
   /** The run holding the lease when this parked — why it is waiting. */
   blocked_by: string;
   queued_at: string;
+  /**
+   * When the entry stops being ignitable. For an entry that waits for the
+   * release (below) this is only binding while the lease is FREE: it is the
+   * window restarted at each release, not a deadline on the holder's run.
+   */
   expires_at: string;
+  /**
+   * Present (true) when the entry waits for the lease to free however long the
+   * holder runs, and its window only counts once the slot is free (tick xvk).
+   */
+  waits_for_release?: true;
 };
 
 export type QueueSubmissionRequest = {
@@ -186,6 +200,13 @@ export type QueueSubmissionRequest = {
   credential_grade?: RunCredentialGrade;
   blocked_by: string;
   ttl_ms?: number;
+  /**
+   * Wait for the lease to free, however the holder ends and however long it
+   * runs, and count `ttl_ms` only from the release (tick xvk). Without it the
+   * window is a hard deadline from the park, the D22 behaviour an explicit
+   * per-submission window still asks for.
+   */
+  waits_for_release?: boolean;
 };
 
 export type QueueSubmissionResult =
@@ -387,6 +408,10 @@ type QueuedRecord = {
   blocked_by: string;
   queued_at: number;
   expires_at: number;
+  /** 1 when the entry waits for the release (tick xvk); 0 for a hard window. */
+  waits_for_release: number;
+  /** The window, restarted at each release for a waiting entry. Null on an older row. */
+  window_ms: number | null;
 };
 
 type StopRecord = {
@@ -542,7 +567,9 @@ export class RunRoom extends DurableObject<Env> {
         queued_at INTEGER NOT NULL,
         expires_at INTEGER NOT NULL,
         trace_id TEXT,
-        credential_grade TEXT
+        credential_grade TEXT,
+        waits_for_release INTEGER NOT NULL DEFAULT 0,
+        window_ms INTEGER
       );
       CREATE INDEX IF NOT EXISTS queued_submission_by_age ON queued_submission (queued_at);
       CREATE TABLE IF NOT EXISTS run_stop (
@@ -573,6 +600,8 @@ export class RunRoom extends DurableObject<Env> {
       "max_wall_clock_ms INTEGER",
       "trace_id TEXT",
       "credential_grade TEXT",
+      "waits_for_release INTEGER NOT NULL DEFAULT 0",
+      "window_ms INTEGER",
     ]) {
       try {
         ctx.storage.sql.exec(`ALTER TABLE queued_submission ADD COLUMN ${column}`);
@@ -895,6 +924,7 @@ export class RunRoom extends DurableObject<Env> {
       };
     }
 
+    const window = request.ttl_ms ?? MAX_QUEUE_TTL_MS;
     const record: QueuedRecord = {
       run_id: request.run_id,
       project: request.project,
@@ -911,13 +941,16 @@ export class RunRoom extends DurableObject<Env> {
       // The window is policy and the caller states it (src/runs.ts resolves the
       // deployment's default). An omitted one means "as long as this room
       // allows", which is the bound itself — never unbounded.
-      expires_at: now + (request.ttl_ms ?? MAX_QUEUE_TTL_MS),
+      expires_at: now + window,
+      waits_for_release: request.waits_for_release === true ? 1 : 0,
+      window_ms: window,
     };
     this.ctx.storage.sql.exec(
       `INSERT INTO queued_submission
          (run_id, project, epic, base_sha, requested_by, notify, max_cost_usd,
-          max_wall_clock_ms, blocked_by, queued_at, expires_at, trace_id, credential_grade)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          max_wall_clock_ms, blocked_by, queued_at, expires_at, trace_id, credential_grade,
+          waits_for_release, window_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       record.run_id,
       record.project,
       record.epic,
@@ -931,6 +964,8 @@ export class RunRoom extends DurableObject<Env> {
       record.expires_at,
       record.trace_id,
       record.credential_grade,
+      record.waits_for_release,
+      record.window_ms,
     );
     await this.#armAlarm();
     return { ok: true, queued: this.#queuedView(record) };
@@ -1376,9 +1411,13 @@ export class RunRoom extends DurableObject<Env> {
     const deadlines: number[] = [];
     const lease = this.#lease.deadline();
     if (lease !== null) deadlines.push(lease);
+    // An entry that waits for the release has no deadline while the lease is
+    // held: the lease's own deadline (or its release) is the next thing that
+    // can change its fate (tick xvk).
     const soonest = [
       ...this.ctx.storage.sql.exec<{ expires_at: number }>(
-        "SELECT MIN(expires_at) AS expires_at FROM queued_submission",
+        "SELECT MIN(expires_at) AS expires_at FROM queued_submission WHERE waits_for_release = 0 OR ? = 0",
+        this.#leaseHeld(),
       ),
     ][0]?.expires_at;
     if (typeof soonest === "number") deadlines.push(soonest);
@@ -1393,10 +1432,38 @@ export class RunRoom extends DurableObject<Env> {
   #liveQueue(now: number = Date.now()): QueuedRecord[] {
     return [
       ...this.ctx.storage.sql.exec<QueuedRecord>(
-        "SELECT * FROM queued_submission WHERE expires_at > ? ORDER BY queued_at, run_id",
+        `SELECT * FROM queued_submission
+          WHERE expires_at > ? OR (waits_for_release = 1 AND ? = 1)
+          ORDER BY queued_at, run_id`,
         now,
+        this.#leaseHeld(),
       ),
     ];
+  }
+
+  /**
+   * 1 while a lease row stands — live, or lapsed and not yet swept — else 0.
+   *
+   * A lapsed row counts as held on purpose: the alarm that sweeps it is the
+   * same wake that ignites the queue, so an entry waiting for the release
+   * must survive until that sweep rather than be pruned a moment before it.
+   */
+  #leaseHeld(): number {
+    return this.#lease.read() === null ? 0 : 1;
+  }
+
+  /**
+   * Restarts the window of every entry that waits for the release, from now
+   * (tick xvk). Called only once the lease is free, so the window measures
+   * time spent ignitable-but-unlit, never time spent behind the holder.
+   */
+  #restartWaitingWindows(now: number): void {
+    this.ctx.storage.sql.exec(
+      `UPDATE queued_submission
+          SET expires_at = MAX(expires_at, ? + COALESCE(window_ms, expires_at - queued_at))
+        WHERE waits_for_release = 1`,
+      now,
+    );
   }
 
   /**
@@ -1412,10 +1479,17 @@ export class RunRoom extends DurableObject<Env> {
    * `DELETE ... RETURNING` is atomic, so exactly one caller can.
    */
   #pruneExpiredQueued(now: number = Date.now()): QueuedRecord[] {
+    // An entry that waits for the release never expires behind a held lease
+    // (tick xvk): bo9's parked run was dropped by this delete half an hour
+    // into a seven-hour holder, and the holder's failure at the end of it had
+    // nothing left to ignite.
     return [
       ...this.ctx.storage.sql.exec<QueuedRecord>(
-        "DELETE FROM queued_submission WHERE expires_at <= ? RETURNING *",
+        `DELETE FROM queued_submission
+          WHERE expires_at <= ? AND (waits_for_release = 0 OR ? = 0)
+          RETURNING *`,
         now,
+        this.#leaseHeld(),
       ),
     ];
   }
@@ -1463,6 +1537,10 @@ export class RunRoom extends DurableObject<Env> {
     expired: QueuedRecord[];
   }> {
     const now = Date.now();
+    // The lease is free (every caller has just released or swept it), so a
+    // waiting entry's window starts now — before the prune, which would
+    // otherwise read the time it spent behind the holder as its window.
+    if (this.#lease.read() === null) this.#restartWaitingWindows(now);
     const expired = this.#pruneExpiredQueued(now);
 
     const next = this.#liveQueue(now)[0];
@@ -1534,6 +1612,7 @@ export class RunRoom extends DurableObject<Env> {
       blocked_by: record.blocked_by,
       queued_at: stamp(record.queued_at),
       expires_at: stamp(record.expires_at),
+      ...(record.waits_for_release === 1 ? { waits_for_release: true as const } : {}),
     };
   }
 

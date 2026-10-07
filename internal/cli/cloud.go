@@ -798,6 +798,9 @@ func printCloudRunStatus(out io.Writer, response cloudStatusResponse) {
 	}
 	printCloudRunProgress(out, run, response.Progress)
 	switch {
+	case run.State == "queued":
+		// A parked submission has booted nothing yet (tick xvk): "image:
+		// unrecorded" would read as a deploy that failed to stamp one.
 	case response.Image != nil && response.Image.Digest != "":
 		fmt.Fprintf(out, "  image: %s\n", response.Image.Digest)
 	default:

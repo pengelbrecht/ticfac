@@ -792,6 +792,62 @@ describe("submission queue (D22)", () => {
   });
 });
 
+// Tick xvk: bo9's `--queue` run expired 30 minutes into a seven-hour holder,
+// so the holder's failure at the end had nothing left to ignite and the run
+// answered 404 from then on. An entry that waits for the release must outlive
+// any holder, whatever its window.
+describe("a submission that waits for the release (xvk)", () => {
+  it("outlives its window behind a held lease", async () => {
+    const stub = room("owner/repo-queue-waits");
+    const held = await stub.acquireDispatchLease({ run_id: "run_holder", epic: "ex6" });
+    if (!held.ok) throw new Error("expected the acquire to win");
+    const parked = await stub.queueSubmission({
+      run_id: "run_waiting",
+      project: "owner/repo",
+      epic: "bo9",
+      base_sha: "b".repeat(40),
+      requested_by: "operator@example.com",
+      blocked_by: "run_holder",
+      ttl_ms: MIN_QUEUE_TTL_MS,
+      waits_for_release: true,
+    });
+    if (!parked.ok) throw new Error("expected the park to succeed");
+    expect(parked.queued.waits_for_release).toBe(true);
+
+    // The window has long passed, and the alarm has fired: the entry stands.
+    await wait(MIN_QUEUE_TTL_MS + 60);
+    await runDurableObjectAlarm(stub);
+    const listed = await stub.listQueuedSubmissions();
+    expect(listed.map((q) => q.run_id)).toEqual(["run_waiting"]);
+    // Its deadline does not own the alarm while the lease is held.
+    expect(await scheduledAlarm(stub)).toBe(Date.parse(held.lease.expires_at));
+
+    // The release that ignites it is held by the route tests, against a
+    // fake driver (run-routes.test.ts, xvk): this pool's Workflow binding is
+    // real, and booting it here would leave an engine running past the test.
+  });
+
+  it("keeps the hard window for an entry that does not wait", async () => {
+    const stub = room("owner/repo-queue-hard");
+    const held = await stub.acquireDispatchLease({ run_id: "run_holder", epic: "ex6" });
+    if (!held.ok) throw new Error("expected the acquire to win");
+    await stub.queueSubmission({
+      run_id: "run_hard",
+      project: "owner/repo",
+      epic: "bo9",
+      base_sha: "b".repeat(40),
+      requested_by: "operator@example.com",
+      blocked_by: "run_holder",
+      ttl_ms: MIN_QUEUE_TTL_MS,
+    });
+
+    await wait(MIN_QUEUE_TTL_MS + 60);
+    await runDurableObjectAlarm(stub);
+
+    await expect(stub.listQueuedSubmissions()).resolves.toEqual([]);
+  });
+});
+
 // The lease and the queue share one alarm. `setAlarm` overwrites rather than
 // adding, so a second deadline that ignored the first would silently cancel it
 // — the multiplexing rule this room documents.
