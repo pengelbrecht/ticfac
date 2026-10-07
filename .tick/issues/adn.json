@@ -1,0 +1,13 @@
+{
+  "id": "adn",
+  "title": "Close 55q and rescope k40: LEASE_REFRESH_MS already landed on main",
+  "description": "Two backlog ticks this run filed were overtaken by the main merge it then took. 55q asks for a lease TTL above a cloud worker's 8h wall clock; LEASE_REFRESH_MS (claude-sub.ts:208) is exactly that fix — the proxy refreshes a live job's lease once a minute and LEASE_TTL_MS's comment now reasons about silence rather than job length — so 55q is obsolete and wants closing, not working. k40 asks for a test pinning the stale-lease reassignment the guide promises; with the refresh, a live job's lease no longer goes stale, so the behaviour worth pinning is the refresh and the guide should stop promising the reassignment (see the high finding). Both are cheap tracker hygiene, and both will otherwise be picked up and worked against the code as it was a day ago.\nevidence: cloudflare/src/claude-sub.ts:193-208,550-555,906 against .tick/issues/55q.json and .tick/issues/k40.json\n\nticfac run run_4d92bab25a7341d3bba01691779168a0 filed this backlog tick from the finding 61ef5f81d266558ee393b356da8af2a632046fc16384b2ad50154f22b52fa14c (reported by run-run_4d92bab25a7341d3bba01691779168a0/tick-kzs/attempt-6) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/61ef5f81d266558ee393b356da8af2a632046fc16384b2ad50154f22b52fa14c.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_4d92bab25a7341d3bba01691779168a0/tick-kzs/attempt-6",
+  "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
+  "created_at": "2026-10-07T08:43:56Z",
+  "updated_at": "2026-10-07T08:43:56Z"
+}
