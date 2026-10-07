@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 28,
-  "state": "running",
-  "reason": "yck try 2 (run dispatch #5) is rejected (no-commits): the attempt branch carries no commit beyond the base it was cut from (7206f1e442c1)",
-  "updated_at": "2026-10-07T01:55:58Z",
+  "sequence": 29,
+  "state": "failed",
+  "reason": "yck try 2 (run dispatch #5) answered BLOCKED: the only deliverable is an append to .tick/runners.cloud.toml, which the worker boundary refuses (report.go:190, re-checked by the installed reconciler at dispatch.go:3541), and no run channel writes repository files; the operator must run: sed -n '/^# Named run configs/,$p' internal/runconfig/testdata/runners.cloud.configs.toml >> .tick/runners.cloud.toml (verified on a scratch copy: 16 config tables; both guards green). The question holds for a person because it is in the always-ask class \"Spending money\" of the standing orders. Its work is on ticfac/run-epic-v5t/tick-yck/attempt-5 and is NOT merged, and the tick is NOT closed; the run keeps working every tick that does not wait behind it, and the epic PR lists the question. Answer it on the tick, then release the attempt with `ticfac settle v5t yck 5 --release \"<who>\" --carry-work` and run the epic again",
+  "updated_at": "2026-10-07T01:56:05Z",
   "ticks": [
     {
       "tick_id": "6fv",
