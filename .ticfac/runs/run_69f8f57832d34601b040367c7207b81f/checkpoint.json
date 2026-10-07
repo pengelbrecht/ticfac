@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 84,
-  "state": "dispatching",
-  "reason": "dispatching m1w as attempt 17",
-  "updated_at": "2026-10-07T17:35:10Z",
+  "sequence": 85,
+  "state": "running",
+  "reason": "m1w is running as attempt 17",
+  "updated_at": "2026-10-07T17:35:19Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -44,7 +44,8 @@
     },
     {
       "tick_id": "m1w",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 17
     },
     {
       "tick_id": "q6z",
