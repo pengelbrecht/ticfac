@@ -2,13 +2,14 @@
   "id": "g5f",
   "title": "ticfac skills diff (or a doctor line): say when an installed skill copy is older than the binary",
   "gloss": "skills diff",
+  "description": "Nothing tells an operator that the ticfac skill installed in a repo (.claude/skills/ticfac, .agents/skills/ticfac — stamped with the version that installed it) is older than the binary. tk has tk skills diff for the ticks skill; add the same for ticfac (and/or a ticfac doctor line) naming the upgrade command, ticfac skills install ticfac.",
   "status": "open",
   "priority": 2,
   "type": "task",
   "owner": "ticks-sandbox@ticks.invalid",
-  "parent": "y9v",
+  "parent": "bo9",
   "acceptance_criteria": "installed copy older than the binary is reported with the upgrade command; test; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T14:07:25.165607Z",
-  "updated_at": "2026-10-07T14:07:25.165607Z"
+  "updated_at": "2026-10-07T15:18:21.746766Z"
 }

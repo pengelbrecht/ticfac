@@ -7,9 +7,9 @@
   "priority": 2,
   "type": "bug",
   "owner": "ticks-sandbox@ticks.invalid",
-  "parent": "y9v",
+  "parent": "bo9",
   "acceptance_criteria": "In a repository that is not ticfac, on a machine with only the ticfac binaries and node, a local pi-durable run dispatches and completes a worker; no npm install anywhere; doctor checks node; a stale embedded bundle fails the gate; make gate passes",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T13:55:41.952418Z",
-  "updated_at": "2026-10-07T13:59:54.587127Z"
+  "updated_at": "2026-10-07T15:18:21.909717Z"
 }

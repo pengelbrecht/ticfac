@@ -7,8 +7,9 @@
   "priority": 2,
   "type": "bug",
   "owner": "ticks-sandbox@ticks.invalid",
+  "parent": "bo9",
   "acceptance_criteria": "ticfac run \u003cepic\u003e --cloud --config claude runs on the claude config; contract + Go + Worker tests; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T14:07:25.248735Z",
-  "updated_at": "2026-10-07T14:07:25.248735Z"
+  "updated_at": "2026-10-07T15:18:21.856109Z"
 }

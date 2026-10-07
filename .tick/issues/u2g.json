@@ -2,13 +2,14 @@
   "id": "u2g",
   "title": "ticfac skills get --full prints the skill's references too",
   "gloss": "skills get --full",
+  "description": "ticfac skills get ticfac prints only SKILL.md; since #259 the skill has references/ (commands.md, holds.md, cloud.md) that cannot be read from the binary without installing. Add --full (as tk skills get --full does) printing SKILL.md then every references file, each under a header naming its path.",
   "status": "open",
   "priority": 2,
   "type": "task",
   "owner": "ticks-sandbox@ticks.invalid",
-  "parent": "y9v",
+  "parent": "bo9",
   "acceptance_criteria": "get --full prints SKILL.md and every references/ file; test; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T14:07:25.208098Z",
-  "updated_at": "2026-10-07T14:07:25.208098Z"
+  "updated_at": "2026-10-07T15:18:21.79755Z"
 }
