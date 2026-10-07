@@ -44,9 +44,15 @@ func (r *Reconciler) lookFirst(decisions []runstate.Decision, final int, finding
 		}
 	}
 	if len(undecided) > 0 {
+		// The amendments are listed below whatever this body's condensation did
+		// to them: at the levels that fit GitHub's limit each one keeps only its
+		// headline and the key of the record its own words live in, so the short
+		// list points at THAT rather than promising text the body has dropped
+		// (tick 8wa).
 		items = append(items, fmt.Sprintf("%d worker-proposed amendment(s) to the epic's own record are %s — "+
-			"the operator's word on what a worker wrote to the record the acceptance is scored from, listed with "+
-			"their full text under the amendments below.", len(undecided), strings.Join(undecided, ", ")))
+			"the operator's word on what a worker wrote to the record the acceptance is scored from, listed "+
+			"under the amendments below with the words of their own value or, when this body is condensed to "+
+			"fit GitHub's limit on it, the record those words live in.", len(undecided), strings.Join(undecided, ", ")))
 	}
 	if final >= 0 && reviewVerdictOf(decisions[final].Response) == subprocess.ReviewVerdictNotReady {
 		items = append(items, "**The final review judged the epic NOT READY.** Read its verdict below before the "+

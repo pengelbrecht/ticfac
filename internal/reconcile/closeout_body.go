@@ -76,7 +76,9 @@ func (r *Reconciler) closeoutPRBody() (string, int, error) {
 // absorption decisions reduced to counts, then also without each amendment's
 // full value (each amendment keeps its status line — headline, proposing
 // attempt, the operator's decision — and a pointer to the record its value
-// lives in; tick 8wa: without this level a run with long worker-proposed
+// lives in; its headline is BOUNDED there, because a value that is one line
+// is its own whole headline and would otherwise carry its whole text into the
+// condensed body; tick 8wa: without this level a run with long worker-proposed
 // notes fell to the forge's last-resort fit, which truncates the tail where
 // the readiness section sits). The head — where to look first,
 // the epic's summary, its done, the review's verdict — is never condensed.
@@ -119,6 +121,30 @@ const (
 	prBodyOmitAmendmentText = 3
 	prBodyMostCondensed     = prBodyOmitAmendmentText
 )
+
+// prBodyHeadlineChars bounds the headline the most condensed body carries for
+// an amendment: its status line quotes the value's first line, and a value
+// that is ONE line — a pasted log, a paragraph with no line break in it — is
+// its own whole headline, so the level that drops the value's text drops none
+// of it and that line alone can push the body past the budget (tick 8wa). The
+// worker's first words stay; the rest is cut at a rune boundary, and the full
+// key beside it names the record the whole text lives in.
+const prBodyHeadlineChars = 200
+
+// boundHeadline is the amendment's headline for the body at this condensation
+// level: whole below the most condensed one — the value is written under it
+// there, and a headline shorter than its own value would say less than the
+// body already does — and bounded to prBodyHeadlineChars runes at it, so no
+// single note can outgrow the condensation that exists to fit it. The cut is
+// by rune, never by byte: a body is counted in characters, and one that
+// split a rune would send a malformed character to the forge.
+func boundHeadline(amendment runstate.Amendment, condense int) string {
+	headline := amendment.FirstLine()
+	if condense < prBodyOmitAmendmentText || utf8.RuneCountInString(headline) <= prBodyHeadlineChars {
+		return headline
+	}
+	return string([]rune(headline)[:prBodyHeadlineChars]) + "…"
+}
 
 func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (string, int, error) {
 	if _, err := r.store.Fetch(); err != nil {
@@ -347,11 +373,12 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 	// text the operator reads to decide. Full text, like the findings: a
 	// decision made against a summary is a decision made against prose
 	// nobody scored. Except at the most condensed level (tick 8wa), which
-	// drops the value's full text — the operator's decision surface survives
-	// the condensation as the headline, key and decision the status line
-	// carries — because a body over the budget falls to the forge's
-	// last-resort fit and that truncates the tail, where the readiness
-	// section sits.
+	// drops the value's full text and bounds the headline that survives — a
+	// value that is one line is its own whole headline, so without the bound the
+	// level drops none of it. The operator's decision surface is what the status
+	// line keeps: the headline, the key and the decision. A body over the
+	// budget falls to the forge's last-resort fit, and that truncates the tail,
+	// where the readiness section sits.
 	body.WriteString("\n## Amendments to the epic's record\n\n")
 	if len(amendments) == 0 {
 		// The absence is stated from the RECORD's view, and says so: a worker's
@@ -374,20 +401,21 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 				r.runID, r.branch)
 		}
 		for _, amendment := range amendments {
+			headline := boundHeadline(amendment, condense)
 			switch amendment.Status {
 			case runstate.AmendmentConfirmed:
 				fmt.Fprintf(&body, "\n- CONFIRMED — %q (key %s, %s on the epic, proposed by %s): the operator let it "+
-					"stand, by %s at %s\n", amendment.FirstLine(), short(amendment.Key), amendment.Field,
+					"stand, by %s at %s\n", headline, short(amendment.Key), amendment.Field,
 					r.attemptName(amendment.ProposedBy, amendment.Attempt), amendment.DecidedBy, amendment.DecidedAt)
 			case runstate.AmendmentRejected:
 				fmt.Fprintf(&body, "\n- REJECTED — %q (key %s, %s on the epic, proposed by %s): the operator disowned "+
 					"it, by %s at %s, and the close-out does not hand over while the record still carries it\n",
-					amendment.FirstLine(), short(amendment.Key), amendment.Field,
+					headline, short(amendment.Key), amendment.Field,
 					r.attemptName(amendment.ProposedBy, amendment.Attempt), amendment.DecidedBy, amendment.DecidedAt)
 			default:
 				fmt.Fprintf(&body, "\n- PENDING — %q (key %s, %s on the epic, proposed by %s): waiting for the "+
 					"operator — confirm with `ticfac amendment %s %s --confirm --by <who>`, reject with --reject\n",
-					amendment.FirstLine(), amendment.Key, amendment.Field,
+					headline, amendment.Key, amendment.Field,
 					r.attemptName(amendment.ProposedBy, amendment.Attempt), r.opts.EpicID, amendment.Key)
 			}
 			if condense >= prBodyOmitAmendmentText {
