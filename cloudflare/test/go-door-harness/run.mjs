@@ -146,10 +146,16 @@ async function main() {
   // The v4 options shape is the one wrangler dev itself hands miniflare, so
   // the harness states its bindings the way the deployed config states them.
   // Only the bindings the door needs are declared: DB (the run index and the
-  // credential rows), RUN_ROOMS (the real dispatch lease), and the plain vars
-  // sandboxExecutorDepsFromEnv reads. SANDBOXES is deliberately absent — the
-  // wrapper substitutes the fake binding per request, the same substitution
-  // the worker's own vitest suite makes.
+  // credential rows), RUN_ROOMS (the real dispatch lease), CLAUDE_SUB_POOL
+  // (the real claude-sub pool, with the one subscription token the rung's
+  // end-to-end test leases — a placeholder value, never a real token) and
+  // the plain vars sandboxExecutorDepsFromEnv reads. SANDBOXES is deliberately
+  // absent — the wrapper substitutes the fake binding per request, the same
+  // substitution the worker's own vitest suite makes — and WORKER_AGENTS is
+  // declared the same way when the Go test starts the harness with
+  // --with-worker-agents (tick yhe), through a var the wrapper reads so the
+  // suite's other tests keep the unhosted door they are about.
+  const withWorkerAgents = process.argv.includes("--with-worker-agents");
   const options = () =>
     convertV4MiniflareOptions({
       host: "127.0.0.1",
@@ -164,9 +170,14 @@ async function main() {
       bindings: {
         FACTORY_BASE_URL: url,
         GITHUB_TOKEN: "gh-door-harness",
+        CLAUDE_SUB_TOKEN_MAX1: "sk-ant-oat01-not-a-real-token",
+        ...(withWorkerAgents ? { TICFAC_DOOR_HARNESS_WORKER_AGENTS: "1" } : {}),
       },
       d1Databases: { DB: join(outDir, "db.sqlite") },
-      durableObjects: { RUN_ROOMS: { className: "RunRoom", useSQLite: true } },
+      durableObjects: {
+        RUN_ROOMS: { className: "RunRoom", useSQLite: true },
+        CLAUDE_SUB_POOL: { className: "ClaudeSubPool" },
+      },
     });
 
   const mf = new Miniflare(options());

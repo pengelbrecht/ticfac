@@ -50,7 +50,7 @@
 import { ACTIVE_RUN_STATES } from "./runs";
 import type { OrchestratorSandbox, SandboxBinding } from "./sandbox";
 import { attemptSandboxNameForSlot } from "./sandbox-executor";
-import type { WorkerAgentResolver } from "./worker-agent";
+import { WORKER_AGENT_HARNESS, type WorkerAgentResolver } from "./worker-agent";
 import { WORKER_COMMAND, workerCancelCommand } from "./worker-boot";
 import { defaultSleeper, type Sleeper } from "./worker-dispatch";
 
@@ -158,6 +158,14 @@ type JobBoot = {
   attempt: number;
   job: string;
   at: string;
+  /**
+   * The harness the job's boot recorded it runs on (tick yhe): the agent's
+   * `pi-durable` for a hosted attempt, the CLI kind a container worker
+   * bound to — which a hosted deployment's reclaim routes on, because a
+   * claude-sub job's container is asked for its own salvage even there.
+   * '' is a row from before the column existed, which reads as hosted.
+   */
+  harness: string;
   settled: boolean;
   /**
    * Already recorded reclaimed — re-checked by the sweep, because a destroy
@@ -197,7 +205,7 @@ async function unreclaimedBoots(
   binds.push(filter.limit ?? 200);
   const rows = await db
     .prepare(
-      `SELECT b.run_id, b.tick_id, b.attempt, b.job, b."at" AS at,
+      `SELECT b.run_id, b.tick_id, b.attempt, b.job, b.harness, b."at" AS at,
          EXISTS (SELECT 1 FROM sandbox_job_settled s WHERE s.run_id = b.run_id
            AND s.tick_id = b.tick_id AND s.attempt = b.attempt AND s.job = b.job) AS settled,
          EXISTS (SELECT 1 FROM sandbox_job_reclaimed rc WHERE rc.run_id = b.run_id
@@ -373,9 +381,18 @@ async function reclaimBoots(
     }
     // A hosted worker (tick xd3) is stopped through its agent, never asked
     // through its container: the agent owns the attempt, and its wip
-    // checkpoints already pushed what it had after every tool round.
+    // checkpoints already pushed what it had after every tool round. A
+    // claude-sub job is NOT hosted (tick yhe): its boot names the CLI kind
+    // its own container worker runs, so even on a deployment that binds
+    // WORKER_AGENTS the container is the one to ask — an agent that holds
+    // nothing of it would leave its unpushed tail on the floor.
     try {
-      const hosting = options.agents === undefined ? null : await options.agents(boot.run_id);
+      const hosting =
+        boot.harness !== "" && boot.harness !== WORKER_AGENT_HARNESS
+          ? null
+          : options.agents === undefined
+            ? null
+            : await options.agents(boot.run_id);
       if (hosting !== null) {
         const stopped = await bounded(hosting.agent(name).reclaim(options.reason), askTimeout);
         entry.detail +=

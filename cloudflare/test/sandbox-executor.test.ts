@@ -263,6 +263,7 @@ class FakeBootRecord implements SandboxBootRecord {
     attempt: number;
     job: string;
     model: string;
+    harness: string;
   }> = [];
   readonly #byIdentity = new Map<string, string>();
 
@@ -277,6 +278,7 @@ class FakeBootRecord implements SandboxBootRecord {
     attempt: number;
     job: string;
     model: string;
+    harness: string;
   }): Promise<void> {
     this.#byIdentity.set(`${boot.run_id}/${boot.tick_id}/${boot.attempt}/${boot.job}`, boot.model);
     this.recorded.push({ ...boot });

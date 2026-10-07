@@ -183,6 +183,7 @@ async function workersOf(run: Run): Promise<{ live: FakeWorker[]; settled: FakeW
       attempt: 1,
       job: "",
       model: "workers-ai/@cf/zai-org/glm-5.3",
+      harness: "pi",
       at,
     });
     const container = binding.named(attemptSandboxName(run.run_id, tick, 1));
@@ -195,6 +196,7 @@ async function workersOf(run: Run): Promise<{ live: FakeWorker[]; settled: FakeW
     attempt: 2,
     job: "",
     model: "workers-ai/@cf/zai-org/glm-5.3",
+    harness: "pi",
     at,
   });
   await recordSandboxJobSettled(env.DB, {
