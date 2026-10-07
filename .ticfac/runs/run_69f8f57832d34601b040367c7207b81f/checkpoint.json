@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 46,
-  "state": "running",
-  "reason": "3sd is closed",
-  "updated_at": "2026-10-07T14:41:45Z",
+  "sequence": 47,
+  "state": "dispatching",
+  "reason": "dispatching 8wa as attempt 12",
+  "updated_at": "2026-10-07T14:41:59Z",
   "ticks": [
     {
       "tick_id": "2p3",
