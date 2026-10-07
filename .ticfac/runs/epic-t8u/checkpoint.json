@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 108,
-  "state": "gating",
-  "reason": "running the integrated gate for o3q on 4f9febc919eb",
-  "updated_at": "2026-10-07T22:24:58Z",
+  "sequence": 109,
+  "state": "publishing",
+  "reason": "closing o3q behind the integrated gate on 4f9febc919eb",
+  "updated_at": "2026-10-07T22:27:04Z",
   "ticks": [
     {
       "tick_id": "pqs",
