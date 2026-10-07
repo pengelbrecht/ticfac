@@ -2,15 +2,15 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 13,
-  "state": "dispatching",
-  "reason": "dispatching 2p3 as attempt 5",
-  "updated_at": "2026-10-07T13:51:01Z",
+  "sequence": 14,
+  "state": "running",
+  "reason": "2p3 is running as attempt 5",
+  "updated_at": "2026-10-07T13:51:11Z",
   "ticks": [
     {
       "tick_id": "2p3",
-      "state": "ready",
-      "attempt": 1
+      "state": "dispatched",
+      "attempt": 5
     },
     {
       "tick_id": "2pn",
