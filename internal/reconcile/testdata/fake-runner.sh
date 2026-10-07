@@ -118,7 +118,7 @@ review_not_ready_report() {
 		printf '%s\n' '  "kind": "defect",'
 		printf '%s\n' "  \"title\": \"$2\","
 		printf '%s\n' '  "severity": "high",'
-		printf '%s\n' '  "body": "The reason the epic is not ready."'
+		printf '%s\n' "  \"body\": \"${3:-The reason the epic is not ready.}\""
 		printf '%s\n' '}, {'
 		printf '%s\n' '  "kind": "proposal",'
 		printf '%s\n' '  "title": "A polish the review noticed on the way",'
@@ -799,6 +799,33 @@ review_not_ready_then_ready)
 		review_not_ready_report "the Phase 4 gate run never happened" "The Phase 4 gate run never happened"
 	elif [ "$TICFAC_ROLE" = "review-epic" ]; then
 		report
+	else
+		commit
+		report
+	fi
+	;;
+review_base_drift)
+	# The epic-ilz shape (2026-10-07): main keeps moving under the epic. The
+	# first review (rv) judges the epic NOT READY over a defect of its own
+	# work. The test folds a change to shared/api.txt from main into epic/qeu
+	# while each absorbed fix is worked, so every later review finds the
+	# epic's claims stale against shared/api.txt as main left it: NOT READY,
+	# its blocking finding naming the file the fold brought in. The review
+	# numbered DRIFT_READY_AT (counted in DRIFT_SYNC; 0 = never) answers READY.
+	# DRIFT_BODY replaces the blocking finding's body: one naming nothing the
+	# fold brought in is a reviewer calling the epic's own defect drift.
+	if [ "$TICFAC_ROLE" = "review-epic" ]; then
+		n=$(( $(cat "$DRIFT_SYNC/reviews" 2>/dev/null || printf 0) + 1 ))
+		printf '%s\n' "$n" > "$DRIFT_SYNC/reviews"
+		if [ "$n" = "1" ]; then
+			review_not_ready_report "the Phase 4 gate run never happened" "The Phase 4 gate run never happened"
+		elif [ "$n" = "${DRIFT_READY_AT:-0}" ]; then
+			report
+		else
+			review_not_ready_report "the epic's claims about shared/api.txt went stale when main merged under it" \
+				"Claims went stale when main merged under the epic (review $n)" \
+				"${DRIFT_BODY:-main rewrote shared/api.txt (folded in since the last review) and the epic claims no longer match it.}"
+		fi
 	else
 		commit
 		report

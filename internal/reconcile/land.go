@@ -508,7 +508,11 @@ func (r *Reconciler) landingReviewHold(tick string) (*Refusal, error) {
 	}
 	final := *rounds.final
 	why := fmt.Sprintf("after %d review round(s), the bound being %d", rounds.rounds, maxReviewRounds)
-	if rounds.rounds < maxReviewRounds {
+	if rounds.drift > 0 {
+		why += fmt.Sprintf(" (%d of them excused as the base moving under the epic, the most the run excuses "+
+			"being %d)", rounds.drift, maxDriftReviewRounds)
+	}
+	if !rounds.spent() {
 		why = "and it named no blocking finding the run could absorb and fix"
 	}
 	return r.refuse(RefusedLandReviewNotReady, tick,
