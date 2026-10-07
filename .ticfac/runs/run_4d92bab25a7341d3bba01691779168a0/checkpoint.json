@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 9,
-  "state": "dispatching",
-  "reason": "dispatching yaz as attempt 2",
-  "updated_at": "2026-10-07T07:01:16Z",
+  "sequence": 10,
+  "state": "running",
+  "reason": "yaz is running as attempt 2",
+  "updated_at": "2026-10-07T07:01:33Z",
   "ticks": [
     {
       "tick_id": "56z",
@@ -14,7 +14,8 @@
     },
     {
       "tick_id": "yaz",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 2
     },
     {
       "tick_id": "kzs",
