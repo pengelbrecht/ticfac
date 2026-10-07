@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 104,
-  "state": "running",
-  "reason": "q6z try 2 (run dispatch #20) is rejected (ready-to-merge): BLOCKED: the tick's named deliverable is one cell in `.tick/runners.toml`, a path no dispatched attempt may write on this substrate (the container's pre-commit hook refuses any staged `.tick/` path and the cloud collect refuses any `.tick/` diff), so the `args = [\"--approve\"]` line and its comment still stand there; the exact, verified replacement and the guard that pins it are in this report for the operator (or the run's own writer, once a config-edit channel exists — ky7), while everything the repository itself could reach is done, committed and gate-green on this branch.",
-  "updated_at": "2026-10-07T20:06:21Z",
+  "sequence": 105,
+  "state": "dispatching",
+  "reason": "dispatching q6z as attempt 21",
+  "updated_at": "2026-10-07T20:06:34Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -49,7 +49,7 @@
     },
     {
       "tick_id": "q6z",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 20
     },
     {
