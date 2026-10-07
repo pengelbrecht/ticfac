@@ -3210,7 +3210,11 @@ describe("the completion signal (tick 7eq)", () => {
   /** The POST a finished orchestrator makes: the done door, on its run token. */
   function postDoneSignal(
     token: string,
-    body: { branch: string; head?: string },
+    body: {
+      branch: string;
+      head?: string;
+      outcome?: { state: string; exit_code?: number; reason?: string; halt?: string };
+    },
   ): Promise<Response> {
     return SELF.fetch("https://factory.example.com/api/done", {
       method: "POST",
@@ -3328,6 +3332,98 @@ describe("the completion signal (tick 7eq)", () => {
 
     const logged = await listDispatchLogs(env.DB, runID, epic);
     expect(logged.some((entry) => entry.decision === "signal:done")).toBe(true);
+  });
+
+  // Tick 1y4 — epic ilz's cloud run, 2026-10-07: run_4d92bab2 halted at
+  // 09:07:43, its done signal was HEARD at 09:07:44, and the look it woke saw
+  // the process still running (run-epic posted the door before its last
+  // deferred cleanup). The watch went back to its five-minute cadence, the
+  // operator hard-stopped what looked like a hung run, and the Workflow then
+  // sat out the five-minute stop grace on top: ten minutes `running` after
+  // the halt line. These pin both halves of the fix.
+  it("ends a halted run whose orchestrator lingers after its done signal — on the settle window, not the cadence", async () => {
+    // A cadence and a stop grace the test could never wait out: if this
+    // settles at all, the settle window ended it.
+    set("RUN_POLL_INTERVAL_MS", "600000");
+    set("RUN_STOP_GRACE_MS", "600000");
+    set("RUN_DONE_SETTLE_MS", "2000");
+    const { runID, project, epic } = await ignite();
+    const process = await firstProcess();
+
+    // The halt line, relayed before the signal (run-epic drains the relay
+    // first), then the signal with the run's own outcome — and the process
+    // NEVER exits on its own: the linger.
+    await env.ARTIFACTS.put(
+      relayFeedKey(project, runID, 1, "feed", 0),
+      `${JSON.stringify({
+        schema_version: 1,
+        at: "2026-10-07T09:07:43Z",
+        run_id: runID,
+        tick_id: null,
+        attempt: null,
+        stage: STAGE_SUPERVISION_HALTED,
+        detail: "the run stopped and will NOT be continued automatically: it needs a person",
+      })}\n`,
+    );
+    const answered = await postDoneSignal(process.env.TICKS_FACTORY_TOKEN!, {
+      branch: `epic/${epic}`,
+      outcome: { state: "failed", exit_code: 1, halt: "it needs a person" },
+    });
+    expect(answered.status).toBe(202);
+
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    // Stopped by the watch, and concluded as the halt it was: no reboot.
+    expect(process.killed).toBe(true);
+    expect(sandboxes.booted).toHaveLength(1);
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.detail).toContain("stopped deliberately (boot 1, exit 1)");
+    expect(record.detail).toContain("will NOT be continued automatically");
+    expect(record.detail).toContain("had not exited 2s after reporting its end");
+  });
+
+  it("never stops a running orchestrator over a bare wake-up that reports no outcome", async () => {
+    set("RUN_POLL_INTERVAL_MS", "1000");
+    set("RUN_DONE_SETTLE_MS", "1000");
+    const { runID, epic } = await ignite();
+    const process = await firstProcess();
+
+    await postDoneSignal(process.env.TICKS_FACTORY_TOKEN!, { branch: `epic/${epic}` });
+    // Several settle windows' worth of looks: the process is still running
+    // and was never stopped.
+    const looked = sandboxes.booted[0]!.looked;
+    await waitFor("looks past the settle window", async () =>
+      sandboxes.booted[0]!.looked >= looked + 4 ? true : null,
+    );
+    expect(process.killed).toBe(false);
+
+    orchestratorPushedWork(epic);
+    process.exit(0);
+    expect((await settled(runID)).state).toBe("completed");
+  });
+
+  it("gives an orchestrator that has already exited no stop grace", async () => {
+    set("RUN_POLL_INTERVAL_MS", "600000");
+    set("RUN_STOP_GRACE_MS", "600000");
+    const { runID, epic } = await ignite();
+    const process = await firstProcess();
+
+    // The process is over, THEN the run is stopped, and the next look sees
+    // both at once: the trip is read first, and before tick 1y4 it slept out
+    // the whole grace window on a process with nothing in flight. (A clean
+    // stop, so the run's token still opens the done door that wakes the look;
+    // a hard stop revokes it first, and its grace was the same sleep.)
+    process.exit(1);
+    const stopped = await stopRun(env, runID, "operator");
+    expect(stopped.outcome).toBe("stopping");
+    const answered = await postDoneSignal(process.env.TICKS_FACTORY_TOKEN!, {
+      branch: `epic/${epic}`,
+    });
+    expect(((await answered.json()) as { delivered: boolean }).delivered).toBe(true);
+
+    const run = await settled(runID);
+    expect(run.state).toBe("stopped");
+    expect(sandboxes.booted).toHaveLength(1);
   });
 });
 
