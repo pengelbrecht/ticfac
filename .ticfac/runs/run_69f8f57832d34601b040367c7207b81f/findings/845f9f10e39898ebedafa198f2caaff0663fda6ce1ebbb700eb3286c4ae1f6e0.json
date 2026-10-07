@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "8gd",
   "attempt": 8,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T16:24:39Z",
+  "triaged_at": "2026-10-07T16:24:48Z",
+  "triaged_by": "ticfac run run_69f8f57832d34601b040367c7207b81f absorbing 2ha",
+  "promoted_as": "2ha",
   "provenance": {
     "run_id": "run_69f8f57832d34601b040367c7207b81f",
     "tick_id": "8gd",
