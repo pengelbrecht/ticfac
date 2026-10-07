@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 12,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-10-06T23:19:56Z",
+  "sequence": 13,
+  "state": "collecting",
+  "reason": "collecting tda attempt 2",
+  "updated_at": "2026-10-07T00:56:12Z",
   "ticks": [
     {
       "tick_id": "6fv",
