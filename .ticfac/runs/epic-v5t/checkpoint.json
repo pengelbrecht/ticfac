@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 33,
-  "state": "dispatching",
-  "reason": "dispatching 54l as attempt 6",
-  "updated_at": "2026-10-07T02:02:45Z",
+  "sequence": 34,
+  "state": "running",
+  "reason": "54l is running as attempt 6",
+  "updated_at": "2026-10-07T02:02:59Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -19,7 +19,8 @@
     },
     {
       "tick_id": "54l",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 6
     },
     {
       "tick_id": "9uc",
