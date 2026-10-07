@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Three claims in docs/claude-sub-operator.md contradict cloudflare/src/claude-sub.ts, the file A1 requires them to be checked against. (1) Line 82 says a quota bench with neither a usable unified reset nor retry-after lands \"one second out\"; classifyAnswer computes `reset ?? retryAt ?? now + THROTTLE_COOLDOWN_MS` = 60 seconds, and `Math.max(until, now + 1000)` is only a floor, so an operator is told 1s where the pool means 60s. (2) Lines 83-84 say a 429 that is not a quota rejection benches \"only briefly (60 seconds)\"; the throttle arm returns `retryAt ?? now + THROTTLE_COOLDOWN_MS`, so an answer carrying retry-after benches for that instead, which may be far longer than a minute. (3) Lines 73-74 say a job that holds a lease gets the same subscription back \"on every later ask, benched or not\"; ClaudeSubPoolCore.lease only reuses a held lease while `now - held.at < LEASE_TTL_MS` (2 hours), after which the job is treated as new and may be given a different subscription. The same section also describes the quota test as the unified status (or a per-window variant) reading `rejected`, omitting that a 429 with no unified-status header but a parseable unified reset is also treated as quota, and that windows matching /overage/ are excluded. The guide's operator commands are all correct; it is the explanatory numbers in its most operationally load-bearing section that are not.\nevidence: docs/claude-sub-operator.md:73-84 against cloudflare/src/claude-sub.ts:107,110,207-241,329-334\n\nticfac run run_4d92bab25a7341d3bba01691779168a0 filed this backlog tick from the finding c25b88df0e75a744bf182d99ae85116f013b1bfa3f092421145e1e76c1920acb (reported by run-run_4d92bab25a7341d3bba01691779168a0/tick-yaz/attempt-2) rather than absorb it into the running epic: its reporter rated it high severity and named the done it breaks, but the epic's work was done when it was reported, so it is deferred to the final reviewer. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/c25b88df0e75a744bf182d99ae85116f013b1bfa3f092421145e1e76c1920acb.json on the run branch.",
+    "epic_id": "ilz",
+    "role": "classify-tick",
+    "tick_id": "5gm",
+    "title": "claude-sub guide's failover section misstates bench durations and lease TTL"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.54,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.06,
+      "design": 0.02,
+      "diagnosis": 0.24,
+      "mechanical": 0.63,
+      "translation": 0.05
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1713,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T07:13:27Z",
+  "answered_at": "2026-10-07T07:13:27Z",
+  "provenance": {
+    "run_id": "run_4d92bab25a7341d3bba01691779168a0",
+    "tick_id": "5gm",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "114aec1cd1fd7c8759ca072303a8ea2622aa6300",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:010eb649e6e272c231b13167ae23a3f8d2c68432250f86ee24d25a86d302f6d7",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
