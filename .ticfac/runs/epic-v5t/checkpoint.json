@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 55,
-  "state": "publishing",
-  "reason": "closing 8rm behind its validated review-epic answer",
-  "updated_at": "2026-10-07T03:46:42Z",
+  "sequence": 56,
+  "state": "running",
+  "reason": "8rm is closed",
+  "updated_at": "2026-10-07T03:46:46Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -43,7 +43,7 @@
     },
     {
       "tick_id": "8rm",
-      "state": "reported",
+      "state": "closed",
       "attempt": 9
     }
   ],
