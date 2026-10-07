@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 77,
-  "state": "gating",
-  "reason": "running the integrated gate for ncr on 9bbeb5ae821b",
-  "updated_at": "2026-10-07T19:24:58Z",
+  "sequence": 78,
+  "state": "publishing",
+  "reason": "closing ncr behind the integrated gate on 9bbeb5ae821b",
+  "updated_at": "2026-10-07T19:26:56Z",
   "ticks": [
     {
       "tick_id": "pqs",
