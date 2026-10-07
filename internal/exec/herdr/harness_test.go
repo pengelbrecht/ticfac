@@ -122,6 +122,12 @@ type harness struct {
 	mode           string // the fake agent's mode
 	agentCmd       *exec.Cmd
 	paneCloseCalls []string // pane ids pane.close accepted, in order (the wall-clock escalation's record)
+	// confirmWaitServed records how long the fake's agent.wait route served
+	// each confirm wait — the gate's acknowledgement call, its only caller —
+	// so a test can assert on the wait's own cost at the server, where the
+	// burn would happen, rather than on a wall clock host load moves for its
+	// own reasons (tick u51).
+	confirmWaitServed []time.Duration
 
 	// The fake agent's process, tracked behind mu: the goroutine that
 	// reaps it (cmd.Wait, launched by the agent.start route) is the only
@@ -538,15 +544,40 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		if p.TimeoutMs != nil {
 			budget = time.Duration(*p.TimeoutMs) * time.Millisecond
 		}
+		served := time.Now()
+		note := func() {
+			h.mu.Lock()
+			h.confirmWaitServed = append(h.confirmWaitServed, time.Since(served))
+			h.mu.Unlock()
+		}
 		deadline := time.Now().Add(budget)
 		for {
 			status := h.currentStatus()
 			for _, want := range p.Until {
 				if want == status {
+					note()
 					return agentInfo(t, req, w)
 				}
 			}
+			// A dispatch the harness never gave an agent process can never
+			// reach work: the status file's only writer is the agent process
+			// agent.start never launched, and the only other one is the test
+			// itself, which is blocked inside Start until this wait answers.
+			// The answer the wait would give after polling its whole budget is
+			// knowable now, so it is given now — herdr's own definitive
+			// timeout, the same reply the deadline below would have written,
+			// only without the second of silence a dispatch with no worker
+			// behind it used to pay for it (tick u51). What the gate does with
+			// the answer is untouched: the call was made, the timeout is
+			// classified, the finding is recorded. A spawned agent still gets
+			// the real wait, because a process that exists can still reach
+			// `working` — that is the half worth its budget.
+			if !h.spawn {
+				note()
+				return herdtest.RespondErr(w, req.ID, "timeout", "agent did not reach "+strings.Join(p.Until, ","))
+			}
 			if !time.Now().Before(deadline) {
+				note()
 				return herdtest.RespondErr(w, req.ID, "timeout", "agent did not reach "+strings.Join(p.Until, ","))
 			}
 			time.Sleep(25 * time.Millisecond)
@@ -628,9 +659,12 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 	}
 	// The harness's patience budgets are short: the pane-busy retry and the
 	// readiness poll must be exercised without a 60-second default behind
-	// them, and the confirm wait — which a dispatch with no visible work
-	// burns in full — is a second, ample for the fake agent to reach
-	// `working` and short enough not to stall the suite.
+	// them, and the confirm wait is a second, ample for a spawned fake agent
+	// to reach `working` and short enough not to stall the suite. A dispatch
+	// with no agent behind it no longer burns that second at all: the fake's
+	// agent.wait route knows nothing was spawned and answers its definitive
+	// timeout at once, so the budget is paid only by the dispatches that can
+	// actually use it (tick u51).
 	ex.opts.StartupTimeout = 3 * time.Second
 	ex.opts.ConfirmTimeout = 1 * time.Second
 	ex.opts.InterruptGrace = 1 * time.Second
@@ -679,6 +713,16 @@ func (h *harness) paneCloses() []string {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return append([]string(nil), h.paneCloseCalls...)
+}
+
+// confirmWaits lists how long the fake served each agent.wait — the gate's
+// confirm wait, its only caller — so a test can assert on the wait's own
+// cost at the server, where the burn would happen, instead of on a wall
+// clock host load moves for its own reasons.
+func (h *harness) confirmWaits() []time.Duration {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]time.Duration(nil), h.confirmWaitServed...)
 }
 
 // agentProcess answers whether the harness launched the fake agent, and

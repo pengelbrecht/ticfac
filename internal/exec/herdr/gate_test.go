@@ -146,6 +146,95 @@ func TestATruncatedGateReadIsNotAFailedAgent(t *testing.T) {
 	}
 }
 
+// TestADispatchWithNoAgentBehindItDoesNotPayTheConfirmWait is the wasted
+// wait (tick u51): a harness that spawned no agent has no process to write
+// the status the confirm wait polls, so the wait used to burn its whole
+// budget answering a question nothing could ever answer — a second per
+// dispatch, roughly 40% of the package's wall clock. What the wait is FOR
+// is real behaviour and stays: the call is made, the answer is classified,
+// the finding is on the record. What a dispatch with no agent behind it no
+// longer pays is the budget, and the assertion observes the wait's own
+// served time at the fake, where the burn happened, rather than the
+// test's wall clock — host load moves a wall clock for its own reasons
+// (cy2), but it cannot manufacture a second of work inside a file read.
+func TestADispatchWithNoAgentBehindItDoesNotPayTheConfirmWait(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The served time is recorded at the server the instant BEFORE it
+	// writes its reply, and the fake can still be mid-burn when the client
+	// has already given up on its own earlier deadline — so the recording
+	// is waited for, never sampled (the wait may land a moment after the
+	// start that asked for it returned).
+	if !waitForOr(t, "the fake to serve the confirm wait", 2*time.Second, func() bool {
+		return len(h.confirmWaits()) >= 1
+	}) {
+		t.Fatal("the fake never served a confirm wait: the gate did not ask herdr to wait for working")
+	}
+	waits := h.confirmWaits()
+	if waits[0] >= h.ex.opts.ConfirmTimeout {
+		t.Errorf("the confirm wait burned %s of its %s budget on a dispatch with no agent behind it: "+
+			"nothing was ever going to write the status it polls, so the answer was knowable at once", waits[0], h.ex.opts.ConfirmTimeout)
+	}
+
+	// The confirm path was still exercised in full: the wait was asked, it
+	// answered its definitive timeout, and the gate recorded the finding
+	// that answer rests on — nothing about the observation changed, only
+	// how long the fake took to say it.
+	record, observations := gateRecordOf(t, h, handle)
+	if record.DispatchConfirmed {
+		t.Error("the record claims a confirmed dispatch: working was never observed")
+	}
+	if record.DispatchGate != GateUnexpectedAnswer {
+		t.Errorf("the gate finding is %q, want %q: the definitive timeout is the same answer the full burn gave, "+
+			"only cheaper (observations below)\n%s", record.DispatchGate, GateUnexpectedAnswer, observations)
+	}
+	if !strings.Contains(observations, "not the expected work") {
+		t.Errorf("the unexpected-answer finding is missing from the observation stream:\n%s", observations)
+	}
+}
+
+// TestADispatchThatReachesWorkingIsConfirmedOverTheProtocol is the other
+// half of the confirm wait's contract, the one the fix must not touch: the
+// wait is real behaviour worth keeping, so a dispatch whose agent IS
+// working must still be waited for and confirmed. The status the wait polls
+// is seeded before the dispatch — no process, no race with a shell — so
+// the confirmation is deterministic; what it exercises is the wait, the
+// gate's classification of its answer, and the record it lands on.
+func TestADispatchThatReachesWorkingIsConfirmedOverTheProtocol(t *testing.T) {
+	h := newHarness(t, harnessOptions{})
+	h.setStatus("working")
+	handle, err := h.start("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !waitForOr(t, "the fake to serve the confirm wait", 2*time.Second, func() bool {
+		return len(h.confirmWaits()) >= 1
+	}) {
+		t.Fatal("the fake never served a confirm wait: the gate did not ask herdr to wait for working")
+	}
+	waits := h.confirmWaits()
+	if len(waits) != 1 {
+		t.Fatalf("the fake served %d confirm waits, want the one the gate asks for", len(waits))
+	}
+	if waits[0] >= h.ex.opts.ConfirmTimeout {
+		t.Errorf("a working agent was confirmed only after %s of the %s budget: the wait polls the "+
+			"status it was given, which was there before it was asked", waits[0], h.ex.opts.ConfirmTimeout)
+	}
+	record, observations := gateRecordOf(t, h, handle)
+	if !record.DispatchConfirmed {
+		t.Error("the record does not carry the confirmation: the agent's working was observed over the protocol")
+	}
+	if record.DispatchGate != GateConfirmed {
+		t.Errorf("the gate finding is %q, want %q (observations below)\n%s", record.DispatchGate, GateConfirmed, observations)
+	}
+	if !strings.Contains(observations, "entered working") {
+		t.Errorf("the confirmation is missing from the observation stream:\n%s", observations)
+	}
+}
+
 // TestTheGateDistinguishesItsFindings drives each road through the gate and
 // asserts the three outcomes the tick names — plus the two it allows — land
 // as three-plus-two DIFFERENT values on the record, each from exactly the
