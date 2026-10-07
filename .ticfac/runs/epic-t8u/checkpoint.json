@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 32,
-  "state": "integrating",
-  "reason": "integrating fn8 attempt 7 into epic/t8u",
-  "updated_at": "2026-10-07T16:00:30Z",
+  "sequence": 33,
+  "state": "gating",
+  "reason": "running the integrated gate for fn8 on 9a34b1001b74",
+  "updated_at": "2026-10-07T16:00:46Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "fn8",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 7
     },
     {
