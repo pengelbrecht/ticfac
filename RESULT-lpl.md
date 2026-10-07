@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ilz/attempt-1/lpl`, base `f0361100656d48fc9e6d152bcadc4a7588c1b02f`, harness `claude` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
 # Re-review of epic ilz, round 4 — AS INTEGRATED
 
 Reviewed `epic/ilz` at `1ff1dde4` (my checkout, `f0361100`, is its ancestor and
