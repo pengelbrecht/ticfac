@@ -33,13 +33,19 @@ verdict_line() {
 }
 
 report() {
+	# Written aside and renamed into place, so the report appears whole. A
+	# test that waits for the file to exist and then inspects would otherwise
+	# race the redirect: the shell creates the file empty, and an inspect that
+	# lands before the STATUS line reads a report that ends nothing and
+	# answers running (the gate of epic t8u, tick 89g, failed on exactly that).
 	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
 	{
 		printf '# %s\n\n' "${TICFAC_TICK}"
 		printf 'The fake runner ran in mode %s.\n\n' "$mode"
 		verdict_line
 		printf 'STATUS: %s\n' "$status"
-	} > "$TICFAC_RESULT_PATH"
+	} > "$TICFAC_RESULT_PATH.partial"
+	mv "$TICFAC_RESULT_PATH.partial" "$TICFAC_RESULT_PATH"
 }
 
 case "$mode" in
