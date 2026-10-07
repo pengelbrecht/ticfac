@@ -173,7 +173,21 @@ file = true
 # 2026-09-23 - gate green, epic PR red - and the close-out held on it.
 # `(! grep .)` prints any unformatted file and fails if there was one; it is
 # written without $ so the Makefile's gate target can carry the same line.
-go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout 45m -parallel 12 ./...", description = "Go: gofmt, vet and tests, as CI runs them" }
+#
+# 2026-10-08 - the go test half runs under a STRIPPED GIT ENVIRONMENT (tick
+# pqs): no global or system config file, and user.useConfigOnly refusing the
+# implicit identity fallback. That is CI's machine, reproduced on a laptop: a
+# fixture that commits with no identity of its own - relying on the developer's
+# global git identity - passed every local gate and failed CI with exit 128
+# (tick lkd, 2026-09-24), and a gate that cannot see the condition cannot catch
+# the next one. It is GIT's environment and not HOME=<empty> (the original
+# reproduction's recipe) on purpose: the go toolchain needs HOME for its build
+# cache, the run's own gate builds carry HOME by contract
+# (TestAGateDoesNotInheritTheRunsControlPlane), and the property library
+# resolves a user cache dir at init. The two /dev/null config files give git
+# exactly what an absent HOME gave it - no global config, no system config -
+# and useConfigOnly keeps the identity half honest.
+go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.useConfigOnly GIT_CONFIG_VALUE_0=true go test -short -timeout 45m -parallel 12 ./...", description = "Go: gofmt, vet and tests, as CI runs them" }
 
 # The TypeScript half, added by tick odc. Until it, NOTHING ran cloud/factory's
 # tests — not this gate, not CI — and the cost of that silence was tick b9w: the
