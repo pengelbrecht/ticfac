@@ -1,10 +1,10 @@
 {
   "id": "kzs",
   "title": "Close out the claude-sub operator guide epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "blocked_by": [
     "yaz",
     "0n3"
@@ -13,5 +13,6 @@
   "role": "closeout",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T06:06:13.146497Z",
-  "updated_at": "2026-10-07T06:06:13.146497Z"
+  "updated_at": "2026-10-07T07:51:21.63135042Z",
+  "started_at": "2026-10-07T07:51:21.63134913Z"
 }
