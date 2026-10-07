@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 67,
-  "state": "running",
-  "reason": "p0n is running as attempt 12",
-  "updated_at": "2026-10-07T19:21:10Z",
+  "sequence": 68,
+  "state": "collecting",
+  "reason": "collecting mbv attempt 9",
+  "updated_at": "2026-10-07T19:21:14Z",
   "ticks": [
     {
       "tick_id": "pqs",
