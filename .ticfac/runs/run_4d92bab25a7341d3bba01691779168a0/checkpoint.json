@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 12,
-  "state": "publishing",
-  "reason": "closing yaz behind its validated review-epic answer",
-  "updated_at": "2026-10-07T07:13:04Z",
+  "sequence": 13,
+  "state": "running",
+  "reason": "yaz is closed",
+  "updated_at": "2026-10-07T07:13:06Z",
   "ticks": [
     {
       "tick_id": "56z",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "yaz",
-      "state": "reported",
+      "state": "closed",
       "attempt": 2
     },
     {
