@@ -2,6 +2,7 @@
   "id": "2cv",
   "title": "A '$' in a BLOCKED question's shell command classifies it as Spending money",
   "description": "standing_orders.go's money class lists \"$\" as a subject, and containsWord matches a punctuation-only phrase anywhere. yck's ceiling BLOCKED question quoted `sed -n '/^# Named run configs/,$p' ...`, so the hold was recorded under class 'Spending money'. The outcome (hold for a person) was right for another reason (the deliverable was outside the worker boundary), but any question quoting a shell command, regex or $VAR holds as a money question and tells the person the wrong thing. Match '$' only beside a digit (\\$\\d) or drop it.\nevidence: internal/reconcile/standing_orders.go:143 (\"$\" in the money subjects) and containsWord's punctuation-only branch; .ticfac/runs/epic-v5t/decisions/6.json response.class \"Spending money\"\n\nticfac run epic-v5t filed this backlog tick from the finding fff93cf07bd75ad7a1d3b869d7d0a804121df84d571d51c0fa2cc50fefb3b1fc (reported by run-epic-v5t/tick-9uc/attempt-10) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/fff93cf07bd75ad7a1d3b869d7d0a804121df84d571d51c0fa2cc50fefb3b1fc.json on the run branch.",
+  "notes": "2026-10-07 05:54 - ticfac run epic-v5t: created by absorbing finding fff93cf07bd75ad7a1d3b869d7d0a804121df84d571d51c0fa2cc50fefb3b1fc — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-v5t/absorptions/fff93cf07bd75ad7a1d3b869d7d0a804121df84d571d51c0fa2cc50fefb3b1fc.json on epic/v5t, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-v5t/tick-9uc/attempt-10",
   "created_by": "ticfac run epic-v5t",
   "created_at": "2026-10-07T03:54:30Z",
-  "updated_at": "2026-10-07T03:54:30Z"
+  "updated_at": "2026-10-07T03:54:38.922644Z"
 }
