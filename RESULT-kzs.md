@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ilz/attempt-5/kzs`, base `2a9ca61c26cd8c251f3721f1a92a4898d2f354b5`, harness `claude` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
 # Close-out of epic ilz — the claude-sub operator guide
 
 Epic `ilz`: "Operator guide for claude on the subscription (first claude-config
