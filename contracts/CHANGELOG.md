@@ -53,6 +53,25 @@ loud.
 
 ---
 
+## 2.3.1
+
+PATCH: `lifecycle-invariants.json`'s `today` cross-references follow the code
+they name (ticfac tick p0n). The watch's decision core — the per-look state
+machine that holds an unanswerable container, fails it as its own class past
+MAX_UNANSWERED_LOOKS, classifies a halted or terminal exit, and decides the
+one ending that may boot a replacement — moved out of run-workflow.ts into a
+pure module, `run-watch.ts`, so the Hegel property tests can drive it under
+plain-Node vitest (Hegel's WASM build does not load under workerd; the plain
+modules are what is left to test). The moved symbols (`isTerminalExit`,
+`terminalExitReason`) stop claiming run-workflow.ts, and the four invariants
+whose rules the machine now enforces (A2, A5, A9 and the reboot-only-on-ended
+half of A6) name run-watch.ts as a second site. No rule, fixture shape or
+sequence changed — a consumer of the invariants has nothing to do.
+
+Consumers: `cloudflare/contracts.pin.json` moves to 2.3.1.
+
+---
+
 ## 2.3.0
 
 MINOR: `job-protocol.json`'s observation `kind` gains `claude_sub_quota` — the

@@ -122,7 +122,7 @@ import {
   unverifiedProgress,
 } from "./progress";
 import { readDeclaredSandboxImage } from "./repo-config";
-import { DONE_EVENT_TYPE, type DoneOutcome, type DoneSignal, readDoneSignal } from "./run-done";
+import { DONE_EVENT_TYPE, type DoneSignal, readDoneSignal } from "./run-done";
 import { epicCompleted, epicStarted, publishRunEvents } from "./run-events";
 import {
   appendFeed,
@@ -134,10 +134,29 @@ import {
   UNANSWERABLE_FEED_SEQ,
 } from "./run-feed";
 import { type LeaseLostReason, MAX_LEASE_TTL_MS } from "./run-room";
+// The watch's decision core (tick p0n): a pure state machine, extracted so
+// the Hegel property tests can drive the supervision loop's decisions
+// without workerd. isTerminalExit and terminalExitReason moved there (from
+// ./sandbox, which re-exports them, and the lifecycle contract's `today`
+// cross-reference names run-watch.ts for them since bundle 2.3.1);
+// MAX_UNANSWERED_LOOKS and DONE_SETTLE_LOOK_MS moved there from below. Both
+// are re-exported for every importer this file already served, so the
+// extraction changes no spelling.
+import {
+  DONE_SETTLE_LOOK_MS,
+  MAX_UNANSWERED_LOOKS,
+  type WatchConfig,
+  type WatchDecision,
+  watchDelay,
+  watchEnded,
+  watchHear,
+  watchLook,
+  watchOut,
+  watchStart,
+} from "./run-watch";
 import { logDispatch, type RunWorkflowParams, roomFor } from "./runs";
 import {
   deploymentImage,
-  isTerminalExit,
   ORCHESTRATOR_COMMAND,
   type OrchestratorPhase,
   type OrchestratorSandbox,
@@ -148,8 +167,10 @@ import {
   type SandboxProcessView,
   sandboxBinding,
   sandboxName,
-  terminalExitReason,
 } from "./sandbox";
+
+export { DONE_SETTLE_LOOK_MS, MAX_UNANSWERED_LOOKS } from "./run-watch";
+
 import { workerAgentsFromEnv } from "./worker-agent";
 import { reviewHarness, workerModel } from "./worker-boot";
 
@@ -187,18 +208,14 @@ export const MAX_SANDBOX_BOOTS = 3;
  */
 export const PROCESS_QUERY_ATTEMPTS = 3;
 
-/**
- * How many consecutive looks may fail to ask before the pass gives up on the
- * container (tick 3ed).
- *
- * Bounded on purpose, like every allowance in this file: a container nobody
- * can reach is usually a broken platform, and holding forever would burn the
- * run's whole watch on a question that is never answered. The bound is in
- * LOOKS, not wall clock, so it costs a fixed number of steps inside the
- * instance's budget — and reaching it fails the pass as its own class rather
- * than rebooting, because an unanswered question is not a death (A2/A6).
+/*
+ * MAX_UNANSWERED_LOOKS and DONE_SETTLE_LOOK_MS moved to src/run-watch.ts
+ * with the watch's decision core (tick p0n) and are re-exported above, so
+ * every importer of this module keeps one spelling. The bound's reasons
+ * travel with the constant: see run-watch.ts, which is where a look that
+ * could not ask its container is held and, after the bound, failed as its
+ * own class.
  */
-export const MAX_UNANSWERED_LOOKS = 3;
 
 /**
  * Cloudflare's cap on the steps one Workflow instance may run: 10,000 by
@@ -265,8 +282,10 @@ export const DEFAULT_STOP_GRACE_MS = 300_000; // 5 minutes
  */
 export const DEFAULT_DONE_SETTLE_MS = 30_000;
 
-/** The look cadence while a signalled orchestrator settles (tick 1y4). */
-export const DONE_SETTLE_LOOK_MS = 10_000;
+/*
+ * DONE_SETTLE_LOOK_MS (the settle cadence, tick 1y4) moved to run-watch.ts
+ * with the watch machine that consumes it; re-exported above.
+ */
 
 /**
  * Observation cadence. Fast at first — a broken boot, a missing toolchain and
@@ -1406,10 +1425,12 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
   };
 }
 
-/** Whether a look saw the orchestrator's process over: exited, or gone. */
-function processEnded(state: ObservedProcessState): boolean {
-  return state === "completed" || state === "failed" || state === "gone";
-}
+/*
+ * processEnded (whether a look saw the orchestrator's process over) moved to
+ * run-watch.ts as part of the watch machine (tick p0n): the trip decision it
+ * fed now arrives on the decision itself, so supervisePass reads
+ * `decision.ended` where it used to ask.
+ */
 
 /**
  * One wait between looks (ticks 7eq and cr4): the completion signal when it
@@ -1985,36 +2006,37 @@ async function supervisePass(
       // closeout pass (the only pass that ever carried a window of its own).
       const cadenceDeadline = context.started_at_ms + context.config.max_wall_clock_ms;
 
+      // The watch's DECISIONS come from the pure state machine in
+      // src/run-watch.ts (tick p0n): every verdict below is the machine's, in
+      // its order, so the decisions the live runs paid for are testable
+      // without workerd — the property tests in test/property/ drive this
+      // very transition function. What stays here is everything that touches
+      // a step, a binding or the durable layer: the wait, the observe, the
+      // revocations, the drains, the feed lines, the reconcile. The machine
+      // owns the look budget (watchOut), the unanswered streak, the settle
+      // cadence and the exit classification; this loop owns offset/seq and
+      // the spend sample the pacing reads.
+      const watchConfig: WatchConfig = {
+        max_observations: context.config.max_observations,
+        settle_ms: context.config.done_settle_ms ?? DEFAULT_DONE_SETTLE_MS,
+        settle_look_ms: DONE_SETTLE_LOOK_MS,
+      };
+      let watch = watchStart(booted.at_ms);
       let offset = 0;
       let seq = 1;
-      // Assume the container outlives the watch until an observation says
-      // otherwise: falling out of the loop with this unchanged means the
-      // orchestrator is still ALIVE, which is a different problem from a dead one.
-      let ending: "dead" | "exhausted" = "exhausted";
       // What the last look knew about spend, and when it knew it. Both come from
       // checkpointed step results, never a live `Date.now()`, so a replayed
       // Workflow recomputes the identical cadence.
       let spend: SpendSample | null = null;
-      let lastAt = booted.at_ms;
-      /**
-       * How many consecutive looks could not ASK the container (tick 3ed).
-       * Reset by any answered look, because a streak is a streak: the bound
-       * below is about a container that STAYS unanswerable, not one that
-       * flickered through a transient.
-       */
-      let unasked = 0;
-      /**
-       * The orchestrator's own report of its end, once a done signal carried
-       * one, and the look time it was first seen still running after it
-       * (tick 1y4). From then on the watch looks on the short settle cadence,
-       * and a process still alive past the settle window is stopped and
-       * concluded as the exit it reported. Both come from checkpointed step
-       * results, so a replay recomputes the same decision.
-       */
-      let reported: { outcome: DoneOutcome; since_ms: number | null } | null = null;
-      const settleMs = context.config.done_settle_ms ?? DEFAULT_DONE_SETTLE_MS;
+      // The pass's verdict, set by every terminal decision below; `reboot`
+      // is the one ending that is not terminal — it leaves the try block for
+      // the reconcile and the next attempt, exactly as `ending === "dead"`
+      // did before the extraction.
+      let outcome: PassOutcome | null = null;
+      let reboot = false;
 
-      for (let look = 0; look < context.config.max_observations; look++) {
+      while (outcome === null && !reboot && !watchOut(watch, watchConfig)) {
+        const look = watch.looksTaken;
         // Paced by the looks left (hn6): the last one lands on the deadline,
         // so a healthy orchestrator meets its wall clock, never this loop's end.
         // An orchestrator that has reported its end is looked at on the
@@ -2023,10 +2045,10 @@ async function supervisePass(
         const paced = pollDelay(
           context.config,
           look,
-          { now_ms: lastAt, deadline_ms: cadenceDeadline, spend },
+          { now_ms: watch.lastAt, deadline_ms: cadenceDeadline, spend },
           context.config.max_observations - look,
         );
-        const pollMs = reported === null ? paced : Math.min(paced, DONE_SETTLE_LOOK_MS, settleMs);
+        const pollMs = watchDelay(paced, watch, watchConfig);
         // The wait for THIS look (ticks cr4 and 7eq): `step.waitForEvent` on
         // the orchestrator's completion signal, with the poll cadence as its
         // timeout — whichever lands first. The container's own "I am done"
@@ -2055,12 +2077,10 @@ async function supervisePass(
           // Only a signal that carries the run's own outcome starts the
           // settle window: a bare wake-up (an older client) says nothing about
           // how the process will exit, so it is never a reason to stop one.
-          if (reported === null && signal.outcome !== undefined) {
-            reported = { outcome: signal.outcome, since_ms: null };
-          }
+          watch = watchHear(watch, signal);
         }
 
-        let seen = await step.do(
+        const seen = await step.do(
           `${options.label}:watch:${attempt}:${look}`,
           OBSERVE_RETRIES,
           async () =>
@@ -2078,10 +2098,47 @@ async function supervisePass(
         offset = seen.offset;
         seq = seen.seq;
         spend = spendSample(spend, seen.cost_usd, seen.at_ms);
-        lastAt = seen.at_ms;
 
-        if (seen.trip !== null) {
-          const trip = seen.trip;
+        let decision: WatchDecision = watchLook(watch, seen, watchConfig);
+        // The linger (tick 1y4): the orchestrator said it was done, with its
+        // outcome, and is still running a settle window later. Whatever keeps
+        // it alive — a hung final push, a child it is waiting on — is not
+        // work: run-epic posts the door only after Supervise has returned and
+        // the feed relay has drained. So it is stopped, and the boot is
+        // concluded as the exit it reported, by re-asking the machine with the
+        // synthesized look — through exactly its classification (a halt is
+        // still a halt, a terminal code still terminal) — never left to the
+        // next full-cadence look.
+        if (decision.kind === "linger") {
+          await step.do(`${options.label}:linger:${attempt}`, OBSERVE_RETRIES, () =>
+            drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
+          );
+          decision = watchLook(
+            decision.state,
+            {
+              ...seen,
+              process: "completed" as const,
+              exit_code: decision.reported_exit_code ?? null,
+              lingered: true,
+            },
+            watchConfig,
+          );
+        }
+        const lingered = decision.kind !== "hold" && "lingered" in decision && decision.lingered;
+        const lingerNote = lingered
+          ? `; it had not exited ${Math.round(watchConfig.settle_ms / 1000)}s after reporting its end on the done ` +
+            "door, so it was stopped"
+          : "";
+
+        if (decision.kind === "hold") {
+          // Nothing tripped, the container answered, the process is live:
+          // watch on, on the cadence.
+          watch = decision.state;
+          continue;
+        }
+
+        if (decision.kind === "trip") {
+          const trip = decision.trip;
           const reason = tripRevokeReason(trip);
           const revoke = (label: string) =>
             step.do(`${options.label}:${label}:${attempt}`, OBSERVE_RETRIES, async () => {
@@ -2110,7 +2167,7 @@ async function supervisePass(
           // it gets no window (tick 1y4): epic ilz's halted runs were
           // hard-stopped after their processes had ended and each still sat
           // out five minutes of grace on a dead process.
-          if (!processEnded(seen.process)) {
+          if (!decision.ended) {
             await step.sleep(`${options.label}:grace:${attempt}`, context.config.stop_grace_ms);
           }
           await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
@@ -2121,30 +2178,21 @@ async function supervisePass(
           // stop's already died above.
           if (!trip.hard) await revoke("revoke:clean");
           bootEnded = `orchestrator boot ${boot} was stopped: ${trip.detail}`;
-          return { kind: "tripped", trip, boots: counter.next - 1 };
+          outcome = { kind: "tripped", trip, boots: counter.next - 1 };
+          continue;
         }
 
-        if (seen.process === "unknown") {
-          // The question failed (tick 3ed): a container the supervisor cannot
-          // ASK is UNKNOWN, not dead (A2/A6), and rebooting here would be a
-          // guess — the old container might be alive, working and spending, and
-          // the only thing a failed question proves is that nobody can ask it.
-          // So the watch HOLDS: the next look asks again on the cadence, and
-          // the budgets keep being enforced on every look above, failed
-          // question or not — holding is not unwatched spending.
-          unasked += 1;
-          if (unasked < MAX_UNANSWERED_LOOKS) continue;
-
-          // Out of bounds: give up asking, and fail the pass as its own class
-          // — never a reboot, and never the words a dying container gets. The
-          // feed line is written before the return so a subscriber still
-          // following the run learns the hold ended here rather than reading
-          // silence into it; the decision in the dispatch log is its own name
-          // for the same reason (A9: a failed question is neither a death nor
-          // a reboot, and may not share either's message).
+        if (decision.kind === "unanswerable") {
+          // Out of bounds (tick 3ed): give up asking, and fail the pass as
+          // its own class — never a reboot, and never the words a dying
+          // container gets. The feed line is written before the verdict so a
+          // subscriber still following the run learns the hold ended here
+          // rather than reading silence into it; the decision in the dispatch
+          // log is its own name for the same reason (A9: a failed question is
+          // neither a death nor a reboot, and may not share either's message).
           const detail =
             `the orchestrator's container could not be asked how it was doing for ` +
-            `${MAX_UNANSWERED_LOOKS} looks (last: ${seen.unanswered ?? "the question failed"}) — ` +
+            `${MAX_UNANSWERED_LOOKS} looks (last: ${decision.unanswered ?? "the question failed"}) — ` +
             "the run failed as unanswerable rather than guessing the container dead, " +
             "and no replacement was booted";
           await step.do(`${options.label}:unanswerable:${attempt}`, OBSERVE_RETRIES, async () => {
@@ -2163,94 +2211,92 @@ async function supervisePass(
             return { unanswerable: true };
           });
           bootEnded = `orchestrator boot ${boot}: ${detail}`;
-          return { kind: "failed", detail, boots: counter.next - 1 };
+          outcome = { kind: "failed", detail, boots: counter.next - 1 };
+          continue;
         }
-        unasked = 0;
 
-        // The linger (tick 1y4): the orchestrator said it was done, with its
-        // outcome, and is still running a settle window later. Whatever keeps
-        // it alive — a hung final push, a child it is waiting on — is not
-        // work: run-epic posts the door only after Supervise has returned and
-        // the feed relay has drained. So it is stopped, and the boot is
-        // concluded as the exit it reported, through exactly the
-        // classification below (a halt is still a halt, a terminal code still
-        // terminal) — never left to the next full-cadence look.
-        let lingered = false;
-        if (reported !== null && seen.process === "running") {
-          reported.since_ms ??= seen.at_ms;
-          if (seen.at_ms - reported.since_ms >= settleMs) {
-            await step.do(`${options.label}:linger:${attempt}`, OBSERVE_RETRIES, () =>
-              drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
-            );
-            seen = { ...seen, process: "completed", exit_code: reported.outcome.exit_code ?? null };
-            lingered = true;
-          }
-        }
-        const lingerNote = lingered
-          ? `; it had not exited ${Math.round(settleMs / 1000)}s after reporting its end on the done ` +
-            "door, so it was stopped"
-          : "";
-
-        if (seen.process === "completed" && (seen.exit_code ?? 0) === 0) {
+        if (decision.kind === "completed") {
           bootEnded = `the orchestrator exited 0 (boot ${boot})${lingerNote}`;
-          return { kind: "completed", boots: counter.next - 1 };
+          outcome = { kind: "completed", boots: counter.next - 1 };
+          continue;
         }
 
-        if (seen.process === "completed" || seen.process === "failed" || seen.process === "gone") {
-          const code = seen.exit_code;
-          lastDetail =
-            seen.process === "gone"
-              ? orchestratorContainerGone(boot)
-              : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})${lingerNote}`;
-          bootEnded = lastDetail;
-          // An orchestrator that EXITED after its supervisor halted is a
-          // decision, not a death (epic hn6's cloud run: boots 1 and 2 both
-          // exited 1 right after a supervision_halted line, and each was
-          // rebooted and spent a boot). The halt's own line is on the run
-          // feed, relayed before the process exited; a replacement would only
-          // re-derive the stop the halt already made. Asked BEFORE the exit
-          // code is classified: a halt exits 3 when the reconciler held (hn6's
-          // run_be66ff09, claim_width), and 3 is also a configuration verdict's
-          // code — the halt line on the feed is what says which it was.
-          if (seen.process !== "gone") {
-            const halted = await step.do(
-              `${options.label}:halted:${attempt}`,
-              OBSERVE_RETRIES,
-              async () => ({
-                detail: await supervisionHaltOf(env.ARTIFACTS, params.project, params.run_id, boot),
-              }),
-            );
-            if (halted.detail !== null) {
-              const detail =
-                `the orchestrator stopped deliberately (boot ${boot}, exit ${code ?? "unknown"}): its ` +
-                `supervisor halted rather than continue — ${halted.detail} — so no sandbox was rebooted` +
-                lingerNote;
-              bootEnded = detail;
-              return { kind: "failed", detail, boots: counter.next - 1 };
-            }
-          }
-          if (isTerminalExit(code)) {
-            bootEnded = `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)})`;
-            // A configuration verdict from the boot: the SHA still will not check
-            // out, the pre-flight still fails, the epic the run was submitted
-            // for is still missing from the submitted tree. Another container
-            // reaches the identical answer and only costs money — so the reason
-            // the run STOPS with names the class, not just the code
-            // (terminalExitReason, ticfac tick rf3).
-            return {
-              kind: "failed",
-              detail: `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)}), so no sandbox was rebooted`,
-              boots: counter.next - 1,
-            };
-          }
-          lastSeen = { state: seen.process, exit_code: code };
-          ending = "dead";
-          break;
+        if (decision.kind !== "ended") {
+          // The machine's own invariant: a look that reached the
+          // classification can only be one of the kinds handled above. Loud
+          // rather than silent, and superviseRun's net (tick 0ye) turns even
+          // this into a finalize if it ever fires.
+          throw new Error(
+            `run-watch: a look classified as ${JSON.stringify(decision.kind)}, which the watch cannot end on`,
+          );
         }
+        const code = decision.exit_code;
+        lastDetail =
+          decision.process === "gone"
+            ? orchestratorContainerGone(boot)
+            : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})${lingerNote}`;
+        bootEnded = lastDetail;
+        // An orchestrator that EXITED after its supervisor halted is a
+        // decision, not a death (epic hn6's cloud run: boots 1 and 2 both
+        // exited 1 right after a supervision_halted line, and each was
+        // rebooted and spent a boot). The halt's own line is on the run
+        // feed, relayed before the process exited; a replacement would only
+        // re-derive the stop the halt already made. Asked BEFORE the exit
+        // code is classified: a halt exits 3 when the reconciler held (hn6's
+        // run_be66ff09, claim_width), and 3 is also a configuration verdict's
+        // code — the halt line on the feed is what says which it was.
+        const halted =
+          decision.process === "gone"
+            ? null
+            : (
+                await step.do(`${options.label}:halted:${attempt}`, OBSERVE_RETRIES, async () => ({
+                  detail: await supervisionHaltOf(
+                    env.ARTIFACTS,
+                    params.project,
+                    params.run_id,
+                    boot,
+                  ),
+                }))
+              ).detail;
+        const classified = watchEnded(decision, halted);
+        if (classified.kind === "halted") {
+          const detail =
+            `the orchestrator stopped deliberately (boot ${boot}, exit ${code ?? "unknown"}): its ` +
+            `supervisor halted rather than continue — ${halted} — so no sandbox was rebooted` +
+            lingerNote;
+          bootEnded = detail;
+          outcome = { kind: "failed", detail, boots: counter.next - 1 };
+          continue;
+        }
+        if (classified.kind === "terminal") {
+          // A configuration verdict from the boot: the SHA still will not
+          // check out, the pre-flight still fails, the epic the run was
+          // submitted for is still missing from the submitted tree. Another
+          // container reaches the identical answer and only costs money — so
+          // the reason the run STOPS with names the class, not just the code
+          // (terminalExitReason, ticfac tick rf3).
+          bootEnded = `${lastDetail} — a configuration failure (${classified.reason})`;
+          outcome = {
+            kind: "failed",
+            detail: `${lastDetail} — a configuration failure (${classified.reason}), so no sandbox was rebooted`,
+            boots: counter.next - 1,
+          };
+          continue;
+        }
+        // The container died on this run's watch: the one ending that may
+        // boot a replacement, and only because the platform ANSWERED that
+        // the process is over (never on a failed question, never on a live
+        // one — the property the machine's tests pin).
+        lastSeen = { state: decision.process, exit_code: code };
+        reboot = true;
+        break;
       }
 
-      if (ending === "exhausted") {
-        // The orchestrator is still running and this instance is out of looks.
+      if (outcome !== null) {
+        return outcome;
+      }
+      if (!reboot) {
+        // The watch is out of looks with the orchestrator still running.
         // Stop it cleanly — never boot a replacement beside a live one.
         await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
           drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
@@ -2260,7 +2306,7 @@ async function supervisePass(
         const detail = outOfLooksDetail(
           context.config,
           context.started_at_ms,
-          lastAt,
+          watch.lastAt,
           options.job === "review"
             ? "the review can be requested again"
             : "its work is on the run branch, so resubmitting the epic resumes it",

@@ -152,75 +152,21 @@ function withImplicitTag(reference: string): string {
 /** The command the sandbox runs. It is on PATH in the Phase 1 image. */
 export const ORCHESTRATOR_COMMAND = "/usr/local/bin/ticks-orchestrator";
 
-/**
- * Entrypoint exit codes that are a *configuration* verdict, not a crash
- * (`image/README.md`). Rebooting on one of these burns money to reach
- * the identical answer: the SHA still will not check out, `tk` is still the
- * wrong version, the pre-flight still fails. They end the run.
- *
- * Codes 3 and 4 each carry a second meaning, from the other side of the exec:
- * the orchestrator entrypoint hands the container to `ticfac run-epic`, which
- * exits with the CLI's own documented table (internal/cli/exit.go) — and
- * there code 3 is HELD, a run that stopped holding something only a person
- * can move, and code 4 is NOT-FOUND, the honest empty lookup. Both are
- * terminal here for the same reason the entrypoint's own are: a reboot
- * reaches the identical answer, because nothing a replacement container can
- * do moves a person's decision or restores an epic the submitted tree lacks.
- * The lookup that matters is the epic: a run submitted from a commit that
- * does not carry the epic exits 4, and the tracker's tree is cut from that
- * commit, so the epic is missing on every boot — the first per-tick
- * Cloudflare smoke run re-booted into the identical failure until a person
- * stopped it by hand (ticfac tick rf3), and a run held for a triage or a
- * settle rebooted into the same hold (ticfac tick 4mv). The collision is
- * benign and deliberate: both readings of each code are deterministic
- * verdicts, and no caller branches on the difference — the container's
- * flushed log names which one it was.
+/*
+ * The configuration-verdict exit codes (TERMINAL_EXIT_CODES, isTerminalExit,
+ * terminalExitReason) moved to src/run-watch.ts with the watch's decision core
+ * (tick p0n) — the machine classifies a boot's exit status, so the code that
+ * answers "is this rebootable?" lives with the state machine that asks it.
+ * Re-exported here because this module is where the whole seam (the entrypoint,
+ * the executor, the worker-boot probes) already reads them from: one spelling,
+ * unchanged for every importer. The codes' reasons travel with the constants —
+ * see run-watch.ts.
  */
-export const TERMINAL_EXIT_CODES: readonly number[] = [
-  2, // a required input is missing or malformed (including no gateway)
-  3, // clone or checkout of the submitted SHA failed — or the reconciler's
-  // held: the run stopped holding something only a person can move
-  4, // tk is absent or is not the version the image pins — or the reconciler's
-  // not-found: the epic does not exist on the submitted tree
-  5, // an Environment pre-flight check failed
-  6, // the repository's own [sandbox] setup failed
-];
-
-/** Whether a nonzero exit means "do not boot another sandbox for this run". */
-export function isTerminalExit(code: number | null): boolean {
-  return code !== null && TERMINAL_EXIT_CODES.includes(code);
-}
-
-/**
- * The class of configuration verdict a terminal exit code names, so the run's
- * recorded reason says WHAT failed and not only THAT it did. An exit status
- * is the only channel a container's boot has to the supervisor, so this class
- * is how `run.json`'s detail tells an operator "the epic was missing from the
- * submitted tree" from "the pre-flight refused" — before they go read the
- * flushed log for the sentence the container itself printed.
- */
-export function terminalExitReason(code: number): string {
-  switch (code) {
-    case 2:
-      return "a required input is missing or malformed";
-    case 3:
-      return (
-        "the clone or checkout of the submitted SHA failed, or the reconciler held — " +
-        "the run stopped holding something only a person can move"
-      );
-    case 4:
-      return (
-        "tk is absent or is not the version the image pins, or the reconciler answered not-found — " +
-        "the epic does not exist on the submitted tree"
-      );
-    case 5:
-      return "an Environment pre-flight check failed";
-    case 6:
-      return "the repository's own [sandbox] setup failed";
-    default:
-      return "an unknown configuration verdict";
-  }
-}
+export {
+  isTerminalExit,
+  TERMINAL_EXIT_CODES,
+  terminalExitReason,
+} from "./run-watch";
 
 // ------------------------------------------------------------ the seam ---
 
