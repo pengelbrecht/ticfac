@@ -1,0 +1,14 @@
+{
+  "id": "atu",
+  "title": "A run-feed read once returned a body that is not JSON ('invalid character i'): find where a feed page can start mid-line",
+  "gloss": "feed page starts mid-line?",
+  "description": "2026-10-07 ~15:00 UTC the attached ex6 view died on 'not a run event feed: invalid character i looking for beginning of value'. #261 made the client retry such reads, but the server-side cause is unexplained; likeliest is a cursor that lands mid-line in readRunFeedPage (cloudflare/src/run-feed.ts) under concurrent appends. Reproduce with concurrent append + paged reads; make a page always start and end on a line boundary.",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "a vitest reproducing concurrent appends and paged reads never returns a partial line; fix; make gate",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T17:46:55.041566Z",
+  "updated_at": "2026-10-07T17:46:55.041566Z"
+}
