@@ -1,0 +1,13 @@
+{
+  "id": "wa8",
+  "title": "No condensation level fitting still costs the PR body its readiness section",
+  "description": "The readiness section and the closing 'durable record' line are composed at the very tail of the body, so a run whose findings' titles and keys alone overflow the budget — or one with a few hundred amendments, each keeping its status line at level 3 — still falls to forge.FitBody, which keeps the head and drops exactly those. The tick 8wa description anticipated this with its other option: compose the readiness section before the condensable bulk, or have the last-resort fit keep the sections a person merging reads.\nevidence: internal/forge/body.go:24 FitBody keeps the head and truncates the tail; internal/reconcile/closeout_body.go writes readinessSection after the deferred-findings section\n\nticfac run run_69f8f57832d34601b040367c7207b81f filed this backlog tick from the finding bfd692a9a508a98cc7254ad651c3ea4aa64d423142c890f8ee9bd84d7204740d (reported by run-run_69f8f57832d34601b040367c7207b81f/tick-8wa/attempt-13) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/bfd692a9a508a98cc7254ad651c3ea4aa64d423142c890f8ee9bd84d7204740d.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_69f8f57832d34601b040367c7207b81f/tick-8wa/attempt-13",
+  "created_by": "ticfac run run_69f8f57832d34601b040367c7207b81f",
+  "created_at": "2026-10-07T16:08:16Z",
+  "updated_at": "2026-10-07T16:08:16Z"
+}
