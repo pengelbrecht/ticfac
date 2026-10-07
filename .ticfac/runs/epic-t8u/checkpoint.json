@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 59,
-  "state": "dispatching",
-  "reason": "dispatching o3q as attempt 11",
-  "updated_at": "2026-10-07T19:18:03Z",
+  "sequence": 60,
+  "state": "running",
+  "reason": "o3q is running as attempt 11",
+  "updated_at": "2026-10-07T19:18:09Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -59,7 +59,8 @@
     },
     {
       "tick_id": "o3q",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 11
     },
     {
       "tick_id": "p0n",
