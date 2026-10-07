@@ -90,7 +90,7 @@ func (e *Executor) Cancel(h *JobHandle) (*CancelAck, error) {
 	// settle on its own. A worker still running past the grace is stopped,
 	// and that stop IS recorded (TestCancelStopsAWorkerThatWroteItsReportAndKeptRunning).
 	if !settled && !alreadyCancelled && e.hasReported(st) {
-		settled = e.awaitOwnSettlement(st, reportedSettleGrace)
+		settled = e.awaitOwnSettlement(st, e.settleGrace())
 	}
 
 	if settled {
@@ -190,12 +190,21 @@ func (e *Executor) hasSettled(st *store) bool {
 	return terminalState(state)
 }
 
-// reportedSettleGrace bounds how long a cancel of an attempt that has
+// DefaultReportedSettleGrace bounds how long a cancel of an attempt that has
 // reported waits for it to settle on its own before stopping it. The tail it
 // waits out is a runner exiting and a supervisor's last push and settlement
-// record: seconds at most, even on a loaded CI runner. A variable only so a
-// test can shorten it.
-var reportedSettleGrace = 10 * time.Second
+// record: seconds at most, even on a loaded CI runner.
+const DefaultReportedSettleGrace = 10 * time.Second
+
+// settleGrace is the same window this executor was built with: an Options
+// field so a test can run the wait at the harness's cadence rather than the
+// production number, exactly as it runs every other bound.
+func (e *Executor) settleGrace() time.Duration {
+	if e.opts.ReportedSettleGrace > 0 {
+		return e.opts.ReportedSettleGrace
+	}
+	return DefaultReportedSettleGrace
+}
 
 // hasReported says the attempt's report is written with a status: the
 // evidence observe reads as `succeeded` without asking the operating system.
