@@ -74,7 +74,7 @@ test-race:
 # notably for the drift guards that read .tick/runners.toml by absolute path,
 # which are the one place caching is known to be able to serve a stale pass.
 #
-# 2026-10-08 — the go test half now runs under a STRIPPED GIT ENVIRONMENT
+# 2026-10-07 — the go test half now runs under a STRIPPED GIT ENVIRONMENT
 # (tick pqs): no global or system config file, and user.useConfigOnly
 # refusing the implicit identity fallback. That is CI's machine, reproduced
 # on a laptop: a fixture that commits with no identity of its own — relying
