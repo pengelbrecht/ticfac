@@ -89,8 +89,16 @@ func TestAnOperatorFetchingInTheRunsCheckoutEndsNothing(t *testing.T) {
 	// FETCH_HEAD, and `git rev-parse FETCH_HEAD` takes the first line. On the
 	// run's own branch a clobbered FETCH_HEAD would still name the right
 	// commit and the bug would hide; on main it names a tree with no .ticfac.
+	//
+	// The dance's own fetch is pinned off FETCH_HEAD — the checkout it builds
+	// must not carry one, or a store regressed to resolving through FETCH_HEAD
+	// would read main's head during the SETUP and die an eight-refusals death
+	// that names nothing. With none there to read, that regression dies at
+	// its first fetch naming FETCH_HEAD; the clobber itself is the watcher's
+	// to perform, in the window below, where it belongs.
 	dir := s.git.dir
-	gitRun(t, dir, "fetch", "--quiet", "origin", "+refs/heads/main:refs/remotes/origin/main")
+	gitRun(t, dir, "fetch", "--quiet", "--no-write-fetch-head", "origin",
+		"+refs/heads/main:refs/remotes/origin/main")
 	gitRun(t, dir, "update-ref", "refs/heads/main", "refs/remotes/origin/main")
 	gitRun(t, dir, "symbolic-ref", "HEAD", "refs/heads/main")
 	gitRun(t, dir, "config", "branch.main.remote", "origin")
