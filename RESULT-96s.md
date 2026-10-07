@@ -1,6 +1,13 @@
 <!-- ticks-worker: container facts, prepended after the harness exited. The
 agent's report, including its STATUS line, is unchanged below. -->
 
+_ticks-worker: branch `tick/ex6/attempt-18/96s`, base `7a6f5fb9bf212e6ebd7c9f52fd2d9cf3d3fa1531`, harness `pi-durable` exited 0, 0 work commit(s), 0 uncommitted path(s)._
+
+_ticks-worker: a carried attempt — its base `7a6f5fb9bf212e6ebd7c9f52fd2d9cf3d3fa1531` is the head of the work it continued, which was cut from `304cca6250414b27584d43678a2b38a4f914e7c2`; its work commits are counted from the carried head._
+
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
 _ticks-worker: branch `tick/ex6/attempt-14/96s`, base `304cca6250414b27584d43678a2b38a4f914e7c2`, harness `pi-durable` exited 0, 0 work commit(s), 0 uncommitted path(s)._
 
 # RESULT — tick 96s (run attempt 14, the tick's first attempt) — runners.local.toml header note: review/closeout deliberately not overlaid
