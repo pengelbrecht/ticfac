@@ -1,0 +1,14 @@
+{
+  "id": "8rm",
+  "title": "Re-review v5t after its NOT READY review's blocking findings (round 2)",
+  "description": "Review the epic v5t again, AS INTEGRATED, now that the blocking findings of its NOT READY review are fixed. This is review round 2 of at most 2.\n\nThe previous review (54l, decision 7) judged it NOT READY: claude-config workers must actually run on the production hosted (WorkerAgent) door under the subscription interception, and the Go executor must accept the factory's Workers AI step-down, each with a test across the TS/Go seam; its blocking finding(s): \"Hosted WorkerAgent door ignores the claude-sub rung; every rung job dies\"; \"Go executor refuses the factory's Workers AI step-down of a rung dispatch\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY at this round is not reviewed again by the run unless the tree changes after it: it holds for a person with your reasons.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "v5t",
+  "role": "review",
+  "created_by": "ticfac run epic-v5t",
+  "created_at": "2026-10-07T02:14:51Z",
+  "updated_at": "2026-10-07T02:14:51Z"
+}
