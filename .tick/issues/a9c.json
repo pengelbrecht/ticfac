@@ -2,6 +2,7 @@
   "id": "a9c",
   "title": "ticfac init still writes dead --approve args into its runner templates",
   "description": "ticfac init's generated runners.toml and runners.cloud.toml templates still emit args = [\"--approve\"] beside kind = \"pi\" — for implement in the common template, and for implement, review and closeout in the cloud template. No executor reads roles-table args for these roles (implement routes to the local-subprocess or cloud executor; the durable Node host takes no trust flags), so every new repository is initialized with the same misleading dead config q6z removes from this repository's own routing file. Dropping the emission and its comment is a small follow-up tick.\nevidence: internal/cli/init.go:667 (commonTOML) and :696 (cloudTOML)\n\nticfac run run_69f8f57832d34601b040367c7207b81f filed this backlog tick from the finding 4834be2fea8a1d1dc8a8ca0bb67048c66c74642eab3f8519496648f6cda6ec3b (reported by run-run_69f8f57832d34601b040367c7207b81f/tick-q6z/attempt-19) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/4834be2fea8a1d1dc8a8ca0bb67048c66c74642eab3f8519496648f6cda6ec3b.json on the run branch.",
+  "notes": "2026-10-07 18:48 - ticfac run run_69f8f57832d34601b040367c7207b81f: created by absorbing finding 4834be2fea8a1d1dc8a8ca0bb67048c66c74642eab3f8519496648f6cda6ec3b — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/4834be2fea8a1d1dc8a8ca0bb67048c66c74642eab3f8519496648f6cda6ec3b.json on epic/ex6, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_69f8f57832d34601b040367c7207b81f/tick-q6z/attempt-19",
   "created_by": "ticfac run run_69f8f57832d34601b040367c7207b81f",
   "created_at": "2026-10-07T18:48:50Z",
-  "updated_at": "2026-10-07T18:48:50Z"
+  "updated_at": "2026-10-07T18:48:56.71044977Z"
 }
