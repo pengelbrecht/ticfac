@@ -1,0 +1,13 @@
+{
+  "id": "u5q",
+  "title": "Dead --approve remnants remain in runners.cloud.toml and runners.local.toml",
+  "description": "Once the common file's implement cell drops args = [\"--approve\"] (q6z's edit), the same dead pairing survives in the two routing files a worker boundary does not let a tick write: .tick/runners.cloud.toml's [roles.implement] still carries it (and it flows into the glm named config's resolution, whose cell declares no args), and .tick/runners.local.toml's [roles.implement.tiers.frontier] carries args = [], a clearing of nothing. The cloud file's [configs.claude.roles.implement] keeps an args = [] whose comment explains clearing the --approve. All inert, all misleading the same way; fold them into the same operator edit as q6z's paste.\nevidence: .tick/runners.cloud.toml:24 and :155-162; .tick/runners.local.toml:16\n\nticfac run run_69f8f57832d34601b040367c7207b81f filed this backlog tick from the finding bee7105c87f44f6c0c5670b5231f9e24960eb37cbdbe1310f0ec4d97d07cca15 (reported by run-run_69f8f57832d34601b040367c7207b81f/tick-q6z/attempt-19) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/bee7105c87f44f6c0c5670b5231f9e24960eb37cbdbe1310f0ec4d97d07cca15.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_69f8f57832d34601b040367c7207b81f/tick-q6z/attempt-19",
+  "created_by": "ticfac run run_69f8f57832d34601b040367c7207b81f",
+  "created_at": "2026-10-07T18:49:12Z",
+  "updated_at": "2026-10-07T18:49:12Z"
+}
