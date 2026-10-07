@@ -3,12 +3,14 @@
   "title": "Rescope or close djo (Phase 5b): its Claude half shipped as jvj + v5t",
   "description": "Epic djo (subscription seats as flat-rate credentials, via omp's auth broker) predates jvj's spike and v5t, which deliver the Claude half differently: a factory-held CLAUDE_SUB_TOKEN_\u003cLABEL\u003e with leases and a Workers AI step-down, no broker. What remains is Codex/ChatGPT seats and the broker question. An operator decision: rescope djo to Codex seats on v5t's rung design, or close it.\nevidence: .tick/issues/djo.json; docs/spikes/jvj-claude-sub-cloud.md; .tick/runners.cloud.toml [configs.claude]\n\nticfac run epic-v5t filed this backlog tick from the finding 709c7a0865c831e7aee6018701830d5018a3d08aabad4c5a01d2def86db30933 (reported by run-epic-v5t/tick-9uc/attempt-10) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/709c7a0865c831e7aee6018701830d5018a3d08aabad4c5a01d2def86db30933.json on the run branch.",
   "notes": "2026-10-07 05:55 - ticfac run epic-v5t: created by absorbing finding 709c7a0865c831e7aee6018701830d5018a3d08aabad4c5a01d2def86db30933 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-v5t/absorptions/709c7a0865c831e7aee6018701830d5018a3d08aabad4c5a01d2def86db30933.json on epic/v5t, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticks-sandbox@ticks.invalid",
   "discovered_from": "run-epic-v5t/tick-9uc/attempt-10",
   "created_by": "ticfac run epic-v5t",
   "created_at": "2026-10-07T03:54:58Z",
-  "updated_at": "2026-10-07T03:55:07.468498Z"
+  "updated_at": "2026-10-07T13:43:50.270719Z",
+  "closed_at": "2026-10-07T13:43:50.270719Z",
+  "closed_reason": "djo closed as superseded by jvj + v5t"
 }
