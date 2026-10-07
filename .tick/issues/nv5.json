@@ -2,6 +2,7 @@
   "id": "nv5",
   "title": "wirevocab's live herdr drift guard can be served stale from a warm cache",
   "description": "The drift test diffs the pinned herd vocabulary against the installed herdr binary — a host input outside the module, reached through a subprocess. cmd/go never rechecks outside-module inputs (computeTestInputsID skips them at hashing time, deliberately), so on any host with a warm go test cache a herdr upgrade cannot invalidate this package's cached pass. That matters because CI never runs the guard at all (no herdr on a public-repo runner): the operator's and worker hosts — exactly the machines with warm caches — are the only places the pin's freshness is ever proven, and the test's own comment claimed every suite executes it. No read the test could perform closes it: outside-module reads are never rechecked, in-process or not. The structural fix is keeping the package uncached in the gate (a [testing.commands] + Makefile gate-recipe change, which must stay byte-identical under TestTheGateTargetMatchesTheDeclaredGate), or accepting the residual now documented in drift_test.go's comment. Demonstrated by TestACachedPassCanHideAnEditToAFileOutsideTheModule and the scratch experiment behind it.\nevidence: internal/herd/wirevocab/drift_test.go:65; cmd/go/internal/test/test.go computeTestInputsID (\"Do not recheck files outside the module, GOPATH, or GOROOT root\")\n\nticfac run epic-t8u filed this backlog tick from the finding 22207ebf609638776b7d095b7ea06f28d2f7bd3dfd9ddd1fea6c09a9725bc0b5 (reported by run-epic-t8u/tick-mbv/attempt-9) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/22207ebf609638776b7d095b7ea06f28d2f7bd3dfd9ddd1fea6c09a9725bc0b5.json on the run branch.",
+  "notes": "2026-10-07 21:21 - ticfac run epic-t8u: created by absorbing finding 22207ebf609638776b7d095b7ea06f28d2f7bd3dfd9ddd1fea6c09a9725bc0b5 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/22207ebf609638776b7d095b7ea06f28d2f7bd3dfd9ddd1fea6c09a9725bc0b5.json on epic/t8u, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-t8u/tick-mbv/attempt-9",
   "created_by": "ticfac run epic-t8u",
   "created_at": "2026-10-07T19:21:22Z",
-  "updated_at": "2026-10-07T19:21:22Z"
+  "updated_at": "2026-10-07T19:21:28.181332Z"
 }
