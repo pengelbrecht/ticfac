@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 29,
-  "state": "running",
-  "reason": "kzs is running as attempt 5",
-  "updated_at": "2026-10-07T07:51:36Z",
+  "sequence": 30,
+  "state": "collecting",
+  "reason": "collecting the closeout-epic job for kzs",
+  "updated_at": "2026-10-07T08:06:45Z",
   "ticks": [
     {
       "tick_id": "56z",
