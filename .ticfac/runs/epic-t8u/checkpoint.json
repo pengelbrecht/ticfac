@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 37,
-  "state": "running",
-  "reason": "krh is running as attempt 8",
-  "updated_at": "2026-10-07T16:06:50Z",
+  "sequence": 38,
+  "state": "collecting",
+  "reason": "collecting 9si attempt 6",
+  "updated_at": "2026-10-07T18:04:52Z",
   "ticks": [
     {
       "tick_id": "pqs",
