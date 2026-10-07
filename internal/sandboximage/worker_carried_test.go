@@ -100,3 +100,57 @@ func TestWorkerIgnoresAWorkBaseItCannotRead(t *testing.T) {
 		t.Errorf("the worker claimed carried work it could not read:\n%s", out)
 	}
 }
+
+// ex6 2p3 (2026-10-07). Try 1's harness died and the container wrote its
+// fallback, `STATUS: BLOCKED — the harness exited 1, wrote no report, and
+// nothing landed on tick/ex6/attempt-1/2p3; re-dispatch this tick`. Tries 2
+// and 3 were carried from try 1's head — which carries that report — and
+// both harnesses failed too (exit 11, exit 9) without writing one. The
+// container saw a RESULT file at the path, took it for its own agent's,
+// wrote no fallback, and pushed try 1's question as its answer; at the top of
+// the ladder the run held the tick for a person over three harness faults.
+//
+// A report the carried base already holds, unchanged, is inherited: this
+// attempt's fallback replaces it, and the fallback asks nothing.
+func TestWorkerDoesNotPassOffACarriedReportAsItsOwn(t *testing.T) {
+	f := newWorkerFixture(t)
+	inherited := "# " + f.tick + "\n\nThe harness exited 1 without writing RESULT-" + f.tick + ".md.\n\n" +
+		WorkerLegacyFallbackSentence + "\n\n" +
+		"STATUS: BLOCKED — the harness exited 1, wrote no report, and nothing landed on tick/ex6/attempt-1/" +
+		f.tick + "; re-dispatch this tick\n"
+	carriedSeed(t, f, WorkerResultFile(f.tick), inherited)
+	delete(f.env, "TICKS_TEST_WORKER_RESULT")
+	f.env["TICKS_TEST_WORKER_EXIT"] = "1"
+
+	out, code := f.run()
+	if code != ExitWorkerAgent {
+		t.Fatalf("a failed harness on a carried base gave exit %d, want %d:\n%s", code, ExitWorkerAgent, out)
+	}
+	report := f.reportOnOrigin(WorkerBranch(f.epic, f.tick))
+	if strings.Contains(report, "attempt-1/"+f.tick) {
+		t.Errorf("the pushed report is the carried attempt's, not this one's:\n%s", report)
+	}
+	mustContain(t, report, WorkerFallbackReportMarker, "this attempt's own fallback")
+	if status, _, line := collectParseStatus(report); status != "" {
+		t.Errorf("the fallback for a harness fault on a carried base answers %q (%s), want no status: "+
+			"a fault is not a question for a person", status, line)
+	}
+}
+
+// The other half of the same trap: a harness that ended its turn cleanly
+// without writing its report is nudged, and an inherited report at the path
+// must not stand in for the one it never wrote.
+func TestWorkerNudgesAHarnessWhoseOnlyReportIsTheCarriedOne(t *testing.T) {
+	f := newWorkerFixture(t)
+	carriedSeed(t, f, WorkerResultFile(f.tick), "# old\n\nSTATUS: BLOCKED — an earlier try's question\n")
+	delete(f.env, "TICKS_TEST_WORKER_RESULT")
+
+	out, _ := f.run()
+	if !strings.Contains(out, "nudge 1 of") {
+		t.Errorf("a clean exit with only the carried report at the path was not nudged:\n%s", out)
+	}
+	report := f.reportOnOrigin(WorkerBranch(f.epic, f.tick))
+	if strings.Contains(report, "an earlier try's question") {
+		t.Errorf("the carried attempt's question was pushed as this attempt's answer:\n%s", report)
+	}
+}
