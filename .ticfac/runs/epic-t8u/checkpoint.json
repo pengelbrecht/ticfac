@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 60,
-  "state": "running",
-  "reason": "o3q is running as attempt 11",
-  "updated_at": "2026-10-07T19:18:09Z",
+  "sequence": 61,
+  "state": "collecting",
+  "reason": "collecting krh attempt 8",
+  "updated_at": "2026-10-07T19:18:15Z",
   "ticks": [
     {
       "tick_id": "pqs",
