@@ -58,10 +58,24 @@ func run(t *testing.T, st mainState, age int) (string, bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	script := filepath.Join(root, ".github", "scripts", "main-ci-watchdog.sh")
+	// The script is read IN-PROCESS, before bash runs it (tick mbv). go's test
+	// cache keys a package's result on the files the test binary opens, and
+	// bash's opens never reach it: without this read, a cached pass stands
+	// over an edited script forever. Demonstrated at the audit, on the base
+	// commit: with this package warm, a watchdog.sh reduced to `exit 1` was
+	// answered `ok (cached)`, and only -count=1 revealed every watchdog test
+	// failing. The read also asserts the input exists, but its real job is to
+	// hand the cache the one input this guard exists to watch.
+	if raw, err := os.ReadFile(script); err != nil {
+		t.Fatalf("read %s: %v", script, err)
+	} else if len(raw) == 0 {
+		t.Fatalf("%s is empty: there is no watchdog to run", script)
+	}
 	bin := t.TempDir()
 	fakeGh(t, bin, st)
 	record := filepath.Join(bin, "dispatches")
-	cmd := exec.Command("bash", filepath.Join(root, ".github", "scripts", "main-ci-watchdog.sh"))
+	cmd := exec.Command("bash", script)
 	cmd.Env = []string{
 		"PATH=" + bin + string(os.PathListSeparator) + os.Getenv("PATH"),
 		"GITHUB_REPOSITORY=o/r",
