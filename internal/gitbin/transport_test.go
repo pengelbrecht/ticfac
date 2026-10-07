@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -93,34 +94,20 @@ func TestEveryGitThatCanReachARemoteIsBounded(t *testing.T) {
 		unused[key] = true
 	}
 	var offenders []string
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", ".claude", "testdata", "vendor", "node_modules":
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
+	for _, path := range trackedGoFiles(t, root) {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
 		}
 		src, err := os.ReadFile(path)
 		if err != nil {
-			return err
+			t.Fatalf("read %s: %v", path, err)
 		}
 		rel, _ := filepath.Rel(root, path)
 		found, err := unboundedGits(rel, src)
 		if err != nil {
-			return err
+			t.Fatalf("scan %s: %v", rel, err)
 		}
 		offenders = append(offenders, found...)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk: %v", err)
 	}
 	offenders = slices.DeleteFunc(offenders, func(offender string) bool {
 		file, rest, _ := strings.Cut(offender, ":")
@@ -369,6 +356,38 @@ func flatten(args []ast.Expr, spread bool) (words []string, known []bool) {
 		visit(arg, spread && i == len(args)-1)
 	}
 	return words, known
+}
+
+// trackedGoFiles answers the .go files git knows about under root, in the
+// order git lists them.
+//
+// Both repository-wide guards in this package (this transport guard, and the
+// push-queue guard beside it) read the tree's TRACKED files rather than
+// walking the directory (tick pqs): a checkout is not a clean room — an
+// agent worktree or a scratch clone under it is no party to this tree, and
+// the old walks had to name every stray directory after the fact.
+//
+// It runs git itself, through this package's own binary and pins — this is
+// the package internal/gittest is built on, so it cannot import the helper,
+// and this package's tests are the one place the hermeticity guard exempts.
+func trackedGoFiles(t *testing.T, root string) []string {
+	t.Helper()
+	cmd := exec.Command(Path(), "ls-files", "*.go")
+	cmd.Dir = root
+	cmd.Env = append(WithoutPinnedConfig(os.Environ()),
+		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null", "GIT_TERMINAL_PROMPT=0")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git ls-files in %s: %v", root, err)
+	}
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if line == "" {
+			continue
+		}
+		files = append(files, filepath.Join(root, filepath.FromSlash(line)))
+	}
+	return files
 }
 
 func moduleRoot(t *testing.T) string {

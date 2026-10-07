@@ -254,34 +254,20 @@ func TestEveryGitThatCanPushGoesThroughThePushQueue(t *testing.T) {
 	t.Parallel()
 	root := moduleRoot(t)
 	var offenders []string
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", ".claude", "testdata", "vendor", "node_modules":
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
+	for _, path := range trackedGoFiles(t, root) {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
 		}
 		src, err := os.ReadFile(path)
 		if err != nil {
-			return err
+			t.Fatalf("read %s: %v", path, err)
 		}
 		rel, _ := filepath.Rel(root, path)
 		found, err := unqueuedPushes(filepath.ToSlash(rel), src)
 		if err != nil {
-			return err
+			t.Fatalf("scan %s: %v", rel, err)
 		}
 		offenders = append(offenders, found...)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk: %v", err)
 	}
 	offenders = slices.DeleteFunc(offenders, func(offender string) bool {
 		file, rest, _ := strings.Cut(offender, ":")
