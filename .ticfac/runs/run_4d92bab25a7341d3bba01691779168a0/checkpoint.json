@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 23,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for 0n3",
-  "updated_at": "2026-10-07T07:50:01Z",
+  "sequence": 24,
+  "state": "publishing",
+  "reason": "closing 0n3 behind its validated review-epic answer",
+  "updated_at": "2026-10-07T07:50:46Z",
   "ticks": [
     {
       "tick_id": "56z",
@@ -28,7 +28,7 @@
     },
     {
       "tick_id": "0n3",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 4
     }
   ],
