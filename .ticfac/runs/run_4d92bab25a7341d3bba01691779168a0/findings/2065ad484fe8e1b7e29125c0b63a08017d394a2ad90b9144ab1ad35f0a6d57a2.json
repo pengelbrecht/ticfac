@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "vnp",
   "attempt": 7,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T09:07:01Z",
+  "triaged_at": "2026-10-07T09:07:12Z",
+  "triaged_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0 absorbing 3za",
+  "promoted_as": "3za",
   "provenance": {
     "run_id": "run_4d92bab25a7341d3bba01691779168a0",
     "tick_id": "vnp",
