@@ -188,6 +188,15 @@ var readsOnlyTheLocalRepository = map[string]string{
 	// spread, a package variable of -c flags the reader cannot resolve.
 	"internal/runstate/batch.go start":          "`cat-file --batch`: the store's held-open object reader",
 	"internal/runstate/batch.go catFileProcess": "`cat-file blob <sha>`: one object read",
+	// internal/gittest is the test fixtures' one hermetic helper (tick pqs).
+	// Command and Control ARE bounded — Env() and ControlEnv() append
+	// gitbin.TransportEnv — but the mention is one call away, past this
+	// guard's single-function view. Under is deliberately unbounded: the
+	// environment it runs under is the fixture's own subject (the sandbox
+	// grades), and a bound the helper added would erase the thing under test.
+	"internal/gittest/gittest.go Command": "bounded through Env(), which appends gitbin.TransportEnv",
+	"internal/gittest/gittest.go Control": "bounded through ControlEnv(), which appends gitbin.TransportEnv",
+	"internal/gittest/gittest.go Under":   "the caller's environment is the fixture's subject; a bound would erase it",
 }
 
 // localSubcommands never leave the machine. A literal one of these, named in
