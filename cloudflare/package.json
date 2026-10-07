@@ -17,13 +17,19 @@
     "lint:test": "node --test --no-warnings scripts/lint.test.mjs",
     "format": "biome check --write",
     "typecheck": "pnpm contracts:check && tsc --noEmit",
+<<<<<<< HEAD
     "test": "pnpm contracts:check && pnpm contracts:test && pnpm operator-strings && pnpm lint:test && vitest run",
+=======
+    "test:properties": "vitest run --config vitest.config.hegel.ts",
+    "test": "pnpm contracts:check && pnpm contracts:test && pnpm operator-strings && pnpm test:properties && vitest run",
+>>>>>>> b167294ac9a384097a5ccc6e52f0c0ec7ee3c52b
     "test:watch": "pnpm contracts:check && vitest"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.13",
     "@cloudflare/vitest-pool-workers": "^0.22.0",
     "@cloudflare/workers-types": "^5.20261001.1",
+    "@hegeldev/hegel": "0.4.7",
     "esbuild": "0.28.1",
     "miniflare": "5.20261001.0-alpha",
     "typescript": "^5.9.3",
