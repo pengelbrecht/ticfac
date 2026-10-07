@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 21,
-  "state": "dispatching",
-  "reason": "dispatching yck as attempt 4",
-  "updated_at": "2026-10-07T01:28:11Z",
+  "sequence": 22,
+  "state": "running",
+  "reason": "yck is running as attempt 4",
+  "updated_at": "2026-10-07T01:28:20Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -27,7 +27,8 @@
     },
     {
       "tick_id": "yck",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 4
     }
   ],
   "provenance": {
