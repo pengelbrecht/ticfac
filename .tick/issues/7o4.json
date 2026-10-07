@@ -1,0 +1,13 @@
+{
+  "id": "7o4",
+  "title": "Failover section omits the three-redispatch bound on a quota stop",
+  "description": "The guide tells an operator that a claude-sub job stopped by its own quota answer \"is redispatched at the same tier rather than climbing the ladder\", with no bound. reconcile's MidJob arm takes from the same counter as every other infrastructure failure, maxInfrastructureRedispatches = 3, and the fourth in a row refuses the run (RefusedInfrastructure) with \"The run stops here; no rung of the ladder was spent\". An operator whose single subscription is spent sees the run stop after three redispatches and has nothing in the guide to read it against.\nevidence: docs/claude-sub-operator.md:111-114 against internal/reconcile/infrastructure.go:86 and :141-156\n\nticfac run run_18eafdaa047544be9a196d913fb08a30 filed this backlog tick from the finding 9cb3421beb227a4a31b98f75781919c63cbe88dcacaaeb62eacf038c661f77ef (reported by run-run_18eafdaa047544be9a196d913fb08a30/tick-lpl/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_18eafdaa047544be9a196d913fb08a30/absorptions/9cb3421beb227a4a31b98f75781919c63cbe88dcacaaeb62eacf038c661f77ef.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_18eafdaa047544be9a196d913fb08a30/tick-lpl/attempt-1",
+  "created_by": "ticfac run run_18eafdaa047544be9a196d913fb08a30",
+  "created_at": "2026-10-07T09:42:22Z",
+  "updated_at": "2026-10-07T09:42:22Z"
+}
