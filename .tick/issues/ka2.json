@@ -1,0 +1,13 @@
+{
+  "id": "ka2",
+  "title": "A carried attempt released past the grace integrates nothing on resume",
+  "description": "The recorded-verdict precedence restores the verdict but not the collected HEAD. An attempt carried from a released one that delivered the carried work commits nothing of its own (its branch sits at the carried head), so its re-collected Collection carries no head; the resumed integrate then refuses in durableAttemptHead ('the collect of this attempt read no commit at all') and the run stops for a person with the work preserved — far better than the re-judging this tick removed, but the recorded verdict still cannot finish the attempt by itself. The fix would record the collected head beside the verdict and let durableAttemptHead read it, the way it already reads a repair decision's recorded head (recordedAttemptHead).\nevidence: internal/reconcile/integrate.go:376 (durableAttemptHead's local==\"\" refusal); internal/reconcile/dispatch.go readRecordedVerdictFirst\n\nticfac run epic-t8u filed this backlog tick from the finding a7ab854167a79a3201c90b9e499f8d596b7e39fe1df29dbb9501f94df4b1d468 (reported by run-epic-t8u/tick-o3q/attempt-11) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/a7ab854167a79a3201c90b9e499f8d596b7e39fe1df29dbb9501f94df4b1d468.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-o3q/attempt-11",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-07T22:24:12Z",
+  "updated_at": "2026-10-07T22:24:12Z"
+}
