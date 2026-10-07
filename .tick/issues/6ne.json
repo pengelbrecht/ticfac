@@ -2,6 +2,7 @@
   "id": "6ne",
   "title": "Re-review v5t: its tree changed since its READY final review (round 3)",
   "description": "Review the epic v5t again, AS INTEGRATED, before the run lands it: its final review (8rm, decision 11) judged it READY at 2b39fdb56da5, and the epic branch has changed since — now at 6ab6259b62de, with work that review never saw (a tick closed or a commit pushed after it). This is review round 3, made only because the tree changed; the run lands on YOUR verdict, not the earlier one.\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what blocks it.",
+  "notes": "2026-10-07 06:07 - ticfac run epic-v5t: the review-epic job, 6ne try 1 (run dispatch #11), returned a validated ticfac.job-result.review-epic.v1 envelope at 4a4275c1c425 — DONE: DONE (READY)",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -10,6 +11,6 @@
   "role": "review",
   "created_by": "ticfac run epic-v5t",
   "created_at": "2026-10-07T04:01:43Z",
-  "updated_at": "2026-10-07T04:01:57.113045Z",
+  "updated_at": "2026-10-07T04:07:04.088476Z",
   "started_at": "2026-10-07T04:01:57.113045Z"
 }
