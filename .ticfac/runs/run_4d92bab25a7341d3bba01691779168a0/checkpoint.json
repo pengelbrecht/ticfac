@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 19,
-  "state": "publishing",
-  "reason": "closing 5gm behind the integrated gate on e834273c8d32",
-  "updated_at": "2026-10-07T07:39:24Z",
+  "sequence": 20,
+  "state": "running",
+  "reason": "5gm is closed",
+  "updated_at": "2026-10-07T07:39:26Z",
   "ticks": [
     {
       "tick_id": "56z",
@@ -23,7 +23,7 @@
     },
     {
       "tick_id": "5gm",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 3
     },
     {
