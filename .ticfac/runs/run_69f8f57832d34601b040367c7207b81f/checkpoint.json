@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 82,
-  "state": "publishing",
-  "reason": "closing gzw behind the integrated gate on c15200e79310",
-  "updated_at": "2026-10-07T17:34:53Z",
+  "sequence": 83,
+  "state": "running",
+  "reason": "gzw is closed",
+  "updated_at": "2026-10-07T17:34:56Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -39,7 +39,7 @@
     },
     {
       "tick_id": "gzw",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 15
     },
     {
