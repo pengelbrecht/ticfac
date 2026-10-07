@@ -265,7 +265,6 @@ func TestAStartOnAPinnedClaudeModelIsRefused(t *testing.T) {
 	}
 }
 
-<<<<<<< HEAD
 // The factory's step-down of a rung dispatch (tick y38): a dispatch that
 // resolved the claude-sub rung and found no subscription free is not refused
 // by the factory — the job is re-resolved onto the deployment's standing
@@ -347,7 +346,9 @@ func TestASteppedDownRungDispatchOnAnotherWorkersAIModelIsRefused(t *testing.T) 
 	}
 	if st := newStore(h.ex.stateDirFor(h.spec.JobID, 1)); st.exists(fileAttempt) {
 		t.Error("an attempt record was written for a worker on a model the rung does not declare")
-=======
+	}
+}
+
 // The hosted door's defect (tick yhe), pinned as the client's half of it: a
 // door that answers a claude/sonnet rung start with the WORKER AGENT's
 // harness — pi-durable, the name a hosted attempt's handle carries whatever
@@ -378,7 +379,6 @@ func TestAHostedHandleOnTheSubscriptionRungIsRefused(t *testing.T) {
 	}
 	if st := newStore(h.ex.stateDirFor(h.spec.JobID, 1)); st.exists(fileAttempt) {
 		t.Error("an attempt record was written for a pairing the cloud billing rule refuses")
->>>>>>> a33388ee2430c6a880c61f0e270e9b53185b1a15
 	}
 }
 
