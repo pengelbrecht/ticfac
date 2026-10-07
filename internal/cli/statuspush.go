@@ -90,6 +90,14 @@ import (
 // 30 seconds is one small write, not a conversation.
 const statusPushInterval = 30 * time.Second
 
+// statusPushTimeout bounds ONE push, the gathering and the POST together
+// (tick 1y4). The ending push runs after run-epic has already posted its done
+// signal, on the way out of the process: an unbounded one — a forge, a
+// gateway or a door that never answers — kept the orchestrator alive after it
+// had told its Workflow it was finished, and the Workflow then waited on a
+// process with nothing left to do. A var so a test can shorten it.
+var statusPushTimeout = 20 * time.Second
+
 // statusSnapshotPath is the OPERATOR's snapshot door, the one a local run's
 // pusher talks to. The TS half pins the contract (cloudflare/src/status.ts):
 // envelope version, the model's own `ticfac.status.v1` version, a local
@@ -285,6 +293,8 @@ func (p *statusPusher) Stop() {
 // push gathers and POSTs one snapshot. Best-effort by construction: every
 // failure is a line to the log and nothing else.
 func (p *statusPusher) push(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, statusPushTimeout)
+	defer cancel()
 	snapshot, dropped := statusSnapshotTrimmed(ctx, p.repo, p.runID, p.host)
 	if dropped > 0 && !p.trimNoted {
 		// Said once per pusher: the snapshot still goes, with the bare ids

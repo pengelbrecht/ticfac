@@ -219,6 +219,12 @@ declare namespace Cloudflare {
     RUN_MAX_COST_USD?: string;
     RUN_STOP_GRACE_MS?: string;
     /**
+     * How long an orchestrator that reported its end on the done door has to
+     * exit before the watch stops it (tick 1y4). Unset on a real deployment;
+     * tests shorten it.
+     */
+    RUN_DONE_SETTLE_MS?: string;
+    /**
      * How long a LOCAL orchestrator (`ticfac run --cloud-workers`) may go
      * without a heartbeat before its run is ended (src/local-orchestrator.ts).
      * Unset on a real deployment, which takes the module's default; tests
