@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 44,
-  "state": "gating",
-  "reason": "running the integrated gate for y38 on 008fce3cf803",
-  "updated_at": "2026-10-07T03:13:55Z",
+  "sequence": 45,
+  "state": "publishing",
+  "reason": "closing y38 behind the integrated gate on 008fce3cf803",
+  "updated_at": "2026-10-07T03:16:05Z",
   "ticks": [
     {
       "tick_id": "6fv",
