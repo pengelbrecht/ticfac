@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 50,
-  "state": "running",
-  "reason": "pqs is closed",
-  "updated_at": "2026-10-07T18:30:18Z",
+  "sequence": 51,
+  "state": "dispatching",
+  "reason": "dispatching ncr as attempt 10",
+  "updated_at": "2026-10-07T18:30:34Z",
   "ticks": [
     {
       "tick_id": "pqs",
