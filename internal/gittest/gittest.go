@@ -170,6 +170,37 @@ func Control(dir string, args ...string) *exec.Cmd {
 	return cmd
 }
 
+// StatedEnv is the environment of the TEST PROCESS as the test has stated
+// it, with the run's own pins added: maintenance off, the transport bound,
+// the prompt off, and NOTHING ELSE. No config file is forced to /dev/null,
+// nothing is stripped — a test that t.Setenv's GIT_CONFIG_GLOBAL (or any
+// other git variable) and wants its git to inherit exactly that is a
+// fixture whose SUBJECT is a host-shaped environment, and this is its door.
+//
+// It exists for internal/reconcile's rerere fixture (tick 6na): the test
+// states a host-global config enabling rerere with autoupdate, and its
+// hand resolution must RECORD into the rr-cache exactly the way the
+// incident's did — which the hermetic Env cannot do, because /dev/null as
+// the global config is precisely the incident's absence. That the run's
+// own merge still leaves the conflict is what the fixture then asserts
+// against this door's poison.
+func StatedEnv() []string {
+	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	env = append(env, gitbin.TransportEnv()...)
+	return gitbin.WithNoAutoMaintenance(env)
+}
+
+// Stated builds a git command under StatedEnv, for a fixture whose subject
+// is an environment the test itself has stated. See StatedEnv, and Command
+// for the default door.
+func Stated(dir string, args ...string) *exec.Cmd {
+	requireAbsDir(dir)
+	cmd := exec.Command(gitbin.Path(), args...)
+	cmd.Dir = dir
+	cmd.Env = StatedEnv()
+	return cmd
+}
+
 // Under builds a git command running under an environment the CALLER
 // constructed. It exists for fixtures whose subject is a constructed
 // environment — internal/exec/subprocess's sandbox grades, whose push
