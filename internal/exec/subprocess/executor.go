@@ -115,10 +115,10 @@ type Options struct {
 	// reported waits for that attempt to settle on its own before stopping
 	// it (#141, hol): the runner exiting after its report, and the
 	// supervisor's closing push and settlement record. Zero is
-	// DefaultReportedSettleGrace — seconds at most even on a loaded CI
-	// runner — and a test runs the wait at the harness's own cadence, the
-	// way it runs every other bound, so the window stays the production
-	// number everywhere a test did not name it.
+	// DefaultReportedSettleGrace, the production number; a test runs the wait
+	// at the harness's own cadence, the way it runs every other bound, so
+	// the window stays the production number everywhere a test did not name
+	// it.
 	ReportedSettleGrace time.Duration
 
 	// StuckAfter is the stuck watch's window (activity.go, tick wv2), carried

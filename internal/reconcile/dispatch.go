@@ -3533,21 +3533,12 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	}
 	// The collect's own checkpoint lands HERE, at the ruling, stating the
 	// verdict it ruled (tick o3q) — not before the executor is read, as the
-	// announce it replaces did: the collect is one step, and a step's records
+	// announce it replaced did: the collect is one step, and a step's records
 	// land as one push (tick f61), so a second checkpoint beside the verdict
-	// would be a second push per tick. The verdict is durable BEFORE the
-	// worker is released below — the release is a Cancel, and a reported
-	// worker still running past its grace is stopped and durably cancelled by
-	// it, so this is the last moment the run's own records can state what
-	// they ruled before the executor's state can be renamed `cancelled`
-	// under them. Rejections have always had their verdict recorded
-	// (rejectDurably, read back by disposition); the positive verdict had
-	// nowhere, so a restart re-collected the attempt and took the executor's
-	// word for it again, and the release's own cancellation renamed the work
-	// `cancelled` for the resume that rejected and redid it. A resume reads
-	// the verdict recorded here first (readRecordedVerdictFirst), and the
-	// release's own cancellation cannot override the work it is the record
-	// of.
+	// would be a second push per tick. It is written before the worker is
+	// released below, which is the whole point: the release is a Cancel, and
+	// the verdict has to be durable in this run's own records before the
+	// executor's state can be renamed `cancelled` under it.
 	if err := r.recordCollectVerdict(marker); err != nil {
 		return nil, err
 	}
