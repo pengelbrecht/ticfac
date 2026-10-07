@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 108,
-  "state": "running",
-  "reason": "q6z try 3 (run dispatch #21) is rejected (ready-to-merge): BLOCKED: the tick's named deliverable is one cell in `.tick/runners.toml` (plus the two remnant files folded into the same edit), a path no dispatched attempt may write on this substrate (the container's pre-commit hook refuses any staged `.tick/` path and the cloud collect refuses any `.tick/` diff — the wall open ticks 26g, z2x, g7p and ky7 already carry), so the `args = [\"--approve\"]` line and its comment still stand there; the complete, byte-verified four-pair operator paste and the 22-finding guard that pins it are in this report for the operator (or the run's own writer, once ky7's config-edits channel exists), while the repository-side half is done, merged and gate-green, and this branch commits nothing because nothing a worker may write remained to change.",
-  "updated_at": "2026-10-07T20:52:28Z",
+  "sequence": 109,
+  "state": "dispatching",
+  "reason": "dispatching qzg as attempt 22",
+  "updated_at": "2026-10-07T20:52:42Z",
   "ticks": [
     {
       "tick_id": "2p3",
