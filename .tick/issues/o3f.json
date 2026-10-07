@@ -1,0 +1,13 @@
+{
+  "id": "o3f",
+  "title": "bw7 is already fixed in the integrated tree by y38; close it",
+  "description": "bw7 was reported from yhe attempt 8's base e5b155f, which does not contain the y38 merge 008fce3cf. In the integrated tree, executor.go's bootedOnTheResolvedModelOrTheRungsDeclaredFallback accepts the rung's declared step-down pair. A real-door run (hosted, cap full) shows the stepped-down pi-durable/glm-5.3 handle accepted by the Go executor.\nevidence: internal/exec/cloudflaresandbox/executor.go:527-539; git merge-base --is-ancestor 008fce3cf e5b155fed -\u003e false\n\nticfac run epic-v5t filed this backlog tick from the finding 07afac2d7a8eb834012feb01565422663b7c46ee7ae1252c0b6d96b48baabddf (reported by run-epic-v5t/tick-8rm/attempt-9) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/07afac2d7a8eb834012feb01565422663b7c46ee7ae1252c0b6d96b48baabddf.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-epic-v5t/tick-8rm/attempt-9",
+  "created_by": "ticfac run epic-v5t",
+  "created_at": "2026-10-07T03:46:22Z",
+  "updated_at": "2026-10-07T03:46:22Z"
+}
