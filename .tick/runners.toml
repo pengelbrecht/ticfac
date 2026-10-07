@@ -204,7 +204,9 @@ go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./..
 # own — vitest has no global bound, and its per-test bounds are set in the
 # config — so the harness bound (60m) is the outer one, and the worst
 # observed run is a tenth of it. The ts command goes from ~6s to about
-# 3.5-6m, beside a Go half that still owns the gate's wall clock.
+# 3.5-6m; against the Go half's ~3m on this host the TypeScript half now
+# carries the gate's longer leg — the price of behaviour being gated per
+# tick rather than on the epic PR alone.
 #
 # The spelling is `vitest run`, the exit-when-done form: bare `vitest` is watch
 # mode, and a gate command that never exits is a gate that holds its harness
