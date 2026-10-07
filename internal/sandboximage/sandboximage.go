@@ -552,6 +552,21 @@ const (
 	// the RUN cut short: the two call for opposite next actions.
 	WorkerCancelReportMarker = "CANCELLED BY THE SUPERVISOR"
 
+	// WorkerFallbackReportMarker heads the report the entrypoint writes when
+	// the harness wrote none (write_fallback_report). It is the structured
+	// fact a collector reads that the report is the CONTAINER's account of a
+	// fault — the harness died, or ended its turn without a report — and never
+	// the agent's answer, so nothing in it is a question for a person (ex6
+	// 2p3, 2026-10-07: a fallback's "BLOCKED — re-dispatch this tick" climbed
+	// the blocked-answer ladder and held the tick for a person).
+	WorkerFallbackReportMarker = "NO AGENT REPORT"
+
+	// WorkerLegacyFallbackSentence is the line every fallback report an image
+	// built before WorkerFallbackReportMarker carried, verbatim. Those reports
+	// still sit on attempt branches (and a carried attempt boots at one), so
+	// the collector recognises the fallback by either.
+	WorkerLegacyFallbackSentence = "Nothing here is the agent's own account of the work; there is none."
+
 	// EnvWorkerStateDir is where the container keeps the two facts a second
 	// process inside it has to find — the harness's pid, and whether a
 	// cancellation has been lodged. It has a fixed default because the two

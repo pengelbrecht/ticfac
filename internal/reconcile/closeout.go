@@ -536,6 +536,14 @@ func (r *Reconciler) gateCloseoutClose(ctx context.Context, marker attemptHandle
 	if err := r.disposeRoutedFindings(ctx, marker); err != nil {
 		return err
 	}
+	// The protected changes workers proposed (protected_changes.go) go on
+	// now: the close-out's attempt and its integrated gate — the last readers
+	// of this run's configuration — are behind, and CI below gates the head
+	// that carries them. Each finding is triaged fixed by its commit, so the
+	// findings gate below meets a decision rather than holding for a person.
+	if err := r.applyProtectedChanges(ctx, marker); err != nil {
+		return err
+	}
 	if !r.closeoutRule.Declared {
 		// No PR, no CI — but the findings gate still runs (tick aqm): the hold
 		// the per-tick close carried moved HERE, not away, and a repository

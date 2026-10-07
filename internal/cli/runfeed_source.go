@@ -27,6 +27,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -49,7 +50,7 @@ import (
 // follower's read cadence is the follower's implementation detail, never a
 // guess about the work. A LOCAL feed is followed at runfeed.FollowTick, the
 // file-stat cadence the local subscription has always used.
-const defaultCloudFeedInterval = defaultCloudLogsInterval
+var defaultCloudFeedInterval = defaultCloudLogsInterval // a variable only so a test need not wait out real seconds
 
 // cloudFeedSource is a cloud run's feed as one [runfeed.Source]: the standing
 // segment stream the factory serves, read as bytes a cursor walks.
@@ -69,6 +70,10 @@ type cloudFeedSource struct {
 	// is warned about and retried at the next poll; everywhere else it is
 	// an error the command reports as a failed read.
 	follow bool
+
+	// failures counts a follow's failed reads in a row: the backoff's
+	// exponent, reset by the next good page.
+	failures int
 
 	mu    sync.Mutex
 	state string // the run record's own claim, carried from the last read
@@ -122,6 +127,54 @@ const cloudFeedMaxPages = 100_000
 // operator a run five hours in "has not written an event".
 var errFeedRead = errors.New("the run's event feed could not be read")
 
+// feedRetryBase and feedRetryMax bound how a watch backs off a factory whose
+// reads fail: the first retry after feedRetryBase, doubling to feedRetryMax.
+// Variables so a test does not wait out real seconds.
+var (
+	feedRetryBase = 2 * time.Second
+	feedRetryMax  = 30 * time.Second
+)
+
+// feedRetryDelay is the wait before the retry that follows `failures`
+// failed reads in a row (0-based).
+func feedRetryDelay(failures int) time.Duration {
+	delay := feedRetryBase
+	for i := 0; i < failures && delay < feedRetryMax; i++ {
+		delay *= 2
+	}
+	if delay > feedRetryMax {
+		delay = feedRetryMax
+	}
+	return delay
+}
+
+// feedReadTransient reports whether a failed read of a cloud run is worth
+// asking again (vy8): a connect error, a body that is not JSON or not a feed,
+// a factory that failed answering (5xx, 408, 429). What is NOT is the
+// factory's definitive answer — the run is unknown (404), the token is
+// refused (401/403), the deployment has no feed at all (feed_unavailable) —
+// and a cancelled context, which is the caller leaving. Anything else that is
+// not one of those transport failures (no factory configured, say) is not a
+// blip either: asking again would only ask the same question.
+func feedReadTransient(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return false
+	}
+	var apiErr cloudAPIError
+	if errors.As(err, &apiErr) {
+		return apiErr.transient()
+	}
+	if errors.Is(err, errFeedRead) {
+		return true
+	}
+	// The request never got an answer (DNS, connect, reset, a client
+	// timeout), or the answer was not JSON at all.
+	var urlErr *url.Error
+	var syntaxErr *json.SyntaxError
+	var typeErr *json.UnmarshalTypeError
+	return errors.As(err, &urlErr) || errors.As(err, &syntaxErr) || errors.As(err, &typeErr)
+}
+
 // page is one request of the paged route.
 func (s *cloudFeedSource) page(ctx context.Context, query url.Values) (cloudFeedResponse, error) {
 	path := "/api/runs/" + url.PathEscape(s.runID) + "/events"
@@ -131,11 +184,15 @@ func (s *cloudFeedSource) page(ctx context.Context, query url.Values) (cloudFeed
 	data, err := s.client.request(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		var apiErr cloudAPIError
-		if errors.As(err, &apiErr) {
+		if errors.As(err, &apiErr) && !apiErr.transient() {
 			// The route's own answer about the feed (an unknown run, a
-			// deployment with no bucket): terminal, in its own words.
+			// deployment with no bucket, a token it refuses): terminal, in
+			// its own words.
 			return cloudFeedResponse{}, err
 		}
+		// A connect error, or a factory that failed answering (a 5xx —
+		// workerd's HTML page for an exception a route let escape among
+		// them, 2026-10-07): a failed read, never an answer about the feed.
 		return cloudFeedResponse{}, fmt.Errorf("%w from the factory: %w", errFeedRead, err)
 	}
 	var response cloudFeedResponse
@@ -168,6 +225,7 @@ func (s *cloudFeedSource) ReadAt(ctx context.Context, cursor int64) ([]byte, int
 		if err != nil {
 			if s.follow && errors.Is(err, errFeedRead) {
 				fmt.Fprintf(s.warn, "# %v\n", err)
+				s.backOff(ctx)
 				return out, at, nil
 			}
 			return nil, 0, err
@@ -193,11 +251,36 @@ func (s *cloudFeedSource) ReadAt(ctx context.Context, cursor int64) ([]byte, int
 			return nil, 0, fmt.Errorf("%w: the page at byte %d carried %d bytes against a stated %d (next %d)",
 				errFeedRead, at, len(response.Text), response.Bytes, response.Next)
 		}
+		if s.follow {
+			// A page whose lines do not parse (vy8: `invalid character 'i'
+			// looking for beginning of value`, 2026-10-07) is a read that
+			// failed, not a feed that ended: the follower keeps what it had
+			// and asks again — the pages before this one are still good.
+			if _, perr := runfeed.ParseLocated([]byte(response.Text)); perr != nil {
+				fmt.Fprintf(s.warn, "# %v: the page at byte %d did not parse (%v); asking again\n", errFeedRead, at, perr)
+				s.backOff(ctx)
+				return out, at, nil
+			}
+		}
 		out = append(out, response.Text...)
 		at = response.Next
+		s.failures = 0
 		if !response.More || response.Bytes == 0 {
 			return out, at, nil
 		}
+	}
+}
+
+// backOff waits out a failed read under a follow before the follower asks
+// again: one more failure in a row, one longer wait (feedRetryDelay), so a
+// factory that is failing is not asked every poll. Cancelling the context
+// ends the wait.
+func (s *cloudFeedSource) backOff(ctx context.Context) {
+	delay := feedRetryDelay(s.failures)
+	s.failures++
+	select {
+	case <-ctx.Done():
+	case <-time.After(delay):
 	}
 }
 
@@ -481,6 +564,12 @@ func feedStanding(ctx context.Context, source runfeed.Source) (located []runfeed
 	}
 	located, err = runfeed.ParseLocated(chunk)
 	if err != nil {
+		if _, cloud := source.(*cloudFeedSource); cloud {
+			// Bytes that arrived over a network and do not parse are a read
+			// that failed (vy8), and the next read from byte zero is a new
+			// chance; a local file that does not parse is the file's fact.
+			return nil, false, fmt.Errorf("%w: %s: %w", errFeedRead, source.Where(), err)
+		}
 		return nil, false, fmt.Errorf("%s: %w", source.Where(), err)
 	}
 	if len(located) == 0 {

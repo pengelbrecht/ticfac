@@ -609,7 +609,30 @@ async function runFeedRoute(url: URL, runID: string, env: Env): Promise<Response
   if (request.from !== undefined && request.tail !== undefined) {
     return badRequest("from and tail are two ways to say where the page starts: name one");
   }
-  const page = await readRunFeedPage(env.ARTIFACTS, run.project, runID, request);
+  let page: Awaited<ReturnType<typeof readRunFeedPage>>;
+  try {
+    page = await readRunFeedPage(env.ARTIFACTS, run.project, runID, request);
+  } catch (error) {
+    // An R2 list or get that failed mid-page (2026-10-07, run_69f8…: the
+    // attached view of epic ex6 died on workerd's HTML 500 for exactly an
+    // uncaught throw on this route). Transient by nature — the segments are
+    // immutable and the next poll reads them again — so it is answered as a
+    // retryable 503 a follower backs off on, never as an exception.
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `factory run-feed: ${runID} page read failed (from=${request.from ?? "-"} tail=${
+        request.tail ?? "-"
+      } limit=${request.limit ?? "-"}): ${message}`,
+    );
+    return Response.json(
+      {
+        error: "feed_read_failed",
+        detail: `the run's feed could not be read just now (${message}); retry`,
+        retryable: true,
+      },
+      { status: 503 },
+    );
+  }
   return Response.json({
     run_id: runID,
     project: run.project,
@@ -1520,7 +1543,11 @@ async function authorizeRunQuestionAccess(
   return "allowed";
 }
 
-export default {
+/**
+ * The routes themselves. `export default` below wraps this handler's fetch so
+ * an exception a route lets escape is still answered as JSON.
+ */
+const factory = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
@@ -1987,6 +2014,44 @@ export default {
         }
       })(),
     );
+  },
+} satisfies ExportedHandler<Env>;
+
+/**
+ * The last word on any request a route let an exception escape from.
+ *
+ * Without it workerd answers an uncaught throw with its own HTML 500 page —
+ * "A Worker script configured by the website owner threw an unhandled
+ * exception" — which no client of this API can parse, and which ended an
+ * attached `ticfac run ex6 --cloud` (2026-10-07). Every route answers JSON, so
+ * this failure does too: a 500 with an `error` a client can switch on, and
+ * one console line naming the method and path (never the query or a header:
+ * the bearer token travels in one) so `wrangler tail` shows what threw.
+ * Not exported: workerd refuses a named export from the entry module that is
+ * not a handler (see SERVICE above).
+ */
+function unhandledErrorResponse(request: Request, error: unknown): Response {
+  const url = new URL(request.url);
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`factory: unhandled exception on ${request.method} ${url.pathname}: ${message}`);
+  return Response.json(
+    {
+      error: "internal_error",
+      detail: "the factory failed while answering this request; it is safe to retry",
+      retryable: true,
+    },
+    { status: 500 },
+  );
+}
+
+export default {
+  ...factory,
+  async fetch(request: Request, env: Env): Promise<Response> {
+    try {
+      return await factory.fetch(request, env);
+    } catch (error) {
+      return unhandledErrorResponse(request, error);
+    }
   },
 } satisfies ExportedHandler<Env>;
 

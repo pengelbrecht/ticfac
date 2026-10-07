@@ -181,6 +181,27 @@ type cloudAPIError struct {
 	body   []byte
 }
 
+// transient reports whether this answer is the factory failing rather than
+// the factory answering: a 5xx (workerd's own page for an exception a route
+// let escape among them), a timeout, a rate limit. A 503 `feed_unavailable`
+// — a deployment with no artifacts bucket — is the one 5xx that is an
+// answer: asking again changes nothing.
+func (e cloudAPIError) transient() bool {
+	switch {
+	case e.status == http.StatusRequestTimeout, e.status == http.StatusTooManyRequests:
+		return true
+	case e.status < http.StatusInternalServerError:
+		return false
+	}
+	var response struct {
+		Error string `json:"error"`
+	}
+	if json.Unmarshal(e.body, &response) == nil && response.Error == "feed_unavailable" {
+		return false
+	}
+	return true
+}
+
 func (e cloudAPIError) Error() string {
 	var response struct {
 		Error  string `json:"error"`

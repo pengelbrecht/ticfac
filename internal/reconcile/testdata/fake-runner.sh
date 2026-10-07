@@ -678,6 +678,69 @@ tracker_edit_finding)
 		} > "$TICFAC_RESULT_PATH"
 	fi
 	;;
+protected_change_finding)
+	# The epic-v5t shape (ticks tda, yck): a1 does what it can and reports a
+	# HIGH finding naming done item A1 whose fix is an edit of
+	# .tick/runners.cloud.toml, which no worker may write — carrying the
+	# exact change. The run applies it itself after the close-out's reads,
+	# rather than absorbing a tick no worker could do.
+	commit
+	if [ "$TICFAC_TICK" != "a1" ]; then
+		report
+	else
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf '%s\n' '```findings v2'
+			printf '%s\n' '[{"kind": "defect", "title": "Append the named cloud configs to .tick/runners.cloud.toml", "severity": "high",'
+			printf '%s\n' '  "breaks": {"item": "A1"},'
+			printf '%s\n' '  "body": "A worker may not write the file, so the run applies the change.",'
+			printf '%s\n' '  "protected_change": {"path": ".tick/runners.cloud.toml", "append": "# Named run configs\n[configs.claude]\nmodel = \"claude\""}}]'
+			printf '%s\n' '```'
+			printf '\nSTATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+	fi
+	;;
+protected_change_only)
+	# Epic ex6's 2pn: b1's WHOLE deliverable is a change to .tick/runners.toml,
+	# which the cloud substrate refuses to every worker. It commits nothing
+	# and carries the change as a finding's protected_change: that is its
+	# delivery, which the run applies itself after the close-out.
+	if [ "$TICFAC_TICK" != "b1" ]; then
+		commit
+		report
+	else
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf '%s\n' '```findings v2'
+			printf '%s\n' '[{"kind": "defect", "title": "The lint command is not declared", "severity": "medium",'
+			printf '%s\n' '  "protected_change": {"path": ".tick/runners.toml", "append": "# lint: make lint"}}]'
+			printf '%s\n' '```'
+			printf '\nSTATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+	fi
+	;;
+protected_edit_prose)
+	# The same discovery as protected_change_finding, as the incident's
+	# worker reported it: prose only, the operator told to run a sed. It is
+	# never absorbed as a tick no worker could do.
+	commit
+	if [ "$TICFAC_TICK" != "a1" ]; then
+		report
+	else
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf '%s\n' '```findings v2'
+			printf '%s\n' '[{"kind": "defect", "title": "Append the named cloud configs to .tick/runners.cloud.toml", "severity": "high",'
+			printf '%s\n' '  "breaks": {"item": "A1"},'
+			printf '%s\n' '  "body": "This must be done by the operator or the run, not a worker."}]'
+			printf '%s\n' '```'
+			printf '\nSTATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+	fi
+	;;
 epic_note)
 	# The 8em shape (epic 43y, tick 7sn): b1's deliverable is a tracker edit
 	# that appends a NOTE to the EPIC's own record — the record the close-out

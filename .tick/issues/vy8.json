@@ -3,12 +3,14 @@
   "title": "A run attach dies on one non-JSON answer from the factory's run feed instead of retrying",
   "gloss": "attach dies on a bad feed read",
   "description": "2026-10-07 ~15:00 UTC, during a local DNS outage on the operator's Mac: the attached 'ticfac run ex6 --cloud' view exited with 'ticfac watch: the factory's run feed for run_69f8…: not a run event feed: invalid character 'i' looking for beginning of value' — one bad (non-JSON) read ended the attach while the cloud run kept going. A read of the run feed that fails to parse or to connect is transient: keep the last frame, label it stale (as the dashboard does), back off and retry; exit only on a definitive answer (404 run unknown, 401).",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "bug",
   "owner": "ticks-sandbox@ticks.invalid",
   "acceptance_criteria": "a non-JSON or failed run-feed read during attach is retried with backoff and the attach continues; test reproduces the incident's body; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T15:22:28.934339Z",
-  "updated_at": "2026-10-07T15:22:28.934339Z"
+  "updated_at": "2026-10-07T17:23:57.686916Z",
+  "closed_at": "2026-10-07T17:23:57.686916Z",
+  "closed_reason": "watch/attach treat a 5xx, connect error, non-JSON body or unparseable feed page as transient: keep the last frame labelled stale, back off (2s doubling to 30s) and retry; exit only on 404/401/403 or feed_unavailable. Factory's feed route now answers JSON 503 feed_read_failed on an R2 failure, and the Worker answers any escaped exception as JSON 500."
 }

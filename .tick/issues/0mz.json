@@ -1,0 +1,14 @@
+{
+  "id": "0mz",
+  "title": "An operator door that ends one attempt's WorkerAgent host on demand, so the host-loss fault can be injected mid-tool",
+  "gloss": "kill a worker host on demand",
+  "description": "9if's first fault (the WorkerAgent DO's life lost mid-tool) is injected today by triggering a factory deploy (gh workflow run deploy-factory.yml). On 2026-10-07 that took ~10 min from trigger to swap (17:01-17:11 UTC), so it landed between tool calls of ex6's gzw and proved nothing; only a tool call longer than a deploy could be hit. Add an operator-only, authenticated factory route + CLI (e.g. ticfac cloud fault \u003crun\u003e --tick \u003ct\u003e host-loss) that ends exactly that attempt's WorkerAgent host life (abort the DO / drop its in-memory host) without touching the container, so the next heartbeat's host life must resume from storage and reattach the tracked bash by nonce. Exact identity only (run+tick+attempt), refuse the orchestrator. Update docs/pi-durable-cloud-run-runbook.md to use it.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "the door ends one named attempt's host mid-tool; the attempt's log then shows 'a new host life resumed the conversation from its storage' and the in-flight tool ran once; refuses any other run's attempt and the orchestrator; vitest + Go tests; runbook updated; make gate",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T17:14:31.114017Z",
+  "updated_at": "2026-10-07T17:14:31.114017Z"
+}
