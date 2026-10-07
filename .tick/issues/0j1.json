@@ -2,6 +2,7 @@
   "id": "0j1",
   "title": "Two restore lines can name one restore when the paths race",
   "description": "restoreLostWorkspace() memoises concurrent callers into one restore, but each caller announces its own line: a mid-command loss racing the pre-round ready check on the same fresh box would say both 'the container was lost mid-command; …' and 'the container was lost between rounds; …' for one restore, against the 'one restore says one line' intent both wirings state. Pre-existing in kind since dbi; the ear this tick extended is the second announcer.\nevidence: harness/src/env/factory-sandbox.ts:950 (containerLost announces) against the this.restoring memo at :913-918, and the extension's own onRestore in harness/src/host/worker-attempt.ts:945-949\n\nticfac run run_69f8f57832d34601b040367c7207b81f filed this backlog tick from the finding 120d51651ca86486ec5bdf602839c8415ec05b8cb41228dfc7b858f0a463637d (reported by run-run_69f8f57832d34601b040367c7207b81f/tick-qzg/attempt-23) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/120d51651ca86486ec5bdf602839c8415ec05b8cb41228dfc7b858f0a463637d.json on the run branch.",
+  "notes": "2026-10-07 22:19 - ticfac run run_69f8f57832d34601b040367c7207b81f: created by absorbing finding 120d51651ca86486ec5bdf602839c8415ec05b8cb41228dfc7b858f0a463637d — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/120d51651ca86486ec5bdf602839c8415ec05b8cb41228dfc7b858f0a463637d.json on epic/ex6, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_69f8f57832d34601b040367c7207b81f/tick-qzg/attempt-23",
   "created_by": "ticfac run run_69f8f57832d34601b040367c7207b81f",
   "created_at": "2026-10-07T22:19:21Z",
-  "updated_at": "2026-10-07T22:19:21Z"
+  "updated_at": "2026-10-07T22:19:27.788637279Z"
 }
