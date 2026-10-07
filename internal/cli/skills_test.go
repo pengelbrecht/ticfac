@@ -13,6 +13,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	"github.com/pengelbrecht/ticfac/internal/skills"
 )
 
@@ -227,7 +229,9 @@ func TestTheEmbeddedSkillTeachesTheLoopAndStatesItsBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read the embedded skill: %v", err)
 	}
-	skill := string(data)
+	// Phrases are matched over the text with its line wrapping folded, so
+	// re-flowing a paragraph can neither fail nor pass the contract.
+	skill := strings.Join(strings.Fields(string(data)), " ")
 
 	// The boundary, stated: planning is the ticks skill's, execution is
 	// this one's. A skill that answered the other's question is the
@@ -257,56 +261,141 @@ func TestTheEmbeddedSkillTeachesTheLoopAndStatesItsBoundary(t *testing.T) {
 	if !strings.Contains(skill, "3 the run ended holding") || !strings.Contains(skill, "5 the command ended while the run is still going") {
 		t.Errorf("the skill does not teach the held and running exit classes")
 	}
-
-	// Every `ticfac <command>` the skill names exists in the tree: a skill
-	// that teaches a command the binary does not carry is a contradiction
-	// between the two skills' shared world, caught here.
-	if unknown := skillUnknownCommands(skill, knownCommands()); len(unknown) != 0 {
-		for _, sub := range unknown {
-			t.Errorf("the skill teaches `ticfac %s`, which the tree does not carry", sub)
-		}
-	}
 }
 
-// knownCommands is the set of subcommand names the tree carries — what a
-// skill's teachings are checked against, built from the root so a command
-// added to the tree is known here without an edit.
-func knownCommands() map[string]bool {
-	root := newRootCommand(discardWriter{}, discardWriter{})
-	known := map[string]bool{}
-	for _, cmd := range root.Commands() {
-		known[cmd.Name()] = true
+// skillText is every markdown file the embedded ticfac skill installs —
+// SKILL.md and its references/ — as one text: the guard below holds the
+// whole bundle, because detail moved into a reference is still a teaching.
+func skillText(t *testing.T) string {
+	t.Helper()
+	paths, err := skills.Paths("ticfac")
+	if err != nil {
+		t.Fatalf("list the embedded skill: %v", err)
 	}
-	return known
-}
-
-// skillUnknownCommands returns every `ticfac <command>` the skill text
-// names that the tree does not carry. Commands are read off the BACKTICK
-// SPANS — the markdown convention this skill writes commands in — because
-// the skill also uses the name in prose ("the ticfac skill owns
-// EXECUTION"), and prose is not a teaching. Splitting on whitespace
-// instead reads `ticfac init` as the two fields `ticfac and init`, checks
-// neither, and no subcommand is ever looked up — the vacuous loop of tick
-// 7ht.
-func skillUnknownCommands(skill string, known map[string]bool) []string {
-	var unknown []string
-	for _, span := range backtickSpans(skill) {
-		fields := strings.Fields(span)
-		if len(fields) == 0 || fields[0] != "ticfac" {
+	var b strings.Builder
+	for _, p := range paths {
+		if !strings.HasSuffix(p, ".md") {
 			continue
 		}
-		if len(fields) == 1 {
-			continue // the bare overview, real
+		data, err := skills.Read("ticfac", p)
+		if err != nil {
+			t.Fatalf("read %s: %v", p, err)
 		}
-		sub := strings.Trim(fields[1], "|,.;:()")
-		if sub == "" || strings.HasPrefix(sub, "-") || strings.HasPrefix(sub, "<") {
-			continue // a flag or a placeholder like <epic>, not a command name
-		}
-		if !known[sub] {
-			unknown = append(unknown, sub)
+		b.Write(data)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+// skillTree is the command tree a skill is checked against, with cobra's
+// lazily-added `help` and `completion` commands materialised so the skill
+// may name them like any other.
+func skillTree() *cobra.Command {
+	root := newRootCommand(discardWriter{}, discardWriter{})
+	root.InitDefaultHelpCmd()
+	root.InitDefaultCompletionCmd()
+	return root
+}
+
+// childNamed is the child of cmd called name, or nil.
+func childNamed(cmd *cobra.Command, name string) *cobra.Command {
+	for _, c := range cmd.Commands() {
+		if c.Name() == name {
+			return c
 		}
 	}
-	return unknown
+	return nil
+}
+
+// skillCommandCheck reads every `ticfac …` backtick span of a skill's text
+// against the tree and returns what does not exist — an unknown command,
+// subcommand or --flag — plus the set of command paths ("run", "cloud
+// logs") the text names. Commands are read off the BACKTICK SPANS — the
+// markdown convention the skill writes commands in — because the skill
+// also uses the name in prose ("the ticfac skill owns EXECUTION"), and
+// prose is not a teaching. Splitting on whitespace instead reads `ticfac
+// init` as the two fields `ticfac and init`, checks neither, and no
+// subcommand is ever looked up — the vacuous loop of tick 7ht.
+//
+// A position may name alternatives (`skills list|get|install`, or `\|`
+// inside a table cell); each is checked. A word in angle or square
+// brackets is a placeholder, and the walk stops at the first argument of a
+// command that has no subcommands.
+func skillCommandCheck(text string, root *cobra.Command) (unknown []string, named map[string]bool) {
+	named = map[string]bool{}
+	for _, span := range backtickSpans(text) {
+		fields := strings.Fields(span)
+		if len(fields) < 2 || fields[0] != "ticfac" {
+			continue // prose, or the bare overview
+		}
+		// Resolve the command path, at most two command words deep.
+		cmd := root
+		path := ""
+		for depth, f := range fields[1:] {
+			if depth >= 2 || !cmd.HasSubCommands() || isSkillArgWord(f) {
+				break
+			}
+			alts := splitAlternatives(f)
+			var next *cobra.Command
+			for _, alt := range alts {
+				full := strings.TrimSpace(path + " " + alt)
+				child := childNamed(cmd, alt)
+				if child == nil {
+					unknown = append(unknown, full)
+					continue
+				}
+				named[full] = true
+				next = child
+			}
+			if len(alts) != 1 || next == nil {
+				cmd = nil // alternatives or an unknown: no single command owns the flags
+				break
+			}
+			cmd = next
+			path = strings.TrimSpace(path + " " + alts[0])
+		}
+		if cmd == nil || cmd == root || cmd.DisableFlagParsing {
+			continue
+		}
+		for _, f := range fields {
+			for _, alt := range splitAlternatives(strings.Trim(f, "[]()")) {
+				if !strings.HasPrefix(alt, "--") {
+					continue
+				}
+				name := strings.TrimPrefix(alt, "--")
+				if i := strings.IndexByte(name, '='); i >= 0 {
+					name = name[:i]
+				}
+				if name == "" || name == "help" {
+					continue
+				}
+				if cmd.Flags().Lookup(name) == nil && cmd.InheritedFlags().Lookup(name) == nil {
+					unknown = append(unknown, path+" --"+name)
+				}
+			}
+		}
+	}
+	return unknown, named
+}
+
+// isSkillArgWord reports whether a span word is an argument, a flag or a
+// placeholder rather than a command name.
+func isSkillArgWord(f string) bool {
+	return f == "" || strings.HasPrefix(f, "-") || strings.HasPrefix(f, "[") ||
+		strings.HasPrefix(f, "'") || strings.HasPrefix(f, ".") || strings.ContainsAny(f, "=<>…")
+}
+
+// splitAlternatives splits `a|b|c` (or a table cell's `a\|b`) into its
+// alternatives, trimming the punctuation prose leaves on a span's edge.
+func splitAlternatives(f string) []string {
+	var out []string
+	for _, a := range strings.Split(strings.ReplaceAll(f, `\|`, "|"), "|") {
+		a = strings.Trim(a, ",.;:()[]")
+		if a != "" {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // backtickSpans returns the text between each pair of backticks — the spans
@@ -328,39 +417,147 @@ func backtickSpans(text string) []string {
 	}
 }
 
+// The skill cannot rot silently (2026-10-07: nine days of commands — named
+// configs, --cloud-workers, steer, factory wait-deployed, sweep — had
+// shipped with no word in the skill). Both directions:
+//
+//   - every `ticfac …` the skill or its references name exists — command,
+//     subcommand and flag — so it never teaches what the binary lacks;
+//   - every visible command in the tree, and every subcommand of a group
+//     (cloud, factory, skills, herd, sweep, sandbox), is named somewhere in
+//     the skill bundle, so a command added to the tree fails here until the
+//     skill says what it is for.
+func TestTheSkillAndTheCommandTreeNameEachOther(t *testing.T) {
+	t.Parallel()
+
+	root := skillTree()
+	unknown, named := skillCommandCheck(skillText(t), root)
+	for _, u := range unknown {
+		t.Errorf("the skill teaches `ticfac %s`, which the tree does not carry", u)
+	}
+	for _, cmd := range root.Commands() {
+		if cmd.Hidden || cmd.Name() == "help" {
+			continue
+		}
+		if !named[cmd.Name()] {
+			t.Errorf("the skill never names `ticfac %s` — say what it is for in skills/ticfac/SKILL.md or its references/", cmd.Name())
+		}
+		if cmd.Name() == "completion" {
+			continue // the shells are completion's arguments, not teachings
+		}
+		for _, sub := range cmd.Commands() {
+			if sub.Hidden || sub.Name() == "help" {
+				continue
+			}
+			if path := cmd.Name() + " " + sub.Name(); !named[path] {
+				t.Errorf("the skill never names `ticfac %s` — say what it is for in skills/ticfac/SKILL.md or its references/", path)
+			}
+		}
+	}
+}
+
 // The command check must CHECK (tick 7ht): it used to split the skill on
 // whitespace, so `ticfac init` read as the two fields `ticfac and init` —
 // the first trimmed to the bare overview and skipped, the second without
 // the prefix — and no subcommand was ever looked up, so a skill teaching a
 // command the tree does not carry passed. A skill that names a nonexistent
-// command must be caught, and a skill that names real ones must not be.
+// command, subcommand or flag must be caught, and one that names real ones
+// must not be.
 func TestSkillCommandCheckCatchesACommandTheTreeDoesNotCarry(t *testing.T) {
 	t.Parallel()
 
-	known := knownCommands()
+	root := skillTree()
 	for _, skill := range []string{
 		"run it with `ticfac init`, then `ticfac frobnicate <run-id>`",
-		"resume with `ticfac unwatch` and see", // a nonexistent command with no argument
+		"resume with `ticfac unwatch` and see",                      // a nonexistent command with no argument
+		"read `ticfac cloud tail <epic>`",                           // a nonexistent subcommand
+		"start `ticfac run <epic> --clod`",                          // a nonexistent flag
+		"pick `ticfac skills list|frob`",                            // a nonexistent alternative
+		"then `ticfac amendment <epic> <key> --confirm\\|--rejekt`", // a nonexistent flag alternative
 	} {
-		if unknown := skillUnknownCommands(skill, known); len(unknown) == 0 {
+		if unknown, _ := skillCommandCheck(skill, root); len(unknown) == 0 {
 			t.Errorf("a skill teaching %q was not caught", skill)
 		}
 	}
 
-	// The commands the real skill teaches, all real in the tree — the
-	// check's own negative control.
-	real := "1. `ticfac init` — make it runnable.\n" +
-		"2. `ticfac doctor` — ready?\n" +
-		"3. `ticfac run <epic>`, `ticfac status <run-id>`, `ticfac events <run-id> --follow`,\n" +
-		"4. `ticfac` with no arguments, `ticfac skills install ticfac`\n"
-	if unknown := skillUnknownCommands(real, known); len(unknown) != 0 {
+	// Real commands, subcommands, alternatives and flags — the check's own
+	// negative control.
+	real := "1. `ticfac init --yes` — make it runnable.\n" +
+		"2. `ticfac doctor --cloud` — ready?\n" +
+		"3. `ticfac run <epic> --cloud-workers --config claude`, `ticfac status <run-id>`, `ticfac events <run-id> --follow`,\n" +
+		"4. `ticfac` with no arguments, `ticfac skills install ticfac`, `ticfac skills list|get|install`\n" +
+		"5. `ticfac cloud logs <epic> -f [--tick <id>]`, `ticfac factory wait-deployed <sha>`\n" +
+		"6. `ticfac amendment <epic> <key> --confirm\\|--reject --by <who>`, `ticfac completion bash|zsh|fish`\n"
+	unknown, named := skillCommandCheck(real, root)
+	if len(unknown) != 0 {
 		t.Errorf("real commands were flagged: %v", unknown)
+	}
+	for _, path := range []string{"init", "run", "skills install", "skills get", "cloud logs", "factory wait-deployed", "completion"} {
+		if !named[path] {
+			t.Errorf("`ticfac %s` was not read as named", path)
+		}
 	}
 
 	// Prose around the name is not a teaching: the skill's boundary section
 	// says “the ticfac skill owns EXECUTION”, and that must stay legal.
 	prose := "the ticfac skill owns EXECUTION; plan with `tk`, run with `ticfac`."
-	if unknown := skillUnknownCommands(prose, known); len(unknown) != 0 {
-		t.Errorf("prose was read as command teachings: %v", unknown)
+	if unknown, named := skillCommandCheck(prose, root); len(unknown) != 0 || len(named) != 0 {
+		t.Errorf("prose was read as command teachings: %v %v", unknown, named)
+	}
+}
+
+// The upgrade path, end to end: a copy a previous binary installed —
+// stamped with its version, carrying files the new bundle no longer has
+// and an old SKILL.md — is replaced by an install from this binary, with
+// this binary's version on the stamp and the bundle's whole tree
+// (references/ included), and nothing of the old tree left behind.
+func TestSkillsInstallFromANewBinaryUpgradesAStampedCopy(t *testing.T) {
+	root := skillsRepoFixture(t, ".claude/skills")
+	dir := filepath.Join(root, ".claude", "skills", "ticfac")
+	if err := os.MkdirAll(filepath.Join(dir, "references"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{
+		"SKILL.md":              "---\nname: ticfac\n---\n# the old skill\n",
+		"references/retired.md": "# a reference the new bundle dropped\n",
+		skills.StampFile:        `{"skill":"ticfac","version":"v0.0.1-old","installed_at":"2026-09-28T00:00:00Z"}`,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, filepath.FromSlash(name)), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "install", "ticfac"}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("installing over an older stamped copy exited %d, want 0: %s%s", code, stdout.String(), stderr.String())
+	}
+
+	stamp, err := skills.ReadStamp(dir)
+	if err != nil {
+		t.Fatalf("the upgraded copy carries no stamp: %v", err)
+	}
+	if stamp.Version != Version {
+		t.Errorf("the stamp names %q after the upgrade, want this binary's %q", stamp.Version, Version)
+	}
+	paths, err := skills.Paths("ticfac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range paths {
+		want, err := skills.Read("ticfac", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(filepath.Join(dir, filepath.FromSlash(p)))
+		if err != nil {
+			t.Errorf("the upgrade did not install %s: %v", p, err)
+			continue
+		}
+		if string(got) != string(want) {
+			t.Errorf("%s is not the embedded bundle's after the upgrade", p)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "references", "retired.md")); !os.IsNotExist(err) {
+		t.Errorf("a file the new bundle dropped survived the upgrade (stat err %v)", err)
 	}
 }
