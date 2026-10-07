@@ -41,8 +41,9 @@ import (
 //     real graph layering; a tick created mid-run enters through
 //     unplannedTicks, the same function replan admits it with.
 //   - THE LIFECYCLE GUARDS are the real ones: MayDispatch before every
-//     dispatch (A11), Poll as the keepalive (A4), ClampBudget at admission
-//     (A12), RecordEvidence and PublishEvidence around the gate's verdict
+//     dispatch (A11), the budget clamped and reported at admission (A12),
+//     Poll as the keepalive with the step cap a leg is spent against (A4 and
+//     A3), and RecordEvidence and PublishEvidence around the gate's verdict
 //     (A13).
 //   - A TRANSIENT REMOTE FAILURE is classified and waited through by
 //     runstate's own RemoteRetry over the real ClassifyRemote.
@@ -253,9 +254,23 @@ func newLifecycleModel(t *testing.T, dir string, tc hegel.TestCase) *lifecycleMo
 		evidence:      map[string]Fingerprint{},
 		published:     []string{},
 		wipeThreshold: DefaultWipeThreshold,
+		stepCap:       DefaultStepCap,
+		pollInterval:  DefaultPollInterval,
 		now:           func() time.Time { return time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC) },
 		sleep:         func(time.Duration) {},
 		ticks:         []runstate.TickState{},
+	}
+	// A12: the budget is said at ADMISSION, while the run can still be
+	// cancelled cheaply, and the number reported is the one that governs —
+	// the clamp, never the request.
+	m.r.SetBudget(1.0, 0.5)
+	if m.r.budget.Effective != 0.5 || !m.r.budget.Clamped {
+		m.fail("the run's budget did not clamp to the deployment ceiling: %+v", m.r.budget)
+	}
+	// ReportBudget's answer is the guard's own vocabulary; the NUMBER is what
+	// the record says was reported, and it must be the one that governs.
+	if reported := m.r.ReportBudget(); reported != "reported_effective" || m.r.Budget().Reported != 0.5 {
+		m.fail("the run's reported budget is not the number that governs: %s of %+v", reported, m.r.Budget())
 	}
 	m.r.inFlightIDs = m.inFlightIDs()
 	m.plan = m.planFromTracker()
@@ -541,8 +556,17 @@ func (m *lifecycleModel) RuleAWorkerSettles(tc hegel.TestCase) {
 	idx := hegel.Draw(tc, hegel.Integers(0, len(m.window.live)-1))
 	fl := m.window.live[idx]
 	tick := fl.entry.TickID
-	// The poll IS the keepalive: an attempt unaddressed past the substrate's
-	// threshold is gone, and the reconciler learns that here.
+	// A3: the leg this attempt is addressed in is spent against the step cap
+	// — a poll that could not fit in a step is a step nobody opened, and the
+	// outcome here is always within it because the interval is drawn under
+	// the cap the way the executors state theirs.
+	step := m.r.OpenStep(m.r.stepCap)
+	leg := time.Duration(hegel.Draw(tc, hegel.Integers(1, 60)) * int(time.Second))
+	if step.Spend(leg) != WithinCap {
+		m.fail("%s: a poll of %s did not fit in a step of %s", tick, leg, m.r.stepCap)
+	}
+	// A4: the poll IS the keepalive: an attempt unaddressed past the
+	// substrate's threshold is gone, and the reconciler learns that here.
 	if m.r.Poll(tick) == Wiped {
 		m.logf("%s went unaddressed past the wipe threshold and is gone", tick)
 	}
