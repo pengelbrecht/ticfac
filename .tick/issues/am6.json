@@ -2,6 +2,7 @@
   "id": "am6",
   "title": "Boundary banner reports any refused tk call as an attempted write",
   "description": "The banner prepended to a report when the guard fires says, unconditionally, \"This agent tried to write tracker state\" (image/worker.sh:1303). Tick 56z's banner fired for `tk tree ilz` — `tree` is not a subcommand tk 0.32.0 has, so the call could not have written anything, and the guard's own comment at image/worker.sh:456-465 says what it refuses is a WRITE to this checkout's tracker \"and only that\". Every non-allowlisted invocation, including a typo and any read-only subcommand added to tk after the allowlist was written, is escalated to a human as misconduct. Fix: let the banner distinguish a refused unknown-or-read invocation from a staged .tick/ write, or pass an unknown subcommand through and let tk's own usage answer it.\nevidence: image/worker.sh:1303 and the allowlist at image/worker.sh:481-482; the banner in RESULT-56z.md (commit 7f27fdc8f)\n\nticfac run run_4d92bab25a7341d3bba01691779168a0 filed this backlog tick from the finding b2ae7925d7100b1ab420eb5fa07cfcfe351bcb242cd1ded2c1e7df22714fef93 (reported by run-run_4d92bab25a7341d3bba01691779168a0/tick-kzs/attempt-5) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/b2ae7925d7100b1ab420eb5fa07cfcfe351bcb242cd1ded2c1e7df22714fef93.json on the run branch.",
+  "notes": "2026-10-07 08:07 - ticfac run run_4d92bab25a7341d3bba01691779168a0: created by absorbing finding b2ae7925d7100b1ab420eb5fa07cfcfe351bcb242cd1ded2c1e7df22714fef93 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_4d92bab25a7341d3bba01691779168a0/absorptions/b2ae7925d7100b1ab420eb5fa07cfcfe351bcb242cd1ded2c1e7df22714fef93.json on epic/ilz, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_4d92bab25a7341d3bba01691779168a0/tick-kzs/attempt-5",
   "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
   "created_at": "2026-10-07T08:07:35Z",
-  "updated_at": "2026-10-07T08:07:35Z"
+  "updated_at": "2026-10-07T08:07:40.767810115Z"
 }
