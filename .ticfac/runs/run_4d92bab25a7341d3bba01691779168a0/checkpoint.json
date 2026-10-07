@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 27,
-  "state": "running",
-  "reason": "CI is green on the epic PR #254; the close-out of ilz is admitted",
-  "updated_at": "2026-10-07T07:51:15Z",
+  "sequence": 28,
+  "state": "dispatching",
+  "reason": "dispatching kzs as attempt 5",
+  "updated_at": "2026-10-07T07:51:18Z",
   "ticks": [
     {
       "tick_id": "56z",
