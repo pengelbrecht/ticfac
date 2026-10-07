@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 86,
-  "state": "running",
-  "reason": "u51 is closed",
-  "updated_at": "2026-10-07T20:09:02Z",
+  "sequence": 87,
+  "state": "dispatching",
+  "reason": "dispatching uhe as attempt 15",
+  "updated_at": "2026-10-07T20:09:12Z",
   "ticks": [
     {
       "tick_id": "pqs",
