@@ -67,6 +67,78 @@ func TestTheRuleAndTheFactoryAgreeAboutTheSubscriptionRung(t *testing.T) {
 	}
 }
 
+// The rung's step-down is declared in Go and performed by the factory, and
+// neither imports the other: this package's [CloudRule].SubscriptionRungs
+// names the Workers AI model a rung dispatch with no free subscription falls
+// back to, and the factory's lease failure is what performs it
+// (cloudflare/src/sandbox-executor.ts, claudeSubLeaseForBoot) — onto the
+// deployment's standing pair, RUN_WORKER_HARNESS/RUN_WORKER_MODEL in
+// wrangler.toml with worker-boot.ts's defaults beneath. The Go executor
+// accepts a stepped-down answer as exactly the rung's declared fallback
+// PAIR (internal/exec/cloudflaresandbox, tick y38), so a drift between the
+// declared fallback and the performed step-down is a start that can never
+// succeed: every rung dispatch with no subscription free is refused by its
+// own executor. This guard holds the two together — the declared fallback
+// pair and the factory's standing pair are one pair, the model compared
+// namespace-normalised (the rule spells it in pi's namespace, the factory in
+// omp's).
+func TestTheRungsDeclaredFallbackAgreesWithTheFactorysStepDown(t *testing.T) {
+	if len(CloudRule.SubscriptionRungs) != 1 {
+		t.Fatalf("CloudRule declares %d subscription rungs; this guard pins the one-declaration shape — extend it when a second rung is added deliberately",
+			len(CloudRule.SubscriptionRungs))
+	}
+	rung := CloudRule.SubscriptionRungs[0]
+
+	boot, err := os.ReadFile(repoPath(t, "cloudflare", "src", "worker-boot.ts"))
+	if err != nil {
+		t.Fatalf("reading the factory's worker boot ladder: %v", err)
+	}
+	defaultHarness := regexp.MustCompile(`export const WORKER_DEFAULT_HARNESS = "([^"]+)"`).FindSubmatch(boot)
+	defaultModel := regexp.MustCompile(`export const WORKER_DEFAULT_MODEL = "([^"]+)"`).FindSubmatch(boot)
+	if defaultHarness == nil || defaultModel == nil {
+		t.Fatal("cloudflare/src/worker-boot.ts no longer states WORKER_DEFAULT_HARNESS and WORKER_DEFAULT_MODEL — " +
+			"the factory's floor under a deployment that pins no standing pair is gone, and this guard must move with it")
+	}
+	wrangler, err := os.ReadFile(repoPath(t, "cloudflare", "wrangler.toml"))
+	if err != nil {
+		t.Fatalf("reading the deployable factory config: %v", err)
+	}
+	pinnedHarness := regexp.MustCompile(`(?m)^RUN_WORKER_HARNESS = "([^"]+)"`).FindSubmatch(wrangler)
+	pinnedModel := regexp.MustCompile(`(?m)^RUN_WORKER_MODEL = "([^"]+)"`).FindSubmatch(wrangler)
+	if pinnedHarness == nil || pinnedModel == nil {
+		t.Fatal("cloudflare/wrangler.toml no longer pins RUN_WORKER_HARNESS and RUN_WORKER_MODEL — " +
+			"the standing pair the factory's step-down lands on is unstated, and this guard must move with it")
+	}
+
+	// The harness half: the step-down lands on the hosted kind — the name a
+	// hosted attempt's handle carries whatever the dispatch resolved, and the
+	// one the executor's fallback acceptance answers for. A standing harness
+	// that is not the hosted kind steps a rung dispatch onto a pair its own
+	// executor refuses.
+	for _, side := range []struct{ name, harness string }{
+		{"worker-boot.ts's WORKER_DEFAULT_HARNESS", string(defaultHarness[1])},
+		{"wrangler.toml's RUN_WORKER_HARNESS", string(pinnedHarness[1])},
+	} {
+		if side.harness != HostedDurableHarness {
+			t.Errorf("the factory's standing harness is %q (%s), not the hosted kind %q the rung's step-down acceptance names — "+
+				"a stepped-down rung dispatch would be refused by its own executor", side.harness, side.name, HostedDurableHarness)
+		}
+	}
+	// The model half: the declared fallback and the performed step-down are
+	// one model, namespace-normalised — the rule's pi spelling and the
+	// factory's omp spelling of it.
+	for _, side := range []struct{ name, model string }{
+		{"worker-boot.ts's WORKER_DEFAULT_MODEL", string(defaultModel[1])},
+		{"wrangler.toml's RUN_WORKER_MODEL", string(pinnedModel[1])},
+	} {
+		if WorkersAIModelCore(side.model) != WorkersAIModelCore(rung.Fallback) {
+			t.Errorf("the rung declares fallback %q but the factory's step-down model is %q (%s) — "+
+				"a rung dispatch with no free subscription would boot on a model its executor refuses",
+				rung.Fallback, side.model, side.name)
+		}
+	}
+}
+
 // repoPath locates a repository-relative path from this package's directory,
 // so a guard reads the tree it pins rather than a copy.
 func repoPath(t *testing.T, parts ...string) string {

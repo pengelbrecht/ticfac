@@ -441,8 +441,16 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	// The door names the model it booted the worker on. Anything but the one
 	// asked for — an adoption of a container some other start booted, a door
 	// that fell back to its own default — is refused before a record is
-	// written, because the record's model is what every trace reads.
-	if payload.Model != req.Model {
+	// written, because the record's model is what every trace reads. The one
+	// exception is the subscription rung's declared step-down (tick y38): a
+	// dispatch that resolved the rung and found no subscription free is not
+	// refused by the factory — the job is re-resolved onto the rung's declared
+	// Workers AI fallback (cloudflare/src/sandbox-executor.ts, claudeSubLeaseForBoot)
+	// and the answer names exactly that pair. A Workers AI model the rung does
+	// not declare — a deployment whose standing model drifted from the rule —
+	// is refused as before, and the record below still names the pair that RAN,
+	// never the alias the dispatch resolved.
+	if !bootedOnTheResolvedModelOrTheRungsDeclaredFallback(req, payload) {
 		return nil, fmt.Errorf("the door booted attempt %d of %s on model %q, not the %q its dispatch resolved: "+
 			"a record naming the requested model over a worker running another is a provenance that lies",
 			attempt, spec.JobID, payload.Model, req.Model)
@@ -456,7 +464,13 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 	// [WorkerAgentHarness] whatever harness the dispatch's profile named for
 	// the container its tools run in, so the answer names it, the record
 	// below states it, and provenance names what ran — the same rule the
-	// refusal enforces, answered on the other side.
+	// refusal enforces, answered on the other side. And since the rung's
+	// step-down (tick y38), a container boot can carry the name too: the
+	// factory re-resolves a rung dispatch with no free subscription onto the
+	// deployment's standing pair, whose harness is the hosted kind — which is
+	// why the model check's fallback acceptance answers for the PAIR and not
+	// the model alone, and why the parity guard in internal/profile holds the
+	// standing harness to the hosted kind the rung's step-down names.
 	if payload.Harness != req.Harness && payload.Harness != WorkerAgentHarness {
 		return nil, fmt.Errorf("the door booted attempt %d of %s on harness %q, not the %q its dispatch resolved: "+
 			"a record naming the requested harness over a worker bound to another is a provenance that lies",
@@ -494,6 +508,34 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		return nil, err
 	}
 	return handleFor(record), nil
+}
+
+// bootedOnTheResolvedModelOrTheRungsDeclaredFallback is the model half of
+// Start's provenance check, answered with its one exception. The door's
+// answer names the model the attempt runs on, and the check holds it to the
+// model the dispatch resolved — except when the dispatch resolved a
+// subscription rung and the factory stepped it down (tick y38): a rung
+// dispatch that finds no subscription free is re-resolved by the factory
+// onto the rung's DECLARED Workers AI fallback, on the hosted kind the
+// deployment's standing harness pins, and the answer names that pair. The
+// fallback's model is compared namespace-normalised
+// ([profile.WorkersAIModelCore]): the rule declares it in pi's namespace
+// and the factory's step-down (RUN_WORKER_MODEL) answers in omp's, and the
+// two spellings are one model — the parity guard in internal/profile holds
+// the declared fallback and the factory's standing pair together. Anything
+// else — a Workers AI model the rung does not declare, the declared one on
+// any other harness — is a pairing this run did not choose, and is the lie
+// the check exists to keep out of a record every trace reads.
+func bootedOnTheResolvedModelOrTheRungsDeclaredFallback(req *startRequest, payload *cloudflareHandle) bool {
+	if payload.Model == req.Model {
+		return true
+	}
+	rung, onRung := profile.SubscriptionRungFor(req.Harness, req.Model)
+	if !onRung || payload.Harness != WorkerAgentHarness {
+		return false
+	}
+	return profile.IsWorkersAIModel(payload.Model) &&
+		profile.WorkersAIModelCore(payload.Model) == profile.WorkersAIModelCore(rung.Fallback)
 }
 
 // ------------------------------------------------------- reattach settled ---

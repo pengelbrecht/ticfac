@@ -153,6 +153,31 @@ func IsWorkersAIModel(model string) bool {
 	return false
 }
 
+// WorkersAIModelCore is the model id beneath every provider-namespace
+// spelling of it: each leading namespace ([CloudRule].ModelNamespaces) is
+// stripped, so pi's `cloudflare-workers-ai/@cf/…`, omp's `workers-ai/@cf/…`
+// and Workers AI's own bare `@cf/…` — three spellings of one provider route —
+// all fold to the one id beneath. Two ids name one model when their cores
+// are equal, which is how a rung's DECLARED fallback ([SubscriptionRung].
+// Fallback, spelled in pi's namespace) is compared with the factory's
+// step-down of the same rung (RUN_WORKER_MODEL, spelled in omp's): the two
+// spellings are one model, and anything else is a different one. An id in
+// no namespace — a subscription alias, a pinned vendor id — is its own
+// core, unchanged.
+func WorkersAIModelCore(model string) string {
+	for {
+		stripped := false
+		for _, ns := range CloudRule.ModelNamespaces {
+			if rest, ok := strings.CutPrefix(model, ns); ok {
+				model, stripped = rest, true
+			}
+		}
+		if !stripped {
+			return model
+		}
+	}
+}
+
 // reachesWorkersAI reports whether kind is a harness the gateway serves.
 func reachesWorkersAI(kind string) bool {
 	for _, h := range CloudRule.Harnesses {

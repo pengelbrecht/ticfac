@@ -430,6 +430,37 @@ func TestEverySubscriptionRungIsWellFormed(t *testing.T) {
 	}
 }
 
+// The three provider namespaces are three spellings of one provider route,
+// and a model id beneath any of them is ONE model however it is spelled: the
+// rule declares the rung fallback in pi's namespace, the factory's step-down
+// answers in omp's, and the executor's acceptance compares the two — so the
+// core must fold every spelling of one model to one string and keep
+// different models different.
+func TestWorkersAIModelCoreFoldsTheNamespacesToOneModel(t *testing.T) {
+	const core = "zai-org/glm-5.3"
+	for _, id := range []string{
+		"cloudflare-workers-ai/@cf/zai-org/glm-5.3", // pi's spelling
+		"workers-ai/@cf/zai-org/glm-5.3",            // omp's spelling
+		"@cf/zai-org/glm-5.3",                       // Workers AI's own
+	} {
+		if got := WorkersAIModelCore(id); got != core {
+			t.Errorf("WorkersAIModelCore(%q) = %q, want %q — the namespaces are spellings of one route, not different models", id, got, core)
+		}
+		if !IsWorkersAIModel(id) {
+			t.Errorf("%q is not read as a Workers AI model", id)
+		}
+	}
+	// A different model stays different, namespace or none.
+	if got := WorkersAIModelCore("cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"); got != "zai-org/glm-5.3-flash" {
+		t.Errorf("WorkersAIModelCore folded %q onto %q's core: a different model must stay different", got, core)
+	}
+	// And an id in no namespace — a subscription alias, a pinned vendor id —
+	// is its own string, never folded onto a namespaced model's core.
+	if got := WorkersAIModelCore("sonnet"); got != "sonnet" {
+		t.Errorf("WorkersAIModelCore(\"sonnet\") = %q, want it unchanged: an alias is not a namespaced model's core", got)
+	}
+}
+
 // CloudBillingAllows is the rule's ONE predicate, the one the factory's
 // executor and any other consumer answer to: a Workers AI worker (harness the
 // gateway serves, model in a Workers AI namespace) or a subscription rung
