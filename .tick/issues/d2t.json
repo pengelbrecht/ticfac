@@ -2,6 +2,7 @@
   "id": "d2t",
   "title": "TestCachePathIsPerFactoryEndpoint measures the host's HOME",
   "description": "While reproducing the stripped-gate recipe, HOME=\u003cempty\u003e fails internal/factory/dashboard with 'CachePath: $HOME is not defined'. It is the same meta-class this tick ends for git — a test reading the host instead of constructing its condition — but it is outside this tick's scope (git config, git maintenance, git working directory), so the gate strips git's environment only. A t.Setenv HOME in that test would close it.\nevidence: internal/factory/dashboard/snapshot_test.go:226 — env HOME= go test ./internal/factory/dashboard -run TestCachePathIsPerFactoryEndpoint\n\nticfac run epic-t8u filed this backlog tick from the finding 1aaa0bfe7ffd9a349888f9472ca353d187dedb43c0171b577bd6bb2b50c71006 (reported by run-epic-t8u/tick-pqs/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/1aaa0bfe7ffd9a349888f9472ca353d187dedb43c0171b577bd6bb2b50c71006.json on the run branch.",
+  "notes": "2026-10-07 20:11 - ticfac run epic-t8u: created by absorbing finding 1aaa0bfe7ffd9a349888f9472ca353d187dedb43c0171b577bd6bb2b50c71006 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/1aaa0bfe7ffd9a349888f9472ca353d187dedb43c0171b577bd6bb2b50c71006.json on epic/t8u, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-t8u/tick-pqs/attempt-1",
   "created_by": "ticfac run epic-t8u",
   "created_at": "2026-10-07T18:11:48Z",
-  "updated_at": "2026-10-07T18:11:48Z"
+  "updated_at": "2026-10-07T18:11:58.510169Z"
 }
