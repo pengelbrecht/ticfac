@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ilz/attempt-7/vnp`, base `d56dedb8dba985927fd50624dd182e383af8902d`, harness `claude` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
 # Re-review of epic ilz, round 3, at the integration head
 
 Epic `ilz` set out to ship one thing: `docs/claude-sub-operator.md`, an
