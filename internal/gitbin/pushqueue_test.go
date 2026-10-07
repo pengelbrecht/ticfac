@@ -254,34 +254,20 @@ func TestEveryGitThatCanPushGoesThroughThePushQueue(t *testing.T) {
 	t.Parallel()
 	root := moduleRoot(t)
 	var offenders []string
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case ".git", ".claude", "testdata", "vendor", "node_modules":
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
+	for _, path := range trackedGoFiles(t, root) {
+		if strings.HasSuffix(path, "_test.go") {
+			continue
 		}
 		src, err := os.ReadFile(path)
 		if err != nil {
-			return err
+			t.Fatalf("read %s: %v", path, err)
 		}
 		rel, _ := filepath.Rel(root, path)
 		found, err := unqueuedPushes(filepath.ToSlash(rel), src)
 		if err != nil {
-			return err
+			t.Fatalf("scan %s: %v", rel, err)
 		}
 		offenders = append(offenders, found...)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk: %v", err)
 	}
 	offenders = slices.DeleteFunc(offenders, func(offender string) bool {
 		file, rest, _ := strings.Cut(offender, ":")
@@ -302,6 +288,15 @@ func TestEveryGitThatCanPushGoesThroughThePushQueue(t *testing.T) {
 var neverPushes = map[string]string{
 	"internal/runstate/batch.go start":          "`cat-file --batch` after the safeArgs spread",
 	"internal/runstate/batch.go catFileProcess": "`cat-file blob <sha>` after the safeArgs spread",
+	// internal/gittest is the test fixtures' one hermetic helper (tick pqs);
+	// every git a test starts goes through one of these three doors. A
+	// fixture's push is to a temp origin the fixture owns alone, for the
+	// seconds the test lives: the queue exists to pace RUNS sharing one
+	// repository, and no run ever shares a fixture's. Under is the door whose
+	// environment is the fixture's own subject, argv and all.
+	"internal/gittest/gittest.go Command": "test-only helper: a fixture pushes to a temp origin it owns alone",
+	"internal/gittest/gittest.go Control": "test-only helper: a maintenance control in a temp repository",
+	"internal/gittest/gittest.go Under":   "test-only helper: a sandbox-grade fixture whose environment is the subject",
 }
 
 // The guard's negative control.

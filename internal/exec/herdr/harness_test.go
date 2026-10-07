@@ -23,6 +23,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/herd/client"
 	"github.com/pengelbrecht/ticfac/internal/herd/herdtest"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
@@ -65,6 +66,12 @@ func newRepo(t *testing.T, name string) *testRepo {
 
 func mustRun(t *testing.T, dir string, name string, args ...string) string {
 	t.Helper()
+	// A git handed to a generic runner is a git start the hermeticity guard
+	// cannot see, so the git case is routed through the one hermetic helper
+	// (tick pqs); everything else stays generic.
+	if name == "git" {
+		return gittest.Run(t, dir, args...)
+	}
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
@@ -831,9 +838,6 @@ func fileExists(path string) bool {
 }
 
 func runGitErr(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	out, err := cmd.CombinedOutput()
+	out, err := gittest.Command(dir, args...).CombinedOutput()
 	return string(out), err
 }

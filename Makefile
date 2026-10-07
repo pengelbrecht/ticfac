@@ -73,8 +73,23 @@ test-race:
 # `make suite` below keeps -count=1 for when you want the paranoid answer —
 # notably for the drift guards that read .tick/runners.toml by absolute path,
 # which are the one place caching is known to be able to serve a stale pass.
+#
+# 2026-10-07 — the go test half now runs under a STRIPPED GIT ENVIRONMENT
+# (tick pqs): no global or system config file, and user.useConfigOnly
+# refusing the implicit identity fallback. That is CI's machine, reproduced
+# on a laptop: a fixture that commits with no identity of its own — relying
+# on the developer's global git identity — passed every local gate and
+# failed CI with exit 128 (tick lkd, 2026-09-24), and a gate that cannot see
+# the condition cannot catch the next one. It is GIT's environment and not
+# HOME=<empty> (the original reproduction's recipe) on purpose: the go
+# toolchain needs HOME for its build cache, the run's own gate builds carry
+# HOME by contract (TestAGateDoesNotInheritTheRunsControlPlane), and the
+# property library resolves a user cache dir at init. The two /dev/null
+# config files give git exactly what an absent HOME gave it — no global
+# config, no system config — and useConfigOnly keeps the identity half
+# honest.
 gate:
-	gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
+	gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.useConfigOnly GIT_CONFIG_VALUE_0=true go test -short -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
 
 # The TypeScript half of the gate (tick odc). Kept as its own target, and its
 # own [testing.commands] entry, so each check records its own evidence and a

@@ -3,11 +3,11 @@ package runsignal
 import (
 	"context"
 	"encoding/json"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -22,14 +22,7 @@ import (
 // gitIn runs git in a directory, failing the test on the first refusal.
 func gitIn(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s (in %s): %v\n%s", strings.Join(args, " "), dir, err, out)
-	}
-	return string(out)
+	return gittest.Run(t, dir, args...)
 }
 
 // repoWithRemoteBranch builds a clone with a bare origin and one pushed branch,

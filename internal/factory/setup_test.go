@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -17,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 )
 
 // ---------------------------------------------------------------------------
@@ -704,7 +704,7 @@ func TestSetupNeverWritesASecretIntoTheRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	status, gitErr := exec.Command("git", "-C", repo, "status", "--porcelain").CombinedOutput()
+	status, gitErr := gittest.Command(repo, "status", "--porcelain").CombinedOutput()
 	if gitErr != nil {
 		t.Fatalf("git status: %v\n%s", gitErr, status)
 	}
@@ -738,19 +738,13 @@ func newTestRepo(t *testing.T) string {
 		{"config", "user.email", "test@example.com"},
 		{"config", "user.name", "Test"},
 	} {
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
+		gittest.Run(t, dir, args...)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	for _, args := range [][]string{{"add", "-A"}, {"commit", "-q", "-m", "init"}} {
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
+		gittest.Run(t, dir, args...)
 	}
 	return dir
 }

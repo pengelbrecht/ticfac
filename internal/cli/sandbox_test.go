@@ -14,11 +14,11 @@ package cli
 import (
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
 
@@ -642,11 +642,7 @@ func TestSandboxWorkerPromptReportsADamagedTickAsAFailure(t *testing.T) {
 
 func runGitOK(t *testing.T, dir string, args ...string) {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-	}
+	gittest.Run(t, dir, args...)
 }
 
 // Every `ticfac sandbox` verb answers --json with one document naming its

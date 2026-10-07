@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
@@ -367,7 +368,7 @@ func writeFile(t *testing.T, path, content string) {
 // semantics for free: no checkout of the dying container is ever read.
 func gitOut(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"--git-dir", dir}, args...)...)
+	cmd := gittest.Command(dir, append([]string{"--git-dir", dir}, args...)...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s (in %s): %v\n%s", strings.Join(args, " "), dir, err, out)

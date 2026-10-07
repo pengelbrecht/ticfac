@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
@@ -41,12 +42,7 @@ type fixture struct {
 
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(),
-		"GIT_AUTHOR_NAME=ticks test", "GIT_AUTHOR_EMAIL=test@example.com",
-		"GIT_COMMITTER_NAME=ticks test", "GIT_COMMITTER_EMAIL=test@example.com",
-	)
+	cmd := gittest.Command(dir, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)

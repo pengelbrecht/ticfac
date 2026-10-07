@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
@@ -40,9 +40,11 @@ func statusFixture(t *testing.T, now time.Time) string {
 	repo := t.TempDir()
 	git := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repo
-		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0",
+		cmd := gittest.Command(repo, args...)
+		// The stamped dates are the fixture's own statement, appended after
+		// the helper's environment: they are not git configuration, so the
+		// maintenance pins' numbering is untouched.
+		cmd.Env = append(cmd.Env,
 			"GIT_AUTHOR_DATE="+now.Add(-3*time.Hour).UTC().Format(time.RFC3339),
 			"GIT_COMMITTER_DATE="+now.Add(-3*time.Hour).UTC().Format(time.RFC3339))
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -59,8 +61,7 @@ func statusFixture(t *testing.T, now time.Time) string {
 	git("commit", "--quiet", "-m", "base")
 	git("branch", "ticfac/run-r-status/tick-a1/attempt-1")
 	worktree := filepath.Join(t.TempDir(), "wt-a1")
-	cmd := exec.Command("git", "worktree", "add", "--quiet", worktree, "ticfac/run-r-status/tick-a1/attempt-1")
-	cmd.Dir = repo
+	cmd := gittest.Command(repo, "worktree", "add", "--quiet", worktree, "ticfac/run-r-status/tick-a1/attempt-1")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
 	}

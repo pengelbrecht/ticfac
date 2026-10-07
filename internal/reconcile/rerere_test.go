@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 )
 
 // The run's merges are not resolved by the host's rerere cache (tick 6na).
@@ -81,7 +83,15 @@ func TestTheRunsMergeIsNotResolvedByTheHostsRerereCache(t *testing.T) {
 	}
 	write(t, filepath.Join(repo.Dir, "work.txt"), "a person's resolution\n")
 	mustRun(t, repo.Dir, "git", "add", "work.txt")
-	mustRun(t, repo.Dir, "git", "commit", "--quiet", "--no-edit")
+	// rerere records the RESOLUTION at this commit — the postimage half of
+	// the cache entry — so the commit runs through the fixture's STATED
+	// git (runGit below): rerere must be enabled here, from the
+	// test-stated global config, exactly the way every entry of the
+	// incident's cache was recorded. The harness's hermetic git would
+	// refuse it: a /dev/null global config is the incident's absence.
+	if err := runGit(repo.Dir, "commit", "--quiet", "--no-edit"); err != nil {
+		t.Fatalf("the person's commit of a hand resolution: %v", err)
+	}
 	// Back to where the run will meet the same conflict.
 	mustRun(t, repo.Dir, "git", "reset", "--hard", "--quiet", epicHead)
 
@@ -176,11 +186,16 @@ func TestTheRunsMergeIsNotResolvedByTheHostsRerereCache(t *testing.T) {
 	}
 }
 
-// runGit is mustRun for a command whose FAILURE is part of the fixture: the
-// hand merge conflicts, and that exit status is the setup working, not the
-// test failing.
+// runGit is this fixture's STATED git: a command whose FAILURE is part of
+// the fixture (the hand merge conflicts, and that exit status is the setup
+// working), run under gittest.Stated — the test process's environment as
+// the test has stated it, with the run's own pins. This test's subject IS a
+// host-global config (the t.Setenv'd GIT_CONFIG_GLOBAL above), so its git
+// inherits exactly that; the harness's hermetic git, with the global config
+// forced to /dev/null, is precisely the incident's absence and can neither
+// record the poison nor replay it (tick pqs).
 func runGit(dir string, args ...string) error {
-	return harnessCommand("git", args...).run(dir)
+	return gittest.Stated(dir, args...).Run()
 }
 
 // rrCacheIDs is the rerere cache's conflict ids, and nil when the repository

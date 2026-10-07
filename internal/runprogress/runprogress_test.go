@@ -1,10 +1,9 @@
 package runprogress
 
 import (
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -17,14 +16,7 @@ import (
 
 func gitIn(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s (in %s): %v\n%s", strings.Join(args, " "), dir, err, out)
-	}
-	return string(out)
+	return gittest.Run(t, dir, args...)
 }
 
 // repoWithCommitAt builds a repository with one commit whose committer date is
@@ -41,10 +33,11 @@ func repoWithCommitAt(t *testing.T, at time.Time) string {
 	}
 	gitIn(t, dir, "add", "-A")
 	stamp := at.UTC().Format("2006-01-02T15:04:05Z")
-	cmd := exec.Command("git", "commit", "--quiet", "-m", "base")
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0",
-		"GIT_AUTHOR_DATE="+stamp, "GIT_COMMITTER_DATE="+stamp)
+	cmd := gittest.Command(dir, "commit", "--quiet", "-m", "base")
+	// The stamped dates are the fixture's own statement, appended after the
+	// helper's environment: they are not git configuration, so the
+	// maintenance pins' numbering is untouched.
+	cmd.Env = append(cmd.Env, "GIT_AUTHOR_DATE="+stamp, "GIT_COMMITTER_DATE="+stamp)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git commit (in %s): %v\n%s", dir, err, out)
 	}
