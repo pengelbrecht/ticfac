@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 97,
-  "state": "integrating",
-  "reason": "integrating p0n attempt 12 into epic/t8u",
-  "updated_at": "2026-10-07T21:41:15Z",
+  "sequence": 98,
+  "state": "gating",
+  "reason": "running the integrated gate for p0n on ec0c8f176628",
+  "updated_at": "2026-10-07T21:43:38Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -64,7 +64,7 @@
     },
     {
       "tick_id": "p0n",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 12
     },
     {
