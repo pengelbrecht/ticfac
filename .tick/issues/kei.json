@@ -2,6 +2,7 @@
   "id": "kei",
   "title": "Grow the reconciler lifecycle model: the resolve ladder, role jobs, real adoption",
   "description": "The lifecycle model this tick added (internal/reconcile/lifecycle_pbt_test.go) earns its gate seconds today by covering the width arithmetic, the hold vocabulary, the gate-evidence freshness (A13) and the absorption bound over arbitrary sequences. Three things it cannot yet see, each of which is where a real sequence bug would show up first: (1) the resolve ladder — a merge conflict is terminal in the model, while the real run dispatches resolve-conflict jobs and repairs failed gates (gate_repair.go, resolve.go), so the conflict/repair interleavings are uncovered; (2) the review and close-out role jobs — isRoleJob is read by mayAdmit but never dispatched, so the runs-alone rule is untested in the sequence space; (3) adoption from the store's real attempt records rather than the model's durable map. A tick that grows any one of these over the existing fake runner (one repository per case for the cases that need it, shorttest-skipped in the gate, paid by CI) is the cheapest next increment of the #50/#53/o82 class of coverage.\nevidence: internal/reconcile/lifecycle_pbt_test.go (the model and its header saying what is model code); internal/reconcile/resolve_conflict_test.go and gate_repair.go for the ladder it does not model\n\nticfac run epic-t8u filed this backlog tick from the finding bdbe08b462bffe1fd4abfe35635318a64ed7b362a9aeec1c85c93b0e67c502ec (reported by run-epic-t8u/tick-89g/attempt-5) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/bdbe08b462bffe1fd4abfe35635318a64ed7b362a9aeec1c85c93b0e67c502ec.json on the run branch.",
+  "notes": "2026-10-07 21:03 - ticfac run epic-t8u: created by absorbing finding bdbe08b462bffe1fd4abfe35635318a64ed7b362a9aeec1c85c93b0e67c502ec — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/bdbe08b462bffe1fd4abfe35635318a64ed7b362a9aeec1c85c93b0e67c502ec.json on epic/t8u, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-t8u/tick-89g/attempt-5",
   "created_by": "ticfac run epic-t8u",
   "created_at": "2026-10-07T19:03:14Z",
-  "updated_at": "2026-10-07T19:03:14Z"
+  "updated_at": "2026-10-07T19:03:21.477239Z"
 }
