@@ -176,6 +176,51 @@ func TestThisRepositorysGateIsReadable(t *testing.T) {
 	}
 }
 
+// TestTheTypeScriptGateRunsTheVitestSuite.
+//
+// The `ts` gate was contracts and types and never behaviour (tick odc's
+// measurement): a TypeScript change could settle a tick without its own
+// tests ever running in the gate — mn7's worker ran them, the gate did not,
+// and the gap was yoh's final-review finding dfae216d, filed as this tick.
+// A gate that does not run the behaviour suite is not a gate on the code a
+// tick changed; it is a gate on the shape of that code, and the shape is the
+// half a worker gets right by construction.
+//
+// The spelling this pins is `vitest run`, the exit-when-done form. Bare
+// `vitest` is watch mode: a gate that never exits is a gate that holds the
+// harness bound open for its whole 60 minutes on every tick, forever, and
+// refuses nothing while doing it.
+// short: one read of this checkout's own gate
+func TestTheTypeScriptGateRunsTheVitestSuite(t *testing.T) {
+	t.Parallel()
+	root, err := contracts.RepoRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(root, ".tick", "runners.toml")
+	if _, err := os.Stat(path); err != nil {
+		t.Skipf("no %s in this checkout", path)
+	}
+	commands, err := ReadGateCommands(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ts string
+	for _, command := range commands {
+		if command.Name == "ts" {
+			ts = command.Command
+		}
+	}
+	if ts == "" {
+		t.Fatal("this repository declares no `ts` gate: the TypeScript control plane's behaviour suite is what it exists to refuse")
+	}
+	if !strings.Contains(ts, "vitest run") {
+		t.Errorf("the `ts` gate runs no vitest: %q\n"+
+			"A TypeScript behaviour change could settle a tick without its tests ever running in the gate "+
+			"(yoh review finding dfae216d, tick tc9).", ts)
+	}
+}
+
 // TestTheHarnessBoundOutlivesEveryDeclaredGateBound.
 //
 // A gate command that names its own timeout has said what it considers too
