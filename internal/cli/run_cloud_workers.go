@@ -237,9 +237,15 @@ func runCloudWorkersCommand(ctx context.Context, epicID, repo string, fl *runFla
 	runID := credential.RunID
 	finish := finishFor(runID)
 	fmt.Fprintf(prose, "run %s: the orchestrator runs on this machine; every worker runs in the factory "+
-		"(the cloud profile set, the Workers AI cells of .tick/runners.cloud.toml)", runID)
+		"(the cloud profile set, the cells .tick/runners.cloud.toml declares for the cloud)", runID)
 	if credential.FactoryMaxInstances > 0 {
 		fmt.Fprintf(prose, ", at most %d worker container(s) at once", credential.FactoryMaxInstances)
+	}
+	// The named config (tick tda): which of those cells every dispatch
+	// resolves against — the flag's word, the epic's label, or the declared
+	// default, as the child re-derives from the argv it was given.
+	if *fl.config != "" {
+		fmt.Fprintf(prose, " (run config: %s)", *fl.config)
 	}
 	fmt.Fprintln(prose)
 

@@ -2,7 +2,6 @@ package statusmodel
 
 import (
 	"regexp"
-	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
@@ -51,15 +50,4 @@ func selectedRunConfig(feed []runfeed.Event) string {
 	// to guess: the field stays null, and Recent still carries the sentence
 	// for a person to read.
 	return ""
-}
-
-// runConfigSentence is the last selection line's own wording, for the
-// surfaces that render the source beside the name. Empty when no line is
-// there to read.
-func runConfigSentence(feed []runfeed.Event) string {
-	line := latestStage(feed, "", runConfigLine)
-	if line == nil {
-		return ""
-	}
-	return strings.TrimSpace(line.Detail)
 }
