@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "kzs",
   "attempt": 2,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T10:24:24Z",
+  "triaged_at": "2026-10-07T10:24:33Z",
+  "triaged_by": "ticfac run run_18eafdaa047544be9a196d913fb08a30 absorbing x5e",
+  "promoted_as": "x5e",
   "provenance": {
     "run_id": "run_18eafdaa047544be9a196d913fb08a30",
     "tick_id": "kzs",
