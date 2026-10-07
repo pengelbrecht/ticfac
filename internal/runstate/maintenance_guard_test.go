@@ -214,7 +214,7 @@ func TestEveryGitTheTestsStartGoesThroughThePinnedRunner(t *testing.T) {
 	sort.Strings(offenders)
 	if len(offenders) != 0 {
 		t.Errorf("these tests start git without going through gitCommand:\n  %s\n"+
-			"gitCommand is where gitbin.WithNoAutoMaintenance is stated, and a git without it ends "+
+			"gitCommand is where gittest.Env is stated, and a git without it ends "+
 			"by forking `git maintenance run --auto --detach` into the repository the test is about to "+
 			"delete — a background process that outlives the test and breaks the NEXT one's fixture "+
 			"(tick qsn, reconcile's two days; tick 35l is this package's half). Route it through "+

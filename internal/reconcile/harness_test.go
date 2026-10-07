@@ -18,6 +18,7 @@ import (
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
@@ -864,8 +865,14 @@ func harnessCommand(name string, args ...string) harnessCmd {
 		// rather than once per process (gitbin.Path).
 		name = gitbin.Path()
 	}
-	return harnessCmd{name: name, args: args,
-		env: gitbin.WithNoAutoMaintenance(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"))}
+	// gittest.Env is the one hermetic environment this repository's tests
+	// run git under (tick pqs): no inherited GIT_CONFIG_* pins, no config
+	// file of the host's, identity stated above every config file, no
+	// maintenance, the transports bounded. The harness runs non-git
+	// processes under it too, which is deliberate: a fake agent script
+	// commits in its worktree, and its git is as much a fixture's git as
+	// one the test starts by name.
+	return harnessCmd{name: name, args: args, env: gittest.Env()}
 }
 
 // withEnv appends environment entries AFTER the pins, which is where a

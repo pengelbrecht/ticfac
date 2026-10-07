@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/forge"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
@@ -40,12 +41,7 @@ func modelFixture(t *testing.T, now time.Time) (repo, home string) {
 	repo = t.TempDir()
 	git := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repo
-		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-		}
+		gittest.Run(t, repo, args...)
 	}
 	git("init", "--quiet", "-b", "main")
 	git("config", "user.email", "status@example.com")
@@ -157,8 +153,7 @@ func modelFixture(t *testing.T, now time.Time) (repo, home string) {
 	// The standing worktree, on the write ref the run's vocabulary builds.
 	worktree := filepath.Join(t.TempDir(), "wt-t2")
 	git("branch", "ticfac/run-epic-rmod/tick-t2/attempt-2")
-	cmd := exec.Command("git", "worktree", "add", "--quiet", worktree, "ticfac/run-epic-rmod/tick-t2/attempt-2")
-	cmd.Dir = repo
+	cmd := gittest.Command(repo, "worktree", "add", "--quiet", worktree, "ticfac/run-epic-rmod/tick-t2/attempt-2")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
 	}
@@ -196,7 +191,7 @@ func registeredWorktree(t *testing.T, repo, worktree string) string {
 	if real, err := filepath.EvalSymlinks(repo); err == nil {
 		resolved = real
 	}
-	out, err := exec.Command("git", "-C", repo, "worktree", "list", "--porcelain").Output()
+	out, err := gittest.Command(repo, "worktree", "list", "--porcelain").Output()
 	if err != nil {
 		t.Fatalf("git worktree list: %v", err)
 	}
@@ -771,12 +766,7 @@ func TestStatusCIRefusesAnotherForge(t *testing.T) {
 	dir := t.TempDir()
 	git := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-		}
+		gittest.Run(t, dir, args...)
 	}
 	git("init", "--quiet", "-b", "main")
 	git("remote", "add", "origin", "git@gitlab.com:example/example.git")
@@ -799,7 +789,7 @@ func TestStatusRecordsCarriesEveryRunsRecords(t *testing.T) {
 
 	head := func() string {
 		t.Helper()
-		out, err := exec.Command("git", "-C", repo, "rev-parse", "refs/remotes/origin/epic/qeu").Output()
+		out, err := gittest.Command(repo, "rev-parse", "refs/remotes/origin/epic/qeu").Output()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -901,7 +891,7 @@ func TestRepeatedStatusRefreshesLeakNoGitProcesses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	head, err := exec.Command("git", "-C", repo, "rev-parse", "refs/remotes/origin/epic/qeu").Output()
+	head, err := gittest.Command(repo, "rev-parse", "refs/remotes/origin/epic/qeu").Output()
 	if err != nil {
 		t.Fatal(err)
 	}
