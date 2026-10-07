@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 48,
-  "state": "running",
-  "reason": "8wa is running as attempt 12",
-  "updated_at": "2026-10-07T14:42:08Z",
+  "sequence": 49,
+  "state": "gating",
+  "reason": "running the integrated gate for 3sd on 332aae1ae663",
+  "updated_at": "2026-10-07T15:16:58Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -66,7 +66,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/ex6",
-    "source_sha": "2a87fd6579957522b8616c32f6161a7585ca9e69",
+    "source_sha": "332aae1ae663ecd8ebff47b06d346052ece11622",
     "integration_ref": "refs/heads/epic/ex6",
     "phase": "worker",
     "executor": null,
