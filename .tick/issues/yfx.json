@@ -1,0 +1,13 @@
+{
+  "id": "yfx",
+  "title": "runconfig still inherits args across a kind change; only implement is guarded",
+  "description": "The operator recorded on 2026-09-10 (av8's decision log) that a tier or config cell that switches kind inherits args the new kind cannot parse, fixed then by manually clearing args = [] on every kind-switching cell, and that the real fix — a refusal in runconfig — was worth carrying into wgi. Nothing ever carried it: resolve.go still applies args by presence with no kind check. This tick's paste drops the two manual clearings because internal/reconcile's new implement-args guard refuses the pairing on that one role everywhere; review, closeout, resolve-conflict and plan-repair have no such guard, so an args line re-added to one of their cells under a switching kind would flow through unchecked. A runconfig refusal at the kind switch (or the same guard sweep over every role) is the residual fix.\nevidence: internal/runconfig/resolve.go (overlay: args replace when present, no kind check); .tick/issues/av8.json notes 2026-09-10 12:49\n\nticfac run run_69f8f57832d34601b040367c7207b81f filed this backlog tick from the finding d0ac9f4fe8f6b86702c8e0740b00137beaf3f7dcf8065f7e9096dd53623a1800 (reported by run-run_69f8f57832d34601b040367c7207b81f/tick-q6z/attempt-21) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/d0ac9f4fe8f6b86702c8e0740b00137beaf3f7dcf8065f7e9096dd53623a1800.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_69f8f57832d34601b040367c7207b81f/tick-q6z/attempt-21",
+  "created_by": "ticfac run run_69f8f57832d34601b040367c7207b81f",
+  "created_at": "2026-10-07T20:52:14Z",
+  "updated_at": "2026-10-07T20:52:14Z"
+}
