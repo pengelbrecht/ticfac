@@ -11,8 +11,11 @@
   "tick_id": "yaz",
   "attempt": 2,
   "done_item": "A1",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T07:11:45Z",
+  "triaged_at": "2026-10-07T07:11:55Z",
+  "triaged_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0 absorbing 5gm",
+  "promoted_as": "5gm",
   "provenance": {
     "run_id": "run_4d92bab25a7341d3bba01691779168a0",
     "tick_id": "yaz",
