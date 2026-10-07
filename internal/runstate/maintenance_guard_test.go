@@ -177,11 +177,13 @@ func TestEveryGitTheTestsStartGoesThroughThePinnedRunner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The two sanctioned builders of a git command line, exempted BY FUNCTION
-	// and not by file: gitCmd.command states the rule, and unpinnedGit is the
-	// control that proves the rule bites. A file-wide exemption would let a
-	// third git in beside them without anybody noticing.
-	sanctioned := map[string]bool{"command": true, "unpinnedGit": true}
+	// The one sanctioned builder of a git command line, exempted BY FUNCTION
+	// and not by file: gitCmd.command states the rule. unpinnedGit left the
+	// table when tick pqs moved its construction into gittest.Control — it
+	// starts nothing itself now, so an exec.Command reappearing in it fails
+	// here like anywhere else. A file-wide exemption would let a third git in
+	// beside the builder without anybody noticing.
+	sanctioned := map[string]bool{"command": true}
 
 	var offenders []string
 	for _, entry := range entries {
