@@ -224,6 +224,167 @@ func TestAReadOnlyWorkersConfigCarriesNoRemote(t *testing.T) {
 	}
 }
 
+// The metering join rides worker.json too (tick m1w): a dispatch whose
+// resolver produced one, on a Workers AI model, reaches the harness as the
+// config it composes its provider override from — the same facts the pi CLI
+// reads out of the generated extension, and nothing else.
+func TestAMeteredWorkersAIConfigCarriesTheJoin(t *testing.T) {
+	const model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+	metering := &GatewayMetering{
+		RunID:      "run-43y",
+		TickID:     "m1w",
+		Attempt:    3,
+		GatewayURL: "https://gateway.ai.cloudflare.com/v1/acct/gw",
+	}
+	dir := t.TempDir()
+	record := &attemptRecord{
+		Branch:      "ticfac/run-43y/tick-m1w/attempt-3",
+		ResultPath:  "/abs/RESULT.md",
+		TickID:      "m1w",
+		Model:       model,
+		IssuedAt:    "2026-10-06T12:00:00Z",
+		WallSeconds: 0,
+	}
+	opts := &Options{SupervisorArgv: []string{"/bin/ticfac-exec-subprocess", "supervise"}, Metering: metering}
+	if err := writeWorkerConfig(func(path string, data []byte, perm os.FileMode) error {
+		return os.WriteFile(path, data, perm)
+	}, dir, record, opts); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, fileWorkerConfig))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var config workerConfig
+	if err := json.Unmarshal(raw, &config); err != nil {
+		t.Fatal(err)
+	}
+	if config.Metering == nil {
+		t.Fatal("a metered Workers AI dispatch wrote a config with no metering join: the harness would route every call past the gateway")
+	}
+	if config.Metering.GatewayURL != metering.GatewayURL || config.Metering.RunID != metering.RunID {
+		t.Errorf("the join's route and run id did not travel: %+v", config.Metering)
+	}
+
+	// The metadata the config carries is the ONE composition, the same value
+	// the generated extension stamps: two compositions of the gateway's
+	// attribution vocabulary are how a worker's rows stop joining the ones
+	// the reader filters by.
+	extension, err := metering.WriteExtension(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(extension)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := extensionMetadata(t, string(body))
+	if config.Metering.Metadata != want {
+		t.Errorf("the config's metadata = %q, want the extension's own composition %q", config.Metering.Metadata, want)
+	}
+
+	// The credential command is the pipeline, not the pi CLI's `!`-prefixed
+	// form: the harness executes it, pi resolves it as a config value.
+	if config.Metering.CredentialCommand != gatewayCredentialPipeline {
+		t.Errorf("the config's credential command = %q, want the one builder's pipeline", config.Metering.CredentialCommand)
+	}
+	if strings.HasPrefix(config.Metering.CredentialCommand, "!") {
+		t.Errorf("the config carries pi's `!` config-value syntax: the harness executes the command itself")
+	}
+}
+
+// extensionMetadata extracts the cf-aig-metadata header VALUE the generated
+// extension carries, for the parity check above.
+func extensionMetadata(t *testing.T, body string) string {
+	t.Helper()
+	const key = "\"cf-aig-metadata\": "
+	i := strings.Index(body, key)
+	if i < 0 {
+		t.Fatalf("the generated extension carries no %s: %s", metadataHeader, body)
+	}
+	rest := body[i+len(key):]
+	end := strings.Index(rest, ",\n")
+	if end < 0 {
+		t.Fatalf("the generated extension's metadata line never ends: %s", rest)
+	}
+	var quoted string
+	if err := json.Unmarshal([]byte(rest[:end]), &quoted); err != nil {
+		t.Fatalf("the generated extension's metadata is not a JSON string: %v", err)
+	}
+	return quoted
+}
+
+// An unmetered dispatch, or a metered resolver on a model the join does not
+// apply to, writes a config with no metering at all — the harness then runs
+// exactly as it did before the join existed.
+func TestAnUnmeteredConfigCarriesNoJoin(t *testing.T) {
+	metering := &GatewayMetering{RunID: "run-43y", GatewayURL: "https://gateway.ai.cloudflare.com/v1/acct/gw"}
+	record := &attemptRecord{
+		Branch:     "b",
+		ResultPath: "/abs/RESULT.md",
+		TickID:     "m1w",
+		IssuedAt:   "2026-10-06T12:00:00Z",
+	}
+	write := func(model string, opts *Options) workerConfig {
+		t.Helper()
+		dir := t.TempDir()
+		record.Model = model
+		if err := writeWorkerConfig(func(path string, data []byte, perm os.FileMode) error {
+			return os.WriteFile(path, data, perm)
+		}, dir, record, opts); err != nil {
+			t.Fatal(err)
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, fileWorkerConfig))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var config workerConfig
+		if err := json.Unmarshal(raw, &config); err != nil {
+			t.Fatal(err)
+		}
+		return config
+	}
+
+	for name, tc := range map[string]struct {
+		model string
+		opts  *Options
+	}{
+		// No resolver output at all — the host states no gateway.
+		"no metering": {model: "cloudflare-workers-ai/@cf/zai-org/glm-5.3", opts: &Options{SupervisorArgv: []string{"x"}}},
+		// The resolver output on a model the join would route wrongly: the
+		// tests' faux rung, and a non-Workers-AI id — the same rule the
+		// herdr executor's extension launch applies.
+		"faux model":     {model: "faux/faux-1", opts: &Options{SupervisorArgv: []string{"x"}, Metering: metering}},
+		"other provider": {model: "openrouter/z-ai/glm-5.3", opts: &Options{SupervisorArgv: []string{"x"}, Metering: metering}},
+		"bare model":     {model: "", opts: &Options{SupervisorArgv: []string{"x"}, Metering: metering}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if config := write(tc.model, tc.opts); config.Metering != nil {
+				t.Errorf("the config carries a metering join: %+v", config.Metering)
+			}
+		})
+	}
+}
+
+// A gateway URL that is not an absolute address refuses the config write
+// rather than leaving the harness to compose a relative route — the same
+// refusal WriteExtension makes, from the same check.
+func TestAConfigRefusesANonAbsoluteGatewayURL(t *testing.T) {
+	metering := &GatewayMetering{RunID: "run-43y", GatewayURL: "not a url"}
+	record := &attemptRecord{
+		Branch:     "b",
+		ResultPath: "/abs/RESULT.md",
+		TickID:     "m1w",
+		Model:      "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+		IssuedAt:   "2026-10-06T12:00:00Z",
+	}
+	err := writeWorkerConfig(func(string, []byte, os.FileMode) error { return nil }, t.TempDir(), record,
+		&Options{SupervisorArgv: []string{"x"}, Metering: metering})
+	if err == nil || !strings.Contains(err.Error(), "absolute") {
+		t.Fatalf("err = %v, want the non-absolute gateway URL refusal", err)
+	}
+}
+
 // The wall deadline is refused rather than guessed when the issued-at stamp
 // cannot be read: a runner arming a wrong wall is a runner that may abort a
 // healthy conversation or never arm at all.
