@@ -1,0 +1,13 @@
+{
+  "id": "8qi",
+  "title": "Image still pins claude CLI 2.1.227: opus/sonnet resolve to 5, not 5.5",
+  "description": "6fv's title promises a current claude CLI in the image, and the operator's note on tda says the aliases resolve to 5.5 today. CLAUDE_CODE_VERSION is still 2.1.227, which maps opus to claude-opus-5 and sonnet to claude-sonnet-5. The weekly workflow only proposes a bump later.\nevidence: image/Dockerfile:53 ARG CLAUDE_CODE_VERSION=2.1.227; docs/spikes/jvj-claude-sub-cloud.md design item 1\n\nticfac run epic-v5t filed this backlog tick from the finding 8e4b245939e6cb00e53beb963f9faaa1d92c3d96a3b8c94e6e36f3d0e43b792e (reported by run-epic-v5t/tick-54l/attempt-6) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/8e4b245939e6cb00e53beb963f9faaa1d92c3d96a3b8c94e6e36f3d0e43b792e.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-epic-v5t/tick-54l/attempt-6",
+  "created_by": "ticfac run epic-v5t",
+  "created_at": "2026-10-07T02:12:51Z",
+  "updated_at": "2026-10-07T02:12:51Z"
+}
