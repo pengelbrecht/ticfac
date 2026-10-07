@@ -1,131 +1,61 @@
 <!-- ticks-worker: container facts, prepended after the harness exited. The
 agent's report, including its STATUS line, is unchanged below. -->
 
-_ticks-worker: branch `tick/ex6/attempt-18/96s`, base `7a6f5fb9bf212e6ebd7c9f52fd2d9cf3d3fa1531`, harness `pi-durable` exited 0, 0 work commit(s), 0 uncommitted path(s)._
+_ticks-worker: branch `tick/ex6/attempt-3/96s`, base `1f44e5959b4359cd149ebd7a0edfde084c01e3c5`, harness `pi-durable` exited 0, 0 work commit(s), 1 uncommitted path(s)._
 
-_ticks-worker: a carried attempt — its base `7a6f5fb9bf212e6ebd7c9f52fd2d9cf3d3fa1531` is the head of the work it continued, which was cut from `304cca6250414b27584d43678a2b38a4f914e7c2`; its work commits are counted from the carried head._
+_ticks-worker: a carried attempt — its base `1f44e5959b4359cd149ebd7a0edfde084c01e3c5` is the head of the work it continued, which was cut from `304cca6250414b27584d43678a2b38a4f914e7c2`; its work commits are counted from the carried head._
 
-<!-- ticks-worker: container facts, prepended after the harness exited. The
-agent's report, including its STATUS line, is unchanged below. -->
-
-_ticks-worker: branch `tick/ex6/attempt-14/96s`, base `304cca6250414b27584d43678a2b38a4f914e7c2`, harness `pi-durable` exited 0, 0 work commit(s), 0 uncommitted path(s)._
-
-# RESULT — tick 96s (run attempt 14, the tick's first attempt) — runners.local.toml header note: review/closeout deliberately not overlaid
+# RESULT — tick 96s (attempt 3) — runners.local.toml header note delivered as a protected_change
 
 ## Summary
 
-STATUS: BLOCKED. The tick's whole deliverable is a one-paragraph comment note
-in `.tick/runners.local.toml`'s header explaining why that file declares no
-`[roles.review]` / `[roles.closeout]` overlay. `.tick/runners.local.toml` is a
-`.tick/` path, and I obey the refusals that govern it: the container's
-pre-commit hook (installed from image/worker.sh's `install_boundary_guard`,
-tick dxk) refuses any commit that stages a `.tick/` path, and the cloud
-collect (`cloudflare/src/worker-collect.ts:313`, `:530`) reads any `.tick/`
-path in a branch diff as a boundary violation and refuses the branch. The
-tick's own description records that a worker was already rejected for exactly
-this edit once (attempt 32 of run-epic-43y, tick j6o): "runners.local.toml is
-outside the files a worker may write." I staged nothing, committed nothing,
-and recorded no boundary attempt — the guard's ledger is empty.
+STATUS: DONE. Tick 96s's whole deliverable is the one-paragraph note in `.tick/runners.local.toml`'s header explaining why that file declares no `[roles.review]`/`[roles.closeout]` overlay (the blessed local claude exception of tick j6o lives in `.tick/runners.toml`; the behaviour is already enforced by guard tests, so the note is documentation only). `.tick/runners.local.toml` is a protected `.tick/` path no worker may write — attempts 14 and 18 of this tick ended BLOCKED over exactly that, and tick j6o's attempt 32 was rejected for the same edit. This attempt's instructions give the delivery channel for precisely this case: do not write the file, do not answer BLOCKED, and report a v2 finding carrying the exact change as its `protected_change` key, which the run applies itself onto the epic branch after close-out as a labelled commit. So this attempt commits nothing and changes no code: the composed, verified change is in the findings block below, and the tick closes when the run applies it.
 
-## What I did instead
+## What the note says (for the person reviewing the epic PR)
 
-1. Verified the tick's premise — that the behaviour is already enforced and
-   the note is documentation only. Both guard tests pass on this tree:
-   - `TestThisRepositorysLocalClaudeRoutingIsExactlyTheBlessedCells`
-     (`internal/reconcile/routing_check_test.go:350`)
-   - `TestThisRepositorysLocalImplementTiersRouteOnTheOneHarness`
-     (`internal/reconcile/routing_check_test.go:288`)
-   `.tick/runners.toml`'s header comment (lines 52–64) states the same thing
-   in prose; this tick asks for the matching prose in the local overlay's own
-   header.
+One comment block inserted into `.tick/runners.local.toml` after the last header paragraph (line 9, "(claude opus), capped there."), before `version = 2` (line 10). Everything else in the file is byte-identical:
 
-2. Composed the note. **The exact change the tick needs** — insert after the
-   last paragraph of the header comment in `.tick/runners.local.toml`
-   (currently its line 9, the "attempt 1 -> ... capped there." sentence),
-   before the line `version = 2`:
+```diff
+ # attempt: attempt 1 -> strong (pi on glm-5.3), after a failure -> frontier
+ # (claude opus), capped there.
++#
++# Deliberately no [roles.review] or [roles.closeout] cells here (tick 96s):
++# the blessed local claude exception lives in .tick/runners.toml — its
++# [roles.review], [roles.review.tiers.frontier] and [roles.closeout] cells
++# name the claude CLI on opus for local final reviews and close-outs (the
++# 2026-10-04/05 decisions, tick j6o), and an overlay cell in this file
++# would move those jobs off the blessed decision. So the cells below
++# concern the implement ladder only: the frontier rung and the
++# [tier_policy] that climbs it (and sets the ceiling the on-demand
++# judgement jobs route at, through the review cell). A local run's review
++# and close-out therefore keep .tick/runners.toml's cells exactly as
++# written, and the claude CLI appears locally only in those cells and on
++# implement's frontier rung. Guards:
++# TestThisRepositorysLocalClaudeRoutingIsExactlyTheBlessedCells and
++# TestThisRepositorysLocalImplementTiersRouteOnTheOneHarness
++# (internal/reconcile/routing_check_test.go).
+ version = 2
+```
 
-   ```
-   # Deliberately no [roles.review] or [roles.closeout] cells here (tick 96s):
-   # the blessed local claude exception lives in .tick/runners.toml — its
-   # [roles.review], [roles.review.tiers.frontier] and [roles.closeout] cells
-   # name the claude CLI on opus for local final reviews and close-outs, and
-   # an overlay cell in this file would move those jobs off the blessed
-   # decision. So this file overlays only the implement role: a local run's
-   # review and close-out route through .tick/runners.toml exactly as written,
-   # and the claude CLI appears locally only in those cells and on implement's
-   # frontier rung. Guard:
-   # TestThisRepositorysLocalClaudeRoutingIsExactlyTheBlessedCells and
-   # TestThisRepositorysLocalImplementTiersRouteOnTheOneHarness
-   # (internal/reconcile/routing_check_test.go:288, :350).
-   ```
-
-3. Ran the whole-repo gate. The first `make gate` run reported FAIL; two
-   follow-up runs exit 0, including a full `-count=1` uncached pass over all
-   47 packages. I cannot attribute the first failure to a named test (its
-   output was lost to my own output truncation and nothing failed again), so
-   per this repo's rule — the run dedupes findings on the test id — I file no
-   finding for it and flag it here for a human eye.
-
-## Why this needs a person or the run's own writer
-
-- The routing behaviour is already enforced by the two guard tests above;
-  nothing in this tick is code. It is one paragraph of prose in a file whose
-  only writers are the orchestrator and the operator.
-- The tracker-edit channel a worker can trigger (`internal/reconcile/
-  tracker_edits.go`, `subprocess/tracker_edits.go`) carries tick-record prose
-  fields only (`acceptance_criteria`, `description`, `notes`) — it has no verb
-  for a runner-table header paragraph. Appending the text to this tick's
-  `notes` would not be a substitute: it would satisfy the tick's reader
-  without satisfying its deliverable, which the record names as the file
-  header. And a BLOCKED answer carrying a tracker-edit gets applied and the
-  tick closed (tick l89's rule), which would close 96s over a note instead of
-  the file — so I deliberately propose no tracker edit.
-- Attempting the edit anyway is a recorded boundary attempt, not a delivery:
-  the hook refuses the commit and logs it, and a refused branch risks the
-  real work on it.
-
-## What the next attempt (or the operator) should do
-
-- If the run's own writer can touch `.tick/runners.local.toml` outside a
-  worker attempt, apply the paragraph above verbatim — it is the whole tick.
-- Otherwise this waits for the operator: one paragraph, one paste, then close
-  96s. The guards stay green either way; nothing else on this branch changes.
+Every claim in the note was checked against the current tree: `.tick/runners.toml`'s `[roles.review]`, `[roles.review.tiers.frontier]` and `[roles.closeout]` all name `kind = "claude", model = "opus"`; `.tick/runners.local.toml` declares no review or closeout cell and its own cells are exactly the implement frontier rung and the `[tier_policy]`; the blessed table in `TestThisRepositorysLocalClaudeRoutingIsExactlyTheBlessedCells` confirms the claude CLI appears locally only in those cells and on implement's frontier rung.
 
 ## What I ran
 
-- `go test ./internal/reconcile/ -run
-  'TestThisRepositorysLocalClaudeRoutingIsExactlyTheBlessedCells|TestThisRepositorysLocalImplementTiersRouteOnTheOneHarness'
-  -count=1 -timeout 5m` → ok 0.882s
-- `make gate` → FAIL once (unattributed, never reproduced), then exit 0 twice
-  (cached suite + full `-count=1` pass, 47 packages ok)
-- `git status` → clean tree except this report file; no commits made
+- `go test ./internal/reconcile/ -run 'TestThisRepositorysLocalClaudeRoutingIsExactlyTheBlessedCells|TestThisRepositorysLocalImplementTiersRouteOnTheOneHarness' -count=1 -timeout 5m` → ok (both guards pass; the behaviour the note documents is already enforced).
+- `make gate` → exit 0, twice (a full pass, then a second pass re-checked for FAIL lines: none). Attempt 14's one-time unattributed gate failure did not reproduce; nothing re-filed for it.
+- `git status` → clean tree apart from this report file; no commits made by this attempt.
+
+There is no new test and no code change: the deliverable is prose in a protected file, and the guards that enforce the behaviour it documents already exist and are named in the note itself.
 
 ## What the next tick has to know
 
-- Nothing on this branch moved from its base. The two guard tests above are
-  the evidence that the behaviour the note documents is already enforced — do
-  not re-verify by editing the file inside an attempt; that is the boundary.
-- Found while checking why a non-read `tk` call reached the real binary (the
-  second finding): this container's tk boundary shim is disarmed because its
-  `checkout` companion holds git's error text instead of a path.
+- Nothing on this branch moved from its base. The delivery is the `protected_change` finding below; if the epic branch's `.tick/runners.local.toml` has moved since this attempt's base, merge the note into its header rather than replacing the file blindly (called out in the finding's body too).
+- Once the note lands, do not "fix" it by adding a review/closeout cell to `runners.local.toml`: the blessed-cells sweep fails any such cell by design, which is exactly what the note tells a reader.
+- Attempt 14's harness boundary-guard defect (checkout file holding git's stderr, disarming the tk shim) is STILL LIVE in this container — re-filed below with fresh evidence so dedup keeps it visible; it is outside this tick's scope.
+- Attempt 14's "deliverable writable by no actor a run can dispatch" finding is superseded by this attempt's delivery: the `protected_change` channel is the writer.
 
 ```findings v2
-[
-  {
-    "kind": "defect",
-    "title": "Tick 96s's deliverable is writable by no actor a run can dispatch",
-    "severity": "medium",
-    "body": "Tick 96s's whole deliverable is a comment paragraph in .tick/runners.local.toml's header. Workers are refused it twice over (the container's pre-commit hook refuses any staged .tick/ path, image/worker.sh's install_boundary_guard, tick dxk; the cloud collect reads any .tick/ diff as a violation, cloudflare/src/worker-collect.ts:313,530) — the wall open ticks 9sy and 26g already carry — but this file adds a lock beyond both: it is not in internal/exec/subprocess/report.go's exemptFromBoundary (only config.md, runners.toml, learnings.md are), so even honoring the exemption list would not unblock it. The run's own writer has no verb for it either: the tracker-edit channel a worker can trigger carries tick-record prose fields only (subprocess/tracker_edits.go), so the one remaining writer is a person. Every dispatched attempt of this tick can only end BLOCKED, costing two more attempts up the ladder before the hold; the note is composed and ready to paste in this attempt's report, which is the 30-second resolution.",
-    "evidence": "internal/exec/subprocess/report.go:190-194 (exemptFromBoundary), .git/hooks/pre-commit, cloudflare/src/worker-collect.ts:313 and :530, internal/reconcile/tracker_edits.go (TrackerEditFields)"
-  },
-  {
-    "kind": "defect",
-    "title": "Harness guard writes git's stderr into its checkout file, disarming the tk shim",
-    "severity": "medium",
-    "body": "harness/src/env/boundary-guard.ts resolves the guard's checkout companion with 'git rev-parse --path-format=absolute --git-common-dir || true' run through a helper that captures the merged output of the command, so when the resolution runs before the checkout exists (or from outside it) the failure's stderr line — 'fatal: not a git repository ...' — is written to the checkout file as if it were a path. The shim then can never match the live git dir, so its 'pass through anything against a different tracker' clause fires for EVERY call and the guard passes reads and WRITES alike to the real tk, silently: Layer 1 of the boundary is disarmed for the whole container life while looking installed. Observed in this run's container: /work/repo.guard/checkout holds exactly that fatal line (the image's own installer at image/worker.sh:468 truncates the file on failure and redirects stderr, so this one came from the harness path), the ledger is empty, and a non-read 'tk --json' printed the real tk's usage. The pre-commit hook and the collect's boundary check still hold, so this is defense-in-depth lost, not a write path — but the guard's refusal (and its ledger, which is what tells a person the agent tried) is off exactly where it exists to fire.",
-    "evidence": "harness/src/env/boundary-guard.ts:171-176 (the checkout resolution and its writeTextFile), harness/src/env/factory-sandbox.ts:798-800 (onOutput accumulates the door's merged output stream); observed live: /work/repo.guard/checkout content and empty /work/repo.guard/attempts after a non-read invocation"
-  }
-]
+[{"kind": "proposal", "title": "Tick 96s's header note for .tick/runners.local.toml, composed and verified", "severity": "low", "body": "The whole of tick 96s's deliverable is the comment paragraph in .tick/runners.local.toml's header explaining why that file declares no [roles.review]/[roles.closeout] overlay (the blessed local claude exception of tick j6o); the behaviour is already enforced by the guard tests, so it is documentation only. The file is a protected .tick/ path no worker may write, so this finding carries the exact change as protected_change: the whole new file, the note inserted in the header before 'version = 2', everything else byte-identical to this tree. The run applies it onto the epic branch after close-out as the labelled commit and the tick closes on it; if the epic branch's copy of the file has moved since this attempt's base, merge the note into its header rather than replacing the file blindly. This supersedes attempt 14's 'deliverable writable by no actor' finding: the protected_change channel is the writer.", "evidence": ".tick/runners.local.toml (insertion before line 10, 'version = 2'); TestThisRepositorysLocalClaudeRoutingIsExactlyTheBlessedCells and TestThisRepositorysLocalImplementTiersRouteOnTheOneHarness (internal/reconcile/routing_check_test.go:350, :288) pass on this tree; make gate exit 0", "protected_change": {"path": ".tick/runners.local.toml", "content": "# Overrides for runs on THIS machine — herdr and harness substrates (tick\n# 5uo): merged over .tick/runners.toml. The cloud never reads this file.\n#\n# The operator, 2026-09-23: \"if a tick is complex you can consider using a\n# claude executor locally. It should be significantly stronger than pi/glm\" —\n# local claude bills to the operator's Max subscription. So a local run's\n# implement ladder starts on GLM 5.3 and climbs to claude after one failed\n# attempt: attempt 1 -> strong (pi on glm-5.3), after a failure -> frontier\n# (claude opus), capped there.\n#\n# Deliberately no [roles.review] or [roles.closeout] cells here (tick 96s):\n# the blessed local claude exception lives in .tick/runners.toml — its\n# [roles.review], [roles.review.tiers.frontier] and [roles.closeout] cells\n# name the claude CLI on opus for local final reviews and close-outs (the\n# 2026-10-04/05 decisions, tick j6o), and an overlay cell in this file\n# would move those jobs off the blessed decision. So the cells below\n# concern the implement ladder only: the frontier rung and the\n# [tier_policy] that climbs it (and sets the ceiling the on-demand\n# judgement jobs route at, through the review cell). A local run's review\n# and close-out therefore keep .tick/runners.toml's cells exactly as\n# written, and the claude CLI appears locally only in those cells and on\n# implement's frontier rung. Guards:\n# TestThisRepositorysLocalClaudeRoutingIsExactlyTheBlessedCells and\n# TestThisRepositorysLocalImplementTiersRouteOnTheOneHarness\n# (internal/reconcile/routing_check_test.go).\nversion = 2\n\n[roles.implement.tiers.frontier]\nkind = \"claude\"\nmodel = \"opus\"\neffort = \"high\"\nargs = []\n\n[tier_policy]\ndefault = \"strong\"\nceiling = \"frontier\"\nstep = 1\n# No tick starts on the classifier (operator decision 2026-10-04): every\n# implementation tick starts at strong (GLM 5.3) and climbs to frontier\n# (claude opus) after a failed attempt. The dear-mass rule tick ms9 set here\n# (dear_work_types = design + diagnosis, dear_tier = frontier,\n# mass_threshold = 0.75) is switched off. ms9's own history table already\n# showed the mass caught 3 of 10 work failures at every threshold and missed\n# the big construction ticks; docs/classifier-eval-2026-10-04-jev-clef.md\n# (tick r3y, PR #206) then measured dear mass against outcomes at AUC\n# 0.37-0.42 for Jev, Clef and Clef-flash — no model makes the rule\n# predictive. Classification still runs and is recorded on the run branch,\n# as data for a later question (size/effort, or fine-tuning on outcomes).\n# `ticfac status` reports the escalation rate the ladder now carries alone.\n"}}, {"kind": "defect", "title": "Harness guard writes git's stderr into its checkout file, disarming the tk shim", "severity": "medium", "body": "First filed by attempt 14 of this same tick; re-filed because it is still live in this container (fresh evidence below) and dedup should keep it visible. boundary-guard.ts resolves the guard's checkout companion with 'git rev-parse --path-format=absolute --git-common-dir || true' through a helper that captures the command's merged output, so when the resolution runs before/outside the checkout the failure's stderr line lands in the checkout file as if it were a path. The shim's 'different tracker' clause then matches for every non-read call and passes reads AND writes to the real tk, silently: layer 1 of the boundary is off exactly where it exists to fire, and the ledger never records the attempt. The pre-commit hook and the collect's .tick/ diff check still hold, so this is defense-in-depth lost, not an open write path. Observed live in this container: /work/repo.guard/checkout holds exactly 'fatal: not a git repository (or any of the parent directories): .git' and the ledger is empty.", "evidence": "harness/src/env/boundary-guard.ts:166-170 (the resolution), :171 (writeTextFile of checkout.output.trim()); harness/src/env/factory-sandbox.ts:798 (onOutput accumulates the merged stream); live: /work/repo.guard/checkout content and empty /work/repo.guard/attempts"}]
 ```
 
-STATUS: BLOCKED — the deliverable is one comment paragraph in .tick/runners.local.toml, a .tick/ path no worker may commit (refused by the pre-commit hook and collect alike) and no tracker-edit verb covers; the paragraph is composed verbatim in this report and needs the operator's .tick authority to land, after which the tick closes with no code change.
+STATUS: DONE — no commits: the deliverable is a change to the protected file `.tick/runners.local.toml`, delivered verbatim as the `protected_change` finding above for the run to apply onto the epic branch; the behaviour the note documents is already enforced and green on this tree (guards pass, `make gate` exit 0).
