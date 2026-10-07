@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 12,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "After the main merge, composePRBodyAt condenses findings text (level 1) and absorption decisions (level 2) to stay under prBodyBudget, but the 7sn 'Amendments to the epic's record' section always writes each amendment's full Value. Today amendments are few and short so this is not a reason the epic is not ready; a run with many or long worker-proposed notes would push the body back over the budget and fall to the forge's last-resort fit, which truncates the tail (where the readiness section sits). Either count amendments toward a condensation level or place them before the condensable sections' tail.\nevidence: internal/reconcile/closeout_body.go composePRBodyAt: the amendments loop writes amendment.Value unconditionally; condensePRBody levels prBodyOmitFindingText/prBodyCountAbsorptions do not cover it\n\nticfac run epic-43y filed this backlog tick from the finding ad7c6da9878fdde2ed2336aaac24d44d5f0ce3b382f9caaa4bbbf29194ca7266 (reported by run-epic-43y/tick-yp8/attempt-68): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/ad7c6da9878fdde2ed2336aaac24d44d5f0ce3b382f9caaa4bbbf29194ca7266.json on the run branch.",
+    "epic_id": "ex6",
+    "role": "classify-tick",
+    "tick_id": "8wa",
+    "title": "Close-out PR body: amendments section is never condensed under the body budget"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.35,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.28,
+      "design": 0.48,
+      "diagnosis": 0.02,
+      "mechanical": 0.2,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1385,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T14:41:55Z",
+  "answered_at": "2026-10-07T14:41:55Z",
+  "provenance": {
+    "run_id": "run_69f8f57832d34601b040367c7207b81f",
+    "tick_id": "8wa",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "4a908bb3220c4394606c7f99880d11b652c5e4fb",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:0fd84feaa6def26de94fef1a4da33b194dfa9b1fa1c66cc1c31a8a555019f2a4",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
