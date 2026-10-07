@@ -1,70 +1,75 @@
 <!-- ticks-worker: container facts, prepended after the harness exited. The
 agent's report, including its STATUS line, is unchanged below. -->
 
-_ticks-worker: branch `tick/ex6/attempt-20/q6z`, base `f4945ff3ed87912f6c92c4095ae637ecf7045a8c`, harness `pi-durable` exited 0, 1 work commit(s), 1 uncommitted path(s)._
+_ticks-worker: branch `tick/ex6/attempt-21/q6z`, base `2364d3703e949aa3ac5e48d044222bb8325d9952`, harness `pi-durable` exited 0, 0 work commit(s), 1 uncommitted path(s)._
 
-_ticks-worker: a carried attempt — its base `f4945ff3ed87912f6c92c4095ae637ecf7045a8c` is the head of the work it continued, which was cut from `ff2752098d6af41836d18bb9dafb5adb80db66d4`; its work commits are counted from the carried head._
+_ticks-worker: a carried attempt — its base `2364d3703e949aa3ac5e48d044222bb8325d9952` is the head of the work it continued, which was cut from `ff2752098d6af41836d18bb9dafb5adb80db66d4`; its work commits are counted from the carried head._
 
-# RESULT — tick q6z: `[roles.implement] args = ["--approve"]` is dead config after the herdr re-cut
+# RESULT — tick q6z, attempt 21: `[roles.implement] args = ["--approve"]` is dead config after the herdr re-cut
 
-## What changed — one commit, `0b0f5ed`
+Attempt 20's report (committed in this branch's base) did the repository-side half of
+this tick — `ticfac init` no longer writes the dead pairing — and that work is merged
+and green on this tree. What the tick NAMES, though, is one cell of
+`.tick/runners.toml`, and that line and its comment still stand there, because a
+dispatched attempt may not write under `.tick/` on this substrate. This attempt
+re-verified everything from scratch against the current tree, widened the operator
+paste to every file the pairing survives in (verified byte for byte), and hardened the
+guard that pins it (22 findings at base, all of them the tick's claim). There is no
+commit on this branch: nothing in a worker's write boundary remained to change.
 
-**The repository's own generator of the dead pairing no longer writes it.** `ticfac init`
-was emitting `args = ["--approve"]` beside `kind = "pi"` — into the pi cells of the common
-`runners.toml` it writes, and into all three role cells of the cloud file — with a comment
-that explained the deleted pi CLI's trust model as if it launched. That is the same defect
-one level up: every repository `ticfac init` creates was told, in its own routing, that its
-implement workers run with a flag nothing reads.
+## What this attempt re-verified, itself
 
-- `internal/cli/init.go` — no `args` are written at all, and each generated file says so in
-  one short comment placed where a reader looks for the flag; the full reasoning (the one
-  consumer, the refusals, where each harness's argv really comes from) is in the Go
-  comment beside the emission.
-- `internal/cli/init_test.go` — `TestInitWritesNoArgsIntoTheRoutingItGenerates`, written
-  test-first. It is red on the old code for all three answers (local `--runner pi`,
-  `both`, cloud-only), over three assertions: the generated text names no `--approve`; no
-  role cell, tier or substrate overlay in the generated files declares `args`; and no
-  role resolves with `args` on any substrate the answer serves — the exact value a herdr
-  dispatch's `spawnArgv` would read. Green after the fix.
+- **The repository-side half is green.** `TestInitWritesNoArgsIntoTheRoutingItGenerates`
+  (internal/cli/init_test.go, attempt 20's test) passes on this tree, and `make gate`
+  exits 0 over it. `internal/cli/init.go` writes no `args` into any routing it
+  generates, and says so once in each file, where a reader looks for the flag.
+- **The pairing still stands where the tick names it.** `.tick/runners.toml:17-22`
+  carries `args = ["--approve"]` under the comment that still explains the deleted pi
+  CLI's trust model as if it launched. The same dead line survives independently in
+  `.tick/runners.cloud.toml:24` (the cloud's own `[roles.implement]` cell, which
+  redeclares it, so it flows into every cloud resolution and into the `glm` named
+  config's, whose implement cell declares no args of its own), and two `args = []`
+  clearings exist only to cancel it: `.tick/runners.cloud.toml:155-162` (with a comment
+  that explains clearing the `--approve`) and `.tick/runners.local.toml:16`.
+- **The wall is real and unchanged.** Three layers refuse a worker's write to the
+  cell: the container's pre-commit hook (`.git/hooks/pre-commit`, installed by
+  `image/worker.sh:529`, refuses any staged `.tick/` path), the harness's `tk` shim
+  (`harness/src/env/boundary-guard.ts`), and the cloud collect
+  (`cloudflare/src/worker-collect.ts:313`, `:530`: any `.tick/` path in a branch diff
+  is a `boundary-violation` that refuses the whole branch). The local Go collect would
+  in fact honour the exemption (`internal/exec/subprocess/report.go`'s
+  `exemptFromBoundary` names `.tick/runners.toml`), but the hook makes the commit
+  impossible before the collect ever runs, and `internal/exec/subprocess/prompt.go`'s
+  own "you MAY write these" clause is a fourth disagreement. This is the wall open
+  ticks **26g, z2x, g7p and ky7** already carry; I did not attempt the write, did not
+  bypass the hook, and did not file it again — this attempt's guard ledger
+  (`/work/repo.guard/attempts`) is empty, and a fifth draft of a four-times-filed
+  finding is noise, not evidence. Everything below is delivered through the report,
+  which is the one channel a worker owns.
 
-Why I judged this in scope for q6z rather than another tick: the tick is *about* this dead
-pairing and its misleading comment, and its own text frames it as "jhp's sweep of the
-pi-CLI remnants" — the init template's `--approve` line is exactly such a remnant (the
-flag went with the pi CLI in jhp/uxi), and it is the only place the pairing is
-still emitted as live configuration that a dispatched attempt can write
-(the herdr metering fixtures that spell the old argv are frozen history of
-that executor's join, not configuration). Attempt 19 filed it as a proposal
-finding; it is delivered here instead, so the reviewer can attribute the whole
-diff to this tick's subject. Nothing else in the
-repository carries the pairing as live instruction: `internal/runconfig/runners-config.md`
-still uses `--approve` in one parenthetical example of the field-by-field config-merge rule
-(line 246), but the same document already states the pi-CLI spawn rules are history and that
-no `args = ["--approve"]` licenses a worker (line 298), so I left it alone.
+## The one operator paste — every file the pairing survives in
 
-## What this attempt could not change — the tick's named target
+Verified against THIS tree, not composed blind: each old block below matches its
+current file exactly once (byte for byte), the patched copies parse through the
+production reader (`runconfig.LoadForConfig`) on every substrate × every declared
+named config, the sweep below comes back empty against them, and every kind, model and
+effort resolution is exactly what it is today — the paste may only take the args away.
+A throwaway test did this and was removed before the gate; the four replacement pairs
+are the whole edit, and one operator session closes this tick, 2p3, and the two
+remnant files in it.
 
-`.tick/runners.toml`'s `[roles.implement]` cell still carries the line and the comment. It
-is a `.tick/` path, and this substrate refuses it twice over: the container's pre-commit
-hook refuses any staged `.tick/` path, and the cloud collect returns `boundary-violation`
-for any `.tick/` diff, discarding the attempt wholesale. The run's own boundary vocabulary
-says the opposite (`internal/exec/subprocess/report.go`'s `exemptFromBoundary` names
-`.tick/runners.toml` as a file a worker "may legitimately amend"), and the one worker→run
-write channel — the tracker-edits block — carries tick-record prose fields only, so the
-operator's edit cannot be proposed through it either. I did not write under `.tick/` and
-did not bypass the hook: this attempt's guard ledger (`/work/repo.guard/attempts`) is
-empty. This is the wall ticks 26g, z2x, g7p and ky7 already carry.
+### 1. `.tick/runners.toml` — the tick's named target (and 2p3's)
 
-## The operator's paste — verified against this tree, ready to land
-
-Verified, not composed blind: applied to a copy of this repository's own
-`.tick/runners.toml`, the block below matches byte for byte, parses through the production
-reader (`runconfig.LoadFor`), leaves `kind`/`model`/`effort` exactly as they stand, and
-clears the args at every tier the cell declares. The Phase 2 routing paragraph above it is
-untouched on purpose.
-
-Replace this block in `.tick/runners.toml`:
+Replace this block:
 
 ```toml
+[roles.implement]
+# Operator routing for Phase 2 (2026-09-10). Implementation runs entirely on
+# GLM on cloudflare through pi: GLM 5.3 for complex work (the default, and the
+# `strong` tier) and GLM 5.3-flash for simple work (`economy`). opus is NOT an
+# implementation tier — it is the claude harness only, reserved for review and
+# closeout, and it is not available in pi at all.
+#
 # pi needs no permission-bypass flag: verified live 2026-09-10 (tick gjk) that it
 # runs tools unprompted. `--approve` covers project-local file trust, and that is
 # the whole of its full-auto story. Evidence: .tick/logs/herd/av8/gjk.RESULT.md
@@ -77,61 +82,173 @@ args = ["--approve"]
 with:
 
 ```toml
-# No `args` here, deliberately (tick q6z): the roles table's args have exactly
-# one consumer — internal/cli/executor.go's spawnArgv, reached only for a herdr
-# dispatch — and since 2q5 implement routes onto the local-subprocess executor,
-# which launches the durable host from its own runner table and reads no argv
-# from here; the cloud container is booted from the door's worker.json; and
-# runconfig.Compile refuses kind "pi" for a herdr pane (uxi), so the pairing
-# could not compile where it used to be read. The line that sat here was the
-# deleted pi CLI's `--approve` — project-local file trust, verified live
-# 2026-09-10 (tick gjk; .tick/logs/herd/av8/gjk.RESULT.md) — dead config on
-# every substrate once the CLI went with its worker path (jhp, uxi): it told a
-# reader of this file that implement workers somewhere run with --approve.
+[roles.implement]
+# Operator routing for Phase 2 (2026-09-10; comment reworded tick q6z).
+# Implementation runs on GLM on cloudflare through pi: GLM 5.3 for complex
+# work (the default, and the `strong` tier) and GLM 5.3-flash for simple work
+# (`economy`). opus is the claude harness and not a pi model at all; for
+# implement it is the local `frontier` escalation (runners.local.toml) and the
+# cloud's named `claude` config, never a starting tier — review and closeout
+# run on it by the operator's own cells below.
+#
+# No `args` on this cell, deliberately (tick q6z): the roles table's args
+# have exactly one consumer — spawnArgv (internal/cli/executor.go), read only
+# when a dispatch spawns a herdr pane — and runconfig.Compile refuses
+# kind "pi" for a herdr pane (uxi), so nothing can read a flag from here:
+# the local-subprocess executor launches the durable pi host from its own
+# runner table, and a cloud container is booted from the worker.json its
+# sandbox door hands it. The line that sat here was the deleted pi CLI's
+# `--approve` — project-local file trust, verified live 2026-09-10 (tick gjk;
+# .tick/logs/herd/av8/gjk.RESULT.md) — dead config on every substrate since
+# the CLI went with its worker path (jhp, uxi): it told a reader of this
+# file that implement workers somewhere run with --approve. pi needs no
+# permission-bypass flag in any case: it runs tools unprompted.
 kind = "pi"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
 ```
 
-### The guard that makes it stick — land it with the paste
+The first paragraph keeps the operator's routing rationale (dated 2026-09-10) rather
+than dropping it — attempt 20's paste deleted it wholesale — but corrects its one
+stale claim: since 2026-09-23 `opus` *is* an implement rung locally (the `frontier`
+escalation in runners.local.toml) and in the cloud's named `claude` config, so "opus
+is NOT an implementation tier" had stopped being true of the whole routing. The
+second paragraph replaces the trust story: the reader of the cell now learns why
+there are no args, not what `--approve` used to mean to a CLI that no longer exists.
 
-It cannot ride this branch: it is red while the line stands, and a red guard fails the
-gate. Compiled and run against this tree, it fails with the nine findings that are the
-tick's claim (the cell's own line, plus every local-world tier except `frontier`, which
-`runners.local.toml` already clears), and the same assertions pass against a patched copy
-of the file. Land it as `internal/reconcile/implement_args_test.go` in the same edit — a
-worker can commit it too, once the cell is fixed.
+### 2. `.tick/runners.cloud.toml` — the same dead pairing on the cloud's own cell
+
+Replace this block:
+
+```toml
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+args = ["--approve"]
+```
+
+with:
+
+```toml
+# No `args` on this cell (tick q6z): the roles table's args are read
+# only when a herdr dispatch compiles an agent's argv, and a cloud container
+# is booted from the worker.json its sandbox door hands it. The line that sat
+# here was the deleted pi CLI's `--approve`, dead on this substrate too.
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+```
+
+### 3. `.tick/runners.cloud.toml` — the clearing that explained a `--approve` it cancels
+
+Replace this block:
+
+```toml
+# `args = []` clears the `--approve` the cloud's own implement cell hands pi:
+# a cell that switches kind keeps the argv beneath it unless it says so, and
+# claude does not take pi's flag.
+[configs.claude.roles.implement]
+kind = "claude"
+model = "sonnet"
+effort = "high"
+args = []
+```
+
+with:
+
+```toml
+# This cell switches implement onto the claude-sub rung. No `args` here
+# (tick q6z): the cells beneath it declare none, and a cell that switches
+# kind keeps the argv beneath it unless it says so — the `args = []` that sat
+# here cleared a `--approve` the pi cell no longer carries. internal/reconcile's
+# implement-args guard now refuses any args on this role, which is the
+# protection the manual clearing used to give.
+[configs.claude.roles.implement]
+kind = "claude"
+model = "sonnet"
+effort = "high"
+```
+
+### 4. `.tick/runners.local.toml` — the bare clearing on the frontier rung
+
+Replace this block:
+
+```toml
+[roles.implement.tiers.frontier]
+kind = "claude"
+model = "opus"
+effort = "high"
+args = []
+```
+
+with:
+
+```toml
+[roles.implement.tiers.frontier]
+kind = "claude"
+model = "opus"
+effort = "high"
+```
+
+Dropping the two `args = []` clearings is safe **only together with the guard below**,
+which takes over their job: the clearings were manual protection against
+args-inheritance-across-a-kind-change (the runners.toml defect the operator recorded
+on 2026-09-10), and the guard refuses args on this role everywhere, at every tier,
+world and config — strictly more than the two clearings covered. Land the guard in
+the same edit, and see the third finding below for the residual this leaves on the
+other roles.
+
+## The guard that makes it stick — land it in the same edit
+
+This is the guard attempt 20 handed over, hardened on the two things its run at base
+exposed: it now covers the **cloud world and both named configs** (attempt 20's
+covered the common file and the two local worlds only — nine findings), and its
+"bites" section is a synthetic routing rather than a patched copy of this
+repository's files, so it says the same thing whatever state the real routing is in.
+Compiled and run against this tree it fails with **22 findings** — four cells
+declaring the pairing (the common cell, both local worlds' merged cell, the cloud's,
+and the `glm` config's inherited one) and eighteen resolutions resolving implement
+with `--approve` (local base/economy/balanced/strong ×2, cloud
+base/economy/balanced/strong/frontier ×2 configs); the local `frontier` rung and the
+`claude` config are clean only because their `args = []` clearings cancel the line —
+which is exactly why the paste drops the line *and* the clearings together. Against
+the patched copies of the same files the same sweep returns nothing.
+
+Land it as `internal/reconcile/implement_args_test.go` — a worker can commit it too,
+once the cell is fixed; until then it is red, and a red guard fails the gate.
 
 ```go
 package reconcile
 
 import (
+	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/runconfig"
 )
 
-// [roles.implement] in this repository's own routing carried
-// args = ["--approve"] — the deleted pi CLI's project-local file-trust flag
-// (verified live 2026-09-10, tick gjk) — long after nothing could read it
-// (tick q6z): the roles table's args have exactly one consumer, spawnArgv
-// (internal/cli/executor.go), reached only for a herdr dispatch, and
-// runconfig.Compile refuses kind "pi" for a herdr pane since uxi; since 2q5
-// implement routes onto the local-subprocess executor, which launches the
-// durable host from its own runner table, and a cloud container is booted
-// from the door's worker.json. The line stayed on as dead config whose
-// comment still explained the pi CLI's trust model as if it launched: a
-// reader of runners.toml would believe implement workers somewhere run with
-// --approve. This guard keeps it out: the common file declares no args on
-// implement, and every resolution the two local worlds can produce for the
-// role, at every tier, carries none.
-//
-// The cloud overlay (.tick/runners.cloud.toml) is deliberately outside this
-// guard: it declares its own [roles.implement] cell, a worker's boundary does
-// not let this repository's ticks write that file, and the same dead pairing
-// there is the operator's edit to make.
+// The implement cell of this repository's routing carried
+// args = ["--approve"] — the deleted pi CLI's project-local file-trust flag,
+// verified live 2026-09-10 (tick gjk; .tick/logs/herd/av8/gjk.RESULT.md) —
+// long after nothing could read it (tick q6z). The roles table's args have
+// exactly one consumer, spawnArgv (internal/cli/executor.go), reached only
+// when a dispatch spawns a herdr pane, and runconfig.Compile refuses
+// kind "pi" for a herdr pane since uxi; since 2q5 implement routes onto the
+// local-subprocess executor, which launches the durable pi host from its own
+// runner table, and a cloud container is booted over its sandbox door from
+// the worker.json the door hands it. A flag no executor reads is not inert
+// config: it tells a reader of runners.toml that implement workers somewhere
+// run with --approve. This guard keeps the pairing out of every file this
+// repository's routing is read from — the common cell, the two substrate
+// overlays (the cloud cell redeclared the pairing independently), and every
+// named config's cells — and off every resolution every world can produce,
+// at base values and at every tier a pin can reach: the exact value a herdr
+// dispatch's spawnArgv would compile into an agent's argv.
 //
 // short: reads this repository's .tick/runners*.toml and resolves roles in
 // memory; no harness, no git, milliseconds.
@@ -142,109 +259,163 @@ func TestThisRepositorysImplementRoutingCarriesNoArgs(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := filepath.Join(root, ".tick", "runners.toml")
-
-	cfg, err := runconfig.LoadFor(config, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	cell := cfg.Roles["implement"]
-	if cell == nil {
-		t.Fatal("[roles.implement] is missing from .tick/runners.toml")
-	}
-	if len(cell.Args) != 0 {
-		t.Errorf("[roles.implement] declares args %v: dead config since 2q5 — the roles table's args are read "+
-			"only by a herdr dispatch's spawnArgv, runconfig.Compile refuses kind \"pi\" for a herdr pane, and "+
-			"implement routes onto the local-subprocess executor, which launches the durable host from its own "+
-			"runner table (tick q6z)", cell.Args)
+	for _, problem := range sweepImplementArgs(config) {
+		t.Error(problem)
 	}
 
-	for _, sub := range []runconfig.Substrate{runconfig.SubstrateHarness, runconfig.SubstrateHerdr} {
+	// The sweep bites: a synthetic routing that re-adds the pairing — the
+	// historic line on the implement cell, and a tier of its own — must be
+	// flagged on the cell AND on the resolution, or the sweep certifies
+	// nothing. It is a synthetic file, not a copy of this repository's, so
+	// the bite says the same thing whatever state the real routing is in.
+	dir := t.TempDir()
+	writeTOML(t, filepath.Join(dir, "runners.toml"), `version = 2
+
+[roles.implement]
+kind = "pi"
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+effort = "high"
+args = ["--approve"]
+
+[roles.implement.tiers.economy]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
+effort = "medium"
+`)
+	problems := sweepImplementArgs(filepath.Join(dir, "runners.toml"))
+	if len(problems) == 0 {
+		t.Fatal("the re-added args = [\"--approve\"] passed the sweep")
+	}
+	joined := strings.Join(problems, "\n")
+	for _, want := range []string{"--approve", "declares args", `tier "economy"`} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("the sweep's report does not name %s:\n%s", want, joined)
+		}
+	}
+}
+
+// sweepImplementArgs resolves implement against config on every substrate a
+// run of this repository executes on — through the file's own cells and every
+// named config they declare — and returns every place the role carries args,
+// as strings rather than t.Errorf calls so the guard's own test can also
+// point it at a config it must flag. ResolveOn is the seam spawnArgv reads
+// (internal/cli/executor.go), and it is fail-open about tiers: a tier no cell
+// declares resolves at the role's base values, so every tier a pin can reach
+// resolves to something here, and none of those answers may carry args.
+func sweepImplementArgs(config string) []string {
+	var problems []string
+	tiers := []string{""}
+	for _, tier := range runconfig.TierNames {
+		tiers = append(tiers, string(tier))
+	}
+	for _, sub := range []runconfig.Substrate{
+		runconfig.SubstrateHerdr, runconfig.SubstrateHarness, runconfig.SubstrateCloud,
+	} {
 		world, err := runconfig.LoadFor(config, sub)
 		if err != nil {
-			t.Fatalf("%s: %v", sub, err)
+			problems = append(problems, fmt.Sprintf("the %s world does not read %s: %v", sub, config, err))
+			continue
 		}
-		for _, tier := range append([]runconfig.Tier{""}, runconfig.TierNames...) {
-			w, err := world.ResolveOn(sub, "implement", tier)
+		names := append([]string{""}, world.NamedConfigNames()...)
+		for _, name := range names {
+			selected, err := runconfig.LoadForConfig(config, sub, name)
 			if err != nil {
-				// Every tier name here is in the runconfig vocabulary; a tier
-				// the merged cells do not declare is the profile layer's
-				// refusal to make, never a silent fall back, so an error is a
-				// routing defect in its own right.
-				t.Errorf("substrate %q does not resolve implement at tier %q: %v", sub, tier, err)
+				problems = append(problems, fmt.Sprintf("the %s world refuses its own config %q: %v", sub, name, err))
 				continue
 			}
-			if len(w.Args) != 0 {
-				t.Errorf("substrate %q resolves implement at tier %q with args %v: dead config on every "+
-					"substrate (tick q6z)", sub, tier, w.Args)
+			what := fmt.Sprintf("the %s world (config %q)", sub, name)
+			if cell := selected.Roles["implement"]; cell == nil {
+				problems = append(problems, what+" declares no [roles.implement] cell")
+			} else if len(cell.Args) != 0 {
+				problems = append(problems, fmt.Sprintf("%s [roles.implement] declares args %v: dead config since 2q5 — the roles table's args are read only by a herdr dispatch's spawnArgv, runconfig.Compile refuses kind %q for a herdr pane, and implement routes onto the local-subprocess executor (tick q6z)", what, cell.Args, cell.Kind))
+			}
+			for _, tier := range tiers {
+				rung := "base values"
+				if tier != "" {
+					rung = fmt.Sprintf("tier %q", tier)
+				}
+				w, err := selected.ResolveOn(sub, "implement", runconfig.Tier(tier))
+				if err != nil {
+					problems = append(problems, fmt.Sprintf("%s does not resolve implement at %s: %v", what, rung, err))
+					continue
+				}
+				if len(w.Args) != 0 {
+					problems = append(problems, fmt.Sprintf("%s resolves implement at %s with args %v: dead config on every substrate (tick q6z)", what, rung, w.Args))
+				}
 			}
 		}
 	}
+	return problems
 }
 ```
 
 ## What I ran, in order
 
-- `go test -run 'TestInitWritesNoArgsIntoTheRoutingItGenerates' ./internal/cli/` — FAIL
-  on the untouched tree, all three subtests, then PASS after the fix.
-- `go test -short -count=1 -timeout 45m ./internal/cli/` — ok, 54s.
-- The paste's two verifications (throwaway tests, removed before the commit): the
-  replacement applies to `.tick/runners.toml` as it stands, parses, and clears the args;
-  the handed-over guard's assertions pass against a patched copy of the same two files.
-- The handed-over guard, compiled and run in `internal/reconcile` — FAIL at base with the
-  nine findings named above (removed before the commit; it cannot ride a green gate).
-- `make gate GOTEST_PARALLEL=4` — exit 0, twice (gofmt, `go vet ./...`, the whole-repo
-  short suite, 47 packages ok; 1m35s on the second run).
-- `ticfac-exec-subprocess lint-report RESULT-q6z.md --role implement-tick --tick q6z` —
-  exit 0.
+- `go test -short -count=1 -run 'TestThisRepositorysImplementRoutingCarriesNoArgs' -timeout 300s ./internal/reconcile/`
+  — **FAIL** on the untouched tree, 22 findings, every one of them the tick's claim
+  (the throwaway file carrying it was removed before the gate; its text is above).
+- `go test -short -count=1 -run 'TestTheQ6zPasteVerifiesAgainstThisTree' -timeout 300s ./internal/reconcile/`
+  — **PASS**: each of the four old blocks matches its current file exactly once, the
+  patched copies parse on every world and config, the sweep returns nothing against
+  them, and every kind/model/effort resolution is unchanged. Throwaway, removed.
+- `go test -short -count=1 -run 'TestInitWritesNoArgsIntoTheRoutingItGenerates' -timeout 300s ./internal/cli/`
+  — **PASS** (attempt 20's repository-side half, green on this tree).
+- `make gate GOTEST_PARALLEL=4` — **exit 0**, twice (gofmt, `go vet ./...`, the
+  whole-repo short suite, 47 packages ok). The tree this branch leaves is exactly its
+  gate-green base: this attempt commits nothing.
+- `ticfac-exec-subprocess lint-report RESULT-q6z.md --role implement-tick --tick q6z`
+  — exit 0.
 
-## What the next attempt / the operator has to know
+## What the operator and the next attempt have to know
 
-- **Nothing in this report needs re-deriving.** The repository-side half of the tick is
-  done and committed on this branch; the named target is one paste (above), verified
-  against this tree; the wall is already filed four times over (26g, z2x, g7p, ky7). If
-  this tick is escalated again, the next worker should read this report, confirm the paste
-  still applies, and answer the same way — there is no work left that a dispatched attempt
-  can do.
-- **The paste is one edit that closes more than q6z.** 2p3 asks for the same cell with the
-  same words, and the same dead pairing stands in `.tick/runners.cloud.toml:24` and (as a
-  clearing of nothing, once the common file is fixed) `.tick/runners.local.toml:16`, with
-  `.tick/runners.cloud.toml:155-162` explaining a `--approve` it clears. One operator
-  session finishes all of it; the guard above pins the common file's half.
-- **The guard cannot land before the paste.** It is red while the line stands. Land it in
-  the same edit, or dispatch it to the next attempt of this tick once the cell is fixed —
-  then it is green and the config cannot come back unnoticed.
-- The `--approve` I removed from the templates is dead by the same reasoning as the tick's
-  own: `spawnArgv` (internal/cli/executor.go:335) is the only caller of `runconfig.Compile`,
-  the only reader of roles-table args, and it is reached only for herdr dispatches, for
-  which `runconfig.Compile` refuses `kind = "pi"` (internal/runconfig/compile.go:159);
-  the local-subprocess runner's argv is compiled from `internal/exec/subprocess`'s own
-  `runners` table (`pi` = the durable Node host, `--config <worker.json> --message
-  <prompt>`), and the cloud container is booted from the door's `worker.json`.
+- **One session closes this tick.** The paste above (four replacement pairs) is the
+  whole edit: it closes q6z and 2p3 (same cell, same words) and removes the pairing
+  from the two files no dispatched actor may write. Land the guard with it — it is red
+  until all four pairs land and green the moment they do, and it is the enforcement
+  that lets the manual `args = []` clearings go.
+- **Do not attach a tracker edit to a BLOCKED answer on this tick.** The l89
+  disposition (`internal/reconcile/tracker_edits.go`) applies a BLOCKED answer's
+  tracker edits itself and closes the tick over them — the honest shape only when the
+  fix *is* the record write. q6z's fix is a `.tick/runners.toml` cell, not a record
+  field, so a note would close this tick on the strength of a comment while the dead
+  line still stands in the routing. This attempt carries no tracker-edits block for
+  exactly that reason; the next attempt should not add one either. The channel that
+  would carry this edit is ky7's `config-edits` proposal, still open.
+- **There is no work left that a dispatched attempt can do.** The repository-side
+  sweep is complete and merged (the only live `--approve` spellings outside `.tick/`
+  routing are `image/entrypoint.sh` and `image/worker.sh`'s `omp --auto-approve` —
+  the omp CLI's own flag, a different harness — and a synthetic fixture's prose in
+  `internal/cli/executor_gate_test.go` that uses `--approve` as an example of the
+  *field's* semantics, which says nothing about this repository's cells).
+  `internal/runconfig/runners-config.md`'s parenthetical example of the config-merge
+  rule keeps `--approve` as a hypothetical, and the same document already states no
+  `args = ["--approve"]` can license a pi CLI worker; it is not a live remnant. If
+  this tick is escalated again, the next worker should confirm the paste still
+  applies, hand the same report, and answer the same way.
 
 ```findings v2
 [
   {
     "kind": "defect",
-    "title": "A tick whose deliverable is .tick/ config cannot be delivered here",
-    "severity": "medium",
-    "body": "The run's own boundary tells a worker it may amend .tick/runners.toml (internal/exec/subprocess/report.go's exemptFromBoundary), but this substrate refuses it twice over: the container's pre-commit hook refuses any staged .tick/ path, and the cloud collect returns boundary-violation for any .tick/ diff, discarding the attempt wholesale. q6z's remaining deliverable is exactly such a cell, as are 2p3's and 96s's, so every dispatched attempt of them can only end BLOCKED. This is the wall 26g, z2x, g7p and ky7 already carry — filed from this attempt's own evidence so its BLOCKED names it, and it will dedupe against them.",
-    "evidence": ".git/hooks/pre-commit; cloudflare/src/worker-collect.ts:313 and :530; internal/exec/subprocess/report.go:190-194; this attempt's guard ledger /work/repo.guard/attempts is empty (no write attempted)"
-  },
-  {
-    "kind": "defect",
     "title": "Dead --approve remnants stand in runners.cloud.toml and runners.local.toml",
     "severity": "low",
-    "body": "The common file's implement cell is q6z's named target, but the same dead pairing survives in the two routing files a worker's boundary does not let a tick write: .tick/runners.cloud.toml's [roles.implement] still carries args = [\"--approve\"], and it flows into any named config's resolution whose own cell declares no args; .tick/runners.local.toml's [roles.implement.tiers.frontier] carries args = [], a clearing of the line the common file is to drop. The cloud file's [configs.claude.roles.implement] also keeps an args = [] whose comment explains clearing the --approve. All inert, all misleading the same way; fold them into the same operator edit as q6z's paste.",
-    "evidence": ".tick/runners.cloud.toml:24 and :155-162; .tick/runners.local.toml:16"
+    "body": "q6z's named target is the common file's implement cell, but the same dead pairing survives in the two routing files a worker's boundary does not let a tick write: .tick/runners.cloud.toml's [roles.implement] carries its own args = [\"--approve\"], which flows into every cloud resolution and into the glm named config's (its implement cell declares no args of its own); .tick/runners.cloud.toml's [configs.claude.roles.implement] keeps an args = [] whose comment explains clearing the --approve; .tick/runners.local.toml's frontier tier carries a bare args = [] clearing of the same line. All inert, all misleading the same way as the tick's own target. The four replacement pairs in this report's paste fold all of them into the one operator session that closes q6z and 2p3.",
+    "evidence": ".tick/runners.cloud.toml:24 and :155-162; .tick/runners.local.toml:16; this report's paste section, pair 2-4"
   },
   {
     "kind": "defect",
     "title": "q6z and 2p3 ask for the same one-paste edit to the same cell",
     "severity": "low",
-    "body": "Two open blockers of ex6's final review carry the same deliverable: q6z (from 2q5's finding bab43662…) and 2p3 (from uxi's c1dded50…) both ask for the [roles.implement] args line and its comment in .tick/runners.toml to go, and 2p3 is already three attempts into its ladder. One operator paste closes both, but the run is running two ladders for it. A person should close one as the other's duplicate — nothing here needs a worker, and a tick dispatched to merge them would hit the same .tick/ wall as the ticks it merges.",
-    "evidence": ".tick/issues/q6z.json and .tick/issues/2p3.json, both open, both blockers of 0rt"
+    "body": "Two open blockers of ex6's final review carry the same deliverable: q6z (from 2q5's finding bab43662…) and 2p3 (from uxi's finding c1dded50…) both ask for the [roles.implement] args line and its comment in .tick/runners.toml to go, and both have been dispatched into the same .tick/ wall (2p3's ladder is spent; it is rejected in the run's checkpoint and still open in the tracker). One operator paste closes both, and this report's paste is it. A person should close one as the other's duplicate — nothing here needs a worker, and a tick dispatched to merge them would hit the same wall as the ticks it merges.",
+    "evidence": ".tick/issues/q6z.json and .tick/issues/2p3.json, both open, both parented to ex6"
+  },
+  {
+    "kind": "proposal",
+    "title": "runconfig still inherits args across a kind change; only implement is guarded",
+    "severity": "low",
+    "body": "The operator recorded on 2026-09-10 (av8's decision log) that a tier or config cell that switches kind inherits args the new kind cannot parse, fixed then by manually clearing args = [] on every kind-switching cell, and that the real fix — a refusal in runconfig — was worth carrying into wgi. Nothing ever carried it: resolve.go still applies args by presence with no kind check. This tick's paste drops the two manual clearings because internal/reconcile's new implement-args guard refuses the pairing on that one role everywhere; review, closeout, resolve-conflict and plan-repair have no such guard, so an args line re-added to one of their cells under a switching kind would flow through unchecked. A runconfig refusal at the kind switch (or the same guard sweep over every role) is the residual fix.",
+    "evidence": "internal/runconfig/resolve.go (overlay: args replace when present, no kind check); .tick/issues/av8.json notes 2026-09-10 12:49"
   }
 ]
 ```
 
-STATUS: BLOCKED — the tick's named deliverable is one cell in `.tick/runners.toml`, a path no dispatched attempt may write on this substrate (the container's pre-commit hook refuses any staged `.tick/` path and the cloud collect refuses any `.tick/` diff), so the `args = ["--approve"]` line and its comment still stand there; the exact, verified replacement and the guard that pins it are in this report for the operator (or the run's own writer, once a config-edit channel exists — ky7), while everything the repository itself could reach is done, committed and gate-green on this branch.
+STATUS: BLOCKED — the tick's named deliverable is one cell in `.tick/runners.toml` (plus the two remnant files folded into the same edit), a path no dispatched attempt may write on this substrate (the container's pre-commit hook refuses any staged `.tick/` path and the cloud collect refuses any `.tick/` diff — the wall open ticks 26g, z2x, g7p and ky7 already carry), so the `args = ["--approve"]` line and its comment still stand there; the complete, byte-verified four-pair operator paste and the 22-finding guard that pins it are in this report for the operator (or the run's own writer, once ky7's config-edits channel exists), while the repository-side half is done, merged and gate-green, and this branch commits nothing because nothing a worker may write remained to change.
