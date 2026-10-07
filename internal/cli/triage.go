@@ -232,6 +232,7 @@ func triageCommand(args []string, repo, remote, branch, runID, by *string, asJSO
 		fmt.Fprintf(stderr, "ticfac triage %s: %v\n", epicID, err)
 		return exitGeneric
 	}
+	defer store.Close()
 	findings, err := store.Findings()
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac triage %s: %v\n", epicID, err)

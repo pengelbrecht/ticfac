@@ -106,6 +106,7 @@ func amendmentsCommand(args []string, repo, remote, branch, runID *string, asJSO
 		fmt.Fprintf(stderr, "ticfac amendments %s: %v\n", epicID, err)
 		return exitGeneric
 	}
+	defer store.Close()
 	amendments, err := store.Amendments()
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac amendments %s: %v\n", epicID, err)
@@ -216,6 +217,7 @@ func amendmentCommand(args []string, repo, remote, branch, runID *string, confir
 		fmt.Fprintf(stderr, "ticfac amendment %s %s: %v\n", epicID, key, err)
 		return exitGeneric
 	}
+	defer store.Close()
 	amendments, err := store.Amendments()
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac amendment %s %s: %v\n", epicID, key, err)

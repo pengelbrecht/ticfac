@@ -887,6 +887,52 @@ func TestStatusRecordsCarriesEveryRunsRecords(t *testing.T) {
 	}
 }
 
+// TestRepeatedStatusRefreshesLeakNoGitProcesses is the 2026-10-06 incident: a
+// `ticfac watch v5t` left up for 4h40m held 4641 <defunct> children, the
+// host's per-user process limit was spent, and the live run beside it halted
+// because it could not fork `git fetch`. Every refresh read the run's records
+// through a run-state store and never closed it, so each refresh left one
+// `git cat-file --batch` behind: alive until collected, and a zombie nobody
+// waited for after. A refresh must leave the process table as it found it,
+// synchronously, not "eventually, after a GC".
+func TestRepeatedStatusRefreshesLeakNoGitProcesses(t *testing.T) {
+	repo := newFindingsRepo(t)
+	store, err := runstate.Open(runstate.Options{Repo: repo, Remote: "origin", Branch: "epic/qeu", RunID: "epic-qeu"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := exec.Command("git", "-C", repo, "rev-parse", "refs/remotes/origin/epic/qeu").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PutCheckpoint(runstate.Checkpoint{
+		SchemaVersion: runstate.SchemaVersion, RunID: "epic-qeu", EpicID: "qeu", Sequence: 1,
+		State: runstate.StateRunning, Reason: "the fixture says so", UpdatedAt: "2026-10-06T18:00:00Z",
+		Provenance: runstate.Provenance{RunID: "epic-qeu", SourceRef: "refs/heads/epic/qeu",
+			SourceSHA: strings.TrimSpace(string(head)), IntegrationRef: runstate.Ptr("refs/heads/epic/qeu"),
+			Phase: runstate.PhaseWorker},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	store.Close()
+
+	before := runstate.LiveObjectReaders()
+	const refreshes = 25
+	for i := 0; i < refreshes; i++ {
+		records, _, err := statusRecords(repo, "epic-qeu", "qeu")
+		if err != nil {
+			t.Fatalf("refresh %d: %v", i, err)
+		}
+		if records.Checkpoint == nil {
+			t.Fatalf("refresh %d read no checkpoint: the store was not read, so this proves nothing", i)
+		}
+	}
+	if after := runstate.LiveObjectReaders(); after != before {
+		t.Fatalf("%d refreshes left %d git cat-file --batch processes unreaped (before %d, after %d): "+
+			"a watch leaks one per refresh until the host cannot fork", refreshes, after-before, before, after)
+	}
+}
+
 // TestStatusModelSurfacesAPriorRunsHold: a hold an earlier run left is a fact
 // the feed is the only writer of — the records say the tick was rejected, but
 // only the line says the run held it FOR A PERSON — and the local gathering
