@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 65,
-  "state": "publishing",
-  "reason": "closing 9uc behind the integrated gate on c2931a7315fc",
-  "updated_at": "2026-10-07T04:01:27Z",
+  "sequence": 66,
+  "state": "running",
+  "reason": "9uc is closed",
+  "updated_at": "2026-10-07T04:01:30Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "9uc",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 10
     },
     {
