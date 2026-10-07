@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 4,
-  "state": "dispatching",
-  "reason": "dispatching 2pn as attempt 2",
-  "updated_at": "2026-10-07T23:40:14Z",
+  "sequence": 5,
+  "state": "running",
+  "reason": "2pn is collected as attempt 2 from run run_69f8f57832d34601b040367c7207b81f's settled attempt 10",
+  "updated_at": "2026-10-07T23:40:31Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -14,7 +14,8 @@
     },
     {
       "tick_id": "2pn",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 2
     },
     {
       "tick_id": "96s",
