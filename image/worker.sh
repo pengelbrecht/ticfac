@@ -552,6 +552,10 @@ install_boundary_guard() {
 				printf 'Refused paths:\n'
 				printf '%s\n' "\$staged" | sed 's/^/  /'
 				printf 'Unstage them (git reset -- .tick) and commit your work without them.\n'
+				printf 'When a change to a file directly in .tick/ (runners.toml, runners.cloud.toml,\n'
+				printf 'config.md, ...) IS the fix, report it in your RESULT file as a v2 finding\n'
+				printf 'whose "protected_change" key carries it ({"path": ..., "append" or "content": ...}):\n'
+				printf 'the run applies it itself after the close-out, for the person who merges.\n'
 				printf 'This attempt was recorded and will be reported to a human.\n'
 			} >&2
 			exit 1
@@ -914,6 +918,20 @@ report_proposes_tracker_edits() {
 	grep -qE '^```tracker-edits([[:space:]]+v1)?[[:space:]]*$' "$report" || return 1
 	status="$(sed -E 's/^[[:space:]>*#`-]+//' "$report" | grep -E '^STATUS:' | tail -n 1)"
 	[[ $status =~ ^STATUS:[[:space:]]*(DONE_WITH_CONCERNS|DONE)([^A-Z_]|$) ]]
+}
+
+# Whether the report delivers a protected change (epic ex6's 2pn): a tick
+# whose deliverable is a change to a file under `.tick/` — refused here by the
+# hook and by collect — commits nothing and carries the exact change as a
+# finding's "protected_change", which the run applies itself after the
+# close-out. Behind DONE or BLOCKED that is a delivery, not the no-work exit;
+# collect decides whether the proposal holds.
+report_proposes_protected_change() {
+	local report="$workdir/$result_path" status
+	[[ -f $report ]] || return 1
+	grep -q '"protected_change"' "$report" || return 1
+	status="$(sed -E 's/^[[:space:]>*#`-]+//' "$report" | grep -E '^STATUS:' | tail -n 1)"
+	[[ $status =~ ^STATUS:[[:space:]]*(DONE_WITH_CONCERNS|DONE|BLOCKED)([^A-Z_]|$) ]]
 }
 
 # What is appended to the WHOLE prompt for a harness with no session to
@@ -1807,6 +1825,10 @@ finish_phase() {
 		fi
 		if report_proposes_tracker_edits; then
 			say "the harness exited 0, committed nothing and answered done with a tracker-edits block: the proposal is the delivery, which the run validates and applies through its own tracker writer"
+			exit 0
+		fi
+		if report_proposes_protected_change; then
+			say "the harness exited 0, committed nothing and its report carries a protected_change: the proposal is the delivery, which the run applies itself after the close-out"
 			exit 0
 		fi
 		warn "the harness exited 0 and committed nothing to ${worker_branch}; the report is on origin and the tick is not implemented"

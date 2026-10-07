@@ -200,6 +200,24 @@ func (r *Reconciler) acceptTrackerEdits(ctx context.Context, marker attemptHandl
 		return collected
 	}
 
+	delivered := deliveredWithoutHead(collected)
+	if blocked {
+		r.record(marker.TickID, StageCollected, "%s answered %s over a fix that is itself a tracker-record write and "+
+			"committed no work: the run applies the %d proposed edit(s) (%s) itself, through its own tracker writer, "+
+			"instead of dispatching the question up the blocked ladder, then gates and closes the tick over them",
+			name, collected.Report.Status, len(collected.Report.TrackerEdits), trackerEditList(collected.Report.TrackerEdits))
+	} else {
+		r.record(marker.TickID, StageCollected, "%s committed no work and proposed %d tracker edit(s) (%s): that is its "+
+			"delivery, not an empty branch — the run applies the edits through its own tracker writer, then gates and "+
+			"closes the tick over them", name, len(collected.Report.TrackerEdits), trackerEditList(collected.Report.TrackerEdits))
+	}
+	return delivered
+}
+
+// deliveredWithoutHead is a no-commits collection read as a delivery: ready
+// to merge, with no head — the run itself writes what it delivers (a tracker
+// edit, a protected change).
+func deliveredWithoutHead(collected *subprocess.Collection) *subprocess.Collection {
 	result := *collected.Result
 	result.Source.HeadSHA = nil
 	result.Source.Commits = 0
@@ -222,16 +240,6 @@ func (r *Reconciler) acceptTrackerEdits(ctx context.Context, marker attemptHandl
 	delivered.Result = &result
 	delivered.Verdict = subprocess.VerdictReadyToMerge
 	delivered.Message = ""
-	if blocked {
-		r.record(marker.TickID, StageCollected, "%s answered %s over a fix that is itself a tracker-record write and "+
-			"committed no work: the run applies the %d proposed edit(s) (%s) itself, through its own tracker writer, "+
-			"instead of dispatching the question up the blocked ladder, then gates and closes the tick over them",
-			name, collected.Report.Status, len(collected.Report.TrackerEdits), trackerEditList(collected.Report.TrackerEdits))
-	} else {
-		r.record(marker.TickID, StageCollected, "%s committed no work and proposed %d tracker edit(s) (%s): that is its "+
-			"delivery, not an empty branch — the run applies the edits through its own tracker writer, then gates and "+
-			"closes the tick over them", name, len(collected.Report.TrackerEdits), trackerEditList(collected.Report.TrackerEdits))
-	}
 	return &delivered
 }
 

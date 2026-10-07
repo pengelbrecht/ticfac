@@ -159,6 +159,10 @@ func (r *Reconciler) composePRBodyAt(readinessSection string, condense int) (str
 	}
 	body.WriteString("\n\n## Where to look first\n\n")
 	body.WriteString(r.lookFirst(decisions, final, findings, absorptions, amendments))
+	// Protected changes the run applied for workers (protected_changes.go):
+	// right under where to look first, because each is a change to a file no
+	// worker may write, and the merge is where a person reviews it.
+	body.WriteString(r.protectedChangesSection(findings, condense >= prBodyOmitFindingText))
 	body.WriteString("\n## What this epic did\n\n")
 	body.WriteString(r.epicSummary())
 	body.WriteString("\n## Definition of done\n\n")
