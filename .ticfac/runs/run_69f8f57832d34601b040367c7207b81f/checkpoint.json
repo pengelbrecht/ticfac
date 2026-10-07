@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 8,
-  "state": "dispatching",
-  "reason": "dispatching 8gd as attempt 4",
-  "updated_at": "2026-10-07T13:49:22Z",
+  "sequence": 9,
+  "state": "running",
+  "reason": "8gd is running as attempt 4",
+  "updated_at": "2026-10-07T13:49:32Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -24,7 +24,8 @@
     },
     {
       "tick_id": "8gd",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 4
     },
     {
       "tick_id": "8wa",
