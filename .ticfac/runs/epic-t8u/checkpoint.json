@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 71,
-  "state": "publishing",
-  "reason": "closing mbv behind the integrated gate on a0ec86db4252",
-  "updated_at": "2026-10-07T19:24:00Z",
+  "sequence": 72,
+  "state": "running",
+  "reason": "mbv is closed",
+  "updated_at": "2026-10-07T19:24:02Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -49,7 +49,7 @@
     },
     {
       "tick_id": "mbv",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 9
     },
     {
