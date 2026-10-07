@@ -98,6 +98,40 @@ gate:
 ts-gate:
 	cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit
 
+# The pi-durable harness package's half of the gate (tick 2pn, epic ex6), kept
+# as its own target and its own [testing.commands] entry for the same reason as
+# ts-gate above: a reader can see which half refused a tick. Until it, the
+# harness package's suites ran in CI ('harness conformance and replay') and in
+# no gate, so a tick that changed harness/ merged on a gate that had said
+# nothing about it — and one of its node-half tests sat red at base, found and
+# absorbed five times by five different workers (h3c, 7oy, 4ao, omq, 30e).
+#
+# It is the whole suite, not the fast half: measured on this host (4 cores) the
+# command is 1m24s warm — install 0.4s (11.3s the first ever run, a store fill,
+# not a gate cost), lint 1.5s, typecheck 15.3s (two tsc projects), both vitest
+# suites 56-65s (the workerd half 30-37s, the node half 26-28s) — against the
+# 60m bound under a gate command and a Go half measured in minutes. The node
+# half (real bash, real git, the real local door) is where the red-at-base test
+# lived, so a gate that took only the workerd half would have covered the
+# package and missed it anyway.
+#
+# `pnpm test` is harness/package.json's own script, which is BOTH vitest configs
+# (vitest.config.ts and vitest.node.config.ts): the target spells the package's
+# scripts rather than restating them, so CI's step and this check cannot drift —
+# and gate_target_test.go pins both halves of that spellings to the script.
+#
+# STATE, stated so a reader is not left to guess: the [testing.commands] twin of
+# this target is NOT yet declared in .tick/runners.toml. That one line is the
+# half of tick 2pn a worker could not write — the substrate refuses a worker
+# commit under .tick/ wholesale (image/worker.sh's pre-commit hook and
+# cloudflare/src/worker-collect.ts, where the Go boundary exempts the runner
+# table: tick 9sy) — so until it lands this target is the human/CI half alone.
+# When it does, TestTheGateTargetMatchesTheDeclaredGate's `targets` map gains
+# "harness": "harness-gate" and the two spellings are pinned as the go and ts
+# halves already are.
+harness-gate:
+	cd harness && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm typecheck && pnpm test
+
 # The gate, with the cache refused. Slower and unconditional.
 suite:
 	go test -short -count=1 -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
