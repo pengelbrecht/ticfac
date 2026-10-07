@@ -2,6 +2,7 @@
   "id": "km9",
   "title": "Real-door Go test for the hosted claude-sub step-down",
   "description": "The step-down is covered by the parity guard (static) and by a fake httptest door on the Go side, but no test drives the real door through it. A scratch test confirmed it works: hosted harness, fill MAX1's cap with two claude/sonnet starts, and the third start comes back as pi-durable/workers-ai/@cf/zai-org/glm-5.3 and is accepted by the real executor. Commit it beside TestTheRealDoorRunsAClaudeSubJobOnAHostedDeployment, asserting the handle, the record, one agent started, and no new lease. Lowering the cap through a harness binding (CLAUDE_SUB_MAX_CONCURRENT=1) would keep it to two starts.\nevidence: internal/exec/cloudflaresandbox/claude_sub_e2e_test.go (leased path only); internal/exec/cloudflaresandbox/model_test.go TestASteppedDownRungDispatchStartsAndRecordsThePairThatRan (fake door)\n\nticfac run epic-v5t filed this backlog tick from the finding e88a3a9e755fa5c3a42ab884ab58a4fd84404855de7d88324383c71e8a58de03 (reported by run-epic-v5t/tick-8rm/attempt-9) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/e88a3a9e755fa5c3a42ab884ab58a4fd84404855de7d88324383c71e8a58de03.json on the run branch.",
+  "notes": "2026-10-07 05:45 - ticfac run epic-v5t: created by absorbing finding e88a3a9e755fa5c3a42ab884ab58a4fd84404855de7d88324383c71e8a58de03 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-v5t/absorptions/e88a3a9e755fa5c3a42ab884ab58a4fd84404855de7d88324383c71e8a58de03.json on epic/v5t, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-v5t/tick-8rm/attempt-9",
   "created_by": "ticfac run epic-v5t",
   "created_at": "2026-10-07T03:45:25Z",
-  "updated_at": "2026-10-07T03:45:25Z"
+  "updated_at": "2026-10-07T03:45:33.980603Z"
 }
