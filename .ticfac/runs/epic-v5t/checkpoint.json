@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 63,
-  "state": "gating",
-  "reason": "running the integrated gate for 9uc on c2931a7315fc",
-  "updated_at": "2026-10-07T03:55:27Z",
+  "sequence": 64,
+  "state": "running",
+  "reason": "CI on the epic PR #248 is pending on the head that includes the close-out's own commits; the close-out of v5t is held",
+  "updated_at": "2026-10-07T03:56:12Z",
   "ticks": [
     {
       "tick_id": "6fv",
