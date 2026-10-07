@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "q6z",
   "attempt": 21,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T20:52:07Z",
+  "triaged_at": "2026-10-07T20:52:18Z",
+  "triaged_by": "ticfac run run_69f8f57832d34601b040367c7207b81f absorbing yfx",
+  "promoted_as": "yfx",
   "provenance": {
     "run_id": "run_69f8f57832d34601b040367c7207b81f",
     "tick_id": "q6z",
