@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 20,
-  "state": "publishing",
-  "reason": "closing 3xe behind the integrated gate on 3b33c07661a6",
-  "updated_at": "2026-10-07T14:53:40Z",
+  "sequence": 21,
+  "state": "running",
+  "reason": "3xe is closed",
+  "updated_at": "2026-10-07T14:53:43Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "3xe",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 4
     },
     {
