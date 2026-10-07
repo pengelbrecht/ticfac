@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "o3q",
   "attempt": 11,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T22:24:07Z",
+  "triaged_at": "2026-10-07T22:24:15Z",
+  "triaged_by": "ticfac run epic-t8u absorbing ka2",
+  "promoted_as": "ka2",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "o3q",
