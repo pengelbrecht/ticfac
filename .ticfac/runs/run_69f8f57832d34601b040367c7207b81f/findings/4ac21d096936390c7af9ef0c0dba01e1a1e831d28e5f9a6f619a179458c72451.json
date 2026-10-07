@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "96s",
   "attempt": 16,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T17:35:28Z",
+  "triaged_at": "2026-10-07T17:35:39Z",
+  "triaged_by": "ticfac run run_69f8f57832d34601b040367c7207b81f absorbing g7p",
+  "promoted_as": "g7p",
   "provenance": {
     "run_id": "run_69f8f57832d34601b040367c7207b81f",
     "tick_id": "96s",
