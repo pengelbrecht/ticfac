@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 35,
-  "state": "running",
-  "reason": "2pn try 2 (run dispatch #6) is rejected (ready-to-merge): BLOCKED: the harness exited 1, wrote no report, and nothing landed on tick/ex6/attempt-2/2pn; re-dispatch this tick",
-  "updated_at": "2026-10-07T13:54:56Z",
+  "sequence": 36,
+  "state": "dispatching",
+  "reason": "dispatching 2pn as attempt 10",
+  "updated_at": "2026-10-07T13:55:07Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "2pn",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 6
     },
     {
