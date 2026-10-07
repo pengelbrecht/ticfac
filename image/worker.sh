@@ -1007,7 +1007,9 @@ run_harness() {
 		;;
 	claude)
 		# --session-id names the session up front and --resume prompts it
-		# again in print mode with its whole history (claude 2.1.283) — that
+		# again in print mode with its whole history (claude 2.1.283, and the
+		# image's pin 2.1.227: internal/sandboximage's real-CLI smoke test,
+		# TestTheRealClaudeCLIOnTheSubscriptionRoute, proves it) — that
 		# is what the nudge re-prompts through, exactly as the local
 		# executor's runner table does.
 		cmd=(claude -p)
