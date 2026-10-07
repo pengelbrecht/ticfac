@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 13,
-  "state": "running",
-  "reason": "yaz is closed",
-  "updated_at": "2026-10-07T07:13:06Z",
+  "sequence": 14,
+  "state": "dispatching",
+  "reason": "dispatching 5gm as attempt 3",
+  "updated_at": "2026-10-07T07:13:30Z",
   "ticks": [
     {
       "tick_id": "56z",
@@ -19,6 +19,14 @@
     },
     {
       "tick_id": "kzs",
+      "state": "ready"
+    },
+    {
+      "tick_id": "5gm",
+      "state": "ready"
+    },
+    {
+      "tick_id": "0n3",
       "state": "ready"
     }
   ],
