@@ -1,0 +1,57 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "ilz",
+    "job_id": "run-run_18eafdaa047544be9a196d913fb08a30/tick-z6t/attempt-3",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (cloudflare-sandbox/claude, opus)",
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "0821a25dc19067bd5cea9d8801c59dd5e8f580a4",
+    "tick_id": "z6t"
+  },
+  "response": {
+    "findings": [],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/ilz/attempt-3/z6t",
+      "commits": 2,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/ilz/attempt-3/z6t:RESULT-z6t.md",
+      "review_verdict": "READY",
+      "review_verdict_detail": ""
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "reviewed epic/ilz as integrated at 0821a25d against its base e684dfec; re-derived every guide claim against claude-sub.ts, sandbox-executor.ts and runconfig_select.go, checked the rewritten close-out record citation by citation, ran `make gate` (exit 0) and confirmed this dispatch's own claude-sub lease; verdict READY, no findings."
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T10:48:36Z",
+  "answered_at": "2026-10-07T10:48:36Z",
+  "provenance": {
+    "run_id": "run_18eafdaa047544be9a196d913fb08a30",
+    "tick_id": "z6t",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "0821a25dc19067bd5cea9d8801c59dd5e8f580a4",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
