@@ -85,10 +85,11 @@ gate:
 # the suite, the gate did not (yoh review finding dfae216d). The suite is
 # deterministic now (3cq's leaked Workflow and the refused-slot flake are
 # both fixed; cloudflare/vitest.config.ts runs files serially and bounds
-# every test at 30s), and three consecutive runs on this host at load ~5
-# took 208/233/353s. This target now covers CONTRACTS, TYPES AND BEHAVIOUR;
-# the two node --test suites around the scripts themselves still ride with
-# CI's `pnpm test`.
+# every test at 30s), and five consecutive green runs on this host at load
+# ~5 took 208-353s — a tenth of the 60m harness bound that bounds a gate
+# command with no timeout of its own. This target now covers CONTRACTS,
+# TYPES AND BEHAVIOUR; the two node --test suites around the scripts
+# themselves still ride with CI's `pnpm test`.
 #
 # `pnpm lint` is Biome (tick ncr), the formatter and linter this side had
 # neither of. It rides inside this one command rather than taking a target of

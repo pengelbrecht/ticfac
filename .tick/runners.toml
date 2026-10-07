@@ -198,12 +198,13 @@ go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./..
 # five on exactly this host) and every test and hook is bounded at 30s.
 #
 # The cost, measured on this host on 2026-10-07 with the machine at load ~5
-# (other runs' workers): 1864 tests in 80 files, three consecutive green runs
-# at 208s, 233s and 353s. The command declares no timeout of its own — vitest
-# has no global bound, and its per-test bounds are set in the config — so the
-# harness bound (60m) is the outer one, and the worst observed run is 6% of
-# it. The ts command goes from ~6s to about 3.5-6m, beside a Go half that
-# still owns the gate's wall clock.
+# (other runs' workers): 1864 tests in 80 files, green five times running —
+# three standalone `vitest run` at 208s, 233s and 353s, then this whole
+# command twice at 309s and 310s. The command declares no timeout of its
+# own — vitest has no global bound, and its per-test bounds are set in the
+# config — so the harness bound (60m) is the outer one, and the worst
+# observed run is a tenth of it. The ts command goes from ~6s to about
+# 3.5-6m, beside a Go half that still owns the gate's wall clock.
 #
 # The spelling is `vitest run`, the exit-when-done form: bare `vitest` is watch
 # mode, and a gate command that never exits is a gate that holds its harness
