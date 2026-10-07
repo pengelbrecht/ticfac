@@ -24,8 +24,9 @@ it("the watch holds through a real-sized look budget without recursion or slowdo
     steps++;
   }
   const ms = performance.now() - t0;
-  // 10,000 folds in well under a second is linear; the property draws budgets
-  // of at most 6, so this is the only place the real number is reached.
+  // Linear in looks: 10,000 folds measured ~1.4ms on the author's machine, so
+  // the 1s bound has ~700x headroom for CI load and still catches the
+  // accidental quadratic (which would be minutes at this size).
   expect(steps).toBe(10_000);
   expect(ms).toBeLessThan(1_000);
 });
