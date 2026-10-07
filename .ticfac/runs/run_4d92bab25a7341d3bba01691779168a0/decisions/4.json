@@ -1,0 +1,72 @@
+{
+  "schema_version": 3,
+  "decision": 4,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "ilz",
+    "job_id": "run-run_4d92bab25a7341d3bba01691779168a0/tick-0n3/attempt-4",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (cloudflare-sandbox/claude, opus)",
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "72a61b88a0c051599141746d3e703e56db20d733",
+    "tick_id": "0n3"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "The guide's failover section tells an operator the width of the rung is CLAUDE_SUB_MAX_CONCURRENT, default 2 (docs/claude-sub-operator.md:70). That is the factory's per-subscription lease cap, and it is stated correctly, but it is not what bounds how many claude workers this repository runs at once: .tick/runners.cloud.toml also declares [configs.claude.tier_policy.concurrency] economy = 2, strong = 1, which TierPolicy.WaveWidth (internal/runconfig/tierpolicy.go:533) narrows the wave to. An operator asking the guide why only one opus worker is running is sent to the wrong number, in the wrong place, with no hint the second cap exists. One sentence in the failover or the config-selection section would close it.\nevidence: docs/claude-sub-operator.md:68-71 against .tick/runners.cloud.toml ([configs.claude.tier_policy.concurrency]) and internal/runconfig/tierpolicy.go:515-545",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "claude-sub guide names only the factory's concurrency cap, not the config's"
+      },
+      {
+        "body": "The guide's corrected stickiness claim (docs/claude-sub-operator.md:76-80) promises an operator that a job whose lease goes stale past LEASE_TTL_MS is treated as new on its next ask and may be handed a different subscription. ClaudeSubPoolCore.lease does that (claude-sub.ts:331-334), but no case asserts it: claude-sub.test.ts:184 covers stickiness inside the TTL, and :236 covers the leak expiry with a job (\"leaked\") that never asks again. A case that leases a job, advances the clock past LEASE_TTL_MS and re-asks with the first subscription benched would pin the sentence the guide now stakes the operator's expectation on.\nevidence: cloudflare/test/claude-sub.test.ts:184-243 against cloudflare/src/claude-sub.ts:329-334",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "No test pins the stale-lease reassignment the guide now promises"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/ilz/attempt-4/0n3",
+      "commits": 2,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/ilz/attempt-4/0n3:RESULT-0n3.md",
+      "review_verdict": "READY",
+      "review_verdict_detail": ""
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (READY)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T07:50:44Z",
+  "answered_at": "2026-10-07T07:50:44Z",
+  "provenance": {
+    "run_id": "run_4d92bab25a7341d3bba01691779168a0",
+    "tick_id": "0n3",
+    "attempt": 4,
+    "source_ref": "refs/heads/epic/ilz",
+    "source_sha": "72a61b88a0c051599141746d3e703e56db20d733",
+    "integration_ref": "refs/heads/epic/ilz",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
