@@ -3128,3 +3128,4 @@
 {"ts":"2026-10-07T09:15:04.029766Z","tick":"kk7","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"A held cloud run's own 'run the epic again' only re-attaches: resume must supersede the waiting Workflow","type":"bug"}}
 {"ts":"2026-10-07T09:22:47.40481Z","tick":"lpl","action":"create","actor":"ticks-sandbox@ticks.invalid","epic":"ilz","data":{"priority":2,"title":"Re-review ilz after the operator's failover-section fix (round 4)","type":"task"}}
 {"ts":"2026-10-07T09:22:47.441593Z","tick":"kzs","action":"reopen","actor":"ticfac","epic":"ilz","data":{"title":"Close out the claude-sub operator guide epic"}}
+{"ts":"2026-10-07T09:23:00.010436Z","tick":"kzs","action":"block","actor":"ticfac","epic":"ilz","data":{"blockers":["yaz","0n3","lpl"],"title":"Close out the claude-sub operator guide epic"}}
