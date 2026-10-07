@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/1vn/tap`, base `c60f1474ffda55368f8dd5edee8390c0d8af2a4a`, harness `pi-durable` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+
 # 8gd — Host the cloud PR-review boot on pi-durable
 
 The tick offered two paths: the operator re-confirms the review's omp exception
