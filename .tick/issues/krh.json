@@ -3,7 +3,7 @@
   "title": "The reconcile test tracker counts a re-claim as a new claim; real tk does not",
   "gloss": "re-claim counting in test tracker",
   "description": "Found by #50's author: internal/reconcile/harness_test.go's fake tracker counts a re-claim of an already-claimed tick against the width, which the real tk does not. Tests that depend on width can then pass or fail for a reason production never has. Make the fake match tk's claim semantics and add a test pinning it against tk's own behaviour.",
-  "notes": "2026-10-07 21:18 - ticfac run epic-t8u: krh try 1 (run dispatch #8) reported a finding the run itself decided — proposed-tick \"The full reconcile suite cannot fit one local run under the host-shared flags\" (key 4d9214177db22c9dad45ddbe3b126ce19de7348b48336cd3151c74095e9324b8, severity low, for this repository) is promoted to a backlog tick with an owner, sij; the decision record is on the run branch at .ticfac/runs/epic-t8u/absorptions/4d9214177db22c9dad45ddbe3b126ce19de7348b48336cd3151c74095e9324b8.json, and the draft is triaged as promoted.\n2026-10-07 21:18 - ticfac run epic-t8u: krh try 1 (run dispatch #8) reported a finding the run itself decided — proposed-tick \"No CI runner installs tk, so every real-binary pin skips in CI\" (key d46e0999e61bebadf9d863f2d36e79aca0eace806793fd2da804b4520afe7c0b, severity low, for this repository) is promoted to a backlog tick with an owner, cio; the decision record is on the run branch at .ticfac/runs/epic-t8u/absorptions/d46e0999e61bebadf9d863f2d36e79aca0eace806793fd2da804b4520afe7c0b.json, and the draft is triaged as promoted.",
+  "notes": "2026-10-07 21:18 - ticfac run epic-t8u: krh try 1 (run dispatch #8) reported a finding the run itself decided — proposed-tick \"The full reconcile suite cannot fit one local run under the host-shared flags\" (key 4d9214177db22c9dad45ddbe3b126ce19de7348b48336cd3151c74095e9324b8, severity low, for this repository) is promoted to a backlog tick with an owner, sij; the decision record is on the run branch at .ticfac/runs/epic-t8u/absorptions/4d9214177db22c9dad45ddbe3b126ce19de7348b48336cd3151c74095e9324b8.json, and the draft is triaged as promoted.\n2026-10-07 21:18 - ticfac run epic-t8u: krh try 1 (run dispatch #8) reported a finding the run itself decided — proposed-tick \"No CI runner installs tk, so every real-binary pin skips in CI\" (key d46e0999e61bebadf9d863f2d36e79aca0eace806793fd2da804b4520afe7c0b, severity low, for this repository) is promoted to a backlog tick with an owner, cio; the decision record is on the run branch at .ticfac/runs/epic-t8u/absorptions/d46e0999e61bebadf9d863f2d36e79aca0eace806793fd2da804b4520afe7c0b.json, and the draft is triaged as promoted.\n2026-10-07 21:20 - ticfac run epic-t8u: krh try 1 (run dispatch #8) merged into epic/t8u as ad3e150cef04; the integrated gate (go, ts) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -12,6 +12,6 @@
   "acceptance_criteria": "The fake tracker's claim counting matches tk's (a re-claim by the same claimant is not a new claim); a test pins the parity; go test ./internal/reconcile/ passes",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-23T23:10:51.499136Z",
-  "updated_at": "2026-10-07T19:18:49.656199Z",
+  "updated_at": "2026-10-07T19:20:52.60119Z",
   "started_at": "2026-10-07T16:06:42.434974Z"
 }
