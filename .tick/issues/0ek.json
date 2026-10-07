@@ -1,0 +1,14 @@
+{
+  "id": "0ek",
+  "title": "Local pi-durable workers only run inside the ticfac repo: the harness is found at \u003crepo\u003e/harness",
+  "gloss": "harness only in ticfac repo",
+  "description": "internal/exec/subprocess/executor.go harnessDir() defaults to filepath.Join(e.repo, \"harness\") unless TICFAC_HARNESS_DIR is set, and the runner launches node --import {{harness_dir}}/runtime/register.mjs {{harness_dir}}/src/local/main.ts. In any other repository (or on a machine with only the released binaries, e.g. ralph) there is no harness/ dir and no node_modules, so a local run on the pi-durable harness cannot start a worker. Ship the harness with the release (embedded and extracted to a versioned cache dir with its deps, or a release asset installed beside the binaries), resolve it from there by default, and have ticfac doctor check it. Found 2026-10-07 setting ticfac up on a second machine (ralph).",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "a local pi-durable run in a repo that is not ticfac, on a machine with only the installed release, dispatches and completes a worker; doctor names a missing harness; tests cover the resolution; make gate passes",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T13:55:41.952418Z",
+  "updated_at": "2026-10-07T13:55:41.952418Z"
+}
