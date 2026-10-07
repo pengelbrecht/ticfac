@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 31,
+  "sequence": 32,
   "state": "failed",
-  "reason": "the closeout-epic job for kzs answered DONE_WITH_CONCERNS, and the run's verdict is no-commits (failed): the only commit tick/ilz/attempt-5/kzs carries beyond its base (2a9ca61c26cd) is the container's own report at RESULT-kzs.md: the worker committed no work, and a report is not a deliverable. The tick is NOT closed: for this role an empty branch is an undelivered deliverable, whatever the answer says",
-  "updated_at": "2026-10-07T08:08:05Z",
+  "reason": "kzs did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: the closeout-epic job for kzs answered DONE_WITH_CONCERNS, and the run's verdict is no-commits (failed): the only commit tick/ilz/attempt-5/kzs carries beyond its base (2a9ca61c26cd) is the container's own report at RESULT-kzs.md: the worker committed no work, and a report is not a deliverable. The tick is NOT closed: for this role an empty branch is an undelivered deliverable, whatever the answer says",
+  "updated_at": "2026-10-07T08:08:12Z",
   "ticks": [
     {
       "tick_id": "56z",
