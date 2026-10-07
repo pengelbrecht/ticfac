@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 100,
-  "state": "running",
-  "reason": "p0n is closed",
-  "updated_at": "2026-10-07T21:47:43Z",
+  "sequence": 101,
+  "state": "collecting",
+  "reason": "collecting r1f attempt 13",
+  "updated_at": "2026-10-07T22:20:57Z",
   "ticks": [
     {
       "tick_id": "pqs",
