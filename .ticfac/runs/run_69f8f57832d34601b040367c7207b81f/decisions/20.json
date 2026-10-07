@@ -1,0 +1,41 @@
+{
+  "schema_version": 3,
+  "decision": 20,
+  "role": "implement-tick",
+  "request": {
+    "attempt": 16,
+    "job_id": "run-run_69f8f57832d34601b040367c7207b81f/tick-96s/attempt-16",
+    "kind": "blocked_answer",
+    "question": "the deliverable is one comment paragraph in `.tick/runners.local.toml`, a `.tick/` path this container's pre-commit hook and the factory's collect both refuse and that the run's own boundary does not exempt, and no tracker-edit verb covers it; the paragraph is composed verbatim above and needs the operator's `.tick/` authority (or the run's own writer) to land, after which 96s closes with no code change.",
+    "status": "BLOCKED",
+    "tick_id": "96s",
+    "tick_role": "implement-tick",
+    "tier": "strong"
+  },
+  "response": {
+    "class": "",
+    "step": "decide"
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T17:36:12Z",
+  "answered_at": "2026-10-07T17:36:12Z",
+  "provenance": {
+    "run_id": "run_69f8f57832d34601b040367c7207b81f",
+    "tick_id": "96s",
+    "attempt": 16,
+    "source_ref": "refs/heads/ticfac/run-run_69f8f57832d34601b040367c7207b81f/tick-96s/attempt-14",
+    "source_sha": "7a6f5fb9bf212e6ebd7c9f52fd2d9cf3d3fa1531",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "strong",
+    "profile_digest": "sha256:b0ff5a04913b76197bbc0b1336af87d32f1d5ff67aa612d964bbc1d9492873b8",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
