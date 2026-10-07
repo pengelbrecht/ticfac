@@ -17,12 +17,8 @@
     "lint:test": "node --test --no-warnings scripts/lint.test.mjs",
     "format": "biome check --write",
     "typecheck": "pnpm contracts:check && tsc --noEmit",
-<<<<<<< HEAD
-    "test": "pnpm contracts:check && pnpm contracts:test && pnpm operator-strings && pnpm lint:test && vitest run",
-=======
     "test:properties": "vitest run --config vitest.config.hegel.ts",
-    "test": "pnpm contracts:check && pnpm contracts:test && pnpm operator-strings && pnpm test:properties && vitest run",
->>>>>>> b167294ac9a384097a5ccc6e52f0c0ec7ee3c52b
+    "test": "pnpm contracts:check && pnpm contracts:test && pnpm operator-strings && pnpm lint:test && pnpm test:properties && vitest run",
     "test:watch": "pnpm contracts:check && vitest"
   },
   "devDependencies": {
