@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_18eafdaa047544be9a196d913fb08a30",
   "epic_id": "ilz",
-  "sequence": 12,
-  "state": "running",
-  "reason": "kzs is running as attempt 2",
-  "updated_at": "2026-10-07T10:04:10Z",
+  "sequence": 13,
+  "state": "collecting",
+  "reason": "collecting the closeout-epic job for kzs",
+  "updated_at": "2026-10-07T10:24:20Z",
   "ticks": [
     {
       "tick_id": "lpl",
