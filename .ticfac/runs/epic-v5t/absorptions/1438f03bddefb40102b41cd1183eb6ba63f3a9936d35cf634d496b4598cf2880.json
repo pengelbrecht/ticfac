@@ -1,0 +1,30 @@
+{
+  "schema_version": 3,
+  "key": "1438f03bddefb40102b41cd1183eb6ba63f3a9936d35cf634d496b4598cf2880",
+  "tick_id": "yck",
+  "gating": true,
+  "item_id": "A1",
+  "basis": "worker-asserted-high",
+  "reason": "the reporter rated it high severity and names done item A1 as the one it breaks, while the epic's work is still under way: it is absorbed and fixed before the done is asserted",
+  "placement": "before-review",
+  "decided_at": "2026-10-07T01:23:35Z",
+  "provenance": {
+    "run_id": "epic-v5t",
+    "tick_id": "tda",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/v5t",
+    "source_sha": "0538a6c47cadcedc1ca48472d213d3e1fb6c500e",
+    "integration_ref": "refs/heads/epic/v5t",
+    "phase": "worker",
+    "executor": "local-subprocess",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "frontier",
+    "profile_digest": "sha256:632d6cf966ce43fb4e5ed23161efbae05ad86646e8702c4f1331ac3216ec1e1e",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
