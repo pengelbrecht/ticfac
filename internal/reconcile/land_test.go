@@ -573,7 +573,10 @@ func TestALandedEpicWithOpenFollowUpsStaysOpenAndTheRunStillCompletes(t *testing
 
 // A CONFLICTING FOLD at the merge is the resolve job's: main edits the same
 // file the epic did after the run reached its close-out, the fold conflicts,
-// the resolve-conflict job makes the union, and the epic still lands.
+// the resolve-conflict job makes the union, and the epic still lands. The
+// fold changed deps.txt, a file the epic's own diff touches, so the land
+// stops once for a review of the folded tree (review_rounds.go, epic ilz) —
+// resumably, needing nobody — and the next incarnation reviews and lands.
 func TestAConflictingBaseFoldBeforeTheMergeIsResolvedAndTheEpicLands(t *testing.T) {
 	t.Parallel()
 	pr := &landingForge{}
@@ -594,10 +597,25 @@ func TestAConflictingBaseFoldBeforeTheMergeIsResolvedAndTheEpicLands(t *testing.
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if result.State != runstate.StateCompleted {
-		t.Fatalf("the run ended %s (%+v): a conflicting fold is the resolve job's", result.State, result.Failure)
+	if result.Failure == nil || result.Failure.Reason != RefusedLandFoldReview ||
+		!strings.Contains(result.Failure.Message, "deps.txt") {
+		t.Fatalf("the run ended %s (%+v), want the %s stop over deps.txt", result.State, result.Failure,
+			RefusedLandFoldReview)
 	}
 	if len(baseFoldDecisions(t, r)) != 1 {
+		t.Errorf("the conflicting fold was not resolved by exactly one resolve job: %d", len(baseFoldDecisions(t, r)))
+	}
+	r, result, err = f.run(f.Repo, fixtureOptions{mode: "land_repair", pullRequests: pr})
+	if err != nil {
+		t.Fatalf("the resume: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the resume ended %s (%+v): the folded tree is reviewed, then landed", result.State, result.Failure)
+	}
+	if n := len(reviewDecisions(t, draftsStore(t, f.Repo))); n != 2 {
+		t.Errorf("%d review decisions, want 2: the READY review and one over the fold of deps.txt", n)
+	}
+	if len(baseFoldDecisions(t, r)) > 1 {
 		t.Errorf("the conflicting fold was not resolved by exactly one resolve job: %d", len(baseFoldDecisions(t, r)))
 	}
 	if got := strings.TrimSpace(showOnOrigin(t, f, "main", "deps.txt")); got != "resolved by the resolve-conflict job" {
