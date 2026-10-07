@@ -12,8 +12,11 @@
   "attempt": 6,
   "done_item": "A1",
   "demonstrating_check": "git diff e834273c8d32 bfedc21c168d -- cloudflare/src/claude-sub.ts",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T08:43:09Z",
+  "triaged_at": "2026-10-07T08:43:20Z",
+  "triaged_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0 absorbing xe9",
+  "promoted_as": "xe9",
   "provenance": {
     "run_id": "run_4d92bab25a7341d3bba01691779168a0",
     "tick_id": "kzs",
