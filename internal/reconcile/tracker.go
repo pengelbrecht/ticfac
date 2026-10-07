@@ -517,6 +517,18 @@ func (d *durableTracker) Graph(ctx context.Context, epicID string) (tk.Graph, er
 	return d.inner.Graph(ctx, epicID)
 }
 
+// GraphAll is the graph with the epic's CLOSED tasks, where the tracker
+// underneath can list them (tk's `graph --all`), and its Graph otherwise.
+func (d *durableTracker) GraphAll(ctx context.Context, epicID string) (tk.Graph, error) {
+	if err := d.tree.sync(); err != nil {
+		return tk.Graph{}, err
+	}
+	if all, ok := d.inner.(graphAller); ok {
+		return all.GraphAll(ctx, epicID)
+	}
+	return d.inner.Graph(ctx, epicID)
+}
+
 func (d *durableTracker) Show(ctx context.Context, tickID string) (tk.Tick, error) {
 	if err := d.tree.sync(); err != nil {
 		return tk.Tick{}, err

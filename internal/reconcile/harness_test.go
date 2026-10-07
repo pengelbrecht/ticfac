@@ -179,6 +179,13 @@ type trackerState struct {
 	// would — which is the fact tick g50 is about. A fixture that leaves it
 	// unset keeps the fixed Waves it declared.
 	BlockedBy map[string][]string `json:"blocked_by,omitempty"`
+
+	// OpenOnlyGraph makes Graph answer as `tk graph` does: OPEN tasks alone,
+	// the closed ones only through GraphAll (`tk graph --all`). The fake's
+	// default lists closed tasks too, which hid epic ilz's round 3: a
+	// close-out the open graph no longer names is one whose merge reads as
+	// unreviewed work. A test of what a closed tick's absence does sets it.
+	OpenOnlyGraph bool `json:"open_only_graph,omitempty"`
 }
 
 func newTracker(t *testing.T, dir string) *fakeTracker {
@@ -331,6 +338,17 @@ func (s trackerState) waves() [][]string {
 
 func (f *fakeTracker) Graph(_ context.Context, epicID string) (tk.Graph, error) {
 	f.tally("graph")
+	return f.graph(epicID, false)
+}
+
+// GraphAll is `tk graph --all`: the graph with the closed tasks, whatever
+// OpenOnlyGraph says.
+func (f *fakeTracker) GraphAll(_ context.Context, epicID string) (tk.Graph, error) {
+	f.tally("graph")
+	return f.graph(epicID, true)
+}
+
+func (f *fakeTracker) graph(epicID string, all bool) (tk.Graph, error) {
 	state, err := f.load()
 	if err != nil {
 		return tk.Graph{}, err
@@ -340,6 +358,9 @@ func (f *fakeTracker) Graph(_ context.Context, epicID string) (tk.Graph, error) 
 		w := tk.GraphWave{Wave: i + 1, Parallel: len(wave), Ready: i == 0}
 		for _, id := range wave {
 			tick := state.Ticks[id]
+			if state.OpenOnlyGraph && !all && tick.Status == "closed" {
+				continue
+			}
 			w.Tasks = append(w.Tasks, tk.GraphTask{
 				ID: id, Title: tick.Title, Status: tick.Status, Priority: tick.Priority,
 				Type: tick.Type, Labels: tick.Labels, Role: state.Roles[id],
