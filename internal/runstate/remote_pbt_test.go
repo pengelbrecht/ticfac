@@ -96,6 +96,7 @@ func genRemoteError(tc hegel.TestCase) (string, []int) {
 	return strings.Join(parts, "\n"), ranks
 }
 
+// short: the classifier over generated stderr drawn from its own marker lists, no git, no processes
 func TestPBTRemoteClassificationNeverWaitsOnAnAnswer(t *testing.T) {
 	t.Parallel()
 	var cases, waits, stops int
@@ -143,6 +144,7 @@ func TestPBTRemoteClassificationNeverWaitsOnAnAnswer(t *testing.T) {
 	}
 }
 
+// short: the classifier over generated stderr and arbitrary text, no git, no processes
 func TestPBTRemoteClassificationIgnoresCaseAndNeverInventsAClass(t *testing.T) {
 	t.Parallel()
 	hegel.Test(t, func(ht *hegel.T) {

@@ -80,8 +80,6 @@ import (
 //     to the backlog, never recursed into — and a deferral never becomes work
 //     the run dispatches.
 
-// short: an in-memory state machine over the real window/claim/gate decisions and the fake tracker, no git, no processes
-
 // modelAttempt is one attempt's durable marker as origin holds it: the thing
 // a restarted incarnation adopts by identity.
 type modelAttempt struct {
@@ -1242,6 +1240,7 @@ func (m *lifecycleModel) closedIn(tick string) bool {
 // TestPBTTheReconcilerLifecycleHoldsItsInvariants drives the model: every case
 // is a fresh epic, a fresh width and an arbitrary sequence of the eight
 // operations, with the five invariants checked at every join point.
+// short: an in-memory state machine over the real window/claim/gate decisions and the fake tracker, no git, no processes
 func TestPBTTheReconcilerLifecycleHoldsItsInvariants(t *testing.T) {
 	t.Parallel()
 	root, err := os.MkdirTemp("", tempdir.Pattern("ticfac-lifecycle-pbt-"))
