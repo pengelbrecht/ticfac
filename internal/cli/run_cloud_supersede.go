@@ -117,8 +117,8 @@ func supersedeHeldCloudRun(ctx context.Context, client *cloudClient, epicID, run
 		"requested_by": cloudRequestedBy(),
 		"mode":         "clean",
 	}); err != nil {
-		return fmt.Sprintf("the held run %s could not be stopped (%v); `ticfac cloud stop %s` stops it, and "+
-			"`ticfac run %s --cloud` then resumes the epic", runID, err, runID, epicID)
+		return fmt.Sprintf("the held run %s could not be stopped (%v); nothing was submitted — "+
+			"`ticfac run %s --cloud` asks again", runID, err, epicID)
 	}
 	fmt.Fprintf(prose, "cloud run %s is stopping — waiting for its Workflow to end (the stop's grace window "+
 		"included) before the resume is submitted; Ctrl-C leaves it stopping and submits nothing\n", runID)
