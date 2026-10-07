@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 14,
-  "state": "collecting",
-  "reason": "collecting q6z attempt 4",
-  "updated_at": "2026-10-07T23:41:39Z",
+  "sequence": 15,
+  "state": "running",
+  "reason": "q6z try 1 (run dispatch #4) is rejected (no-commits): the only commit tick/ex6/attempt-21/q6z carries beyond its base (2364d3703e94) is the container's own report at RESULT-q6z.md: the worker committed no work, and a report is not a deliverable",
+  "updated_at": "2026-10-07T23:41:48Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "q6z",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 4
     },
     {
