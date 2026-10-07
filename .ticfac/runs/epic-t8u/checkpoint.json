@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 49,
-  "state": "publishing",
-  "reason": "closing pqs behind the integrated gate on 5ee5faa21338",
-  "updated_at": "2026-10-07T18:30:13Z",
+  "sequence": 50,
+  "state": "running",
+  "reason": "pqs is closed",
+  "updated_at": "2026-10-07T18:30:18Z",
   "ticks": [
     {
       "tick_id": "pqs",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
