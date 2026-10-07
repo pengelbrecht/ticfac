@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 102,
-  "state": "running",
-  "reason": "q6z is running as attempt 20",
-  "updated_at": "2026-10-07T18:49:48Z",
+  "sequence": 103,
+  "state": "collecting",
+  "reason": "collecting q6z attempt 20",
+  "updated_at": "2026-10-07T20:05:14Z",
   "ticks": [
     {
       "tick_id": "2p3",
