@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 13,
-  "state": "publishing",
-  "reason": "closing tc9 behind the integrated gate on 96d1b8e31726",
-  "updated_at": "2026-10-07T14:36:03Z",
+  "sequence": 14,
+  "state": "running",
+  "reason": "tc9 is closed",
+  "updated_at": "2026-10-07T14:36:06Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -14,7 +14,7 @@
     },
     {
       "tick_id": "tc9",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 2
     },
     {
