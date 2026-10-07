@@ -120,6 +120,9 @@ func (r *Reconciler) startWithRoom(executor Executor, tick string, spec *subproc
 	for {
 		handle, err := executor.Start(spec)
 		if !isNoCapacity(err) {
+			if err == nil {
+				r.noteClaudeSubStepDown(executor, tick, handle)
+			}
 			return handle, err
 		}
 		if waited == 0 {
@@ -138,6 +141,30 @@ func (r *Reconciler) startWithRoom(executor Executor, tick string, spec *subproc
 		r.sleep(CapacityRetry)
 		waited += CapacityRetry
 		r.lookAtLiveJobs()
+	}
+}
+
+// StageClaudeSubSteppedDown is the feed line of a job the dispatch resolved
+// onto the claude-sub rung (claude on the operator's subscription) that the
+// factory stepped down to Workers AI — no subscription configured, every one
+// at its cap, or every one exhausted until its reset — so `ticfac watch` and
+// `status` say why a run expected on sonnet/opus is on another model.
+const StageClaudeSubSteppedDown = "claude_sub_stepped_down"
+
+// ClaudeSubStepDowns is an executor that can say a job it started was
+// stepped down from the claude-sub rung, and why (the cloud sandbox door).
+type ClaudeSubStepDowns interface {
+	ClaudeSubStepDown(handle *subprocess.JobHandle) (string, bool)
+}
+
+// noteClaudeSubStepDown records a started job's step-down on the feed.
+func (r *Reconciler) noteClaudeSubStepDown(executor Executor, tick string, handle *subprocess.JobHandle) {
+	noter, ok := executor.(ClaudeSubStepDowns)
+	if !ok || handle == nil {
+		return
+	}
+	if detail, down := noter.ClaudeSubStepDown(handle); down {
+		r.record(tick, StageClaudeSubSteppedDown, "%s", detail)
 	}
 }
 

@@ -652,7 +652,17 @@ func (r *Reconciler) claimDispatch(ctx context.Context, entry planEntry) (*subpr
 		disposition, where := r.disposition(*existing, marker)
 		switch disposition {
 		case redispatchAttempt:
-			if service, ok := infrastructure[existing.Attempt]; ok {
+			if failure, ok := infrastructure[existing.Attempt]; ok && failure.midJob {
+				// A service gave out under it mid-job — a claude-sub job's
+				// subscription quota (infrastructure.go): the same rule, no
+				// rung, in its own words.
+				r.record(tick, StageRedispatched,
+					"%s stopped mid-job when %s ran out under it and was rejected as infrastructure, not a "+
+						"failed try; a new try is dispatched at the same tier",
+					attemptLabel(tick, tryOf(attempts, tick, existing.Attempt), existing.Attempt), failure.service)
+				continue
+			} else if ok {
+				service := failure.service
 				// It never reached its harness: a service outside it did
 				// not answer (infrastructure.go). A new try is dispatched,
 				// and the ladder earns no rung — nothing about the tick was

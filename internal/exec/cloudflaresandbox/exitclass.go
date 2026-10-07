@@ -90,6 +90,45 @@ const fileStartUnpublished = "start-unpublished.json"
 // orchestrator that never saw the settle.
 const fileInfrastructure = "infrastructure.json"
 
+// claudeSubHarness is the harness of the claude-sub rung (profile.CloudRule's
+// subscription rung): the claude CLI, on the operator's subscription.
+const claudeSubHarness = "claude"
+
+// fileClaudeSubQuota marks a claude-sub attempt whose subscription ran out of
+// quota during the job (the door's claude_sub_quota observation): written by
+// the Inspect that saw it, read by the collect.
+const fileClaudeSubQuota = "claude-sub-quota.json"
+
+// claudeSubQuotaFault is the collect's typed fact for such a job: transient
+// (the next dispatch's lease steps down to Workers AI, or finds the
+// subscription back), mid-job, and no verdict on the tick.
+func claudeSubQuotaFault(code int) *subprocess.InfrastructureFailure {
+	return &subprocess.InfrastructureFailure{
+		Service:  "the claude subscription's quota",
+		ExitCode: code,
+		MidJob:   true,
+		Fix: "the subscription's usage window is spent; the factory benches it until its reset and steps " +
+			"claude-sub jobs down to Workers AI meanwhile (`/api/claude-sub` shows the bench) — add a " +
+			"subscription or wait for the reset, then run the epic again",
+	}
+}
+
+// exitCodeOf is the exit code a terminal status's `exited` observation
+// names, or 0 when none does.
+func exitCodeOf(status *subprocess.JobStatus) int {
+	if status == nil {
+		return 0
+	}
+	for _, o := range status.Observations {
+		if m := exitedPattern.FindStringSubmatch(o.Detail); m != nil {
+			if code, err := strconv.Atoi(m[1]); err == nil {
+				return code
+			}
+		}
+	}
+	return 0
+}
+
 // bootFault is what a worker's boot exit code says stopped it before its
 // harness started, or nil for a code that is not a boot stop. None of them is
 // a verdict on the TICK — the harness never ran — so none earns the tier

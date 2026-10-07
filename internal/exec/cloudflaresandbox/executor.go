@@ -497,6 +497,7 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		Title:         payload.Title,
 		Model:         payload.Model,
 		Harness:       payload.Harness,
+		ClaudeSub:     payload.ClaudeSub,
 		Prompt:        req.Prompt,
 		Adopted:       adopted,
 		Spec:          spec,
@@ -794,8 +795,48 @@ func (e *Executor) Inspect(h *subprocess.JobHandle, cursor string) (*subprocess.
 			"observed_at": status.ObservedAt, "exit_code": code,
 		})
 	}
+	// A claude-sub job whose subscription ran out under it (the door's
+	// claude_sub_quota observation, job-protocol 2.3.0): marked for the
+	// collect, which otherwise reads a harness that died mid-job as a failed
+	// attempt at the tick and climbs the tier ladder.
+	if payload.State != "" && status != nil && status.Terminal {
+		for _, o := range status.Observations {
+			if o.Kind == subprocess.ObsClaudeSubQuota {
+				_ = e.storeAt(payload.State).writeJSON(fileClaudeSubQuota, map[string]any{
+					"observed_at": status.ObservedAt, "detail": o.Detail, "exit_code": exitCodeOf(status),
+				})
+				break
+			}
+		}
+	}
 	nameExitClasses(status)
 	return status, nil
+}
+
+// ClaudeSubStepDown says why a job the dispatch resolved onto the claude-sub
+// rung was stepped down to Workers AI, in a sentence the run's feed carries
+// (reconcile.ClaudeSubStepDowns): "claude-sub exhausted until <reset>; on
+// Workers AI (<harness> on <model>)". ok is false for any other job — one
+// that leased a subscription, or never resolved the rung.
+func (e *Executor) ClaudeSubStepDown(h *subprocess.JobHandle) (string, bool) {
+	payload, err := local(h)
+	if err != nil || payload.ClaudeSub == nil || payload.ClaudeSub.State != "stepped_down" {
+		return "", false
+	}
+	why := payload.ClaudeSub.Reason
+	switch why {
+	case "none":
+		why = "has no subscription configured"
+	case "busy":
+		why = "has every subscription at its concurrency cap"
+	default:
+		why = "is exhausted"
+		if payload.ClaudeSub.RetryAt != nil && *payload.ClaudeSub.RetryAt != "" {
+			why += " until " + *payload.ClaudeSub.RetryAt
+		}
+	}
+	return fmt.Sprintf("claude-sub %s; %s runs on Workers AI (%s on %s) instead", why, h.JobID,
+		payload.Harness, payload.Model), true
 }
 
 // ChecksOutFromOrigin says this executor's jobs run off a checkout of the

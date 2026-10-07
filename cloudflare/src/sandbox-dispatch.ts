@@ -234,7 +234,7 @@
  */
 
 import type { AttemptSpec } from "./attempt-protocol";
-import { claudeSubRelease } from "./claude-sub";
+import { claudeSubPool, claudeSubRelease } from "./claude-sub";
 import { heldSlots, mayBeAdoptable } from "./container-capacity";
 import { getRun } from "./db";
 import { authorizeGatewayRequest, type GatewayDenial } from "./gateway";
@@ -795,6 +795,29 @@ async function attemptStatusRoute(
     // container settled — the subscription lease ends with it.
     claudeSubRelease(env),
   );
+  // A claude-sub job whose OWN answer benched its subscription on the quota
+  // ended because the subscription ran out under it, not because it failed
+  // at its tick: the proxy remembered it (pool.jobQuota), and the terminal
+  // status carries it as a typed observation (job-protocol 2.3.0), so the
+  // collect redispatches at the same tier instead of climbing the ladder.
+  if (status.state === "failed") {
+    const quota = await claudeSubPool(env)
+      ?.jobQuota(specJobID(identity))
+      .catch(() => null);
+    if (quota !== null && quota !== undefined) {
+      const until = new Date(quota.bench.until).toISOString();
+      status.observations = [
+        ...(status.observations ?? []),
+        {
+          at: status.observed_at,
+          kind: "claude_sub_quota",
+          detail:
+            `claude subscription ${quota.label} ran out of quota during this job ` +
+            `(${quota.bench.detail}); benched until ${until}`,
+        },
+      ];
+    }
+  }
   return { ok: true, status: 200, body: status as unknown as Record<string, unknown> };
 }
 
