@@ -12,8 +12,11 @@
   "attempt": 3,
   "done_item": "A1",
   "demonstrating_check": "grep -c '^\\[configs' .tick/runners.cloud.toml",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T01:23:21Z",
+  "triaged_at": "2026-10-07T01:23:48Z",
+  "triaged_by": "ticfac run epic-v5t absorbing yck",
+  "promoted_as": "yck",
   "provenance": {
     "run_id": "epic-v5t",
     "tick_id": "tda",
