@@ -1,0 +1,14 @@
+{
+  "id": "yck",
+  "title": "Append the two named cloud configs to .tick/runners.cloud.toml",
+  "description": "Tick tda's acceptance [1] puts the glm and claude configs in .tick/runners.cloud.toml, but a worker may not write that file, and attempt 2 was refused whole for doing it. The block is internal/runconfig/testdata/runners.cloud.configs.toml, and two repository guards check it against the real files. Until it is appended, a cloud run of an epic labelled config: claude is refused, because the cloud files declare no named configs. Fix: sed -n '/^# Named run configs/,$p' internal/runconfig/testdata/runners.cloud.configs.toml \u003e\u003e .tick/runners.cloud.toml. The guards then hold the real file. This must be done by the operator or the run, not a worker.\nevidence: internal/runconfig/testdata/runners.cloud.configs.toml; internal/reconcile/runconfig_select.go selectRunConfig (a label on a cloud run without configs is refused)\n\nticfac run epic-v5t created this tick by absorbing the finding 1438f03bddefb40102b41cd1183eb6ba63f3a9936d35cf634d496b4598cf2880 (reported by run-epic-v5t/tick-tda/attempt-3): the finding was judged against the epic's definition of done and gates done item A1, as its reporter asserts at high severity. The decision record — item id, verdict, basis — is .ticfac/runs/epic-v5t/absorptions/1438f03bddefb40102b41cd1183eb6ba63f3a9936d35cf634d496b4598cf2880.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "v5t",
+  "discovered_from": "run-epic-v5t/tick-tda/attempt-3",
+  "created_by": "ticfac run epic-v5t",
+  "created_at": "2026-10-07T01:23:37Z",
+  "updated_at": "2026-10-07T01:23:37Z"
+}
