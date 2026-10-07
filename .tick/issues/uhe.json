@@ -3,6 +3,7 @@
   "title": "Apply the D1 migrations once, not once per test file",
   "gloss": "D1 migrations applied once",
   "description": "Measured on the operator's run of cloud/factory's suite: 345.57s total, of which SETUP IS 97.81s - transform is 10.31s and tests are 158.80s. The setup is test/apply-migrations.ts, which applies the deploy-authored migration set (16 migrations) and is registered as vitest's setupFiles, so it runs ONCE PER TEST FILE across 53 files. Roughly 1.8s x 53 spent re-applying the same schema to a fresh D1.\n\nThe file is correct as written - it leans on applyD1Migrations being idempotent and says so - it is just paid 53 times. Candidate shapes: seed one D1 and share it, snapshot after migration and restore per file, or apply in a global setup rather than a per-file one. Which is available depends on @cloudflare/vitest-pool-workers' isolation model, so measure before committing to one.\n\nDo not fix this by weakening isolation: the per-file fresh database is what stops one file's rows reaching another, and tick 5qj's comment records real corruption when files shared state. A faster setup that reintroduces cross-file bleed is a worse trade than the 97 seconds.",
+  "notes": "2026-10-07 23:35 - ticfac run epic-t8u: uhe try 1 (run dispatch #15) reported a finding the run itself decided — proposed-tick \"cloudflare:test's per-file import is the vitest suite's dominant cost; no tick owns it\" (key 351fef2de2be83c6b16decb16941c8c53d389f29296491e83bd4b58bc900b7fd, severity medium, for this repository) is promoted to a backlog tick with an owner, 9fn; the decision record is on the run branch at .ticfac/runs/epic-t8u/absorptions/351fef2de2be83c6b16decb16941c8c53d389f29296491e83bd4b58bc900b7fd.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +12,6 @@
   "acceptance_criteria": "The migration set is applied once per run rather than once per file, and the suite's reported setup time drops materially (report before and after from vitest's own summary). Every test still sees a schema-correct database with no rows from another file, proven by the existing suite passing unchanged.",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T15:39:34.138836Z",
-  "updated_at": "2026-10-07T20:09:15.549247Z",
+  "updated_at": "2026-10-07T21:35:22.395758Z",
   "started_at": "2026-10-07T20:09:15.549246Z"
 }
