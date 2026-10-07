@@ -3193,3 +3193,5 @@
 {"ts":"2026-10-07T15:19:29.807241Z","tick":"rkk","action":"create","actor":"ticks-sandbox@ticks.invalid","epic":"bo9","data":{"priority":2,"title":"ticfac skills install/get default to the ticfac skill when no name is given","type":"task"}}
 {"ts":"2026-10-07T15:19:29.85405Z","tick":"g2s","action":"block","actor":"ticks-sandbox@ticks.invalid","epic":"bo9","data":{"blockers":["ba4","g5f","u2g","0ek","rkk"],"title":"Final review of the operator surface follow-ups diff"}}
 {"ts":"2026-10-07T15:22:28.934822Z","tick":"vy8","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"A run attach dies on one non-JSON answer from the factory's run feed instead of retrying","type":"bug"}}
+{"ts":"2026-10-07T17:14:31.114462Z","tick":"0mz","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"An operator door that ends one attempt's WorkerAgent host on demand, so the host-loss fault can be injected mid-tool","type":"task"}}
+{"ts":"2026-10-07T17:14:31.226565Z","tick":"9if","action":"block","actor":"ticfac","data":{"blockers":["0mz"],"title":"Inject [A2]'s two faults into that cloud run and record them"}}
