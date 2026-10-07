@@ -169,6 +169,7 @@ func (r *Reconciler) dispatchBaseFold(ctx context.Context, base, baseHead, epicH
 	}
 	resolved, err := profile.Resolve(RoleResolveConflict, profile.Options{
 		Dir: r.opts.ProfileDir, RunnersConfig: r.opts.GateConfig, Tier: tier, Substrate: string(r.substrate),
+		Config: r.runConfig.Name,
 	})
 	if err == nil {
 		err = usableProfile(r.executors, resolved)

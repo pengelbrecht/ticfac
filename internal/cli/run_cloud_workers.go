@@ -224,7 +224,7 @@ func runCloudWorkersCommand(ctx context.Context, epicID, repo string, fl *runFla
 	}
 
 	if credential == nil {
-		runID, _, err := submitCloudRun(ctx, client, repo, epicID, "local", prose)
+		runID, _, err := submitCloudRun(ctx, client, repo, epicID, "local", *fl.config, prose)
 		if err != nil {
 			return fail(action, err)
 		}
@@ -237,9 +237,15 @@ func runCloudWorkersCommand(ctx context.Context, epicID, repo string, fl *runFla
 	runID := credential.RunID
 	finish := finishFor(runID)
 	fmt.Fprintf(prose, "run %s: the orchestrator runs on this machine; every worker runs in the factory "+
-		"(the cloud profile set, the Workers AI cells of .tick/runners.cloud.toml)", runID)
+		"(the cloud profile set, the cells .tick/runners.cloud.toml declares for the cloud)", runID)
 	if credential.FactoryMaxInstances > 0 {
 		fmt.Fprintf(prose, ", at most %d worker container(s) at once", credential.FactoryMaxInstances)
+	}
+	// The named config (tick tda): which of those cells every dispatch
+	// resolves against — the flag's word, the epic's label, or the declared
+	// default, as the child re-derives from the argv it was given.
+	if *fl.config != "" {
+		fmt.Fprintf(prose, " (run config: %s)", *fl.config)
 	}
 	fmt.Fprintln(prose)
 
@@ -251,6 +257,13 @@ func runCloudWorkersCommand(ctx context.Context, epicID, repo string, fl *runFla
 	argv := []string{"run-epic", epicID, "--repo", repo, "--run-id", runID, "--profiles", profile.EmbeddedCloud}
 	if *fl.wall > 0 {
 		argv = append(argv, "--wall", strconv.Itoa(*fl.wall))
+	}
+	// The named config rides the argv (tick tda): --cloud-workers' workers
+	// boot factory containers on the cells the repository's runners files
+	// declare for the cloud, and the named configs are the choice between
+	// them — the flag over the epic's label over the default.
+	if *fl.config != "" {
+		argv = append(argv, "--config", *fl.config)
 	}
 	logPath := filepath.Join(dir, startLogName)
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)

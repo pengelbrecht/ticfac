@@ -161,6 +161,7 @@ func (r *Reconciler) dispatchRepair(ctx context.Context, entry planEntry, marker
 	}
 	resolved, err := profile.Resolve(RoleRepairGate, profile.Options{
 		Dir: r.opts.ProfileDir, RunnersConfig: r.opts.GateConfig, Tier: tier, Substrate: string(r.substrate),
+		Config: r.runConfig.Name,
 	})
 	if err == nil {
 		err = usableProfile(r.executors, resolved)
@@ -225,6 +226,7 @@ func (r *Reconciler) dispatchRepair(ctx context.Context, entry planEntry, marker
 		Title:        r.repairTitle(tick),
 		Profile:      resolved,
 		Tier:         tier,
+		Config:       r.runConfig.Name,
 		Executor:     resolved.Executor,
 		PriorReports: append([]subprocess.PriorReport{}, r.priorReports(tick, marker.Attempt)...),
 	}

@@ -1537,3 +1537,18 @@ func statusModelGoldens(t *testing.T) map[string]statusmodel.Model {
 	}
 	return out
 }
+
+// TestTheWatchCostLineNamesTheRunConfig (tick tda): the run's spend is read
+// beside the config that spent it, so two epics on two configs compare on
+// the one line that answers what each cost. A run that selected no config
+// (a repository declaring none) says nothing about one.
+func TestTheWatchCostLineNamesTheRunConfig(t *testing.T) {
+	name := "claude"
+	m := statusmodel.Model{RunConfig: &name}
+	if got := dashCost(m, plainStyles()); !strings.HasPrefix(got, "config claude · cost") {
+		t.Errorf("the cost line on a claude run is %q, want it to name the config first", got)
+	}
+	if got := dashCost(statusmodel.Model{}, plainStyles()); strings.Contains(got, "config") {
+		t.Errorf("the cost line of a run with no config is %q", got)
+	}
+}

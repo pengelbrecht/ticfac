@@ -14,7 +14,7 @@ WORKERS                                       ACTIVITY (10m)
     ran go test ./internal/reconcile (1m ago)  nudged ×1
 
 CI #98 go ◐ 6m · ts ✓
-cost Workers AI $0.41 · claude not metered
+config claude · cost Workers AI $0.41 · claude not metered
 ─ recent ─────────────────────────────────────────────────
 18:58:02 46x#2        dispatched: 46x try 2 dispatched (run 
 19:04:12 run          closeout_held: the close-out waits for

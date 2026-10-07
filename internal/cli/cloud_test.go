@@ -235,6 +235,7 @@ type cloudTickFixture struct {
 	Parent    string
 	Owner     string
 	CreatedBy string
+	Labels    []string
 }
 
 // writeCloudTickFixture writes a tick fixture directly as the JSON document
@@ -259,6 +260,9 @@ func writeCloudTickFixture(t *testing.T, repo string, f cloudTickFixture) {
 	}
 	if f.Parent != "" {
 		doc["parent"] = f.Parent
+	}
+	if len(f.Labels) > 0 {
+		doc["labels"] = f.Labels
 	}
 	data, err := json.Marshal(doc)
 	if err != nil {

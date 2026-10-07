@@ -89,6 +89,95 @@ func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 			}
 		}
 	}
+
+	// Every NAMED config routes too (tick tda): the repository declares two
+	// — glm, the declared default, and claude, the subscription rung — and a
+	// config that cannot route is a config doctor and the submission
+	// preflight refuse, so the repository's own gate must catch it first.
+	// The declaration is internal/runconfig/testdata/runners.cloud.configs.toml
+	// until it is
+	// appended to .tick/runners.cloud.toml (a worker may not write that
+	// file), so the guard checks it appended to a scratch copy of the real
+	// files — and checks the real files themselves once they carry it.
+	assertTheNamedConfigsRoute(t, withTheDeclaredConfigs(t, root))
+	if merged, err := runconfig.LoadFor(config, runconfig.SubstrateCloud); err != nil {
+		t.Fatal(err)
+	} else if len(merged.NamedConfigNames()) > 0 {
+		assertTheNamedConfigsRoute(t, config)
+	}
+}
+
+// withTheDeclaredConfigs copies this repository's runners files into a
+// scratch .tick directory with internal/runconfig/testdata's
+// runners.cloud.configs.toml appended to the cloud file, and returns the
+// scratch runners.toml.
+func withTheDeclaredConfigs(t *testing.T, root string) string {
+	t.Helper()
+	dir := t.TempDir()
+	block, err := os.ReadFile(filepath.Join(root, "internal", "runconfig", "testdata", "runners.cloud.configs.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"runners.toml", "runners.local.toml", "runners.cloud.toml"} {
+		data, err := os.ReadFile(filepath.Join(root, ".tick", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if name == "runners.cloud.toml" {
+			data = append(append(data, '\n'), block...)
+		}
+		writeTOML(t, filepath.Join(dir, name), string(data))
+	}
+	return filepath.Join(dir, "runners.toml")
+}
+
+// assertTheNamedConfigsRoute holds a runners file's named cloud configs to
+// the acceptance: exactly glm and claude, every job of each routed, and each
+// final resolved worker inside the cloud billing rule — the durable harness
+// on a Workers AI model (glm), or the claude-sub rung's harness on one of
+// its VERSIONLESS aliases (claude — admitted since 6fv: the alias is what
+// makes the rung subscription-billed, and a pinned id anywhere in the claude
+// config is per-token spend the rule refuses by name).
+func assertTheNamedConfigsRoute(t *testing.T, config string) {
+	t.Helper()
+	counts, jobs, err := CheckEveryNamedConfig(profile.EmbeddedCloud, config, runconfig.SubstrateCloud)
+	if err != nil {
+		t.Fatalf("every named config did not route: %v", err)
+	}
+	if len(counts) != 2 {
+		t.Errorf("the cloud file declares %d named configs, want the two the acceptance names: %v", len(counts), counts)
+	}
+	if _, ok := counts["glm"]; !ok {
+		t.Error("the declared default config glm is missing")
+	}
+	if _, ok := counts["claude"]; !ok {
+		t.Error("the claude config is missing")
+	}
+	sawRung := false
+	for _, job := range jobs {
+		_, onRung := profile.SubscriptionRungFor(job.Profile.Runner, job.Profile.Model)
+		switch {
+		case onRung:
+			// The claude-sub rung: legal exactly as the harness/alias pair,
+			// and only ever under the config that chose it.
+			sawRung = true
+			if job.Config != "claude" {
+				t.Errorf("the %s config routes %s at %q onto the subscription rung (%s/%s) — the rung is the claude config's to select, never a default's",
+					job.Config, job.Role, job.Tier, job.Profile.Runner, job.Profile.Model)
+			}
+		case cloudRunnerIsDurable(job.Profile.Runner) && strings.HasPrefix(job.Profile.Model, "cloudflare-workers-ai/"):
+			if job.Config == "claude" && job.Role == "implement-tick" {
+				t.Errorf("the claude config routes implement at %q to %s/%s, want its workers on the claude-sub rung",
+					job.Tier, job.Profile.Runner, job.Profile.Model)
+			}
+		default:
+			t.Errorf("cloud %s at tier %q under config %s routes to %s/%s — neither the durable harness on Workers AI nor a subscription rung pair",
+				job.Role, job.Tier, job.Config, job.Profile.Runner, job.Profile.Model)
+		}
+	}
+	if !sawRung {
+		t.Error("no job of any config rides the claude-sub rung: the claude config routes nothing to the subscription")
+	}
 }
 
 // cloudRunnerIsDurable reports whether a resolved cloud profile finally
