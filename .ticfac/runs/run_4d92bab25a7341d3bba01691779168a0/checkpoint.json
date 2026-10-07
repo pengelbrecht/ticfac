@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 5,
-  "state": "integrating",
-  "reason": "integrating 56z attempt 1 into epic/ilz",
-  "updated_at": "2026-10-07T06:45:37Z",
+  "sequence": 6,
+  "state": "gating",
+  "reason": "running the integrated gate for 56z on f05bb24b0f5f",
+  "updated_at": "2026-10-07T06:50:44Z",
   "ticks": [
     {
       "tick_id": "56z",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 1
     },
     {
