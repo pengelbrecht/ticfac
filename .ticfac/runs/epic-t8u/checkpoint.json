@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 21,
-  "state": "running",
-  "reason": "3xe is closed",
-  "updated_at": "2026-10-07T14:53:43Z",
+  "sequence": 22,
+  "state": "dispatching",
+  "reason": "dispatching 9si as attempt 6",
+  "updated_at": "2026-10-07T14:53:55Z",
   "ticks": [
     {
       "tick_id": "pqs",
