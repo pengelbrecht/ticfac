@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 41,
-  "state": "integrating",
-  "reason": "integrating kzs attempt 6 into epic/ilz",
-  "updated_at": "2026-10-07T08:44:10Z",
+  "sequence": 42,
+  "state": "gating",
+  "reason": "running the integrated gate for kzs on 1f23a3087e5e",
+  "updated_at": "2026-10-07T08:44:20Z",
   "ticks": [
     {
       "tick_id": "56z",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "kzs",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 6
     },
     {
