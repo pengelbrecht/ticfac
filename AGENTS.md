@@ -7,16 +7,16 @@ and `make gate`. That is the bar to merge for most PRs: PR CI is advisory,
 not a required check, so you do not wait for it.
 
 **Exception: a PR that touches `internal/reconcile/` waits for its PR CI to be
-green before you merge it.** The full reconcile suite runs in CI, and since
-tick r1f also in the per-tick gate of any tick whose diff reaches it — the
-three merges that skipped it turned main red within two days (#225, #226,
-#233), blocking every other agent's deploy. Operator decision, 2026-10-06.
-Don't run the full `internal/reconcile`
-suite locally as a matter of course: it takes 20-30 minutes and this host is
-shared with live runs and other agents — and the run's own gates now pay for
-it where the tick's diff says it must, so a person rarely needs to. Run heavy
-local commands at low
-priority (GOTEST_PARALLEL=4, GOFLAGS=-p=2).
+green before you merge it.** The three merges that skipped this turned main
+red within two days (#225, #226, #233), blocking every other agent's deploy.
+Operator decision, 2026-10-06. Since tick r1f the per-tick gate also runs the
+FULL suites of every package a tick's diff reaches — with one deliberate
+exception: internal/reconcile itself is left to CI (its full suite measured
+41m28s on this host; the reasoning and the numbers are in .tick/runners.toml's
+go-touched entry), so a person checking a reconcile PR still reads CI, and
+nobody runs that suite locally as a matter of course. This host is shared
+with live runs and other agents: run heavy local commands at low priority
+(GOTEST_PARALLEL=4, GOFLAGS=-p=2).
 
 ## What CI runs, and where it must be green
 

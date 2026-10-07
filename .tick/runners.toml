@@ -216,29 +216,40 @@ go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./..
 # reverse-dep edge is the one dz1 rode in on: the tick touched internal/tk,
 # the tests that broke lived in internal/reconcile, which imports it.
 #
-# THE BOUND, decided and justified (the tick asked for one):
+# THE BOUND, decided and justified (the tick asked for one): per-package
+# budgets, plus the cap that already exists.
 #   - go test's own -timeout, 45m, PER PACKAGE BINARY — the whole-repo
 #     suite's number, for the Makefile's own stated reason: a loaded or
 #     slower host must fail on its own merits, never on go's 10m default.
 #   - The check's outer cap is the gate's existing harness bound (60m), the
-#     same one that bounds every declared check — including the short-suite
-#     half above, measured taking 37 minutes under someone else's load and
-#     still inside it. A second, smaller bound here would refuse exactly the
-#     slow-but-honest suite cy2 spent this epic defending; what bounds the
-#     WORK is the selection, not a clock: only the packages the tick's diff
-#     reaches run.
-#   - The worst selection on this repository is a tick that touches a
-#     foundational package (internal/gitbin, internal/shorttest), whose
-#     reverse closure is ~34 packages — measured [MEASURED-WORST] on this
-#     host, inside the harness bound; a typical tick's closure is ~10
-#     packages — measured [MEASURED-TYPICAL]. Those numbers are this epic's
-#     to shrink: they are the same suites [A1] halves.
+#     same one that bounds every declared check — a second, smaller clock
+#     here would refuse exactly the slow-but-honest suites cy2 spent this
+#     epic defending.
+#   - What bounds the WORK is the selection, and the budget is -leave-to-ci.
+#     THE ONE NAME ON THAT LIST IS internal/reconcile, and the number is
+#     why, measured on this host (10-core darwin/arm64, load ~3.5 with
+#     other runs live, under nice): internal/reconcile's full suite alone
+#     ran 41m28s at the gate's own -parallel 12, and the whole 23-package
+#     closure of this very tick 43m39s — against the short half of the
+#     same gate at 1m33s. Most ticks reach reconcile through one import or
+#     another (forge, tk, runstate, gitbin, subprocess), so paying it per
+#     tick would put ~40 minutes on most of the dozens of gates an epic
+#     runs (49 on epic-9pd) and invert this epic's own reason for existing.
+#     reconcile's full suite therefore stays where it already runs — CI's
+#     three sharded go-test jobs, which the close-out waits on — and every
+#     gate names it as left to CI in its own evidence rather than skipping
+#     it silently. The price of that decision is stated plainly: a
+#     dz1-shaped break IN internal/reconcile itself rides to the close-out
+#     exactly as dz1 did; what the gate keeps per tick for it is the short
+#     suite and the full suites of every importer — cli, factory, herdr,
+#     statusmodel, runlife — which is where a tick's reach is observable
+#     anyway. When this epic's [A1] halves the full suite and x73 lands,
+#     delete the name below and the gate pays.
 #   - Without -count=1, deliberately: a package among the selection whose
-#     inputs did not change — the re-gate over a repair that fixed the
-#     TypeScript half, say — answers from go's own test cache, which the mbv
+#     inputs did not change answers from go's own test cache, which the mbv
 #     audit demonstrated is a true statement about this tree. That is what
 #     keeps a repair's re-gate from paying for the whole selection twice.
-go-touched = { command = "go run ./cmd/gate-touched -timeout 45m -parallel 12", description = "Go: the full (non-short) suites of the packages this tick touched, and of the packages that import them" }
+go-touched = { command = "go run ./cmd/gate-touched -timeout 45m -parallel 12 -leave-to-ci github.com/pengelbrecht/ticfac/internal/reconcile", description = "Go: the full (non-short) suites of the packages this tick touched, and of the packages that import them" }
 
 # The TypeScript half, added by tick odc. Until it, NOTHING ran cloud/factory's
 # tests — not this gate, not CI — and the cost of that silence was tick b9w: the

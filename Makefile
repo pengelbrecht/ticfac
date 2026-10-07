@@ -103,9 +103,13 @@ gate:
 # halves over your branch that the per-tick gate will run over its merge.
 # The reconciler exports the pair a TICK's gate is about
 # (TICFAC_GATE_TOUCHED_BASE/HEAD, internal/reconcile/gate_touched.go); the
-# selection is internal/gatescope's.
+# selection is internal/gatescope's. The -leave-to-ci budget is
+# internal/reconcile — its full suite measured 41m28s on this host, too
+# expensive for most of the dozens of gates an epic runs; the reasoning and
+# the numbers are in .tick/runners.toml's go-touched entry, which this
+# recipe is byte-identical to.
 gate-touched:
-	go run ./cmd/gate-touched -timeout 45m -parallel 12
+	go run ./cmd/gate-touched -timeout 45m -parallel 12 -leave-to-ci github.com/pengelbrecht/ticfac/internal/reconcile
 
 # The TypeScript half of the gate (tick odc). Kept as its own target, and its
 # own [testing.commands] entry, so each check records its own evidence and a

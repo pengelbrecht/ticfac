@@ -20,6 +20,7 @@ package main
 import (
 	"flag"
 	"os"
+	"strings"
 
 	"github.com/pengelbrecht/ticfac/internal/gatescope"
 )
@@ -27,7 +28,25 @@ import (
 func main() {
 	timeout := flag.String("timeout", "45m", "go test's per-package bound, as the whole-repo suite declares")
 	parallel := flag.String("parallel", "12", "the tests' parallelism, as the whole-repo suite declares")
+	leave := flag.String("leave-to-ci", "",
+		"comma-separated import paths whose full suites this gate declares too expensive to pay per tick; "+
+			"each is named in the output and left to CI")
 	flag.Parse()
-	os.Exit(gatescope.Run(gatescope.Options{Timeout: *timeout, Parallel: *parallel},
+	os.Exit(gatescope.Run(gatescope.Options{Timeout: *timeout, Parallel: *parallel, LeaveToCI: list(*leave)},
 		os.LookupEnv, gatescope.NewShell(), os.Stdout))
+}
+
+// list splits a comma-separated flag value into its names, empty when the
+// flag was not set.
+func list(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	var out []string
+	for _, name := range strings.Split(value, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			out = append(out, name)
+		}
+	}
+	return out
 }

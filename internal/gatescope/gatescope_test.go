@@ -148,6 +148,80 @@ func TestSelectRunsNothingWhenNoPackageOwnsTheChange(t *testing.T) {
 	}
 }
 
+// The per-package budget (tick r1f): the packages the gate declares too
+// expensive to pay for per tick are taken out of the run and named in the
+// output — never skipped silently — and a declaration that names no package
+// of the module is refused, or a typo would run the suite it meant to leave.
+//
+// short: pure functions over fixed inputs
+func TestTheBudgetTakesAPackageOutOfTheRunAndNamesIt(t *testing.T) {
+	t.Parallel()
+	shell := func(name string, args ...string) (string, error) {
+		if name == "go" && strings.Contains(strings.Join(args, " "), "-f") {
+			return "example.com/probe/alpha\talpha\t\t\t\n" +
+				"example.com/probe/beta\tbeta\texample.com/probe/alpha\t\t\n" +
+				"example.com/probe/hero\thero\texample.com/probe/beta\t\t\n", nil
+		}
+		return "alpha/alpha.go\x00", nil
+	}
+	getenv := func(name string) (string, bool) {
+		switch name {
+		case gatescope.EnvBase:
+			return "base-sha", true
+		case gatescope.EnvHead:
+			return "head-sha", true
+		}
+		return "", false
+	}
+
+	out := &strings.Builder{}
+	code := gatescope.Run(gatescope.Options{Timeout: "10m", Parallel: "4",
+		LeaveToCI: []string{"example.com/probe/beta"}}, getenv, shell, out)
+	if code == 0 {
+		t.Fatalf("a run that shells out to go test cannot pass in this fixture; it answered 0:\n%s", out)
+	}
+	if !strings.Contains(out.String(), "example.com/probe/beta is left to CI") {
+		t.Errorf("the budgeted package was skipped without being named:\n%s", out)
+	}
+	if strings.Contains(out.String(), " example.com/probe/beta\n") ||
+		strings.Contains(out.String(), " example.com/probe/beta\n\n") {
+		t.Errorf("the budgeted package still ran:\n%s", out)
+	}
+	if !strings.Contains(out.String(), "example.com/probe/alpha") ||
+		!strings.Contains(out.String(), "example.com/probe/hero") {
+		t.Errorf("the run lost a package the budget did not name:\n%s", out)
+	}
+
+	// A name no package of the module carries is a typo, and the suite it
+	// meant to leave would run: refused.
+	typo := &strings.Builder{}
+	code = gatescope.Run(gatescope.Options{Timeout: "10m", Parallel: "4",
+		LeaveToCI: []string{"example.com/probe/recncile"}}, getenv, shell, typo)
+	if code == 0 {
+		t.Fatalf("a typo in the budget list was accepted:\n%s", typo)
+	}
+	if !strings.Contains(typo.String(), "example.com/probe/recncile") {
+		t.Errorf("the refusal does not name the typo:\n%s", typo)
+	}
+
+	// The whole selection budgeted away is a pass that says so, not a silent
+	// green.
+	all := &strings.Builder{}
+	shellAll := func(name string, args ...string) (string, error) {
+		if name == "go" && strings.Contains(strings.Join(args, " "), "-f") {
+			return "example.com/probe/alpha\talpha\t\t\t\n", nil
+		}
+		return "alpha/alpha.go\x00", nil
+	}
+	if code := gatescope.Run(gatescope.Options{Timeout: "10m", Parallel: "4",
+		LeaveToCI: []string{"example.com/probe/alpha"}}, getenv, shellAll, all); code != 0 {
+		t.Fatalf("a selection left wholly to CI refused the tick:\n%s", all)
+	}
+	if !strings.Contains(all.String(), "every package the diff") {
+		t.Errorf("a wholly-budgeted selection ran without saying so:\n%s", all)
+	}
+}
+
 // short: pure functions over fixed inputs
 func TestPairReadsTheDiffTheGateExportsAndRefusesHalfOfOne(t *testing.T) {
 	t.Parallel()

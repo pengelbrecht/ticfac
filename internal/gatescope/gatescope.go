@@ -311,10 +311,15 @@ func Pair(getenv func(string) (string, bool), shell Shell) (base, head string, e
 }
 
 // Options is the `go test` the check runs: the timeout and the parallelism
-// the repository's gate declares, passed to go test verbatim.
+// the repository's gate declares, passed to go test verbatim, and the
+// packages — by import path — this repository declares too expensive for a
+// per-tick gate: their full suites are CI's (and the close-out's), not the
+// gate's, and the check names each one it leaves rather than running it
+// silently.
 type Options struct {
-	Timeout  string
-	Parallel string
+	Timeout   string
+	Parallel  string
+	LeaveToCI []string
 }
 
 // Run is the check: resolve the diff, select the packages, run their full
@@ -345,6 +350,28 @@ func Run(opts Options, getenv func(string) (string, bool), shell Shell, out io.W
 			shortSHA(base), shortSHA(head))
 		return 0
 	}
+	// The per-package budget (tick r1f): the packages this repository refuses
+	// to pay for per tick are taken out of the run and named in the output,
+	// each with the reason, so a gate that skips one says so in its own
+	// evidence. A name that is no package of this module is a typo that would
+	// otherwise silently pay for the suite it meant to leave: it is refused.
+	if len(opts.LeaveToCI) > 0 {
+		graph, err := LoadPackages(shell)
+		if err != nil {
+			fmt.Fprintf(out, "gate-touched: %v\n", err)
+			return 1
+		}
+		if err := validateLeaveToCI(opts.LeaveToCI, graph); err != nil {
+			fmt.Fprintf(out, "gate-touched: %v\n", err)
+			return 1
+		}
+		pkgs = leaveToCI(pkgs, opts.LeaveToCI, out)
+		if len(pkgs) == 0 {
+			fmt.Fprintf(out, "gate-touched: every package the diff %s...%s reaches is left to CI, so no full suite runs\n",
+				shortSHA(base), shortSHA(head))
+			return 0
+		}
+	}
 	fmt.Fprintf(out, "gate-touched: the diff %s...%s; full (non-short) suites of %d package(s):\n  %s\n",
 		shortSHA(base), shortSHA(head), len(pkgs), strings.Join(pkgs, "\n  "))
 	args := []string{"test", "-timeout", opts.Timeout, "-parallel", opts.Parallel}
@@ -369,6 +396,42 @@ func shortSHA(sha string) string {
 		return sha[:12]
 	}
 	return sha
+}
+
+// validateLeaveToCI refuses a declaration that names no package of this
+// module: a typo in the budget list would silently run the very suite it
+// was meant to leave to CI, and a gate that quietly pays 40 minutes for a
+// misspelled name is a budget nobody can read.
+func validateLeaveToCI(leave []string, graph []Package) error {
+	known := map[string]bool{}
+	for _, pkg := range graph {
+		known[pkg.ImportPath] = true
+	}
+	for _, name := range leave {
+		if !known[name] {
+			return fmt.Errorf("-leave-to-ci names %q, which is not a package of this module", name)
+		}
+	}
+	return nil
+}
+
+// leaveToCI takes the declared packages out of the run, naming each one it
+// leaves with the reason, and answers what is left to run.
+func leaveToCI(pkgs []string, leave []string, out io.Writer) []string {
+	skipped := map[string]bool{}
+	for _, name := range leave {
+		skipped[name] = true
+	}
+	var run []string
+	for _, pkg := range pkgs {
+		if !skipped[pkg] {
+			run = append(run, pkg)
+			continue
+		}
+		fmt.Fprintf(out, "gate-touched: %s is left to CI: this gate declares its full suite too expensive to pay "+
+			"per tick, so the short suite and CI's are its cover\n", pkg)
+	}
+	return run
 }
 
 func sortedKeys(set map[string]bool) []string {
