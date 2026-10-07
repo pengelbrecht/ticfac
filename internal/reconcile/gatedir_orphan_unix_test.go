@@ -47,7 +47,15 @@ func TestAGateThatOutlivesItsReconcilerKeepsHoldingItsSlot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The belt, for a test that fails before it collects its gate. Never
+	// called once the gate HAS been collected: killGateGroup aimed at a pid
+	// that was reaped would, on its group-ESRCH fallback, signal a number the
+	// kernel may since have handed to somebody else (tick rmc's rule).
+	collected := false
 	defer func() {
+		if collected {
+			return
+		}
 		_ = killGateGroup(shell.cmd.Process.Pid)
 		_, _ = shell.cmd.Process.Wait()
 	}()
@@ -74,6 +82,7 @@ func TestAGateThatOutlivesItsReconcilerKeepsHoldingItsSlot(t *testing.T) {
 	// one did: hand-rolling killGateGroup here, as this test did before 9si,
 	// measured the race instead of closing it.
 	_, _, _, waitErr := shell.wait()
+	collected = true
 	if !errors.Is(waitErr, errGateKilled) {
 		t.Fatalf("the gate was collected with %v rather than killed", waitErr)
 	}
@@ -175,7 +184,14 @@ func TestAGateWhoseKillMissesAMemberReleasesItsSlotAnyway(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The belt, for a test that fails before it collects its gate: aimed at
+	// the shell while it is still un-reaped, never at the pid a collected
+	// gate has let the kernel hand out again (tick rmc's rule).
+	collected := false
 	defer func() {
+		if collected {
+			return
+		}
 		_ = killGateGroup(shell.cmd.Process.Pid)
 		_, _ = shell.cmd.Process.Wait()
 	}()
@@ -199,6 +215,7 @@ func TestAGateWhoseKillMissesAMemberReleasesItsSlotAnyway(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _, _, waitErr := shell.wait()
+	collected = true
 	if !errors.Is(waitErr, errGateKilled) {
 		t.Fatalf("the gate was collected with %v rather than killed", waitErr)
 	}
