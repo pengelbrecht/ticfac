@@ -2,7 +2,7 @@
   "id": "vnp",
   "title": "Re-review ilz: its tree changed since its READY final review (round 3)",
   "description": "Review the epic ilz again, AS INTEGRATED, before the run lands it: its final review (0n3, decision 4) judged it READY at 72a61b88a0c0, and the epic branch has changed since — now at 7fcffc96624f, with work that review never saw (a tick closed or a commit pushed after it). This is review round 3, made only because the tree changed; the run lands on YOUR verdict, not the earlier one.\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what blocks it.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -10,5 +10,6 @@
   "role": "review",
   "created_by": "ticfac run run_4d92bab25a7341d3bba01691779168a0",
   "created_at": "2026-10-07T08:51:05Z",
-  "updated_at": "2026-10-07T08:51:05Z"
+  "updated_at": "2026-10-07T08:51:14.633937049Z",
+  "started_at": "2026-10-07T08:51:14.633935929Z"
 }
