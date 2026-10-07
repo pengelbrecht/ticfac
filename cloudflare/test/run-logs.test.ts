@@ -1,5 +1,5 @@
 import { env, SELF } from "cloudflare:test";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import {
   HARNESS_TAIL_MAX_BYTES,
@@ -265,5 +265,86 @@ describe("GET /api/runs/:id/events", () => {
     expect((await get(`/api/runs/${runID}/events?from=-1`)).status).toBe(400);
     expect((await get(`/api/runs/${runID}/events?limit=0`)).status).toBe(400);
     expect((await get(`/api/runs/${runID}/events?from=0&tail=5`)).status).toBe(400);
+  });
+});
+
+// 2026-10-07 ~16:15 UTC: the attached `ticfac run ex6 --cloud` view died on
+// `factory returned HTTP 500: A Worker script configured by the website owner
+// threw an unhandled exception` — workerd's own HTML page for an exception a
+// route let escape. `ticfac events ex6` reproduced it intermittently (one
+// read in a few dozen, answered in under half a second), so not a CPU or
+// size limit: a storage read that failed and was never caught. A route may
+// fail; it may never answer anything but JSON.
+describe("a feed read whose storage fails", () => {
+  const realArtifacts = env.ARTIFACTS;
+  const realDB = env.DB;
+
+  afterEach(() => {
+    env.ARTIFACTS = realArtifacts;
+    env.DB = realDB;
+  });
+
+  function failing(bucket: R2Bucket, method: "list" | "get"): R2Bucket {
+    return new Proxy(bucket, {
+      get(target, prop) {
+        if (prop === method) {
+          return async () => {
+            throw new Error(`R2 ${method}: We encountered an internal error. Please try again.`);
+          };
+        }
+        const value = Reflect.get(target, prop, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  }
+
+  for (const method of ["list", "get"] as const) {
+    it(`answers a retryable JSON 503 when an R2 ${method} throws mid-page`, async () => {
+      const runID = `run_feed_r2_${method}_fails`;
+      await recordedRun(runID);
+      await appendFeed(env, {
+        project: PROJECT,
+        run_id: runID,
+        seq: 1,
+        events: [runFinishedFeedEvent({ run_id: runID, detail: "one line" })],
+      });
+      env.ARTIFACTS = failing(realArtifacts!, method);
+
+      const res = await get(`/api/runs/${runID}/events?from=0`);
+      expect(res.status).toBe(503);
+      expect(res.headers.get("content-type")).toContain("application/json");
+      const body = (await res.json()) as { error: string; detail: string; retryable: boolean };
+      expect(body.error).toBe("feed_read_failed");
+      expect(body.retryable).toBe(true);
+      expect(body.detail).toContain("internal error");
+
+      // And the next poll, once storage answers again, reads the page.
+      env.ARTIFACTS = realArtifacts;
+      const again = await get(`/api/runs/${runID}/events?from=0`);
+      expect(again.status).toBe(200);
+    });
+  }
+
+  it("answers any route's escaped exception as JSON, never workerd's HTML 500", async () => {
+    const runID = "run_feed_d1_fails";
+    await recordedRun(runID);
+    env.DB = new Proxy(realDB, {
+      get(target, prop) {
+        if (prop === "prepare") {
+          return (sql: string) => {
+            if (sql.includes("FROM runs")) throw new Error("D1_ERROR: Network connection lost.");
+            return target.prepare(sql);
+          };
+        }
+        const value = Reflect.get(target, prop, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+
+    const res = await get(`/api/runs/${runID}/events`);
+    expect(res.status).toBe(500);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    const body = (await res.json()) as { error: string; retryable: boolean };
+    expect(body).toMatchObject({ error: "internal_error", retryable: true });
   });
 });

@@ -235,7 +235,27 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	// 6in` answers for epic-6in, the run `ticfac run 6in` started.
 	resolution := resolveRunArg(*repo, runID)
 	runID = resolution.RunID
-	source, kind, resolved, err := feedSource(ctx, *repo, runID, stderr)
+	// Where the feed lives may take the factory's answer, and a factory
+	// that failed answering (a 5xx, a DNS blip) is asked again rather than
+	// ending the watch on it (vy8); its definitive answers end it as before.
+	var (
+		source   runfeed.Source
+		kind     string
+		resolved string
+		err      error
+	)
+	for failures := 0; ; failures++ {
+		source, kind, resolved, err = feedSource(ctx, *repo, runID, stderr)
+		if err == nil || !feedReadTransient(err) || ctx.Err() != nil {
+			break
+		}
+		delay := feedRetryDelay(failures)
+		fmt.Fprintf(stderr, "# %v — asking the factory again in %s\n", err, delay)
+		select {
+		case <-ctx.Done():
+		case <-time.After(delay):
+		}
+	}
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
 		return 1
@@ -257,7 +277,7 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 	// The standing feed is read once up front: it decides whether there is
 	// anything to watch at all and, below, where the subscription starts. The
 	// run's own liveness claim is asked with it.
-	located, absent, err := feedStanding(ctx, source)
+	located, absent, err := feedStandingRetrying(ctx, source, stderr)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac watch: %v\n", err)
 		return 1
@@ -729,6 +749,30 @@ func watchEpicID(repo, runID string, source runfeed.Source) string {
 	return runID
 }
 
+// feedStandingRetrying is the watch's first read of the standing feed, which
+// for a cloud run is asked again — with backoff, until the caller leaves —
+// while the factory's failure is transient (vy8): a connect error, a 5xx, a
+// body that is not a feed. An attach that started during a DNS blip or a
+// factory exception ended on one bad read, 2026-10-07, while the run went
+// on. A definitive answer (404 run unknown, 401/403) ends it as before, and
+// so does every local read's error: a file says what it says.
+func feedStandingRetrying(ctx context.Context, source runfeed.Source, stderr io.Writer) ([]runfeed.Located, bool, error) {
+	_, cloud := source.(*cloudFeedSource)
+	for failures := 0; ; failures++ {
+		located, absent, err := feedStanding(ctx, source)
+		if err == nil || !cloud || !feedReadTransient(err) || ctx.Err() != nil {
+			return located, absent, err
+		}
+		delay := feedRetryDelay(failures)
+		fmt.Fprintf(stderr, "# %v — asking the factory again in %s\n", err, delay)
+		select {
+		case <-ctx.Done():
+			return nil, false, err
+		case <-time.After(delay):
+		}
+	}
+}
+
 // watchRunStillAlive answers whether the run's own claim says it is going,
 // the same way the watch's first question did: the pidfile for a local run,
 // the factory's record for one the Workflow hosts.
@@ -944,15 +988,31 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	// drill views are its keys' answers.
 	ui := watchUI{view: watchViewDashboard}
 	previous := 0
+	// stale is why the frame on screen is the last good one rather than a
+	// fresh reading (vy8) — the run's host or its feed could not be read —
+	// and it is said ON the frame, its first line, the way the factory
+	// dashboard labels a kept frame stale. Empty while the reads succeed.
+	stale := ""
 	draw := func(model statusmodel.Model) {
+		rows := height
+		if stale != "" && rows > 1 {
+			rows--
+		}
 		var frame []string
 		switch ui.view {
 		case watchViewFeed:
-			frame = renderFeedView(feedEvents, &tries, &model, ui.scroll, width, height, styles)
+			frame = renderFeedView(feedEvents, &tries, &model, ui.scroll, width, rows, styles)
 		case watchViewTick:
-			frame = renderTickView(model, ui.selected, styles, width, height)
+			frame = renderTickView(model, ui.selected, styles, width, rows)
 		default:
-			frame = renderWatchFrame(model, styles, width, height, ui.selected)
+			frame = renderWatchFrame(model, styles, width, rows, ui.selected)
+		}
+		if stale != "" {
+			line := styles.red("stale: " + stale)
+			if width > 0 {
+				line = ansi.Truncate(line, width, "")
+			}
+			frame = append([]string{line}, frame...)
 		}
 		if previous > 0 {
 			fmt.Fprintf(stdout, "\x1b[%dA\r\x1b[J", previous)
@@ -973,6 +1033,8 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	// one-frame end has always had — never the interrupted words, which
 	// would tell a caller the run is still going.
 	ended := false
+	// readFailures counts the failed reads in a row: the backoff's exponent.
+	readFailures := 0
 	var model statusmodel.Model
 	endNow := func() int {
 		restore()
@@ -1013,9 +1075,12 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 		// says so), and the feed view keeps the lines it had.
 		var located []runfeed.Located
 		readOK := false
+		var feedErr error
 		if standing, _, err := feedStanding(ctx, source); err == nil {
 			located = standing
 			readOK = true
+		} else {
+			feedErr = err
 		}
 		maxEnd := seen
 		if readOK {
@@ -1044,22 +1109,61 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 		// durable sources.
 		var buildErr error
 		model, buildErr = build()
+		// What decides the next wait: a failed read — the host's or the
+		// feed's — backs off (vy8), so a factory that is failing is not
+		// asked every interval; a good one resets the backoff.
+		wait := interval
+		failedRead := buildErr != nil || (feedErr != nil && ctx.Err() == nil)
+		if failedRead {
+			if delay := feedRetryDelay(readFailures); delay > wait {
+				wait = delay
+			}
+			readFailures++
+		} else {
+			readFailures = 0
+		}
 		switch {
-		case buildErr != nil && lastGood == nil:
-			// The watch ends here, and the words it says end it with: the
-			// terminal is restored first, cooked output is cooked.
+		case buildErr != nil && ctx.Err() != nil:
+			// The caller left mid-read: the interrupted end, never a
+			// failure of the host.
+			if lastGood != nil {
+				return interrupted(*lastGood)
+			}
+			return interrupted(statusmodel.Model{})
+		case buildErr != nil && !feedReadTransient(buildErr):
+			// A definitive answer — the run is unknown to the factory, the
+			// token is refused — ends the watch, in the answer's own words.
+			// The terminal is restored first: cooked output is cooked.
 			restore()
 			fmt.Fprintf(stderr, "ticfac watch: %v\n", buildErr)
 			return 1
-		case buildErr != nil:
-			// Keep the warning where the person reading the block reads the
-			// block's own history: above it, in the scrollback.
+		case buildErr != nil && lastGood == nil:
+			// Nothing to keep on screen yet, and nothing definitive said: the
+			// watch waits for the host instead of ending on one bad read
+			// (vy8: an attach died this way during a DNS outage and again on
+			// a factory 500, 2026-10-07, while the run kept going).
 			keepAboveBlock(stdout, previous, width, eol, styles.red,
-				fmt.Sprintf("the run's host could not be read: %v", buildErr))
+				fmt.Sprintf("the run's host could not be read: %v — asking again in %s", buildErr, wait))
+			select {
+			case <-ctx.Done():
+				return interrupted(statusmodel.Model{})
+			case <-time.After(wait):
+			}
+			continue
+		case buildErr != nil:
+			// The last good frame stays on screen, labelled stale, and the
+			// watch asks again after the backoff.
+			stale = fmt.Sprintf("the run's host could not be read at %s (%v); showing the last good frame, asking again in %s",
+				time.Now().Format("15:04:05"), buildErr, wait)
 			model = *lastGood
 		default:
 			modelCopy := model
 			lastGood = &modelCopy
+			stale = ""
+			if feedErr != nil && ctx.Err() == nil {
+				stale = fmt.Sprintf("the run's feed could not be read at %s (%v); asking again in %s",
+					time.Now().Format("15:04:05"), feedErr, wait)
+			}
 		}
 
 		// The attention alert is kept above the block ONCE per episode: the
@@ -1101,7 +1205,7 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 			// on this command must not read an interrupted watch as a
 			// finished run — the same contract the stream path holds.
 			return interrupted(model)
-		case <-time.After(interval):
+		case <-time.After(wait):
 		case key, ok := <-keys:
 			if !ok {
 				// The keyboard is gone (the reader ended); watch on without
