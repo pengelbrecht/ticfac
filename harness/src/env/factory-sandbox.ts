@@ -30,7 +30,11 @@
  * signal anywhere in the door's RPCs — is caught by the host-side ready
  * check before the next round (tick 4fs): `ensureWorkspaceReady`, wired
  * into the checkpoint extension's `beforeRequest` hook, verifies the
- * ready marker and restores before the round's request goes out.
+ * ready marker and restores before the round's request goes out. Both of
+ * the env's OWN restores — the replay's and the mid-command loss's —
+ * announce through `FactorySandboxEnvOptions.onRestore` (ticks dbi and
+ * qzg), naming the loss that caused them, so the host's log says what the
+ * model is told.
  *
  * Runtime-neutral on purpose: the door is structural (./sandbox-door.ts), so
  * the same env code runs in the cloud (a DO stub) and in tests (a local
@@ -152,18 +156,29 @@ export type FactorySandboxEnvOptions = {
    */
   readonly workspace?: WorkspaceGit;
   /**
-   * The host's ear for a restore this env performs on its own (tick dbi): a
-   * tracked bash whose nonce no container knows — the replay path —
-   * restores the workspace BEFORE it re-starts the command, and until this
-   * callback that restore reached no log anywhere: the operator watching
-   * the run saw only a mysteriously slow tool round (the cni staging
-   * proof's 139s round was exactly this). The ready check the host itself
-   * drives ({@link ensureWorkspaceReady}) does not fire it — that path
-   * announces through the checkpoint extension's own `onRestore` wiring
+   * The host's ear for a restore this env performs on its own (tick dbi, tick
+   * qzg): a tracked bash whose nonce no container knows — the replay path —
+   * restores the workspace BEFORE it re-starts the command, and a container
+   * lost MID-COMMAND — its process gone, or ended with no exit code —
+   * restores before the model is told to re-run. Until this callback neither
+   * restore reached any log anywhere: the operator watching the run saw
+   * only a mysteriously slow tool round (the cni staging proof's 139s round
+   * was exactly this), and then a model that knew something they did not.
+   * The second argument names which loss fired it, so the host's line says
+   * the one it was. The ready check the host itself drives
+   * ({@link ensureWorkspaceReady}) does not fire it — that path announces
+   * through the checkpoint extension's own `onRestore` wiring
    * (./workspace/checkpoints.ts), so one restore says one line.
    */
-  readonly onRestore?: (outcome: RestoreOutcome) => void;
+  readonly onRestore?: (outcome: RestoreOutcome, cause: RestoreCause) => void;
 };
+
+/**
+ * Which of the env's own paths performed a restore: a tracked bash whose
+ * nonce no container knows (the replay path, tick dbi) or a container lost
+ * mid-command (tick qzg). The host's log says which one it heard.
+ */
+export type RestoreCause = "nonce-replay" | "mid-command";
 
 /** One short command's outcome, as the env classifies it. */
 type ShortOutcome = { exitCode: number; output: string; truncated: boolean };
@@ -231,7 +246,7 @@ export class FactorySandboxEnv implements ExecutionEnv {
   private readonly pollMs: number;
   private readonly now: () => number;
   private readonly workspace: WorkspaceGit | null;
-  private readonly onRestore: ((outcome: RestoreOutcome) => void) | undefined;
+  private readonly onRestore: ((outcome: RestoreOutcome, cause: RestoreCause) => void) | undefined;
   private guardInstalling: Promise<void> | undefined;
   private restoring: Promise<RestoreOutcome> | undefined;
 
@@ -840,15 +855,15 @@ export class FactorySandboxEnv implements ExecutionEnv {
    * Whether a replay's fresh start is on a live workspace: a container
    * destroyed while no harness watched boots EMPTY, and a re-started
    * command would run on nothing. One short command; restore only when the
-   * workspace is missing. The restore this performs is the one no other
-   * path announces (tick dbi), so its outcome goes to the host's ear
-   * ({@link FactorySandboxEnvOptions.onRestore}) — the operator watching
-   * the run hears which sha it rebuilt from. Throws the restore's failure —
-   * the replay must not start on a box it could not rebuild.
+   * workspace is missing. The restore this performs announces through the
+   * host's ear ({@link FactorySandboxEnvOptions.onRestore}), naming the
+   * replay as its cause — the operator watching the run hears which sha it
+   * rebuilt from. Throws the restore's failure — the replay must not start
+   * on a box it could not rebuild.
    */
   private async ensureWorkspaceRestored(): Promise<void> {
     const ready = await this.ensureWorkspaceReady();
-    if (ready.kind !== "ready") this.onRestore?.(ready);
+    if (ready.kind !== "ready") this.onRestore?.(ready, "nonce-replay");
     if (ready.kind === "failed") {
       throw new Error(`the workspace could not be restored: ${ready.error}`);
     }
@@ -917,7 +932,10 @@ export class FactorySandboxEnv implements ExecutionEnv {
    * the model the message the prototype's experiment 4 proved — restored
    * to N, re-check and re-run. The model re-reads the files and re-runs the
    * command on the restored tree; edits since the last tool round are the
-   * only loss.
+   * only loss. The restore announces through the host's ear (tick qzg),
+   * naming the mid-command loss as its cause — until it did, the sha this
+   * message carries reached the MODEL and no log anywhere, so the operator
+   * watching the say-stream read a mysteriously slow round.
    */
   private async containerLost(what: string): Promise<Result<ShellExecResult, ExecutionError>> {
     if (this.workspace === null) {
@@ -929,6 +947,7 @@ export class FactorySandboxEnv implements ExecutionEnv {
       );
     }
     const restore = await this.restoreLostWorkspace();
+    this.onRestore?.(restore, "mid-command");
     if (restore.kind === "failed") {
       return err(
         new ExecutionError(

@@ -496,6 +496,84 @@ describe("a worker attempt driven by the host", () => {
     expect(lines.some((l) => l.includes("the container was lost between rounds"))).toBe(false);
   });
 
+  // Tick qzg: the MID-COMMAND loss — a tracked bash whose process is gone,
+  // or ended with no exit code — restored the workspace and told the MODEL
+  // which sha it rebuilt from, while the host's own log stream said nothing:
+  // the operator watching the say-stream read a mysteriously slow round and
+  // then a model that knew something they did not. The env fires the same
+  // ear the nonce path fires, naming the loss, so the say-stream says it too.
+  it("says which sha a mid-command loss restored the workspace from", {
+    timeout: 120_000,
+  }, async () => {
+    const door = fakeSandboxDoor({
+      // The restore's read-back answers the attempt branch's tip; the wip
+      // snapshot's rev-parse answers the round's sha.
+      runOutput: (command) =>
+        command.includes("git rev-parse HEAD && git log -1 --format=%s")
+          ? "cafef00d\nwip: tool round\n"
+          : command.includes("git rev-parse HEAD")
+            ? "cafef00d\n"
+            : "",
+      processScript: (command) => {
+        if (command === WORKER_BOOT_PROTOCOL.bootCommand) {
+          return { output: bootOutput(), exit: 0, ms: 20 };
+        }
+        if (command.startsWith(WORKER_BOOT_PROTOCOL.finishCommand)) {
+          return { output: "ticks-worker: pushed\n", exit: 0, ms: 20 };
+        }
+        // The model's bash runs long enough to be lost under.
+        return { output: "bash ran\n", exit: 0, ms: 400 };
+      },
+    });
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      // The model is told of the loss and the restore — the second response
+      // is the turn continuing on the message the env hands back.
+      () => fauxAssistantMessage("finished after the restore"),
+    ]);
+    const records = memoryRecords();
+    const lines: string[] = [];
+    const host = new WorkerAttemptHost({
+      door: door.sandbox,
+      storage: async () => new MemoryStorage(),
+      models,
+      records,
+      log: async (text) => {
+        lines.push(text);
+      },
+      pollMs: 5,
+      bashPollMs: 5,
+      guardDir: null,
+    });
+
+    await host.start(spec());
+    const driving = host.drive();
+    await waitFor("the model's bash to start", () =>
+      door.starts.some((s) => s.command.includes("make test")),
+    );
+    // The container is destroyed under the model's bash — the host life
+    // SURVIVES: the tracked process ends with no exit code, which is the
+    // env's own mid-command loss, not a harness death.
+    door.loseRunning();
+    const settled = await driving;
+    expect(settled.settled).toMatchObject({ exitCode: 0, phase: "finishing" });
+
+    // The env restored rather than re-running: the command started once, and
+    // the model read the loss and the sha it was restored to.
+    expect(door.starts.filter((s) => s.command.includes("make test")).length).toBe(1);
+    const restored = lines.filter((l) => l.includes("the container was lost mid-command"));
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).toContain("restored to cafef00d");
+    expect(restored[0]).toContain("wip: tool round");
+    // Neither other restore path claims it: this loss was not between
+    // rounds, and no tracked bash had to go looking for a fresh container.
+    expect(lines.some((l) => l.includes("the container was lost between rounds"))).toBe(false);
+    expect(lines.some((l) => l.includes("a tracked bash found a fresh container"))).toBe(false);
+  });
+
   it("places an operator's steer after the running tool round", {
     timeout: 120_000,
   }, async () => {

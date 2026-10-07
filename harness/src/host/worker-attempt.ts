@@ -67,12 +67,13 @@ import {
   watchEvents,
 } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
-import { bashNonceMarker, FactorySandboxEnv } from "../env/factory-sandbox.js";
+import { bashNonceMarker, FactorySandboxEnv, type RestoreCause } from "../env/factory-sandbox.js";
 import type { SandboxBootOptions, SandboxDoor } from "../env/sandbox-door.js";
 import { gatewayModelRef } from "../gateway/workers-ai.js";
 import { createTrackedBashTool } from "../tools/tracked-bash.js";
 import { armWallDeadline, WORKER_HEADLESS_LINE, workerOnYield } from "../worker-contract.js";
 import {
+  type RestoreOutcome,
   retireWipSnapshot,
   type WorkspaceGit,
   workspaceCheckpointExtension,
@@ -851,18 +852,15 @@ export class WorkerAttemptHost {
       // from the pull request would check out hostile code, the one thing
       // the review phase exists not to do.
       ...(kindOf(spec) === "worker" && git.branch !== "" ? { workspace: git } : {}),
-      // The nonce path's ear (tick dbi): a tracked bash whose nonce no
-      // container knows restores before it re-starts — until this wiring
-      // that restore reached no log anywhere, and the operator watching the
-      // run saw only a mysteriously slow tool round. The between-rounds
-      // loss keeps its own line (the checkpoint extension's onRestore in
-      // registryFor), so one restore says one line.
-      onRestore: (outcome) =>
-        void this.say(
-          outcome.kind === "restored"
-            ? `a tracked bash found a fresh container; the workspace was restored to ${outcome.sha.slice(0, 12)} (${outcome.subject})`
-            : `a tracked bash found a fresh container and the workspace could not be restored: ${outcome.error}`,
-        ),
+      // The env's own restores' ear (ticks dbi and qzg): a tracked bash whose
+      // nonce no container knows restores before it re-starts, and a
+      // container lost MID-COMMAND restores before the model is told to
+      // re-run — until the dbi wiring neither restore reached any log
+      // anywhere, and the operator watching the run saw only a mysteriously
+      // slow tool round. The between-rounds loss keeps its own line (the
+      // checkpoint extension's onRestore in registryFor), so one restore
+      // says one line — and the cause names which loss this one was.
+      onRestore: (outcome, cause) => void this.say(restoreSaid(outcome, cause)),
     });
     return this.env;
   }
@@ -1309,6 +1307,28 @@ export class WorkerAttemptHost {
 }
 
 // --------------------------------------------------------------- helpers ---
+
+/**
+ * The host's one log line for a restore the env performed on its own (ticks
+ * dbi and qzg), so the operator watching the say-stream can tell which loss
+ * they are hearing — a mid-command loss, or a tracked bash that found a
+ * fresh container — and not read a mysteriously slow round instead. Every
+ * line is spelled out in full, deliberately: the cloud runbook's [A2]
+ * observation criteria cite these by their text, and
+ * internal/cli/runbook_fault_evidence_test.go pins each one against both
+ * sides — a shared prefix and a shared suffix would move the whole line out
+ * from under the runbook, and under the guard, unread.
+ */
+function restoreSaid(outcome: RestoreOutcome, cause: RestoreCause): string {
+  if (outcome.kind === "restored") {
+    return cause === "mid-command"
+      ? `the container was lost mid-command; the workspace was restored to ${outcome.sha.slice(0, 12)} (${outcome.subject})`
+      : `a tracked bash found a fresh container; the workspace was restored to ${outcome.sha.slice(0, 12)} (${outcome.subject})`;
+  }
+  return cause === "mid-command"
+    ? `the container was lost mid-command and the workspace could not be restored: ${outcome.error}`
+    : `a tracked bash found a fresh container and the workspace could not be restored: ${outcome.error}`;
+}
 
 /**
  * The door every container call of the attempt goes through: the run's boot
