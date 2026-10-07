@@ -3076,3 +3076,4 @@
 {"ts":"2026-10-07T06:43:23.160719Z","tick":"7r4","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"Run the real-CLI claude-sub smoke test on every CLAUDE_CODE_VERSION bump","type":"task"}}
 {"ts":"2026-10-07T07:07:35.155835Z","tick":"po2","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"claude-sub: carry a quota-stopped job's commits into its redispatch","type":"task"}}
 {"ts":"2026-10-07T07:07:35.202166Z","tick":"4s0","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"claude-sub: same lease-leak and observability review for the orchestrator/review boot in run-workflow.ts","type":"task"}}
+{"ts":"2026-10-07T09:15:04.029766Z","tick":"kk7","action":"create","actor":"ticks-sandbox@ticks.invalid","data":{"priority":2,"title":"A held cloud run's own 'run the epic again' only re-attaches: resume must supersede the waiting Workflow","type":"bug"}}
