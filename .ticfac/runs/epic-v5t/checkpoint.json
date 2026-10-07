@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 45,
-  "state": "publishing",
-  "reason": "closing y38 behind the integrated gate on 008fce3cf803",
-  "updated_at": "2026-10-07T03:16:05Z",
+  "sequence": 46,
+  "state": "running",
+  "reason": "y38 is closed",
+  "updated_at": "2026-10-07T03:16:09Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -33,7 +33,7 @@
     },
     {
       "tick_id": "y38",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 7
     },
     {
