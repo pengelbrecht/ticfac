@@ -140,10 +140,29 @@ type fakeTracker struct {
 // claimCount is what tk counts: claims open, and the high-water mark. refuseAt
 // makes the tracker refuse a claim that would exceed a width, which is the
 // guard epic dha hit.
+//
+// The count is a SET of tick ids (tick krh), not a tally of Claim calls: tk's
+// claim is `update --status in_progress`, and tk counts what is in flight
+// from the tick's STATUS — so a re-claim of a tick already in progress opens
+// nothing, whoever asks, exactly as the pinned manifest states ("Re-claiming
+// an already in_progress tick is idempotent and keeps its started_at"). A
+// tally counted every call, which made a redispatched try — one tick, claimed
+// again by the run that already held it — open a phantom claim against the
+// width, a verdict production never has: the window's own arithmetic
+// (window.go) already treats a re-dispatch into a claim the width counts as
+// "takes no new one", and the fake must agree with the thing it stands in
+// for. held is therefore the width's own bookkeeping: a tick is in it from
+// the claim that opened it until the close that ends it, once, however many
+// claims were asked for it in between.
 type claimCount struct {
 	open     int
 	peak     int
 	refuseAt int
+
+	// held is the set of ticks this tracker has counted as open claims. It is
+	// what makes open a reading of state rather than a count of events, which
+	// is the shape tk's own counting has.
+	held map[string]bool
 
 	// refusals is how many claims this tracker has refused, and relentAfter is
 	// the refusal at which it stops refusing (tick go6). Together they are the
@@ -192,7 +211,7 @@ func newTracker(t *testing.T, dir string) *fakeTracker {
 	t.Helper()
 	tracker := &fakeTracker{
 		path: filepath.Join(dir, "tracker.json"), mu: &sync.Mutex{},
-		calls: map[string]int{}, claims: &claimCount{},
+		calls: map[string]int{}, claims: &claimCount{held: map[string]bool{}},
 	}
 	state := trackerState{
 		Epic:  "qeu",
@@ -415,33 +434,64 @@ func (f *fakeTracker) Show(_ context.Context, tickID string) (tk.Tick, error) {
 
 func (f *fakeTracker) Claim(_ context.Context, tickID, owner string) (tk.Tick, error) {
 	f.tally("claim:" + tickID)
-	// tk's own guard, in the fake (tick 3mp): a claim lives until its tick
+	// tk's own claim, in the fake (tick 3mp): a claim lives until its tick
 	// closes, and one beyond the declared width is REFUSED with the typed
-	// error the real tk returns for exit 8.
+	// error the real tk returned for exit 8.
+	//
+	// And tk's own CLAIM SEMANTICS (tick krh): a claim is `update --status
+	// in_progress`, so a tick already in progress is re-claimed IDEMPOTENTLY
+	// — its started_at is kept and nothing new opens, whoever asks, exactly
+	// as the pinned manifest states and TestTheFakeTrackerCountsAReclaimTheWayRealTkDoes
+	// pins against the real binary. The whole decision and the write happen
+	// under one lock, so a concurrent claim of the same tick cannot slip a
+	// second count between the reading and the writing.
 	f.mu.Lock()
-	if f.claims.refuseAt > 0 && f.claims.open >= f.claims.refuseAt {
-		open := f.claims.open
-		f.claims.refusals++
-		if f.claims.relentAfter > 0 && f.claims.refusals >= f.claims.relentAfter {
-			// The other holder closed its tick. This claim is still refused —
-			// the width was full when it was asked — and the next one is not.
-			f.claims.refuseAt = 0
+	defer f.mu.Unlock()
+	state, err := f.load()
+	if err != nil {
+		return tk.Tick{}, err
+	}
+	current, ok := state.Ticks[tickID]
+	if !ok {
+		return tk.Tick{}, fmt.Errorf("no tick %s", tickID)
+	}
+	reclaim := current.Status == "in_progress"
+	if !reclaim {
+		// Only a claim that would OPEN one can exceed the width: a re-claim
+		// makes no tick in progress that was not already, so it is neither
+		// refused nor counted — the run re-claiming its own tick on a
+		// redispatch is not the over-claim the guard exists to stop.
+		if f.claims.refuseAt > 0 && f.claims.open >= f.claims.refuseAt {
+			open, width := f.claims.open, f.claims.refuseAt
+			f.claims.refusals++
+			if f.claims.relentAfter > 0 && f.claims.refusals >= f.claims.relentAfter {
+				// The other holder closed its tick. This claim is still refused —
+				// the width was full when it was asked — and the next one is not.
+				f.claims.refuseAt = 0
+			}
+			return tk.Tick{}, &tk.ErrDispatchWidth{
+				Command:  "claim",
+				ExitCode: 8,
+				Stderr: fmt.Sprintf("wave width %d is full: %d implementer(s) already in flight; claiming %s would make %d",
+					width, open, tickID, open+1),
+			}
 		}
-		f.mu.Unlock()
-		return tk.Tick{}, &tk.ErrDispatchWidth{
-			Command:  "claim",
-			ExitCode: 8,
-			Stderr: fmt.Sprintf("wave width %d is full: %d implementer(s) already in flight; claiming %s would make %d",
-				f.claims.refuseAt, open, tickID, open+1),
+		if f.claims.held == nil {
+			f.claims.held = map[string]bool{}
+		}
+		f.claims.held[tickID] = true
+		f.claims.open++
+		if f.claims.open > f.claims.peak {
+			f.claims.peak = f.claims.open
 		}
 	}
-	f.claims.open++
-	if f.claims.open > f.claims.peak {
-		f.claims.peak = f.claims.open
-	}
-	f.mu.Unlock()
-	return f.mutate(tickID, func(tick *tk.Tick) {
+	return f.mutateLocked(tickID, func(tick *tk.Tick) {
 		tick.Status, tick.Owner = "in_progress", owner
+		// started_at opens with the claim and is KEPT by a re-claim — tk's own
+		// observable for the idempotence, and the field the parity pin reads.
+		if !reclaim {
+			tick.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		}
 	})
 }
 
@@ -650,10 +700,16 @@ func (f *fakeTracker) EditTick(_ context.Context, tickID, field, value string) (
 func (f *fakeTracker) Close(_ context.Context, tickID string) (tk.Tick, error) {
 	f.tally("close:" + tickID)
 	// The claim ends HERE and nowhere earlier, which is the whole of tick 3mp:
-	// a settled attempt still being integrated is still claimed.
+	// a settled attempt still being integrated is still claimed. It ends
+	// ONCE (tick krh): only a tick this tracker counted as a claim frees a
+	// slot of the width, so a close of a tick claimed outside the Claim path
+	// (holdClaimsAs, another party's record) cannot eat width nobody granted.
 	f.mu.Lock()
-	if f.claims.open > 0 {
-		f.claims.open--
+	if f.claims.held != nil && f.claims.held[tickID] {
+		delete(f.claims.held, tickID)
+		if f.claims.open > 0 {
+			f.claims.open--
+		}
 	}
 	f.mu.Unlock()
 	return f.mutate(tickID, func(tick *tk.Tick) {
@@ -674,6 +730,17 @@ func (f *fakeTracker) CloseWithReason(_ context.Context, tickID, reason string) 
 			}
 		}
 	}
+	// A close is a close (tick krh): this verb ends a counted claim exactly as
+	// Close does, so the width's bookkeeping does not depend on WHICH close a
+	// tick got.
+	f.mu.Lock()
+	if f.claims.held != nil && f.claims.held[tickID] {
+		delete(f.claims.held, tickID)
+		if f.claims.open > 0 {
+			f.claims.open--
+		}
+	}
+	f.mu.Unlock()
 	return f.mutate(tickID, func(tick *tk.Tick) {
 		tick.Status, tick.ClosedReason = "closed", reason
 	})
@@ -693,6 +760,14 @@ func (f *fakeTracker) ReopenTick(_ context.Context, tickID string) (tk.Tick, err
 func (f *fakeTracker) mutate(tickID string, apply func(*tk.Tick)) (tk.Tick, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	return f.mutateLocked(tickID, apply)
+}
+
+// mutateLocked is mutate for a caller that already holds f.mu — Claim, whose
+// decision about whether the claim opens anything must read and write the
+// tick under ONE lock (tick krh), so a second claim of the same tick cannot
+// be counted by one goroutine while another is still writing it.
+func (f *fakeTracker) mutateLocked(tickID string, apply func(*tk.Tick)) (tk.Tick, error) {
 	state, err := f.load()
 	if err != nil {
 		return tk.Tick{}, err
