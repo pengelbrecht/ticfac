@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 24,
-  "state": "running",
-  "reason": "yck try 1 (run dispatch #4) is rejected (no-commits): the attempt branch carries no commit beyond the base it was cut from (612b87e8891a)",
-  "updated_at": "2026-10-07T01:53:55Z",
+  "sequence": 25,
+  "state": "dispatching",
+  "reason": "dispatching yck as attempt 5",
+  "updated_at": "2026-10-07T01:54:20Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -27,7 +27,7 @@
     },
     {
       "tick_id": "yck",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 4
     }
   ],
