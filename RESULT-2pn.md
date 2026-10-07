@@ -1,6 +1,13 @@
 <!-- ticks-worker: container facts, prepended after the harness exited. The
 agent's report, including its STATUS line, is unchanged below. -->
 
+_ticks-worker: branch `tick/ex6/attempt-6/2pn`, base `532a8cc9cace67355e1b94aac508e1f2fa581ccf`, harness `pi-durable` exited 1, 0 work commit(s), 0 uncommitted path(s)._
+
+_ticks-worker: a carried attempt — its base `532a8cc9cace67355e1b94aac508e1f2fa581ccf` is the head of the work it continued, which was cut from `177cfc3965afce7842ce168d7af19ef9cfce61a7`; its work commits are counted from the carried head._
+
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
 _ticks-worker: branch `tick/ex6/attempt-2/2pn`, base `177cfc3965afce7842ce168d7af19ef9cfce61a7`, harness `pi-durable` exited 1, 0 work commit(s), 0 uncommitted path(s)._
 
 # 2pn
