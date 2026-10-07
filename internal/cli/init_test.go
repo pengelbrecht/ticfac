@@ -584,3 +584,102 @@ func TestInitWithNoAnswerOnStdinRefuses(t *testing.T) {
 		t.Errorf("the refusal still wrote a routing — a refusal must write nothing")
 	}
 }
+
+// assertNoDeadRunnerArgs holds one initialised repository to tick q6z's
+// claim: init writes no `args` into the routing it generates, on the base
+// file or the cloud file, and the deleted pi CLI's `--approve` is not in the
+// text either. Three assertions, because the tick is about a reader as much
+// as an executor — the text is what a reader of runners.toml sees, the raw
+// cells are what a reader of the table sees, and the resolutions are the
+// exact values a herdr dispatch's spawnArgv would read.
+func assertNoDeadRunnerArgs(t *testing.T, repo string, substrates ...runconfig.Substrate) {
+	t.Helper()
+	for _, name := range []string{runconfig.FileName, initCloudName} {
+		raw, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(name)))
+		if os.IsNotExist(err) {
+			continue // this answer writes no cloud file
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(raw), "--approve") {
+			t.Errorf("%s still names the deleted pi CLI's --approve, which no worker can be passed any more:\n%s", name, raw)
+		}
+	}
+	for _, substrate := range append([]runconfig.Substrate{""}, substrates...) {
+		cfg, err := runconfig.LoadFor(initRunnersPath(repo), substrate)
+		if err != nil {
+			t.Fatalf("the written routing does not load for %q: %v", substrate, err)
+		}
+		for role, cell := range cfg.Roles {
+			if cell == nil {
+				continue
+			}
+			if len(cell.Args) != 0 {
+				t.Errorf("the %q view's [roles.%s] cell declares args %v: dead config in a routing init generates — no cell init writes has a flag to add",
+					substrate, role, cell.Args)
+			}
+			for tier, variant := range cell.Tiers {
+				if variant != nil && len(variant.Args) != 0 {
+					t.Errorf("[roles.%s.tiers.%s] in the %q view declares args %v: dead config in a routing init generates",
+						role, tier, substrate, variant.Args)
+				}
+			}
+			for sub, variant := range cell.Substrates {
+				if variant != nil && len(variant.Args) != 0 {
+					t.Errorf("the %s override of [roles.%s] in the %q view declares args %v: dead config in a routing init generates",
+						sub, role, substrate, variant.Args)
+				}
+			}
+		}
+		for _, role := range []string{"implement", "review", "closeout"} {
+			w, err := cfg.ResolveOn(substrate, role, "")
+			if err != nil {
+				t.Fatalf("the %s routing of %s does not resolve on %q: %v", role, initRunnersPath(repo), substrate, err)
+			}
+			if len(w.Args) != 0 {
+				t.Errorf("%s resolves on %q with args %v — the one reader of them is a herdr dispatch's spawnArgv, and no cell init writes has a flag to add",
+					role, substrate, w.Args)
+			}
+		}
+	}
+}
+
+// TestInitWritesNoArgsIntoTheRoutingItGenerates (tick q6z): the roles
+// table's `args` reach a worker's argv through exactly one consumer —
+// spawnArgv, reached only for a herdr dispatch (internal/cli/executor.go) —
+// and runconfig.Compile has refused `kind = "pi"` for a herdr pane since
+// tick uxi, so the pi-CLI trust flag init used to write beside
+// `kind = "pi"` could not reach a worker on ANY substrate: the
+// local-subprocess executor launches the durable host off its own runner
+// table (internal/exec/subprocess's `runners`, the whole argv), and the
+// cloud container's interface is the door's worker.json, not the roles
+// table. The line was dead config that told a reader of every repository
+// init creates that its implement workers run with `--approve` — the same
+// dead pairing this repository's own .tick/runners.toml carries and q6z
+// exists to remove. init writes no `args` at all, for the local answer's pi
+// cell, for a cloud-only answer's three cells, and for a both answer's
+// cloud cells, and neither the flag nor the table can come back unnoticed.
+func TestInitWritesNoArgsIntoTheRoutingItGenerates(t *testing.T) {
+	t.Run("the local pi answer", func(t *testing.T) {
+		repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+		if code, _, stderr := runInitOn(t, repo, "", "--yes", "--runner", "pi"); code != exitSuccess {
+			t.Fatalf("init --runner pi exits %d: %s", code, stderr)
+		}
+		assertNoDeadRunnerArgs(t, repo, runconfig.SubstrateHarness, runconfig.SubstrateHerdr)
+	})
+	t.Run("the both answer", func(t *testing.T) {
+		repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+		if code, stdout, _ := runInitOn(t, repo, "both\n\n\n\n"); code != exitSuccess {
+			t.Fatalf("init on the both answer exits %d: %s", code, stdout)
+		}
+		assertNoDeadRunnerArgs(t, repo, runconfig.SubstrateHarness, runconfig.SubstrateHerdr, runconfig.SubstrateCloud)
+	})
+	t.Run("the cloud-only answer", func(t *testing.T) {
+		repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+		if code, stdout, _ := runInitOn(t, repo, "cloud\n\n\n"); code != exitSuccess {
+			t.Fatalf("init on the cloud answer exits %d: %s", code, stdout)
+		}
+		assertNoDeadRunnerArgs(t, repo, runconfig.SubstrateCloud)
+	})
+}
