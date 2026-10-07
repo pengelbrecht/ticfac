@@ -14,6 +14,13 @@
 *.out
 coverage.*
 
+# Hegel's example database: the Rust engine writes its generated cases beside
+# the working directory of the test binary, so every package with a Hegel
+# property test grows a .hegel/ when its suite runs (tick 89g). It is exhaust
+# the way coverage files are — a run's own gate leaves it in the checkout, and
+# without this line it is a dirty tree a later `git add -A` sweeps up.
+.hegel/
+
 # BEGIN ticfac run state
 # .ticfac/runs/** is COMMITTED — it is the run's durable record (SPEC 10.4),
 # and durable means pushed on origin. Only these two are exhaust:
