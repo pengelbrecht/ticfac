@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "lpl",
   "attempt": 1,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T09:42:16Z",
+  "triaged_at": "2026-10-07T09:42:25Z",
+  "triaged_by": "ticfac run run_18eafdaa047544be9a196d913fb08a30 absorbing 7o4",
+  "promoted_as": "7o4",
   "provenance": {
     "run_id": "run_18eafdaa047544be9a196d913fb08a30",
     "tick_id": "lpl",
