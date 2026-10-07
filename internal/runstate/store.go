@@ -99,7 +99,50 @@ type Store struct {
 	// that has stopped guarding does not raise: it lets a second reconciler
 	// dispatch the same attempt, and the run pays for both jobs.
 	guardOff bool
+
+	// contend, when set, places this store's competitors at the exact instants
+	// their window is open. It is the contention seam of the concurrent-fetch
+	// guards (concurrent_fetch_test.go) and nothing else: nil in every
+	// production store.
+	//
+	// The store's contract is that it is safe against other processes doing
+	// what they like in this checkout and on origin: a watcher's plain fetch,
+	// another ticfac command fetching into its own ref, another writer pushing
+	// between this store's read and its write. The guards for that contract
+	// used to spray a fetch in an unthrottled loop for the length of the test
+	// and hope one landed inside the window where it is dangerous, which
+	// saturated a core for up to half a minute per test and still caught each
+	// regression only some runs (tick 1qy). Armed here instead, a guard
+	// performs each competing action at the instant named below — which is
+	// deterministic, near-instant, and immune to machine load.
+	//
+	// It is deliberately not an Options field: an option is a seam production
+	// code could set.
+	contend func(moment contentionMoment)
 }
+
+// contentionMoment is one instant at which the competitors of a run-state
+// store — a watcher fetching in this checkout, another ticfac command, a
+// second writer — can strike. The concurrent-fetch guards arm Store.contend
+// to place a competitor at exactly these instants instead of racing for them.
+type contentionMoment int
+
+const (
+	// branchFetchedHome: this store's fetch has brought the branch home and
+	// nothing has resolved it yet. This is the FETCH_HEAD window (tick wdb):
+	// a fetch by anyone else in this checkout, completed now, rewrites the
+	// shared values the store is about to resolve — and a store that resolved
+	// through FETCH_HEAD would read a head with no .ticfac tree, the shape
+	// that ended the pwp run.
+	branchFetchedHome contentionMoment = iota
+
+	// pushAboutToLeave: this store's chain is built on the head it read and
+	// the push is about to leave. Another writer pushing to origin now moves
+	// the ref between this store's read and its write — the lost-lease
+	// moment, which the store survives by re-reading origin and rebuilding
+	// the chain (maxContendedPushes), never by ending the run.
+	pushAboutToLeave
+)
 
 // Open prepares a store. It makes no network call: a writer that has not
 // fetched has no view of origin, and the contract requires that to be visible
@@ -354,6 +397,13 @@ func (s *Store) peek() (head string, view map[string]string, err error) {
 	if _, err := s.git.run("fetch", "--no-write-fetch-head", "--refmap=", s.remote,
 		"+"+s.branchRef()+":"+ref); err != nil {
 		return "", nil, fmt.Errorf("runstate: fetch %s %s: %w", s.remote, s.branch, err)
+	}
+	if s.contend != nil {
+		// The contention seam: the branch is home and nothing has resolved it
+		// yet, so a competitor fetching in this checkout right now rewrites
+		// the shared values the resolve below is about to read. The guards
+		// place their competitor here; see Store.contend.
+		s.contend(branchFetchedHome)
 	}
 	head, err = s.git.run("rev-parse", ref)
 	if err != nil {

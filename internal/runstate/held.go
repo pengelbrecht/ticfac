@@ -220,6 +220,13 @@ func (s *Store) flush(subject *heldWrite) (Outcome, error) {
 	for try := 0; try < maxContendedPushes; try++ {
 		tip := s.tip
 		pushed = append(pushed, tip)
+		if s.contend != nil {
+			// The contention seam: another writer pushing to origin right now
+			// moves the ref between this store's read and its write, which is
+			// the lease this push is about to lose. The guards place their
+			// competitor here; see Store.contend.
+			s.contend(pushAboutToLeave)
+		}
 		_, stderr, tries, pushErr := s.git.tryCounted(nil, nil, "push",
 			"--force-with-lease="+s.branchRef()+":"+base,
 			s.remote, tip+":"+s.branchRef())
