@@ -93,13 +93,12 @@ func (c ProtectedChange) Validate() error {
 		return fmt.Errorf("path %q is not a clean repository path (write %q)", c.Path, path)
 	}
 	if !ProposableProtectedPath(path) {
-		if !OutsideBoundary(path) {
+		if !OutsideBoundary(path) && !CloudBoundaryRefuses(path) {
 			return fmt.Errorf("%s is not a protected path: commit the change to it yourself", path)
 		}
 		return fmt.Errorf("%s is protected and not a configuration file this channel changes: only a file "+
-			"directly in .tick/ that the worker boundary refuses (%s) is proposed here; a tracker record "+
-			"is a tracker_edit, and the run's own state under .ticfac/ is never a worker's",
-			path, strings.Join(proposableExamples(), ", "))
+			"directly in .tick/ (%s) is proposed here; a tracker record is a tracker_edit, and the run's own "+
+			"state under .ticfac/ is never a worker's", path, strings.Join(proposableExamples(), ", "))
 	}
 	switch {
 	case c.Content != "" && c.Append != "":
@@ -119,35 +118,59 @@ func (c ProtectedChange) Validate() error {
 	return nil
 }
 
+// CloudBoundaryRefuses is the CLOUD substrate's boundary: the container's
+// pre-commit hook (image/worker.sh) and the cloud collect
+// (cloudflare/src/worker-collect.ts, boundary_files) refuse every path under
+// `.tick/` — the files OutsideBoundary exempts (runners.toml, config.md,
+// learnings.md) included (tick 9sy). A worker on the cloud can write none of
+// them, so the protected-change channel must take them all there.
+func CloudBoundaryRefuses(path string) bool {
+	path = strings.TrimPrefix(strings.TrimSpace(path), "./")
+	return path == ".tick" || strings.HasPrefix(path, ".tick/")
+}
+
 // ProposableProtectedPath says whether a path is one a worker may propose a
-// change to through the run: a file DIRECTLY in .tick/ that the worker
-// boundary refuses — the run's configuration, runners.cloud.toml and
-// runners.local.toml among them. It is read off OutsideBoundary, the one
-// list the boundary keeps, never a second copy of it. A tracker record
-// (.tick/issues/…, .tick/activity/…) has its own channel, and the run's
-// state (.ticfac/) is never a worker's to propose.
+// change to through the run: a file DIRECTLY in .tick/ — the run's and the
+// tracker's configuration. Every such file is refused by some substrate's
+// boundary: the cloud's refuses all of them (CloudBoundaryRefuses), the local
+// one all but the few it exempts (OutsideBoundary) — runners.cloud.toml and
+// runners.local.toml everywhere, runners.toml's [testing.commands] on the
+// cloud (epic ex6's 2pn). A tracker record (.tick/issues/…, .tick/activity/…)
+// has its own channel, and the run's state (.ticfac/) is never a worker's to
+// propose.
 func ProposableProtectedPath(path string) bool {
 	path = strings.TrimPrefix(strings.TrimSpace(path), "./")
-	if !OutsideBoundary(path) {
+	if !CloudBoundaryRefuses(path) && !OutsideBoundary(path) {
 		return false
 	}
 	rest, ok := strings.CutPrefix(path, ".tick/")
 	return ok && rest != "" && rest != "." && rest != ".." && !strings.Contains(rest, "/")
 }
 
+// UnwritableOn says whether a worker on the substrate can not write a
+// proposable path in its own commits: on the cloud none of them, locally
+// only those OutsideBoundary refuses.
+func UnwritableOn(path string, cloud bool) bool {
+	if !ProposableProtectedPath(path) {
+		return false
+	}
+	return cloud || OutsideBoundary(path)
+}
+
 // proposableExamples names the protected configuration this repository's
 // layout has, for a message.
 func proposableExamples() []string {
-	return []string{".tick/runners.cloud.toml", ".tick/runners.local.toml"}
+	return []string{".tick/runners.cloud.toml", ".tick/runners.local.toml", ".tick/runners.toml (on the cloud)"}
 }
 
 // protectedPathMention finds a `.tick/<file>` mention in prose.
 var protectedPathMention = regexp.MustCompile(`\.tick/[A-Za-z0-9._-]+/?`)
 
-// ProtectedPathsIn is every path a text names that a worker may not write
-// and the protected-change channel takes, in order, each once. Trailing
-// punctuation a sentence puts after a path is not part of it.
-func ProtectedPathsIn(text string) []string {
+// ProtectedPathsIn is every path a text names that a worker on the substrate
+// (cloud or not) may not write and the protected-change channel takes, in
+// order, each once. Trailing punctuation a sentence puts after a path is not
+// part of it.
+func ProtectedPathsIn(text string, cloud bool) []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, match := range protectedPathMention.FindAllString(text, -1) {
@@ -155,7 +178,7 @@ func ProtectedPathsIn(text string) []string {
 			continue // a directory under .tick/: records, never configuration
 		}
 		path := strings.TrimRight(match, ".")
-		if !seen[path] && ProposableProtectedPath(path) {
+		if !seen[path] && UnwritableOn(path, cloud) {
 			seen[path] = true
 			out = append(out, path)
 		}

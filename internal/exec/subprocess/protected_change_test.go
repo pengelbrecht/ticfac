@@ -58,8 +58,12 @@ func TestAProtectedAppendIsAppliedOnce(t *testing.T) {
 	if got := (ProtectedChange{Path: ".tick/runners.cloud.toml", Content: "new"}).Applied("old"); got != "new" {
 		t.Errorf("a replacement is %q", got)
 	}
-	if got := ProtectedPathsIn("put it in .tick/runners.cloud.toml. Not .tick/issues/x.json or .tick/runners.toml"); len(got) != 1 ||
-		got[0] != ".tick/runners.cloud.toml" {
-		t.Errorf("ProtectedPathsIn = %v", got)
+	text := "put it in .tick/runners.cloud.toml. Not .tick/issues/x.json or .tick/runners.toml"
+	if got := ProtectedPathsIn(text, false); len(got) != 1 || got[0] != ".tick/runners.cloud.toml" {
+		t.Errorf("ProtectedPathsIn(local) = %v, want runners.cloud.toml alone: a local worker writes runners.toml", got)
+	}
+	// The cloud's boundary refuses all of .tick/ (tick 9sy), runners.toml too.
+	if got := ProtectedPathsIn(text, true); len(got) != 2 || got[1] != ".tick/runners.toml" {
+		t.Errorf("ProtectedPathsIn(cloud) = %v, want runners.cloud.toml and runners.toml", got)
 	}
 }

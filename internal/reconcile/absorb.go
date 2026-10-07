@@ -200,7 +200,7 @@ func (r *Reconciler) decideFinding(ctx context.Context, marker attemptHandle, ke
 	if change, ok := standing.ProtectedChange(); ok {
 		return r.holdProtectedChange(marker, *standing, change), nil
 	}
-	if paths := protectedDeliverable(standing.Title, standing.Body); len(paths) > 0 {
+	if paths := protectedDeliverable(standing.Title, standing.Body, r.onCloud()); len(paths) > 0 {
 		return r.decideProtectedEditFinding(ctx, marker, *standing, dispatch, paths)
 	}
 

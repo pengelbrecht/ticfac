@@ -581,7 +581,7 @@ func (r *Reconciler) absorbNotReadyFindings(ctx context.Context, durable *durabl
 				"it was settled otherwise", key, f.Title)
 			continue
 		}
-		if notAWorkersTick(f) {
+		if r.notAWorkersTick(f) {
 			// A protected edit (protected_changes.go): no worker can make it,
 			// so naming it blocking cannot make it the epic's work — the run
 			// applies a carried change at the close-out, and the merger reads it.

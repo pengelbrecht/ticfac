@@ -12,6 +12,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/runconfig"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
@@ -78,20 +79,26 @@ var protectedEditPhrase = regexp.MustCompile(`(?i)\b(not a worker|no worker|work
 // .tick/runners.cloud.toml"), or the body names one and says the edit is not
 // a worker's to make. Empty for every other finding — a finding that merely
 // mentions a configuration file in passing is ordinary work.
-func protectedDeliverable(title, body string) []string {
-	if paths := subprocess.ProtectedPathsIn(title); len(paths) > 0 {
+func protectedDeliverable(title, body string, cloud bool) []string {
+	if paths := subprocess.ProtectedPathsIn(title, cloud); len(paths) > 0 {
 		return paths
 	}
-	if paths := subprocess.ProtectedPathsIn(body); len(paths) > 0 && protectedEditPhrase.MatchString(body) {
+	if paths := subprocess.ProtectedPathsIn(body, cloud); len(paths) > 0 && protectedEditPhrase.MatchString(body) {
 		return paths
 	}
 	return nil
 }
 
+// onCloud says whether this run's workers run on the cloud substrate, whose
+// boundary refuses every `.tick/` path (subprocess.CloudBoundaryRefuses).
+func (r *Reconciler) onCloud() bool {
+	return r.substrate == runconfig.SubstrateCloud
+}
+
 // notAWorkersTick says whether a finding must never become a child of the
 // running epic: it carries a protected change, or its deliverable is one.
-func notAWorkersTick(f subprocess.Finding) bool {
-	return f.ProtectedChange != nil || len(protectedDeliverable(f.Title, f.Body)) > 0
+func (r *Reconciler) notAWorkersTick(f subprocess.Finding) bool {
+	return f.ProtectedChange != nil || len(protectedDeliverable(f.Title, f.Body, r.onCloud())) > 0
 }
 
 // protectedEditReason is the reasoning the backlog decision record carries.
@@ -369,4 +376,92 @@ func (r *Reconciler) protectedChangesSection(findings []runstate.Finding, conden
 		fmt.Fprintf(&b, "\n%s:\n\n````\n%s\n````\n", what, strings.TrimRight(change.Text(), "\n"))
 	}
 	return b.String()
+}
+
+// protectedChangesIn is every protected change a collection's findings carry.
+func protectedChangesIn(collected *subprocess.Collection) []subprocess.ProtectedChange {
+	if collected == nil {
+		return nil
+	}
+	var out []subprocess.ProtectedChange
+	for _, finding := range collected.Findings {
+		if finding.ProtectedChange != nil {
+			out = append(out, *finding.ProtectedChange)
+		}
+	}
+	return out
+}
+
+func protectedChangeList(changes []subprocess.ProtectedChange) string {
+	names := make([]string, 0, len(changes))
+	for _, change := range changes {
+		names = append(names, change.String())
+	}
+	return strings.Join(names, "; ")
+}
+
+// acceptProtectedDelivery is the collect's half for a tick whose ONLY
+// deliverable is a protected change (epic ex6's 2pn: one [testing.commands]
+// cell in .tick/runners.toml, which the cloud's container refuses). The
+// worker commits nothing and reports the change as a finding's
+// protected_change; that is a delivery — ready to merge with no head — not an
+// empty branch, on every substrate. A BLOCKED answer that committed nothing
+// and carries the change is the same delivery: the wall it names is the
+// boundary, and the run is what goes round it — unless the question is in the
+// standing orders' always-ask class.
+func (r *Reconciler) acceptProtectedDelivery(marker attemptHandle, collected *subprocess.Collection) *subprocess.Collection {
+	if collected == nil || collected.Result == nil || marker.Role != "implement-tick" ||
+		collected.Verdict != subprocess.VerdictNoCommits || len(collected.Report.TrackerEdits) > 0 {
+		return collected
+	}
+	changes := protectedChangesIn(collected)
+	if len(changes) == 0 {
+		return collected
+	}
+	switch collected.Report.Status {
+	case subprocess.StatusDone, subprocess.StatusDoneWithConcerns:
+	case subprocess.StatusBlocked:
+		if class := r.standingOrders().alwaysAskClass(collected.Report.Detail); class != "" {
+			r.record(marker.TickID, StageProtectedChangeRefused, "%s answered %s carrying %s, but the question is in "+
+				"the always-ask class %q of the standing orders: it holds for a person",
+				r.attemptName(marker.TickID, marker.Attempt), collected.Report.Status, protectedChangeList(changes), class)
+			return collected
+		}
+	default:
+		return collected
+	}
+	r.record(marker.TickID, StageCollected, "%s committed no work and its findings carry %d protected change(s) (%s): "+
+		"that is its delivery, not an empty branch — the run applies them itself after the close-out's reads, for the "+
+		"merger to review, and gates and closes the tick now", r.attemptName(marker.TickID, marker.Attempt),
+		len(changes), protectedChangeList(changes))
+	return deliveredWithoutHead(collected)
+}
+
+// protectedDelivery says the run took this attempt's protected changes as its
+// whole delivery (acceptProtectedDelivery): nothing to merge now.
+func protectedDelivery(collected *subprocess.Collection) bool {
+	return collected != nil && collected.Result != nil &&
+		collected.Verdict == subprocess.VerdictReadyToMerge &&
+		collected.Result.Source.HeadSHA == nil &&
+		len(collected.Report.TrackerEdits) == 0 &&
+		len(protectedChangesIn(collected)) > 0
+}
+
+// integrateProtectedDelivery is the integrate's half: nothing merges — the
+// change is applied at the close-out — and the gate runs over the epic head.
+func (r *Reconciler) integrateProtectedDelivery(marker attemptHandle, collected *subprocess.Collection) (bool, merge, error) {
+	if !protectedDelivery(collected) {
+		return false, merge{}, nil
+	}
+	head, err := r.git.remoteHead(r.branch)
+	if err != nil {
+		return false, merge{}, err
+	}
+	attemptHead, _ := r.git.remoteHead(branchOf(marker.WriteRef))
+	r.setTick(marker.TickID, "integrated")
+	r.record(marker.TickID, StageIntegrated, "%s's delivery is %s, which the run applies onto %s after the "+
+		"close-out's reads; nothing merges now, and the gate runs over %s at %s",
+		r.attemptName(marker.TickID, marker.Attempt), protectedChangeList(protectedChangesIn(collected)), r.branch,
+		r.branch, short(head))
+	return true, merge{AttemptHead: attemptHead, EpicHead: head, GateSHA: head, Merged: false}, nil
 }

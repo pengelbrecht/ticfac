@@ -701,6 +701,26 @@ protected_change_finding)
 		} > "$TICFAC_RESULT_PATH"
 	fi
 	;;
+protected_change_only)
+	# Epic ex6's 2pn: b1's WHOLE deliverable is a change to .tick/runners.toml,
+	# which the cloud substrate refuses to every worker. It commits nothing
+	# and carries the change as a finding's protected_change: that is its
+	# delivery, which the run applies itself after the close-out.
+	if [ "$TICFAC_TICK" != "b1" ]; then
+		commit
+		report
+	else
+		mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+		{
+			printf '# %s\n\n' "$TICFAC_TICK"
+			printf '%s\n' '```findings v2'
+			printf '%s\n' '[{"kind": "defect", "title": "The lint command is not declared", "severity": "medium",'
+			printf '%s\n' '  "protected_change": {"path": ".tick/runners.toml", "append": "# lint: make lint"}}]'
+			printf '%s\n' '```'
+			printf '\nSTATUS: %s\n' "$status"
+		} > "$TICFAC_RESULT_PATH"
+	fi
+	;;
 protected_edit_prose)
 	# The same discovery as protected_change_finding, as the incident's
 	# worker reported it: prose only, the operator told to run a sed. It is

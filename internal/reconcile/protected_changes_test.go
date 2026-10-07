@@ -106,6 +106,47 @@ func TestAFindingCarryingAProtectedChangeIsAppliedAfterTheCloseOutNotAbsorbed(t 
 	}
 }
 
+// Epic ex6's 2pn: a tick whose WHOLE deliverable is a protected change — the
+// cloud's boundary refuses .tick/runners.toml — commits nothing and carries
+// the change. That is a delivery, not an empty branch: the tick closes, the
+// run applies the change after the close-out, and the run completes rather
+// than holding the tick for a person.
+func TestATickWhoseOnlyDeliverableIsAProtectedChangeClosesAndTheRunAppliesIt(t *testing.T) {
+	shorttest.EndToEnd(t)
+	t.Parallel()
+
+	opts := fixtureOptions{mode: "protected_change_only"}
+	f := newFixture(t, opts)
+	r, result, err := f.run(f.Repo, opts)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s: %s: %+v — a protected-change delivery must never wait for a person",
+			result.State, result.Reason, result.Failure)
+	}
+	state, err := f.Tracker.load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := state.Ticks["b1"].Status; got != "closed" {
+		t.Errorf("b1 is %s, want closed over its protected-change delivery", got)
+	}
+	store := openRunStore(t, f.Repo.Dir, r.IntegrationBranch(), r.RunID())
+	findings, err := store.Findings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 || findings[0].Status != runstate.FindingFixed {
+		t.Fatalf("findings %+v, want the one, fixed by the run's commit", findings)
+	}
+	branch := r.IntegrationBranch()
+	mustRun(t, f.Repo.Dir, "git", "fetch", "--quiet", "origin", branch)
+	if file := mustRun(t, f.Repo.Dir, "git", "show", "origin/"+branch+":.tick/runners.toml"); !strings.Contains(file, "# lint: make lint") {
+		t.Errorf("the epic branch's runners.toml does not carry the change:\n%s", file)
+	}
+}
+
 // The incident's own shape: the finding names the protected edit in prose
 // only. It is never absorbed into the epic as a worker's tick — it is a
 // backlog tick outside the epic, gating nothing — and the run completes.
@@ -163,11 +204,16 @@ func TestAWorkerWritingAProtectedFileIsStillRefused(t *testing.T) {
 			t.Errorf("%s is not proposable: the run channel must take it", path)
 		}
 	}
-	for _, path := range []string{".tick/runners.toml", ".tick/config.md", "src/a.go", ".tick/issues/x.json",
-		".ticfac/runs/r/findings/k.json"} {
+	for _, path := range []string{"src/a.go", ".tick/issues/x.json", ".ticfac/runs/r/findings/k.json"} {
 		if subprocess.ProposableProtectedPath(path) {
-			t.Errorf("%s is proposable: only protected configuration directly in .tick/ is", path)
+			t.Errorf("%s is proposable: only configuration directly in .tick/ is", path)
 		}
+	}
+	// The cloud substrate refuses all of .tick/ (tick 9sy, epic ex6's 2pn), so
+	// the file the local boundary exempts is proposable — and unwritable there.
+	if !subprocess.ProposableProtectedPath(".tick/runners.toml") ||
+		!subprocess.UnwritableOn(".tick/runners.toml", true) || subprocess.UnwritableOn(".tick/runners.toml", false) {
+		t.Error(".tick/runners.toml: want proposable, unwritable on the cloud, writable locally")
 	}
 }
 
@@ -176,17 +222,21 @@ func TestProtectedDeliverableReadsTheTitleOrAnUnwritableBody(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		title, body string
-		want        bool
+		cloud, want bool
 	}{
-		{"Append the two named cloud configs to .tick/runners.cloud.toml", "", true},
+		{"Append the two named cloud configs to .tick/runners.cloud.toml", "", false, true},
 		{"Cloud configs are missing", "The block must go in .tick/runners.cloud.toml. This must be done by the " +
-			"operator or the run, not a worker.", true},
-		{"The router misreads a cell", "selectRunConfig reads .tick/runners.cloud.toml and drops the tier.", false},
-		{"Fix the parser", "", false},
+			"operator or the run, not a worker.", false, true},
+		{"The router misreads a cell", "selectRunConfig reads .tick/runners.cloud.toml and drops the tier.", false, false},
+		{"Fix the parser", "", false, false},
+		// Epic ex6's 2pn: a runners.toml cell is a local worker's to write,
+		// and no cloud worker's.
+		{"Declare the lint command in .tick/runners.toml", "", false, false},
+		{"Declare the lint command in .tick/runners.toml", "", true, true},
 	}
 	for _, c := range cases {
-		if got := len(protectedDeliverable(c.title, c.body)) > 0; got != c.want {
-			t.Errorf("protectedDeliverable(%q, %q) = %v, want %v", c.title, c.body, got, c.want)
+		if got := len(protectedDeliverable(c.title, c.body, c.cloud)) > 0; got != c.want {
+			t.Errorf("protectedDeliverable(%q, %q, cloud=%v) = %v, want %v", c.title, c.body, c.cloud, got, c.want)
 		}
 	}
 }

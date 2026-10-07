@@ -3215,6 +3215,9 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	// A proposed tracker edit is held to the tracker here, and a DONE whose
 	// only deliverable is the edit is a delivery (tracker_edits.go, hn6 yjq).
 	collected = r.acceptTrackerEdits(ctx, marker, collected)
+	// And a DONE whose only deliverable is a protected change it carries
+	// (protected_changes.go, epic ex6's 2pn) is a delivery too.
+	collected = r.acceptProtectedDelivery(marker, collected)
 	r.setTick(marker.TickID, "reported")
 	// Tick 19l: what the worker answered and what the run concluded are two
 	// claims by two parties, stated separately — never one sentence that reads
