@@ -3067,3 +3067,4 @@
 {"ts":"2026-10-07T04:01:30.439084Z","tick":"9uc","action":"close","actor":"ticfac","epic":"v5t","data":{"title":"Close out claude-sub per epic: retro, then the next feasible epic"}}
 {"ts":"2026-10-07T04:01:57.113299Z","tick":"6ne","action":"start","actor":"ticfac","epic":"v5t","data":{"title":"Re-review v5t: its tree changed since its READY final review (round 3)"}}
 {"ts":"2026-10-07T04:07:04.088796Z","tick":"6ne","action":"note","actor":"ticfac","epic":"v5t","data":{"note":"2026-10-07 06:07 - ticfac run epic-v5t: the review-epic job, 6ne try 1 (run dispatch #11), returned a validated ticfac.job-result.review-epic.v1 envelope at 4a4275c1c425 — DONE: DONE (READY)","title":"Re-review v5t: its tree changed since its READY final review (round 3)"}}
+{"ts":"2026-10-07T04:07:04.270523Z","tick":"6ne","action":"close","actor":"ticfac","epic":"v5t","data":{"title":"Re-review v5t: its tree changed since its READY final review (round 3)"}}
