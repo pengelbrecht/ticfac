@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 54,
-  "state": "running",
-  "reason": "8wa try 1 (run dispatch #12) is rejected (missing-result): the container pushed tick/ex6/attempt-12/8wa with no report at RESULT-8wa.md committed to it: settled is not finished, and this is neither running nor done",
-  "updated_at": "2026-10-07T15:21:33Z",
+  "sequence": 55,
+  "state": "dispatching",
+  "reason": "dispatching 8wa as attempt 13",
+  "updated_at": "2026-10-07T15:21:44Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "8wa",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 12
     },
     {
