@@ -758,8 +758,9 @@ async function startNamedAttemptUnchecked(
         adopted: true,
       };
     }
-    // A claude-sub job (claude_sub on the boot): the container's own worker,
-    // below — the agent is never started for it.
+    // No lease on the boot: the agent's to host. A claude-sub job
+    // (claude_sub on the boot) falls through to the container below — its own
+    // all-in-one claude worker, and the agent is never started for it.
     if (boot.claude_sub === undefined) {
       return startHostedAttempt(deps, spec, hosting, { jobID, slot, name, payload }, boot);
     }

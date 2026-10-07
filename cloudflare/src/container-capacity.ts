@@ -387,12 +387,9 @@ async function reclaimBoots(
     // WORKER_AGENTS the container is the one to ask — an agent that holds
     // nothing of it would leave its unpushed tail on the floor.
     try {
+      const hostedHere = boot.harness === "" || boot.harness === WORKER_AGENT_HARNESS;
       const hosting =
-        boot.harness !== "" && boot.harness !== WORKER_AGENT_HARNESS
-          ? null
-          : options.agents === undefined
-            ? null
-            : await options.agents(boot.run_id);
+        hostedHere && options.agents !== undefined ? await options.agents(boot.run_id) : null;
       if (hosting !== null) {
         const stopped = await bounded(hosting.agent(name).reclaim(options.reason), askTimeout);
         entry.detail +=
