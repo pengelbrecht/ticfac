@@ -12,9 +12,8 @@ on the real door until the review (yhe). **Rule:** When an epic's gate is a run 
 tick wires the thinnest path through the PRODUCTION entry point, its tests binding what production
 binds (wrangler.toml), and a named tick INSIDE the epic performs it; a DEPLOYED-factory clause is post-merge.
 
-**Problem:** gvc absorbed none of 21 findings; 2jn scored none of 30: the data the machinery reads
-was prose. **Rule:** An orchestrator epic names the NEXT run on the rebuilt binary as its demo;
-[A<n>] items AND a command per item land at planning, or the run absorbs on guesses.
+**Problem:** gvc absorbed none of 21 findings; 2jn scored none of 30: the data the machinery reads was prose. **Rule:** An orchestrator epic names the
+NEXT run on the rebuilt binary as its demo; [A<n>] items AND a command per item land at planning, or the run absorbs on guesses.
 
 **Problem:** hn6 planned 9 ticks and closed 65: ten repairs each fixed ONE pairing of which word wins
 across nine runs. **Rule:** An epic that renders run state lists the state matrix (running, held,
@@ -25,9 +24,8 @@ silent same-function collision, 7o5); v5t's two became y38 (Go) and yhe (TS) on 
 resolve and a duplicate high finding (bw7). **Rule:** A reviewer reports ONE blocking finding per SEAM,
 naming every side of it: the run makes one tick per finding, so the report is the only fold there is.
 
-**Problem:** A policy held per layer and failed in the whole: xte checked the cloud overlay, then a tier
-overlay replaced the model; yoh keyed the Workers-AI rule on the substrate, not the executor (78v).
-**Rule:** Check a policy on the FINAL resolved value, keyed on what actually crosses the boundary.
+**Problem:** A policy held per layer and failed in the whole: xte checked the cloud overlay, then a tier overlay replaced the model; yoh keyed the
+Workers-AI rule on the substrate, not the executor (78v). **Rule:** Check a policy on the FINAL resolved value, keyed on what crosses the boundary.
 
 **Problem:** wne put a vocabulary (mrn) and its consumer (0ju) in one wave; hn6's wave 1 HAND-TYPED its
 status goldens and seven repairs removed values wave 2 could never produce. **Rule:** DECLARING and
@@ -97,9 +95,8 @@ repairs fixed a printed "clear with" command that could not clear its hold. **Ru
 names EVERY implementation of the seam, leaves a guard test, and reproduces on the old code; a
 command printed for a person comes from ONE builder and a test PARSES it with the real CLI.
 
-**Problem:** 06t deleted the stray RESULT-*.md reports and passed its gate; the integration merge
-(keepReportsOut) restored all seven, and only round two's `git ls-tree epic/hn6` saw it (obk).
-**Rule:** A repair whose effect is a TREE state is accepted on the INTEGRATED head, never the branch.
+**Problem:** 06t deleted stray RESULT-*.md reports and passed its gate; the integration merge (keepReportsOut) restored all seven; only round two's
+`git ls-tree epic/hn6` saw it (obk). **Rule:** A repair whose effect is a TREE state is accepted on the INTEGRATED head, never the branch.
 
 **Problem:** A boot step past its retries escaped supervisePass. **Rule:** Every ending is
 finalize's: catch a throwing step AT ITS STEP; a test fails each step past its retries.
@@ -107,10 +104,9 @@ finalize's: catch a throwing step AT ITS STEP; a test fails each step past its r
 **Problem:** Gate evidence keyed by commit was wrong both ways: the run writes `.ticfac/` to the
 branch it gates. **Rule:** Key evidence by the SOURCE (tree minus the run's own path).
 
-**Problem:** Wall-clock tests refused innocent work six times; ONE host SIGTERM defect (8d6) failed
-at base in 18 ticks; one 43y 120s harness bound was filed five times (h3c 7oy 4ao omq 30e). **Rule:** A
-gate verdict is about the tree only if the host is bounded (registrytest.GuardMain's per-process root);
-before filing "fails at base", grep `.tick/issues/` — the run must dedupe on the test id.
+**Problem:** Wall-clock tests refused innocent work six times; ONE host SIGTERM defect (8d6) failed at base in 18 ticks; one 43y 120s harness
+bound was filed five times (h3c 7oy 4ao omq 30e). **Rule:** A gate verdict is about the tree only if the host is bounded
+(registrytest.GuardMain's per-process root); before filing "fails at base", grep `.tick/issues/` — the run dedupes on the test id.
 
 **Problem:** wne's gates went green with 7 of 10 relevant tests skipped under `-short`; yoh's ts gate
 ran no vitest; dz1's and 43y's (enb, 4w7) red EndToEnd epic CI sat unread until a review. **Rule:** A
@@ -148,3 +144,7 @@ until proven otherwise; change one variable at a time. Off-vendor, set `compat.t
 **Problem:** dm2 blamed row-less pi runs on pi abandoning the stream; 648 showed pi drains it. The
 gateway passes pi's own `Authorization` upstream (a bad key fails 10000) and needs `/workers-ai/v1`.
 **Rule:** Verify a gateway route by reading its LOG ROW back; verify a cause by reproducing it.
+
+**Problem:** Three gate guards ran a repo script through a shell — a broken watchdog answered `ok (cached)`: go's test cache sees
+only the test binary's own opens; a subprocess's never, and outside-module files not at all. **Rule:** A drift guard reads its
+input in-process, inside the module, or it is not guarding (mbv); a host-tool guard (wirevocab × herdr) needs -count=1 somewhere.
