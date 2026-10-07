@@ -2,6 +2,7 @@
   "id": "3gw",
   "title": "Close-out retro declares [A1] broken on a head where it is fixed",
   "description": "docs/ilz-closeout-retro-2026-10-07.md ships on the same tree as the fix that answers it: it marks [A1] \"MET AS WRITTEN AND REVIEWED, BROKEN ON THE HEAD THAT SHIPS\", lists the three failover claims as \"now wrong on the integration head\", and closes with \"Two things nothing has answered … the three stale guide claims above, which break [A1] on the head that merges to main\". 555253ba corrected all three before this head, so the integrated tree carries a durable record contradicting its own deliverable. Its supporting numbers moved with the fix too: the contribution stat block says 2 files / 148 insertions against merge base 4cf4d59 (now 3 files / 480 insertions against e684dfec), the guide is 159 lines rather than 143, and its citations of guide lines 72-80, 81-93 and 94-96 point at text the fix rewrote. One dated line saying the claims were corrected in 555253ba would settle it.\nevidence: docs/ilz-closeout-retro-2026-10-07.md:64-83 and :135-139, against 555253ba and docs/claude-sub-operator.md:72-114\n\nticfac run run_18eafdaa047544be9a196d913fb08a30 filed this backlog tick from the finding 4f8befda50c805e6a484e5981865743efb07d12d02c481f42e0621553ea472ca (reported by run-run_18eafdaa047544be9a196d913fb08a30/tick-lpl/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_18eafdaa047544be9a196d913fb08a30/absorptions/4f8befda50c805e6a484e5981865743efb07d12d02c481f42e0621553ea472ca.json on the run branch.",
+  "notes": "2026-10-07 09:42 - ticfac run run_18eafdaa047544be9a196d913fb08a30: created by absorbing finding 4f8befda50c805e6a484e5981865743efb07d12d02c481f42e0621553ea472ca — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_18eafdaa047544be9a196d913fb08a30/absorptions/4f8befda50c805e6a484e5981865743efb07d12d02c481f42e0621553ea472ca.json on epic/ilz, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_18eafdaa047544be9a196d913fb08a30/tick-lpl/attempt-1",
   "created_by": "ticfac run run_18eafdaa047544be9a196d913fb08a30",
   "created_at": "2026-10-07T09:42:04Z",
-  "updated_at": "2026-10-07T09:42:04Z"
+  "updated_at": "2026-10-07T09:42:10.472734947Z"
 }
