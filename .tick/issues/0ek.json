@@ -1,15 +1,15 @@
 {
   "id": "0ek",
-  "title": "Local pi workers need the ticfac harness installed, like local claude workers need claude",
+  "title": "Ship the local pi harness inside the ticfac binary: one bundled JS file, embedded, run with node",
   "gloss": "harness as a machine prerequisite",
-  "description": "Today a local pi-durable worker runs node \u003crepo\u003e/harness/src/local/main.ts (internal/exec/subprocess/executor.go harnessDir(), TICFAC_HARNESS_DIR override), so it only works inside the ticfac repository. Decision (operator, 2026-10-07): treat the harness exactly like the claude CLI for local claude workers — a prerequisite installed on the machine. Publish ticfac's harness (harness/, pi-durable pinned inside) as an npm package installed globally (name to be chosen); the binary records the harness version it is compatible with; the local executor resolves the globally installed harness (TICFAC_HARNESS_DIR still overrides, and the ticfac repo's own harness/ stays usable for development); ticfac doctor checks presence and version and prints the install command, the way it does for claude; the release workflow publishes the package with each release (y9v); ticfac upgrade (y9v) updates both.",
+  "description": "Today a local pi-durable worker runs node \u003crepo\u003e/harness/src/local/main.ts (internal/exec/subprocess/executor.go harnessDir(), TICFAC_HARNESS_DIR override), so it only works inside the ticfac repository, with harness/node_modules installed. Decision (operator, 2026-10-07): no npm packages — the harness is part of ticfac. Build harness/src/local/main.ts with esbuild (already a dev dependency) into ONE self-contained JS file with pi-durable, pi-ai and chord inlined, as a build step of the Go binary (make build / goreleaser / the image build), and go:embed it. At run time the local executor writes it once to a versioned cache dir (keyed by the build) and runs it with node; the only machine prerequisite is Node, the same Node the claude CLI already needs. TICFAC_HARNESS_DIR still overrides for harness development. ticfac doctor checks node is present and new enough. The embedded bundle must stay in sync with harness/src: a test or the gate rebuilds and compares, so a stale bundle fails CI.",
   "status": "open",
   "priority": 2,
   "type": "bug",
   "owner": "ticks-sandbox@ticks.invalid",
   "parent": "y9v",
-  "acceptance_criteria": "In a repository that is not ticfac, on a machine with the released binaries plus the globally installed harness package, a local pi-durable run dispatches and completes a worker; doctor names a missing or mismatched harness with its install command; tests cover resolution and the version check; make gate passes",
+  "acceptance_criteria": "In a repository that is not ticfac, on a machine with only the ticfac binaries and node, a local pi-durable run dispatches and completes a worker; no npm install anywhere; doctor checks node; a stale embedded bundle fails the gate; make gate passes",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T13:55:41.952418Z",
-  "updated_at": "2026-10-07T13:59:03.044929Z"
+  "updated_at": "2026-10-07T13:59:54.587127Z"
 }
