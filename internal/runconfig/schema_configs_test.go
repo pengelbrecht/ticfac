@@ -194,6 +194,15 @@ func assertWellFormedNamedConfigs(t *testing.T, path string) {
 		default:
 			t.Errorf("the claude config's %s names model %q — the versionless aliases are what make the rung subscription-billed; a pinned id bills per token", role, w.Model)
 		}
+		// A cell that switches kind does not inherit the argv of the kind it
+		// replaced: the cloud's implement cell hands pi `--approve`, which
+		// claude does not take — `args = []` clears it, as the local
+		// frontier rung's cell does.
+		for _, tier := range []Tier{"", TierEconomy, TierStrong} {
+			if w, err := claude.ResolveOn(SubstrateCloud, role, tier); err == nil && len(w.Args) != 0 {
+				t.Errorf("the claude config's %s at tier %q hands claude args %q inherited from another kind's cell", role, tier, w.Args)
+			}
+		}
 	}
 	// The implement ladder climbs sonnet → opus (the operator's ladder,
 	// 2026-10-06): economy is sonnet, strong is opus, and the step from the

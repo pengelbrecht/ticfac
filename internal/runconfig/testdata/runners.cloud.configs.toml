@@ -76,10 +76,14 @@ default = "economy"
 ceiling = "strong"
 step = 2
 
+# `args = []` clears the `--approve` the cloud's own implement cell hands pi:
+# a cell that switches kind keeps the argv beneath it unless it says so, and
+# claude does not take pi's flag.
 [configs.claude.roles.implement]
 kind = "claude"
 model = "sonnet"
 effort = "high"
+args = []
 
 # The cloud claude ladder the operator named (2026-10-06): implement starts
 # on sonnet and climbs to opus, step = 2 so one failed attempt goes straight
