@@ -90,6 +90,14 @@ readonly WORKER_PROBE_MARKER="ticks-worker-probe-ok"
 readonly WORKER_CANCEL_MARKER="ticks-worker-cancel-requested"
 readonly WORKER_CANCEL_REPORT_MARKER="CANCELLED BY THE SUPERVISOR"
 
+# WORKER_FALLBACK_REPORT_MARKER heads the report this container writes when
+# the harness wrote none (write_fallback_report). It is the STRUCTURED fact a
+# collector reads — pinned in internal/sandboximage/sandboximage.go as
+# WorkerFallbackReportMarker — that the report is the container's account of
+# a fault, never the agent's answer: a fallback that asks a question is a
+# harness crash held for a person (ex6 2p3, 2026-10-07).
+readonly WORKER_FALLBACK_REPORT_MARKER="NO AGENT REPORT"
+
 # ---------------------------------------------------------------------------
 # The boot and finish phases (epic 43y, tick pom)
 #
@@ -839,7 +847,7 @@ nudge_due() {
 	local status="$1" count="$2" started="$3"
 	((status == 0)) || return 1
 	((count < NUDGE_MAX)) || return 1
-	[[ -f $workdir/$result_path ]] && return 1
+	report_written && return 1
 	if cancel_requested; then
 		return 1
 	fi
@@ -944,7 +952,7 @@ check_report() {
 report_pushback_due() {
 	local status="$1" count="$2" started="$3"
 	((status == 0)) || return 1
-	[[ -f $workdir/$result_path ]] || return 1
+	report_written || return 1
 	if cancel_requested; then
 		return 1
 	fi
@@ -1194,6 +1202,24 @@ salvage_uncommitted() {
 	return 0
 }
 
+# report_written says whether THIS attempt's agent wrote the report. A file at
+# the path is not enough: a CARRIED attempt boots at the released attempt's
+# head, and that head carries the released attempt's own RESULT file. Read as
+# this attempt's, the inherited report suppressed the nudge and the fallback
+# and was collected as this attempt's answer — ex6 2p3 tries 2 and 3 both
+# "answered" try 1's fallback BLOCKED, the second at the top of the ladder,
+# where it held the tick for a person over two harness faults (2026-10-07).
+# So a report identical to the one the base already carries is inherited, not
+# written; any change to it (or a report the base never had) is the agent's.
+report_written() {
+	[[ -f $workdir/$result_path ]] || return 1
+	if git -C "$workdir" cat-file -e "${base_sha}:${result_path}" 2>/dev/null &&
+		git -C "$workdir" diff --quiet "$base_sha" -- "$result_path" 2>/dev/null; then
+		return 1
+	fi
+	return 0
+}
+
 # What survived, as a phrase a report can read — "2 work commit(s)", the
 # salvage, or both. Empty when nothing did, which is the whole distinction the
 # fallback below is built on.
@@ -1234,11 +1260,23 @@ landed_phrase() {
 # the salvage made a commit. Nothing new is gathered; the script simply stops
 # throwing the distinction away.
 #
-# The STATUS word is one of collect's four, because a status the collector
-# cannot parse is no status at all — and it stays independent of the verdict
-# collect computes from the branch (internal/herd/collect/doc.go): a reader
-# gets "ready-to-merge" beside "no agent account of it", which together say
-# exactly what happened.
+# Two of the shapes are FAULTS, and a fault is not a question. Until ex6 2p3
+# (2026-10-07) the nothing-landed shape answered `STATUS: BLOCKED — …;
+# re-dispatch this tick` and the failed-with-work shape `STATUS:
+# NEEDS_CONTEXT`: the two statuses a worker uses to stop and ASK. The
+# reconciler answered them as questions — one tier up, then "decide it under
+# the standing orders", then a hold for a person — so a harness that died
+# twice held its tick for a human. A container that knows its harness failed
+# has no question to ask; the run's answer to a fault is to dispatch the tick
+# again, carrying whatever landed, which is what missing-result already gets.
+#
+# So the fault shapes carry NO status line: a report without one is
+# missing-result in every collect (Go and worker-collect.ts alike), and the
+# marker (WORKER_FALLBACK_REPORT_MARKER) tells the collect the report is the
+# container's account of a fault rather than an agent's unreadable answer.
+# Only the 5jo shape — exit 0 with work on the branch — keeps a status,
+# DONE_WITH_CONCERNS, one of collect's four: that work is a delivery whose
+# account is missing, not a fault.
 # ---------------------------------------------------------------------------
 write_fallback_report() {
 	local status="$1" commits="${2:-0}" salvaged="${3:-0}" landed
@@ -1246,23 +1284,23 @@ write_fallback_report() {
 
 	{
 		printf '# %s\n\n' "$tick_id"
-		printf 'The harness exited %s without writing %s. This report was written by %s so\n' \
-			"$status" "$result_path" "$ME"
-		printf "the tick's outcome reaches the durable layer at all — an absent report is\n"
-		printf 'indistinguishable from a container that never ran.\n\n'
+		printf '> **%s.** The harness exited %s without writing %s. This report\n' \
+			"$WORKER_FALLBACK_REPORT_MARKER" "$status" "$result_path"
+		printf "> was written by %s so the tick's outcome reaches the durable layer at\n" "$ME"
+		printf '> all — an absent report is indistinguishable from a container that never ran.\n\n'
 		printf "Nothing here is the agent's own account of the work; there is none.\n\n"
 	} >"$workdir/$result_path"
 
 	if [[ -z $landed ]]; then
-		# Nothing survived. The tick is unimplemented and the container is the
-		# only witness — the one shape a re-dispatch is the right advice for.
+		# Nothing survived: a fault, and the run dispatches the tick again.
 		cat >>"$workdir/$result_path" <<-REPORT
 			Nothing landed on \`${worker_branch}\`: no work commits, and nothing uncommitted
-			to salvage. This tick is unimplemented.
-
-			STATUS: BLOCKED — the harness exited ${status}, wrote no report, and nothing landed on ${worker_branch}; re-dispatch this tick
+			to salvage. The harness exited ${status}, wrote no report, and nothing landed:
+			a fault of this container's harness, not a question for anyone. There is no
+			status line on purpose — the run reads this as missing-result and dispatches
+			the tick again.
 		REPORT
-		warn "the harness wrote no ${result_path} and nothing landed; ${ME} wrote one recording that"
+		warn "the harness wrote no ${result_path} and nothing landed; ${ME} wrote one recording the fault"
 		return
 	fi
 
@@ -1282,15 +1320,16 @@ write_fallback_report() {
 		return
 	fi
 
-	# The 5qj shape. A failed or killed harness with work on the branch: partial,
-	# and a human decides what to do with it. Both facts are named because
-	# either alone is misleading.
+	# The 5qj shape. A failed or killed harness with work on the branch:
+	# partial work, and a fault. Both facts are named because either alone is
+	# misleading; the run carries what landed into the next try rather than
+	# discarding it or asking a person.
 	cat >>"$workdir/$result_path" <<-REPORT
 		The harness exited ${status} and ${landed} landed on \`${worker_branch}\`. That is
-		partial work, not an empty branch: review what landed before deciding anything,
-		because running this tick again from the base would discard it.
-
-		STATUS: NEEDS_CONTEXT — the harness exited ${status} and wrote no report, but ${landed} landed on ${worker_branch}; a human has to review what is there before this tick is run again
+		partial work, not an empty branch: the next try continues from it, because
+		running this tick again from the base would discard it. The harness wrote no
+		report: a fault, not a question. There is no status line on purpose — the run
+		reads this as missing-result and dispatches the tick again, carrying what landed.
 	REPORT
 	warn "the harness exited ${status} and wrote no ${result_path} while ${landed} landed; ${ME} reported partial work rather than an empty branch"
 }
@@ -1725,7 +1764,7 @@ finish_phase() {
 	if ((dirty > 0)); then
 		salvage_uncommitted "$harness_status" && salvaged=1
 	fi
-	if [[ ! -f $workdir/$result_path ]]; then
+	if ! report_written; then
 		# The counts are what decide the verdict, so they are passed rather
 		# than re-read: `commits` is what the AGENT committed and `salvaged`
 		# what this container rescued, and a fallback that conflated them
