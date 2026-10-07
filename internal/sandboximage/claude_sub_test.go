@@ -80,6 +80,10 @@ func TestAClaudeSubBootHandsTheHarnessOnlyThePlaceholder(t *testing.T) {
 		`CLAUDE_CODE_OAUTH_TOKEN="` + claudeSubPlaceholder,
 		`NODE_EXTRA_CA_CERTS="`,
 		`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"`,
+		// The container runs as root: without IS_SANDBOX the real CLI
+		// refuses --dangerously-skip-permissions and the job dies at its
+		// harness probe (epic ilz, 2026-10-07).
+		`IS_SANDBOX="1"`,
 	} {
 		if !strings.Contains(env, want) {
 			t.Errorf("the claude CLI was not handed %s:\n%s", want, env)
