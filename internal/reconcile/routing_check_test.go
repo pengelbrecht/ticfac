@@ -94,7 +94,8 @@ func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 	// — glm, the declared default, and claude, the subscription rung — and a
 	// config that cannot route is a config doctor and the submission
 	// preflight refuse, so the repository's own gate must catch it first.
-	// The declaration is testdata/runners.cloud.configs.toml until it is
+	// The declaration is internal/runconfig/testdata/runners.cloud.configs.toml
+	// until it is
 	// appended to .tick/runners.cloud.toml (a worker may not write that
 	// file), so the guard checks it appended to a scratch copy of the real
 	// files — and checks the real files themselves once they carry it.
@@ -107,12 +108,13 @@ func TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate(t *testing.T) {
 }
 
 // withTheDeclaredConfigs copies this repository's runners files into a
-// scratch .tick directory with testdata/runners.cloud.configs.toml appended
-// to the cloud file, and returns the scratch runners.toml.
+// scratch .tick directory with internal/runconfig/testdata's
+// runners.cloud.configs.toml appended to the cloud file, and returns the
+// scratch runners.toml.
 func withTheDeclaredConfigs(t *testing.T, root string) string {
 	t.Helper()
 	dir := t.TempDir()
-	block, err := os.ReadFile(filepath.Join("testdata", "runners.cloud.configs.toml"))
+	block, err := os.ReadFile(filepath.Join(root, "internal", "runconfig", "testdata", "runners.cloud.configs.toml"))
 	if err != nil {
 		t.Fatal(err)
 	}

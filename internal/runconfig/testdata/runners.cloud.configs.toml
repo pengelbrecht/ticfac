@@ -4,11 +4,13 @@
 # It lives here, not in that file, because .tick/runners.cloud.toml is
 # outside the writable boundary a run's worker is judged against (only
 # .tick/config.md, .tick/runners.toml and .tick/learnings.md are exempt), so
-# tick tda's attempt 2 that wrote it there was refused whole. The repository
-# guard (TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate) appends
-# this block to the real cloud file in a scratch copy and routes every job
-# of every config, so the block is proven against the cells it will sit
-# beside; once it IS in the real file, the same guard holds the real file.
+# tick tda's attempt 2 that wrote it there was refused whole. Two guards
+# append this block to a scratch copy of the real runners files:
+# TestThisRepositorysOwnFilesCarryWellFormedNamedConfigs (this package)
+# parses, validates and selects both configs, and internal/reconcile's
+# TestThisRepositorysRoutingRoutesEveryJobOnEverySubstrate routes every job
+# of each — so the block is proven against the cells it will sit beside.
+# Once it IS in the real file, the same guards hold the real file.
 
 # Named run configs (tick tda): one repository, more than one cloud routing.
 # [configs.glm] is the Workers AI routing this file's own cells have always
