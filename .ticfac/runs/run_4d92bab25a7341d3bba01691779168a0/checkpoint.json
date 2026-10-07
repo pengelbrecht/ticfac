@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 15,
-  "state": "running",
-  "reason": "5gm is running as attempt 3",
-  "updated_at": "2026-10-07T07:13:49Z",
+  "sequence": 16,
+  "state": "collecting",
+  "reason": "collecting 5gm attempt 3",
+  "updated_at": "2026-10-07T07:23:57Z",
   "ticks": [
     {
       "tick_id": "56z",
