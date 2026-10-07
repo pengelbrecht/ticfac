@@ -63,6 +63,18 @@ const harnessStubPreamble = `if [ "$1" = "config" ] && [ "$2" = "path" ]; then
   exit 0
 fi
 if [ -n "${TICKS_HARNESS_PROBE:-}" ]; then
+  # TICKS_TEST_PROBE_FAILS=N fails the first N probes with
+  # TICKS_TEST_PROBE_FAIL_ANSWER / _EXIT (counted in TICKS_TEST_PROBE_COUNT),
+  # and every probe after them answers READY: a service that clears.
+  if [ -n "${TICKS_TEST_PROBE_FAILS:-}" ]; then
+    n=$(cat "$TICKS_TEST_PROBE_COUNT" 2>/dev/null || echo 0); n=$((n + 1))
+    printf '%s\n' "$n" > "$TICKS_TEST_PROBE_COUNT"
+    if [ "$n" -le "$TICKS_TEST_PROBE_FAILS" ]; then
+      printf '%s\n' "$TICKS_TEST_PROBE_FAIL_ANSWER"
+      exit "${TICKS_TEST_PROBE_FAIL_EXIT:-1}"
+    fi
+  fi
+  [ -z "${TICKS_TEST_PROBE_ENV_RECORD:-}" ] || export -p > "$TICKS_TEST_PROBE_ENV_RECORD"
   printf 'READY\n'
   exit 0
 fi
