@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 23,
-  "state": "collecting",
-  "reason": "collecting 8gd attempt 4",
-  "updated_at": "2026-10-07T13:52:17Z",
+  "sequence": 24,
+  "state": "running",
+  "reason": "8gd try 1 (run dispatch #4) is rejected (missing-result): the container never reached its harness: its boot stopped on the model route (exit 7) — the environment, not the tick, and a retry boots the same one",
+  "updated_at": "2026-10-07T13:52:23Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "8gd",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 4
     },
     {
