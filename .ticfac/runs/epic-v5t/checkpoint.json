@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-v5t",
   "epic_id": "v5t",
-  "sequence": 50,
-  "state": "publishing",
-  "reason": "closing yhe behind the integrated gate on 252434684fc8",
-  "updated_at": "2026-10-07T03:38:32Z",
+  "sequence": 51,
+  "state": "running",
+  "reason": "yhe is closed",
+  "updated_at": "2026-10-07T03:38:37Z",
   "ticks": [
     {
       "tick_id": "6fv",
@@ -38,7 +38,7 @@
     },
     {
       "tick_id": "yhe",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 8
     },
     {
