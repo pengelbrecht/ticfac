@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 28,
-  "state": "dispatching",
-  "reason": "dispatching kzs as attempt 5",
-  "updated_at": "2026-10-07T07:51:18Z",
+  "sequence": 29,
+  "state": "running",
+  "reason": "kzs is running as attempt 5",
+  "updated_at": "2026-10-07T07:51:36Z",
   "ticks": [
     {
       "tick_id": "56z",
@@ -19,7 +19,8 @@
     },
     {
       "tick_id": "kzs",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 5
     },
     {
       "tick_id": "5gm",
