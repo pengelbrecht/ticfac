@@ -1,0 +1,13 @@
+{
+  "id": "2zs",
+  "title": "Door contract docs misstate a fresh stepped-down boot's handle fields",
+  "description": "The start route's documented `model` row says the handle's model is \"for a fresh boot, this field\", and the `harness` row beside it says \"the handle's `harness` names it back\" — both written before the rung's step-down (tick 6fv). A rung dispatch with no free subscription is re-resolved by the factory onto the deployment's standing pair before the container is addressed, so the handle a fresh STEP-DOWN boot mints names the re-resolved pair, never the request's fields. A future implementer reading the table would expect the echo and could 'fix' the truthful answer, or build a client check on the wrong invariant.\nevidence: cloudflare/src/sandbox-dispatch.ts:70 (the model row; the harness row at :71)\n\nticfac run epic-v5t filed this backlog tick from the finding b84b3424e3cb12ae8ac5d012acfe815e69b28763e693a0565fbd5f813953dca0 (reported by run-epic-v5t/tick-y38/attempt-7) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-v5t/absorptions/b84b3424e3cb12ae8ac5d012acfe815e69b28763e693a0565fbd5f813953dca0.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-epic-v5t/tick-y38/attempt-7",
+  "created_by": "ticfac run epic-v5t",
+  "created_at": "2026-10-07T03:13:09Z",
+  "updated_at": "2026-10-07T03:13:09Z"
+}
