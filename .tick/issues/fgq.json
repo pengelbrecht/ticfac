@@ -1,0 +1,13 @@
+{
+  "id": "fgq",
+  "title": "Close xe9 and 3gw, rescope 6a6: all answered on the integration head",
+  "description": "Three of the sixteen backlog ticks this epic filed are answered or half answered at 781ff16 and will otherwise be dispatched against the guide as it was before 555253b. xe9 (high) named the three stale failover claims; 555253b corrected all three and round 4 re-read them claim by claim — close it. 3gw (medium) said the close-out retro declares [A1] broken on a head where it is fixed; the rewritten retro at 84cb108d5 is its answer — close it. 6a6 (medium) is half answered: its second half, that the guide said a 401/403 benches for 24h without saying only inference answers are ever classified, is fixed at docs/claude-sub-operator.md:82-86 and :104; its first half stands, so it wants rescoping to what is actually missing — REFUSED_BETAS, a request naming a non-claude model, and a leased label with no secret value. This is the same tracker hygiene adn asks for on 55q and k40, and is cheap enough to fold into it.\nevidence: docs/claude-sub-operator.md:82-104 against cloudflare/src/claude-sub.ts:860-901; .tick/issues/xe9.json, 3gw.json, 6a6.json against 555253b and 84cb108d5\n\nticfac run run_18eafdaa047544be9a196d913fb08a30 filed this backlog tick from the finding 2c0aeb3c4abedbb406a6c5e8f67c811b7e8b1354e816c4e478b126776193b5c6 (reported by run-run_18eafdaa047544be9a196d913fb08a30/tick-kzs/attempt-2) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_18eafdaa047544be9a196d913fb08a30/absorptions/2c0aeb3c4abedbb406a6c5e8f67c811b7e8b1354e816c4e478b126776193b5c6.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_18eafdaa047544be9a196d913fb08a30/tick-kzs/attempt-2",
+  "created_by": "ticfac run run_18eafdaa047544be9a196d913fb08a30",
+  "created_at": "2026-10-07T10:24:48Z",
+  "updated_at": "2026-10-07T10:24:48Z"
+}
