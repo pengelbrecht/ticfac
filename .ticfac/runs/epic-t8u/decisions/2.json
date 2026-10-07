@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "The ts gate runs the vitest suite; it passes deterministically on this host and in CI across several runs; the Makefile gate parity test still holds",
+    "description": "From yoh final-review finding dfae216d (cs1). The ts gate in .tick/runners.toml runs format, lint, contracts and tsc, but no vitest, so a TS behaviour change merges without its tests running in the gate (mn7's worker ran them; the gate did not). Add the vitest suite to the ts gate once the suite is deterministic under load (3cq and the slot-refused fix were the known flakes); watch its wall time against the gate bound.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "tc9",
+    "title": "The integrated gate runs vitest, so TypeScript behaviour ticks are gated by their tests"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.69,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.75,
+      "design": 0,
+      "diagnosis": 0.01,
+      "mechanical": 0.1,
+      "translation": 0.14
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1142,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T13:45:12Z",
+  "answered_at": "2026-10-07T13:45:12Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "tc9",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "4108f825d5d48205911ad4136a6f8b98558e9cd6",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
