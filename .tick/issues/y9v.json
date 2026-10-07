@@ -11,5 +11,5 @@
   "acceptance_criteria": "[A1] curl -fsSL https://ticks.sh/ticfac | sh on a clean macOS and Linux machine yields working ticfac, ticfac-exec-subprocess and tk; [A2] ticfac upgrade moves an installed build to the latest release; [A3] ticfac skills diff reports an out-of-date installed skill; [A4] a landed epic in ticfac's repo produces a new GitHub release without a person",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-28T09:25:48.666464Z",
-  "updated_at": "2026-09-28T09:25:55.16652Z"
+  "updated_at": "2026-10-07T13:55:41.993351Z"
 }

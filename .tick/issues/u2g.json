@@ -1,0 +1,14 @@
+{
+  "id": "u2g",
+  "title": "ticfac skills get --full prints the skill's references too",
+  "gloss": "skills get --full",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "parent": "y9v",
+  "acceptance_criteria": "get --full prints SKILL.md and every references/ file; test; make gate",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T14:07:25.208098Z",
+  "updated_at": "2026-10-07T14:07:25.208098Z"
+}
