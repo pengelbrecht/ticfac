@@ -1,0 +1,17 @@
+{
+  "id": "ilz",
+  "title": "Operator guide for claude on the subscription (first claude-config cloud run)",
+  "gloss": "claude-sub operator guide",
+  "description": "The smoke run of the claude config in the cloud (operator, 2026-10-07): a deliberately small epic whose workers run on claude via the subscription rung (sonnet implement, opus review/close-out). Deliverable: the operator documentation that v5t shipped without — how to add, list, rotate and remove subscriptions (CLAUDE_SUB_TOKEN_\u003cLABEL\u003e Worker secrets, made with claude setup-token), how the pool fails over (lease at job start, bench on a quota 429 until the unified reset, the retry leases another subscription, Workers AI when none is free), how an epic selects the claude config (config:claude label, --config, the [configs] default), and how to see the pool's state.",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "labels": [
+    "config:claude"
+  ],
+  "acceptance_criteria": "[A1] docs/claude-sub-operator.md exists and covers: making a token, adding/rotating/removing a subscription with wrangler secret commands against the production config, label rules, failover behaviour, selecting the config per epic, and observing the pool — every claim checked against cloudflare/src/claude-sub.ts, cloudflare/src/sandbox-executor.ts and internal/reconcile/runconfig_select.go. [A2] README.md links to it. [A3] make gate passes. [A4] The run's workers ran on claude via the subscription rung (the run's events show the claude-sub lease, not a step-down).",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T06:06:13.07662Z",
+  "updated_at": "2026-10-07T06:06:13.07662Z"
+}
