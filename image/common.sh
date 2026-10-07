@@ -718,6 +718,12 @@ select_harness_route() {
 	# not to spend it, because an API key wins over OAuth.
 	if [[ -n $claude_sub ]]; then
 		say "harness $harness on the subscription: no credential exported, the placeholder and the interception carry it"
+		# The container runs as root, and the claude CLI refuses
+		# --dangerously-skip-permissions under root unless told it is in a
+		# sandbox ("cannot be used with root/sudo privileges"). It is one: a
+		# throwaway container per job. The first production claude-sub run
+		# (epic ilz, 2026-10-07) died on exactly this at its harness probe.
+		export IS_SANDBOX=1
 		return 0
 	fi
 	export "$harness_credential_env=$gateway_token"

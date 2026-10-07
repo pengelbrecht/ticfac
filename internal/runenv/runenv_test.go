@@ -131,7 +131,7 @@ var buildEnv = map[string]bool{
 	"OPENAI_BASE_URL": true, "OPENAI_API_KEY": true,
 	"OPENROUTER_BASE_URL": true, "OPENROUTER_API_KEY": true,
 	"WORKERS_AI_BASE_URL": true, "CLOUDFLARE_ACCOUNT_ID": true,
-	"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": true,
+	"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": true, "IS_SANDBOX": true,
 }
 
 var exportRE = regexp.MustCompile(`(?m)\bexport\s+([A-Za-z_][A-Za-z0-9_]*)(?:=|[ \t]*;|[ \t]*$)`)
