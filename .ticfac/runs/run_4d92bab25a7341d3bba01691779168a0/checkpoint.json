@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_4d92bab25a7341d3bba01691779168a0",
   "epic_id": "ilz",
-  "sequence": 44,
-  "state": "publishing",
-  "reason": "closing kzs behind the integrated gate on 1f23a3087e5e",
-  "updated_at": "2026-10-07T08:50:52Z",
+  "sequence": 45,
+  "state": "running",
+  "reason": "kzs is closed",
+  "updated_at": "2026-10-07T08:50:55Z",
   "ticks": [
     {
       "tick_id": "56z",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "kzs",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 6
     },
     {
