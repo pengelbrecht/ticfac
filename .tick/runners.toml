@@ -234,14 +234,28 @@ go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./..
 # binary. It is IN this command rather than a sibling [testing.commands] entry
 # for one measured reason: a sibling would repeat `pnpm install`, which is ~0.7s
 # on a warm store, to learn nothing the &&-chain's own output does not already
-# name. Biome itself is 0.47/0.55/0.64s over three runs on these 109 files, so
-# the gate's TypeScript half goes from ~3s to ~3.6s and the whole gate is
-# unmoved against the 3m26s Go side.
+# name. The cost, re-measured 2026-10-07 (attempt 10 of ncr) with the tree at
+# 167 files rather than the 109 the first measurement saw: `pnpm lint` is
+# 3.19/2.89/2.32s wall over three runs (Biome's own line: "Checked 167 files in
+# 1.3s"), so the gate's TypeScript half goes from ~3s to ~6s and the whole gate
+# stays unmoved against the 3m26s Go side.
 #
 # `pnpm lint` is `biome ci --error-on-warnings`, and the flag matters: plain
 # `biome ci` exits 0 with warnings still on the floor, and most of what Biome
 # found here — the unused variable, the implicit anys — is warning severity, so
 # without it this half cannot refuse what it was added to catch.
+#
+# `pnpm lint:test` is that claim made executable — ncr's acceptance says the
+# format check and the lint check must both FAIL on a deliberately bad file,
+# and until it the proof was a probe a worker ran by hand ("it was also checked
+# that it CAN fire"), evidence that left with the terminal it ran in. It breaks
+# five throwaway trees, each a copy of biome.jsonc and one deliberately bad
+# file, against the real binary: a clean control, a mis-formatted module, a
+# floating promise (the nursery rule the config names by hand, so the case also
+# proves the config — not a fallback — is in force), the warning-severity probe
+# that plain `biome ci` passes and the flag refuses, and a file the config's
+# includes never named. 1.00/1.04/1.00s over three runs, beside the 2-3s the
+# lint itself costs.
 #
 # Biome itself is still shape, not behaviour: it reads one file at a time. The
 # behaviour half of this command is vitest, which is why it is here.
@@ -249,7 +263,10 @@ go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./..
 # What still rides with CI alone: the two node --test suites around the
 # scripts themselves (contracts:test, operator-strings — sub-second each,
 # run by ci.yml's `pnpm test`). The gate takes the behaviour suite the
-# finding was about, not every check that touches cloudflare/.
+# finding was about, not every check that touches cloudflare/. lint:test is
+# the one exception, and it is in both deliberately: it is not a suite around
+# the scripts, it is the acceptance evidence for `pnpm lint` itself, which
+# the gate cannot run without.
 #
 # The two-layout fallback is GONE (tick 9a8). It existed only while Phase 4's
 # l9n moved cloud/factory to cloudflare/: this command is read from the RUN'S
@@ -257,7 +274,7 @@ go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./..
 # move the two disagreed and l9n could never have passed the gate whose job it
 # was to move. Phase 4 merged to main on 2026-09-19 and neither cloud/factory
 # nor cloud/sandbox exists any more, so the fallback arm named nothing.
-ts = { command = "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit && pnpm exec vitest run", description = "TypeScript format, lint, contracts, types and tests" }
+ts = { command = "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm lint:test && pnpm contracts:check && pnpm exec tsc --noEmit && pnpm exec vitest run", description = "TypeScript format, lint, lint refusals, contracts, types and tests" }
 
 [environment.commands]
 which-go = { command = "which go", description = "Go toolchain on PATH" }

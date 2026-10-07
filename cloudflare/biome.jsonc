@@ -3,14 +3,22 @@
   // neither: `tsc --noEmit` is the whole of what read this tree, and tsc is
   // silent about unused values, floating promises, and unreachable code.
   //
-  // JSONC, not JSON, ON PURPOSE. Biome accepts `biome.json` without comments;
-  // put a `//` line in a `biome.json` and Biome does NOT fail — it silently
-  // falls back to its built-in defaults (tabs, lineWidth 80, every rule on,
-  // every file in scope) and formats files this config never named. Measured
-  // here: the same tree checked 110 files with the config honoured and 113,
-  // including contracts.pin.json, with it silently dropped (109 now that
-  // test/fixtures is excluded below). `.jsonc` is the
-  // spelling Biome parses comments in.
+  // JSONC, not JSON, ON PURPOSE: `.jsonc` is the spelling Biome parses
+  // comments in. The hazard the first version of this comment named — put a
+  // `//` line in a `biome.json` and Biome silently falls back to its defaults —
+  // is not what 2.5.13 does, and the correction is worth writing out because
+  // the silent half of it is real. Re-measured at the pinned version: a
+  // `biome.json` carrying comments is a PARSE error — exit 1, "End of file
+  // expected" on the first comment — so that route is loud. The silent hazard
+  // is a config that is ABSENT (renamed, misspelled, or simply not copied into
+  // a tree that should carry it): Biome's built-in defaults then apply with no
+  // diagnostic at all — space-2 and double quotes like here, lineWidth 80
+  // rather than this tree's 100, `recommended` and no nursery rule, and every
+  // file in scope, the pins included (measured: the tree that checks 167
+  // files here checks them plus contracts.pin.json under defaults, and the
+  // scope probe in scripts/lint.test.mjs fails on exactly that difference).
+  // That suite runs in the gate beside the lint it is evidence for, so a
+  // dropped config fails a tick rather than reformatting what it never named.
   "$schema": "https://biomejs.dev/schemas/2.5.13/schema.json",
   "vcs": {
     "enabled": true,
@@ -86,12 +94,17 @@
   },
   "overrides": [
     {
-      // src/untrusted-text.ts EXISTS to strip control characters from
-      // outsider-written prose. Its INVISIBLE class names the C0/C1 ranges and
-      // the bidi overrides on purpose — that regex is the module's whole point,
-      // and a rule that says "you probably did not mean to write U+202E here"
-      // is wrong about exactly this one file.
-      "includes": ["src/untrusted-text.ts"],
+      // These two files EXIST to name control characters. src/untrusted-text.ts
+      // strips them from outsider-written prose: its INVISIBLE class names the
+      // C0/C1 ranges and the bidi overrides on purpose, that regex is the
+      // module's whole point, and a rule that says "you probably did not mean
+      // to write U+202E here" is wrong about exactly that. scripts/lint.test.mjs
+      // (tick ncr) strips the ANSI colour and hyperlink escapes out of Biome's
+      // OWN output — a regex naming ESC is the only way to match them — so the
+      // refusal suite's assertions see plain text and pass the same on every
+      // terminal. The escape is the point of each file, not a typo the rule
+      // caught, and the rule stays on everywhere else.
+      "includes": ["src/untrusted-text.ts", "scripts/lint.test.mjs"],
       "linter": {
         "rules": {
           "suspicious": {

@@ -117,8 +117,16 @@ gate:
 # Biome found in this tree — the unused variable, the implicit anys, the
 # optional-chain misses — is warning severity. Without the flag this is a gate
 # that cannot refuse the things it was added to catch.
+#
+# `pnpm lint:test` is the refusal half made executable (tick ncr's own
+# acceptance): the format check and the lint check must both FAIL on a
+# deliberately bad file, and until it that proof was a probe a worker ran by
+# hand — evidence that left with the terminal it ran in. It breaks five
+# throwaway trees (each a copy of biome.jsonc and one deliberately bad file)
+# against the real binary, so the gate re-runs the proof every tick. ~2s
+# beside the 2s the lint itself costs.
 ts-gate:
-	cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit && pnpm exec vitest run
+	cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm lint:test && pnpm contracts:check && pnpm exec tsc --noEmit && pnpm exec vitest run
 
 # The gate, with the cache refused. Slower and unconditional.
 suite:
