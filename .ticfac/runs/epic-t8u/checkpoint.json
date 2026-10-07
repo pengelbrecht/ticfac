@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 4,
-  "state": "dispatching",
-  "reason": "dispatching tc9 as attempt 2",
-  "updated_at": "2026-10-07T13:45:16Z",
+  "sequence": 5,
+  "state": "running",
+  "reason": "tc9 is running as attempt 2",
+  "updated_at": "2026-10-07T13:45:24Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -14,7 +14,8 @@
     },
     {
       "tick_id": "tc9",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 2
     },
     {
       "tick_id": "1qy",
