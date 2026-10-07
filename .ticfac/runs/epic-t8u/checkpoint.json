@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 54,
-  "state": "integrating",
-  "reason": "integrating 89g attempt 5 into epic/t8u",
-  "updated_at": "2026-10-07T19:03:50Z",
+  "sequence": 55,
+  "state": "gating",
+  "reason": "running the integrated gate for 89g on 6fb280ff88bc",
+  "updated_at": "2026-10-07T19:04:10Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "89g",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 5
     },
     {
