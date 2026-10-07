@@ -55,9 +55,10 @@ type Role struct {
 	// OverrideFile is the override the roles were read with, "" for none.
 	OverrideFile string
 	// SelectedConfig is the named run config the roles were read under
-	// (tick tda): [configs.<name>] was applied as the last overlay over these
-	// cells, so the provenance a resolution records points at the config's
-	// own cells. "" when no selection applied.
+	// (tick tda), when that config declares a cell for THIS role:
+	// [configs.<name>] was applied as the last overlay over these cells, so
+	// the provenance a resolution records points at the config's own cell.
+	// "" when no selection applied, or the config declares none here.
 	SelectedConfig string
 }
 
@@ -116,8 +117,13 @@ func rolesFrom(cfg *runconfig.Config) map[string]Role {
 		if role == nil {
 			continue
 		}
-		entry := Role{Name: name, Kind: role.Kind, Model: role.Model,
-			OverrideFile: cfg.OverrideFile, SelectedConfig: cfg.SelectedConfig}
+		entry := Role{Name: name, Kind: role.Kind, Model: role.Model, OverrideFile: cfg.OverrideFile}
+		// The config is named only on a role whose cell it declared: a role
+		// the config left alone routed on the cells beneath it, and the
+		// provenance's job is naming the table a reader must edit.
+		if nc, ok := cfg.NamedConfig(cfg.SelectedConfig); ok && nc.Roles[name] != nil {
+			entry.SelectedConfig = cfg.SelectedConfig
+		}
 		if len(role.Tiers) > 0 {
 			entry.Tiers = make(map[string]Role, len(role.Tiers))
 			for tier, variant := range role.Tiers {

@@ -231,3 +231,36 @@ func TestTheConfigSelectionDoesNotLeakBetweenResolutions(t *testing.T) {
 		t.Errorf("the claude resolution lost its cells: %q", onClaude.Model)
 	}
 }
+
+// TestTheProvenanceNamesAConfigCellOnlyWhereTheConfigDeclaredOne: a config
+// that declares no cell for a role routed nothing for it, so the role's
+// provenance must not point a reader at a [configs.<name>.roles.<role>]
+// table that does not exist — the label's whole job is naming the table to
+// edit.
+func TestTheProvenanceNamesAConfigCellOnlyWhereTheConfigDeclaredOne(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "runners.toml")
+	if err := os.WriteFile(path, []byte(configProfileCommon+`
+[configs]
+default = "lean"
+
+[configs.lean.roles.implement]
+model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	implement, err := Resolve("implement-tick", Options{RunnersConfig: path, Config: "lean"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(implement.Routed, "[configs.lean.roles.implement]") {
+		t.Errorf("implement's provenance %q does not name the config cell that routed it", implement.Routed)
+	}
+	closeout, err := Resolve("closeout-epic", Options{RunnersConfig: path, Config: "lean"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(closeout.Routed, "[configs.") {
+		t.Errorf("closeout's provenance %q names a config cell the config never declared", closeout.Routed)
+	}
+}
