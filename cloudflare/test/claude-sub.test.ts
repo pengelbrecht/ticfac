@@ -337,6 +337,10 @@ describe("claude-sub: what the proxy forwards on the token", () => {
     expect(allowedRoute("post", "/v1/messages/count_tokens")).toBe("inference");
     expect(allowedRoute("GET", "/api/claude_code/policy_limits")).toBe("startup");
     expect(allowedRoute("GET", "/api/claude_code/settings")).toBe("startup");
+    // The CLI's unauthenticated connectivity check, on every start (2.1.227,
+    // seen in the Linux container by the image's real-CLI smoke test).
+    expect(allowedRoute("HEAD", "/api/hello")).toBe("connectivity");
+    expect(allowedRoute("GET", "/api/hello")).toBeNull();
     expect(allowedRoute("GET", "/v1/messages")).toBeNull();
     expect(allowedRoute("POST", "/v1/messages/batches")).toBeNull();
     expect(allowedRoute("POST", "/api/oauth/claude_cli/create_api_key")).toBeNull();
@@ -529,6 +533,34 @@ describe("claude-sub: the proxy", () => {
       until: NOW + 600_000,
     });
     expect(h.calls.map((c) => c.method)).toContain("recordJobQuota");
+  });
+
+  it("forwards the CLI's connectivity check without the token, even with none configured", async () => {
+    const h = harness(() => new Response(null, { status: 200 }));
+    h.deps.token = null;
+    const response = await h.run(
+      new Request("https://api.anthropic.com/api/hello", { method: "HEAD" }),
+    );
+    expect(response.status).toBe(200);
+    expect(h.sent[0]?.method).toBe("HEAD");
+    expect(h.sent[0]?.headers.get("authorization")).toBeNull();
+    expect(h.calls.map((c) => c.method)).not.toContain("bench");
+  });
+
+  it("strips a credit-backed fallback beta, and forwards the rest", async () => {
+    const h = harness(() => new Response("{}"));
+    await h.run(
+      messages(
+        { model: "claude-opus-5" },
+        {
+          "anthropic-beta":
+            "claude-code-20250219,server-side-fallback-2026-06-01,fallback-credit-2026-06-01",
+        },
+      ),
+    );
+    expect(h.sent[0]?.headers.get("anthropic-beta")).toBe(
+      `claude-code-20250219,server-side-fallback-2026-06-01,${OAUTH_BETA}`,
+    );
   });
 
   it("refreshes the job's lease as its traffic passes, at most once a minute", async () => {
