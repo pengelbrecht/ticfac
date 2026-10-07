@@ -667,7 +667,9 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 	}
 	if client, err := newCloudClient(); err == nil {
 		fmt.Fprintln(stdout, sourceEscalationLine(ctx, &cloudFeedSource{client: client, runID: runID, warn: stderr}))
-		fmt.Fprintln(stdout, sourceRunConfigLine(ctx, &cloudFeedSource{client: client, runID: runID, warn: stderr}))
+		if line := sourceRunConfigLine(ctx, &cloudFeedSource{client: client, runID: runID, warn: stderr}); line != "" {
+			fmt.Fprintln(stdout, line)
+		}
 	}
 	if answer.Alive {
 		return 0
