@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "pqs",
   "attempt": 1,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-07T18:12:08Z",
+  "triaged_at": "2026-10-07T18:12:24Z",
+  "triaged_by": "ticfac run epic-t8u absorbing ksq",
+  "promoted_as": "ksq",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "pqs",
