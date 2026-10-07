@@ -32,20 +32,28 @@ func TestEnvCarriesNoConfigOrIdentityOfTheHost(t *testing.T) {
 
 	// Nothing inherited survives: the pin mechanism, git's `-c` pass-through,
 	// and the host's askpass are all gone.
-	for _, name := range []string{
-		"GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0", "GIT_CONFIG_PARAMETERS", "GIT_ASKPASS",
-	} {
+	for _, name := range []string{"GIT_CONFIG_PARAMETERS", "GIT_ASKPASS"} {
 		if _, ok := has(name); ok {
 			t.Errorf("Env() carries inherited %s: a pin the host set reaches the fixture above every config file", name)
 		}
 	}
-	// The maintenance pins are the helper's OWN, numbered from nothing: count
-	// 2, keys 0 and 1, after the inherited count was stripped.
+	// The pushInsteadOf the host pinned is GONE: the maintenance pins are the
+	// helper's OWN, numbered from nothing after the inherited count was
+	// stripped, so key 0 is maintenance.auto and never the host's URL rewrite.
+	for _, entry := range env {
+		if entry == "GIT_CONFIG_KEY_0=url.https://forge.example.com/.pushInsteadOf" ||
+			entry == "GIT_CONFIG_VALUE_0=https://elsewhere.example.com/" {
+			t.Errorf("Env() carries the host's pushInsteadOf pin: %s", entry)
+		}
+	}
 	if count, ok := has("GIT_CONFIG_COUNT"); !ok || count != "2" {
 		t.Errorf("Env() carries GIT_CONFIG_COUNT=%q ok=%v, want the helper's own count of 2", count, ok)
 	}
 	if key, ok := has("GIT_CONFIG_KEY_0"); !ok || key != "maintenance.auto" {
 		t.Errorf("Env() GIT_CONFIG_KEY_0=%q ok=%v, want maintenance.auto", key, ok)
+	}
+	if value, ok := has("GIT_CONFIG_VALUE_0"); !ok || value != "false" {
+		t.Errorf("Env() GIT_CONFIG_VALUE_0=%q ok=%v, want false", value, ok)
 	}
 	// No config file of the host's is read, the identity is stated in the
 	// environment above every file, and the prompt is off.
