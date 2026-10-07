@@ -1246,6 +1246,22 @@ hang)
 	commit
 	exec sleep 86400
 	;;
+linger-past-grace)
+	# The o3q shape: the worker $LINGER_TICK names does its work, reports, and
+	# then keeps running PAST the grace a cancel of an attempt that has
+	# reported waits out (#141) — long enough that the release which follows
+	# its collect waits the grace out and records a durable cancellation over
+	# the verdict the run has already collected. Every other tick is the plain
+	# report mode, so the fixture costs one worker's seconds and not five.
+	if [ "$TICFAC_TICK" = "${LINGER_TICK:-a1}" ]; then
+		commit
+		report
+		sleep "${LINGER_SECONDS:-30}"
+	else
+		commit
+		report
+	fi
+	;;
 busy-a1)
 	# The 9fc shape (tick dh1): a1 keeps writing into its worktree and
 	# commits NOTHING until the end, so for most of its life it has no

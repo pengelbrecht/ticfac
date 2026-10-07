@@ -1015,6 +1015,15 @@ type fixture struct {
 	// the only pushes its origin sees are the ones it schedules.
 	pushInterval time.Duration
 
+	// settleGrace is the cancel's reported-settle grace this fixture's
+	// executors run (#141): the window a Cancel of an attempt that has
+	// reported waits for it to settle on its own before stopping it and
+	// recording the durable cancellation. Zero is the production grace; a
+	// test that releases a worker which keeps running past the grace sets
+	// one at the harness's own cadence, the way it sets every other bound
+	// (tick o3q).
+	settleGrace time.Duration
+
 	// sweeper is the substrate half of the run's leftover sweep, for a test
 	// that stands one in (sweep_test.go). Nil is the local executor's
 	// answer: it makes nothing outside git.
@@ -1325,6 +1334,11 @@ func (f *fixture) newExecutor(d Dispatch) (Executor, Substrate, error) {
 		Attempt:        d.Attempt,
 		Try:            d.Try,
 		PushInterval:   pushInterval,
+		// The cancel's reported-settle grace, this fixture's own unless the
+		// test named one (#141, tick o3q): the harness's cadence, not the
+		// production ten seconds, so a test can release a worker that keeps
+		// running past it without paying the production window.
+		ReportedSettleGrace: f.settleGrace,
 		// What the tick's earlier attempts found (tick nvn), forwarded the
 		// way the production factories forward it.
 		PriorReports: d.PriorReports,
