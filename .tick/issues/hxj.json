@@ -1,0 +1,13 @@
+{
+  "id": "hxj",
+  "title": "Settle fileParallelism on the real CI runner: a temporary workflow_dispatch job",
+  "description": "Both re-measurements of fileParallelism (2026-09-18 on pool-workers 0.21.3: 1 failure in 5; 2026-10-07 on 0.22.0: 20 parallel runs green, ten of them under 1-minute host load 13-87) have cleared the laptop, but no laptop run can clear the 2-vCPU ubuntu runner where 5qj's corruption was actually observed. The only measurement that can flip the flag is N parallel runs on the real runner: a temporary workflow_dispatch job that runs `pnpm exec vitest run --file-parallelism` in cloudflare, say 10 times, on ubuntu-24.04, reporting each run's verdict. All green: the flag goes on with CI evidence and the serial cost (the suite's ~345 s there) is recovered; any red: the vitest.config.ts comment gains the CI date and version. The shape is already named in the comment this tick updated (cloudflare/vitest.config.ts, beside fileParallelism); this proposal makes it a tick of its own.\nevidence: cloudflare/vitest.config.ts fileParallelism: false and its comment; .github/workflows/ci.yml typescript job runs `pnpm test` in cloudflare on ubuntu-24.04\n\nticfac run epic-t8u filed this backlog tick from the finding 7e1734cf54b8cc1335ebdd5abb4beee71d3ea327830ef2533450e86fcfac5dcb (reported by run-epic-t8u/tick-3xe/attempt-4) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/7e1734cf54b8cc1335ebdd5abb4beee71d3ea327830ef2533450e86fcfac5dcb.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-3xe/attempt-4",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-07T14:51:42Z",
+  "updated_at": "2026-10-07T14:51:42Z"
+}
