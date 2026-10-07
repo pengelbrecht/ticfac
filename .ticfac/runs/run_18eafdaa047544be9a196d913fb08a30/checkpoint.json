@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_18eafdaa047544be9a196d913fb08a30",
   "epic_id": "ilz",
-  "sequence": 3,
-  "state": "running",
-  "reason": "lpl is running as attempt 1",
-  "updated_at": "2026-10-07T09:31:47Z",
+  "sequence": 4,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for lpl",
+  "updated_at": "2026-10-07T09:41:55Z",
   "ticks": [
     {
       "tick_id": "lpl",
