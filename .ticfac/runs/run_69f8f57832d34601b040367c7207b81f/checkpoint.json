@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_69f8f57832d34601b040367c7207b81f",
   "epic_id": "ex6",
-  "sequence": 119,
-  "state": "running",
-  "reason": "qzg is closed",
-  "updated_at": "2026-10-07T22:35:00Z",
+  "sequence": 120,
+  "state": "failed",
+  "reason": "2p3 try 3 (run dispatch #9) answered BLOCKED: the harness exited 1, wrote no report, and nothing landed on tick/ex6/attempt-1/2p3; re-dispatch this tick. The question still holds for a person because it came back from the worker that was told to decide it under the standing orders; its work is on ticfac/run-run_69f8f57832d34601b040367c7207b81f/tick-2p3/attempt-9 (c2a26e8fb23f) and is NOT merged. Answer it on the tick, then release the attempt with `ticfac settle ex6 2p3 9 --run-id run_69f8f57832d34601b040367c7207b81f --release \"<who>\" --carry-work` and run the epic again",
+  "updated_at": "2026-10-07T22:35:07Z",
   "ticks": [
     {
       "tick_id": "2p3",
