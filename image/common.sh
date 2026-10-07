@@ -716,14 +716,19 @@ select_harness_route() {
 	# the CA the interception signs with; exporting ANTHROPIC_API_KEY beside
 	# the placeholder would put per-token spend on a job selected precisely
 	# not to spend it, because an API key wins over OAuth.
+	#
+	# Every claude kind, subscription or gateway: the container runs as root,
+	# and the claude CLI refuses --dangerously-skip-permissions under root
+	# unless told it is in a sandbox ("cannot be used with root/sudo
+	# privileges"). It is one: a throwaway container per job. The first
+	# production claude-sub run (epic ilz, 2026-10-07) died on exactly this at
+	# its harness probe, and a per-token claude run (RUN_HARNESS=claude) boots
+	# the same CLI as the same root.
+	if [[ $harness == "claude" ]]; then
+		export IS_SANDBOX=1
+	fi
 	if [[ -n $claude_sub ]]; then
 		say "harness $harness on the subscription: no credential exported, the placeholder and the interception carry it"
-		# The container runs as root, and the claude CLI refuses
-		# --dangerously-skip-permissions under root unless told it is in a
-		# sandbox ("cannot be used with root/sudo privileges"). It is one: a
-		# throwaway container per job. The first production claude-sub run
-		# (epic ilz, 2026-10-07) died on exactly this at its harness probe.
-		export IS_SANDBOX=1
 		return 0
 	fi
 	export "$harness_credential_env=$gateway_token"
@@ -853,12 +858,44 @@ probe_harness() {
 
 	# Marked, so the container's two invocations of the same binary are told
 	# apart by anything reading them — including this script's own tests.
-	export TICKS_HARNESS_PROBE=1
-	answer="$(cd "$dir" && bounded "$harness_probe_timeout" "${cmd[@]}" </dev/null 2>&1)"
-	status=$?
-	unset TICKS_HARNESS_PROBE
+	#
+	# On a claude-sub job the probe is the ONLY proof of the route (the model
+	# probe is skipped: there is no gateway in front of a subscription), so it
+	# owns the transient/persistent split probe_model makes for the gateway: a
+	# hiccup between the container and Anthropic — a 429, a 529 or other 5xx,
+	# a timeout, a dropped connection — is asked again over the same bounded
+	# window, and one that never clears stops the boot as INFRASTRUCTURE
+	# (EXIT_GATEWAY_UNAVAILABLE: redispatched at the same tier, no rung spent),
+	# never as the harness's wiring (EXIT_HARNESS: the run stops). Before this,
+	# one 529 at boot stopped the whole run as a "worker boot fault".
+	local try=1
+	while :; do
+		export TICKS_HARNESS_PROBE=1
+		answer="$(cd "$dir" && bounded "$harness_probe_timeout" "${cmd[@]}" </dev/null 2>&1)"
+		status=$?
+		unset TICKS_HARNESS_PROBE
+		answer="$(printf '%s' "$answer" | tail -c 600)"
+		[[ -n $claude_sub ]] || break
+		((status != 0)) || break
+		claude_sub_probe_transient "$status" "$answer" || break
+		if ((try >= probe_tries)); then
+			rm -rf "$dir"
+			die $EXIT_GATEWAY_UNAVAILABLE "the claude CLI could not get a one-word round-trip through to the subscription in $try tries (the last exited $status).
+  model: $harness_model_selector (a versionless alias the CLI resolves; billed to the operator's claude subscription)
+  route: api.anthropic.com, intercepted by the factory's claude-sub proxy
+  output: ${answer:-<none>}
+Every try failed the way a busy or unreachable service does (rate limiting, overload, a 5xx, a timeout or a dropped connection), so the boot stops here as infrastructure, not the tick (exit $EXIT_GATEWAY_UNAVAILABLE): the job is dispatched again at the same tier, and a subscription the proxy benched on its quota steps the next job down to Workers AI."
+		fi
+		warn "harness probe try $try of $probe_tries on the subscription exited $status with a transient answer; asking again in $((probe_backoff * try))s: ${answer:-<none>}"
+		sleep "$((probe_backoff * try))"
+		try=$((try + 1))
+	done
 	rm -rf "$dir"
-	answer="$(printf '%s' "$answer" | tail -c 600)"
+
+	if [[ -n $claude_sub ]]; then
+		claude_sub_probe_verdict "$status" "$answer" "$want"
+		return 0
+	fi
 
 	if ((status == 124)); then
 		die $EXIT_HARNESS "the $harness harness did not finish a one-word round-trip within ${harness_probe_timeout}s.
@@ -886,6 +923,54 @@ The model probe above was GREEN, so the gateway and the route are fine and this 
 This is the green-start trap, and it is why the gate is the answer rather than the exit status: a clean exit with no completed round-trip is a run that begins and does nothing. Seen for real from a model that returned an empty stop on every retry — check that '$model_id' is a model this route actually serves and that it can hold a conversation."
 	fi
 	say "harness probe green: $harness answered '$want' through its '$harness_provider' provider"
+}
+
+# claude_sub_probe_transient says whether one failed claude-sub harness probe
+# is the service not getting through, rather than the wiring answering no.
+#
+# The claude CLI prints its API failures as one line ("API Error: 529
+# Overloaded", "API Error: Server is temporarily limiting requests (not your
+# usage limit) · …", "Failed to authenticate. API Error: 403 …") and exits 1,
+# so the class is read from the words. The WIRING is asked first and wins:
+# a refused token, the root refusal, a flag this CLI does not take are the
+# same answer on every try, and a retry would only delay the stop that names
+# them. Then the transient shapes: bounded's timeout (124), a rate limit or
+# overload, a 5xx, a timeout or a connection the network dropped. Anything
+# else is not known to be transient and stays the wiring's stop.
+claude_sub_probe_transient() {
+	local status="$1" answer="$2"
+	if printf '%s' "$answer" | grep -Eiq \
+		'((^|[^0-9])40[13]([^0-9]|$)|failed to authenticate|invalid api key|invalid bearer|oauth token|authentication_error|permission_error|cannot be used with root|unknown option|unknown argument|error: unknown|not logged in|/login)'; then
+		return 1
+	fi
+	((status == 124)) && return 0
+	printf '%s' "$answer" | grep -Eiq \
+		'((^|[^0-9])(429|5[0-9][0-9])([^0-9]|$)|overloaded|rate.?limit|temporarily limiting|too many requests|internal server error|bad gateway|service unavailable|gateway time-?out|timed? ?out|econnrefused|econnreset|etimedout|eai_again|enotfound|epipe|socket hang up|unable to connect|fetch failed|connection error|network error)'
+}
+
+# claude_sub_probe_verdict is the claude-sub probe's stop, in the route's own
+# words (tick 6fv): there is no gateway in front of a subscription and no
+# credential variable to name — the CLI holds a placeholder OAuth token and the
+# factory's interception swaps in the subscription's — and the model probe was
+# SKIPPED, so nothing upstream was proved green before this.
+claude_sub_probe_verdict() {
+	local status="$1" answer="$2" want="$3"
+	local route="  model: $harness_model_selector (a versionless alias the CLI resolves; billed to the operator's claude subscription)
+  route: api.anthropic.com, intercepted by the factory's claude-sub proxy (CLAUDE_CODE_OAUTH_TOKEN is a placeholder the proxy replaces)"
+	if ((status != 0)); then
+		die $EXIT_HARNESS "the claude CLI could not make a model call on the subscription (exit $status).
+$route
+  output: ${answer:-<none>}
+This is not a busy or unreachable service (that is retried, and stops as infrastructure): it is the CLI's own wiring or a refused subscription — a token Anthropic refuses or the pool has benched (see /api/claude-sub), the root check (IS_SANDBOX), or a flag the pinned CLI does not take. Its message is quoted verbatim above."
+	fi
+	if [[ ${answer^^} != *"$want"* ]]; then
+		die $EXIT_HARNESS "the claude CLI exited 0 on the subscription without answering the probe.
+$route
+  asked for: $want
+  said: ${answer:-<nothing>}
+This is the green-start trap: a clean exit with no completed round-trip is a run that begins and does nothing."
+	fi
+	say "harness probe green: claude answered '$want' on the subscription, through the factory's interception"
 }
 
 # Caches are convenience state (axiom 1): they live in the sandbox filesystem,
