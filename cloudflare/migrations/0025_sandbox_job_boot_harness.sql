@@ -1,0 +1,28 @@
+-- The harness one JOB's worker runs on, as the dispatch door recorded it
+-- before anything was addressed (tick yhe).
+--
+-- A deployment that binds WORKER_AGENTS hosts every worker attempt on its
+-- WorkerAgent — every attempt except a claude-sub job (src/claude-sub.ts): a
+-- dispatch that resolved the subscription rung and leased a subscription runs
+-- the claude CLI in its own container under the interception, because the
+-- agent's conversation is pi-durable on the factory's gateway, which serves
+-- no claude alias. So "which door owns this job — the agent, or the
+-- container?" is a fact about the JOB, decided at its start, and every later
+-- reader (the state route, the run-end reclaim) must follow the start's
+-- decision rather than the deployment's shape: reading a rung job through an
+-- agent that holds nothing answers `lost` for as long as the worker runs.
+--
+-- The boot record is where the door already states what it commanded (the
+-- model, migration 0018), written before anything is addressed; the harness
+-- joins it. 'pi-durable' (WORKER_AGENT_HARNESS) names a hosted attempt, the
+-- CLI kind a container worker bound to ('claude' for a rung job).
+--
+-- Rows from before this column existed carry '' — unknown, which every
+-- reader takes as HOSTED: a deployment that binds WORKER_AGENTS hosted every
+-- job it ever booted before this column, so '' preserves each such row's
+-- behaviour exactly. (A deployment that binds no WORKER_AGENTS never reads the
+-- column at all: it has no agent to consult.)
+--
+-- D1 has no `ADD COLUMN IF NOT EXISTS`, but as with 0008 the migration
+-- ledger never re-runs an applied file, so a retried deploy skips this.
+ALTER TABLE sandbox_job_boot ADD COLUMN harness TEXT NOT NULL DEFAULT '';

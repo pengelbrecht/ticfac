@@ -265,6 +265,7 @@ func TestAStartOnAPinnedClaudeModelIsRefused(t *testing.T) {
 	}
 }
 
+<<<<<<< HEAD
 // The factory's step-down of a rung dispatch (tick y38): a dispatch that
 // resolved the claude-sub rung and found no subscription free is not refused
 // by the factory — the job is re-resolved onto the deployment's standing
@@ -346,6 +347,38 @@ func TestASteppedDownRungDispatchOnAnotherWorkersAIModelIsRefused(t *testing.T) 
 	}
 	if st := newStore(h.ex.stateDirFor(h.spec.JobID, 1)); st.exists(fileAttempt) {
 		t.Error("an attempt record was written for a worker on a model the rung does not declare")
+=======
+// The hosted door's defect (tick yhe), pinned as the client's half of it: a
+// door that answers a claude/sonnet rung start with the WORKER AGENT's
+// harness — pi-durable, the name a hosted attempt's handle carries whatever
+// the dispatch resolved — names a pairing the cloud billing rule refuses,
+// and the client refuses it BEFORE any record is written. A claude-sub job
+// is the container's own claude worker under the interception; the handle
+// that proves it ran there names the rung's own pair, which
+// [TestAStartOnTheSubscriptionRungIsAccepted] shows the client accepts —
+// and the real-door end-to-end test in claude_sub_e2e_test.go shows the bound
+// WORKER_AGENTS door now produces.
+//
+// short: an httptest door and one state directory.
+func TestAHostedHandleOnTheSubscriptionRungIsRefused(t *testing.T) {
+	h := newHarness(t)
+	h.newExecutorOnRung(t.TempDir(), "claude", "sonnet")
+	// The door a hosted deployment answered with before the routing: the
+	// agent's harness over the rung's alias, on a start that leased.
+	h.door.bootedHarness = WorkerAgentHarness
+	_, err := h.start("keh")
+	if err == nil {
+		t.Fatal("a rung start answered with the agent's harness was accepted: pi-durable/sonnet is a pairing the cloud billing rule refuses")
+	}
+	if !strings.Contains(err.Error(), "pi-durable/sonnet") {
+		t.Errorf("the refusal does not name the pairing it refused: %v", err)
+	}
+	if !strings.Contains(err.Error(), "billing rule") {
+		t.Errorf("the refusal does not name the rule that fired: %v", err)
+	}
+	if st := newStore(h.ex.stateDirFor(h.spec.JobID, 1)); st.exists(fileAttempt) {
+		t.Error("an attempt record was written for a pairing the cloud billing rule refuses")
+>>>>>>> a33388ee2430c6a880c61f0e270e9b53185b1a15
 	}
 }
 

@@ -390,6 +390,11 @@ const realDoorStartup = 3 * time.Minute
 // realDoorHarnessPath is the door harness under cloudflare/, run by node.
 var realDoorHarnessPath = filepath.Join("test", "go-door-harness", "run.mjs")
 
+// realDoorWorkerAgentsFlag starts the door harness with its fake WORKER_AGENTS
+// seam bound (tick yhe): the door every production deployment answers with,
+// under which a claude-sub job must still reach its own container.
+const realDoorWorkerAgentsFlag = "--with-worker-agents"
+
 // realDoorWorkCommand is WORKER_COMMAND (cloudflare/src/worker-boot.ts): the
 // command a worker container's WORK process runs. The door's own
 // isWorkProcess matches it exactly, so the observation assertion does too.
@@ -428,6 +433,16 @@ type realDoor struct {
 // sleep — until the door is serving with the run seeded and the lease held.
 // It skips, naming the remedy, on a host that cannot run the door at all.
 func newRealDoor(t *testing.T) *realDoor {
+	return newRealDoorOpt(t, false)
+}
+
+// newRealDoorOpt is [newRealDoor] with the harness's one door-shape flag
+// (tick yhe): withWorkerAgents starts run.mjs with `--with-worker-agents`,
+// so the door binds the fake WORKER_AGENTS seam the way production binds its
+// namespace — every start consults the agent, and a claude-sub job must route
+// AROUND it to its own container. The suite's other real-door tests pass
+// false and keep the unhosted door they are about.
+func newRealDoorOpt(t *testing.T, withWorkerAgents bool) *realDoor {
 	t.Helper()
 
 	node, err := exec.LookPath("node")
@@ -453,7 +468,11 @@ func newRealDoor(t *testing.T) *realDoor {
 	}
 
 	door := &realDoor{t: t}
-	door.cmd = exec.Command(node, realDoorHarnessPath)
+	args := []string{realDoorHarnessPath}
+	if withWorkerAgents {
+		args = append(args, realDoorWorkerAgentsFlag)
+	}
+	door.cmd = exec.Command(node, args...)
 	door.cmd.Dir = harnessDir
 	stdout, err := door.cmd.StdoutPipe()
 	if err != nil {
@@ -616,26 +635,13 @@ func (d *realDoor) finish(t *testing.T, sandbox string, code int) {
 // observe reads the harness's one observation route: what containers its
 // fake binding was asked to boot, what processes they hold, and the boot
 // environment the live work process was started with (tick 9iz). The door's
-// own answers cannot express "no rival was booted" — this can.
+// own answers cannot express "no rival was booted" — this can. The route's
+// whole shape — the claude-sub installs and the agents started included
+// (tick yhe) — is decoded once, by [rawObservation], so the assertions that
+// read it cannot drift from each other.
 func (d *realDoor) observe() (map[string]int, map[string]string, error) {
-	response, err := http.Get(d.url + "/__door_harness/sandboxes")
+	observation, err := d.rawObservation()
 	if err != nil {
-		return nil, nil, err
-	}
-	defer response.Body.Close()
-	var observation struct {
-		Sandboxes []struct {
-			Name      string `json:"name"`
-			Processes []struct {
-				ID       string            `json:"id"`
-				Command  string            `json:"command"`
-				State    string            `json:"state"`
-				ExitCode *int              `json:"exit_code"`
-				Env      map[string]string `json:"env"`
-			} `json:"processes"`
-		} `json:"sandboxes"`
-	}
-	if err := json.NewDecoder(response.Body).Decode(&observation); err != nil {
 		return nil, nil, err
 	}
 	counts := map[string]int{}
