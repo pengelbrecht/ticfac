@@ -1,8 +1,8 @@
 package subprocess
 
 import (
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -45,9 +45,7 @@ func stoppedHoldingWork(t *testing.T) (*fixture, *JobHandle, string) {
 // there: the boundary-exclusion assertions need a non-fatal read.
 func committedFile(t *testing.T, repo, commit, path string) (string, bool) {
 	t.Helper()
-	cmd := exec.Command("git", "show", commit+":"+path)
-	cmd.Dir = repo
-	out, err := cmd.Output()
+	out, err := gittest.Command(repo, "show", commit+":"+path).Output()
 	if err != nil {
 		return "", false
 	}
@@ -58,9 +56,7 @@ func committedFile(t *testing.T, repo, commit, path string) (string, bool) {
 // test.
 func snapshotRefExists(t *testing.T, repo, ref string) bool {
 	t.Helper()
-	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", ref)
-	cmd.Dir = repo
-	return cmd.Run() == nil
+	return gittest.Command(repo, "show-ref", "--verify", "--quiet", ref).Run() == nil
 }
 
 // TestDisposePreservesUncommittedWorkItWouldOtherwiseDestroy is pbb's

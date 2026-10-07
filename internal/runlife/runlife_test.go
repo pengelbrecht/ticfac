@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runregistry"
@@ -402,12 +402,7 @@ func TestProbeReportsTheStandingAttemptsGaps(t *testing.T) {
 	// A repository the census CAN read, with no attempt standing in it.
 	git := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repo
-		cmd.Env = testGitEnv()
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-		}
+		gittest.Run(t, repo, args...)
 	}
 	git("init", "--quiet", "-b", "main")
 	git("config", "user.email", "runlife@example.com")
@@ -443,15 +438,13 @@ func TestProbeLeavesTheGapsNullWhenTheCensusCannotBeRead(t *testing.T) {
 	}
 }
 
-// testGitEnv is the environment these tests' own git runs in. Automatic
-// maintenance is off: a `git commit` starts `git maintenance run --auto
-// --detach`, which goes on touching .git after the commit returns, and the
-// test's TempDir cleanup then races it — "unlinkat .../.git: directory not
-// empty" (TestProbeReportsTheStandingAttemptsGaps, CI go race, PR #163). The
-// run's own git has been held to the same rule since tick mel (gitbin).
-func testGitEnv() []string {
-	return gitbin.WithNoAutoMaintenance(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"))
-}
+// These tests' own git runs under gittest (tick pqs), which carries the rule
+// this builder used to state on its own: automatic maintenance off, because
+// a `git commit` starts `git maintenance run --auto --detach`, which goes on
+// touching .git after the commit returns, and the test's TempDir cleanup then
+// races it — "unlinkat .../.git: directory not empty"
+// (TestProbeReportsTheStandingAttemptsGaps, CI go race, PR #163). The run's
+// own git has been held to the same rule since tick mel (gitbin).
 
 // wallRepo is a repository with ONE standing attempt — the in-flight shape —
 // whose run feed already carries lines beside the liveness facts: the fixture
@@ -461,12 +454,7 @@ func wallRepo(t *testing.T, runID string, now time.Time) string {
 	repo := t.TempDir()
 	git := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repo
-		cmd.Env = testGitEnv()
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-		}
+		gittest.Run(t, repo, args...)
 	}
 	git("init", "--quiet", "-b", "main")
 	git("config", "user.email", "runlife@example.com")
@@ -479,10 +467,7 @@ func wallRepo(t *testing.T, runID string, now time.Time) string {
 	branch := "ticfac/run-" + runID + "/tick-a1/attempt-1"
 	git("branch", branch)
 	worktree := filepath.Join(t.TempDir(), "wt-a1")
-	cmd := exec.Command("git", "worktree", "add", "--quiet", worktree, branch)
-	cmd.Dir = repo
-	cmd.Env = testGitEnv()
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := gittest.Command(repo, "worktree", "add", "--quiet", worktree, branch).CombinedOutput(); err != nil {
 		t.Fatalf("git worktree add: %v\n%s", err, out)
 	}
 	return repo

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -206,11 +207,7 @@ func TestManifestCommandsAgainstRealTk(t *testing.T) {
 func gitInit(t *testing.T, dir string) {
 	t.Helper()
 	runGit := func(args ...string) {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		if output, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
-		}
+		gittest.Run(t, dir, args...)
 	}
 	runGit("init", "-q")
 	runGit("config", "user.name", "ticfac fixture")

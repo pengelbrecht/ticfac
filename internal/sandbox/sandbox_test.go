@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/sandboximage"
 )
 
@@ -545,6 +546,13 @@ func TestBaseImageMatchesTheDockerfilePin(t *testing.T) {
 
 func runOK(t *testing.T, dir string, args ...string) {
 	t.Helper()
+	// A git handed to a generic runner is a git start the hermeticity guard
+	// cannot see, so the git case is routed through the one hermetic helper
+	// rather than started raw (tick pqs); everything else stays generic.
+	if len(args) > 0 && args[0] == "git" {
+		gittest.Run(t, dir, args[1:]...)
+		return
+	}
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {

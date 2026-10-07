@@ -80,6 +80,7 @@ var sanctionedRunners = map[string]map[string]bool{
 	"internal/exec/herdr":      {"mustRun": true},
 	"internal/exec/subprocess": {"mustRun": true},
 	"internal/cli":             {"execTestCmd": true, "execTestOutput": true},
+	"internal/sandbox":         {"runOK": true},
 }
 
 // universalCallees may receive the literal "git" in any test file: the

@@ -16,6 +16,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
@@ -92,9 +93,7 @@ func isolatedGitEnv(home string) []string {
 // file goes through it.
 func doorGit(t *testing.T, home, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = isolatedGitEnv(home)
+	cmd := gittest.Under(isolatedGitEnv(home), dir, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
@@ -114,10 +113,16 @@ func TestGitInThisFileIsIsolated(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := string(body)
-	// One construction site, inside doorGit itself.
-	// Assembled rather than written out, so this line is not itself a match.
-	if n := strings.Count(source, "exec.Command("+`"git"`); n != 1 {
-		t.Errorf("%d direct git invocations in this file, want exactly 1 (doorGit): every git here must run under isolatedGitEnv", n)
+	// One construction site, inside doorGit itself — and NO direct one:
+	// doorGit builds through gittest.Under (tick pqs), so the isolation this
+	// file exists to hold is the environment it hands Under, and any git
+	// started outside doorGit cannot have it. Assembled rather than written
+	// out, so this line is not itself a match.
+	if n := strings.Count(source, "exec.Command("+`"git"`); n != 0 {
+		t.Errorf("%d direct git invocations in this file, want 0: every git here must run under doorGit, through gittest.Under and isolatedGitEnv", n)
+	}
+	if n := strings.Count(source, "gittest.Under(iso"+"latedGitEnv("); n != 1 {
+		t.Errorf("%d gittest.Under construction sites, want exactly 1 (doorGit): the isolation is one statement, not one per test", n)
 	}
 	// The package's shared helper (entrypoint_test.go) inherits the host
 	// environment, including the system gitconfig this file exists to stay away

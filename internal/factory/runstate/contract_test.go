@@ -9,13 +9,29 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	contractschema "github.com/pengelbrecht/ticfac/internal/schema"
 )
 
 const (
 	contractFile = "../../../contracts/ticfac-run-state.json"
-	repoRoot     = "../../.."
 )
+
+// repoRoot is the repository this contract's .gitignore fragment lives in,
+// resolved ABSOLUTE at package initialization, before any test chdirs — the
+// factory deploy tests' testdataDir pattern. A relative root here made
+// `git check-ignore` read its repository from the caller's working
+// directory, which in a linked worktree is the worktree and anywhere else
+// is wherever the test happened to run (tick pqs).
+var repoRoot = mustAbs("../../..")
+
+func mustAbs(rel string) string {
+	abs, err := filepath.Abs(rel)
+	if err != nil {
+		panic("cannot resolve " + rel + ": " + err.Error())
+	}
+	return abs
+}
 
 type layoutEntry struct {
 	Path             string `json:"path"`
@@ -729,9 +745,9 @@ func TestGitHonoursTheFragment(t *testing.T) {
 	}
 
 	ignored := func(path string) bool {
-		cmd := exec.Command("git", "check-ignore", "-q", "--", path)
-		cmd.Dir = repoRoot
-		return cmd.Run() == nil
+		// Hermetic (tick pqs): the host's global excludes cannot change what
+		// this repository ignores, which is what the contract is about.
+		return gittest.Command(repoRoot, "check-ignore", "-q", "--", path).Run() == nil
 	}
 
 	for _, path := range c.Gitignore.IgnoredExamples {

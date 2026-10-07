@@ -13,6 +13,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
 	"time"
 )
@@ -339,9 +340,7 @@ func (f *workerFixture) run(args ...string) (string, int) {
 // has and the only one collect looks at.
 func (f *workerFixture) remoteBranch(branch string) (bool, int) {
 	f.t.Helper()
-	cmd := exec.Command("git", "rev-parse", "--verify", "-q", "refs/heads/"+branch)
-	cmd.Dir = f.source
-	if err := cmd.Run(); err != nil {
+	if err := gittest.Command(f.source, "rev-parse", "--verify", "-q", "refs/heads/"+branch).Run(); err != nil {
 		return false, 0
 	}
 	count := git(f.t, f.source, "rev-list", "--count", f.baseSHA+"..refs/heads/"+branch)
@@ -353,9 +352,7 @@ func (f *workerFixture) remoteBranch(branch string) (bool, int) {
 // remoteFile returns a file's contents at the branch tip on origin.
 func (f *workerFixture) remoteFile(branch, path string) (string, bool) {
 	f.t.Helper()
-	cmd := exec.Command("git", "show", "refs/heads/"+branch+":"+path)
-	cmd.Dir = f.source
-	out, err := cmd.Output()
+	out, err := gittest.Command(f.source, "show", "refs/heads/"+branch+":"+path).Output()
 	if err != nil {
 		return "", false
 	}

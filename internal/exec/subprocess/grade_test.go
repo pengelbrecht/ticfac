@@ -2,8 +2,8 @@ package subprocess
 
 import (
 	"fmt"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -385,8 +385,10 @@ func sandboxEnvFor(t *testing.T, worktree, grade string) []string {
 // produces. Its output is for the failure message; what the test acts on is
 // whether the ref appeared on ORIGIN.
 func pushUnder(dir string, env []string, args ...string) string {
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = env
+	// Under, not Command: the environment is the SANDBOX GRADE's, the very
+	// thing this fixture is about to prove a push cannot escape (tick pqs
+	// names the door; grade_test built the shape first).
+	cmd := gittest.Under(env, dir, append([]string{"-C", dir}, args...)...)
 	out, _ := cmd.CombinedOutput()
 	return string(out)
 }
@@ -494,10 +496,9 @@ func TestTheReadOnlyGradesResidualIsADeliberateOverrideOnTheCommandLine(t *testi
 	// the two cases above land; a remote that does need one gets nothing from
 	// this process — no helper, no askpass, no terminal.
 	t.Run("and it still resolves no credential", func(t *testing.T) {
-		cmd := exec.Command("git", "-c", "url.https://forge.example.com/.pushInsteadOf=https://forge.example.com/",
+		cmd := gittest.Under(readOnly, repo.Dir,
+			"-c", "url.https://forge.example.com/.pushInsteadOf=https://forge.example.com/",
 			"credential", "fill")
-		cmd.Dir = repo.Dir
-		cmd.Env = readOnly
 		cmd.Stdin = strings.NewReader("protocol=https\nhost=forge.example.com\n\n")
 		out, err := cmd.CombinedOutput()
 		if err == nil || strings.Contains(string(out), "password=") {

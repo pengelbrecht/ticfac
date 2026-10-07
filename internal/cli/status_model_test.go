@@ -16,7 +16,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -637,12 +636,7 @@ func TestStatusModelLocalWiringPassesTheDashboardReaders(t *testing.T) {
 	repo := t.TempDir()
 	git := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = repo
-		cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-		}
+		gittest.Run(t, repo, args...)
 	}
 	git("init", "--quiet", "-b", "main")
 	git("config", "user.email", "status@example.com")
