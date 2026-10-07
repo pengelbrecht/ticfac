@@ -131,7 +131,11 @@ never deployed.
   A tracked-bash replay whose process is gone checks the workspace is there
   before re-starting on it, so a container that died while no harness
   watched is restored too. `restoreLostWorkspace()` is public for the host
-  that owns the container's lifetime (epic step 6).
+  that owns the container's lifetime (epic step 6). Both of the env's OWN
+  restores — this one and the replay's — announce through
+  `FactorySandboxEnvOptions.onRestore`, which carries the outcome and names
+  the loss that caused it (tick qzg), so a host's log says the sha the model
+  is told rather than a mysteriously slow round.
 - **The pre-round ready check** (tick 4fs, same extension): a container
   destroyed BETWEEN tool rounds — no harness call in flight, so none of the
   restore triggers above can fire — boots empty, and the next round's first

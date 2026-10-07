@@ -11,7 +11,7 @@ import (
 // ewd): the runbook's "What 'observed' means for [A2]'s real-run half"
 // section tells the operator to prove the two [A2] faults inside the real
 // cloud run by reading EXACT lines out of the attempt's log — the resume
-// line after a mid-tool host loss, the two container-loss restore lines —
+// line after a mid-tool host loss, the three container-loss restore lines —
 // and to address the mid-turn destroy by an EXACT container name. Those
 // strings live in the harness host's TypeScript
 // (harness/src/host/worker-attempt.ts) and the door's executor
@@ -48,12 +48,18 @@ func TestTheCloudRunbooksA2FaultEvidenceMatchesTheHarnessHost(t *testing.T) {
 	}
 
 	// Every log line the observation criteria name, and the prefix every
-	// one of them carries in the attempt's log (the host's own `say`).
+	// one of them carries in the attempt's log (the host's own `say`). The
+	// three restore lines are one per loss path: the ready check's
+	// between-rounds one, the nonce path's (tick dbi), and the mid-command
+	// one (tick qzg) — until it, a container destroyed while a tracked bash
+	// ran restored its workspace and told only the model, so the operator
+	// reading the log for this fault saw nothing they could name.
 	for _, line := range []string{
 		"ticfac-harness: ",
 		"a new host life resumed the conversation from its storage (submission ",
 		"the container was lost between rounds; workspace restored to ",
 		"a tracked bash found a fresh container; the workspace was restored to ",
+		"the container was lost mid-command; the workspace was restored to ",
 		"wip checkpoint ",
 	} {
 		if !strings.Contains(oneline(host), line) {

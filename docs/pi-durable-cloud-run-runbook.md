@@ -162,10 +162,17 @@ contract's own):
 
    Observed when all three hold:
 
-   - the attempt's log carries `ticfac-harness: the container was lost
-     between rounds; workspace restored to <sha>` — or, when the loss lands
-     under a tracked bash, `ticfac-harness: a tracked bash found a fresh
-     container; the workspace was restored to <sha> (<subject>)`;
+   - the attempt's log carries one of the three restore lines, one per loss
+     path — `ticfac-harness: the container was lost between rounds;
+     workspace restored to <sha>` for a loss no harness call was in flight
+     to see; `ticfac-harness: a tracked bash found a fresh container; the
+     workspace was restored to <sha> (<subject>)` when the resumed bash's
+     nonce is known by no process anywhere (tick dbi); or `ticfac-harness:
+     the container was lost mid-command; the workspace was restored to
+     <sha> (<subject>)` when the loss lands under a tracked bash whose
+     process is gone or ended with no exit code — the likeliest of the
+     three for this destroy, and until tick qzg the one loss path that
+     restored without saying a line anywhere;
    - the restored `<sha>` is the last `wip checkpoint … pushed` line the lost
      life's own log shows;
    - the turn completed on the restored tree: the attempt settles 0, its
