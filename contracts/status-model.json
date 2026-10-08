@@ -30,23 +30,6 @@
     "epic_title and gloss — and, once the header's clock was found counting",
     "past a finished run (tick e6g), progress.run_elapsed_seconds: the epic's",
     "own elapsed, measured and clamped at the run's end, carried by the model",
-<<<<<<< HEAD
-    "so no renderer derives it a second time. The `dashboard` golden carries",
-    "every one of them populated — it is the fixture the wave-3 renderers and",
-    "the phone page test against. The version does not move: the phone page's",
-    "snapshot parser refuses any model version other than 1, and every reader",
-    "of this contract lives in this repository.",
-    "",
-    "The watch-redesign fields (epic ymf, tick lck) are additive the same way:",
-    "every tick carries a plain-language status word and the exception note",
-    "beside it, the lifecycle carries the epic phase track with its",
-    "you-are-here index, and the model carries the four tick groups the",
-    "dashboard groups by. All of them are derived from the same records the",
-    "rest of the model reads — the pipeline cell, the checkpoint, the attempt",
-    "markers, the holds the feed states, the census — so the words and the",
-    "dots cannot say two things about one tick, and the renderer never",
-    "re-derives a word."
-=======
     "so no renderer derives it a second time, and, since tick b13, cost.subscription:",
     "the claude-sub window use a run on the subscription shows instead of a wallet",
     "number that is always $0.00. The `dashboard` golden carries every one of",
@@ -63,8 +46,17 @@
     "wave-3 renderers and the phone page test against, and a renderer that needs",
     "the field reads its shape from that same derivation. The version does not",
     "move: the phone page's snapshot parser refuses any model version other",
-    "than 1, and every reader of this contract lives in this repository."
->>>>>>> 62eec9afcc951801ff7594dfad82af550f65d2d0
+    "than 1, and every reader of this contract lives in this repository.",
+    "",
+    "The watch-redesign fields (epic ymf, tick lck) are additive the same way:",
+    "every tick carries a plain-language status word and the exception note",
+    "beside it, the lifecycle carries the epic phase track with its",
+    "you-are-here index, and the model carries the four tick groups the",
+    "dashboard groups by. All of them are derived from the same records the",
+    "rest of the model reads — the pipeline cell, the checkpoint, the attempt",
+    "markers, the holds the feed states, the census — so the words and the",
+    "dots cannot say two things about one tick, and the renderer never",
+    "re-derives a word."
   ],
   "schema_version": 1,
   "contract": "ticfac.status_model",

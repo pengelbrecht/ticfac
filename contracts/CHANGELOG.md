@@ -53,28 +53,59 @@ loud.
 
 ---
 
-## 2.4.0
+## 2.5.0
 
-MINOR: `status-model.json` gains the watch-redesign fields (ticfac tick lck,
-epic ymf): every tick now carries `status` — the tick's situation in the
-operator's words (`up next`, `claimed`, `writing code`, `testing`, `merging`,
-`merged`, `reviewing`, `closing out`, `waiting for CI`, `held: reason`,
-`failed: reason`, `done`, and `waiting: X` for a tick blocked behind open
-work or a run that is not going) — derived from the same pipeline cell and
-records the existing fields come from; `exception`, the inline note for what
-is unusual about an unfinished attempt (`attempt N`, `model escalated`,
-`stalled Nm`, null when none); and the lifecycle carries `track`, the epic
-phase track in the same words (building / reviewing / closing out / PR & CI /
-merged), with `here`, the you-are-here index into it. The model carries
-`groups`, the four state buckets the dashboard groups ticks by (NOW, DONE,
-UP NEXT, HELD), as tick ids in the waves' own order, null when the tracker
-could not be read. All are additive within the model's `schema_version` 1 in
-the way the dashboard fields were; the `dashboard` golden and the other
-goldens carry them populated. Consumers: `cloudflare/contracts.pin.json`
-moves to 2.4.0; the Go model and builder gained the fields in the same
-commit, and renderers that read fields by name (the phone page's snapshot
-parser) are unchanged and correct — the watch redesign's rendering ticks
-(ugm) and the phone page's shared model are what the fields exist for.
+MINOR: the fold of tick b13 into epic/ymf — two parallel cuts become one
+again, for the reason 1.2.0 states. The tick cut its own 2.4.0 over the 2.3.0
+it shared with the epic (tick b13, the cost line's leased subscription —
+full text below): `cost` gains `subscription`, the claude-sub label a run's
+jobs lease with the factory's proxy's last-seen use of the account's shared
+5h/7d windows, required-and-null so "no subscription" states itself. The epic
+had already cut 2.4.0 with different bytes (tick lck's watch-redesign fields,
+the entry below), so the tick's half cannot keep its number — a version
+string must never mean two different sets of bytes — and the union re-cuts
+here, at the next MINOR over the tick's own 2.4.1, its words-only patch,
+which keeps its number and its ledger entry. The two halves rewrote one
+fixture from two sides — both touched `status-model.json`'s `why` — so the
+union is neither side's bytes: the dashboard-fields paragraph carries the
+subscription sentence and the golden's one stated null, and the
+watch-redesign paragraph stands beside it; the `dashboard` golden carries the
+watch-redesign fields populated with `cost.subscription` null (it is a LOCAL
+run, and a local run's jobs lease nothing), so the golden's every-field claim
+holds with the one exception 2.4.1 states, and the Go suite still binds the
+populated shape the same way (`TestTheContractBindsTheLeasedSubscription`).
+`version_digests` keeps the epic's binding of 2.4.0
+(3f5cc4ca809c6078c9cdb2098a3d9659673b2428980617fa24e60248367bd2dc), the
+entry the fold's surviving line had already written; the tick's own cut of
+the same version,
+5c2fab2cd66e6a465999ac55ad54c89488ea1397ad9482605a47c59896ec2cbd, is
+recorded here instead. Consumers: an unchanged reader is still correct but no
+longer complete; a consumer pinned to either line's 2.4.0 adopts both halves
+by moving here. The cloudflare pin bumps in the same commit.
+
+### tick b13's 2.4.0, re-cut here
+
+MINOR: `status-model.json`'s cost object gains `subscription` — the claude-sub
+subscription a cloud run's jobs lease (ticfac tick b13), with the window use
+the factory's proxy last saw on the account's shared 5-hour and 7-day windows.
+A run on the subscription pays no wallet money, so its cost line is the
+SUBSCRIPTION's: which label it holds (`MAX1 · 34% of 5h · 8% of 7d` on the
+dashboard) and how much of the windows the operator's own interactive use
+shares. Required-and-null like every field that can be genuinely absent: null
+is a run that leased nothing the factory's /api/claude-sub names — no lease,
+no pool, no factory configured — never a guess, and the label is the only
+identifier the object carries: the route is built so the whole answer is safe
+to paste into a log, and nothing here changes that. Additive within the model's
+own `schema_version` 1, the way the hn6 dashboard fields were; consumers that
+read fields by name (the phone page's snapshot parser) are unchanged and
+correct.
+
+No other fixture changes. Consumers: `cloudflare/contracts.pin.json` moves to
+2.4.0; the Go Model and its builder gained the field in the same commit
+(`internal/statusmodel`, `Sources.ClaudeSub`), and the factory read that fills
+it (`internal/factory/claudesub.go`, gathered in `internal/cli`) is new in the
+same commit.
+
 ## 2.4.1
 
 PATCH: `status-model.json`'s `why` no longer claims something its own golden
@@ -98,26 +129,26 @@ the same commit. Consumers: the cloudflare pin bumps in the same commit.
 
 ## 2.4.0
 
-MINOR: `status-model.json`'s cost object gains `subscription` — the claude-sub
-subscription a cloud run's jobs lease (ticfac tick b13), with the window use
-the factory's proxy last saw on the account's shared 5-hour and 7-day windows.
-A run on the subscription pays no wallet money, so its cost line is the
-SUBSCRIPTION's: which label it holds (`MAX1 · 34% of 5h · 8% of 7d` on the
-dashboard) and how much of the windows the operator's own interactive use
-shares. Required-and-null like every field that can be genuinely absent: null
-is a run that leased nothing the factory's /api/claude-sub names — no lease,
-no pool, no factory configured — never a guess, and the label is the only
-identifier the object carries: the route is built so the whole answer is safe
-to paste into a log, and nothing here changes that. Additive within the model's
-own `schema_version` 1, the way the hn6 dashboard fields were; consumers that
-read fields by name (the phone page's snapshot parser) are unchanged and
-correct.
-
-No other fixture changes. Consumers: `cloudflare/contracts.pin.json` moves to
-2.4.0; the Go Model and its builder gained the field in the same commit
-(`internal/statusmodel`, `Sources.ClaudeSub`), and the factory read that fills
-it (`internal/factory/claudesub.go`, gathered in `internal/cli`) is new in the
-same commit.
+MINOR: `status-model.json` gains the watch-redesign fields (ticfac tick lck,
+epic ymf): every tick now carries `status` — the tick's situation in the
+operator's words (`up next`, `claimed`, `writing code`, `testing`, `merging`,
+`merged`, `reviewing`, `closing out`, `waiting for CI`, `held: reason`,
+`failed: reason`, `done`, and `waiting: X` for a tick blocked behind open
+work or a run that is not going) — derived from the same pipeline cell and
+records the existing fields come from; `exception`, the inline note for what
+is unusual about an unfinished attempt (`attempt N`, `model escalated`,
+`stalled Nm`, null when none); and the lifecycle carries `track`, the epic
+phase track in the same words (building / reviewing / closing out / PR & CI /
+merged), with `here`, the you-are-here index into it. The model carries
+`groups`, the four state buckets the dashboard groups ticks by (NOW, DONE,
+UP NEXT, HELD), as tick ids in the waves' own order, null when the tracker
+could not be read. All are additive within the model's `schema_version` 1 in
+the way the dashboard fields were; the `dashboard` golden and the other
+goldens carry them populated. Consumers: `cloudflare/contracts.pin.json`
+moves to 2.4.0; the Go model and builder gained the fields in the same
+commit, and renderers that read fields by name (the phone page's snapshot
+parser) are unchanged and correct — the watch redesign's rendering ticks
+(ugm) and the phone page's shared model are what the fields exist for.
 
 ## 2.3.0
 
