@@ -502,6 +502,59 @@ func TestInitOnAPiRepositoryWritesCellsEverySubstrateCanRun(t *testing.T) {
 	}
 	constructs("harness", "")
 	constructs("herdr", profile.EmbeddedHerdr)
+
+	// tick 2p3: the written implement cell declares no args — no launch of
+	// the pi-durable harness reads roles-table args, so the parsed cell must
+	// carry none. See TestAPiCellIsWrittenWithoutArgs for the writers.
+	if cell := cfg.Roles["implement"]; len(cell.Args) != 0 {
+		t.Errorf("the written implement cell declares args %v — no launch of the pi-durable harness reads roles-table args", cell.Args)
+	}
+}
+
+// TestAPiCellIsWrittenWithoutArgs pins tick 2p3's code half at the writers.
+// The `pi` kind is the pi-durable harness — headless through the
+// local-subprocess executor or hosted in a cloud container — and neither
+// launch reads roles-table `args`: that key reaches an argv only through the
+// herdr pane path (spawnArgv), and herdr refuses kind pi. The writers used
+// to emit `args = ["--approve"]` beside the deleted pi CLI's trust story
+// (tick gjk's `--approve` covers project-local file trust), telling a reader
+// a pi-CLI path still existed. Both are gone: no pi cell carries args, and
+// the base writer says why in one line.
+//
+// short: two string builds and a substring scan; no files written.
+func TestAPiCellIsWrittenWithoutArgs(t *testing.T) {
+	t.Parallel()
+	model := "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+	gates := []guessedGate{{ID: "go", Command: "go test ./...", Description: "tests"}}
+
+	base := runnersTOML("harness", initRunnerPi, model, gates)
+	if strings.Contains(base, "args = [") {
+		t.Errorf("the base writer still emits an args line beside a pi cell — no launch of the pi-durable harness reads roles-table args:\n%s", base)
+	}
+	if !strings.Contains(base, "no launch of this harness reads them") {
+		t.Errorf("the base writer's pi cell does not say why args are absent — a reader back from the deleted CLI's story deserves the reason:\n%s", base)
+	}
+	for _, story := range []string{"permission-bypass", "file trust", "full-auto story"} {
+		if strings.Contains(base, story) {
+			t.Errorf("the base writer still tells the deleted pi CLI's trust story (%q) beside a pi cell:\n%s", story, base)
+		}
+	}
+	if !strings.Contains(base, "kind = \"pi\"") || !strings.Contains(base, "model = \""+model+"\"") {
+		t.Errorf("the base writer's implement cell lost the answer's harness or model:\n%s", base)
+	}
+
+	cloud := cloudTOML(model)
+	if strings.Contains(cloud, "args = [") {
+		t.Errorf("the cloud writer still emits an args line beside a pi cell:\n%s", cloud)
+	}
+	for _, story := range []string{"permission-bypass", "file trust", "full-auto story"} {
+		if strings.Contains(cloud, story) {
+			t.Errorf("the cloud writer still tells the deleted pi CLI's trust story (%q):\n%s", story, cloud)
+		}
+	}
+	if got := strings.Count(cloud, "kind = \"pi\""); got != 3 {
+		t.Errorf("the cloud writer names pi in %d cells, want all three roles on the cloud's own harness:\n%s", got, cloud)
+	}
 }
 
 // TestInitRefusesACloudModelTheBillingRuleDoesNotAdmit pins the cloud rule

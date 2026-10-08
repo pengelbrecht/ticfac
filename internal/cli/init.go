@@ -654,18 +654,19 @@ version = 2
 				"# every substrate launches for this role. No model here: the shipped\n" +
 				"# profile pairs the claude harness with its own.\n")
 		}
+		if cellKind == initRunnerPi {
+			// `pi` is the pi-durable harness, which runs headless through the
+			// local-subprocess executor or hosted in a cloud container — neither
+			// reads roles-table `args`, a herdr-pane escape hatch only, so a pi
+			// cell that declares one is config no launch reads (tick 2p3 dropped
+			// the `--approve` this writer used to emit for the deleted pi CLI).
+			b.WriteString("# No `args`: no launch of this harness reads them.\n")
+		}
 		fmt.Fprintf(&b, "kind = %q\n", cellKind)
 		if cellModel != "" {
 			fmt.Fprintf(&b, "model = %q\n", cellModel)
 		}
 		b.WriteString("effort = \"high\"\n")
-		if cellKind == initRunnerPi {
-			// pi needs no permission-bypass flag (verified live in this
-			// repository's own routing, tick gjk): `--approve` covers
-			// project-local file trust, and that is the whole of its
-			// full-auto story.
-			b.WriteString("args = [\"--approve\"]\n")
-		}
 		b.WriteString("\n")
 	}
 
@@ -693,7 +694,11 @@ version = 2
 
 `)
 	for _, role := range []string{"implement", "review", "closeout"} {
-		fmt.Fprintf(&b, "[roles.%s]\nkind = %q\nmodel = %q\neffort = \"high\"\nargs = [\"--approve\"]\n\n",
+		// No `args` (tick 2p3): the container hosts the same pi-durable harness
+		// the local-subprocess executor runs, and neither reads roles-table
+		// args — a herdr-pane escape hatch only, and this substrate never
+		// dispatches one.
+		fmt.Fprintf(&b, "[roles.%s]\nkind = %q\nmodel = %q\neffort = \"high\"\n\n",
 			role, initRunnerPi, model)
 	}
 	return b.String()
