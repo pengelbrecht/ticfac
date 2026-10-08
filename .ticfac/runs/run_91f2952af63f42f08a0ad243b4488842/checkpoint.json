@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 19,
-  "state": "running",
-  "reason": "93n is closed",
-  "updated_at": "2026-10-08T16:02:43Z",
+  "sequence": 20,
+  "state": "collecting",
+  "reason": "collecting b13 attempt 3",
+  "updated_at": "2026-10-08T16:02:54Z",
   "ticks": [
     {
       "tick_id": "47j",
