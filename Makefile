@@ -125,10 +125,14 @@ ts-gate:
 # half of tick 2pn a worker could not write — the substrate refuses a worker
 # commit under .tick/ wholesale (image/worker.sh's pre-commit hook and
 # cloudflare/src/worker-collect.ts, where the Go boundary exempts the runner
-# table: tick 9sy) — so until it lands this target is the human/CI half alone.
-# When it does, TestTheGateTargetMatchesTheDeclaredGate's `targets` map gains
-# "harness": "harness-gate" and the two spellings are pinned as the go and ts
-# halves already are.
+# table: tick 9sy) — so it is carried as the tick's protected change and the
+# run applies it at the close-out, for the merger to review. Until it does this
+# target is the human/CI half alone, and
+# TestTheDeclaredHarnessGatePairsWithItsMakefileTwin pins the cell the run is to
+# apply to this recipe, byte for byte — while gate_target_test.go's `gateTargets`
+# map already names this target as the `harness` command's twin, so the parity
+# guard holds from whichever half lands first and neither order can leave the
+# gate red.
 harness-gate:
 	cd harness && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm typecheck && pnpm test
 
