@@ -1,3 +1,16 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/bo9/attempt-6/g2s`, base `ed3f1d2fc915fef66481900b14e3f73f09f5a2da`, harness `claude` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
+> **BOUNDARY VIOLATION ATTEMPTED.** This agent tried to write tracker state, which the
+> orchestrator owns. The container refused it, so nothing under `.tick/`
+> should have reached this branch — but the attempt is reported rather than
+> silently cleaned, because a model that ignored an explicit instruction is
+> something a human has to see. What it did:
+>
+> - the agent ran `tk note list g2s`
+
 # g2s — final review of the operator surface follow-ups diff (epic bo9)
 
 Read as the integrated tree: `epic/bo9` against `990bb6eb` (the merge base with
