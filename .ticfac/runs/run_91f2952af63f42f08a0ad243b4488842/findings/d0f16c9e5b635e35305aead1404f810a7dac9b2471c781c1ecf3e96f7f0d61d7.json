@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "b13",
   "attempt": 3,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T16:03:06Z",
+  "triaged_at": "2026-10-08T16:03:21Z",
+  "triaged_by": "ticfac run run_91f2952af63f42f08a0ad243b4488842 absorbing bt4",
+  "promoted_as": "bt4",
   "provenance": {
     "run_id": "run_91f2952af63f42f08a0ad243b4488842",
     "tick_id": "b13",
