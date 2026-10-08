@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
   "epic_id": "bo9",
-  "sequence": 34,
-  "state": "gating",
-  "reason": "running the integrated gate for u2g on 06d41537071b",
-  "updated_at": "2026-10-08T10:32:33Z",
+  "sequence": 35,
+  "state": "publishing",
+  "reason": "closing u2g behind the integrated gate on 06d41537071b",
+  "updated_at": "2026-10-08T10:42:46Z",
   "ticks": [
     {
       "tick_id": "0ek",
