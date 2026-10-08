@@ -22,8 +22,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,9 +34,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/factory"
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
 	"github.com/pengelbrecht/ticfac/internal/forge"
 	"github.com/pengelbrecht/ticfac/internal/gatewaytrace"
+	"github.com/pengelbrecht/ticfac/internal/httpnet"
 	"github.com/pengelbrecht/ticfac/internal/jev"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
@@ -461,6 +465,79 @@ var statusWorkerCost = func(ctx context.Context, runID string) (*statusmodel.Wor
 	}, nil
 }
 
+// statusClaudeSub is a CLOUD run's leased claude-sub subscription (tick
+// b13): the factory's /api/claude-sub, read under the operator's own token —
+// the same auth `ticfac factory status` uses — reduced to the one
+// subscription THIS run's jobs lease, with the window utilization the
+// factory's proxy last saw. A run on the claude-sub rung pays no wallet
+// money, so this is the run's cost line: which subscription it holds and
+// how much of the account's shared 5h/7d windows it has spent. The leases
+// are identified by the job ids the factory mints — the door's
+// `run-<run>/tick-…` for its worker dispatches, the review boot's sandbox
+// name `<run>-<boot>` (the two spellings factory.LeasedLabels keys on) — so
+// a lease of another run on the same pool never reads as this run's.
+//
+// The read is best-effort like every cost source: a factory with no pool or
+// no claude-sub route is the documented OPTIONAL state, nil and never an
+// error (the rung is off, nothing leased, nothing to show); a factory that
+// SHOULD have answered but did not (an unreachable one, a rejected token)
+// is an error, which the model degrades per source.
+var statusClaudeSub = func(ctx context.Context, runID string) (*statusmodel.CostSubscription, error) {
+	if strings.TrimSpace(runID) == "" {
+		return nil, nil
+	}
+	file, err := credentials.Load()
+	if err != nil {
+		return nil, err
+	}
+	url := strings.TrimSuffix(strings.TrimSpace(file.Get(credentials.KeyURL)), "/")
+	token := strings.TrimSpace(file.Get(credentials.KeyToken))
+	if url == "" || token == "" {
+		return nil, nil // no factory is configured: the optional state, not a failed read
+	}
+	snapshot, err := factory.FetchClaudeSub(ctx, claudeSubHTTPClient(), url, token)
+	if err != nil {
+		if errors.Is(err, factory.ErrNoClaudeSubPool) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return claudeSubOfRun(snapshot, runID), nil
+}
+
+// claudeSubHTTPClient is the client the read travels on: the same package
+// client every factory command uses, so a test that fakes the factory
+// (cloud_test.go's round tripper) fakes this read too.
+func claudeSubHTTPClient() *http.Client {
+	if cloudHTTPClient == nil {
+		cloudHTTPClient = httpnet.Client(15 * time.Second)
+	}
+	return cloudHTTPClient
+}
+
+// claudeSubOfRun reduces the factory's whole pool snapshot to the one
+// subscription THIS run leases (tick b13): the leased labels in the
+// snapshot's own order, its view taken for the window utilization it
+// carries. One subscription is shown even when several are leased — the
+// line is a glance, the pool's per-label picture is /api/claude-sub's to
+// give in full — and the first in the snapshot's order is the deterministic
+// one. No lease of this run, no fact.
+func claudeSubOfRun(snapshot *factory.ClaudeSubSnapshot, runID string) *statusmodel.CostSubscription {
+	labels := snapshot.LeasedLabels(runID)
+	if len(labels) == 0 {
+		return nil
+	}
+	view := snapshot.ViewOf(labels[0])
+	if view == nil {
+		// The label is leased but the snapshot carries no view for it — not
+		// a shape the factory answers with, but an unreadable window is not
+		// a guess either: the label alone is the fact that exists.
+		return &statusmodel.CostSubscription{Label: labels[0]}
+	}
+	fiveHour, sevenDay := view.WindowUtilization()
+	return &statusmodel.CostSubscription{Label: view.Label, FiveHour: fiveHour, SevenDay: sevenDay}
+}
+
 // modelGatherers is the per-frame source policy for a FOLLOWING surface:
 // `status --json` answers once and pays every read on the way, but the live
 // watch (89m) re-gathers every frame, and a frame every two seconds must
@@ -471,6 +548,7 @@ type modelGatherers struct {
 	graph      func(context.Context, string, string) *tk.Graph
 	ci         func(context.Context, string, string) (*statusmodel.CIInput, error)
 	workerCost func(context.Context, string) (*statusmodel.WorkerCostInput, error)
+<<<<<<< HEAD
 	// activity answers one worker's activity (tick 93n), keyed by the
 	// host the caller names: a non-nil client is a cloud run — the factory's
 	// watch socket, opened just long enough for its first frame and closed;
@@ -480,6 +558,12 @@ type modelGatherers struct {
 	// worker's activity null, the same honest not-measured the model states
 	// wherever a source goes unread.
 	activity func(ctx context.Context, client *cloudClient, runID, tickID string, attempt int) *statusmodel.ActivityInput
+=======
+	// claudeSub answers the subscription the run's jobs lease (tick b13).
+	// Only the cloud gathering calls it: a local run's jobs lease nothing,
+	// and a nil reader is the local shape.
+	claudeSub func(context.Context, string) (*statusmodel.CostSubscription, error)
+>>>>>>> b2f06b98bca1699cb185702c6873119754f53bef
 }
 
 // epicIDOf derives the epic id a run id names: `epic-<id>` for a local run,
@@ -797,6 +881,7 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		workerCost = &statusmodel.WorkerCostInput{USD: *record.CostUSD, Source: "gateway"}
 	}
 
+<<<<<<< HEAD
 	// The cloud census: not a worktree walk (a cloud run's worktrees are the
 	// factory's, never this machine's) but the checkpoint's own word about
 	// which ticks it currently calls dispatched — the only standing-attempt
@@ -811,6 +896,24 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 	if gather.activity != nil {
 		remoteActivity = func(tickID string, attempt int) *statusmodel.ActivityInput {
 			return gather.activity(ctx, client, runID, tickID, attempt)
+=======
+	// The run's leased claude-sub subscription (tick b13): the pool's live
+	// snapshot under the operator's own token, reduced to this run. The
+	// subscription is the operator's — whose windows the run draws on — so
+	// the read is not gated on the records being this checkout's to read
+	// (tick nyi): the label and the windows belong to the factory account,
+	// not to the run's project. A read that cannot answer degrades the
+	// model's claude-sub source like every source this gathering cannot
+	// read; no factory configured, no pool, or no lease answers nil — the
+	// optional state, never a failure.
+	var claudeSub *statusmodel.CostSubscription
+	if gather.claudeSub != nil {
+		sub, err := gather.claudeSub(ctx, runID)
+		if err != nil {
+			degraded = append(degraded, "claude-sub")
+		} else {
+			claudeSub = sub
+>>>>>>> b2f06b98bca1699cb185702c6873119754f53bef
 		}
 	}
 
@@ -842,6 +945,7 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		Activity:   nil,
 		Report:     nil,
 		WorkerCost: workerCost,
+		ClaudeSub:  claudeSub,
 		CI:         ci,
 	})
 }
