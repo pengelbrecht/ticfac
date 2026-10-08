@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 23,
-  "state": "collecting",
-  "reason": "collecting 2p3 attempt 1",
-  "updated_at": "2026-10-08T00:12:54Z",
+  "sequence": 24,
+  "state": "integrating",
+  "reason": "integrating 2p3 attempt 1 into epic/ex6",
+  "updated_at": "2026-10-08T00:18:21Z",
   "ticks": [
     {
       "tick_id": "2p3",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
