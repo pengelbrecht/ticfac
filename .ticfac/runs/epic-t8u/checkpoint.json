@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 153,
-  "state": "dispatching",
-  "reason": "dispatching j1h as attempt 22",
-  "updated_at": "2026-10-08T05:28:58Z",
+  "sequence": 154,
+  "state": "running",
+  "reason": "j1h is running as attempt 22",
+  "updated_at": "2026-10-08T05:29:10Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -99,7 +99,8 @@
     },
     {
       "tick_id": "j1h",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 22
     },
     {
       "tick_id": "0bg",
