@@ -2,6 +2,7 @@
   "id": "xyv",
   "title": "watch's first frame waits ~5s on terminals that ignore the colourscheme query",
   "description": "On a pty that does not answer the OSC-11/DSR terminal query — script(1), plain ptys, CI drivers, some multiplexers — `ticfac watch` writes the query at +0.02s and then draws nothing until the query's ~5-second read times out (+5.18s measured), before the first frame renders. The bare `ticfac` overview renders instantly on the same terminal, so the block is specific to the watch's start. A person opening a watch in a pane that does not answer sees five seconds of blank screen — the exact first-frame class #112/z7w's property targets, and the reason the suite's bound cannot honestly be tighter than 5s. The wait is in the colorscheme detection the cobra wrapper performs at command start (fang/colorprofile), so a fix means bounding or skipping that query for the live view.\nevidence: internal/cli/root.go:28 (the colorprofile writer); pty drive: query bytes at +0.02s, first frame at +5.18s, while `ticfac --repo \u003cworld\u003e` renders at once on the same pty\n\nticfac run epic-t8u filed this backlog tick from the finding 785660e8b2be6610dfbdb37eeb0425ca46d3aea928d98d88161615961effb9fa (reported by run-epic-t8u/tick-z7w/attempt-16) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/785660e8b2be6610dfbdb37eeb0425ca46d3aea928d98d88161615961effb9fa.json on the run branch.",
+  "notes": "2026-10-08 02:23 - ticfac run epic-t8u: created by absorbing finding 785660e8b2be6610dfbdb37eeb0425ca46d3aea928d98d88161615961effb9fa — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/785660e8b2be6610dfbdb37eeb0425ca46d3aea928d98d88161615961effb9fa.json on epic/t8u, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-epic-t8u/tick-z7w/attempt-16",
   "created_by": "ticfac run epic-t8u",
   "created_at": "2026-10-08T00:23:50Z",
-  "updated_at": "2026-10-08T00:23:50Z"
+  "updated_at": "2026-10-08T00:23:55.409844Z"
 }
