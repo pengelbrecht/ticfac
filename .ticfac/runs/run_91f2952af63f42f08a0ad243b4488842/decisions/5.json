@@ -1,0 +1,60 @@
+{
+  "schema_version": 3,
+  "decision": 5,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 3,
+    "attempt_head": "7019eeb42de17299c0bdf49d4bc40df64cb4652a",
+    "conflict_files": [
+      "internal/cli/status.go",
+      "internal/cli/status_model.go",
+      "internal/cli/watch.go"
+    ],
+    "conflicting_ticks": [
+      "b13"
+    ],
+    "epic_id": "ymf",
+    "job_id": "run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-3",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "resolve_branch": "ticfac/run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-3",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "b13"
+  },
+  "response": {
+    "conflict_detail": "3 conflicts: content in internal/cli/status.go; content in internal/cli/status_model.go; content in internal/cli/watch.go",
+    "conflict_files": [
+      "internal/cli/status.go",
+      "internal/cli/status_model.go",
+      "internal/cli/watch.go"
+    ],
+    "failure": "operational",
+    "job_id": "run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-3",
+    "merge": "",
+    "reason": "b13 try 1 (run dispatch #3) does not merge onto epic/ymf (3 conflicts: content in internal/cli/status.go; content in internal/cli/status_model.go; content in internal/cli/watch.go) and its resolve-conflict job failed: it answered with no report the run could read and the run's verdict is missing-result (failed): the container pushed tick/ymf/attempt-3-resolve-3-e2ec4944/b13 with no report at RESULT-b13.md committed to it: settled is not finished, and this is neither running nor done. The tick is neither resolved nor re-dispatched",
+    "resolve_head": "82f10fea57f5de8cb185e7efcea722270b4c284b",
+    "status": "failed"
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T16:43:53Z",
+  "answered_at": "2026-10-08T16:43:53Z",
+  "provenance": {
+    "run_id": "run_91f2952af63f42f08a0ad243b4488842",
+    "tick_id": "b13",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "a3660a96d4617e5b58187addab2115c9a0bebfef",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
