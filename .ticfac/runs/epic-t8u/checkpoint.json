@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 123,
-  "state": "integrating",
-  "reason": "integrating x73 attempt 17 into epic/t8u",
-  "updated_at": "2026-10-08T02:11:56Z",
+  "sequence": 124,
+  "state": "gating",
+  "reason": "running the integrated gate for x73 on 9b03556bef0f",
+  "updated_at": "2026-10-08T02:12:09Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -89,7 +89,7 @@
     },
     {
       "tick_id": "x73",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 17
     },
     {
