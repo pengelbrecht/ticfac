@@ -11,11 +11,13 @@ starting, following, steering, triaging and finishing an epic run. Plan with
 `tk`; run with `ticfac`. When the task is "plan this" or "break this down",
 use ticks; when it is "run this epic" or "what is the run doing", use ticfac.
 
-Install or update this skill with `ticfac skills install ticfac` — the same
-one command as the ticks skill's `tk skills install ticks`. Re-run it after
-upgrading ticfac: it replaces a stamped copy with the new binary's version.
-`ticfac skills diff ticfac` says whether a re-install is needed — missing,
-unstamped, an older version, or changed files all count as drift.
+Install or update this skill with `ticfac skills install` — the binary
+embeds one skill, so naming it (`ticfac skills install ticfac`) is the same
+command — the same shape as the ticks skill's `tk skills install ticks`.
+Re-run it after upgrading ticfac: it replaces a stamped copy with the new
+binary's version. `ticfac skills diff ticfac` says whether a re-install is
+needed — missing, unstamped, an older version, or changed files all count as
+drift.
 
 Detail lives in references/: `commands.md` (every command and the flags
 worth knowing), `holds.md` (every stop: who clears it, with what),
@@ -171,7 +173,7 @@ leftover refs.
 
 - New machine: install ticfac (`install.sh`, README), copy `~/.ticfacrc`
   (`factory_url`, `factory_token` — one factory, every machine; never print
-  or commit it), `ticfac skills install ticfac`, then `ticfac doctor` and
+  or commit it), `ticfac skills install`, then `ticfac doctor` and
   `ticfac factory status`.
 - New repository: `ticfac init` (`--substrate both` for cloud), commit the
   `.tick/` files, `ticfac doctor --cloud`. The factory's GitHub App installed

@@ -3,9 +3,11 @@ package cli
 // `ticfac skills` (tick 8v3): the embedded agent-skill bundle — inspect it,
 // read it, install it. The shape is tk's own `tk skills` (a group with
 // list, get and install), so the two tools' skills install the same way:
-// `ticfac skills install ticfac` is the one command, and it lands in the
-// same .claude/skills/ and .agents/skills/ directories `tk skills install
-// ticks` does.
+// `ticfac skills install` is the one command, and it lands in the same
+// .claude/skills/ and .agents/skills/ directories `tk skills install ticks`
+// does. The binary embeds exactly one skill, so the name is optional on
+// `install` and `get` (tick rkk): with none given, both act on the ticfac
+// skill; naming it explicitly still works.
 //
 // The skill the bundle carries teaches the loop an agent runs an epic with
 // (init, doctor, run, the overview, triage) and states its boundary with
@@ -35,18 +37,20 @@ func newSkillsCommand(stdout, stderr io.Writer) *cobra.Command {
 		Long: `Inspect, read and install the agent skills embedded in this binary.
 
 The bundle is version-matched to this build: 'ticfac skills list' reports the
-ticfac version each skill ships with, and 'ticfac skills get <name>' prints a
+ticfac version each skill ships with, and 'ticfac skills get [name]' prints a
 skill's SKILL.md straight from the binary.
 
-'ticfac skills install ticfac' is the one command: it installs the ticfac
-skill — the loop an agent runs an epic with, and its boundary with the ticks
-skill — into every skill directory the repository carries (.claude/skills/
-and .agents/skills/), the same way 'tk skills install ticks' installs the
-ticks skill, so the two land beside each other. Re-installing over a stamped
-directory is the upgrade path. A target with other content and no stamp is
-refused (pass --force to take it over); a target that holds OTHER skills as
-children is refused outright — --force does not override that, because that
-install would delete every sibling skill.
+'ticfac skills install' is the one command: with no name, it installs the
+ticfac skill — the binary embeds one, so naming it ('ticfac skills install
+ticfac') is equivalent — the loop an agent runs an epic with, and its
+boundary with the ticks skill — into every skill directory the repository
+carries (.claude/skills/ and .agents/skills/), the same way 'tk skills
+install ticks' installs the ticks skill, so the two land beside each other.
+Re-installing over a stamped directory is the upgrade path. A target with
+other content and no stamp is refused (pass --force to take it over); a
+target that holds OTHER skills as children is refused outright — --force
+does not override that, because that install would delete every sibling
+skill.
 
 'ticfac skills diff <name>' compares an installed copy against the embedded
 bundle and reports drift — missing, unstamped, a different version, or
@@ -100,17 +104,26 @@ func newSkillsListCommand(stdout, stderr io.Writer) *cobra.Command {
 // newSkillsGetCommand builds `skills get`.
 func newSkillsGetCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get <name>",
+		Use:   "get [name]",
 		Short: "print a skill's SKILL.md, straight from the binary",
+		Long: fmt.Sprintf(`Print a skill's SKILL.md, straight from the binary.
+
+With no name, print the %s skill — the one this binary embeds.`, skills.DefaultSkill),
 	}
 	fs := flag.NewFlagSet("skills get", flag.ContinueOnError)
 	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.skills-get.v1) holding the file's content instead of the bare text")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		if len(args) != 1 || args[0] == "" {
-			return newExitError(exitUsage, "exactly one skill name is required")
+		if len(args) > 1 {
+			return newExitError(exitUsage, "at most one skill name is accepted")
 		}
-		name := args[0]
+		name := skills.DefaultSkill
+		if len(args) == 1 {
+			if args[0] == "" {
+				return newExitError(exitUsage, "a skill name must not be empty")
+			}
+			name = args[0]
+		}
 		data, err := skills.Read(name, "SKILL.md")
 		if err != nil {
 			return newExitError(exitNotFound, "%v", err)
@@ -145,9 +158,12 @@ type skillsFlags struct {
 // newSkillsInstallCommand builds `skills install`.
 func newSkillsInstallCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "install <name>",
+		Use:   "install [name]",
 		Short: "install a skill from the embedded bundle to disk",
 		Long: `Install a skill from the embedded bundle to disk.
+
+With no name, install the ticfac skill — the one this binary embeds; naming
+it explicitly ('ticfac skills install ticfac') still works.
 
 Without --dir, ticfac detects skill directory conventions at the repo root:
 .claude/skills/ and .agents/skills/. It installs into every one that
@@ -185,13 +201,20 @@ Exit codes
 	}
 	commandFlags(cmd, fs)
 	cmd.Args = func(c *cobra.Command, args []string) error {
-		if len(args) != 1 || args[0] == "" {
-			return newExitError(exitUsage, "exactly one skill name is required")
+		if len(args) > 1 {
+			return newExitError(exitUsage, "at most one skill name is accepted")
+		}
+		if len(args) == 1 && args[0] == "" {
+			return newExitError(exitUsage, "a skill name must not be empty")
 		}
 		return nil
 	}
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(skillsInstallCommand(args[0], fl, stdout, stderr))
+		name := skills.DefaultSkill
+		if len(args) == 1 {
+			name = args[0]
+		}
+		return codeToErr(skillsInstallCommand(name, fl, stdout, stderr))
 	}
 	return cmd
 }
