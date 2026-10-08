@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 23,
-  "state": "running",
-  "reason": "b13 is running as attempt 5",
-  "updated_at": "2026-10-08T18:14:59Z",
+  "sequence": 24,
+  "state": "collecting",
+  "reason": "collecting lck attempt 4",
+  "updated_at": "2026-10-08T18:15:04Z",
   "ticks": [
     {
       "tick_id": "47j",
