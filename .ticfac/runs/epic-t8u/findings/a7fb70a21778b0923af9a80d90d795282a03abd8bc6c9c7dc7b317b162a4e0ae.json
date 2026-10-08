@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "kwh",
   "attempt": 21,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T05:28:06Z",
+  "triaged_at": "2026-10-08T05:28:15Z",
+  "triaged_by": "ticfac run epic-t8u absorbing 1o8",
+  "promoted_as": "1o8",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "kwh",
