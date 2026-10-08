@@ -1,0 +1,13 @@
+{
+  "id": "216",
+  "title": "seam for the Workflows API base so the phantom cloud run is testable hermetically",
+  "description": "z7w's cloud half — the phantom 'running' cloud run, a factory record frozen at running with no Workflow instance behind it — is only honestly detectable through the Cloudflare Workflows API, and `factory.SupervisorOptions` pins that base URL to api.cloudflare.com (internal/factory/supervisor.go: `CloudflareAPIBase`, never set by internal/cli's cloudSupervisorOptions). A seam there (an env var or credential-file key) would let the Bombadil suite stub the Workflows endpoint the way it stubs tk and the registry, and hold the phantom-live property from outside the process; today that property needs the operator's Cloudflare credentials and cannot run in CI.\n\nticfac run epic-t8u filed this backlog tick from the finding 40cbb75d73a72e6531f1e6f33291ae3fe0828a515449394f116af1a68e05f1db (reported by run-epic-t8u/tick-z7w/attempt-16) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/40cbb75d73a72e6531f1e6f33291ae3fe0828a515449394f116af1a68e05f1db.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-z7w/attempt-16",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-08T00:24:06Z",
+  "updated_at": "2026-10-08T00:24:06Z"
+}
