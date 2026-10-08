@@ -129,6 +129,21 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 
 	report, raw, hasReport := e.readReport(record, head)
 
+	// Whose report it is (ex6 2p3, 2026-10-07). A report the container wrote
+	// because its harness wrote none (the fallback marker, or the sentence
+	// every older image's fallback carried) is the container's account of a
+	// fault: a BLOCKED or NEEDS_CONTEXT in it is not a worker stopping to ask,
+	// and read as one it climbed the blocked-answer ladder and held 2p3 for a
+	// person over three harness faults (the older image also took a CARRIED
+	// attempt's inherited fallback for its own agent's report; worker.sh's
+	// report_written is that half's fix). It reads as no answer at all —
+	// missing-result, which the run dispatches again carrying whatever landed.
+	reason := ""
+	if hasReport && containerFallback(raw) && (report.Status == "" || questionStatus(report.Status)) {
+		report.Status, report.Detail, report.Line = "", "", ""
+		reason = reasonContainerFallback
+	}
+
 	// The one lie this substrate's collect could tell about its own branch
 	// (tick dyo, finding 73ba193d): the container's entrypoint commits the
 	// report itself, in its own commit, at the branch root — so a worker
@@ -142,8 +157,11 @@ func (e *Executor) CollectDetail(h *subprocess.JobHandle) (*subprocess.Collectio
 	// two facts an operator acts on the same way but reads differently.
 	reportOnly := reportIsOnlyChange(changed, resultFile(record.TickID))
 
-	verdict, outcome, class, reason := classify(record.Spec.Role, commits, reportOnly, hasReport, report,
+	verdict, outcome, class, classified := classify(record.Spec.Role, commits, reportOnly, hasReport, report,
 		violations, artifactViolations)
+	if reason == "" || verdict != subprocess.VerdictMissingResult {
+		reason = classified
+	}
 
 	result := &subprocess.JobResult{
 		SchemaVersion: subprocess.SchemaVersion,
@@ -583,7 +601,25 @@ const (
 	// the report — so the sentence says the one commit that is there rather
 	// than one that is not.
 	reasonReportOnly = "report-only"
+
+	// reasonContainerFallback is the report the container wrote because its
+	// harness wrote none, asking nothing: a fault, not a question.
+	reasonContainerFallback = "container-fallback"
 )
+
+// containerFallback says whether a report is the one image/worker.sh writes
+// when the harness wrote none — the structured marker, or the sentence every
+// fallback an older image wrote carries verbatim (attempt branches written by
+// those images are still carried forward).
+func containerFallback(raw string) bool {
+	return strings.Contains(raw, sandboximage.WorkerFallbackReportMarker) ||
+		strings.Contains(raw, sandboximage.WorkerLegacyFallbackSentence)
+}
+
+// questionStatus is a status a worker uses to stop and ask.
+func questionStatus(status string) bool {
+	return status == subprocess.StatusBlocked || status == subprocess.StatusNeedsContext
+}
 
 // collectMessage keeps two failures from sharing one sentence.
 func collectMessage(reason, class string, record *attemptRecord, head string, violations, reportProblems []string) string {
@@ -615,6 +651,11 @@ func collectMessage(reason, class string, record *attemptRecord, head string, vi
 		}
 		return fmt.Sprintf("the container pushed %s with no report at %s committed to it: settled is not finished, "+
 			"and this is neither running nor done", record.Branch, resultFile(record.TickID))
+	case reasonContainerFallback:
+		return fmt.Sprintf("the harness wrote no report: the report at %s on %s is the container's fallback "+
+			"(%s), its account of a harness fault and not a question for a person — the tick is dispatched "+
+			"again, carrying whatever landed", resultFile(record.TickID), record.Branch,
+			sandboximage.WorkerFallbackReportMarker)
 	case reasonReportNoStatus:
 		return fmt.Sprintf("the report at %s on %s carries no STATUS line: the worker finished and left an answer "+
 			"nobody can read", resultFile(record.TickID), record.Branch)

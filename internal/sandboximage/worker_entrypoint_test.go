@@ -681,8 +681,14 @@ func TestWorkerWritesAReportWhenTheHarnessDidNot(t *testing.T) {
 	if !ok {
 		t.Fatal("no report reached origin at all")
 	}
-	mustContain(t, report, "STATUS: BLOCKED", "a status a collector can act on")
+	// The structured fact a collector acts on: the container's account of a
+	// fault, which is never a question (ex6 2p3).
+	mustContain(t, report, WorkerFallbackReportMarker, "the marker a collector reads the fault from")
 	mustContain(t, report, "wrote no report", "why the report is not the agent's")
+	if status, _, line := collectParseStatus(report); status != "" {
+		t.Errorf("the fallback for a harness fault carries the status %q (%s): a fault is not a question, "+
+			"and a BLOCKED here climbs the blocked-answer ladder to a person", status, line)
+	}
 }
 
 // tick 3gr. The fallback report is right to exist, and for a long time it said
@@ -695,8 +701,13 @@ func TestWorkerWritesAReportWhenTheHarnessDidNot(t *testing.T) {
 // them — the harness's exit status, the commits on the branch and whether a
 // salvage happened — are already in hand where the fallback is written.
 //
-// So: what survived decides the verdict, and only the shape where nothing
-// survived may advise a re-dispatch.
+// So: what survived decides the verdict. And (ex6 2p3, 2026-10-07) the shapes
+// that are a FAULT — the harness failed, or ended with nothing on the branch —
+// carry no status at all: a fallback that answered BLOCKED or NEEDS_CONTEXT
+// was read as a worker stopping to ask, climbed the blocked-answer ladder, and
+// held its tick for a person over a crashed harness. With no status line every
+// collect reads the fault as missing-result and dispatches the tick again,
+// carrying what landed; the marker says the report is the container's.
 func TestWorkerFallbackReportSeparatesTheShapesOfANoReportRun(t *testing.T) {
 	shorttest.EndToEnd(t) // its fixtures are built inside subtests
 	cases := []struct {
@@ -705,24 +716,23 @@ func TestWorkerFallbackReportSeparatesTheShapesOfANoReportRun(t *testing.T) {
 		exit   string
 		commit bool
 		dirty  bool
-		// what the fallback must then say
+		// what the fallback must then say ("" is no status line: a fault)
 		status      string
 		wantExit    int
-		reDispatch  bool
 		wantDetails []string
 	}{
 		{
 			// run_215b7cbf's 201: nothing ran to completion and nothing
-			// landed. The only shape a re-dispatch is the right advice for.
-			name: "nothing landed", exit: "124", status: collectStatusBlocked,
-			wantExit: ExitWorkerAgent, reDispatch: true,
-			wantDetails: []string{"exited 124", "nothing"},
+			// landed.
+			name: "nothing landed", exit: "124", status: "",
+			wantExit:    ExitWorkerAgent,
+			wantDetails: []string{"exited 124", "nothing landed", "missing-result"},
 		},
 		{
 			// The same emptiness reached by a harness that claimed success.
-			name: "clean exit, nothing landed", exit: "0", status: collectStatusBlocked,
-			wantExit: ExitWorkerAgent, reDispatch: true,
-			wantDetails: []string{"exited 0", "nothing"},
+			name: "clean exit, nothing landed", exit: "0", status: "",
+			wantExit:    ExitWorkerAgent,
+			wantDetails: []string{"exited 0", "nothing landed"},
 		},
 		{
 			// 5jo. Exit 0 and real commits is work that landed; the gap is
@@ -733,14 +743,14 @@ func TestWorkerFallbackReportSeparatesTheShapesOfANoReportRun(t *testing.T) {
 		},
 		{
 			// 5qj. A killed harness whose tree was salvaged: partial work on
-			// the branch that a re-dispatch would throw away.
+			// the branch that the next try carries rather than discards.
 			name: "failed exit, work salvaged", exit: "124", dirty: true,
-			status: collectStatusNeedsContext, wantExit: ExitWorkerAgent,
-			wantDetails: []string{"exited 124", "salvage"},
+			status: "", wantExit: ExitWorkerAgent,
+			wantDetails: []string{"exited 124", "salvage", "carrying what landed"},
 		},
 		{
 			name: "failed exit, work committed", exit: "3", commit: true,
-			status: collectStatusNeedsContext, wantExit: ExitWorkerAgent,
+			status: "", wantExit: ExitWorkerAgent,
 			wantDetails: []string{"exited 3", "1 work commit(s)"},
 		},
 	}
@@ -769,17 +779,14 @@ func TestWorkerFallbackReportSeparatesTheShapesOfANoReportRun(t *testing.T) {
 			}
 			// Read with the collector's own parser: a status a container
 			// invents that collect cannot parse is no status at all.
-			status, detail, line := collectParseStatus(report)
+			status, _, line := collectParseStatus(report)
 			if status != tc.status {
 				t.Errorf("status %q, want %q\n  line: %s\n  report:\n%s", status, tc.status, line, report)
 			}
-			if got := strings.Contains(detail, "re-dispatch"); got != tc.reDispatch {
-				verb := "advises"
-				if !tc.reDispatch {
-					verb = "must not advise"
-				}
-				t.Errorf("the status %s a re-dispatch; it %s one:\n  %s", map[bool]string{true: "advises", false: "does not advise"}[got], verb, line)
+			if status == collectStatusBlocked || status == collectStatusNeedsContext {
+				t.Errorf("the container's fallback asks a question (%s): a fault is never one", line)
 			}
+			mustContain(t, report, WorkerFallbackReportMarker, "the marker that says the report is the container's")
 			for _, want := range tc.wantDetails {
 				mustContain(t, report, want, "the fact that separates this shape from the others")
 			}

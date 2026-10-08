@@ -1,4 +1,4 @@
-import { env, SELF } from "cloudflare:test";
+import { env, runDurableObjectAlarm, SELF } from "cloudflare:test";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { deriveTokenHash, mintFactoryToken } from "../src/auth";
@@ -8,9 +8,10 @@ import {
   listDispatchLogs,
   listRunGatewayTokens,
   recordSandboxJobSettled,
+  updateRunState,
 } from "../src/db";
 import { GATEWAY_PATH_PREFIX, issueRunToken } from "../src/gateway";
-import type { QueuedSubmission } from "../src/run-room";
+import type { QueuedSubmission, RunRoom } from "../src/run-room";
 import {
   MIN_QUEUE_TTL_MS,
   type RunWorkflowInstance,
@@ -730,6 +731,103 @@ describe("queued submissions (D22)", () => {
     if (released.ok) expect(released.ignited).toBeNull();
     // Only the holder was ever created: the parked entry expired unignited.
     expect(workflow.created).toHaveLength(1);
+  });
+
+  // Tick xvk: bo9's `--queue` run parked behind ex6, expired on the 30-minute
+  // default window while ex6 ran for seven hours, and was never seen again —
+  // ex6 ended `failed`, released, and found nothing to ignite.
+  it("waits out a holder that runs past the window and ends failed, visible while it waits", async () => {
+    const project = await enrolled("queue-xvk");
+    const first = (await (
+      await post("/api/runs", submission(project, { epic: "ex6" }))
+    ).json()) as {
+      run: { run_id: string };
+    };
+    const original = env.RUN_QUEUE_TTL_MS;
+    env.RUN_QUEUE_TTL_MS = String(MIN_QUEUE_TTL_MS);
+    let parked: { queued: QueuedSubmission };
+    try {
+      parked = (await (
+        await post(
+          "/api/runs",
+          submission(project, { epic: "bo9", base_sha: OTHER_SHA, queue: true }),
+        )
+      ).json()) as { queued: QueuedSubmission };
+    } finally {
+      if (original === undefined) delete env.RUN_QUEUE_TTL_MS;
+      else env.RUN_QUEUE_TTL_MS = original;
+    }
+    const queuedID = parked.queued.run_id;
+
+    // Long past the deployment's window, with the alarm fired.
+    await new Promise((resolve) => setTimeout(resolve, MIN_QUEUE_TTL_MS + 60));
+    const stub = env.RUN_ROOMS.get(env.RUN_ROOMS.idFromName(project));
+    await runDurableObjectAlarm(stub as unknown as DurableObjectStub<RunRoom>);
+
+    // Visible by its own id, as the run it will become...
+    const one = await get(`/api/runs/${queuedID}`);
+    expect(one.status).toBe(200);
+    const status = (await one.json()) as {
+      run: { run_id: string; state: string; epic: string; project: string };
+      queued: QueuedSubmission[];
+      lease: { run_id: string };
+    };
+    expect(status.run).toMatchObject({ run_id: queuedID, state: "queued", epic: "bo9", project });
+    expect(status.lease).toMatchObject({ run_id: first.run.run_id });
+    expect(status.queued.map((q) => q.run_id)).toContain(queuedID);
+    // ...and in the unfiltered listing.
+    const listing = (await (await get("/api/runs")).json()) as {
+      projects: { project: string; queued: QueuedSubmission[] }[];
+    };
+    const mine = listing.projects.find((p) => p.project === project);
+    expect(mine?.queued.map((q) => q.run_id)).toEqual([queuedID]);
+
+    // The holder ends failed and its lease is released the way an ended run's
+    // is: the parked run ignites.
+    await updateRunState(env.DB, first.run.run_id, "failed", new Date().toISOString());
+    const released = await roomFor(env, project).releaseLeaseOfEndedRun(first.run.run_id);
+    expect(released.released).toBe(true);
+    expect(released.ignited).toMatchObject({ run_id: queuedID, epic: "bo9" });
+    expect(workflow.created.map((c) => c.id)).toEqual([first.run.run_id, queuedID]);
+    await expect(getRun(env.DB, queuedID)).resolves.toMatchObject({ state: "starting" });
+  });
+
+  // The window of a submission that waited counts from the release, not from
+  // the park: an ignition that fails right after a long holder must leave a
+  // whole window to retry in, not an entry that is already overdue (xvk).
+  it("restarts a waiting submission's window when the release cannot ignite it", async () => {
+    const project = await enrolled("queue-xvk-retry");
+    const first = (await (
+      await post("/api/runs", submission(project, { epic: "ex6" }))
+    ).json()) as {
+      run: { run_id: string };
+    };
+    const original = env.RUN_QUEUE_TTL_MS;
+    env.RUN_QUEUE_TTL_MS = "1000";
+    let parked: { queued: QueuedSubmission };
+    try {
+      parked = (await (
+        await post(
+          "/api/runs",
+          submission(project, { epic: "bo9", base_sha: OTHER_SHA, queue: true }),
+        )
+      ).json()) as { queued: QueuedSubmission };
+    } finally {
+      if (original === undefined) delete env.RUN_QUEUE_TTL_MS;
+      else env.RUN_QUEUE_TTL_MS = original;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    workflow.failNextCreate = true;
+    const released = await roomFor(env, project).releaseLeaseOfEndedRun(first.run.run_id);
+    expect(released.released).toBe(true);
+    expect(released.ignited).toBeNull();
+
+    const waiting = await roomFor(env, project).listQueuedSubmissions();
+    expect(waiting.map((q) => q.run_id)).toEqual([parked.queued.run_id]);
+    // Its parked deadline has passed; the restarted one is a whole window on.
+    expect(Date.now()).toBeGreaterThan(Date.parse(parked.queued.expires_at));
+    expect(Date.parse(waiting[0]!.expires_at)).toBeGreaterThan(Date.now() + 500);
   });
 
   it("refuses a queue window outside the accepted bounds", async () => {

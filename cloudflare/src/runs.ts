@@ -48,6 +48,7 @@ import {
   insertDispatchLog,
   insertRun,
   insertRunImage,
+  listEnrolledProjects,
   listRuns,
   listSettledSandboxAttempts,
   type Run,
@@ -1028,6 +1029,11 @@ export async function submitRun(env: Env, submission: RunSubmission): Promise<Su
       : { credential_grade: submission.credential_grade }),
     blocked_by: lease.holder.run_id,
     ttl_ms: queueTtlMs(env, submission.queue_ttl_ms),
+    // A submission that named no window of its own waits for the holder to
+    // end, however it ends and however long it runs (tick xvk). The deployment
+    // default then bounds only the time it sits ignitable-but-unlit after the
+    // release; an explicit window keeps D22's hard deadline from the park.
+    waits_for_release: submission.queue_ttl_ms === undefined,
   });
   if (parked.ok === false && parked.error === "invalid_request") {
     return { outcome: "invalid", detail: parked.detail };
@@ -1263,7 +1269,7 @@ export type RunStatus = {
 /** Everything `tk cloud status <run>` shows: index row, Workflow step state, lease, gates, queue. */
 export async function runStatus(env: Env, runID: string): Promise<RunStatus | null> {
   const run = await getRun(env.DB, runID);
-  if (run === null) return null;
+  if (run === null) return queuedRunStatus(env, runID);
 
   const room = roomFor(env, run.project);
   const [lease, queued, gates, stop, image, progress, settled] = await Promise.all([
@@ -1287,6 +1293,51 @@ export async function runStatus(env: Env, runID: string): Promise<RunStatus | nu
     progress,
     settled_attempts: settled,
   };
+}
+
+/**
+ * A submission still parked behind a lease, answered as a run in state
+ * `queued` (tick xvk).
+ *
+ * A parked submission is not a run yet — it has no index row until it ignites
+ * — so `tk cloud status <its id>` used to answer 404 "no run", the very id the
+ * submission was handed back as. The id names no project, so each enrolled
+ * project's room is asked; that is one RPC per project, and only on a miss.
+ */
+async function queuedRunStatus(env: Env, runID: string): Promise<RunStatus | null> {
+  for (const { project } of await listEnrolledProjects(env.DB)) {
+    const room = roomFor(env, project);
+    const queued = await room.listQueuedSubmissions();
+    const parked = queued.find((entry) => entry.run_id === runID);
+    if (parked === undefined) continue;
+    const [lease, gates] = await Promise.all([room.leaseStatus(), room.listQuestions()]);
+    return {
+      run: {
+        run_id: parked.run_id,
+        project: parked.project,
+        epic: parked.epic,
+        base_sha: parked.base_sha,
+        requested_by: parked.requested_by,
+        state: "queued",
+        // Not started: an empty stamp rather than the park time, which would
+        // read as a start that never happened.
+        started_at: "",
+        ended_at: null,
+        cost_usd: 0,
+        trace_id: parked.trace_id ?? null,
+        credential_grade: parked.credential_grade ?? "write",
+      },
+      phase: { state: "queued", workflow: null },
+      lease,
+      queued,
+      gates,
+      stop: null,
+      image: null,
+      progress: null,
+      settled_attempts: [],
+    };
+  }
+  return null;
 }
 
 /**
@@ -1345,6 +1396,16 @@ export async function listRunStatus(
   const projects = new Set(runs.map((run) => run.project));
   if (filter.project !== undefined) projects.add(filter.project);
 
+  // A parked submission is not a run, so a project whose only news is its
+  // queue (its holder fell out of the listing's window) would otherwise be
+  // missing from it — and the parked run with it (tick xvk).
+  const extra =
+    filter.project === undefined
+      ? (await listEnrolledProjects(env.DB))
+          .map((enrolled) => enrolled.project)
+          .filter((project) => !projects.has(project))
+      : [];
+
   const statuses = await Promise.all(
     [...projects].sort().map(async (project): Promise<ProjectStatus> => {
       const room = roomFor(env, project);
@@ -1352,6 +1413,18 @@ export async function listRunStatus(
       return { project, lease, queued };
     }),
   );
+  const parked = (
+    await Promise.all(
+      extra.sort().map(async (project): Promise<ProjectStatus> => {
+        const room = roomFor(env, project);
+        const [lease, queued] = await Promise.all([
+          room.leaseStatus(),
+          room.listQueuedSubmissions(),
+        ]);
+        return { project, lease, queued };
+      }),
+    )
+  ).filter((status) => status.queued.length > 0);
 
-  return { runs, projects: statuses };
+  return { runs, projects: [...statuses, ...parked] };
 }

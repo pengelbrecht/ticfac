@@ -81,7 +81,7 @@ const MaxFindingTitle = 80
 // knownV2Field is the closed key set of a v2 item.
 var knownV2Field = map[string]bool{
 	"kind": true, "title": true, "body": true, "severity": true, "target": true, "breaks": true, "evidence": true,
-	"tracker_edit": true,
+	"tracker_edit": true, "protected_change": true,
 }
 
 // V2FindingFieldNames is the v2 key set, sorted, for messages.
@@ -114,6 +114,9 @@ func looksLikeV2(items []map[string]json.RawMessage) bool {
 		if _, ok := fields["tracker_edit"]; ok {
 			return true
 		}
+		if _, ok := fields["protected_change"]; ok {
+			return true
+		}
 		var kind string
 		if json.Unmarshal(fields["kind"], &kind) == nil &&
 			(kind == FindingV2KindProposal || kind == FindingV2KindContractChange) {
@@ -134,6 +137,9 @@ type findingV2 struct {
 	// TrackerEdit is the exact tracker change that fixes the finding, when
 	// its fix is purely tracker-side (tracker_edits.go).
 	TrackerEdit json.RawMessage `json:"tracker_edit"`
+	// ProtectedChange is the change to a protected file that fixes the
+	// finding, for the run to apply after its close-out (protected_change.go).
+	ProtectedChange json.RawMessage `json:"protected_change"`
 }
 
 // readFindingV2 reads one v2 item and maps it onto the internal record. It
@@ -239,6 +245,17 @@ func readFindingV2(i int, fields map[string]json.RawMessage) (Finding, []Finding
 		}
 		finding.TrackerEdit = &edit
 		finding.Body = appendBodyLine(finding.Body, "tracker edit: "+edit.String()+" (applied by the run)")
+	}
+	// The protected change that IS the fix (epic-v5t's yck): never folded or
+	// repaired, for the tracker edit's reason — it is a write.
+	if len(item.ProtectedChange) > 0 && string(item.ProtectedChange) != "null" {
+		change, err := readProtectedChange(item.ProtectedChange)
+		if err != nil {
+			return Finding{}, nil, fmt.Sprintf("findings[%d].protected_change %v", i, err)
+		}
+		finding.ProtectedChange = &change
+		finding.Body = appendBodyLine(finding.Body, "protected change: "+change.String()+
+			" (applied by the run after its close-out, for the merger to review)")
 	}
 	return finding, notes, ""
 }

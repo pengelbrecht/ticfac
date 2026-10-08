@@ -3318,6 +3318,7 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	// A proposed tracker edit is held to the tracker here, and a DONE whose
 	// only deliverable is the edit is a delivery (tracker_edits.go, hn6 yjq).
 	collected = r.acceptTrackerEdits(ctx, marker, collected)
+<<<<<<< HEAD
 	// The verdict this run has already recorded for the attempt is read
 	// BEFORE the executor's re-read of it (tick o3q): a restart re-collects
 	// an attempt whose work never merged, and the executor answers from the
@@ -3326,6 +3327,11 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	// ruled. The recorded verdict outranks the cancellation that followed it;
 	// a cancellation that PRECEDED one is baked into the verdict itself.
 	collected = r.readRecordedVerdictFirst(marker, collected)
+=======
+	// And a DONE whose only deliverable is a protected change it carries
+	// (protected_changes.go, epic ex6's 2pn) is a delivery too.
+	collected = r.acceptProtectedDelivery(marker, collected)
+>>>>>>> 990bb6eb429df10d37ebfe99f6ee05bd7be2f981
 	r.setTick(marker.TickID, "reported")
 	// Tick 19l: what the worker answered and what the run concluded are two
 	// claims by two parties, stated separately — never one sentence that reads

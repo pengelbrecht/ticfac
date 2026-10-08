@@ -93,11 +93,17 @@ const CloudFSRoot = "profiles-cloudflare-sandbox"
 const EmbeddedCloud = "cloudflare-sandbox"
 
 // EmbeddedSets are the profile sets compiled into this binary, by the Dir
-// value that resolves each: the local set ("") and the herdr set. A caller
-// that must find the set whose profiles name a given executor — a dispatch
-// rebuilt from an attempt's marker, whose executor is a recorded fact —
-// walks these rather than spelling an executor's name itself.
-var EmbeddedSets = []string{"", EmbeddedHerdr}
+// value that resolves each: the local set (""), the herdr set and the cloud
+// set. A caller that must find the set whose profiles name a given executor —
+// a dispatch rebuilt from an attempt's marker, whose executor is a recorded
+// fact — walks these rather than spelling an executor's name itself.
+//
+// The cloud set was missing from this list when it was compiled in (#151), so
+// `ticfac settle` of a cloud attempt refused "ran on executor
+// cloudflare-sandbox, and no profile set this build carries resolves one
+// naming it" until the person added `--profiles profiles-cloudflare-sandbox`
+// — the record already said which executor (tick w5u).
+var EmbeddedSets = []string{"", EmbeddedHerdr, EmbeddedCloud}
 
 // Roles are the three role profiles Phase 1 ships, in the order the reconciler
 // dispatches them. They are job-protocol.json's role names, not the tracker's

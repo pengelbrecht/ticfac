@@ -289,7 +289,7 @@ func (r *Reconciler) readyEpic(ctx context.Context) (readiness, error) {
 		r.record("", StageLandSkipped, "the epic ran no close-out, so no epic PR exists to keep ready")
 		return readiness{}, nil
 	}
-	lands := r.closeoutRule.Lands()
+	lands := r.landsItself()
 	if lands {
 		if refusal, err := r.landingReviewHold(co.marker.TickID); err != nil {
 			return readiness{}, err
@@ -519,7 +519,7 @@ func (rd readiness) section(r *Reconciler) string {
 			short(rd.BaseHead))
 	}
 	fmt.Fprintf(&b, "- CI (%s) is green on %s.\n", r.closeoutRule.CIWorkflow, short(rd.CI))
-	if r.closeoutRule.Lands() {
+	if r.landsItself() {
 		fmt.Fprintf(&b, "- The repository opts in to the run merging its own PR (%s), so the run merges this PR "+
 			"now, with tk's merge drivers, as a merge commit.\n", r.closeoutRule.MergeStated)
 	} else {
