@@ -6,6 +6,9 @@
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
+  "blocked_by": [
+    "lrd"
+  ],
   "parent": "ex6",
   "role": "review",
   "created_by": "ticfac run run_af0e77b99c1540b7b8005cf04fd2795d",
