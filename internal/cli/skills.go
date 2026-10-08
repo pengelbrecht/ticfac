@@ -97,38 +97,87 @@ func newSkillsListCommand(stdout, stderr io.Writer) *cobra.Command {
 	return cmd
 }
 
+// skillsGetFileJSON is one file's content as `skills get --full --json`
+// carries it.
+type skillsGetFileJSON struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
 // newSkillsGetCommand builds `skills get`.
 func newSkillsGetCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <name>",
-		Short: "print a skill's SKILL.md, straight from the binary",
+		Short: "print a skill's SKILL.md, or the whole bundle with --full",
+		Long: `Print a skill's SKILL.md, straight from the binary.
+
+With --full, print the whole skill bundle instead: SKILL.md followed by
+every other file in the skill (its references/ files), each preceded by a
+separator line naming its path — the only way to read those files without
+installing the skill to disk first.`,
 	}
 	fs := flag.NewFlagSet("skills get", flag.ContinueOnError)
-	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.skills-get.v1) holding the file's content instead of the bare text")
+	full := fs.Bool("full", false, "print the whole skill bundle, not just SKILL.md: SKILL.md then every other file, each under a header naming its path")
+	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.skills-get.v1) holding the file content(s) instead of the bare text")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
 		if len(args) != 1 || args[0] == "" {
 			return newExitError(exitUsage, "exactly one skill name is required")
 		}
 		name := args[0]
-		data, err := skills.Read(name, "SKILL.md")
+
+		if !*full {
+			data, err := skills.Read(name, "SKILL.md")
+			if err != nil {
+				return newExitError(exitNotFound, "%v", err)
+			}
+			if *asJSON {
+				return emitAgentJSON(stdout, struct {
+					agentDoc
+					Skill   string `json:"skill"`
+					File    string `json:"file"`
+					Content string `json:"content"`
+				}{
+					agentDoc: agentDoc{Schema: agentSchemaID("skills-get"), State: agentStateDone},
+					Skill:    name,
+					File:     "SKILL.md",
+					Content:  string(data),
+				})
+			}
+			_, _ = stdout.Write(data)
+			fmt.Fprintln(stdout)
+			return nil
+		}
+
+		paths, err := skills.Paths(name)
 		if err != nil {
 			return newExitError(exitNotFound, "%v", err)
+		}
+		files := make([]skillsGetFileJSON, 0, len(paths))
+		for _, p := range paths {
+			data, err := skills.Read(name, p)
+			if err != nil {
+				return newExitError(exitNotFound, "%v", err)
+			}
+			files = append(files, skillsGetFileJSON{Path: p, Content: string(data)})
 		}
 		if *asJSON {
 			return emitAgentJSON(stdout, struct {
 				agentDoc
-				Skill   string `json:"skill"`
-				File    string `json:"file"`
-				Content string `json:"content"`
+				Skill string              `json:"skill"`
+				Files []skillsGetFileJSON `json:"files"`
 			}{
 				agentDoc: agentDoc{Schema: agentSchemaID("skills-get"), State: agentStateDone},
 				Skill:    name,
-				File:     "SKILL.md",
-				Content:  string(data),
+				Files:    files,
 			})
 		}
-		_, _ = stdout.Write(data)
+		for i, f := range files {
+			if i > 0 {
+				fmt.Fprintf(stdout, "\n--- %s ---\n\n", f.Path)
+			}
+			fmt.Fprint(stdout, f.Content)
+		}
 		fmt.Fprintln(stdout)
 		return nil
 	}
