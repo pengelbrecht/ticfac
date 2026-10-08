@@ -12,8 +12,11 @@
   "attempt": 18,
   "done_item": "A3",
   "demonstrating_check": "go test -count=1 -run TestTheEvacuationWaitsOutTheSupervisorsPushThatHoldsTheRefLock ./internal/reconcile/ (on git >= 2.51, e.g. CI ubuntu-24.04 git 2.55)",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T02:37:32Z",
+  "triaged_at": "2026-10-08T02:37:41Z",
+  "triaged_by": "ticfac run epic-t8u absorbing p4c",
+  "promoted_as": "p4c",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "r6v",
