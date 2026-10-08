@@ -1162,12 +1162,18 @@ func TestStatusModelCloudGathersTheLeasedSubscription(t *testing.T) {
 	}{
 		{
 			name: "the run's jobs lease MAX1",
+			// The real lease spellings, as the factory's own suite asserts them
+			// (sandbox-dispatch.test.ts: a worker dispatch's lease is its job id,
+			// run-<run>/tick-<tick>/attempt-<n>) — and another run's worker job
+			// beside them, which must not read as this run's. The review boot's
+			// shape is its own leg below: one spelling per leg, so one drifting
+			// alone is the failure it is.
 			claudeSub: func(cloudFactoryRequest) (int, any) {
 				return 200, map[string]any{
 					"labels": []string{"MAX1"},
 					"subscriptions": []any{map[string]any{
 						"label":         "MAX1",
-						"active_leases": []string{runID + "-46x-1", "other_run-7zk-1"},
+						"active_leases": []string{"run-" + runID + "/tick-46x/attempt-1", "run-run_6a4b8e0f2c1d5f3b/tick-7zk/attempt-1"},
 						"last_limits": map[string]string{
 							"anthropic-ratelimit-unified-5h-utilization": "0.34",
 							"anthropic-ratelimit-unified-7d-utilization": "0.08",
@@ -1178,13 +1184,29 @@ func TestStatusModelCloudGathersTheLeasedSubscription(t *testing.T) {
 			wantLabel: "MAX1", want5h: ptr(float64(0.34)), want7d: ptr(float64(0.08)),
 		},
 		{
+			name: "the run's review boot alone leases",
+			claudeSub: func(cloudFactoryRequest) (int, any) {
+				return 200, map[string]any{
+					"labels": []string{"MAX1"},
+					"subscriptions": []any{map[string]any{
+						"label":         "MAX1",
+						"active_leases": []string{runID + "-2", "other_run-7"},
+						"last_limits": map[string]string{
+							"anthropic-ratelimit-unified-5h-utilization": "0.12",
+						},
+					}},
+				}
+			},
+			wantLabel: "MAX1", want5h: ptr(float64(0.12)),
+		},
+		{
 			name: "only another run's jobs lease",
 			claudeSub: func(cloudFactoryRequest) (int, any) {
 				return 200, map[string]any{
 					"labels": []string{"MAX1"},
 					"subscriptions": []any{map[string]any{
 						"label":         "MAX1",
-						"active_leases": []string{"other_run-46x-1"},
+						"active_leases": []string{"run-run_6a4b8e0f2c1d5f3b/tick-46x/attempt-1", "other_run-46x-1"},
 						"last_limits":   map[string]string{},
 					}},
 				}

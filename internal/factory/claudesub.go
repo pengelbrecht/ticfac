@@ -46,8 +46,12 @@ type ClaudeSubSnapshot struct {
 type ClaudeSubView struct {
 	Label string `json:"label"`
 	// ActiveLeases is the job ids currently holding a lease. A job's id is
-	// the sandbox it runs in, spelled `<run-id>-<tick>-<attempt>` (or with a
-	// trailing slot), so a lease of THIS run's begins with its run id.
+	// the one the DOOR mints for it — `run-<run-id>/tick-<tick>/attempt-<n>`,
+	// the role jobs' variants and the base fold's under the same
+	// `run-<run-id>/` prefix (sandbox-executor.ts's specJobID) — or, for the
+	// review boot, the container's sandbox name `<run-id>-<boot>`
+	// (run-workflow.ts's pool.lease(name)). The spelling is what
+	// LeasedLabels keys on; see its comment for the whole rule.
 	ActiveLeases []string `json:"active_leases"`
 	// LastLimits is the last `anthropic-ratelimit-unified-*` headers the
 	// proxy saw, verbatim — the window utilization a claude-sub run reads
@@ -107,19 +111,32 @@ func FetchClaudeSub(ctx context.Context, client *http.Client, factoryURL, token 
 // LeasedLabels returns the snapshot's subscriptions whose active leases name
 // one of run's jobs, in the snapshot's own order — the labels sorted — so a
 // caller that takes the first takes a deterministic one. A lease belongs to
-// the run when its job id IS the run id or begins with it and a separator:
-// every job id the factory mints is a sandbox name built from the run id
-// (`<run-id>-<tick>-<attempt>`, sandbox.ts / sandbox-executor.ts), and the
-// separator keeps `run_abc` from claiming a run `run_abc2`'s lease.
+// the run when its job id is one of the two spellings the factory keys a
+// run's own jobs by:
+//
+//   - the door's job id, `run-<run-id>/…`: every worker the reconciler
+//     dispatches — the implement, review, closeout, repair and resolve jobs
+//     — leases under its job id (specJobID → attemptJobID,
+//     cloudflare/src/sandbox-executor.ts), and the attempt protocol bounds
+//     job_id at `run-<run-id>/` (sandbox-dispatch.ts), so the role variants
+//     (`…/repair-1-r2`, `run-<run>/base-fold-2`) ride the same prefix;
+//   - the review boot's sandbox name, `<run-id>-<boot>` — the one job that
+//     leases under its container's name rather than its job id
+//     (run-workflow.ts's pool.lease(name), sandbox.ts's sandboxName).
+//
+// The separators — the `/` of the job id, the `-` of the sandbox name — are
+// the whole match: they keep `run_abc` from claiming `run_abc2`'s lease in
+// either spelling.
 func (s *ClaudeSubSnapshot) LeasedLabels(runID string) []string {
 	if s == nil || runID == "" {
 		return nil
 	}
-	prefix := runID + "-"
+	bootPrefix := runID + "-"
+	jobPrefix := "run-" + runID + "/"
 	var leased []string
 	for _, view := range s.Subscriptions {
 		for _, jobID := range view.ActiveLeases {
-			if jobID == runID || strings.HasPrefix(jobID, prefix) {
+			if jobID == runID || strings.HasPrefix(jobID, bootPrefix) || strings.HasPrefix(jobID, jobPrefix) {
 				leased = append(leased, view.Label)
 				break
 			}

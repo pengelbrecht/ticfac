@@ -472,9 +472,10 @@ var statusWorkerCost = func(ctx context.Context, runID string) (*statusmodel.Wor
 // factory's proxy last saw. A run on the claude-sub rung pays no wallet
 // money, so this is the run's cost line: which subscription it holds and
 // how much of the account's shared 5h/7d windows it has spent. The leases
-// are identified by the job id the factory mints (the sandbox name, built
-// from the run id), so a lease of another run on the same pool never reads
-// as this run's.
+// are identified by the job ids the factory mints — the door's
+// `run-<run>/tick-…` for its worker dispatches, the review boot's sandbox
+// name `<run>-<boot>` (the two spellings factory.LeasedLabels keys on) — so
+// a lease of another run on the same pool never reads as this run's.
 //
 // The read is best-effort like every cost source: a factory with no pool or
 // no claude-sub route is the documented OPTIONAL state, nil and never an
