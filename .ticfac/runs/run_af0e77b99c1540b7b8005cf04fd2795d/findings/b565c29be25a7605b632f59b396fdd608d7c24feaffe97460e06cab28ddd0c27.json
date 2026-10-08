@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "0rt",
   "attempt": 7,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T02:56:53Z",
+  "triaged_at": "2026-10-08T02:57:02Z",
+  "triaged_by": "ticfac run run_af0e77b99c1540b7b8005cf04fd2795d absorbing tgx",
+  "promoted_as": "tgx",
   "provenance": {
     "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
     "tick_id": "0rt",
