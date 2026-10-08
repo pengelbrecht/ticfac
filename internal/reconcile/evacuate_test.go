@@ -228,10 +228,14 @@ func TestTheEvacuationWaitsOutTheSupervisorsPushThatHoldsTheRefLock(t *testing.T
 
 	// The hooks, in the bare origin. pre-receive writes one line per push
 	// that carries the attempt branch — the observable the release is
-	// scheduled on. reference-transaction holds one prepared transaction for
-	// that ref at the lock until the go file appears, then lets it commit: a
-	// push held there is a push holding the ref lock, carrying exactly the
-	// HEAD the flush wants on the branch.
+	// scheduled on. reference-transaction holds the FIRST prepared
+	// transaction naming that ref at the lock until the go file appears, then
+	// lets it commit: a push held there is a push holding the ref lock,
+	// carrying exactly the HEAD the flush wants on the branch. Only the
+	// first, because git >= 2.51 also runs that hook for a push whose ref
+	// lock was refused — the flush's own — and holding THAT one deadlocks the
+	// release on the third push that can never arrive (the hook's own
+	// comment has the whole story).
 	pushes := filepath.Join(f.Repo.Origin, "fn8-pushes.log")
 	held := filepath.Join(f.Repo.Origin, "fn8-held.log")
 	goFile := filepath.Join(f.Repo.Origin, "fn8-go")
@@ -259,6 +263,20 @@ while read old new ref; do
 	[ "x$ref" = "x%s" ] && hold=1
 done
 [ "x$hold" = "x1" ] || exit 0
+# The hold is one-shot: only the FIRST prepared transaction naming the
+# attempt branch is held. git >= 2.51 (receive-pack's batched reference
+# updates) runs this hook for a push whose ref lock was ALREADY refused,
+# with the refused ref on stdin, so the flush's own push — refused behind
+# the holder's lock — reaches this line too. Holding it would deadlock the
+# test on itself: the go file below appears only when a THIRD push arrives,
+# and no third push can arrive while the flush's own is held here, so the
+# first push burned its whole bound and every CI run since the hook was
+# written came back red ('did not finish inside its bound', 'only 2
+# pushes'). git <= 2.50 never runs this hook for a refused lock, so there
+# the mkdir is held by the one push it always was. The mkdir succeeds only
+# once; every later transaction falls through to whatever the ref lock
+# does with it.
+mkdir %q 2>/dev/null || exit 0
 echo held >> %q
 i=0
 while [ ! -f %q ]; do
@@ -271,7 +289,7 @@ while [ ! -f %q ]; do
 	fi
 done
 exit 0
-`, branchRef, held, goFile))
+`, branchRef, held+".once", held, goFile))
 
 	// The supervisor's push, the command its timer makes (pushBranch), from
 	// the attempt's own worktree — started first, so the lock it takes is
