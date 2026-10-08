@@ -194,6 +194,12 @@ func (s *Store) chain(w *heldWrite) error {
 		w.parent = ""
 	}
 	w.when = s.now()
+	// A record chained onto a chain that has already been materialized (a
+	// mid-step history read builds the head it answers from) invalidates that
+	// materialization: the tip it named is no longer the chain's end, and a
+	// flush that trusted it would push a head that strands every record the
+	// read never saw. materialize rebuilds the whole chain; it is one process.
+	s.tip = ""
 	s.held = append(s.held, w)
 	if w.path != "" {
 		s.view[w.path] = w.blob

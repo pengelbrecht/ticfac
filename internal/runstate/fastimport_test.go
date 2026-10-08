@@ -146,6 +146,65 @@ func TestAHeldStepMaterializesOncePerRelease(t *testing.T) {
 	}
 }
 
+// TestAChainGrownAfterAMidStepReadStillLandsEverything holds the
+// materializer's idempotence against its one real hazard: a read that needs
+// the chain's head mid-step (CheckpointHistory is the one reader that does)
+// materializes what is held SO FAR, and a record chained after that must
+// invalidate that materialization — or the step would push the stale tip and
+// silently drop the records the read never saw.
+func TestAChainGrownAfterAMidStepReadStillLandsEverything(t *testing.T) {
+	o := newOrigin(t)
+	pushes := o.countPushes(t)
+	s := o.actor("reconciler", testRun)
+	if _, err := s.PutCheckpoint(testCheckpoint(StateAdmitted, "admitted")); err != nil {
+		t.Fatal(err)
+	}
+	before, commitsBefore := pushes(), o.commits()
+
+	s.Hold()
+	if _, err := s.PutCheckpoint(testCheckpoint(StatePublishing, "closing a1")); err != nil {
+		t.Fatal(err)
+	}
+	// The mid-step history read: the one reader that materializes the chain
+	// before it is pushed.
+	history, err := s.CheckpointHistory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("the mid-step history read answered %d checkpoints, want 2 (admitted, publishing)", len(history))
+	}
+	// The step keeps writing after that.
+	if _, err := s.StageChanges("ticfac run "+testRun+": close a1",
+		trackerChange(t, s, ".tick/issues/a1.json", "{\"id\":\"a1\",\"status\":\"closed\"}\n"), true, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.PutCheckpoint(testCheckpoint(StateRunning, "a1 is closed")); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if got := pushes() - before; got != 1 {
+		t.Errorf("the step took %d pushes, want 1", got)
+	}
+	if got := o.commits() - commitsBefore; got != 3 {
+		t.Errorf("the step landed %d commits, want 3: a read mid-step must not strand the records after it", got)
+	}
+	want := []string{
+		"ticfac run " + testRun + ": update " + CheckpointPath(testRun),
+		"ticfac run " + testRun + ": close a1",
+		"ticfac run " + testRun + ": update " + CheckpointPath(testRun),
+	}
+	subjects := o.subjects()
+	tail := subjects[len(subjects)-3:]
+	for i := range want {
+		if tail[i] != want[i] {
+			t.Errorf("commit %d of the step is %q, want %q", i+1, tail[i], want[i])
+		}
+	}
+}
+
 // TestAFastImportFailureFallsBackToThePerRecordPath keeps the materializer
 // honest about failure the way the batch reader is (batch.go): a store whose
 // fast-import dies keeps working exactly as it did before, one process per
