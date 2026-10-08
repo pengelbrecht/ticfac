@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "2pn",
   "attempt": 5,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T01:15:25Z",
+  "triaged_at": "2026-10-08T01:15:34Z",
+  "triaged_by": "ticfac run run_af0e77b99c1540b7b8005cf04fd2795d absorbing ydw",
+  "promoted_as": "ydw",
   "provenance": {
     "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
     "tick_id": "2pn",
