@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
   "epic_id": "bo9",
-  "sequence": 9,
-  "state": "publishing",
-  "reason": "closing 0ek behind the integrated gate on c8e6310b0939",
-  "updated_at": "2026-10-08T09:20:02Z",
+  "sequence": 10,
+  "state": "running",
+  "reason": "0ek is closed",
+  "updated_at": "2026-10-08T09:20:05Z",
   "ticks": [
     {
       "tick_id": "0ek",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
