@@ -1,0 +1,14 @@
+{
+  "id": "ynd",
+  "title": "Re-review ex6 after its NOT READY review's blocking findings (round 2)",
+  "description": "Review the epic ex6 again, AS INTEGRATED, now that the blocking findings of its NOT READY review are fixed. This is review round 2; 2 count toward the bound of 2.\n\nThe previous review (0rt, decision 8) judged it NOT READY: deliver m1w's harness half (read the metering join from worker.json, compose the provider override, with a harness test) and make the close-out's protected changes leave 2pn's harness gate cell in .tick/runners.toml (the whole-file proposals wipe it); its blocking finding(s): \"m1w's metering join reaches worker.json and no harness code reads it\"; \"Protected changes applied in key order wipe 2pn's harness gate cell\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY that spends the bound is not reviewed again by the run unless the tree changes after it: it holds for a person with your reasons.",
+  "status": "open",
+  "priority": 1,
+  "type": "task",
+  "owner": "ticfac",
+  "parent": "ex6",
+  "role": "review",
+  "created_by": "ticfac run run_af0e77b99c1540b7b8005cf04fd2795d",
+  "created_at": "2026-10-08T02:57:34Z",
+  "updated_at": "2026-10-08T02:57:34Z"
+}
