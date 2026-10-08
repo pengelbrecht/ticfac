@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 59,
-  "state": "publishing",
-  "reason": "closing lrd behind the integrated gate on 73f92acbff69",
-  "updated_at": "2026-10-08T04:55:42Z",
+  "sequence": 60,
+  "state": "running",
+  "reason": "lrd is closed",
+  "updated_at": "2026-10-08T04:55:43Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -38,7 +38,7 @@
     },
     {
       "tick_id": "lrd",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 10
     },
     {
