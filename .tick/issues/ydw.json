@@ -1,0 +1,13 @@
+{
+  "id": "ydw",
+  "title": "make gate covers a third of what the run's gate runs: name all three for a human",
+  "description": "AGENTS.md and .tick/config.md name `make gate` as the bar a human must run before they merge, and that target runs the Go third only: the TypeScript half is `make ts-gate` and the harness half is `make harness-gate`, each its own [testing.commands] entry by design, so a person following the documented bar runs a third of what the run's integrated gate runs over the same tree. This tick's cell makes it a third rather than a half, which is why it is worth a tick of its own rather than a line here. Either an umbrella target (gate-all: gate ts-gate harness-gate) or a sentence in both documents naming all three closes it.\nevidence: AGENTS.md:3-6 and .tick/config.md:10 name `make gate`; the Makefile carries gate, ts-gate and harness-gate as three targets\n\nticfac run run_af0e77b99c1540b7b8005cf04fd2795d filed this backlog tick from the finding 8d9615f7f2db00578036a64102d6abba321078fb04f1e23c245b830b33132e7c (reported by run-run_af0e77b99c1540b7b8005cf04fd2795d/tick-2pn/attempt-5) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_af0e77b99c1540b7b8005cf04fd2795d/absorptions/8d9615f7f2db00578036a64102d6abba321078fb04f1e23c245b830b33132e7c.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_af0e77b99c1540b7b8005cf04fd2795d/tick-2pn/attempt-5",
+  "created_by": "ticfac run run_af0e77b99c1540b7b8005cf04fd2795d",
+  "created_at": "2026-10-08T01:15:31Z",
+  "updated_at": "2026-10-08T01:15:31Z"
+}
