@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ex6/attempt-11/ynd`, base `e698666f5d985f26824ec0494cbd33a70355f025`, harness `pi-durable` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
 # Round-2 review of the pi-durable cloud hardening diff — epic ex6, tick ynd
 
 ## What I reviewed
