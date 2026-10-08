@@ -12,8 +12,11 @@
   "attempt": 5,
   "protected_path": ".tick/runners.toml",
   "protected_append": "\n# The pi-durable harness package's own suites (tick 2pn, epic ex6). Until this\n# cell the harness package that epic 43y created ran lint, typecheck and BOTH\n# its vitest suites in CI (ci.yml's \"harness conformance and replay\") and in\n# no gate at all, so a tick that changed harness/ merged on a gate that had\n# said nothing about it: one of its node-half tests sat red at base and was\n# found, and absorbed, five times by five workers (h3c, 7oy, 4ao, omq, 30e)\n# because no gate ever told a run the suite was already red.\n#\n# The whole suite, not a fast half. Measured on one host (4 cores, load under 1):\n# pnpm install 0.4s from a warm store (11.3s the first ever run, a store fill,\n# not a gate cost), pnpm lint 1.5s, pnpm typecheck 15.3s (two tsc projects),\n# pnpm test 56-65s (the workerd half 30-37s, the node half 26-28s). The whole\n# command 1m24s warm and 1m29s cold against the 60m bound under one gate\n# command and a Go half the same host measures at 1m45s — the same order as the\n# cloudflare vitest the ts cell deliberately leaves to CI. The FAST HALF would\n# not have been enough: the node half — real bash, real git, the real local\n# door — is where the red-at-base test lived, so a gate that ran only the\n# workerd half would have covered the package and missed it a sixth time.\n#\n# pnpm test is harness/package.json's own script, which is BOTH vitest\n# configs, so CI's step and this check cannot drift; pnpm install comes first\n# because a gate worktree carries no node_modules.\n[testing.commands.harness]\ncommand = \"cd harness && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm typecheck && pnpm test\"\ndescription = \"Harness package: lint, types and both vitest suites\"\n",
-  "status": "proposed",
+  "status": "fixed",
   "proposed_at": "2026-10-08T01:15:21Z",
+  "triaged_at": "2026-10-08T07:59:11Z",
+  "triaged_by": "ticfac run run_af0e77b99c1540b7b8005cf04fd2795d applying the protected change the finding carries, for the merger",
+  "fixed_as": "c09cbb8d6151761b931341908cee09a2fb24db46",
   "provenance": {
     "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
     "tick_id": "2pn",
