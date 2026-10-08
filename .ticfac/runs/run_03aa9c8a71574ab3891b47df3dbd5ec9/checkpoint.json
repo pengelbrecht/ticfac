@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
   "epic_id": "bo9",
-  "sequence": 7,
-  "state": "integrating",
-  "reason": "integrating 0ek attempt 1 into epic/bo9",
-  "updated_at": "2026-10-08T09:04:36Z",
+  "sequence": 8,
+  "state": "gating",
+  "reason": "running the integrated gate for 0ek on c8e6310b0939",
+  "updated_at": "2026-10-08T09:09:44Z",
   "ticks": [
     {
       "tick_id": "0ek",
-      "state": "dispatched",
+      "state": "integrated",
       "attempt": 1
     },
     {
