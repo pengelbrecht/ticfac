@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 111,
-  "state": "collecting",
-  "reason": "collecting z7w attempt 16",
-  "updated_at": "2026-10-08T00:23:42Z",
+  "sequence": 112,
+  "state": "integrating",
+  "reason": "integrating z7w attempt 16 into epic/t8u",
+  "updated_at": "2026-10-08T00:24:32Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -84,7 +84,7 @@
     },
     {
       "tick_id": "z7w",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 16
     },
     {
