@@ -1,0 +1,13 @@
+{
+  "id": "r0t",
+  "title": "2p3 asks for the same routing edit this tick delivers",
+  "description": "Open tick 2p3 (\"runners.toml implement cell still describes the deleted pi CLI\", from uxi's finding c1dded50…) names the same cell, the same comment and the same args line as q6z, and this run's attempt 9 was collected as a blocked answer with no report written and the run held on it. Nothing in 2p3 remains that a dispatched worker can write, so another dispatch is another attempt into the same refusal. The tracker_edit appends the note that closes the loop: q6z's protected changes carry the exact replacement content for both routing files, and 2p3 is done by the labelled commit that applies them.\nevidence: .tick/issues/2p3.json and .tick/issues/q6z.json, both open, both parented to ex6; .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/decisions/15.json (2p3 attempt 9, BLOCKED)\ntracker edit: notes of 2p3 (applied by the run)\n\nticfac run run_af0e77b99c1540b7b8005cf04fd2795d filed this backlog tick from the finding 345e58786697e48074ff9f8bc293a61378afb8487143f0863f2bef941498151d (reported by run-run_af0e77b99c1540b7b8005cf04fd2795d/tick-q6z/attempt-6) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_af0e77b99c1540b7b8005cf04fd2795d/absorptions/345e58786697e48074ff9f8bc293a61378afb8487143f0863f2bef941498151d.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_af0e77b99c1540b7b8005cf04fd2795d/tick-q6z/attempt-6",
+  "created_by": "ticfac run run_af0e77b99c1540b7b8005cf04fd2795d",
+  "created_at": "2026-10-08T00:34:28Z",
+  "updated_at": "2026-10-08T00:34:28Z"
+}
