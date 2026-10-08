@@ -6,6 +6,9 @@
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
+  "blocked_by": [
+    "p4c"
+  ],
   "parent": "t8u",
   "role": "review",
   "created_by": "ticfac run epic-t8u",
