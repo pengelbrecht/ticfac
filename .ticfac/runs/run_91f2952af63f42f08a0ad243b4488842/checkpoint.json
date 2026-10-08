@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 13,
-  "state": "publishing",
-  "reason": "closing 47j behind the integrated gate on 1e6ca05c40f5",
-  "updated_at": "2026-10-08T14:30:20Z",
+  "sequence": 14,
+  "state": "running",
+  "reason": "47j is closed",
+  "updated_at": "2026-10-08T14:30:22Z",
   "ticks": [
     {
       "tick_id": "47j",
-      "state": "reported",
+      "state": "closed",
       "attempt": 1
     },
     {
