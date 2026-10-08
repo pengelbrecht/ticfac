@@ -1,0 +1,13 @@
+{
+  "id": "kf1",
+  "title": "The reconciler's own origin reads are now the suite's biggest measured git cost",
+  "description": "After the store's write path went through one fast-import per step, the biggest measured git cost in internal/reconcile's slowest tests is the cluster of origin reads around the CAS: the store's peek triple (fetch + rev-parse + ls-tree) and repoGit's fetch/ls-remote/rev-parse reads. A wrapper-counted run of the two heaviest store-touching tests (TestAQuietGateIsWarnedAboutAndATalkativeOneIsNot, TestTheWaitUsesTheExecutorsCadenceNotTheRuns) counts 597 fetches, 893 rev-parses, 268 ls-remotes and 357 ls-trees of 5039 invocations. Each is a deliberate freshness point in the compare-and-swap, so the cut is a design question (what may read origin through another reader's fetch, and what must still ask origin itself), not a mechanical one. Measured against A1: the reconcile suite now runs 293 min serial on this host (was 337) and the halving A1 asks for is not reachable while this cluster stands.\nevidence: internal/reconcile/git.go:93 (repoGit's spawn) and internal/runstate/store.go:377 (peek); wrapper-counted profile: 2115 of 5039 invocations in the two heaviest store-touching tests\n\nticfac run epic-t8u filed this backlog tick from the finding ac7aef1cc60dc9131b1e4e46d99a941359f70b403455cae3c9f939f2b2b76d11 (reported by run-epic-t8u/tick-0bg/attempt-19) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/ac7aef1cc60dc9131b1e4e46d99a941359f70b403455cae3c9f939f2b2b76d11.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-0bg/attempt-19",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-08T05:14:41Z",
+  "updated_at": "2026-10-08T05:14:41Z"
+}
