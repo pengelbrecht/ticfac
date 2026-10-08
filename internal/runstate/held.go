@@ -90,7 +90,7 @@ func (c *HeldConflict) Error() string {
 // heldWrite is one record chained locally and not yet on origin.
 type heldWrite struct {
 	message string
-	when     time.Time
+	when    time.Time
 
 	// A store record: one path, under its guard. guard is the blob origin
 	// held at the path when the chain began ("" = absent), which is what the
