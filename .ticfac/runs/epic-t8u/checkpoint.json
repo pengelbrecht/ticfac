@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 155,
-  "state": "collecting",
-  "reason": "collecting the closeout-epic job for j1h",
-  "updated_at": "2026-10-08T05:38:50Z",
+  "sequence": 156,
+  "state": "integrating",
+  "reason": "integrating j1h attempt 22 into epic/t8u",
+  "updated_at": "2026-10-08T05:39:29Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -99,7 +99,7 @@
     },
     {
       "tick_id": "j1h",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 22
     },
     {
