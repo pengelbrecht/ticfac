@@ -126,7 +126,10 @@ func FetchClaudeSub(ctx context.Context, client *http.Client, factoryURL, token 
 //
 // The separators — the `/` of the job id, the `-` of the sandbox name — are
 // the whole match: they keep `run_abc` from claiming `run_abc2`'s lease in
-// either spelling.
+// either spelling. And nothing else matches, on purpose: the factory mints
+// no lease under the bare run id, so a matcher that claimed one is a
+// matcher reading a shape nobody writes as this run's lease —
+// TestLeasedLabelsMatchOnlyTheSpellingsTheFactoryMints holds that line.
 func (s *ClaudeSubSnapshot) LeasedLabels(runID string) []string {
 	if s == nil || runID == "" {
 		return nil
@@ -136,7 +139,7 @@ func (s *ClaudeSubSnapshot) LeasedLabels(runID string) []string {
 	var leased []string
 	for _, view := range s.Subscriptions {
 		for _, jobID := range view.ActiveLeases {
-			if jobID == runID || strings.HasPrefix(jobID, bootPrefix) || strings.HasPrefix(jobID, jobPrefix) {
+			if strings.HasPrefix(jobID, bootPrefix) || strings.HasPrefix(jobID, jobPrefix) {
 				leased = append(leased, view.Label)
 				break
 			}

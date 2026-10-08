@@ -53,6 +53,27 @@ loud.
 
 ---
 
+## 2.4.1
+
+PATCH: `status-model.json`'s `why` no longer claims something its own golden
+does not do (ticfac tick b13). 2.4.0 wove `cost.subscription` into the sentence
+that enumerates the dashboard fields and then said "The `dashboard` golden
+carries every one of them populated — it is the fixture the wave-3 renderers
+and the phone page test against" — and the golden's `cost.subscription` is
+null, because the golden is a LOCAL run and a local run's jobs lease nothing
+from the factory's claude-sub pool: the local gathering reads no pool at all.
+So the one fixture the renderers test against stated nothing about the one
+field a claude-sub run's cost line is, and the contract's own description was
+the thing saying otherwise. Words only — no field changed shape, no schema
+moved, no golden changed — so an unchanged consumer is still correct. The
+sentence now states the null and its host, and names where the populated shape
+is bound: the Go suite derives it FROM the golden (the same document with the
+subscription set the way a leasing run's model carries it) and holds it to the
+guarantees the golden gives every field it populates — schema admission,
+required-in-cost, the Model's round trip —
+`TestTheContractBindsTheLeasedSubscription` in `internal/statusmodel`, new in
+the same commit. Consumers: the cloudflare pin bumps in the same commit.
+
 ## 2.4.0
 
 MINOR: `status-model.json`'s cost object gains `subscription` — the claude-sub

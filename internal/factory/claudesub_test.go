@@ -190,6 +190,30 @@ func TestLeasedLabelsMatchTheRunOwnJobs(t *testing.T) {
 	}
 }
 
+// TestLeasedLabelsMatchOnlyTheSpellingsTheFactoryMints: the matcher's rule
+// — "the two spellings the factory keys a run's own jobs by" — is the whole
+// of it. The factory mints no lease under the BARE run id: the door's job ids
+// are `run-<run>/…` (attemptJobID, and a spec's own job_id is bounded under
+// the same prefix), the review boot's is `<run>-<boot>` (sandboxName), and
+// the staging door leases under the sandbox name its caller picked, which
+// cannot even spell a run id (its route binds `[a-z0-9-]`, and a run id
+// carries an underscore). A lease that reads as the bare run id is a shape
+// nobody writes, and a matcher that claims it is the same forgiving fixture
+// this suite exists to refuse — it reads another job's lease as this run's
+// on a spelling the factory cannot produce.
+func TestLeasedLabelsMatchOnlyTheSpellingsTheFactoryMints(t *testing.T) {
+	t.Parallel()
+	const runID = "run_abc1"
+	snapshot := &ClaudeSubSnapshot{Subscriptions: []ClaudeSubView{{
+		Label:        "MAX1",
+		ActiveLeases: []string{runID},
+	}}}
+	if got := snapshot.LeasedLabels(runID); got != nil {
+		t.Errorf("a lease spelled the bare run id %q read as this run's: %v — the factory mints no lease under it (the door's job ids are run-%s/…, the review boot's is %s-<boot>), so it is another job's",
+			runID, got, runID, runID)
+	}
+}
+
 // TestTheLeaseMatchAgreesWithTheJobIdsTheFactoryMints: the matcher's two
 // spellings are the factory's own, and neither language imports the other —
 // the same seam the subscription rung guards
