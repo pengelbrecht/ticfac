@@ -1,0 +1,72 @@
+{
+  "schema_version": 3,
+  "decision": 25,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "t8u",
+    "job_id": "run-epic-t8u/tick-kwh/attempt-21",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.1.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:b0e2bfa26280693ae2d479fd3dbeec0b99b14f94c04fc3f006ca558fe2e1efc9",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "27a7aa7ccde3cf84e49d12f036fee9eb79b625ee",
+    "tick_id": "kwh"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "[A1] asks that the full suite (go test -timeout 45m -parallel 12 ./...) finish in under half its wall clock on a quiet host, measured before and after. After 0bg's fast-import write path, the suite's floor, internal/reconcile, is about 13% faster.\n\n- 0bg's own measurement, in its finding promoted as kf1: 337 to 293 serial minutes. Its worker states that 'the halving A1 asks for is not reachable while this cluster stands'.\n- CI go test step durations: base 990bb6eb4 (run 37704846560) reconcile 300/271/258s, packages 242s; head 9278f8bd8 (run 37731483135) reconcile 287/247/183s, packages 232s. Summed reconcile 829s to 717s; slowest shard 300s to 287s.\n- No quiet-host before/after figure is recorded on t8u.\n- A1 has not been re-scoped since eac03b499.\n\nThe remaining levers are backlog ticks outside the epic: kf1 (origin reads around the CAS, a design question), 9xx (tracker mirror, an estimated 10-15%) and 4mn (about 1.5%).\n\nWhat would make the epic ready, either:\n- bring kf1 and 9xx into the epic, cut internal/reconcile's full suite to half, and record the before/after timing on t8u; or\n- an operator decision recorded on t8u that re-scopes A1 to what the epic delivered.\nevidence: CI runs 37704846560 vs 37731483135, 'go test (reconcile n/3)' step durations; .ticfac/runs/epic-t8u/findings/ac7aef1cc60dc9131b1e4e46d99a941359f70b403455cae3c9f939f2b2b76d11.json (337 -> 293 min serial)",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "A1 still unmet: reconcile's full suite ~13% faster after 0bg, not halved"
+      },
+      {
+        "body": "importCommits writes 'author/committer ... <unix> +0000'. commit-tree, which it replaces, writes the host's local offset; on this host that is +0200, as every run commit on epic/t8u shows (git log --date=raw).\n\nThe instant is the same, but the commit header bytes, and so the shas, differ from what the per-record path would build. The date is also now the record's write time rather than the time the commit was built.\n\n0bg's commit message and fastimport.go both claim the commits are 'byte-for-byte' the same, with 'the same ... date'. TestAFastImportCommitIsByteForByteWhatTheIndexDanceBuilds reads the date, offset included, off the LANDED commit and feeds it back to commit-tree, so it cannot detect an offset change. Nor does gittest set TZ.\n\nI found no reader that depends on the offset: runprogress's branchMovedAt parses %cI as an RFC3339 instant. Under [A4] this needs either a note on 0bg stating the change, or the stream should write the local offset (time.Local) so the claim holds.\nevidence: internal/runstate/fastimport.go:126-127 ('+0000'); internal/runstate/fastimport_test.go:66-80 (date read back from the landed commit)",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "fast-import commits now carry +0000; the byte-for-byte guard cannot see it"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-t8u/tick-kwh/attempt-21",
+      "commits": 0,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-t8u/kwh/RESULT-kwh.md",
+      "review_verdict": "NOT READY",
+      "review_verdict_detail": "[A1] is unmet: internal/reconcile's full suite is ~13% faster after 0bg (337->293 serial min; CI reconcile shards 300/271/258s -> 287/247/183s), not halved, and no quiet-host before/after is recorded; ready needs kf1 and 9xx cutting it to half with a recorded before/after timing, or an operator decision on t8u re-scoping A1. p4c is fixed and epic CI is green at 9278f8bd8."
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "A1 is judged from CI step durations and 0bg's serial measurement, not a quiet-host timing (this host's load was 9.9-16.9, and it is shared with live runs)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T05:28:23Z",
+  "answered_at": "2026-10-08T05:28:23Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "kwh",
+    "attempt": 21,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "27a7aa7ccde3cf84e49d12f036fee9eb79b625ee",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:b0e2bfa26280693ae2d479fd3dbeec0b99b14f94c04fc3f006ca558fe2e1efc9",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}
