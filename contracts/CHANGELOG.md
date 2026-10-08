@@ -53,6 +53,56 @@ loud.
 
 ---
 
+## 2.5.0
+
+MINOR: the fold of tick b13's attempt into epic/ymf — two parallel cuts of
+2.4.0 become one again, for the reason 2.1.0 and 1.7.0 state. The epic cut
+its own 2.4.0 (tick lck — the watch-redesign fields, full text below), and
+b13's branch, cut from the epic before lck merged, cut another 2.4.0 over
+the 2.3.0 it carried (tick b13 — the cost `subscription` object, re-cut
+below), so the number means two different sets of bytes and b13's half
+cannot keep it — a version string must never mean two different sets of
+bytes — and the union re-cuts here, at the next MINOR over the epic's
+2.4.0. `version_digests` keeps the epic's binding of 2.4.0
+(3f5cc4ca809c6078c9cdb2098a3d9659673b2428980617fa24e60248367bd2dc);
+b13's own cut of the same version,
+5c2fab2cd66e6a465999ac55ad54c89488ea1397ad9482605a47c59896ec2cbd, is
+recorded here instead. The two halves touch different regions of one
+fixture — the epic's per-tick `status`/`exception`, lifecycle
+`track`/`here` and `groups`; b13's cost `subscription` — so the union is
+each side's fixture bytes merged, re-cut at
+a164de87676710055c78b90e291dc253d7fe2aa5daab20ebf3250c48f8f2ccb2.
+Consumers: an unchanged reader of the epic's 2.4.0 is still correct but no
+longer complete; a consumer pinned to b13's 2.4.0 adopts the epic's cut by
+moving here — the status words, phase track and groups beside the
+subscription line it came for. `cloudflare/contracts.pin.json` moves to
+2.5.0 in the same commit.
+
+### b13's 2.4.0, re-cut here
+
+MINOR: `status-model.json`'s cost object gains `subscription` — the claude-sub
+subscription a cloud run's jobs lease (ticfac tick b13), with the window use
+the factory's proxy last saw on the account's shared 5-hour and 7-day windows.
+A run on the subscription pays no wallet money, so its cost line is the
+SUBSCRIPTION's: which label it holds (`MAX1 · 34% of 5h · 8% of 7d` on the
+dashboard) and how much of the windows the operator's own interactive use
+shares. Required-and-null like every field that can be genuinely absent: null
+is a run that leased nothing the factory's /api/claude-sub names — no lease,
+no pool, no factory configured — never a guess, and the label is the only
+identifier the object carries: the route is built so the whole answer is safe
+to paste into a log, and nothing here changes that. Additive within the model's
+own `schema_version` 1, the way the hn6 dashboard fields were; consumers that
+read fields by name (the phone page's snapshot parser) are unchanged and
+correct.
+
+No other fixture changes. Consumers: `cloudflare/contracts.pin.json` moves to
+2.4.0; the Go Model and its builder gained the field in the same commit
+(`internal/statusmodel`, `Sources.ClaudeSub`), and the factory read that fills
+it (`internal/factory/claudesub.go`, gathered in `internal/cli`) is new in the
+same commit.
+
+---
+
 ## 2.4.0
 
 MINOR: `status-model.json` gains the watch-redesign fields (ticfac tick lck,
@@ -75,26 +125,6 @@ moves to 2.4.0; the Go model and builder gained the fields in the same
 commit, and renderers that read fields by name (the phone page's snapshot
 parser) are unchanged and correct — the watch redesign's rendering ticks
 (ugm) and the phone page's shared model are what the fields exist for.
-MINOR: `status-model.json`'s cost object gains `subscription` — the claude-sub
-subscription a cloud run's jobs lease (ticfac tick b13), with the window use
-the factory's proxy last saw on the account's shared 5-hour and 7-day windows.
-A run on the subscription pays no wallet money, so its cost line is the
-SUBSCRIPTION's: which label it holds (`MAX1 · 34% of 5h · 8% of 7d` on the
-dashboard) and how much of the windows the operator's own interactive use
-shares. Required-and-null like every field that can be genuinely absent: null
-is a run that leased nothing the factory's /api/claude-sub names — no lease,
-no pool, no factory configured — never a guess, and the label is the only
-identifier the object carries: the route is built so the whole answer is safe
-to paste into a log, and nothing here changes that. Additive within the model's
-own `schema_version` 1, the way the hn6 dashboard fields were; consumers that
-read fields by name (the phone page's snapshot parser) are unchanged and
-correct.
-
-No other fixture changes. Consumers: `cloudflare/contracts.pin.json` moves to
-2.4.0; the Go Model and its builder gained the field in the same commit
-(`internal/statusmodel`, `Sources.ClaudeSub`), and the factory read that fills
-it (`internal/factory/claudesub.go`, gathered in `internal/cli`) is new in the
-same commit.
 
 ## 2.3.0
 
