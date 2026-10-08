@@ -3,6 +3,7 @@
   "title": "Live activity excerpt per running worker, local and cloud",
   "gloss": "worker activity line",
   "description": "A one-line excerpt of what each running worker is doing now: its latest tool call (summarised: 'running pytest', 'editing internal/x.go') or latest assistant sentence, from the conversation stream pi-durable and claude already produce (local: the runner log / worker.sqlite; cloud: the factory's worker stream that ticfac cloud logs reads). Add it to the status model per running tick with its age; cap length; never a secret (strip env, tokens). Remove the 'workers run in the cloud — not visible from here' line.",
+  "notes": "2026-10-08 15:46 - ticfac run run_91f2952af63f42f08a0ad243b4488842: 93n try 1 (run dispatch #2) reported a finding the run itself decided — contract \"status-model contract still says a cloud run's census cannot be taken\" (key 2e072a05346b9b5c4f73ac000d8efec4930504549d8e658e6ea6f92b10e4482b, severity medium, for this repository) is promoted to a backlog tick with an owner, pl5; the decision record is on the run branch at .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/2e072a05346b9b5c4f73ac000d8efec4930504549d8e658e6ea6f92b10e4482b.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +12,6 @@
   "acceptance_criteria": "each running tick carries an activity line with its age, local and cloud, tested with recorded streams; no token or URL can appear; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.350244Z",
-  "updated_at": "2026-10-08T13:58:41.122979551Z",
+  "updated_at": "2026-10-08T15:46:42.352760017Z",
   "started_at": "2026-10-08T13:19:16.134403228Z"
 }
