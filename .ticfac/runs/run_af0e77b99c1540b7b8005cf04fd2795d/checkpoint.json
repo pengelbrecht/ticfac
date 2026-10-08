@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 26,
-  "state": "publishing",
-  "reason": "closing 2p3 behind the integrated gate on 2f136b4c31c0",
-  "updated_at": "2026-10-08T00:33:42Z",
+  "sequence": 27,
+  "state": "running",
+  "reason": "2p3 is closed",
+  "updated_at": "2026-10-08T00:33:43Z",
   "ticks": [
     {
       "tick_id": "2p3",
-      "state": "reported",
+      "state": "closed",
       "attempt": 1
     },
     {
