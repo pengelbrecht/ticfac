@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 63,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for ynd",
-  "updated_at": "2026-10-08T05:56:16Z",
+  "sequence": 64,
+  "state": "publishing",
+  "reason": "closing ynd behind its validated review-epic answer",
+  "updated_at": "2026-10-08T05:56:36Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -48,7 +48,7 @@
     },
     {
       "tick_id": "ynd",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 11
     }
   ],
