@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 131,
-  "state": "running",
-  "reason": "r6v is closed",
-  "updated_at": "2026-10-08T02:39:18Z",
+  "sequence": 132,
+  "state": "dispatching",
+  "reason": "dispatching 0bg as attempt 19",
+  "updated_at": "2026-10-08T02:39:41Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -99,6 +99,18 @@
     },
     {
       "tick_id": "j1h",
+      "state": "ready"
+    },
+    {
+      "tick_id": "0bg",
+      "state": "ready"
+    },
+    {
+      "tick_id": "p4c",
+      "state": "ready"
+    },
+    {
+      "tick_id": "kwh",
       "state": "ready"
     }
   ],
