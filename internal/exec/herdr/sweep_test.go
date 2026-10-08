@@ -54,6 +54,8 @@ func sixInScope(closed ...string) subprocess.SweepScope {
 }
 
 func TestTheSweepRemovesAStrandedStartOfAClosedTickAndNothingElse(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	stranded := strand(t, h, "ticfac/run-epic-6in/tick-4i8/repair-3")
 	strandedPath := h.pathOf(stranded)
@@ -90,6 +92,8 @@ func TestTheSweepRemovesAStrandedStartOfAClosedTickAndNothingElse(t *testing.T) 
 }
 
 func TestTheSweepHoldsAWorkspaceWhoseAgentIsWorking(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	busy := strand(t, h, "ticfac/run-epic-6in/tick-4i8/attempt-3")
 	h.setStatus("working")

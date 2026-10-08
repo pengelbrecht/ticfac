@@ -50,6 +50,8 @@ func gateRecordOf(t *testing.T, h *harness, handle *subprocess.JobHandle) (*atte
 // the reply IS the acknowledgement. The 250ms readiness poll of agent.get
 // never runs — nothing is left to poll.
 func TestTheLaunchAsksHerdrToWaitForReadiness(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	h.ex.opts.StartupTimeout = 5 * time.Second
 	handle, err := h.start("t1")
@@ -90,6 +92,8 @@ func TestTheLaunchAsksHerdrToWaitForReadiness(t *testing.T) {
 // attempt is live and addressable, nothing is torn down, and no cause
 // (auth, quota, a stale model string) is asserted anywhere.
 func TestATruncatedGateReadIsNotAFailedAgent(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	// herdr accepted the prompt but saw no state change — delivery is
 	// uncertain, which is the only road to the last-resort read.
@@ -158,6 +162,8 @@ func TestATruncatedGateReadIsNotAFailedAgent(t *testing.T) {
 // test's wall clock — host load moves a wall clock for its own reasons
 // (cy2), but it cannot manufacture a second of work inside a file read.
 func TestADispatchWithNoAgentBehindItDoesNotPayTheConfirmWait(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -204,6 +210,8 @@ func TestADispatchWithNoAgentBehindItDoesNotPayTheConfirmWait(t *testing.T) {
 // the confirmation is deterministic; what it exercises is the wait, the
 // gate's classification of its answer, and the record it lands on.
 func TestADispatchThatReachesWorkingIsConfirmedOverTheProtocol(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	h.setStatus("working")
 	handle, err := h.start("t1")
@@ -240,6 +248,8 @@ func TestADispatchThatReachesWorkingIsConfirmedOverTheProtocol(t *testing.T) {
 // as three-plus-two DIFFERENT values on the record, each from exactly the
 // observations that produced it.
 func TestTheGateDistinguishesItsFindings(t *testing.T) {
+	t.Parallel()
+
 	shorttest.EndToEnd(t)
 	stalledPrompt := func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
 		return herdtest.RespondErr(w, req.ID, "agent_prompt_stalled", "herdr saw no state change")

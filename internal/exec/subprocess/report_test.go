@@ -75,6 +75,8 @@ type collectVocabularyFixture struct {
 // can invert a verdict at run time — a copy that is merely "equivalent" is not
 // what the fixture pins.
 func TestTheStatusPatternAndTrimSetAreTheBundles(t *testing.T) {
+	t.Parallel()
+
 	var v collectVocabularyFixture
 	readBundle(t, "collect-vocabulary.json", &v)
 
@@ -96,6 +98,8 @@ func TestTheStatusPatternAndTrimSetAreTheBundles(t *testing.T) {
 // words, and a fifth spelling here is a word the other three implementations
 // do not know.
 func TestTheVerdictAndStatusWordsAreTheBundles(t *testing.T) {
+	t.Parallel()
+
 	var v collectVocabularyFixture
 	readBundle(t, "collect-vocabulary.json", &v)
 
@@ -131,6 +135,8 @@ func TestTheVerdictAndStatusWordsAreTheBundles(t *testing.T) {
 // include the case the whole fixture exists for: a DONE_WITH_CONCERNS that a
 // weakened pattern would read as its opposite.
 func TestEveryParseCaseFromTheBundleParsesTheSameWayHere(t *testing.T) {
+	t.Parallel()
+
 	var v collectVocabularyFixture
 	readBundle(t, "collect-vocabulary.json", &v)
 
@@ -271,6 +277,8 @@ type lifecycleFixture struct {
 // boundary and the one this executor enforces cannot drift apart with both
 // suites green.
 func TestTheProtectedPrefixesAreTheFixtures(t *testing.T) {
+	t.Parallel()
+
 	var c lifecycleFixture
 	readBundle(t, "lifecycle-invariants.json", &c)
 
@@ -296,6 +304,8 @@ func TestTheProtectedPrefixesAreTheFixtures(t *testing.T) {
 // purpose: a worker may amend the run's configuration, the runner table and
 // the learnings a retro compacts, and may never write a tracker RECORD.
 func TestTheExemptionsAreNarrowAndTheRecordsAreNot(t *testing.T) {
+	t.Parallel()
+
 	for _, exempt := range exemptFromBoundary {
 		under := false
 		for _, prefix := range protectedPrefixes {
@@ -324,6 +334,8 @@ func TestTheExemptionsAreNarrowAndTheRecordsAreNot(t *testing.T) {
 // many more failures, so the message is what a person actually reads, and "the
 // run broke" is the message that sends a diagnosis at the wrong problem.
 func TestNoTwoVerdictsShareAFailureMessage(t *testing.T) {
+	t.Parallel()
+
 	seen := map[string]string{}
 	for verdict, message := range failureMessages {
 		if message == "" {

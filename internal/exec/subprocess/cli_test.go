@@ -49,6 +49,8 @@ func runCLI(t *testing.T, f *fixture, stdin string, args ...string) cliRun {
 // The four operations round-trip JSON on stdin and stdout, and each output is
 // the record the contract says that operation returns.
 func TestTheFourOperationsRoundTripJSONOnStdinAndStdout(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 	spec := f.spec("run-cli/tick-c1/attempt-1", "c1")
 	specJSON := mustMarshal(t, spec)
@@ -125,6 +127,8 @@ func TestTheFourOperationsRoundTripJSONOnStdinAndStdout(t *testing.T) {
 // report and every diagnostic go to stderr, so `| jq` works on the output of
 // every operation whatever happened to the job.
 func TestStdoutCarriesTheRecordAndNothingElse(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "boundary"})
 	spec := f.spec("run-cli/tick-c2/attempt-1", "c2")
 	started := runCLI(t, f, mustMarshal(t, spec), "start")
@@ -151,6 +155,8 @@ func TestStdoutCarriesTheRecordAndNothingElse(t *testing.T) {
 // A refusal has its own exit code: "this executor will not do that, and here
 // is which rule" is a different answer from "something broke".
 func TestARefusalHasItsOwnExitCode(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 	if stop := runCLI(t, f, "", "stop", "--reason", "called off"); stop.code != ExitOK {
 		t.Fatalf("stop exited %d: %s", stop.code, stop.stderr)
@@ -170,6 +176,8 @@ func TestARefusalHasItsOwnExitCode(t *testing.T) {
 // A malformed record is a usage error, and a record the contract refuses is
 // refused here too rather than half-run.
 func TestBadInputIsRefusedBeforeAnythingIsStarted(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 
 	if empty := runCLI(t, f, "", "start"); empty.code != ExitUsage {
@@ -197,6 +205,8 @@ func TestBadInputIsRefusedBeforeAnythingIsStarted(t *testing.T) {
 // The handle a shell wrote to a file is enough to address the job later —
 // which is what "re-addressable" means, and the reason `start` prints one.
 func TestAHandleReadFromAFileStillAddressesTheJob(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "slow_report", sleep: "1"})
 	started := runCLI(t, f, mustMarshal(t, f.spec("run-cli/tick-c5/attempt-1", "c5")), "start")
 	path := filepath.Join(t.TempDir(), "handle.json")

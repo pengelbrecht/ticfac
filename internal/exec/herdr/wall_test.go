@@ -70,6 +70,8 @@ func (h *harness) routeAgentGoneAfterInterrupt(t *testing.T) {
 const wallWording = "stopped at its wall clock"
 
 func TestInspectStopsAWorkerPastItsWallClock(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	clock := &wallClock{t: time.Now().UTC()}
 	h.ex.now = clock.now
@@ -162,6 +164,8 @@ func TestInspectStopsAWorkerPastItsWallClock(t *testing.T) {
 }
 
 func TestTheWallStopReachesTheAgentProcess(t *testing.T) {
+	t.Parallel()
+
 	// A real fake-agent process, in the mode that reports working and waits
 	// to be interrupted: the enforcement must actually stop a process
 	// herdr owns, not merely record that it would have.
@@ -226,6 +230,8 @@ func TestTheWallStopReachesTheAgentProcess(t *testing.T) {
 }
 
 func TestAStopAtTheWallClockDoesNotDecideTheVerdict(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	clock := &wallClock{t: time.Now().UTC()}
 	h.ex.now = clock.now
@@ -281,6 +287,8 @@ func TestAStopAtTheWallClockDoesNotDecideTheVerdict(t *testing.T) {
 // stranded every bounded dispatch on an older herdr the client otherwise
 // supports, naming the wrong repair (an upgrade nobody needs).
 func TestABoundIsEnforceableAgainstTheClientsFloorProtocol(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{serverProtocol: 19, serverVersion: "0.8.0"})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -300,6 +308,8 @@ func TestABoundIsEnforceableAgainstTheClientsFloorProtocol(t *testing.T) {
 // bound really is unenforceable, and the refusal names the bound and the
 // herdr version it refuses.
 func TestABoundIsRefusedAgainstAHerdrThatWentBelowTheFloor(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	// The downgrade, observed by the next snapshot: the client fails the
 	// call closed (the re-check below the floor) but refreshes what the
@@ -351,6 +361,8 @@ func TestABoundIsRefusedAgainstAHerdrThatWentBelowTheFloor(t *testing.T) {
 // wall_clock_exceeded. The already-gone agent is recorded as what it is —
 // settled on its own — and no stop is claimed.
 func TestAnAgentAlreadyGoneWhenTheBoundFiresIsNotAStopThatHappened(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	clock := &wallClock{t: time.Now().UTC()}
 	h.ex.now = clock.now

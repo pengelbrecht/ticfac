@@ -93,6 +93,8 @@ var spokenRecords = map[string]func() any{
 // catches — and it is why the comparison is of decoded values rather than of
 // bytes, so that key order and indentation are not mistaken for meaning.
 func TestEveryGoldenDocumentRoundTripsThroughTheseTypes(t *testing.T) {
+	t.Parallel()
+
 	fixture, _, _ := loadProtocol(t)
 
 	seen := map[string]bool{}
@@ -137,6 +139,8 @@ func TestEveryGoldenDocumentRoundTripsThroughTheseTypes(t *testing.T) {
 // is: the bundle says these five documents are wrong, and Start must refuse
 // all five.
 func TestEveryNegativeJobSpecIsRefused(t *testing.T) {
+	t.Parallel()
+
 	fixture, _, _ := loadProtocol(t)
 
 	negatives := 0
@@ -157,6 +161,8 @@ func TestEveryNegativeJobSpecIsRefused(t *testing.T) {
 // Every golden job_spec is ACCEPTED by the same parser. A validator that
 // refuses everything passes the test above and is useless.
 func TestEveryGoldenJobSpecIsAccepted(t *testing.T) {
+	t.Parallel()
+
 	fixture, _, _ := loadProtocol(t)
 
 	accepted := 0
@@ -180,6 +186,8 @@ func TestEveryGoldenJobSpecIsAccepted(t *testing.T) {
 // JobHandle, inspect a JobStatus (live and terminal), cancel a CancelAck and
 // collect a JobResult, and each is a document the contract admits.
 func TestTheRecordsTheFourOperationsEmitValidateAgainstTheContract(t *testing.T) {
+	t.Parallel()
+
 	_, records, defs := loadProtocol(t)
 	validate := func(name, record string, value any) {
 		t.Helper()
@@ -245,6 +253,8 @@ func TestTheRecordsTheFourOperationsEmitValidateAgainstTheContract(t *testing.T)
 // — must be words the contract's own vocabulary admits, or a hint here is a
 // value the reconciler refuses at the schema.
 func TestTheInferredFailureClassesAreInTheContractVocabulary(t *testing.T) {
+	t.Parallel()
+
 	_, _, defs := loadProtocol(t)
 
 	class, ok := defs["failure_class"]
@@ -269,6 +279,8 @@ func TestTheInferredFailureClassesAreInTheContractVocabulary(t *testing.T) {
 // the three keys a local handle carries, and this executor's handle carries
 // them under the same names.
 func TestTheLocalSubprocessHandleGoldenIsThisExecutorsShape(t *testing.T) {
+	t.Parallel()
+
 	fixture, _, _ := loadProtocol(t)
 
 	var goldenHandle map[string]any

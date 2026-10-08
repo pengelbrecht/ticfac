@@ -17,6 +17,8 @@ import (
 // runner process whose CPU and silence are real.
 
 func TestParseProcsReadsBothPsDialects(t *testing.T) {
+	t.Parallel()
+
 	procs := ParseProcs([]byte("    1     0 267:05.16\n  150     1   2:10.49\n 7000   150 1-02:03:04\n 7001 7000 00:00:07\n garbage\n"))
 	want := map[int]time.Duration{
 		1:    267*time.Minute + 5160*time.Millisecond,
@@ -35,6 +37,8 @@ func TestParseProcsReadsBothPsDialects(t *testing.T) {
 }
 
 func TestTreeCPUWalksByPidFromTheRoot(t *testing.T) {
+	t.Parallel()
+
 	procs := []Proc{
 		{PID: 100, PPID: 1, CPU: time.Hour},          // the shell
 		{PID: 101, PPID: 100, CPU: 30 * time.Second}, // the agent
@@ -73,6 +77,7 @@ func writeTranscript(t *testing.T, kind, cwd string, lines ...map[string]any) {
 // runner named "pi" writes no session transcript at all, so kind pi has
 // no transcript dir — nothing under it can be mistaken for the durable
 // host's signal.
+// serial: t.Setenv points TICFAC_TRANSCRIPT_HOME at this test's home — the env override is the behaviour under test, and t.Setenv refuses a parallel test.
 func TestClaudeTranscriptsAreReadWhereTheHarnessWritesThem(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(EnvTranscriptHome, home)
@@ -117,6 +122,8 @@ func TestClaudeTranscriptsAreReadWhereTheHarnessWritesThem(t *testing.T) {
 // supervisor reads it must use that shape, or it certifies the defect it
 // hides.
 func TestTheDurableRunnersTranscriptSignalIsItsStorageNotTheCliSessions(t *testing.T) {
+	t.Parallel()
+
 	worktree := t.TempDir()
 	state := t.TempDir()
 
@@ -183,6 +190,8 @@ func TestTheDurableRunnersTranscriptSignalIsItsStorageNotTheCliSessions(t *testi
 // executor that wrote the record and the supervisor that reads it are the
 // same binary, and a table launch is the default a bare record spells.
 func TestDurableAttemptIsDecidedOnTheRecordsOverrideFlag(t *testing.T) {
+	t.Parallel()
+
 	for _, name := range []string{"claude", "codex"} {
 		if durableAttempt(&attemptRecord{Runner: name}) {
 			t.Errorf("the %s runner is not durable", name)
@@ -205,6 +214,8 @@ func TestDurableAttemptIsDecidedOnTheRecordsOverrideFlag(t *testing.T) {
 // been thinking or reading for a long time must not read as quiet because
 // only the main file was asked. The signal is the newer of the two files.
 func TestTheStorageSignalCountsTheWalCommitsBesideTheMainFile(t *testing.T) {
+	t.Parallel()
+
 	state := t.TempDir()
 	storage := filepath.Join(state, fileWorkerStorage)
 	wal := storage + "-wal"
@@ -264,6 +275,8 @@ func TestTheStorageSignalCountsTheWalCommitsBesideTheMainFile(t *testing.T) {
 // durable runner's storage when it can be read, the storage honestly when
 // it cannot, and the CLI transcript for every other runner as before.
 func TestEvidenceNamesWhereTheDurableRunnersProgressLives(t *testing.T) {
+	t.Parallel()
+
 	now := time.Date(2026, 10, 4, 20, 0, 0, 0, time.UTC)
 	at := now.Add(-2 * time.Minute)
 	storage := filepath.Join("state", string(filepath.Separator), fileWorkerStorage)
@@ -300,6 +313,8 @@ func TestEvidenceNamesWhereTheDurableRunnersProgressLives(t *testing.T) {
 // The decision, on a hand clock: quiet for the window → nudge; quiet a window
 // past the nudge → stop; activity after the nudge clears it.
 func TestDecideStuck(t *testing.T) {
+	t.Parallel()
+
 	t0 := time.Date(2026, 9, 28, 8, 0, 0, 0, time.UTC)
 	after := 15 * time.Minute
 	s := &ActivityState{FirstSeenAt: t0}
@@ -334,6 +349,8 @@ func TestDecideStuck(t *testing.T) {
 // CPU keeps moving, the conversation storage does not — stopped at the
 // silence bound, while a CLI runner (no storage signal) keeps the CPU rule.
 func TestDecideStuckStopsADurableRunnerSilentPastTheBound(t *testing.T) {
+	t.Parallel()
+
 	t0 := time.Date(2026, 10, 6, 4, 39, 0, 0, time.UTC)
 	after := 15 * time.Minute
 	spinning := Activity{
@@ -364,6 +381,8 @@ func TestDecideStuckStopsADurableRunnerSilentPastTheBound(t *testing.T) {
 }
 
 func TestTheCPUMarkMovesOnlyOnRealUse(t *testing.T) {
+	t.Parallel()
+
 	t0 := time.Date(2026, 9, 28, 8, 0, 0, 0, time.UTC)
 	window := 15 * time.Minute
 	s := &ActivityState{FirstSeenAt: t0}
@@ -386,6 +405,8 @@ func TestTheCPUMarkMovesOnlyOnRealUse(t *testing.T) {
 // interrupted and re-prompted as stuck — once — and the re-prompted run
 // finishes.
 func TestALocalRunnerIsNotStuckWhileItsToolIsBusyAndIsRepromptedWhenItHangs(t *testing.T) {
+	t.Parallel()
+
 	window := 1500 * time.Millisecond
 	f := newFixture(t, fixtureOptions{mode: "busy_then_hang", stuckAfter: window, env: []string{"FAKE_RUNNER_BUSY=4"}})
 	handle := f.Start(f.spec("run-wv2/tick-bsy/attempt-1", "bsy"))
@@ -456,6 +477,8 @@ func superviseSlowStart(args []string) int {
 // exit was collected — select picks among ready cases at random — and nudged
 // as stuck a second time.
 func TestASlowStartingSupervisorDoesNotNudgeABusyRunner(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "busy_then_hang", stuckAfter: 1500 * time.Millisecond,
 		env: []string{"FAKE_RUNNER_BUSY=4"}, supervisorArgv: []string{os.Args[0], superviseSlowStartArg}})
 	handle := f.Start(f.spec("run-onv/tick-slw/attempt-1", "slw"))
@@ -494,6 +517,8 @@ func TestASlowStartingSupervisorDoesNotNudgeABusyRunner(t *testing.T) {
 // A runner that hangs again after its stuck nudge is stopped and settled as
 // stuck: a runner error that says so.
 func TestALocalRunnerThatStaysStuckIsStopped(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "hang", stuckAfter: 1500 * time.Millisecond})
 	handle := f.Start(f.spec("run-wv2/tick-hng/attempt-1", "hng"))
 	f.waitSettled(handle)
@@ -532,6 +557,7 @@ func lastObservationDetail(status *JobStatus) string {
 // doing something — and the LAST tool call as one bounded line, read from
 // Claude Code's layout and block spellings — the one harness that still
 // writes a session transcript since the pi CLI went (epic 43y, tick uxi).
+// serial: t.Setenv points the transcript home writeTranscript writes through, and t.Setenv refuses a parallel test.
 func TestReadTranscriptEventsAnswersTheWindowAndTheLastToolCall(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(EnvTranscriptHome, home)
@@ -617,6 +643,7 @@ func TestReadTranscriptEventsAnswersTheWindowAndTheLastToolCall(t *testing.T) {
 // a worker plausibly types is redacted to <redacted> at the reader, the one
 // producer every renderer reads, and the redaction happens BEFORE the
 // 80-rune bound so a cut line can never carry half a secret.
+// serial: t.Setenv points the transcript home writeTranscript writes through, and t.Setenv refuses a parallel test.
 func TestReadTranscriptEventsRedactsCredentialsFromTheLastToolCall(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(EnvTranscriptHome, home)

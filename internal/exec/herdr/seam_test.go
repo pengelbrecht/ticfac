@@ -34,6 +34,8 @@ var _ reconcile.Executor = (*Executor)(nil)
 // and a fifth quietly dropped is one this executor stopped implementing.
 // short: reflection over the Executor interface and a read of this package's sources
 func TestTheExecutorInterfaceIsUnchanged(t *testing.T) {
+	t.Parallel()
+
 	const want = 5 // Start, Inspect, CollectDetail, Cancel, Dispose
 	if got := reflect.TypeOf((*reconcile.Executor)(nil)).Elem().NumMethod(); got != want {
 		t.Errorf("reconcile.Executor has %d methods, want %d: the interface is the seam, and this "+
@@ -58,6 +60,8 @@ func TestTheExecutorInterfaceIsUnchanged(t *testing.T) {
 //
 // short: reflection over the Executor interface and a read of this package's sources
 func TestReconcileContainsNoHerdrCode(t *testing.T) {
+	t.Parallel()
+
 	root, err := contracts.RepoRoot()
 	if err != nil {
 		t.Fatal(err)
@@ -136,6 +140,8 @@ func stripComments(src string) string {
 // agent name, herdr's own worktree — exist in the ONE open object the
 // contract leaves open, and nowhere else on the JobHandle.
 func TestHerdrAddressingLivesInsideTheHandle(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {

@@ -63,6 +63,8 @@ func superviseMissingChildren(args []string) int {
 // A stop whose kill missed the runner's child goes on until the runner's lock
 // is released: the child dies too, and nothing of the attempt is left alive.
 func TestASupervisorStopWhoseKillMissesTheRunnersChildStillStopsIt(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "hang",
 		supervisorArgv: []string{os.Args[0], superviseMissingChildrenArg}})
 	handle := f.Start(f.spec("run-svs/tick-s1/attempt-1", "s1"))
@@ -95,6 +97,8 @@ func TestASupervisorStopWhoseKillMissesTheRunnersChildStillStopsIt(t *testing.T)
 // zombie) until the supervisor collects the exit code, and a stop signalling
 // that group in between cannot reach a stranger who was handed the number.
 func TestARunnersExitIsObservedWithoutFreeingItsPID(t *testing.T) {
+	t.Parallel()
+
 	for _, already := range []bool{false, true} {
 		cmd := exec.Command("sh", "-c", "sleep 0.2; exit 3")
 		cmd.SysProcAttr = newProcessGroup()

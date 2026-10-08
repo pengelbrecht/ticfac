@@ -15,6 +15,8 @@ import (
 // outright, which is only possible because collect never dials it.
 
 func TestCollectReadsTheVerdictFromTheReportAndTheBranch(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -53,6 +55,8 @@ func TestCollectReadsTheVerdictFromTheReportAndTheBranch(t *testing.T) {
 }
 
 func TestCollectRefusesNoCommits(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -80,6 +84,8 @@ func TestCollectRefusesNoCommits(t *testing.T) {
 }
 
 func TestCollectRefusesAMissingResult(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -126,6 +132,8 @@ func TestCollectRefusesAMissingResult(t *testing.T) {
 // out of the substrate's silence. The two must not share an outcome.
 // short: collected from records in a tempdir; no herdr server and no agent
 func TestCollectDistinguishesSettledFromUnsettled(t *testing.T) {
+	t.Parallel()
+
 	settled, err := collectForState(t, true)
 	if err != nil {
 		t.Fatalf("the settled attempt did not collect: %v", err)
@@ -191,6 +199,8 @@ func (h *harness) settleGone(t *testing.T, handle *subprocess.JobHandle) {
 }
 
 func TestCollectReadsTheReportFromTheBranchWhenTheWorktreeIsGone(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -228,6 +238,8 @@ func TestCollectReadsTheReportFromTheBranchWhenTheWorktreeIsGone(t *testing.T) {
 }
 
 func TestCollectNeedsNoHerdr(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -251,6 +263,8 @@ func TestCollectNeedsNoHerdr(t *testing.T) {
 }
 
 func TestCollectReportsABoundaryViolation(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -293,6 +307,8 @@ func TestCollectReportsABoundaryViolation(t *testing.T) {
 // close-out attempts were rejected and superseded rather than disposed, and
 // their reports died with their worktrees.
 func TestTheReportSurvivesTheWorktree(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
