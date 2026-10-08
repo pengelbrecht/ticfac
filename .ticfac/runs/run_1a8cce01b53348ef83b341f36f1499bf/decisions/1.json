@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "a mapping for every stage the feed emits (a test fails when a new stage has none); mechanics filtered; make gate",
+    "description": "Map run feed stages to short operator sentences without shas or internal terms ('v1g merged into the epic, now testing', 'ww2 finished and merged', 'review says not ready: <one line>', 'paused: needs you'), dropping pure mechanics (pushed, push_queued, policy_stated, cleaned_up) from this section. Raw events stay on the [e] view unchanged.",
+    "epic_id": "ymf",
+    "role": "classify-tick",
+    "tick_id": "47j",
+    "title": "Readable feed sentences for the dashboard's latest section"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.68,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.74,
+      "design": 0.04,
+      "diagnosis": 0,
+      "mechanical": 0,
+      "translation": 0.22
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1101,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T13:18:44Z",
+  "answered_at": "2026-10-08T13:18:44Z",
+  "provenance": {
+    "run_id": "run_1a8cce01b53348ef83b341f36f1499bf",
+    "tick_id": "47j",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "c50ed7874fddfd806eb6945fa4761455d0807682",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:38b72ba23ed02264ab3b10124b3b6616fb7078ea0dddfb2871cc3b4e02f52914",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
