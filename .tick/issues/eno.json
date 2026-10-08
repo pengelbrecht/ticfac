@@ -1,10 +1,10 @@
 {
   "id": "eno",
   "title": "Close out pi-durable cloud hardening: retro, then the next feasible epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "blocked_by": [
     "0rt",
     "ynd"
@@ -13,5 +13,6 @@
   "role": "closeout",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-06T10:03:55.435655Z",
-  "updated_at": "2026-10-06T10:03:55.435655Z"
+  "updated_at": "2026-10-08T05:57:06.936389404Z",
+  "started_at": "2026-10-08T05:57:06.936388364Z"
 }
