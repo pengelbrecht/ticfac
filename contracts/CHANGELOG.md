@@ -53,6 +53,29 @@ loud.
 
 ---
 
+## 2.4.0
+
+MINOR: `status-model.json`'s cost object gains `subscription` — the claude-sub
+subscription a cloud run's jobs lease (ticfac tick b13), with the window use
+the factory's proxy last saw on the account's shared 5-hour and 7-day windows.
+A run on the subscription pays no wallet money, so its cost line is the
+SUBSCRIPTION's: which label it holds (`MAX1 · 34% of 5h · 8% of 7d` on the
+dashboard) and how much of the windows the operator's own interactive use
+shares. Required-and-null like every field that can be genuinely absent: null
+is a run that leased nothing the factory's /api/claude-sub names — no lease,
+no pool, no factory configured — never a guess, and the label is the only
+identifier the object carries: the route is built so the whole answer is safe
+to paste into a log, and nothing here changes that. Additive within the model's
+own `schema_version` 1, the way the hn6 dashboard fields were; consumers that
+read fields by name (the phone page's snapshot parser) are unchanged and
+correct.
+
+No other fixture changes. Consumers: `cloudflare/contracts.pin.json` moves to
+2.4.0; the Go Model and its builder gained the field in the same commit
+(`internal/statusmodel`, `Sources.ClaudeSub`), and the factory read that fills
+it (`internal/factory/claudesub.go`, gathered in `internal/cli`) is new in the
+same commit.
+
 ## 2.3.0
 
 MINOR: `job-protocol.json`'s observation `kind` gains `claude_sub_quota` — the

@@ -142,6 +142,14 @@ type Sources struct {
 	// when no host stated one, and the model's cost lines answer empty.
 	WorkerCost *WorkerCostInput
 
+	// ClaudeSub is the claude-sub subscription the run's jobs lease (tick
+	// b13): the label and the window utilization the factory's /api/claude-sub
+	// answers under the operator's own auth, already reduced to the one
+	// subscription this run leased. Nil when the run leased nothing or the
+	// factory was not asked (a local run, or no factory configured) — and
+	// never a guess: a label the snapshot does not name is not shown.
+	ClaudeSub *CostSubscription
+
 	// CI is the forge's answer for the epic PR, per check per head. Nil
 	// when there is no PR or the forge could not be asked.
 	CI *CIInput

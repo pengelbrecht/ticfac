@@ -11,7 +11,7 @@
 WORKERS                                       ACTIVITY (10m)  LAST
 46x  glm-5.3 · herdr · herdr pane tick-46x-a6 ▁▃▅█▇▅▃▁▂▅      ran go test ./internal/reconcile (1m ago)  nudged ×1
 
-CI #98 go ◐ 6m · ts ✓                                         config claude · cost Workers AI $0.41 · claude not metered
+CI #98 go ◐ 6m · ts ✓                                                              config claude · cost Workers AI $0.41
 ─ recent ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 18:58:02 46x#2        dispatched: 46x try 2 dispatched (run dispatch #6, branch ticfac/run-epic-6in/tick-46x/attempt-6)
 19:04:12 run          closeout_held: the close-out waits for CI green on the PR                 [e] events  [enter] tick

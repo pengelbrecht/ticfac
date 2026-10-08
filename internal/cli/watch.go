@@ -788,7 +788,7 @@ func watchRunStillAlive(source runfeed.Source, kind, repo, runID string) bool {
 // durable sources — so the watch's one document and the live view's last
 // frame cannot disagree.
 func watchGatherModel(ctx context.Context, source runfeed.Source, kind, repo, runID string) (statusmodel.Model, error) {
-	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost}
+	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, claudeSub: statusClaudeSub}
 	if cloudSource, ok := source.(*cloudFeedSource); ok && kind == "cloud" {
 		record, err := readCloudRunRecord(ctx, cloudSource.client, cloudSource.runID)
 		if err != nil {
@@ -910,7 +910,9 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	graphCache := &watchGraphCache{ttl: watchSourceTTL, read: epicGraph}
 	ciCache := &watchCICache{ttl: watchSourceTTL, read: statusCI}
 	costCache := &watchCostCache{ttl: watchSourceTTL, read: statusWorkerCost}
-	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI, workerCost: costCache.WorkerCost}
+	claudeSubCache := &watchClaudeSubCache{ttl: watchSourceTTL, read: statusClaudeSub}
+	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI, workerCost: costCache.WorkerCost,
+		claudeSub: claudeSubCache.Subscription}
 
 	// The model builder: local and cloud gather through their own sources
 	// (status_model.go), and both are the same model — the same frame renders
@@ -1662,6 +1664,34 @@ func (c *watchCostCache) WorkerCost(ctx context.Context, runID string) (*statusm
 	}
 	c.cost, c.cached, c.at = cost, true, time.Now()
 	return cost, nil
+}
+
+// watchClaudeSubCache serves the leased claude-sub subscription at most once
+// per TTL (tick b13): the pool snapshot is a live read of a Durable Object
+// and a frame every two seconds must not ask it every two seconds. An error
+// is returned fresh (a factory that cannot be asked is a fact the model
+// degrades per frame, never one it silently freezes); a successful answer,
+// nil included, is cached — "no lease right now" is an answer too, and the
+// leases a running run holds and releases are picked up within half a
+// minute.
+type watchClaudeSubCache struct {
+	ttl    time.Duration
+	read   func(context.Context, string) (*statusmodel.CostSubscription, error)
+	sub    *statusmodel.CostSubscription
+	cached bool
+	at     time.Time
+}
+
+func (c *watchClaudeSubCache) Subscription(ctx context.Context, runID string) (*statusmodel.CostSubscription, error) {
+	if c.cached && time.Since(c.at) < c.ttl {
+		return c.sub, nil
+	}
+	sub, err := c.read(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	c.sub, c.cached, c.at = sub, true, time.Now()
+	return sub, nil
 }
 
 // clockOf is the line's own time, as a person reads it. A stamp that does not

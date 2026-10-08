@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1137,5 +1138,144 @@ func TestStatusModelForACloudRunSurfacesAPriorRunsHold(t *testing.T) {
 	}
 	if !asked {
 		t.Errorf("the factory was never asked for the prior run's feed: %+v", *requests)
+	}
+}
+
+// TestStatusModelCloudGathersTheLeasedSubscription (tick b13): a cloud run's
+// gathering reads the factory's /api/claude-sub under the operator's own
+// token and hands the model the ONE subscription this run's jobs lease, with
+// the window utilization the factory's proxy last saw — reduced from the
+// pool's whole snapshot, so a lease of another run on the same pool never
+// reads as this run's. No lease, no pool, or no factory configured is the
+// optional state: nil, and the model's degraded list stays empty. A factory
+// that should have answered but did not degrades the model's claude-sub
+// source like every source this gathering cannot read.
+func TestStatusModelCloudGathersTheLeasedSubscription(t *testing.T) {
+	runID := "run_6a4b8e0f2c1d5f3a"
+	for _, leg := range []struct {
+		name        string
+		claudeSub   func(cloudFactoryRequest) (int, any)
+		wantLabel   string
+		want5h      *float64
+		want7d      *float64
+		wantDegrade bool
+	}{
+		{
+			name: "the run's jobs lease MAX1",
+			claudeSub: func(cloudFactoryRequest) (int, any) {
+				return 200, map[string]any{
+					"labels": []string{"MAX1"},
+					"subscriptions": []any{map[string]any{
+						"label":         "MAX1",
+						"active_leases": []string{runID + "-46x-1", "other_run-7zk-1"},
+						"last_limits": map[string]string{
+							"anthropic-ratelimit-unified-5h-utilization": "0.34",
+							"anthropic-ratelimit-unified-7d-utilization": "0.08",
+						},
+					}},
+				}
+			},
+			wantLabel: "MAX1", want5h: ptr(float64(0.34)), want7d: ptr(float64(0.08)),
+		},
+		{
+			name: "only another run's jobs lease",
+			claudeSub: func(cloudFactoryRequest) (int, any) {
+				return 200, map[string]any{
+					"labels": []string{"MAX1"},
+					"subscriptions": []any{map[string]any{
+						"label":         "MAX1",
+						"active_leases": []string{"other_run-46x-1"},
+						"last_limits":   map[string]string{},
+					}},
+				}
+			},
+		},
+		{
+			name: "the deployment binds no pool",
+			claudeSub: func(cloudFactoryRequest) (int, any) {
+				return 503, map[string]any{"error": "no_claude_sub_pool"}
+			},
+		},
+		{
+			name: "the factory predates the route",
+			claudeSub: func(cloudFactoryRequest) (int, any) {
+				return 404, map[string]any{"error": "not_found"}
+			},
+		},
+		{
+			name: "the factory cannot be asked",
+			claudeSub: func(cloudFactoryRequest) (int, any) {
+				return 500, map[string]any{"error": "internal_error"}
+			},
+			wantDegrade: true,
+		},
+	} {
+		t.Run(leg.name, func(t *testing.T) {
+			captured := captureStatusSources(t)
+			repo := t.TempDir()
+			execTestCmd(t, repo, "git", "init", "--quiet", "-b", "main")
+
+			endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+				run := map[string]any{"run_id": runID, "epic": "cst", "state": "running"}
+				switch {
+				case request.Path == "/api/runs":
+					return 200, map[string]any{"runs": []any{run}}
+				case request.Path == "/api/runs/"+runID:
+					return 200, map[string]any{"run": run}
+				case request.Path == "/api/runs/"+runID+"/events":
+					return 200, map[string]any{"run_id": runID, "state": "running", "text": "", "bytes": 0, "total_bytes": 0}
+				case request.Path == "/api/claude-sub":
+					return leg.claudeSub(request)
+				}
+				return 404, map[string]any{"error": "not_found"}
+			})
+			configureCloudFactory(t, endpoint)
+
+			realGraph := epicGraph
+			t.Cleanup(func() { epicGraph = realGraph })
+			epicGraph = func(context.Context, string, string) *tk.Graph { return nil }
+
+			var out, errOut bytes.Buffer
+			if code := Run([]string{"status", "--repo", repo, "--json", runID}, &out, &errOut); code != 0 {
+				t.Fatalf("a live cloud run exited %d: %s\n%s", code, out.String(), errOut.String())
+			}
+			if len(cloudFactoryRequests(requests)) == 0 {
+				t.Fatal("the factory was never asked")
+			}
+
+			// The gatherer asked the pool's operator route under the
+			// operator's own token — the same bearer the factory commands
+			// carry — and reduced the snapshot to this run.
+			switch {
+			case leg.wantLabel == "" && leg.wantDegrade:
+				if !slices.Contains(captured.Degraded, "claude-sub") {
+					t.Errorf("a factory that could not be asked degrades nothing: %v", captured.Degraded)
+				}
+			case leg.wantLabel == "":
+				if captured.ClaudeSub != nil {
+					t.Errorf("a run with no lease of its own gathered %+v, want nil", captured.ClaudeSub)
+				}
+				if slices.Contains(captured.Degraded, "claude-sub") {
+					t.Errorf("the optional state degraded the model: %v", captured.Degraded)
+				}
+			default:
+				if captured.ClaudeSub == nil {
+					t.Fatal("the pool carried this run's lease and the gathering passed no subscription")
+				}
+				sub := captured.ClaudeSub
+				if sub.Label != leg.wantLabel {
+					t.Errorf("the leased label is %q, want %q", sub.Label, leg.wantLabel)
+				}
+				if leg.want5h == nil && sub.FiveHour != nil || leg.want5h != nil && (sub.FiveHour == nil || *sub.FiveHour != *leg.want5h) {
+					t.Errorf("the 5h utilization reads %v, want %v", sub.FiveHour, leg.want5h)
+				}
+				if leg.want7d == nil && sub.SevenDay != nil || leg.want7d != nil && (sub.SevenDay == nil || *sub.SevenDay != *leg.want7d) {
+					t.Errorf("the 7d utilization reads %v, want %v", sub.SevenDay, leg.want7d)
+				}
+				if slices.Contains(captured.Degraded, "claude-sub") {
+					t.Errorf("a read that answered degraded the model: %v", captured.Degraded)
+				}
+			}
+		})
 	}
 }

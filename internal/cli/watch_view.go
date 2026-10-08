@@ -24,6 +24,7 @@ package cli
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -1006,6 +1007,11 @@ func dashboardCICost(m statusmodel.Model, st watchStyles, width int) []string {
 		ci += " · " + github
 	}
 	cost := dashCost(m, st)
+	if cost == "" {
+		// Nothing is metered (tick b13): the cost says nothing, and the CI
+		// line does not pad out to an edge that no longer exists.
+		return []string{"", ci}
+	}
 	if width <= 0 {
 		return []string{"", ci + "    " + cost}
 	}
@@ -1063,30 +1069,78 @@ func dashGitHub(m statusmodel.Model, st watchStyles) string {
 	return st.dim(strings.Join(counts, ", "))
 }
 
-// dashCost is the run's spend per source (hn6 rule 7): a metered line's
-// measured number, and "not metered" — dim, secondary text — where nothing
-// measured, never a fabricated $0.00, because an unmetered line wearing a
-// number is a lie with a decimal point. No lines at all and the whole cost
-// says so. The run's named config, when it selected one (tick tda), leads
-// the line: the spend is read beside the config that spent it, so two epics
-// on two configs compare on the line that answers what each cost.
+// dashCost is the run's cost line (tick b13): what is METERED, and nothing
+// else. The three cases the tick names:
+//
+//   - nothing, when there is no metered cost — no fabricated $0.00, no
+//     "not metered" recital, and no config name floating on an empty line;
+//   - the metered cost, when there is one — each measured river's number,
+//     the whole story still in the model's own lines and `status --json`,
+//     with their coverage bases beside them;
+//   - on a run whose jobs lease the claude-sub subscription, the leased
+//     label and the account's shared 5h/7d window utilization — a run that
+//     pays a flat subscription has no wallet number, and its windows are
+//     what the operator watches.
+//
+// The config still leads the line (tick tda) whenever the line has
+// something to say: the spend is read beside the config that spent it. A
+// measured zero is silence here — an exact $0.00 is no cost — and an
+// unmetered river is silence too, never a recital of what nobody measured.
 func dashCost(m statusmodel.Model, st watchStyles) string {
-	config := ""
-	if m.RunConfig != nil {
-		config = "config " + *m.RunConfig + " · "
-	}
-	if len(m.Cost.Lines) == 0 {
-		return config + st.dim("cost not metered")
-	}
-	parts := make([]string, 0, len(m.Cost.Lines))
+	money := make([]string, 0, len(m.Cost.Lines))
 	for _, line := range m.Cost.Lines {
-		if line.Metered && line.USD != nil {
-			parts = append(parts, fmt.Sprintf("%s $%.2f", dashCostLabel(line.Source), *line.USD))
-		} else {
-			parts = append(parts, dashCostLabel(line.Source)+" "+st.dim("not metered"))
+		if line.Metered && line.USD != nil && *line.USD > 0 {
+			money = append(money, fmt.Sprintf("%s $%.2f", dashCostLabel(line.Source), *line.USD))
 		}
 	}
-	return config + "cost " + strings.Join(parts, " · ")
+	sub := ""
+	if s := m.Cost.Subscription; s != nil && s.Label != "" {
+		sub = dashSubscription(*s)
+	}
+	switch {
+	case len(money) == 0 && sub == "":
+		return ""
+	case len(money) == 0:
+		return dashCostPrefix(m) + sub
+	case sub == "":
+		return dashCostPrefix(m) + "cost " + strings.Join(money, " · ")
+	default:
+		return dashCostPrefix(m) + "cost " + strings.Join(money, " · ") + " · " + sub
+	}
+}
+
+// dashCostPrefix is the config name the cost line leads with (tick tda) —
+// the spend is read beside the config that spent it — empty for a run that
+// selected no config.
+func dashCostPrefix(m statusmodel.Model) string {
+	if m.RunConfig == nil {
+		return ""
+	}
+	return "config " + *m.RunConfig + " · "
+}
+
+// dashSubscription is the leased subscription's segment: its label, then the
+// utilization the factory's proxy last saw for each window it has answered
+// for — "MAX1 · 34% of 5h · 8% of 7d" (the shape the design names). A window
+// the proxy has not answered for yet is absent, never "0%": the absence of
+// a measurement is not a measurement of zero.
+func dashSubscription(sub statusmodel.CostSubscription) string {
+	parts := []string{sub.Label}
+	if sub.FiveHour != nil {
+		parts = append(parts, fmt.Sprintf("%d%% of 5h", percentOf(*sub.FiveHour)))
+	}
+	if sub.SevenDay != nil {
+		parts = append(parts, fmt.Sprintf("%d%% of 7d", percentOf(*sub.SevenDay)))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// percentOf renders a utilization fraction as the whole percent a person
+// reads: 0.34 is 34% of the window, and a fraction of a percent rounds to
+// the nearest whole — the windows are big enough that the remainder is
+// smaller than the number's own noise.
+func percentOf(fraction float64) int {
+	return int(math.Round(fraction * 100))
 }
 
 // dashCostLabel is the source's own name as the tick spells it: the rivers
