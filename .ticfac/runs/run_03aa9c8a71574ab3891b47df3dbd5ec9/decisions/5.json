@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 5,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "get --full prints SKILL.md and every references/ file; test; make gate",
+    "description": "ticfac skills get ticfac prints only SKILL.md; since #259 the skill has references/ (commands.md, holds.md, cloud.md) that cannot be read from the binary without installing. Add --full (as tk skills get --full does) printing SKILL.md then every references file, each under a header naming its path.",
+    "epic_id": "bo9",
+    "role": "classify-tick",
+    "tick_id": "u2g",
+    "title": "ticfac skills get --full prints the skill's references too"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.73,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.78,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.02,
+      "translation": 0.2
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1081,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T09:58:26Z",
+  "answered_at": "2026-10-08T09:58:26Z",
+  "provenance": {
+    "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
+    "tick_id": "u2g",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/bo9",
+    "source_sha": "e270f03ec0b238ee73f2f7c18f79b6da9b4bfb47",
+    "integration_ref": "refs/heads/epic/bo9",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:38b72ba23ed02264ab3b10124b3b6616fb7078ea0dddfb2871cc3b4e02f52914",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
