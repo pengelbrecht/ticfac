@@ -635,6 +635,26 @@ version = 2
 	fmt.Fprintf(&b, "substrate = %q\n", substrate)
 	b.WriteString("max_parallel = 4\n\n")
 
+	// No `args` on any cell, deliberately (tick q6z). The roles table's args
+	// are an escape hatch with exactly one consumer — spawnArgv, reached only
+	// for a herdr dispatch, which compiles them into that dispatch's agent
+	// argv (internal/cli/executor.go) — and no cell init writes has a flag to
+	// add: the local-subprocess executor launches its harness off its own
+	// runner table (internal/exec/subprocess's `runners`, the whole argv), a
+	// cloud container is booted over its sandbox door from the worker.json
+	// the door hands it, and the two roles that DO reach a herdr pane are
+	// written as claude precisely so the shipped profile can pair them
+	// (tick jiv) — nothing there needs a trust flag either. The pi CLI's
+	// `--approve` used to be written beside kind = "pi" anyway: a trust flag
+	// of a CLI that went with its worker path (epic 43y, ticks jhp and uxi),
+	// and runconfig.Compile refuses kind "pi" for a herdr pane, so nothing
+	// could ever have read it. A line no executor reads tells a reader of
+	// this file that workers run with a flag they do not, so init writes none
+	// and says so once, in the file, where the reader looks for it.
+	b.WriteString("# No `args` on any cell, deliberately: the roles table's args are an\n" +
+		"# escape hatch read only when a herdr dispatch compiles an agent's argv,\n" +
+		"# and no cell this file writes has a flag to add — the local-subprocess\n" +
+		"# harness and a cloud container are both launched from their own tables.\n\n")
 	for _, role := range []struct{ name, what string }{
 		{"implement", "the workers that implement ticks"},
 		{"review", "the epic review"},
@@ -666,8 +686,12 @@ version = 2
 		if cellModel != "" {
 			fmt.Fprintf(&b, "model = %q\n", cellModel)
 		}
+<<<<<<< HEAD
 		b.WriteString("effort = \"high\"\n")
 		b.WriteString("\n")
+=======
+		b.WriteString("effort = \"high\"\n\n")
+>>>>>>> c4966b33cabe9a7b0cac75df1a2aa6bf5ba26dad
 	}
 
 	b.WriteString("[testing.commands]\n")
@@ -683,21 +707,30 @@ version = 2
 // cloudTOML declares the cloud substrate's role cells. Every role the run
 // dispatches must be declared here — under the cloud substrate a role this
 // file does not declare is a refusal naming the role, never a fall back to
-// the common cell — so init writes all three.
+// the common cell — so init writes all three. No `args` on any of them
+// (tick q6z): a cloud container is booted by the factory over its
+// per-attempt sandbox door, and its interface is the worker.json the door
+// hands it, not the roles table — so an argv flag written here would be
+// dead config that told a reader of this file that a container runs with it.
 func cloudTOML(model string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, `# Cloud substrate overrides, written by `+"`ticfac init`"+`: merged over
 # .tick/runners.toml for cloud runs. What runs in Cloudflare runs Workers AI
 # models only, through the factory's Workers AI gateway — every cell below
 # names one, and a role this file does not declare is refused at run start.
+# No args on any cell: a container is launched from the door's worker.json,
+# not from the roles table, so there is no flag to pass.
 version = 2
 
 `)
 	for _, role := range []string{"implement", "review", "closeout"} {
+<<<<<<< HEAD
 		// No `args` (tick 2p3): the container hosts the same pi-durable harness
 		// the local-subprocess executor runs, and neither reads roles-table
 		// args — a herdr-pane escape hatch only, and this substrate never
 		// dispatches one.
+=======
+>>>>>>> c4966b33cabe9a7b0cac75df1a2aa6bf5ba26dad
 		fmt.Fprintf(&b, "[roles.%s]\nkind = %q\nmodel = %q\neffort = \"high\"\n\n",
 			role, initRunnerPi, model)
 	}

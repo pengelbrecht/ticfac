@@ -159,9 +159,11 @@ func assertWellFormedNamedConfigs(t *testing.T, path string) {
 			t.Errorf("the claude config's %s names model %q — the versionless aliases are what make the rung subscription-billed; a pinned id bills per token", role, w.Model)
 		}
 		// A cell that switches kind does not inherit the argv of the kind it
-		// replaced: the cloud's implement cell hands pi `--approve`, which
-		// claude does not take — `args = []` clears it, as the local
-		// frontier rung's cell does.
+		// replaced (the operator's 2026-09-10 rule, and the reason `args = []`
+		// sits on every kind-switching cell): whatever argv the cells beneath
+		// declare, the clearing cancels it, as the local frontier rung's cell
+		// does. The pi-CLI `--approve` this clearing used to cancel is gone from
+		// the implement cells with the rest of the dead pairing (tick q6z).
 		for _, tier := range []Tier{"", TierEconomy, TierStrong} {
 			if w, err := claude.ResolveOn(SubstrateCloud, role, tier); err == nil && len(w.Args) != 0 {
 				t.Errorf("the claude config's %s at tier %q hands claude args %q inherited from another kind's cell", role, tier, w.Args)
