@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "x73",
   "attempt": 17,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T02:11:17Z",
+  "triaged_at": "2026-10-08T02:11:27Z",
+  "triaged_by": "ticfac run epic-t8u absorbing yzk",
+  "promoted_as": "yzk",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "x73",
