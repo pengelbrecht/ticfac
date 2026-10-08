@@ -12,10 +12,13 @@ where it reads a checkout.
   `--yes`. Refuses to overwrite an existing file.
 - `ticfac doctor` — what a run still needs on this machine; `--cloud` adds
   the cloud checks whatever the repo declares. Exit 0 ready, 1 missing.
-- `ticfac skills list|get|install` — the skills embedded in this binary.
-  `ticfac skills install ticfac` installs into `.claude/skills/` and
+- `ticfac skills list|get|install|diff` — the skills embedded in this
+  binary. `ticfac skills install ticfac` installs into `.claude/skills/` and
   `.agents/skills/`; `--dir <the skill's own dir>`, `--force` to take over
   an unstamped dir. `ticfac skills list` prints the version each ships with.
+  `ticfac skills diff ticfac` reports when an installed copy has drifted
+  from the binary — missing, unstamped, an older version, or changed files —
+  naming `ticfac skills install ticfac` as the fix; exit 0 means no drift.
 - `ticfac version` — this build and the contract bundle it serves.
 - `ticfac completion bash|zsh|fish` — shell completion.
 

@@ -14,6 +14,8 @@ use ticks; when it is "run this epic" or "what is the run doing", use ticfac.
 Install or update this skill with `ticfac skills install ticfac` — the same
 one command as the ticks skill's `tk skills install ticks`. Re-run it after
 upgrading ticfac: it replaces a stamped copy with the new binary's version.
+`ticfac skills diff ticfac` says whether a re-install is needed — missing,
+unstamped, an older version, or changed files all count as drift.
 
 Detail lives in references/: `commands.md` (every command and the flags
 worth knowing), `holds.md` (every stop: who clears it, with what),
