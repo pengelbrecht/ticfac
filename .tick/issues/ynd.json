@@ -2,6 +2,7 @@
   "id": "ynd",
   "title": "Re-review ex6 after its NOT READY review's blocking findings (round 2)",
   "description": "Review the epic ex6 again, AS INTEGRATED, now that the blocking findings of its NOT READY review are fixed. This is review round 2; 2 count toward the bound of 2.\n\nThe previous review (0rt, decision 8) judged it NOT READY: deliver m1w's harness half (read the metering join from worker.json, compose the provider override, with a harness test) and make the close-out's protected changes leave 2pn's harness gate cell in .tick/runners.toml (the whole-file proposals wipe it); its blocking finding(s): \"m1w's metering join reaches worker.json and no harness code reads it\"; \"Protected changes applied in key order wipe 2pn's harness gate cell\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY that spends the bound is not reviewed again by the run unless the tree changes after it: it holds for a person with your reasons.",
+  "notes": "2026-10-08 05:56 - ticfac run run_af0e77b99c1540b7b8005cf04fd2795d: ynd try 1 (run dispatch #11) reported a finding the run itself decided — defect \"Harness metering test's credential pipeline is unpinned from Go's\" (key 9a823431f410b204d2bf7b5a013bd738e806c28ff24e50dde9de2f0433c1ea1d, severity low, for this repository) is promoted to a backlog tick with an owner, y9g; the decision record is on the run branch at .ticfac/runs/run_af0e77b99c1540b7b8005cf04fd2795d/absorptions/9a823431f410b204d2bf7b5a013bd738e806c28ff24e50dde9de2f0433c1ea1d.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 1,
   "type": "task",
@@ -14,6 +15,6 @@
   "role": "review",
   "created_by": "ticfac run run_af0e77b99c1540b7b8005cf04fd2795d",
   "created_at": "2026-10-08T02:57:34Z",
-  "updated_at": "2026-10-08T04:55:54.732494828Z",
+  "updated_at": "2026-10-08T05:56:31.961965094Z",
   "started_at": "2026-10-08T04:55:54.732494048Z"
 }
