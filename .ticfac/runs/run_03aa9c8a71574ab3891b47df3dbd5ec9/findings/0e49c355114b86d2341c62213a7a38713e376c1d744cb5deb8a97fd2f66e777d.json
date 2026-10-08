@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "two",
   "attempt": 8,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T12:07:21Z",
+  "triaged_at": "2026-10-08T12:07:31Z",
+  "triaged_by": "ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9 absorbing ifw",
+  "promoted_as": "ifw",
   "provenance": {
     "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
     "tick_id": "two",
