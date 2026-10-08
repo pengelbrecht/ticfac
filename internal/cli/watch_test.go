@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -1232,5 +1233,43 @@ func TestSignalStopDetailLeadsOnlyThePersonStopWithTheCancelledWord(t *testing.T
 	}
 	if !strings.Contains(signalStopDetail(syscall.SIGINT), "stopped by a signal") {
 		t.Errorf("the SIGINT death line lost the sentence that says what happened: %q", signalStopDetail(syscall.SIGINT))
+	}
+}
+
+// TestWatchActivityCacheServesWithinTTLAndRefreshesPastIt: activity's own
+// cache (tick 93n) — a frame every two seconds must not dial a fresh watch
+// socket per worker per redraw, the same rule the graph, the CI and the cost
+// caches hold a few lines up, keyed per (tick, attempt) because one redraw
+// reads every running worker.
+func TestWatchActivityCacheServesWithinTTLAndRefreshesPastIt(t *testing.T) {
+	calls := map[string]int{}
+	cache := &watchActivityCache{ttl: time.Hour, read: func(_ context.Context, _ *cloudClient, runID, tickID string, attempt int) *statusmodel.ActivityInput {
+		key := fmt.Sprintf("%s-%s-%d", runID, tickID, attempt)
+		calls[key]++
+		action := fmt.Sprintf("call %d", calls[key])
+		return &statusmodel.ActivityInput{LastAction: action}
+	}}
+
+	first := cache.Activity(context.Background(), nil, "run_1", "t1", 1)
+	second := cache.Activity(context.Background(), nil, "run_1", "t1", 1)
+	if first.LastAction != second.LastAction || first.LastAction != "call 1" {
+		t.Errorf("a second read within the TTL re-dialled: first %+v, second %+v", first, second)
+	}
+	// A different worker is a different key: it costs its own read.
+	other := cache.Activity(context.Background(), nil, "run_1", "t2", 1)
+	if other.LastAction != "call 1" {
+		t.Errorf("a different (tick, attempt) shares the first worker's cache entry: %+v", other)
+	}
+
+	// Past the TTL, the same key reads fresh.
+	cache.mu.Lock()
+	for k, e := range cache.cache {
+		e.at = e.at.Add(-2 * time.Hour)
+		cache.cache[k] = e
+	}
+	cache.mu.Unlock()
+	third := cache.Activity(context.Background(), nil, "run_1", "t1", 1)
+	if third.LastAction != "call 2" {
+		t.Errorf("a read past the TTL answers %+v, want a fresh call", third)
 	}
 }

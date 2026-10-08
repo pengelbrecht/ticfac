@@ -413,8 +413,12 @@ func TestStatusJSONEmitsTheModelForACloudRun(t *testing.T) {
 	if !model.Liveness.Alive || model.Liveness.State != "running" {
 		t.Errorf("the Workflow's own record says running and the model reads %+v", model.Liveness)
 	}
-	if model.Workers != nil {
-		t.Errorf("a cloud run's workers read %+v, want null: the census cannot be taken here", model.Workers)
+	// The records branch carries no checkpoint for this run id, read as the
+	// honest empty answer, not an error (tick 93n): the census is taken —
+	// nobody is standing — rather than left null, which now states "this
+	// machine could not take the census at all".
+	if model.Workers == nil || len(*model.Workers) != 0 {
+		t.Errorf("a cloud run with no checkpoint reads workers %+v, want an empty, non-nil census", model.Workers)
 	}
 	if model.Waves == nil || len(*model.Waves) != 1 || len((*model.Waves)[0].Ticks) != 1 {
 		t.Errorf("the fake tracker's wave did not ride: %+v", model.Waves)
@@ -585,6 +589,17 @@ func TestStatusCloudRunReadsTheContainersRecords(t *testing.T) {
 		t.Errorf("the wave's tick reads %+v, want the checkpoint's dispatched try 1", state)
 	}
 
+	// The checkpoint's own dispatched tick is a worker standing in the
+	// factory (tick 93n): the cloud census, read from the checkpoint rather
+	// than a worktree walk, with no local worktree to name.
+	if model.Workers == nil || len(*model.Workers) != 1 {
+		t.Fatalf("the checkpoint's dispatched tick did not become a standing worker: %+v", model.Workers)
+	}
+	worker := (*model.Workers)[0]
+	if worker.TickID != tickID || worker.Attempt != one || worker.Worktree != "" {
+		t.Errorf("the cloud worker reads %+v, want %s#%d with no worktree", worker, tickID, one)
+	}
+
 	// The untriaged finding the container filed is the model's attention,
 	// with the triage pointer the findings surface spells.
 	var finding *statusmodel.Attention
@@ -673,6 +688,31 @@ func TestStatusModelLocalWiringPassesTheDashboardReaders(t *testing.T) {
 	}
 	if captured.Handle == nil {
 		t.Error("localStatusModel passes no Handle reader: the workers panel's handle cell renders null in every real run (zl1)")
+	}
+
+	// The fallback reader (tick 93n): the gathering with an activity
+	// gatherer wired passes RemoteActivity keyed by the tick and attempt —
+	// the local pi-durable workers whose conversation no transcript file
+	// holds read their watch door through it — and the reader answers
+	// through the gatherer itself.
+	captured = captureStatusSources(t)
+	called := false
+	localStatusModel(context.Background(), repo, "epic-none",
+		runlife.Status{State: runlife.Alive},
+		modelGatherers{
+			graph: func(context.Context, string, string) *tk.Graph { return nil },
+			ci:    func(context.Context, string, string) (*statusmodel.CIInput, error) { return nil, nil },
+			activity: func(context.Context, *cloudClient, string, string, int) *statusmodel.ActivityInput {
+				called = true
+				return nil
+			},
+		})
+	if captured.RemoteActivity == nil {
+		t.Fatal("the gathering with an activity gatherer wired passes no RemoteActivity reader: the local fallback would never fire")
+	}
+	captured.RemoteActivity("6dh", 3)
+	if !called {
+		t.Error("the wired RemoteActivity reader did not reach the gatherer")
 	}
 }
 

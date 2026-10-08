@@ -605,8 +605,8 @@ describe("a cloud run renders the model its own orchestrator pushed (hn6 h7w)", 
     run_id: runID,
     epic_id: "h7w",
     host: "cloud",
-    // The cloud census: the orchestrator container cannot count the workers
-    // its run dispatched into their own containers.
+    // A model whose census could not be taken at all (tick 93n): the null
+    // the page says honestly, in the terminal's own words.
     workers: null,
   });
 
@@ -682,8 +682,9 @@ describe("a cloud run renders the model its own orchestrator pushed (hn6 h7w)", 
     expect(body).toContain("ticks (4)");
     // The model's own per-source cost lines.
     expect(body).toContain("Workers AI $0.41");
-    // The cloud census said honestly, in the terminal's own words.
-    expect(body).toContain("workers run in the cloud — not visible from here");
+    // A census that could not be taken said honestly, in the terminal's own
+    // words (tick 93n).
+    expect(body).toContain("workers: no census could be taken");
     // The age of the last push, named without the local row's PAUSED/STALE
     // claim: a cloud run lives on the factory's container, and its run row —
     // not the snapshot's age — says whether it is still going.

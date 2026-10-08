@@ -234,9 +234,10 @@ type Model struct {
 	Waves *[]Wave `json:"waves"`
 
 	// Workers is one entry per live worker (a standing attempt), with its
-	// own gaps, its runner's silence and its last turn. Null when the
-	// census cannot be taken (a cloud run's workers are not on this
-	// machine); empty when it read and nothing stands.
+	// own gaps, its runner's silence and its last turn — a local run's
+	// worktree census, a cloud run's checkpoint one (tick 93n). Null when
+	// the census cannot be taken at all; empty when it read and nothing
+	// stands.
 	Workers *[]Worker `json:"workers"`
 
 	// WaitsOn is the one thing the run is blocked on, with the command that

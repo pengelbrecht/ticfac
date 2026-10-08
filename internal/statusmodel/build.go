@@ -106,6 +106,19 @@ type Sources struct {
 	// durable attempt's model-or-executor spelling (see runnerOf).
 	Activity func(runner, worktree string) *ActivityInput
 
+	// RemoteActivity answers the same activity window for a worker whose
+	// transcript has nothing to say — a cloud run's worker has no worktree
+	// on this machine, and a local pi-durable worker's worktree names a
+	// conversation no session transcript file holds (its storage is the
+	// harness's, tick 93n) — keyed by the tick and attempt alone, straight
+	// from the worker's own conversation stream wherever this machine
+	// reaches it (the factory's watch socket, the local runner's watch
+	// door). Read where Activity cannot answer — a cloud worker reads this
+	// alone; a worker WITH a worktree reads Activity first, and this only
+	// where the transcript came up empty — and nil-safe on the same terms:
+	// no reader leaves activity null.
+	RemoteActivity func(tickID string, attempt int) *ActivityInput
+
 	// Runner answers one (tick, attempt) worker's harness kind — the agent
 	// kind the executor launched: herdr's `kind`, the local supervisor's
 	// `runner` — from the attempt record in the dispatch's state directory

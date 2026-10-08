@@ -788,7 +788,7 @@ func watchRunStillAlive(source runfeed.Source, kind, repo, runID string) bool {
 // durable sources — so the watch's one document and the live view's last
 // frame cannot disagree.
 func watchGatherModel(ctx context.Context, source runfeed.Source, kind, repo, runID string) (statusmodel.Model, error) {
-	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost}
+	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: workerActivity}
 	if cloudSource, ok := source.(*cloudFeedSource); ok && kind == "cloud" {
 		record, err := readCloudRunRecord(ctx, cloudSource.client, cloudSource.runID)
 		if err != nil {
@@ -910,7 +910,14 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	graphCache := &watchGraphCache{ttl: watchSourceTTL, read: epicGraph}
 	ciCache := &watchCICache{ttl: watchSourceTTL, read: statusCI}
 	costCache := &watchCostCache{ttl: watchSourceTTL, read: statusWorkerCost}
-	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI, workerCost: costCache.WorkerCost}
+	// Activity gets its own, shorter TTL: it is the one line the dashboard
+	// sells as LIVE ("what is happening right now"), so it is let go stale
+	// for seconds, never the graph's and the CI's thirty. Its read is the
+	// two-host dispatcher (tick 93n): a cloud watch reads the factory's
+	// sockets, a local watch the workers' doors — both bounded to one
+	// snapshot per TTL per worker.
+	activityCache := &watchActivityCache{ttl: watchActivityTTL, read: workerActivity}
+	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI, workerCost: costCache.WorkerCost, activity: activityCache.Activity}
 
 	// The model builder: local and cloud gather through their own sources
 	// (status_model.go), and both are the same model — the same frame renders
@@ -1662,6 +1669,50 @@ func (c *watchCostCache) WorkerCost(ctx context.Context, runID string) (*statusm
 	}
 	c.cost, c.cached, c.at = cost, true, time.Now()
 	return cost, nil
+}
+
+// watchActivityTTL is activity's own cache window: short enough that the
+// "what is happening right now" line still reads as live, long enough that
+// a worker is not dialled a fresh watch socket every redraw.
+const watchActivityTTL = 5 * time.Second
+
+// watchActivityCache serves one cloud worker's activity snapshot at most
+// once per TTL, keyed by (tick, attempt) — the same weight the graph, the
+// CI and the cost are capped at: a socket dial and a credential, not a
+// stat, and a frame every two seconds must not pay for one per worker.
+// Concurrent redraws may race the same key; the loser's read is simply
+// overwritten, which costs at most one redundant socket, never a wrong
+// answer.
+type watchActivityCache struct {
+	ttl   time.Duration
+	read  func(context.Context, *cloudClient, string, string, int) *statusmodel.ActivityInput
+	mu    sync.Mutex
+	cache map[string]watchActivityEntry
+}
+
+type watchActivityEntry struct {
+	input *statusmodel.ActivityInput
+	at    time.Time
+}
+
+func (c *watchActivityCache) Activity(ctx context.Context, client *cloudClient, runID, tickID string, attempt int) *statusmodel.ActivityInput {
+	key := fmt.Sprintf("%s#%d", tickID, attempt)
+	c.mu.Lock()
+	if e, ok := c.cache[key]; ok && time.Since(e.at) < c.ttl {
+		c.mu.Unlock()
+		return e.input
+	}
+	c.mu.Unlock()
+
+	input := c.read(ctx, client, runID, tickID, attempt)
+
+	c.mu.Lock()
+	if c.cache == nil {
+		c.cache = map[string]watchActivityEntry{}
+	}
+	c.cache[key] = watchActivityEntry{input: input, at: time.Now()}
+	c.mu.Unlock()
+	return input
 }
 
 // clockOf is the line's own time, as a person reads it. A stamp that does not
