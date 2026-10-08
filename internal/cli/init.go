@@ -686,12 +686,7 @@ version = 2
 		if cellModel != "" {
 			fmt.Fprintf(&b, "model = %q\n", cellModel)
 		}
-<<<<<<< HEAD
-		b.WriteString("effort = \"high\"\n")
-		b.WriteString("\n")
-=======
 		b.WriteString("effort = \"high\"\n\n")
->>>>>>> c4966b33cabe9a7b0cac75df1a2aa6bf5ba26dad
 	}
 
 	b.WriteString("[testing.commands]\n")
@@ -724,13 +719,10 @@ version = 2
 
 `)
 	for _, role := range []string{"implement", "review", "closeout"} {
-<<<<<<< HEAD
 		// No `args` (tick 2p3): the container hosts the same pi-durable harness
 		// the local-subprocess executor runs, and neither reads roles-table
 		// args — a herdr-pane escape hatch only, and this substrate never
 		// dispatches one.
-=======
->>>>>>> c4966b33cabe9a7b0cac75df1a2aa6bf5ba26dad
 		fmt.Fprintf(&b, "[roles.%s]\nkind = %q\nmodel = %q\neffort = \"high\"\n\n",
 			role, initRunnerPi, model)
 	}
