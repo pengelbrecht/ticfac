@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 121,
-  "state": "running",
-  "reason": "x73 is running as attempt 17",
-  "updated_at": "2026-10-08T00:36:21Z",
+  "sequence": 122,
+  "state": "collecting",
+  "reason": "collecting x73 attempt 17",
+  "updated_at": "2026-10-08T02:10:59Z",
   "ticks": [
     {
       "tick_id": "pqs",
