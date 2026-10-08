@@ -12,8 +12,11 @@
   "attempt": 18,
   "done_item": "A1",
   "demonstrating_check": "time go test -timeout 45m -parallel 12 ./... (before/after on a quiet host); CI go-test shard durations",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T02:37:49Z",
+  "triaged_at": "2026-10-08T02:38:00Z",
+  "triaged_by": "ticfac run epic-t8u absorbing 0bg",
+  "promoted_as": "0bg",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "r6v",
