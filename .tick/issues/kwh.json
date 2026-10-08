@@ -7,7 +7,8 @@
   "type": "task",
   "owner": "ticfac",
   "blocked_by": [
-    "p4c"
+    "p4c",
+    "0bg"
   ],
   "parent": "t8u",
   "role": "review",
