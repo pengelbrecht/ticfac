@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ymf/attempt-4/lck`, base `207931e48e9dcdd8f5f4661090bc8aa2fa138e75`, harness `pi-durable` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+
 # RESULT-lck — Status model: plain-language tick status, epic phase track, needs-you, ticks grouped by state
 
 ## What changed (commit 987870187 on `tick/ymf/attempt-4/lck`)
