@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ex6/attempt-12/eno`, base `6d96e78f7eec8996c02083235058210c7cbe95a3`, harness `pi-durable` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+
 # eno — closing out ex6: pi-durable in the cloud, proved and hardened
 
 Attempt 12 of `eno`, the close-out tick of epic `ex6`, run
