@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
   "epic_id": "bo9",
-  "sequence": 47,
+  "sequence": 48,
   "state": "failed",
-  "reason": "the closeout-epic job for 52h answered DONE, and the run's verdict is no-commits (failed): the only commit tick/bo9/attempt-7/52h carries beyond its base (0c7cafb3fbbe) is the container's own report at RESULT-52h.md: the worker committed no work, and a report is not a deliverable. The tick is NOT closed: for this role an empty branch is an undelivered deliverable, whatever the answer says",
-  "updated_at": "2026-10-08T11:38:18Z",
+  "reason": "52h did not pass: the run stopped rather than integrating over an unproven change. Running the epic again under this run id resumes it — a rejected attempt that left nothing is redispatched, a gate that FAILED runs again once the check or the tree is fixed (its evidence is keyed by the commit it ran on, so a fixed tree is a different commit and a new record), an attempt that was rejected holding commits nothing merged is reported rather than dispatched over, and nothing that already passed is redone. The refusal that stopped the run: the closeout-epic job for 52h answered DONE, and the run's verdict is no-commits (failed): the only commit tick/bo9/attempt-7/52h carries beyond its base (0c7cafb3fbbe) is the container's own report at RESULT-52h.md: the worker committed no work, and a report is not a deliverable. The tick is NOT closed: for this role an empty branch is an undelivered deliverable, whatever the answer says",
+  "updated_at": "2026-10-08T11:38:25Z",
   "ticks": [
     {
       "tick_id": "0ek",
