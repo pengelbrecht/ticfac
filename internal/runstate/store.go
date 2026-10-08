@@ -260,7 +260,8 @@ func (s *Store) CommitLocal(path string, content []byte) (Outcome, error) {
 	if err != nil {
 		return "", err
 	}
-	commit, err := s.git.commitWithFile(base, path, blob, s.message("write", path))
+	message := s.message("write", path)
+	commit, err := s.importLocalCommit(base, path, blob, message)
 	if err != nil {
 		return "", err
 	}
@@ -268,6 +269,23 @@ func (s *Store) CommitLocal(path string, content []byte) (Outcome, error) {
 		return "", err
 	}
 	return LocalOnly, nil
+}
+
+// importLocalCommit builds one record's commit for the local-only write: the
+// fast-import stream, with the per-record path as the fallback — the same
+// one-process-per-commit shape every other write of this store took with the
+// materializer (fastimport.go).
+func (s *Store) importLocalCommit(base, path, blob, message string) (string, error) {
+	shas, err := s.git.fastImport(s.importRef(), []importCommit{{
+		parent:  base,
+		message: message,
+		when:    s.now(),
+		changes: []importChange{{mode: "100644", blob: blob, path: path}},
+	}})
+	if err == nil {
+		return shas[0], nil
+	}
+	return s.git.commitWithFile(base, path, blob, message)
 }
 
 // CreateIfAbsent commits and pushes in one operation, guarded on the path being
@@ -729,7 +747,11 @@ func (s *Store) CheckpointHistory() ([]Checkpoint, error) {
 		return nil, nil
 	}
 	path := CheckpointPath(s.runID)
-	out, err := s.git.run("log", "--format=%H", "--reverse", s.readHead(), "--", path)
+	head, err := s.readHead()
+	if err != nil {
+		return nil, err
+	}
+	out, err := s.git.run("log", "--format=%H", "--reverse", head, "--", path)
 	if err != nil {
 		return nil, err
 	}
