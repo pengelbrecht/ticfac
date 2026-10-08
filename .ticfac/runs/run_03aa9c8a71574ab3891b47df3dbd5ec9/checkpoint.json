@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
   "epic_id": "bo9",
-  "sequence": 30,
-  "state": "publishing",
-  "reason": "closing rkk behind the integrated gate on e28a6094b699",
-  "updated_at": "2026-10-08T10:16:48Z",
+  "sequence": 31,
+  "state": "running",
+  "reason": "rkk is closed",
+  "updated_at": "2026-10-08T10:16:50Z",
   "ticks": [
     {
       "tick_id": "0ek",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "rkk",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 4
     },
     {
