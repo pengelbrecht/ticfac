@@ -154,6 +154,12 @@ claude_sub="${TICKS_CLAUDE_SUB:-}"
 # so "may this container dispatch" is decided by the control plane rather than
 # by the agent inside it.
 run_pass="${TICKS_PASS:-}"
+# The named run config this boot's submission carried (tick ba4): forwarded
+# verbatim to `ticfac run-epic` as its own --config, which resolves the same
+# precedence (the flag over the epic's label over the runners files'
+# declared default) a local run does. Empty means run-epic selects by the
+# epic's label and the default, exactly as before this variable existed.
+run_config="${TICKS_CONFIG:-}"
 factory_url="${TICKS_FACTORY_URL:-}"
 factory_token="${TICKS_FACTORY_TOKEN:-}"
 factory_project="${TICKS_FACTORY_PROJECT:-}"

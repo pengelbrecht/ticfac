@@ -53,6 +53,12 @@ const (
 	// role/tier routing, and a boot with neither is refused rather than
 	// started — a harness with no model hangs instead of failing.
 	EnvModel = "TICKS_MODEL"
+	// EnvConfig is the named run config this boot's submission carried (tick
+	// ba4), forwarded verbatim to the `ticfac run-epic` a `run`-phase boot
+	// execs as its own --config. Absent, run-epic selects by the epic's own
+	// config: label and the runners files' declared default — the same
+	// precedence a local run resolves, only without a flag's word over it.
+	EnvConfig = "TICKS_CONFIG"
 	// EnvModelProvider and EnvModelID are what the entrypoint DERIVED from the
 	// routed model: which gateway route serves it, and the id in that
 	// provider's own namespace (the `@cf/…` Workers AI id, the bare Anthropic

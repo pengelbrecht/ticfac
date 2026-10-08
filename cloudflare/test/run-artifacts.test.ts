@@ -224,6 +224,42 @@ describe("a submission's own budget", () => {
   });
 });
 
+// tick ba4: `ticfac run --cloud --config <name>` carries the named config as
+// a field on the submission, so the factory's orchestrator container
+// resolves it rather than only the epic's own label and the declared
+// default.
+describe("a submission's own named config", () => {
+  const base = {
+    project: "example-org/example-repo",
+    epic: "ko8",
+    base_sha: "b".repeat(40),
+    requested_by: "operator@example.com",
+  };
+
+  it("carries the named config verbatim", () => {
+    const parsed = parseSubmission({ ...base, config: "claude" });
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.submission.config).toBe("claude");
+  });
+
+  it("carries no config when the submission names none", () => {
+    const parsed = parseSubmission(base);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.submission.config).toBeUndefined();
+  });
+
+  it("refuses a config that is not a usable string, like every other free-text field", () => {
+    for (const bad of [123, "", "   ", "x".repeat(201)]) {
+      const parsed = parseSubmission({ ...base, config: bad });
+      expect(parsed.ok, JSON.stringify(bad)).toBe(false);
+    }
+  });
+});
+
 describe("observation cadence", () => {
   it("starts fast and backs off to a cadence a long run can afford", () => {
     const config = runConfig({} as never);
@@ -533,6 +569,39 @@ describe("the image contract", () => {
     // The run's gateway credential is not optional: a sandbox with no token
     // cannot make a model call at all (D17).
     expect(built.AI_GATEWAY_TOKEN).toBe("tkr_deadbeef");
+  });
+
+  // tick ba4: the named run config a submission carried rides the
+  // orchestrator container's environment as TICKS_CONFIG, read by
+  // image/common.sh into run_config and forwarded to `ticfac run-epic` as
+  // its own --config.
+  it("carries a submission's named run config as TICKS_CONFIG", () => {
+    const built = orchestratorEnv({
+      run_id: "run_a",
+      epic: "ko8",
+      base_sha: "b".repeat(40),
+      repo_url: "https://github.com/example-org/example-repo.git",
+      gateway_base_url: "https://factory.example.com/api/gateway",
+      gateway_token: "tkr_deadbeef",
+      phase: "run",
+      config: "claude",
+    });
+
+    expect(built.TICKS_CONFIG).toBe("claude");
+  });
+
+  it("omits TICKS_CONFIG when the submission named no config", () => {
+    const built = orchestratorEnv({
+      run_id: "run_a",
+      epic: "ko8",
+      base_sha: "b".repeat(40),
+      repo_url: "https://github.com/example-org/example-repo.git",
+      gateway_base_url: "https://factory.example.com/api/gateway",
+      gateway_token: "tkr_deadbeef",
+      phase: "run",
+    });
+
+    expect(built).not.toHaveProperty("TICKS_CONFIG");
   });
 });
 
