@@ -3,10 +3,10 @@
   "title": "Close out the test-performance epic: retro, then the follow-on packages",
   "gloss": "test-performance epic close-out",
   "description": "Run the epic-close retro, then decide what the remaining parallelism work is worth: internal/runstate (2 t.Setenv call sites) and internal/cli (25, plus 2 os.Chdir) were deliberately left out of x73 as follow-ons rather than blockers.\n\nRecord in the retro the number this epic exists for: the gate ran 49 times during epic-9pd, at roughly 20 minutes idle and 45-60+ under load. Say what it costs now, measured the same way.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "blocked_by": [
     "r6v",
     "kwh"
@@ -15,5 +15,6 @@
   "role": "closeout",
   "created_by": "peter@engelbrecht.dk",
   "created_at": "2026-09-18T06:58:28.94486Z",
-  "updated_at": "2026-09-27T06:30:19.836093Z"
+  "updated_at": "2026-10-08T05:29:01.630005Z",
+  "started_at": "2026-10-08T05:29:01.630005Z"
 }
