@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 5,
-  "state": "running",
-  "reason": "93n is running as attempt 2",
-  "updated_at": "2026-10-08T13:58:46Z",
+  "sequence": 6,
+  "state": "dispatching",
+  "reason": "dispatching b13 as attempt 3",
+  "updated_at": "2026-10-08T13:58:56Z",
   "ticks": [
     {
       "tick_id": "47j",
