@@ -111,22 +111,16 @@ type skillsGetFileJSON struct {
 // newSkillsGetCommand builds `skills get`.
 func newSkillsGetCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-<<<<<<< HEAD
 		Use:   "get [name]",
-		Short: "print a skill's SKILL.md, straight from the binary",
+		Short: "print a skill's SKILL.md, or the whole bundle with --full",
 		Long: fmt.Sprintf(`Print a skill's SKILL.md, straight from the binary.
 
-With no name, print the %s skill — the one this binary embeds.`, skills.DefaultSkill),
-=======
-		Use:   "get <name>",
-		Short: "print a skill's SKILL.md, or the whole bundle with --full",
-		Long: `Print a skill's SKILL.md, straight from the binary.
+With no name, print the %s skill — the one this binary embeds.
 
 With --full, print the whole skill bundle instead: SKILL.md followed by
 every other file in the skill (its references/ files), each preceded by a
 separator line naming its path — the only way to read those files without
-installing the skill to disk first.`,
->>>>>>> 95e1c4aea5e947ff503b68851162f8de29015cea
+installing the skill to disk first.`, skills.DefaultSkill),
 	}
 	fs := flag.NewFlagSet("skills get", flag.ContinueOnError)
 	full := fs.Bool("full", false, "print the whole skill bundle, not just SKILL.md: SKILL.md then every other file, each under a header naming its path")
@@ -143,11 +137,6 @@ installing the skill to disk first.`,
 			}
 			name = args[0]
 		}
-<<<<<<< HEAD
-		data, err := skills.Read(name, "SKILL.md")
-=======
-		name := args[0]
-
 		if !*full {
 			data, err := skills.Read(name, "SKILL.md")
 			if err != nil {
@@ -172,7 +161,6 @@ installing the skill to disk first.`,
 		}
 
 		paths, err := skills.Paths(name)
->>>>>>> 95e1c4aea5e947ff503b68851162f8de29015cea
 		if err != nil {
 			return newExitError(exitNotFound, "%v", err)
 		}
