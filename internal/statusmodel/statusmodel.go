@@ -239,6 +239,14 @@ type Model struct {
 	// machine); empty when it read and nothing stands.
 	Workers *[]Worker `json:"workers"`
 
+	// Groups is every tick of the epic in one of the four buckets the watch
+	// redesign groups by state — NOW (the run is on them now), DONE, UP NEXT
+	// and HELD (stuck where a person is wanted) — as tick ids in the waves'
+	// own order, so a renderer groups the rows without re-deriving a word.
+	// Null when the tracker could not be read: no waves to group and unread
+	// waves are different claims.
+	Groups *TickGroups `json:"groups"`
+
 	// WaitsOn is the one thing the run is blocked on, with the command that
 	// unblocks it when it needs a person. Null when nothing blocks it.
 	WaitsOn   *Wait       `json:"waits_on"`
@@ -289,13 +297,33 @@ type Liveness struct {
 
 // Lifecycle is where the epic stands in its own progress, and each phase's
 // state beside it — the progress bar a renderer draws and the phase a person
-// glances at.
+// glances at. Track is the same progress in the operator's words, the one
+// epic-level line the watch redesign draws (building / reviewing / closing
+// out / PR & CI / merged), with Here the step the marker sits on.
 type Lifecycle struct {
 	Phase  string       `json:"phase"`
 	Phases []PhaseState `json:"phases"`
 	// Wave says which wave the run is in and how many there are, when the
 	// run is in the waves phase and the tracker answered. Null otherwise.
 	Wave *WaveRef `json:"wave"`
+
+	// Track is the epic's phase track: five steps in fixed order, each in the
+	// phase states the Phases above use. It folds the lifecycle's six phases
+	// into the five a person reads — plan and waves are both "building" — so
+	// a renderer lays one line out from the track alone and never re-derives
+	// it from the phases a second time.
+	Track []TrackStep `json:"track"`
+	// Here is the index into Track the "you are here" marker sits on: the
+	// newest step the epic is in, else the next one ahead, else the last —
+	// a merged epic is here at merged, a fresh one at building.
+	Here int `json:"here"`
+}
+
+// TrackStep is one step of the epic's phase track: its label, in the words
+// the watch redesign's layout names, and the phase state it is in.
+type TrackStep struct {
+	Label string `json:"label"`
+	State string `json:"state"`
 }
 
 // PhaseState is one phase's own state, in the Phases order.
@@ -364,6 +392,25 @@ type Tick struct {
 	// the fact the lifecycle phases and the pipeline stage list derive from.
 	Role  string `json:"role,omitempty"`
 	State string `json:"state"`
+
+	// Status is the tick's answer in the operator's words — the plain-language
+	// word the dashboard's groups render (epic ymf, tick lck), derived from the
+	// pipeline cell and the records below it. The vocabulary is the watch
+	// redesign's: waiting (blocked by X), up next, claimed, writing code,
+	// testing, merging, merged, reviewing, closing out, waiting for CI, held:
+	// <reason>, failed: <reason>, done. It is a rendering of the pipeline, not
+	// a second opinion about it: the same records that fill the cell fill the
+	// word, and nothing a worker claims about its own work reaches either.
+	Status string `json:"status"`
+
+	// Exception is the inline note that travels beside the status when it
+	// applies — "attempt N" for a tick whose current work is not its first
+	// try, "model escalated" for one the tier ladder re-cut higher, "stalled
+	// Nm" for a standing worker whose durable output went quiet past the
+	// stall threshold — joined with ", ". Null when none applies, and never
+	// for a tick that has finished: a merged or done row's history is its
+	// try list, not a caveat on it.
+	Exception *string `json:"exception"`
 
 	// Pipeline is the tick's own pipeline cell — the stages this role's
 	// tick passes through, each with its own state, the shape a dashboard
@@ -482,6 +529,17 @@ type ReportDiff struct {
 	Files      int `json:"files"`
 	Insertions int `json:"insertions"`
 	Deletions  int `json:"deletions"`
+}
+
+// TickGroups is the four state buckets of the epic's ticks, each carrying
+// its tick ids in the waves' own order. A tick's bucket is derived from its
+// status word; the mapping is stated in the contract, not guessed at by a
+// renderer.
+type TickGroups struct {
+	Now    []string `json:"now"`
+	Done   []string `json:"done"`
+	UpNext []string `json:"up_next"`
+	Held   []string `json:"held"`
 }
 
 // Worker is one live worker: a standing attempt, its measured gaps, its

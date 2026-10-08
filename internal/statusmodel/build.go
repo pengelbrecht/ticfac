@@ -822,6 +822,11 @@ func buildLifecycle(src Sources, recs Records, m Model) Lifecycle {
 	if lifecycle.Phase == PhaseWaves && m.Progress.Waves != nil && m.Progress.Waves.Active > 0 {
 		lifecycle.Wave = &WaveRef{Active: m.Progress.Waves.Active, Total: m.Progress.Waves.Total}
 	}
+	// The track is the same lifecycle in the operator's words — the one
+	// epic-level line the watch redesign draws, with the marker on the step
+	// the epic is in now (tick lck). Derived from the phases above, so the
+	// track and the phases cannot say two things about one epic.
+	lifecycle.Track, lifecycle.Here = phaseTrackOf(phases)
 	return lifecycle
 }
 
