@@ -6,8 +6,9 @@ package subprocess
 // package is one of the suite's slow five (tick x73): its 222 top-level
 // tests are the per-tick gate's single heaviest package (measured 77.8s
 // under -short and 90.0s in the full suite, serial, on this host before
-// tick x73's parallel pass — -parallel 12 does nothing for a package whose
-// tests never call t.Parallel()), and the isolation the parallelism needs is
+// tick x73's parallel pass — 32.9s short and 32.3s full after it — and
+// -parallel 12 does nothing for a package whose tests never call
+// t.Parallel()), and the isolation the parallelism needs is
 // structural: every fixture builds its own repository and origin under its
 // own t.TempDir(), its own state root and its own runner processes, and the
 // one value two tests share — the executor binary — is built once in

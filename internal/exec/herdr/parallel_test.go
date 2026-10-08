@@ -6,10 +6,9 @@ package herdr
 // package is one of the suite's slow five (tick x73): 143 top-level tests,
 // each over a real git repository and origin, a real fake herdr on its own
 // unix socket and a real agent process — measured 38.3s serial on this host
-// before tick x73's parallel pass, against a wall the parallel pack sets at
-// -parallel 12. -parallel does nothing for a package whose tests never call
-// t.Parallel(), so the annotation is the whole mechanism and the one thing
-// that can rot.
+// before tick x73's parallel pass and 12.3s at -parallel 12 after it.
+// -parallel does nothing for a package whose tests never call t.Parallel(),
+// so the annotation is the whole mechanism and the one thing that can rot.
 //
 // The isolation the parallelism needs is structural — every test builds its
 // own harness, and the harness builds its own repository and origin under
