@@ -53,7 +53,38 @@ loud.
 
 ---
 
+## 2.5.0
+
+MINOR: the fold of two parallel 2.4.0 cuts, for the reason 1.2.0 and 2.1.0
+state. Epic/ymf had cut 2.4.0 at tick lck's watch-redesign fields; tick
+b13's attempt branch cut 2.4.0 again with the cost object's `subscription`,
+each from the same 2.3.0 bytes without the other's fixture in hand (full
+text under 2.4.0). Both halves are additive within `status-model.json`'s own
+`schema_version` 1, so the union is still a MINOR bump — but it cannot be
+re-cut at 2.4.0: a version string must never mean two different sets of
+bytes, and `version_digests` already binds 2.4.0, once per side. The union
+re-cuts here, at the next MINOR version. The two halves live in the same
+fixture this time, so the union is neither side's bytes unchanged but the
+merge of both: `status-model.json` carries the status words, `exception`,
+the lifecycle `track` and `here`, the model's `groups`, and the cost
+object's `subscription`, at the bytes the merge of the two cuts produced.
+`version_digests` keeps the epic line's binding of 2.4.0
+(3f5cc4ca809c6078c9cdb2098a3d9659673b2428980617fa24e60248367bd2dc); the
+attempt branch's own cut of the same version,
+5c2fab2cd66e6a465999ac55ad54c89488ea1397ad9482605a47c59896ec2cbd, is
+recorded here instead. Consumers: an unchanged reader of either 2.4.0 is
+still correct but no longer complete; a consumer pinned to one adopts the
+other half by moving to this version. The cloudflare pin moves to 2.5.0 in
+the same commit.
+
 ## 2.4.0
+
+Cut twice, in parallel, from the same 2.3.0 bytes: epic/ymf and tick b13's
+attempt branch each bumped the bundle to 2.4.0 without knowing of the other,
+and the fold above re-cut the pair as 2.5.0. Both cuts were MINOR; both
+texts follow verbatim.
+
+The epic line's cut (tick lck, merged into epic/ymf as 76af4578d5ca):
 
 MINOR: `status-model.json` gains the watch-redesign fields (ticfac tick lck,
 epic ymf): every tick now carries `status` — the tick's situation in the
@@ -75,6 +106,9 @@ moves to 2.4.0; the Go model and builder gained the fields in the same
 commit, and renderers that read fields by name (the phone page's snapshot
 parser) are unchanged and correct — the watch redesign's rendering ticks
 (ugm) and the phone page's shared model are what the fields exist for.
+
+The attempt branch's cut (tick b13, attempt 5):
+
 MINOR: `status-model.json`'s cost object gains `subscription` — the claude-sub
 subscription a cloud run's jobs lease (ticfac tick b13), with the window use
 the factory's proxy last saw on the account's shared 5-hour and 7-day windows.

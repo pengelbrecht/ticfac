@@ -788,11 +788,7 @@ func watchRunStillAlive(source runfeed.Source, kind, repo, runID string) bool {
 // durable sources — so the watch's one document and the live view's last
 // frame cannot disagree.
 func watchGatherModel(ctx context.Context, source runfeed.Source, kind, repo, runID string) (statusmodel.Model, error) {
-<<<<<<< HEAD
-	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: workerActivity}
-=======
-	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, claudeSub: statusClaudeSub}
->>>>>>> b2f06b98bca1699cb185702c6873119754f53bef
+	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: workerActivity, claudeSub: statusClaudeSub}
 	if cloudSource, ok := source.(*cloudFeedSource); ok && kind == "cloud" {
 		record, err := readCloudRunRecord(ctx, cloudSource.client, cloudSource.runID)
 		if err != nil {
@@ -914,7 +910,6 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	graphCache := &watchGraphCache{ttl: watchSourceTTL, read: epicGraph}
 	ciCache := &watchCICache{ttl: watchSourceTTL, read: statusCI}
 	costCache := &watchCostCache{ttl: watchSourceTTL, read: statusWorkerCost}
-<<<<<<< HEAD
 	// Activity gets its own, shorter TTL: it is the one line the dashboard
 	// sells as LIVE ("what is happening right now"), so it is let go stale
 	// for seconds, never the graph's and the CI's thirty. Its read is the
@@ -922,12 +917,9 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	// sockets, a local watch the workers' doors — both bounded to one
 	// snapshot per TTL per worker.
 	activityCache := &watchActivityCache{ttl: watchActivityTTL, read: workerActivity}
-	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI, workerCost: costCache.WorkerCost, activity: activityCache.Activity}
-=======
 	claudeSubCache := &watchClaudeSubCache{ttl: watchSourceTTL, read: statusClaudeSub}
 	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI, workerCost: costCache.WorkerCost,
-		claudeSub: claudeSubCache.Subscription}
->>>>>>> b2f06b98bca1699cb185702c6873119754f53bef
+		activity: activityCache.Activity, claudeSub: claudeSubCache.Subscription}
 
 	// The model builder: local and cloud gather through their own sources
 	// (status_model.go), and both are the same model — the same frame renders
@@ -1681,7 +1673,6 @@ func (c *watchCostCache) WorkerCost(ctx context.Context, runID string) (*statusm
 	return cost, nil
 }
 
-<<<<<<< HEAD
 // watchActivityTTL is activity's own cache window: short enough that the
 // "what is happening right now" line still reads as live, long enough that
 // a worker is not dialled a fresh watch socket every redraw.
@@ -1724,7 +1715,8 @@ func (c *watchActivityCache) Activity(ctx context.Context, client *cloudClient, 
 	c.cache[key] = watchActivityEntry{input: input, at: time.Now()}
 	c.mu.Unlock()
 	return input
-=======
+}
+
 // watchClaudeSubCache serves the leased claude-sub subscription at most once
 // per TTL (tick b13): the pool snapshot is a live read of a Durable Object
 // and a frame every two seconds must not ask it every two seconds. An error
@@ -1751,7 +1743,6 @@ func (c *watchClaudeSubCache) Subscription(ctx context.Context, runID string) (*
 	}
 	c.sub, c.cached, c.at = sub, true, time.Now()
 	return sub, nil
->>>>>>> b2f06b98bca1699cb185702c6873119754f53bef
 }
 
 // clockOf is the line's own time, as a person reads it. A stamp that does not
