@@ -24,7 +24,7 @@
 # Inputs: the PR's changed paths on stdin, one per line (affected mode only);
 # env EVENT (github.event_name), RECONCILE_SHARDS (default 3), GITHUB_OUTPUT
 # (where the outputs go; stdout when unset). Outputs: mode, go, ts,
-# race_pkgs, matrix.
+# bombadil, race_pkgs, matrix.
 set -euo pipefail
 
 event="${EVENT:?EVENT is required}"
@@ -37,6 +37,10 @@ mode=full
 reason="$event: the full suite"
 changed_pkgs=()
 ts=false
+# The terminal property suite (tick z7w): Bombadil driving the real binary
+# over a pty. Not part of the Go suite — a pty-driver suite belongs to CI's
+# own job — so its trigger is this plan's own output, not the Go matrix.
+bombadil=false
 
 if [ "$event" = "pull_request" ]; then
 	mode=affected
@@ -55,6 +59,11 @@ if [ "$event" = "pull_request" ]; then
 	for f in "${files[@]}"; do
 		case "$f" in
 		cloudflare/* | contracts/* | contracts.pin.json | harness/*) ts=true ;;
+		esac
+		case "$f" in
+		# The screens the terminal suite asserts are built from internal/cli
+		# and cmd/, and the suite itself is tui/.
+		tui/* | internal/cli/* | cmd/*) bombadil=true ;;
 		esac
 		case "$f" in
 		go.mod | go.sum | Makefile | internal/shorttest/* | .github/* | .tick/runners.toml)
@@ -100,6 +109,7 @@ fi
 
 if [ "$mode" = full ]; then
 	ts=true
+	bombadil=true
 	mapfile -t affected < <(go list ./...)
 else
 	# Every package whose test binary depends on a changed package (or is one).
@@ -174,12 +184,13 @@ if [ "$mode" = affected ]; then
 fi
 
 echo "plan: $mode — $reason" >&2
-echo "go=$go ts=$ts" >&2
+echo "go=$go ts=$ts bombadil=$bombadil" >&2
 printf '  %s\n' "${affected[@]}" >&2
 {
 	echo "mode=$mode"
 	echo "go=$go"
 	echo "ts=$ts"
+	echo "bombadil=$bombadil"
 	echo "race_pkgs=${race_pkgs% }"
 	echo "matrix={\"include\":$matrix}"
 } >>"$out"
