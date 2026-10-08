@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "eno",
   "attempt": 12,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T07:57:48Z",
+  "triaged_at": "2026-10-08T07:57:56Z",
+  "triaged_by": "ticfac run run_af0e77b99c1540b7b8005cf04fd2795d absorbing cv4",
+  "promoted_as": "cv4",
   "provenance": {
     "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
     "tick_id": "eno",
