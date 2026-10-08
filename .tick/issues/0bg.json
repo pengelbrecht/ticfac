@@ -7,8 +7,9 @@
   "priority": 2,
   "type": "task",
   "owner": "peter@engelbrecht.dk",
+  "parent": "t8u",
   "discovered_from": "run-epic-t8u/tick-r6v/attempt-18",
   "created_by": "ticfac run epic-t8u",
   "created_at": "2026-10-08T02:37:57Z",
-  "updated_at": "2026-10-08T02:38:02.411805Z"
+  "updated_at": "2026-10-08T02:39:25Z"
 }
