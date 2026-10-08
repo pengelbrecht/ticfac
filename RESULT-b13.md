@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ymf/attempt-5-resolve-5-r-63fd7229/b13`, base `64f4e8fc0afd2bf5455137857d8e2821a8b3efa0`, harness `pi-durable` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
 # b13 — resolve-conflict: b13 (cost line) × lck (status model), epic ymf
 
 This is the report of the resolve-conflict job on `tick/ymf/attempt-5-resolve-5-r-63fd7229/b13`.
