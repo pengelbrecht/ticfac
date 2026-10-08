@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 126,
-  "state": "running",
-  "reason": "x73 is closed",
-  "updated_at": "2026-10-08T02:14:57Z",
+  "sequence": 127,
+  "state": "dispatching",
+  "reason": "dispatching r6v as attempt 18",
+  "updated_at": "2026-10-08T02:15:09Z",
   "ticks": [
     {
       "tick_id": "pqs",
