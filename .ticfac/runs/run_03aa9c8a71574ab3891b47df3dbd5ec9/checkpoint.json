@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
   "epic_id": "bo9",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching 0ek as attempt 1",
-  "updated_at": "2026-10-08T08:28:24Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "0ek is running as attempt 1",
+  "updated_at": "2026-10-08T08:28:41Z",
   "ticks": [
     {
       "tick_id": "0ek",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "ba4",
