@@ -7,19 +7,31 @@ substrate = "auto"
 max_parallel = 4
 
 [roles.implement]
-# Operator routing for Phase 2 (2026-09-10). Implementation runs entirely on
-# GLM on cloudflare through pi: GLM 5.3 for complex work (the default, and the
-# `strong` tier) and GLM 5.3-flash for simple work (`economy`). opus is NOT an
-# implementation tier — it is the claude harness only, reserved for review and
-# closeout, and it is not available in pi at all.
+# Operator routing for Phase 2 (2026-09-10; the args line and the trust
+# comment it carried are gone since tick q6z). Implementation runs on GLM on
+# cloudflare through pi: GLM 5.3 for complex work (the default, and the
+# `strong` tier) and GLM 5.3-flash for simple work (`economy`). opus is a
+# claude-harness model, not a pi one: for implement it is the local frontier
+# escalation and the cloud's named claude config only, never a starting tier
+# — review and closeout are the roles the cells below run on it.
 #
-# pi needs no permission-bypass flag: verified live 2026-09-10 (tick gjk) that it
-# runs tools unprompted. `--approve` covers project-local file trust, and that is
-# the whole of its full-auto story. Evidence: .tick/logs/herd/av8/gjk.RESULT.md
+# No `args` on this cell, deliberately (tick q6z). The roles table's args
+# have exactly one consumer — spawnArgv, in internal/cli/executor.go, read
+# only when a herdr dispatch compiles an agent's argv — and
+# runconfig.Compile refuses kind "pi" for a herdr pane (uxi), so no
+# implement dispatch can read a flag from here: since 2q5 implement routes
+# onto the local-subprocess executor, which launches the durable pi host
+# from its own runner table (internal/exec/subprocess), and a cloud
+# container is booted from the worker.json its sandbox door hands it. The
+# line that sat here was the deleted pi CLI's `--approve` — project-local
+# file trust, verified live 2026-09-10 (tick gjk;
+# .tick/logs/herd/av8/gjk.RESULT.md) — dead config on every substrate since
+# the CLI went with its worker path (jhp, uxi): it told a reader of this
+# file that implement workers somewhere run with --approve. pi needs no
+# permission-bypass flag in any case: it runs tools unprompted.
 kind = "pi"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
-args = ["--approve"]
 
 # Simple work: mechanical, compiler-guided, low judgement.
 [roles.implement.tiers.economy]
@@ -27,8 +39,10 @@ model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
 effort = "medium"
 
 # Complex work, named explicitly. Same model as the default: GLM 5.3 IS the
-# strong tier for this epic. opus is not an implementation tier at all — it is
-# reserved for review and closeout, and it is not available in the pi harness.
+# strong tier for this epic. opus is not a starting tier for implement
+# anywhere: locally it is the frontier escalation only (runners.local.toml)
+# and in the cloud only the named claude config's strong rung — and it is a
+# claude-harness model, not a pi one.
 [roles.implement.tiers.strong]
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
@@ -222,29 +236,3 @@ ts = { command = "cd cloudflare && pnpm install --frozen-lockfile --prefer-offli
 [environment.commands]
 which-go = { command = "which go", description = "Go toolchain on PATH" }
 git-config-user-email = { command = "git config user.email", description = "git identity configured" }
-
-# The pi-durable harness package's own suites (tick 2pn, epic ex6). Until this
-# cell the harness package that epic 43y created ran lint, typecheck and BOTH
-# its vitest suites in CI (ci.yml's "harness conformance and replay") and in
-# no gate at all, so a tick that changed harness/ merged on a gate that had
-# said nothing about it: one of its node-half tests sat red at base and was
-# found, and absorbed, five times by five workers (h3c, 7oy, 4ao, omq, 30e)
-# because no gate ever told a run the suite was already red.
-#
-# The whole suite, not a fast half. Measured on one host (4 cores, load under 1):
-# pnpm install 0.4s from a warm store (11.3s the first ever run, a store fill,
-# not a gate cost), pnpm lint 1.5s, pnpm typecheck 15.3s (two tsc projects),
-# pnpm test 56-65s (the workerd half 30-37s, the node half 26-28s). The whole
-# command 1m24s warm and 1m29s cold against the 60m bound under one gate
-# command and a Go half the same host measures at 1m45s — the same order as the
-# cloudflare vitest the ts cell deliberately leaves to CI. The FAST HALF would
-# not have been enough: the node half — real bash, real git, the real local
-# door — is where the red-at-base test lived, so a gate that ran only the
-# workerd half would have covered the package and missed it a sixth time.
-#
-# pnpm test is harness/package.json's own script, which is BOTH vitest
-# configs, so CI's step and this check cannot drift; pnpm install comes first
-# because a gate worktree carries no node_modules.
-[testing.commands.harness]
-command = "cd harness && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm typecheck && pnpm test"
-description = "Harness package: lint, types and both vitest suites"
