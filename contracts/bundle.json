@@ -1,6 +1,6 @@
 {
   "$comment": "The versioned cross-language contract bundle, authored by TICFAC since tick 4i8. Read contracts/README.md for what the fixtures are and contracts/CHANGELOG.md for the rule that governs this file. `version` is pinned by exact value by every consumer — cloudflare/contracts.pin.json here, and any repository that vendors this bundle. Regenerate `files` and `digests` when a fixture changes; never re-cut them without bumping `version`. `version_digests` is the append-only ledger that makes that rule executable: each version records a sha256 over its own `version` + `digests`, written the first time it is cut and never rewritten, so a re-cut at an unchanged version contradicts it and both verifiers refuse. The ledger begins at 1.0.0, ticfac's first cut: 2.1.1-6.3.0 were ticks' bundle and their history lives in the ticks repository; 1.0.0 carries the 6.3.0 bytes across unchanged except where its own changelog entry says. Two files in this bundle are not ticfac's to edit: tk-json-manifest.json and tracker-layout.json are vendored from a pinned ticks release (contracts.pin.json) and change only by moving that pin.",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "files": [
     "collect-vocabulary.json",
     "credential-ownership.json",
@@ -29,7 +29,7 @@
     "runners-config-contract.json": "602c3b077261ed745201b8d0a49c0133f17d87bea86d32282394721b6dfc861f",
     "sandbox-image-cases.json": "47bf74104bb6a682c9876c25177cd5ff4c31ec6dc477dd5f1182cb6d54e5d470",
     "signal-source-cases.json": "1adf66c382edb9d5fd15cfc1cdf01eb35795d232a823d6060ff3f69e493ed6df",
-    "status-model.json": "72fc79c6bfada0fcfd023406f18754dd4a41a688314d49bbe7b9bbb35f319914",
+    "status-model.json": "749bd2984392c669edf8aa74002fbf7ae5be3e29a4f7543149dc526cb402c790",
     "sweep-policy-cases.json": "7006ba3391618fdaf249084acf799f4fa67e49e3e89ac0baf89ba838b5641d0e",
     "sweep-selection-contract.json": "3d2eafd42b93b7d6e0b1bf45379c3e4008f3757bea5e03d70d58d5f8625f05ef",
     "ticfac-run-state.json": "a1cf745f00b4982c4b59a3aa7a6dac3766365e4b479ece03ef5d8f0280f15ca7",
@@ -58,6 +58,8 @@
     "2.1.0": "882899b81dbbca83dee1c53e2c4a56cad9c5b0e25f30da2111b753947071c594",
     "2.2.0": "b3c5f75194190ae02447e116b2426d4789b9843811914be66257158523dfa494",
     "2.3.0": "2870159d662a6021e82317f4c4f88ce1dcce7df77a65ec6ca13c43159181a7a9",
-    "2.4.0": "3f5cc4ca809c6078c9cdb2098a3d9659673b2428980617fa24e60248367bd2dc"
+    "2.4.0": "3f5cc4ca809c6078c9cdb2098a3d9659673b2428980617fa24e60248367bd2dc",
+    "2.4.1": "ebd89846424951d2c41470bcb0d95309b7ecb6f18e759fac534a2e502d362e89",
+    "2.5.0": "0dccd5d38a28c9324b40ff783284743219cb4000651cdc0539bd2b516505027b"
   }
 }

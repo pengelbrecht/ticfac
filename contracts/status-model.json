@@ -30,11 +30,23 @@
     "epic_title and gloss — and, once the header's clock was found counting",
     "past a finished run (tick e6g), progress.run_elapsed_seconds: the epic's",
     "own elapsed, measured and clamped at the run's end, carried by the model",
-    "so no renderer derives it a second time. The `dashboard` golden carries",
-    "every one of them populated — it is the fixture the wave-3 renderers and",
-    "the phone page test against. The version does not move: the phone page's",
-    "snapshot parser refuses any model version other than 1, and every reader",
-    "of this contract lives in this repository.",
+    "so no renderer derives it a second time, and, since tick b13, cost.subscription:",
+    "the claude-sub window use a run on the subscription shows instead of a wallet",
+    "number that is always $0.00. The `dashboard` golden carries every one of",
+    "them populated except cost.subscription, and the exception is the golden's",
+    "own host: it is a LOCAL run, and a local run's jobs lease nothing from the",
+    "factory's pool, so its subscription is the null the local gathering builds for",
+    "it — a stated absence, not a decay, and populating it would hand the renderers",
+    "a document no gathering produces. What the golden cannot carry, the suite",
+    "binds by deriving it FROM the golden — the same document with the",
+    "subscription set the way a leasing run's model carries it — and holding that",
+    "shape to the guarantees the golden gives every field it populates: schema",
+    "admission, required-in-cost, and the Model's round trip",
+    "(TestTheContractBindsTheLeasedSubscription). It remains the fixture the",
+    "wave-3 renderers and the phone page test against, and a renderer that needs",
+    "the field reads its shape from that same derivation. The version does not",
+    "move: the phone page's snapshot parser refuses any model version other",
+    "than 1, and every reader of this contract lives in this repository.",
     "",
     "The watch-redesign fields (epic ymf, tick lck) are additive the same way:",
     "every tick carries a plain-language status word and the exception note",
@@ -612,7 +624,7 @@
     },
     "cost": {
       "type": "object",
-      "required": ["recorded_usd", "attempts", "basis", "lines"],
+      "required": ["recorded_usd", "attempts", "basis", "lines", "subscription"],
       "additionalProperties": false,
       "properties": {
         "recorded_usd": { "type": ["number", "null"], "description": "The sum of the metered lines, and null when no line is metered — a 0 beside all-unmetered lines is the fabricated $0.00 the per-river split exists to end (hn6 rule 7, tick dm2). The basis names the coverage so the number cannot quietly claim more than the records do." },
@@ -622,7 +634,24 @@
           "type": "array",
           "items": { "$ref": "#/$defs/cost_line" },
           "description": "The spend split per source: which river, whether anything measured it, the number where one exists. Empty when nothing has been split yet — and a line with no measurement states usd null and says so, never a fabricated $0.00."
+        },
+        "subscription": {
+          "$ref": "#/$defs/cost_subscription_nullable",
+          "description": "The claude-sub subscription the run's jobs lease (tick b13): its label and the utilization the factory's proxy last saw on the account's shared 5h/7d windows. Null when the run leased nothing the factory's /api/claude-sub names — a run on the subscription pays no wallet money, so this is the cost line's content, and it is never a token."
         }
+      }
+    },
+    "cost_subscription_nullable": {
+      "anyOf": [{ "$ref": "#/$defs/cost_subscription" }, { "type": "null" }]
+    },
+    "cost_subscription": {
+      "type": "object",
+      "required": ["label", "five_hour", "seven_day"],
+      "additionalProperties": false,
+      "properties": {
+        "label": { "type": "string", "description": "The leased subscription's label — the CLAUDE_SUB_TOKEN_<label> secret the factory holds, spelled as the pool leases it. Never the token itself: the route is built so the whole answer is safe to paste into a log." },
+        "five_hour": { "type": ["number", "null"], "description": "The fraction of the subscription's 5-hour window the factory's proxy last saw used, 0 to 1 — the unified-limit utilization header on its most recent answer. Null when the proxy has answered no request yet: the absence of a measurement is not a measurement of zero." },
+        "seven_day": { "type": ["number", "null"], "description": "The same for the 7-day window. Null when the proxy has answered no request for it." }
       }
     },
     "cost_line": {
@@ -939,6 +968,7 @@
       ],
       "ci": null,
       "cost": {
+        "subscription": null,
         "recorded_usd": 0.04,
         "attempts": 2,
         "basis": "usage recorded on decision records; worker jobs record no cost",
@@ -1088,6 +1118,7 @@
         ]
       },
       "cost": {
+        "subscription": null,
         "recorded_usd": null,
         "attempts": 9,
         "basis": "usage recorded on decision records; worker jobs record no cost",
@@ -1453,6 +1484,7 @@
         ]
       },
       "cost": {
+        "subscription": null,
         "recorded_usd": 0.41,
         "attempts": 6,
         "basis": "usage recorded on decision records; worker jobs record no cost",
@@ -1991,6 +2023,7 @@
         ]
       },
       "cost": {
+        "subscription": null,
         "recorded_usd": 0.41,
         "attempts": 6,
         "basis": "usage recorded on decision records; worker jobs record no cost",
@@ -2496,6 +2529,7 @@
         ]
       },
       "cost": {
+        "subscription": null,
         "recorded_usd": 0.41,
         "attempts": 6,
         "basis": "usage recorded on decision records; worker jobs record no cost",
@@ -2733,6 +2767,7 @@
       ],
       "ci": null,
       "cost": {
+        "subscription": null,
         "recorded_usd": 0.23,
         "attempts": 3,
         "basis": "usage recorded on decision records; worker jobs record no cost",
@@ -2767,7 +2802,7 @@
         "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
+        "cost": { "subscription": null, "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },
@@ -2794,7 +2829,7 @@
         "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
+        "cost": { "subscription": null, "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },
@@ -2820,7 +2855,7 @@
         "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
+        "cost": { "subscription": null, "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },
@@ -2847,7 +2882,7 @@
         "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
+        "cost": { "subscription": null, "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },
@@ -2874,7 +2909,7 @@
         "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
+        "cost": { "subscription": null, "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null,
         "pretty": true
       }
@@ -2902,7 +2937,7 @@
         "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
+        "cost": { "subscription": null, "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },
@@ -2959,7 +2994,7 @@
         "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
+        "cost": { "subscription": null, "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },
@@ -3016,7 +3051,7 @@
         "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "healthy", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
+        "cost": { "subscription": null, "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },
@@ -3044,6 +3079,7 @@
         "gates": [],
         "ci": null,
         "cost": {
+          "subscription": null,
           "recorded_usd": 0,
           "attempts": 0,
           "basis": "usage recorded on decision records; worker jobs record no cost",
@@ -3077,7 +3113,7 @@
         "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "paused", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
-        "cost": { "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
+        "cost": { "subscription": null, "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },
         "remaining": null
       }
     },

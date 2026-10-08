@@ -788,7 +788,11 @@ func watchRunStillAlive(source runfeed.Source, kind, repo, runID string) bool {
 // durable sources — so the watch's one document and the live view's last
 // frame cannot disagree.
 func watchGatherModel(ctx context.Context, source runfeed.Source, kind, repo, runID string) (statusmodel.Model, error) {
-	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: workerActivity}
+	// Both the activity reader (tick 93n) and the claude-sub reader (tick b13)
+	// ride here: the cloud gathering reads the subscription a run's jobs lease,
+	// and the local gathering never asks — its jobs lease nothing from the
+	// factory's pool.
+	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: workerActivity, claudeSub: statusClaudeSub}
 	if cloudSource, ok := source.(*cloudFeedSource); ok && kind == "cloud" {
 		record, err := readCloudRunRecord(ctx, cloudSource.client, cloudSource.runID)
 		if err != nil {
@@ -917,7 +921,13 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	// sockets, a local watch the workers' doors — both bounded to one
 	// snapshot per TTL per worker.
 	activityCache := &watchActivityCache{ttl: watchActivityTTL, read: workerActivity}
-	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI, workerCost: costCache.WorkerCost, activity: activityCache.Activity}
+	// The leased subscription rides the sources' own thirty (tick b13): a pool
+	// snapshot is a live read of a Durable Object, not a socket dialled per
+	// worker, and the leases a running run holds and releases are picked up
+	// within the same half a minute as the graph and the CI.
+	claudeSubCache := &watchClaudeSubCache{ttl: watchSourceTTL, read: statusClaudeSub}
+	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI, workerCost: costCache.WorkerCost,
+		activity: activityCache.Activity, claudeSub: claudeSubCache.Subscription}
 
 	// The model builder: local and cloud gather through their own sources
 	// (status_model.go), and both are the same model — the same frame renders
@@ -1713,6 +1723,34 @@ func (c *watchActivityCache) Activity(ctx context.Context, client *cloudClient, 
 	c.cache[key] = watchActivityEntry{input: input, at: time.Now()}
 	c.mu.Unlock()
 	return input
+}
+
+// watchClaudeSubCache serves the leased claude-sub subscription at most once
+// per TTL (tick b13): the pool snapshot is a live read of a Durable Object
+// and a frame every two seconds must not ask it every two seconds. An error
+// is returned fresh (a factory that cannot be asked is a fact the model
+// degrades per frame, never one it silently freezes); a successful answer,
+// nil included, is cached — "no lease right now" is an answer too, and the
+// leases a running run holds and releases are picked up within half a
+// minute.
+type watchClaudeSubCache struct {
+	ttl    time.Duration
+	read   func(context.Context, string) (*statusmodel.CostSubscription, error)
+	sub    *statusmodel.CostSubscription
+	cached bool
+	at     time.Time
+}
+
+func (c *watchClaudeSubCache) Subscription(ctx context.Context, runID string) (*statusmodel.CostSubscription, error) {
+	if c.cached && time.Since(c.at) < c.ttl {
+		return c.sub, nil
+	}
+	sub, err := c.read(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	c.sub, c.cached, c.at = sub, true, time.Now()
+	return sub, nil
 }
 
 // clockOf is the line's own time, as a person reads it. A stamp that does not

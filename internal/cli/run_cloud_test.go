@@ -538,6 +538,10 @@ func TestRunCloudEndsHoldingForTriageAndTriageSettlesIt(t *testing.T) {
 				"run_id": resumed, "state": "completed",
 				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
 			}
+		case request.Path == "/api/claude-sub":
+			// The pool route the status model's cost gathering reads (tick
+			// b13): this fake factory carries none, the optional state.
+			return 404, map[string]any{"error": "not_found"}
 		}
 		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
 		return 404, map[string]any{"error": "not_found"}
@@ -640,6 +644,10 @@ func TestRunCloudHeldAttemptReleaseCommandNamesTheRun(t *testing.T) {
 				"run_id": resumed, "state": "completed",
 				"text": feed, "bytes": len(feed), "total_bytes": len(feed),
 			}
+		case request.Path == "/api/claude-sub":
+			// The pool route the status model's cost gathering reads (tick
+			// b13): this fake factory carries none, the optional state.
+			return 404, map[string]any{"error": "not_found"}
 		}
 		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
 		return 404, map[string]any{"error": "not_found"}
