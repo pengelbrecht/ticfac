@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 8,
-  "state": "dispatching",
-  "reason": "dispatching lck as attempt 4",
-  "updated_at": "2026-10-08T13:59:13Z",
+  "sequence": 9,
+  "state": "running",
+  "reason": "lck is running as attempt 4",
+  "updated_at": "2026-10-08T13:59:22Z",
   "ticks": [
     {
       "tick_id": "47j",
@@ -24,7 +24,8 @@
     },
     {
       "tick_id": "lck",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 4
     },
     {
       "tick_id": "ugm",
