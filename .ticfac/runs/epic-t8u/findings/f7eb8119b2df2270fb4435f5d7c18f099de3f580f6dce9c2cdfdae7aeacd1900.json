@@ -12,8 +12,11 @@
   "attempt": 21,
   "done_item": "A1",
   "demonstrating_check": "go test -timeout 45m -parallel 12 ./... timed before (990bb6eb4) and after on a quiet host",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T05:27:49Z",
+  "triaged_at": "2026-10-08T05:27:58Z",
+  "triaged_by": "ticfac run epic-t8u absorbing xju",
+  "promoted_as": "xju",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "kwh",
