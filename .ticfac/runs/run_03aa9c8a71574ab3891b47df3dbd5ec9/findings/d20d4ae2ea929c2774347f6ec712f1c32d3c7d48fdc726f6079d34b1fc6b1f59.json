@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "g2s",
   "attempt": 6,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T11:10:04Z",
+  "triaged_at": "2026-10-08T11:10:15Z",
+  "triaged_by": "ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9 absorbing 359",
+  "promoted_as": "359",
   "provenance": {
     "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
     "tick_id": "g2s",
