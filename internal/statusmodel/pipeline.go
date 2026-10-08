@@ -8,6 +8,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
+	"github.com/pengelbrecht/ticfac/internal/runprogress"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
@@ -33,23 +34,39 @@ import (
 const tickIntegrated = "integrated"
 
 // decorateTicks lays the pipeline cell, the parent row, the duration, the
-// findings and the try vocabulary on every tick. The derivation is pure: it
-// reads only the Sources (the graph, the records, the feed) and the model
+// findings, the try vocabulary, the status word and the exception note on
+// every tick, and derives the groups from the words. The derivation is pure:
+// it reads only the Sources (the graph, the records, the feed) and the model
 // built so far — the waves with their ticks, states and try histories — and
 // it decides nothing a record did not state. Where nothing states a fact the
 // tick says null or pending, never a guess. The per-tick records are the
 // merged view's (epic.go): each tick's own from the last run that touched
 // it. priorHolds is the standing prior-run hold answer the model computed
-// once for both of its readers — the header's needs-you and the rows'
-// next steps.
+// once for both of its readers — the header's needs-you and the rows' next
+// steps.
 func decorateTicks(src Sources, merged *mergedRuns, priorHolds []PriorHold, m *Model) {
 	index := newPipelineIndex(src, merged, priorHolds, m.EpicID, m.RunID)
+	// The wave states and the merged closed set, collected before any tick
+	// is decorated: the queued words read them (an upcoming wave is up next
+	// whatever its dependency edges say; an open edge to an open tick is the
+	// "waiting: X" a person can act on), and the groups bucket the ticks by
+	// the words the loop derives.
+	for _, wave := range deref(m.Waves) {
+		for i := range wave.Ticks {
+			tick := &wave.Ticks[i]
+			index.waveState[tick.TickID] = wave.State
+			if tick.State == tickClosed {
+				index.closedTicks[tick.TickID] = true
+			}
+		}
+	}
 	for wi := range deref(m.Waves) {
 		wave := &(*m.Waves)[wi]
 		for ti := range wave.Ticks {
 			decorateTick(src, index, &wave.Ticks[ti])
 		}
 	}
+	m.Groups = index.groupsOf(m)
 }
 
 // pipelineIndex is every per-tick fact the derivation asks for, grouped the
@@ -90,6 +107,24 @@ type pipelineIndex struct {
 	// it stated one — neither completed nor cancelled (tick jkb). A refused
 	// try's honest next step is then the resume, never the tier ladder.
 	notGoing bool
+	// ending is the run's own ending word (runEnding's answer), the fact the
+	// status words' waiting override words its rows from — a stopped run's
+	// in-flight ticks read "waiting: the run is stopped", not "writing
+	// code" (tick lck).
+	ending string
+	// alive is the liveness probe's answer, carried so a row's status word
+	// knows whether anything can still move its attempt.
+	alive bool
+	// waveState is each tick's wave's own state, and closedTicks the merged
+	// closed set — the two facts the queued words read: an upcoming wave's
+	// ticks are up next whatever their dependency edges say, and an open
+	// edge to an open tick is the "waiting: X" a person can act on.
+	waveState   map[string]string
+	closedTicks map[string]bool
+	// standingIdle is each standing attempt's idle gap — how long since its
+	// branch last moved or its worktree last changed, whichever is newer —
+	// the measurement the stalled exception reads.
+	standingIdle map[string]time.Duration
 }
 
 // newPipelineIndex groups the sources' per-tick facts once, so decorating a
@@ -119,6 +154,9 @@ func newPipelineIndex(src Sources, merged *mergedRuns, priorHolds []PriorHold, e
 		standing:       map[string]bool{},
 		priorHold:      map[string]PriorHold{},
 		feed:           src.Feed,
+		waveState:      map[string]string{},
+		closedTicks:    map[string]bool{},
+		standingIdle:   map[string]time.Duration{},
 	}
 	// The standing prior-run holds, keyed per tick: the same answer
 	// buildWaits words the header from, shared with the derivation so a
@@ -173,7 +211,23 @@ func newPipelineIndex(src Sources, merged *mergedRuns, priorHolds []PriorHold, e
 		sort.Slice(tickIDs, func(i, j int) bool { return tickIDs[i].Key < tickIDs[j].Key })
 	}
 	for _, attempt := range src.Standing {
-		p.standing[tryKey(attempt.TickID, attempt.Attempt)] = true
+		key := tryKey(attempt.TickID, attempt.Attempt)
+		p.standing[key] = true
+		// The idle gap the stalled exception reads: the newer of the two
+		// durable outputs' silences, and nothing when neither was measured.
+		var idle time.Duration
+		measured := false
+		for _, gap := range []*runprogress.Duration{attempt.WorktreeIdle, attempt.BranchIdle} {
+			if gap == nil {
+				continue
+			}
+			if !measured || time.Duration(*gap) > idle {
+				idle, measured = time.Duration(*gap), true
+			}
+		}
+		if measured {
+			p.standingIdle[key] = idle
+		}
 	}
 	recs := Records{}
 	if src.Records != nil {
@@ -181,6 +235,8 @@ func newPipelineIndex(src Sources, merged *mergedRuns, priorHolds []PriorHold, e
 	}
 	ending := runEnding(src, recs)
 	p.notGoing = !src.Liveness.Alive && ending != endCompleted && ending != endCancelled
+	p.ending = ending
+	p.alive = src.Liveness.Alive
 	return p
 }
 
@@ -193,6 +249,7 @@ func decorateTick(src Sources, p *pipelineIndex, tick *Tick) {
 	tick.DurationSeconds = p.durationOf(src, tick)
 	tick.Findings = p.findingsOf(tick.TickID)
 	p.decorateTries(tick)
+	p.decorateStatus(tick)
 }
 
 // ---------------------------------------------------------- the pipeline ---

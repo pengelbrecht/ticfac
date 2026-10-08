@@ -53,6 +53,29 @@ loud.
 
 ---
 
+## 2.4.0
+
+MINOR: `status-model.json` gains the watch-redesign fields (ticfac tick lck,
+epic ymf): every tick now carries `status` — the tick's situation in the
+operator's words (`up next`, `claimed`, `writing code`, `testing`, `merging`,
+`merged`, `reviewing`, `closing out`, `waiting for CI`, `held: reason`,
+`failed: reason`, `done`, and `waiting: X` for a tick blocked behind open
+work or a run that is not going) — derived from the same pipeline cell and
+records the existing fields come from; `exception`, the inline note for what
+is unusual about an unfinished attempt (`attempt N`, `model escalated`,
+`stalled Nm`, null when none); and the lifecycle carries `track`, the epic
+phase track in the same words (building / reviewing / closing out / PR & CI /
+merged), with `here`, the you-are-here index into it. The model carries
+`groups`, the four state buckets the dashboard groups ticks by (NOW, DONE,
+UP NEXT, HELD), as tick ids in the waves' own order, null when the tracker
+could not be read. All are additive within the model's `schema_version` 1 in
+the way the dashboard fields were; the `dashboard` golden and the other
+goldens carry them populated. Consumers: `cloudflare/contracts.pin.json`
+moves to 2.4.0; the Go model and builder gained the fields in the same
+commit, and renderers that read fields by name (the phone page's snapshot
+parser) are unchanged and correct — the watch redesign's rendering ticks
+(ugm) and the phone page's shared model are what the fields exist for.
+
 ## 2.3.0
 
 MINOR: `job-protocol.json`'s observation `kind` gains `claude_sub_quota` — the
