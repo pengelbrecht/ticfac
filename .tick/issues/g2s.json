@@ -1,0 +1,20 @@
+{
+  "id": "g2s",
+  "title": "Final review of the operator surface follow-ups diff",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "blocked_by": [
+    "ba4",
+    "g5f",
+    "u2g",
+    "0ek",
+    "rkk"
+  ],
+  "parent": "bo9",
+  "role": "review",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T15:18:21.963119Z",
+  "updated_at": "2026-10-07T15:19:29.853762Z"
+}

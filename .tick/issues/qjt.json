@@ -1,0 +1,13 @@
+{
+  "id": "qjt",
+  "title": "Protected-change channel: the rest after the run applies a finding's protected_change",
+  "description": "Follow-up to the protected-change channel (epic-v5t incident, ticks tda/yck). Shipped: absorption never makes a protected edit a worker's tick (a carried protected_change is applied by the run at the close-out's close as a labelled commit and listed in the epic PR under 'Protected changes for the merger'; prose-only is a backlog tick outside the epic), and a PR carrying one is never merged by the run itself.\n\nNot yet done:\n1. A tick whose ONLY deliverable is a protected change: the worker commits nothing and answers DONE with a protected_change finding, which image/worker.sh reads as no-work (EXIT_NO_WORK) and the local collect as no commits. Accept it as a delivery the way a tracker-edits block is (report_proposes_tracker_edits / trackerEditDelivery).\n2. The protected commit is gated only by the epic PR's CI, not by the integrated gate before it is pushed. If CI goes red on it, the red-CI repair job cannot touch the protected file. Run the integrated gate on the commit before pushing and, if it fails, do not apply: list it as proposed-not-applied in the PR.\n3. An epic with no close-out tick never reaches gateCloseoutClose, so its proposals stay proposed. Apply them at the run's end instead.\n4. A report-level protected-changes block (beside tracker-edits), not only a finding key, if workers reach for it.",
+  "notes": "2026-10-07 19:14 - Item 1 (a tick whose only deliverable is a protected change) is done in PR #247 (acceptProtectedDelivery, worker.sh exits 0 for it, cloud substrate covered). Items 2-4 remain.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T02:19:50.331577Z",
+  "updated_at": "2026-10-07T17:14:03.100313Z"
+}

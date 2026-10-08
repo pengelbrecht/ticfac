@@ -121,6 +121,16 @@ type Finding struct {
 	DoneItem           string `json:"done_item,omitempty"`
 	DemonstratingCheck string `json:"demonstrating_check,omitempty"`
 
+	// The PROTECTED CHANGE the finding carries (epic-v5t's yck): a change to
+	// a file the worker boundary refuses, which the run applies itself onto
+	// the epic branch after the close-out's reads and lists in the epic PR
+	// for the merger (internal/reconcile/protected_changes.go). Path names
+	// the file; exactly one of Content (the whole new file) and Append (lines
+	// added to its end) is set. All empty for every other finding.
+	ProtectedPath    string `json:"protected_path,omitempty"`
+	ProtectedContent string `json:"protected_content,omitempty"`
+	ProtectedAppend  string `json:"protected_append,omitempty"`
+
 	// Status is the triage state; the fields below name the triage.
 	Status     string `json:"status"`
 	ProposedAt string `json:"proposed_at"`
@@ -186,6 +196,16 @@ func (f Finding) LinkageText() string {
 	}
 }
 
+// ProtectedChange is the protected change the finding carries, and whether
+// it carries one.
+func (f Finding) ProtectedChange() (subprocess.ProtectedChange, bool) {
+	if f.ProtectedPath == "" {
+		return subprocess.ProtectedChange{}, false
+	}
+	return subprocess.ProtectedChange{Path: f.ProtectedPath, Content: f.ProtectedContent,
+		Append: f.ProtectedAppend}, true
+}
+
 // Validate applies the draft's own rules: the closed triage vocabulary, the
 // finding's closed kind and severity vocabularies (which are the channel's,
 // owned by the executor record), and a triage that names who made it — the
@@ -217,6 +237,13 @@ func (f Finding) Validate() error {
 	}
 	if err := subprocess.ValidateDoneItem(f.DoneItem); err != nil {
 		return err
+	}
+	if change, ok := f.ProtectedChange(); ok {
+		if err := change.Validate(); err != nil {
+			return fmt.Errorf("finding.protected_change %v", err)
+		}
+	} else if f.ProtectedContent != "" || f.ProtectedAppend != "" {
+		return fmt.Errorf("finding carries a protected change's text and names no protected_path")
 	}
 	if f.TickID == "" || f.Attempt < 1 {
 		return fmt.Errorf("finding names no tick or attempt: the tick whose worker found it is where a " +

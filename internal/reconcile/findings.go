@@ -172,6 +172,12 @@ func (r *Reconciler) fileFindings(ctx context.Context, marker attemptHandle, col
 			ProposedAt:         r.now().UTC().Format("2006-01-02T15:04:05Z"),
 			Provenance:         r.attemptProvenance(dispatch),
 		}
+		if change := finding.ProtectedChange; change != nil {
+			// The protected change rides the draft (protected_changes.go):
+			// the run applies it at the close-out's close, long after this
+			// report is gone.
+			draft.ProtectedPath, draft.ProtectedContent, draft.ProtectedAppend = change.Path, change.Content, change.Append
+		}
 		outcome, err := r.store.PutFinding(draft)
 		if err != nil {
 			return fmt.Errorf("draft the finding %q for %s: %w", finding.Title, marker.TickID, err)

@@ -199,6 +199,14 @@ func (r *Reconciler) finishIntegrate(ctx context.Context, f *finishing) error {
 		f.stage = finishGating
 		return nil
 	}
+	if delivered, merged, err := r.integrateProtectedDelivery(f.fl.marker, f.collected); err != nil {
+		r.disposeFinished(f, err)
+		return err
+	} else if delivered {
+		f.merged = merged
+		f.stage = finishGating
+		return nil
+	}
 	merged, err := r.integrate(ctx, f.fl.marker, f.collected)
 	if err != nil {
 		err = r.conflictToLadder(ctx, f, err)

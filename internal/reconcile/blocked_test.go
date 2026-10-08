@@ -276,6 +276,11 @@ func TestAnAlwaysAskQuestionAtTheCeilingHoldsNamingIt(t *testing.T) {
 		t.Errorf("the hold's release command does not name the run its attempt is recorded under: %s",
 			result.Failure.Message)
 	}
+	// The attempt committed, so the release carries its work (tick w5u: the
+	// flag is printed exactly when there is work to carry).
+	if !strings.Contains(result.Failure.Message, "--carry-work") {
+		t.Errorf("the hold of an attempt with commits does not offer to carry them: %s", result.Failure.Message)
+	}
 	held, ok := journalLine(r, "a1", StageBlockedHeld)
 	if !ok || !strings.Contains(held, question) {
 		t.Errorf("the %s event does not name the question: %q", StageBlockedHeld, held)
@@ -477,6 +482,14 @@ func TestANoCommitQuestionAtTheCeilingIsDecidedOrHeldByName(t *testing.T) {
 		if result.Failure == nil || result.Failure.Reason != RefusedNeedsHuman || !strings.Contains(result.Failure.Message, question) {
 			t.Fatalf("the run failed as %+v, want %s naming the question", result.Failure, RefusedNeedsHuman)
 		}
+		// Nothing was committed, so the printed release must not carry work:
+		// settle refuses --carry-work on an attempt with no commit beyond its
+		// base, and the hold's command has to work verbatim (tick w5u).
+		if !strings.Contains(result.Failure.Message, "ticfac settle qeu a1 1 --run-id r-fixture --release") ||
+			strings.Contains(result.Failure.Message, "--carry-work") {
+			t.Errorf("the hold of an attempt that committed nothing does not name a release without --carry-work: %s",
+				result.Failure.Message)
+		}
 		r, resumed, err := f.run(f.Repo, fixtureOptions{})
 		if err != nil {
 			t.Fatalf("the resumed run did not finish: %v", err)
@@ -486,9 +499,10 @@ func TestANoCommitQuestionAtTheCeilingIsDecidedOrHeldByName(t *testing.T) {
 		}
 		// The resume's hold names the release command addressed by the run
 		// whose store carries the attempt (tick qxj).
-		if !strings.Contains(resumed.Failure.Message, "ticfac settle qeu a1 1 --run-id r-fixture --release") {
-			t.Errorf("the resumed hold's release command does not name the run its attempt is recorded under: %s",
-				resumed.Failure.Message)
+		if !strings.Contains(resumed.Failure.Message, "ticfac settle qeu a1 1 --run-id r-fixture --release") ||
+			strings.Contains(resumed.Failure.Message, "--carry-work") {
+			t.Errorf("the resumed hold's release command does not name the run its attempt is recorded under, "+
+				"without --carry-work: %s", resumed.Failure.Message)
 		}
 		if contains(r.Stages("a1"), StageDispatched) {
 			t.Errorf("the resume dispatched a held question again: %v", r.Stages("a1"))

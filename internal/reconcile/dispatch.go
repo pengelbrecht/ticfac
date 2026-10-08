@@ -3318,6 +3318,9 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	// A proposed tracker edit is held to the tracker here, and a DONE whose
 	// only deliverable is the edit is a delivery (tracker_edits.go, hn6 yjq).
 	collected = r.acceptTrackerEdits(ctx, marker, collected)
+	// And a DONE whose only deliverable is a protected change it carries
+	// (protected_changes.go, epic ex6's 2pn) is a delivery too.
+	collected = r.acceptProtectedDelivery(marker, collected)
 	// The verdict this run has already recorded for the attempt is read
 	// BEFORE the executor's re-read of it (tick o3q): a restart re-collects
 	// an attempt whose work never merged, and the executor answers from the

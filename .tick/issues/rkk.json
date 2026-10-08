@@ -1,0 +1,15 @@
+{
+  "id": "rkk",
+  "title": "ticfac skills install/get default to the ticfac skill when no name is given",
+  "gloss": "skills install: name optional",
+  "description": "Operator, 2026-10-07: 'ticfac skills install ticfac' repeats itself — the binary embeds one skill. Make the name optional for install and get: with no name, use the ticfac skill; keep the explicit form working (and the error when a named skill does not exist). Update the skill text, README and help to show the short form.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "parent": "bo9",
+  "acceptance_criteria": "ticfac skills install and ticfac skills get with no name act on the ticfac skill; the named form still works; help/skill/README show the short form; tests; make gate",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T15:19:29.806705Z",
+  "updated_at": "2026-10-07T15:19:29.806705Z"
+}

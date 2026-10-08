@@ -1,0 +1,14 @@
+{
+  "id": "h8g",
+  "title": "deliverCarriedWork counts a carried head holding only a report commit as delivered work (finding 326c0028)",
+  "gloss": "report-only carry is not work",
+  "description": "internal/reconcile/dispatch.go ~3449 deliverCarriedWork treats a carried head that holds only a RESULT report commit as delivered work. #260 keeps the fallback-report case away from it, but the code is unchanged: a try that carries only an earlier try's report can still be judged as delivering. Count only non-report commits as work.",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "a carried head with only a report commit is not delivered work; reconcile test; PR CI green before merge; make gate",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T17:46:55.11342Z",
+  "updated_at": "2026-10-07T17:46:55.11342Z"
+}

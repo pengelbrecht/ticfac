@@ -1,0 +1,15 @@
+{
+  "id": "ba4",
+  "title": "ticfac run --cloud accepts --config: carry the named config in the factory submission",
+  "gloss": "--config on cloud runs",
+  "description": "ticfac run --cloud refuses --config because the factory's submission record has no field for it, so a cloud run can choose a named config only through the epic's config:\u003cname\u003e label. Carry it in the submission (contract field), the orchestrator applies it with the same precedence as a local run (flag \u003e label \u003e default).",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "parent": "bo9",
+  "acceptance_criteria": "ticfac run \u003cepic\u003e --cloud --config claude runs on the claude config; contract + Go + Worker tests; make gate",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T14:07:25.248735Z",
+  "updated_at": "2026-10-07T15:18:21.856109Z"
+}

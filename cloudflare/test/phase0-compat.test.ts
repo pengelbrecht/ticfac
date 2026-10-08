@@ -904,22 +904,24 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
   });
 
   /**
-   * The three fallback reports `image/worker.sh` writes when the agent
-   * wrote none — READ OUT OF THE SCRIPT, not transcribed from it.
+   * The fallback reports `image/worker.sh` writes when the agent wrote none —
+   * READ OUT OF THE SCRIPT, not transcribed from it.
    *
    * The literals below are the pin; the script is the source. An earlier
    * version of this block fed its own strings to `parseStatus`, which pins
-   * that the parser handles three sentences this file made up, and it had
-   * already drifted from `write_fallback_report` by a whole clause. Extracting
-   * the lines from `worker.sh` and asserting they equal these makes a reword
-   * of either side red.
+   * that the parser handles sentences this file made up, and it had already
+   * drifted from `write_fallback_report` by a whole clause. Extracting the
+   * lines from `worker.sh` and asserting they equal these makes a reword of
+   * either side red.
    *
-   * The point of all three is one rule: **the exit code is not the verdict.**
-   * Run run_215b7cbf wrote "BLOCKED, re-dispatch" on all three of its
-   * containers and only one earned it — exit 0 with two real work commits was
-   * told to redo finished work, and exit 124 with a salvaged tree would have
-   * had it discarded. What survived on the branch decides; the exit code only
-   * colours the wording.
+   * Two rules. **The exit code is not the verdict** (run run_215b7cbf): what
+   * survived on the branch decides. And **a fault is not a question** (ex6
+   * 2p3, 2026-10-07): the shapes where the harness failed or left nothing
+   * once answered BLOCKED / NEEDS_CONTEXT, which the run's blocked-answer
+   * ladder read as a worker stopping to ask and held for a person. They now
+   * carry no status line at all — missing-result in every collect, which the
+   * run dispatches again carrying whatever landed — and only the exit-0
+   * with-work shape, a delivery whose account is missing, keeps a status.
    */
   const FALLBACK_REPORTS: ReadonlyArray<{
     shape: string;
@@ -929,24 +931,21 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
     vars: Record<string, string>;
   }> = [
     {
-      shape: "nothing landed",
-      line: "STATUS: BLOCKED — the harness exited 124, wrote no report, and nothing landed on tick/692/mrq; re-dispatch this tick",
-      status: STATUS_BLOCKED,
-      vars: { status: "124", landed: "0 work commit(s)", worker_branch: "tick/692/mrq" },
-    },
-    {
       shape: "exit 0 with work on the branch",
       line: "STATUS: DONE_WITH_CONCERNS — the harness exited 0 and 2 work commit(s) landed on tick/692/mrq, but no agent report exists; review the branch, and note nothing describes the work but the diff",
       status: STATUS_DONE_WITH_CONCERNS,
       vars: { status: "0", landed: "2 work commit(s)", worker_branch: "tick/692/mrq" },
     },
-    {
-      shape: "a failed harness with work on the branch",
-      line: "STATUS: NEEDS_CONTEXT — the harness exited 124 and wrote no report, but 1 work commit(s) landed on tick/692/mrq; a human has to review what is there before this tick is run again",
-      status: STATUS_NEEDS_CONTEXT,
-      vars: { status: "124", landed: "1 work commit(s)", worker_branch: "tick/692/mrq" },
-    },
   ];
+
+  /** The body of `write_fallback_report`, as worker.sh spells it. */
+  function writeFallbackReportBody(): string {
+    const open = WORKER_SH.indexOf("write_fallback_report() {");
+    expect(open, "worker.sh no longer defines write_fallback_report").toBeGreaterThan(-1);
+    const close = WORKER_SH.indexOf("\n}\n", open);
+    expect(close, "write_fallback_report has no closing brace at column 0").toBeGreaterThan(open);
+    return WORKER_SH.slice(open, close);
+  }
 
   /**
    * The `STATUS:` lines `write_fallback_report` actually writes, in the order
@@ -957,12 +956,7 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
    * that fails for the wrong reason.
    */
   function fallbackStatusLinesInWorkerSh(): string[] {
-    const open = WORKER_SH.indexOf("write_fallback_report() {");
-    expect(open, "worker.sh no longer defines write_fallback_report").toBeGreaterThan(-1);
-    const close = WORKER_SH.indexOf("\n}\n", open);
-    expect(close, "write_fallback_report has no closing brace at column 0").toBeGreaterThan(open);
-
-    return WORKER_SH.slice(open, close)
+    return writeFallbackReportBody()
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.startsWith("STATUS: "));
@@ -994,13 +988,21 @@ describe("SPEC §10.1: what a worker's RESULT report means", () => {
     expect(parsed).toEqual(
       FALLBACK_REPORTS.map((fallback) => `${fallback.shape}: ${fallback.status}`),
     );
+    // Exit 0 with work is a delivery, never a re-dispatch.
+    expect(FALLBACK_REPORTS[0]!.line).not.toContain("re-dispatch");
+  });
 
-    // Exit 0 is not "done" and a nonzero exit is not "unimplemented": both
-    // fallbacks with work on the branch keep a human in the loop, and the one
-    // with nothing on it is the only shape that may advise a re-dispatch.
-    expect(FALLBACK_REPORTS[0]!.line).toContain("re-dispatch this tick");
-    expect(FALLBACK_REPORTS[1]!.line).not.toContain("re-dispatch");
-    expect(FALLBACK_REPORTS[2]!.line).not.toContain("re-dispatch");
+  it("never has the container's fallback ask a question (ex6 2p3)", () => {
+    const body = writeFallbackReportBody();
+    for (const status of [STATUS_BLOCKED, STATUS_NEEDS_CONTEXT]) {
+      expect(
+        body,
+        `write_fallback_report answers ${status}: a harness fault is not a question`,
+      ).not.toMatch(new RegExp(`STATUS:\\s*${status}\\b`));
+    }
+    // The marker the Go collect reads the fault from heads every fallback.
+    expect(body).toContain("WORKER_FALLBACK_REPORT_MARKER");
+    expect(WORKER_SH).toContain('readonly WORKER_FALLBACK_REPORT_MARKER="NO AGENT REPORT"');
   });
 
   it("carries a prevented boundary violation in the report, where the branch cannot", () => {

@@ -238,6 +238,17 @@ func (r *Reconciler) answerBlocked(ctx context.Context, entry planEntry, marker 
 		why = fmt.Sprintf("it is in the always-ask class %q of the standing orders", class)
 	}
 	r.record(tick, StageBlockedHeld, "%s answered %s: %q. It holds for a person: %s", name, answer.Status, question, why)
+	if r.blockedWorkHead(marker) == "" {
+		// Nothing to carry (tick w5u): a printed `--carry-work` here is a
+		// command the settle then refuses ("carries no commit beyond the base
+		// it was cut from"), so the release is spelled without it.
+		return r.refuse(holdReason, tick,
+			"%s answered %s: %s. The question holds for a person because %s. It committed nothing, and the "+
+				"tick is NOT closed; the run keeps working every tick that does not wait behind it, and the epic "+
+				"PR lists the question. Answer it on the tick, then release the attempt with `%s` and run the "+
+				"epic again",
+			name, answer.Status, question, why, r.settleCommand(tick, marker.Attempt))
+	}
 	return r.refuse(holdReason, tick,
 		"%s answered %s: %s. The question holds for a person because %s. Its work is on %s and is NOT merged, and "+
 			"the tick is NOT closed; the run keeps working every tick that does not wait behind it, and the epic PR "+

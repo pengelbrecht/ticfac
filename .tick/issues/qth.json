@@ -1,0 +1,13 @@
+{
+  "id": "qth",
+  "title": "Consider porting ticfac to TypeScript on Bun: one language from CLI to factory",
+  "gloss": "port ticfac to TS/Bun?",
+  "description": "Operator idea, 2026-10-07: someday, port ticfac's Go (CLI, reconciler, executors) to TypeScript on Bun, so the whole system is one language: the factory (cloudflare/) and the worker harness (harness/) are already TypeScript, and bun build --compile would give single-file binaries per platform with the harness inside (no node prerequisite, cf. 0ek). First step when picked up is a spike, not a port: measure the reconciler's size and test suite (internal/reconcile is the bulk and its 20-30 min suite is Go-specific), check Bun's Node compatibility for what the harness uses (node:sqlite / child processes / git), and decide incremental (shared TS core with the Workflow, CLI shims) vs. rewrite. Not before the factory has users' runs to protect; revisit after y9v.",
+  "status": "open",
+  "priority": 4,
+  "type": "epic",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-07T14:02:57.229634Z",
+  "updated_at": "2026-10-07T14:02:57.229634Z"
+}

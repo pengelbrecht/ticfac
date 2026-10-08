@@ -129,6 +129,13 @@ type Finding struct {
 	// could do. It rides beside the record, never in it — the pinned
 	// $defs.finding and the draft are unchanged — so it is not serialised.
 	TrackerEdit *TrackerEdit `json:"-"`
+	// ProtectedChange is the change to a protected file (a runners*.toml the
+	// worker boundary refuses) that IS the finding's fix, when its fix is
+	// that (a v2 finding's `protected_change`, epic-v5t's yck): the run
+	// applies it after its close-out, for the merger to review, rather than
+	// filing a tick no worker could do. Like TrackerEdit it rides beside the
+	// record; the run's draft carries it on (runstate.Finding).
+	ProtectedChange *ProtectedChange `json:"-"`
 }
 
 // findingFields is every REQUIRED field of the record, for the closed-key

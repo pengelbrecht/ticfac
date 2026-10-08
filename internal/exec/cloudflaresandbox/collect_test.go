@@ -9,6 +9,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/gittest"
+	"github.com/pengelbrecht/ticfac/internal/sandboximage"
 )
 
 // Collect from the durable layer: the landing branch and the report the
@@ -486,4 +487,104 @@ func handleWriteRef(t *testing.T, handle *subprocess.JobHandle) string {
 		t.Fatalf("decode the handle payload: %v", err)
 	}
 	return payload.WriteRef
+}
+
+// newCarriedCollectHarness is newCollectHarness for a CARRIED attempt: the
+// dispatch's base is the released attempt's head, which carries files — here
+// the released attempt's own report — beyond the repository's base.
+func newCarriedCollectHarness(t *testing.T, carried map[string]string) (*harness, *gitRepo, *subprocess.JobHandle, string) {
+	t.Helper()
+	h := newHarness(t)
+	repo := newGitRepo(t)
+	h.newExecutorWithRepo(t.TempDir(), repo.Clone)
+	released := repo.workerDir("released")
+	repo.Base = repo.commitOn(released, "tick/ex6/attempt-1/keh", "tick keh: worker report", carried)
+	mustGit(t, repo.Clone, "fetch", "--quiet", "origin")
+
+	spec := h.newSpec("keh")
+	spec.Source.BaseSHA = repo.Base
+	spec.Role = "implement-tick"
+	handle, err := h.ex.Start(spec)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	h.settled("keh", subprocess.StateSucceeded)
+	payload, err := local(handle)
+	if err != nil {
+		t.Fatalf("decode the handle payload: %v", err)
+	}
+	return h, repo, handle, payload.Branch
+}
+
+// legacyFallbackBlocked is the report an image built before the fallback
+// marker wrote when its harness died with nothing on the branch — the exact
+// shape ex6 2p3 carried from try 1 into tries 2 and 3.
+const legacyFallbackBlocked = "# keh\n\nThe harness exited 1 without writing RESULT-keh.md. This report was written by ticks-worker so\n" +
+	"the tick's outcome reaches the durable layer at all — an absent report is\nindistinguishable from a container that never ran.\n\n" +
+	"Nothing here is the agent's own account of the work; there is none.\n\n" +
+	"Nothing landed on `tick/ex6/attempt-1/keh`: no work commits, and nothing uncommitted\nto salvage. This tick is unimplemented.\n\n" +
+	"STATUS: BLOCKED — the harness exited 1, wrote no report, and nothing landed on tick/ex6/attempt-1/keh; re-dispatch this tick\n"
+
+// ex6 2p3 (2026-10-07), the incident's shape: try 3 was carried from try 1's
+// head, its harness failed too, and the only report on its branch was try 1's
+// fallback with the container's facts prepended again. The collect read the
+// fallback's BLOCKED as the worker's question, and at the top of the tier
+// ladder the run held the tick for a person over a harness fault. A fallback
+// asks nothing: the collect answers missing-result — the run's redispatch,
+// carrying whatever landed — and mints no question for the ladder.
+//
+// short: local throwaway git repositories; no network, no container.
+func TestCollectReadsAContainerFallbackAsAFaultNotAQuestion(t *testing.T) {
+	h, repo, handle, branch := newCarriedCollectHarness(t, map[string]string{resultFile("keh"): legacyFallbackBlocked})
+	worker := repo.workerDir("worker")
+	repo.commitOn(worker, branch, "tick keh: worker report", map[string]string{
+		resultFile("keh"): "<!-- ticks-worker: container facts -->\n\n_ticks-worker: harness `claude` exited 9._\n\n" +
+			legacyFallbackBlocked,
+	})
+
+	collected, err := h.ex.CollectDetail(handle)
+	if err != nil {
+		t.Fatalf("CollectDetail: %v", err)
+	}
+	if collected.Verdict != subprocess.VerdictMissingResult {
+		t.Errorf("verdict %q, want %q: the container's fallback is no answer from the worker",
+			collected.Verdict, subprocess.VerdictMissingResult)
+	}
+	if collected.Result.RoleResult != nil {
+		t.Errorf("the fallback minted a role result the blocked-answer ladder reads as a question: %+v",
+			collected.Result.RoleResult)
+	}
+	if collected.Result.FailureClass != subprocess.FailureRunnerError {
+		t.Errorf("failure class %q, want %q: a fault the run redispatches in-run",
+			collected.Result.FailureClass, subprocess.FailureRunnerError)
+	}
+	if !strings.Contains(collected.Message, "fallback") || !strings.Contains(collected.Message, "not a question") {
+		t.Errorf("the message does not say the report is the container's fallback: %s", collected.Message)
+	}
+}
+
+// The new image's fallback carries the marker and no status line at all; it
+// reads as the same fault, with the same sentence, never as an agent's
+// unreadable answer.
+//
+// short: local throwaway git repositories; no network, no container.
+func TestCollectReadsAMarkedFallbackAsAFault(t *testing.T) {
+	h, repo, handle, branch := newCollectHarness(t)
+	worker := repo.workerDir("worker")
+	repo.commitOn(worker, branch, "tick keh: worker report", map[string]string{
+		"internal/keh.go": "package keh\n",
+		resultFile("keh"): "# keh\n\n> **" + sandboximage.WorkerFallbackReportMarker + ".** The harness exited 3 without " +
+			"writing RESULT-keh.md.\n\nThe harness exited 3 and 1 work commit(s) landed. There is no status line on purpose.\n",
+	})
+
+	collected, err := h.ex.CollectDetail(handle)
+	if err != nil {
+		t.Fatalf("CollectDetail: %v", err)
+	}
+	if collected.Verdict != subprocess.VerdictMissingResult {
+		t.Errorf("verdict %q, want %q", collected.Verdict, subprocess.VerdictMissingResult)
+	}
+	if !strings.Contains(collected.Message, "fallback") {
+		t.Errorf("the message reads the fallback as an agent's unreadable answer: %s", collected.Message)
+	}
 }
