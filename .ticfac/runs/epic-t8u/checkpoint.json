@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 158,
-  "state": "running",
-  "reason": "CI on the epic PR #264 is pending on the head that includes the close-out's own commits; the close-out of t8u is held",
-  "updated_at": "2026-10-08T05:41:56Z",
+  "sequence": 159,
+  "state": "publishing",
+  "reason": "closing j1h behind the integrated gate on f4d92372b4f3",
+  "updated_at": "2026-10-08T05:52:12Z",
   "ticks": [
     {
       "tick_id": "pqs",
