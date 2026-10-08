@@ -161,6 +161,18 @@ export type StatusCostLine = {
   basis?: string | null;
 };
 
+/**
+ * One claude-sub subscription's window use (tick b13): the label the pool
+ * leases under — never the token — and the fraction of each shared window the
+ * factory's proxy last saw spent. A window nobody has measured yet is null,
+ * never 0.
+ */
+export type StatusCostSubscription = {
+  label: string;
+  five_hour?: number | null;
+  seven_day?: number | null;
+};
+
 /** One feed event of the model's recent tail — the run's own last words. */
 export type StatusRecentEvent = {
   at: string;
@@ -281,6 +293,8 @@ export type StatusDoc = {
     attempts?: number;
     basis?: string | null;
     lines?: StatusCostLine[];
+    /** The leased claude-sub subscription's window use (tick b13). */
+    subscription?: StatusCostSubscription | null;
   } | null;
   /** The run's own last words: the tail of its feed, oldest first. */
   recent?: StatusRecentEvent[];

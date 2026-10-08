@@ -763,6 +763,11 @@ type CheckState struct {
 // local one); worker jobs record no cost of their own, and the basis says
 // so — a number that quietly claimed more than what was measured would be a
 // lie with a decimal point (hn6 rule 7).
+//
+// Since tick b13 it also carries the subscription window use of a run riding
+// the claude-sub rung: a run whose workers lease the operator's subscription
+// pays no wallet money at all, so its cost line is the SUBSCRIPTION's, and
+// this field is where that fact travels to every surface that renders cost.
 type Cost struct {
 	// RecordedUSD is the sum of the metered lines, and NULL when no line
 	// is metered (tick dm2): a 0 beside all-unmetered lines read as a
@@ -779,6 +784,26 @@ type Cost struct {
 	// does, because an unmetered line wearing a $0.00 is a fabricated spend
 	// (hn6 rule 7). Empty when nothing has been split yet.
 	Lines []CostLine `json:"lines"`
+
+	// Subscription is the claude-sub subscription a cloud run's jobs lease
+	// (tick b13), with the window use the factory's proxy last saw on the
+	// account's shared 5h and 7d windows — the windows the operator's own
+	// interactive use draws on, which is why a run on the subscription says
+	// how much of it is spent instead of a wallet number that is always
+	// $0.00. Null when the run leased nothing the factory's /api/claude-sub
+	// names — never a guess, and never a token: the label is the only
+	// identifier this carries.
+	Subscription *CostSubscription `json:"subscription"`
+}
+
+// CostSubscription is one claude-sub subscription's window use as the model
+// states it (tick b13): the label the pool leases under, and the fraction of
+// each window the factory's proxy last saw used — null per window until a
+// proxied answer has carried that window's utilization header.
+type CostSubscription struct {
+	Label    string   `json:"label"`
+	FiveHour *float64 `json:"five_hour"`
+	SevenDay *float64 `json:"seven_day"`
 }
 
 // CostLine is one source's share of the run's spend: the river, whether the

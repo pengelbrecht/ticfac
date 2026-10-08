@@ -112,6 +112,11 @@ func buildCost(src Sources, recs Records) Cost {
 			"usage recorded on decision records, and the host's Workers AI gateway number where it stated one; " +
 			"worker jobs record no cost",
 		Lines: []CostLine{},
+		// The leased subscription's window use (tick b13) rides as its caller
+		// stated it: the gathering has already reduced the factory's whole
+		// pool snapshot to the one subscription THIS run leases, and the model
+		// adds no opinion on which one that is.
+		Subscription: src.ClaudeSub,
 	}
 
 	lines := []CostLine{}
