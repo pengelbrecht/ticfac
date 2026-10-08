@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
@@ -965,6 +967,16 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 		}
 	}
 
+	// A resized pane is answered AT ONCE, not at the next interval tick
+	// (tick z7w): SIGWINCH wakes the loop, whose top re-reads the size and
+	// starts the frame over. Without it the pane showed the terminal's own
+	// reflow of the previous frame — a wrapped, smeared layout — for up to
+	// one interval, which is exactly the transient the Bombadil suite's
+	// always-properties sample.
+	resized := make(chan os.Signal, 1)
+	signal.Notify(resized, syscall.SIGWINCH)
+	defer signal.Stop(resized)
+
 	// The interrupted end: the one end a watch that is still subscribed to a
 	// live run can reach without the run's own word — the caller's context,
 	// or, since the keys, the person's own q or Ctrl-C on the dashboard.
@@ -1031,6 +1043,34 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 		return watchEndHolding(model, runID, stderr)
 	}
 	for {
+		// The pane's size, re-read every frame (tick z7w): a pane that resized
+		// between frames is a pane whose shape this frame must answer — the
+		// dashboard's layout promise is "fits the pane it is given", and a
+		// size read once at start drew every later frame for a pane that no
+		// longer existed: after a resize the header scrolled away and the
+		// needs-you line with it. A size that changed also reflowed whatever
+		// the pane held, so the cursor the redraw's arithmetic climbs from is
+		// not where the frame left it — the frame starts over from home,
+		// clear, and the alert above the block re-raises whole (its scrollback
+		// copy was reflowed too). Found by the Bombadil terminal suite (tui/),
+		// whose generated resizes broke the layout.
+		if w, h, ok := watchTerminalSize(stdout); ok && (w != width || h != height) {
+			width, height = w, h
+			fmt.Fprint(stdout, "\x1b[H\x1b[2J")
+			previous = 0
+			// The alert above the block keeps its episode: its scrollback
+			// copy is history the reflow reshaped, and re-raising it would
+			// spend the pane's rows on it — rows the frame's own needs-you
+			// lines need at the small sizes. The frame carries the hold; the
+			// scrollback copy stays as it was.
+			if ended {
+				// The standing view redraws only on keys, so a resize that
+				// cleared the pane must redraw the frozen frame itself — at the
+				// pane's new shape — or the dashboard the person is drilling
+				// into blanks until the next key.
+				draw(model)
+			}
+		}
 		// The standing view over an ended run: nothing below rebuilds, and
 		// the select waits on the keys alone — the frozen frame answers
 		// drill-in until q closes the watch.
@@ -1038,6 +1078,10 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 			select {
 			case <-ctx.Done():
 				return endNow()
+			case <-resized:
+				// The frozen frame answers the new shape at once too: the loop
+				// top re-reads the size, clears the pane and redraws it.
+				continue
 			case key, ok := <-keys:
 				if !ok {
 					// The keyboard is gone; an ended dashboard nobody can close
@@ -1151,6 +1195,11 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 			// finished run — the same contract the stream path holds.
 			return interrupted(model)
 		case <-time.After(interval):
+		case <-resized:
+			// A pane that changed shape gets the next frame at once: the
+			// loop top re-reads the size and starts over, so the pane never
+			// holds the terminal's reflow of the previous frame longer than
+			// it takes to redraw.
 		case key, ok := <-keys:
 			if !ok {
 				// The keyboard is gone (the reader ended); watch on without
