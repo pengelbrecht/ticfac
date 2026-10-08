@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 30,
-  "state": "integrating",
-  "reason": "integrating b13 attempt 5 into epic/ymf",
-  "updated_at": "2026-10-08T19:36:52Z",
+  "sequence": 31,
+  "state": "dispatching",
+  "reason": "dispatching b13 as attempt 6",
+  "updated_at": "2026-10-08T21:58:13Z",
   "ticks": [
     {
       "tick_id": "47j",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "b13",
-      "state": "reported",
+      "state": "ready",
       "attempt": 5
     },
     {
