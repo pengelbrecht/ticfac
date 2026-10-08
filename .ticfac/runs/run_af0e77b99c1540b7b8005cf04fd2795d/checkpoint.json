@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 56,
-  "state": "collecting",
-  "reason": "collecting lrd attempt 10",
-  "updated_at": "2026-10-08T04:40:21Z",
+  "sequence": 57,
+  "state": "integrating",
+  "reason": "integrating lrd attempt 10 into epic/ex6",
+  "updated_at": "2026-10-08T04:40:26Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -38,7 +38,7 @@
     },
     {
       "tick_id": "lrd",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 10
     },
     {
