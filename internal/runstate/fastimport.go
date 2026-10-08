@@ -50,6 +50,19 @@ import (
 // the step's tip — which is also what keeps an unpushed chain's objects
 // reachable for the flush's retries.
 //
+// # The objects fast-import writes
+//
+// A fast-import run writes its objects as a PACK, not as loose files, so a
+// store that flushes often leaves several small packs in the run's checkout
+// where the per-record path left loose objects. That is not a new shape for
+// this repository: every push already lands on origin as a pack, and every
+// fetch brings one back, so a checkout that runs a whole epic already holds
+// dozens. gitbin.NoAutoMaintenance — which every git this store runs carries —
+// deliberately defers repacking to the operator's next fetch or commit
+// (tick mel's reasoning), and `git count-objects` stays the same order it
+// was: a few hundred small packs over a whole run, not thousands of loose
+// objects.
+//
 // # Failure
 //
 // Any failure of the stream — a git without fast-import, a malformed
