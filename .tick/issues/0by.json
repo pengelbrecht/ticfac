@@ -1,0 +1,13 @@
+{
+  "id": "0by",
+  "title": "restart evidence tests demand strictly-after on second-granular stamps",
+  "description": "Repeat of the fifth attempt's finding, unchanged. Two tests in internal/reconcile/restart_test.go assert the backing evidence's started_at is strictly after the dead incarnation's finished_at, but both stamps are RFC3339 at second granularity, so when the resumed gate starts in the same second the first one finished, late.After(dead) is false and the test fails on a true reuse: the failure is a flake of the clock, not of the code under test. It only runs in the full suite (shorttest.EndToEnd skips it in the gate), so it can turn a main or epic-branch CI shard red spuriously, and a red main blocks every deploy behind it. The fifth attempt reproduced it once in three at this branch's base; I could not reproduce it in three runs here (23s), which is what a one-in-three same-second race looks like from the other side — the shape is in the code either way, at both sites below.\nevidence: internal/reconcile/restart_test.go:350 (TestAResumedRunDoesNotCloseATickOnGateEvidenceFromAChangedCommand) and :488 (…FromAChangedProfile) — both `if !late.After(dead)` over RFC3339 second-granular stamps\n\nticfac run run_91f2952af63f42f08a0ad243b4488842 filed this backlog tick from the finding 907c8f2cb12f8aa0e39fea26bf331f54f7de94ef3364fa46ea8e2d653bface14 (reported by run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/attempt-6) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/907c8f2cb12f8aa0e39fea26bf331f54f7de94ef3364fa46ea8e2d653bface14.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/attempt-6",
+  "created_by": "ticfac run run_91f2952af63f42f08a0ad243b4488842",
+  "created_at": "2026-10-08T23:13:54Z",
+  "updated_at": "2026-10-08T23:13:54Z"
+}
