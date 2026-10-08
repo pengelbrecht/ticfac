@@ -3286,3 +3286,4 @@
 {"ts":"2026-10-08T13:18:50.417967859Z","tick":"47j","action":"start","actor":"cloud:orchestrator","epic":"ymf","data":{"title":"Readable feed sentences for the dashboard's latest section"}}
 {"ts":"2026-10-08T13:19:16.134753618Z","tick":"93n","action":"start","actor":"cloud:orchestrator","epic":"ymf","data":{"title":"Live activity excerpt per running worker, local and cloud"}}
 {"ts":"2026-10-08T13:58:59.174612185Z","tick":"b13","action":"start","actor":"cloud:orchestrator","epic":"ymf","data":{"title":"Cost line: only when metered; a claude-sub run shows subscription window use"}}
+{"ts":"2026-10-08T13:59:16.622326736Z","tick":"lck","action":"start","actor":"cloud:orchestrator","epic":"ymf","data":{"title":"Status model: plain-language tick status, epic phase track, needs-you, ticks grouped by state"}}
