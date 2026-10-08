@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 68,
-  "state": "dispatching",
-  "reason": "dispatching eno as attempt 12",
-  "updated_at": "2026-10-08T05:57:04Z",
+  "sequence": 69,
+  "state": "running",
+  "reason": "eno is running as attempt 12",
+  "updated_at": "2026-10-08T05:57:11Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -34,7 +34,8 @@
     },
     {
       "tick_id": "eno",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 12
     },
     {
       "tick_id": "lrd",
