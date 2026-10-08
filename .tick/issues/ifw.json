@@ -2,6 +2,7 @@
   "id": "ifw",
   "title": "Next epic run: run --cloud --config is silently dropped when it attaches to a live run",
   "description": "runCloudCommand returns from the `liveness.Alive` branch before it ever reaches submitCloudRun, so `ticfac run \u003cepic\u003e --cloud --config claude` against an epic that already has a live cloud run attaches to that run — started on whatever config it was submitted with — and the flag has no effect and no mention. The prose on that branch says only 'cloud run \u003cid\u003e is alive (\u003creason\u003e) — attaching'. Before this epic the same command was refused with exit 2 and a sentence explaining what a submitted run selects by, so the flag went from loud-and-useless to quiet-and-useless on this one path. The start path does say '(run config: claude)'; the attach path could say the flag does not apply to a run already running.\nevidence: internal/cli/run_cloud.go:192-196 (the `case liveness.Alive` branch and its return) against :214 (the submit that carries *fl.config) and :201-211 (the start path's own prose)\n\nticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9 filed this backlog tick from the finding 0e49c355114b86d2341c62213a7a38713e376c1d744cb5deb8a97fd2f66e777d (reported by run-run_03aa9c8a71574ab3891b47df3dbd5ec9/tick-two/attempt-8) instead of absorbing it: its remedy is a live run — running an epic, or the product on a real substrate — which no worker inside an epic can do. Satisfy it with the next epic run made the way it names, record that run's id and outcome here, and close this tick. The decision record is .ticfac/runs/run_03aa9c8a71574ab3891b47df3dbd5ec9/absorptions/0e49c355114b86d2341c62213a7a38713e376c1d744cb5deb8a97fd2f66e777d.json on the run branch.",
+  "notes": "2026-10-08 12:07 - ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9: created by absorbing finding 0e49c355114b86d2341c62213a7a38713e376c1d744cb5deb8a97fd2f66e777d — a backlog tick outside the epic, labelled live-run: its remedy is a live run of an epic, for the next epic run to satisfy. The decision record is .ticfac/runs/run_03aa9c8a71574ab3891b47df3dbd5ec9/absorptions/0e49c355114b86d2341c62213a7a38713e376c1d744cb5deb8a97fd2f66e777d.json on epic/bo9, and it says: the finding's remedy is a live run — running an epic, or the product on a real substrate — which no worker inside this epic can do: it claims no done item of this epic, and it gates none of this epic's done items here, because absorbing it would dispatch a worker at work only the next epic run can do. It is a backlog tick outside the epic, labelled live-run, for the next epic run to satisfy",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -12,5 +13,5 @@
   "discovered_from": "run-run_03aa9c8a71574ab3891b47df3dbd5ec9/tick-two/attempt-8",
   "created_by": "ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9",
   "created_at": "2026-10-08T12:07:27Z",
-  "updated_at": "2026-10-08T12:07:27Z"
+  "updated_at": "2026-10-08T12:07:33.565749057Z"
 }
