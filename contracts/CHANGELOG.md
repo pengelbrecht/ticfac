@@ -75,6 +75,49 @@ moves to 2.4.0; the Go model and builder gained the fields in the same
 commit, and renderers that read fields by name (the phone page's snapshot
 parser) are unchanged and correct — the watch redesign's rendering ticks
 (ugm) and the phone page's shared model are what the fields exist for.
+## 2.4.1
+
+PATCH: `status-model.json`'s `why` no longer claims something its own golden
+does not do (ticfac tick b13). 2.4.0 wove `cost.subscription` into the sentence
+that enumerates the dashboard fields and then said "The `dashboard` golden
+carries every one of them populated — it is the fixture the wave-3 renderers
+and the phone page test against" — and the golden's `cost.subscription` is
+null, because the golden is a LOCAL run and a local run's jobs lease nothing
+from the factory's claude-sub pool: the local gathering reads no pool at all.
+So the one fixture the renderers test against stated nothing about the one
+field a claude-sub run's cost line is, and the contract's own description was
+the thing saying otherwise. Words only — no field changed shape, no schema
+moved, no golden changed — so an unchanged consumer is still correct. The
+sentence now states the null and its host, and names where the populated shape
+is bound: the Go suite derives it FROM the golden (the same document with the
+subscription set the way a leasing run's model carries it) and holds it to the
+guarantees the golden gives every field it populates — schema admission,
+required-in-cost, the Model's round trip —
+`TestTheContractBindsTheLeasedSubscription` in `internal/statusmodel`, new in
+the same commit. Consumers: the cloudflare pin bumps in the same commit.
+
+## 2.4.0
+
+MINOR: `status-model.json`'s cost object gains `subscription` — the claude-sub
+subscription a cloud run's jobs lease (ticfac tick b13), with the window use
+the factory's proxy last saw on the account's shared 5-hour and 7-day windows.
+A run on the subscription pays no wallet money, so its cost line is the
+SUBSCRIPTION's: which label it holds (`MAX1 · 34% of 5h · 8% of 7d` on the
+dashboard) and how much of the windows the operator's own interactive use
+shares. Required-and-null like every field that can be genuinely absent: null
+is a run that leased nothing the factory's /api/claude-sub names — no lease,
+no pool, no factory configured — never a guess, and the label is the only
+identifier the object carries: the route is built so the whole answer is safe
+to paste into a log, and nothing here changes that. Additive within the model's
+own `schema_version` 1, the way the hn6 dashboard fields were; consumers that
+read fields by name (the phone page's snapshot parser) are unchanged and
+correct.
+
+No other fixture changes. Consumers: `cloudflare/contracts.pin.json` moves to
+2.4.0; the Go Model and its builder gained the field in the same commit
+(`internal/statusmodel`, `Sources.ClaudeSub`), and the factory read that fills
+it (`internal/factory/claudesub.go`, gathered in `internal/cli`) is new in the
+same commit.
 
 ## 2.3.0
 

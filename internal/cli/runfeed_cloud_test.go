@@ -243,6 +243,10 @@ func TestWatchEndsOnACloudRunsOwnLastWord(t *testing.T) {
 				"run_id": "run_62c289d1478fae4b1d5c7a2e3f0a9b8c", "state": "completed", "text": text,
 				"bytes": len(text), "total_bytes": len(text),
 			}
+		case "/api/claude-sub":
+			// The pool route the status model's cost gathering reads (tick
+			// b13): this fake factory carries none, the optional state.
+			return 404, map[string]any{"error": "not_found"}
 		}
 		t.Fatalf("unexpected factory request %s", request.Path)
 		return 500, nil

@@ -13,10 +13,10 @@ package cli
 // flight/working/stall warning; red = failed/rejected/held/needs-you (the
 // needs-you line the most prominent thing on screen when non-empty:
 // red+bold); cyan = tick ids and key hints; dim/grey = secondary text
-// (closed groups, provenance, the feed tail's timestamps, "not metered");
-// bold for section headers. At most those four hues, no background fills,
-// and NO_COLOR and TERM=dumb render plain text with an identical layout —
-// colour never changes widths.
+// (closed groups, provenance, the feed tail's timestamps); bold for section
+// headers. At most those four hues, no background fills, and NO_COLOR and
+// TERM=dumb render plain text with an identical layout — colour never
+// changes widths.
 
 import (
 	"strings"
@@ -206,10 +206,17 @@ func TestWatchColourGridPerState(t *testing.T) {
 	assertGridAttr(t, gridCells(grid, "t2#2"), "t2#2", "cyan", false, false)
 
 	// The health verdict carries its state's hue, and so does a passed CI
-	// check; "not metered" is secondary text, dim.
+	// check; the cost line is primary text — it states what is metered, and
+	// since tick b13 it no longer carries a dim "not metered" recital at all.
 	assertGridAttr(t, gridCells(grid, "● healthy"), "● healthy", "green", false, false)
 	assertGridAttr(t, gridCellsInRow(grid, "CI #98", "✓"), "✓", "green", false, false)
-	assertGridAttr(t, gridCells(grid, "not metered"), "not metered", "", true, false)
+	for _, row := range grid {
+		for _, cell := range row {
+			if strings.Contains(cell.text, "metered") {
+				t.Errorf("the dashboard still renders a %q cost cell (tick b13: nothing when there is no metered cost)", cell.text)
+			}
+		}
+	}
 
 	// A failed/held row is red: the pipeline stage the tick is stuck at,
 	// refused.

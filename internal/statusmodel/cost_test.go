@@ -597,3 +597,44 @@ func recoveredLine(model Model, source string) *CostLine {
 	}
 	return nil
 }
+
+// TestCostCarriesTheLeasedSubscription (tick b13): the claude-sub window use
+// a gathering states rides through to the model's cost, and a gathering that
+// states none states null — required-and-null, never omitted and never
+// guessed. The subscription is data, not derivation: the model adds no
+// opinion on which label the run leased or what the windows look like.
+func TestCostCarriesTheLeasedSubscription(t *testing.T) {
+	t.Parallel()
+
+	// No gathering answer: null in the model, null in the JSON.
+	src := runningEpicSources()
+	src.ClaudeSub = nil
+	model := Build(src)
+	if model.Cost.Subscription != nil {
+		t.Errorf("the cost carries a subscription %+v, want null when the gathering states none", model.Cost.Subscription)
+	}
+	raw, err := json.Marshal(model)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	cost := doc["cost"].(map[string]any)
+	if v, ok := cost["subscription"]; !ok || v != nil {
+		t.Errorf("the JSON's cost.subscription is %v (%T), want an explicit null", v, v)
+	}
+	assertValidatesAgainstTheContract(t, model)
+
+	// The gathering's answer rides through whole: label, both windows.
+	fiveHour, sevenDay := 0.34, 0.08
+	src.ClaudeSub = &CostSubscription{Label: "MAX1", FiveHour: &fiveHour, SevenDay: &sevenDay}
+	model = Build(src)
+	if model.Cost.Subscription == nil || model.Cost.Subscription.Label != "MAX1" ||
+		model.Cost.Subscription.FiveHour == nil || *model.Cost.Subscription.FiveHour != fiveHour ||
+		model.Cost.Subscription.SevenDay == nil || *model.Cost.Subscription.SevenDay != sevenDay {
+		t.Errorf("the leased subscription did not ride through: %+v", model.Cost.Subscription)
+	}
+	assertValidatesAgainstTheContract(t, model)
+}

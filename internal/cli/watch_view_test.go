@@ -640,12 +640,14 @@ func TestDashboardShortPaneKeepsHoldBlocksWhole(t *testing.T) {
 	}
 }
 
-// TestDashboardCallsUnjoinedAttemptsNotMeteredBesideTheNumber (tick kf4):
-// a partially joined river renders as what it is — the measured number
-// for the attempts that joined, and "not metered" for the ones the join
-// never reached — both segments on the one cost line, so the dashboard
-// never reads a measured $X as the whole river's spend.
-func TestDashboardCallsUnjoinedAttemptsNotMeteredBesideTheNumber(t *testing.T) {
+// TestDashboardRendersTheMeteredRiverOnly (was tick kf4's split render, now
+// tick b13's): the dashboard's cost line shows what is METERED and nothing
+// else. A partially joined river renders its measured number alone — its
+// unmeasured remainder is silence on the glance, never a fabricated number
+// beside it — and the full split, with the coverage bases that say the
+// number covers 2 of 32 attempts, stays in the model's own lines where
+// `status --json` and the drill-in surfaces read it.
+func TestDashboardRendersTheMeteredRiverOnly(t *testing.T) {
 	t.Parallel()
 	m := dashboardFixture()
 	m.Cost.Lines = []statusmodel.CostLine{
@@ -655,47 +657,115 @@ func TestDashboardCallsUnjoinedAttemptsNotMeteredBesideTheNumber(t *testing.T) {
 			Basis: "not metered: dispatched without the gateway metering join, their calls never reached the gateway logs"},
 	}
 	joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
-	if !strings.Contains(joined, "Workers AI $0.12") || !strings.Contains(joined, "Workers AI not metered") {
-		t.Errorf("a partially joined river does not render its number and its unmeasured remainder:\n%s", joined)
+	if !strings.Contains(joined, "Workers AI $0.12") {
+		t.Errorf("a partially joined river does not render its measured number:\n%s", joined)
 	}
-	if strings.Count(joined, "Workers AI") != 2 {
-		t.Errorf("the split river renders %d Workers AI segments, want its two lines:\n%s", strings.Count(joined, "Workers AI"), joined)
+	if strings.Contains(joined, "not metered") {
+		t.Errorf("the cost line recites what nobody measured (tick b13: nothing when there is no metered cost):\n%s", joined)
+	}
+	if strings.Contains(joined, "Workers AI $") && strings.Contains(joined, "Workers AI not") {
+		t.Errorf("the unmeasured remainder wears a number:\n%s", joined)
+	}
+	// The model still carries the split: the number claims only its 2 joined
+	// attempts, and the 30 unjoined ones keep their honest line.
+	if len(m.Cost.Lines) != 2 || m.Cost.Lines[1].Metered || m.Cost.Lines[1].USD != nil {
+		t.Errorf("the model's own split was lost: %+v", m.Cost.Lines)
 	}
 }
 
-// TestDashboardNeverPrintsZeroForUnmetered: honest cost (hn6 rule 7). A
-// metered line prints its measured number; an unmetered line says "not
-// metered" — an unmetered line wearing a $0.00 is a fabricated spend. A
-// metered zero is a measured zero and prints as one. No lines at all and
-// the whole cost says so.
-func TestDashboardNeverPrintsZeroForUnmetered(t *testing.T) {
+// TestDashboardCostLineRendersTheSubscription (tick b13): on a run whose
+// jobs lease the claude-sub subscription, the cost line shows the leased
+// label and its 5h/7d window utilization — the shape the design names,
+// "MAX1 · 34% of 5h" — beside any wallet money the run did spend, and
+// instead of a $0.00 when it spent none. A window the factory's proxy has
+// not answered for is absent, never 0%, and a run with no lease has no
+// subscription segment at all.
+func TestDashboardCostLineRendersTheSubscription(t *testing.T) {
 	t.Parallel()
+	name := "claude"
+	m := statusmodel.Model{RunConfig: &name}
+
+	// The subscription alone: the whole line is the label and its windows.
+	m.Cost.Subscription = &statusmodel.CostSubscription{
+		Label: "MAX1", FiveHour: ptr(0.34), SevenDay: ptr(0.08)}
+	if got := dashCost(m, plainStyles()); got != "config claude · MAX1 · 34% of 5h · 8% of 7d" {
+		t.Errorf("a claude-sub run's cost line is %q, want the leased label and its window use", got)
+	}
+
+	// A window not yet measured is absent, never a measured zero.
+	m.Cost.Subscription = &statusmodel.CostSubscription{Label: "MAX1", FiveHour: ptr(0.34)}
+	if got := dashCost(m, plainStyles()); got != "config claude · MAX1 · 34% of 5h" {
+		t.Errorf("the 7d window without a measurement is %q, want only the 5h window", got)
+	}
+	m.Cost.Subscription = &statusmodel.CostSubscription{Label: "MAX1"}
+	if got := dashCost(m, plainStyles()); got != "config claude · MAX1" {
+		t.Errorf("a leased label with no utilization yet renders %q, want the label alone", got)
+	}
+
+	// Fractional percents round to the whole percent the number's own noise
+	// sits inside.
+	m.Cost.Subscription = &statusmodel.CostSubscription{Label: "MAX1", FiveHour: ptr(0.343), SevenDay: ptr(0.004)}
+	if got := dashCost(m, plainStyles()); got != "config claude · MAX1 · 34% of 5h · 0% of 7d" {
+		t.Errorf("fractional utilization rounds oddly: %q", got)
+	}
+
+	// Wallet money beside the subscription: the money first, the windows
+	// after — the spend, then what the subscription it rode looks like.
+	m.Cost.Lines = []statusmodel.CostLine{{Source: statusmodel.CostSourceWorkersAI,
+		Metered: true, USD: ptr(0.02), Attempts: 2, Basis: "AI Gateway logs"}}
+	m.Cost.Subscription = &statusmodel.CostSubscription{Label: "MAX1", FiveHour: ptr(0.34), SevenDay: ptr(0.08)}
+	if got := dashCost(m, plainStyles()); got != "config claude · cost Workers AI $0.02 · MAX1 · 34% of 5h · 8% of 7d" {
+		t.Errorf("the cost line with money and a subscription is %q", got)
+	}
+
+	// No lease, no segment: a GLM run never grows one.
+	m.Cost.Subscription = nil
+	if got := dashCost(m, plainStyles()); got != "config claude · cost Workers AI $0.02" {
+		t.Errorf("a run with no lease renders %q, want money only", got)
+	}
+}
+
+// TestDashboardCostLineRendersMeteredOnly (was TestDashboardNeverPrints-
+// ZeroForUnmetered, now tick b13's three cases): the cost line shows the
+// metered cost when there is one, the leased subscription's window use on a
+// claude-sub run, and NOTHING when there is neither — no fabricated $0.00
+// for unmetered spend (hn6 rule 7), no "not metered" recital, and no
+// config name floating on an otherwise empty line.
+func TestDashboardCostLineRendersMeteredOnly(t *testing.T) {
+	t.Parallel()
+	name := "claude"
 	m := dashboardFixture()
+	m.RunConfig = &name
 	joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
-	for _, want := range []string{"Workers AI $0.41", "claude not metered"} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("the cost line does not carry %q:\n%s", want, joined)
-		}
+	if !strings.Contains(joined, "config claude · cost Workers AI $0.41") {
+		t.Errorf("a metered cost does not read beside the config that spent it:\n%s", joined)
+	}
+	if strings.Contains(joined, "claude not metered") {
+		t.Errorf("an unmetered river is recited on the glance line:\n%s", joined)
 	}
 	if strings.Contains(joined, "$0.00") {
 		t.Errorf("an unmetered cost wears a fabricated $0.00:\n%s", joined)
 	}
 
-	// No lines at all: the cost is honestly unmetered, not silently zero.
+	// No lines at all: nothing renders, not even the config on its own.
 	m.Cost.Lines = nil
-	joined = strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
-	if !strings.Contains(joined, "cost not metered") {
-		t.Errorf("a run with no cost lines does not say the cost is not metered:\n%s", joined)
+	m.Cost.Subscription = nil
+	if got := dashCost(m, plainStyles()); got != "" {
+		t.Errorf("a run with no metered cost renders %q, want nothing at all (tick b13)", got)
 	}
 
-	// A metered zero is a measured zero: it keeps its number.
+	// A metered zero is silence: the gateway measured nothing, and a $0.00
+	// beside nothing else is the number the tick replaces. The measured zero
+	// stays in the model's own line, with its basis.
 	m.Cost.Lines = []statusmodel.CostLine{{
 		Source: statusmodel.CostSourceWorkersAI, Metered: true, USD: ptr(0.0), Attempts: 4,
 		Basis: "gateway usage for 4 dispatches",
 	}}
-	joined = strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
-	if !strings.Contains(joined, "Workers AI $0.00") {
-		t.Errorf("a metered zero does not print its measured number:\n%s", joined)
+	if got := dashCost(m, plainStyles()); got != "" {
+		t.Errorf("a metered zero renders %q, want nothing (tick b13: a $0.00 is no cost)", got)
+	}
+	if m.Cost.Lines[0].USD == nil || *m.Cost.Lines[0].USD != 0.0 || !m.Cost.Lines[0].Metered {
+		t.Errorf("the model's measured zero was lost: %+v", m.Cost.Lines[0])
 	}
 }
 
@@ -1579,10 +1649,15 @@ func statusModelGoldens(t *testing.T) map[string]statusmodel.Model {
 // TestTheWatchCostLineNamesTheRunConfig (tick tda): the run's spend is read
 // beside the config that spent it, so two epics on two configs compare on
 // the one line that answers what each cost. A run that selected no config
-// (a repository declaring none) says nothing about one.
+// (a repository declaring none) says nothing about one — and, since tick
+// b13, a run with nothing to say about cost renders no line at all, config
+// included.
 func TestTheWatchCostLineNamesTheRunConfig(t *testing.T) {
 	name := "claude"
-	m := statusmodel.Model{RunConfig: &name}
+	m := statusmodel.Model{RunConfig: &name, Cost: statusmodel.Cost{
+		Lines: []statusmodel.CostLine{{Source: statusmodel.CostSourceWorkersAI,
+			Metered: true, USD: ptr(0.41), Attempts: 4, Basis: "gateway usage for 4 dispatches"}},
+	}}
 	if got := dashCost(m, plainStyles()); !strings.HasPrefix(got, "config claude · cost") {
 		t.Errorf("the cost line on a claude run is %q, want it to name the config first", got)
 	}

@@ -11,7 +11,7 @@
 WORKERS                                       ACTIVITY (10m)  LAST
 46x  glm-5.3 · herdr · herdr pane tick-46x-a6 ▁▃▅█▇▅▃▁▂▅      ran go test ./internal/reconcile (1m ago)  nudged ×1
 
-CI #98 go ◐ 6m · ts ✓                                         config claude · cost Workers AI $0.41 · claude not metered
+CI #98 go ◐ 6m · ts ✓                                                              config claude · cost Workers AI $0.41
 ─ recent ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 18:58:02 46x#2        dispatched, writing code
 19:04:12 run          closing out is waiting on CI                                              [e] events  [enter] tick

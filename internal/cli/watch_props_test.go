@@ -18,10 +18,11 @@ package cli
 //	    shown hold is whole — every word of its command — and no frame with a
 //	    hold says "needs you: nothing"; a run with no hold says exactly that
 //	    (at height 0 or ≥ 8, where the header always survives the height fit).
-//	P3  never $0.00 for unmetered spend: when the cost says "not metered"
-//	    anywhere, no unmetered river's label wears a number in the frame
-//	    (a metered line's measured number prints, zero included — tick 1tm),
-//	    and the cost line reads whole wherever the pane seats it.
+//	P3  the cost line shows only what is metered (tick b13): no "$0.00"
+//	    anywhere in the frame — a fabricated zero is the lie hn6 rule 7
+//	    ends, and a measured zero is silence on the glance line —, no
+//	    "not metered" recital, no unmetered river's label wearing a number,
+//	    and the line reads whole wherever the pane seats it.
 //	P4  the frame fits the pane: no line wider than the pane, no frame
 //	    taller than it.
 //
@@ -338,10 +339,12 @@ func genModel(r *rand.Rand) statusmodel.Model {
 	// unjoined line; the unsynced shape makes its model a cloud one, the
 	// host that record belongs on. The decisions river's measured zero is
 	// the shape a decision whose usage states a price of zero asks the
-	// RENDERER to print — pinned by TestDashboardNeverPrintsZeroForUnmetered
-	// — and P3 must tolerate it beside unmetered lines while refusing a
-	// number on any unmetered label: the old whole-frame "$0.00" scan
-	// could not tell the two apart (tick 1tm).
+	// RENDERER to keep silent about on the glance line — pinned by
+	// TestDashboardCostLineRendersMeteredOnly since tick b13 (a measured
+	// zero is no cost, so the line renders nothing) — while P3 refuses a
+	// number on any unmetered label and refuses "$0.00" anywhere: the old
+	// whole-frame scan could not tell a printed zero from a fabricated one,
+	// and the new renderer states neither.
 	rivers := []string{
 		statusmodel.CostSourceDecisions, statusmodel.CostSourceWorkersAI,
 		statusmodel.CostSourceClaude, statusmodel.CostSourcePiLocal,
@@ -496,6 +499,14 @@ func genModel(r *rand.Rand) statusmodel.Model {
 			Basis:    "usage recorded on decision records",
 			Lines:    lines,
 		},
+	}
+	if r.IntN(3) == 0 {
+		// A run whose jobs lease the subscription (tick b13): the segment the
+		// cost line draws beside its metered money, with both windows the
+		// proxy answered for — so P3's whole-line check sees the longest
+		// shape the line can carry.
+		m.Cost.Subscription = &statusmodel.CostSubscription{
+			Label: "MAX1", FiveHour: ptr(0.34), SevenDay: ptr(0.08)}
 	}
 	if r.IntN(2) == 0 {
 		m.Remaining = &statusmodel.Remaining{
@@ -906,33 +917,37 @@ func propLineFrom(frame []string, want string, start int) int {
 	return -1
 }
 
-// propCostHonest is P3: no unmetered river wears a number — when the cost
-// says "not metered" anywhere, every UNMETERED line's label in the frame
-// is bare of a price, while a METERED line prints its measured number,
-// zero included (tick 1tm: a decision whose records stated a measured zero
-// is honest beside unmetered lines, and the old whole-frame "$0.00" scan
-// could not tell the two apart) — and the cost line reads whole wherever
-// the pane seats it, on both axes: width that fits the line, and a height
-// that keeps the frame whole (`unbounded` is the frame's length at height
-// 0; the height fold compresses the middle, and the cost line stands in
-// it, so a pane that drops the line cannot be asked to quote it). The
+// propCostHonest is P3: the cost line shows only what is METERED (tick b13,
+// replacing the hn6-rule-7 recital it grew from) — no "$0.00" anywhere in
+// the frame (a fabricated zero is the lie rule 7 ends; a measured zero is
+// silence on the glance line since b13), no "not metered" anywhere, no
+// unmetered river's label wearing a number — and the cost line reads whole
+// wherever the pane seats it, on both axes: width that fits the line, and a
+// height that keeps the frame whole (`unbounded` is the frame's length at
+// height 0; the height fold compresses the middle, and the cost line stands
+// in it, so a pane that drops the line cannot be asked to quote it). The
 // generator draws DISTINCT rivers, so one label names one line and the
-// per-label scan is unambiguous. The oracle is the renderer's own cost
-// line for the model, so the property pins the line the model asks for,
-// not a paraphrase of it.
+// per-label scan is unambiguous. The oracle is the renderer's own cost line
+// for the model, so the property pins the line the model asks for, not a
+// paraphrase of it.
 func propCostHonest(frame []string, _ func() []string, m, _ statusmodel.Model, width, height, unbounded int) error {
-	oracle := dashCost(m, plainStyles())
-	if !strings.Contains(oracle, "not metered") {
-		return nil
-	}
 	joined := strings.Join(frame, "\n")
+	for _, bad := range []string{"$0.00", "not metered"} {
+		if strings.Contains(joined, bad) {
+			return fmt.Errorf("the frame states %s for spend nothing measured (tick b13):\n%s", bad, joined)
+		}
+	}
 	for _, line := range m.Cost.Lines {
 		if line.Metered {
-			continue // a measured number prints — zero included
+			continue // a measured number prints — a positive one, per the tick
 		}
 		if strings.Contains(joined, dashCostLabel(line.Source)+" $") {
 			return fmt.Errorf("the unmetered %s line wears a fabricated number:\n%s", line.Source, joined)
 		}
+	}
+	oracle := dashCost(m, plainStyles())
+	if oracle == "" {
+		return nil // nothing is metered: the cost says nothing at all
 	}
 	if width <= 0 || width >= ansi.StringWidth(oracle) {
 		if height > 0 && height < unbounded {
@@ -978,9 +993,9 @@ var dashProperties = []dashProperty{
 		breakFrame: breakDroppedAttention,
 	},
 	{
-		name:       "never $0.00 for unmetered spend",
+		name:       "the cost line shows only what is metered",
 		check:      propCostHonest,
-		breakFrame: breakUnmeteredAsZero,
+		breakFrame: breakFabricatesUnmeteredZero,
 	},
 	{
 		name:       "the frame fits the pane",
@@ -1041,12 +1056,24 @@ func breakDroppedAttention(frame []string, m statusmodel.Model) []string {
 	return out
 }
 
-// breakUnmeteredAsZero replaces "not metered" with "$0.00" — an unmetered
-// line wearing a fabricated number. P3's breaker.
-func breakUnmeteredAsZero(frame []string, _ statusmodel.Model) []string {
+// breakFabricatesUnmeteredZero appends a fabricated "claude $0.00" segment
+// to the cost line the frame carries (or states one where no cost line was
+// drawn at all) — spend nothing measured, wearing a number. P3's breaker.
+func breakFabricatesUnmeteredZero(frame []string, _ statusmodel.Model) []string {
 	out := make([]string, len(frame))
+	broke := false
 	for i, line := range frame {
-		out[i] = strings.ReplaceAll(line, "not metered", "$0.00")
+		out[i] = line
+		if broke {
+			continue
+		}
+		if strings.Contains(line, "cost ") || strings.Contains(line, "$0.41") {
+			out[i] = line + " · claude $0.00"
+			broke = true
+		}
+	}
+	if !broke && len(out) > 0 {
+		out[len(out)-1] += " · claude $0.00"
 	}
 	return out
 }
