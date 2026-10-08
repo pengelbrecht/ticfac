@@ -29,11 +29,12 @@ const EnvRunnerArgv = "TICFAC_RUNNER_ARGV"
 // every repository, so a table entry that spelled one would be right in
 // exactly one checkout.
 const (
-	promptPlaceholder       = "{{prompt}}"
-	gitCommonDirPlaceholder = "{{git_common_dir}}"
-	sessionPlaceholder      = "{{session}}"
-	harnessDirPlaceholder   = "{{harness_dir}}"
-	stateDirPlaceholder     = "{{state_dir}}"
+	promptPlaceholder        = "{{prompt}}"
+	gitCommonDirPlaceholder  = "{{git_common_dir}}"
+	sessionPlaceholder       = "{{session}}"
+	harnessDirPlaceholder    = "{{harness_dir}}"
+	harnessBundlePlaceholder = "{{harness_bundle}}"
+	stateDirPlaceholder      = "{{state_dir}}"
 )
 
 // runnerDef is one runner's entry: how to launch it headless, and the flag
@@ -124,16 +125,14 @@ var runners = map[string]runnerDef{
 	// `pi` IS the pi-durable Node harness since epic 43y (tick hpk): the
 	// operator's decision — all-in, one harness, no flag — so a local run's
 	// pi-kind workers run on the durable host and there is no parallel local
-	// pi-CLI path. What the argv names is the harness package's own entry
-	// (harness/src/local/main.ts), run from source under plain `node` through
-	// the register shim (harness/runtime/register.mjs) — the harness is
-	// package source in the repository this run works on, and the runner
-	// table is the one place a future packaging change (an embedded bundle,
-	// say) would land.
-	//
-	// `--experimental-strip-types` because type stripping is flagged on the
-	// Node this tree's CI pins (22) and default only from 23.6; passing it
-	// explicitly is a no-op where it is already default.
+	// pi-CLI path. What the argv names, by default, is the embedded,
+	// esbuild-bundled entry (tick 0ek): internal/exec/subprocess/
+	// harnessbundle.go stages harness/src/local/main.ts and everything it
+	// imports — pi-durable, pi-ai and chord inlined — as one file this binary
+	// carries, so a local pi-durable run needs no checkout beside it and no
+	// npm install, only Node. $TICFAC_HARNESS_DIR (executor.go's
+	// harnessSourceDir) selects piSourceArgv below instead, for harness
+	// development — see resolveRunner.
 	//
 	// `--config` names the worker.json the executor writes beside the attempt
 	// record — storage, worktree, branch, report, steer socket, the wall
@@ -156,15 +155,32 @@ var runners = map[string]runnerDef{
 	// the pi CLI, and the table is the one place a future runner belongs.
 	"pi": {
 		Argv: []string{
-			"node", "--experimental-strip-types",
-			"--import", harnessDirPlaceholder + "/runtime/register.mjs",
-			harnessDirPlaceholder + "/src/local/main.ts",
+			"node",
+			harnessBundlePlaceholder,
 			"--config", stateDirPlaceholder + "/worker.json",
 			"--message", promptPlaceholder,
 		},
 		ModelFlag:     "--model",
 		DurableResume: true,
 	},
+}
+
+// piSourceArgv is "pi"'s pre-bundle shape, selected by resolveRunner when
+// $TICFAC_HARNESS_DIR names a harness checkout (launch.HarnessDir) — harness
+// development only. The harness package's own entry
+// (harness/src/local/main.ts) runs from TypeScript source under plain `node`
+// through the register shim (harness/runtime/register.mjs), rather than the
+// embedded bundle the table entry above points at.
+//
+// `--experimental-strip-types` because type stripping is flagged on the
+// Node this tree's CI pins (22) and default only from 23.6; passing it
+// explicitly is a no-op where it is already default.
+var piSourceArgv = []string{
+	"node", "--experimental-strip-types",
+	"--import", harnessDirPlaceholder + "/runtime/register.mjs",
+	harnessDirPlaceholder + "/src/local/main.ts",
+	"--config", stateDirPlaceholder + "/worker.json",
+	"--message", promptPlaceholder,
 }
 
 // KnownRunners is the closed set, sorted, for a caller that wants to say what
@@ -203,11 +219,17 @@ type launch struct {
 	// the worktree.
 	GitCommonDir string
 
-	// HarnessDir is the harness package this runner runs from, resolved from
-	// the checkout the executor works against (or $TICFAC_HARNESS_DIR): the
-	// pi-durable host is package source in the repository, and the argv points
-	// at the entry and register shim inside it.
+	// HarnessDir is a harness checkout to run the "pi" runner's TypeScript
+	// source from, set only when $TICFAC_HARNESS_DIR names one (harness
+	// development). Empty is the common case — production runs the embedded
+	// bundle named by HarnessBundle instead, and resolveRunner picks the argv
+	// shape between the two by whether this is set.
 	HarnessDir string
+
+	// HarnessBundle is the path cachedLocalHarnessBundle staged the embedded
+	// local pi-durable harness bundle at, for the "pi" runner's default,
+	// production argv. Unused, and left empty, when HarnessDir is set.
+	HarnessBundle string
 
 	// StateDir is the attempt's state directory, where worker.json, the
 	// conversation's SQLite storage and the steer socket live.
@@ -232,6 +254,13 @@ func resolveRunner(name string, override []string, at launch) ([]string, error) 
 		def, ok := runners[name]
 		if !ok {
 			return nil, fmt.Errorf("runner %q is not one of %s", name, strings.Join(KnownRunners(), ", "))
+		}
+		// $TICFAC_HARNESS_DIR names a harness checkout: run "pi"'s TypeScript
+		// source from it instead of the embedded bundle the table above
+		// points at. Harness development only — production launches leave
+		// HarnessDir empty and run the bundle.
+		if name == "pi" && at.HarnessDir != "" {
+			def.Argv = piSourceArgv
 		}
 		// The session flags go in front of the prompt for the same reason
 		// the model flag does, below.
@@ -284,8 +313,13 @@ func resolveRunner(name string, override []string, at launch) ([]string, error) 
 			for _, ph := range []struct{ placeholder, value, missing string }{
 				{
 					harnessDirPlaceholder, at.HarnessDir,
-					"the pi-durable harness runs from the repository's harness/ package — the checkout this " +
-						"executor works against has none, and $TICFAC_HARNESS_DIR names none",
+					"the pi-durable harness runs from TypeScript source only when $TICFAC_HARNESS_DIR names a " +
+						"checkout (harness development), and this attempt named none",
+				},
+				{
+					harnessBundlePlaceholder, at.HarnessBundle,
+					"the pi-durable harness runs the embedded esbuild bundle unless $TICFAC_HARNESS_DIR " +
+						"overrides it, and this attempt resolved no cached bundle path",
 				},
 				{stateDirPlaceholder, at.StateDir, "this attempt resolved no state directory"},
 			} {

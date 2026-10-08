@@ -159,13 +159,19 @@ func TestEveryKnownRunnerTakesThePrompt(t *testing.T) {
 	if _, err := resolveRunner("emacs", nil, at); err == nil {
 		t.Error("an unknown runner was accepted; the set is closed")
 	}
-	// The durable runner without a harness directory is a refusal that names
-	// what is missing, not an argv that would fail in a subprocess.
+	// The durable runner's production shape (no $TICFAC_HARNESS_DIR) with no
+	// cached bundle is a refusal that names what is missing, not an argv that
+	// would fail in a subprocess — production always resolves one
+	// (executor.go's cachedLocalHarnessBundle); this constructs the launch by
+	// hand, as a unit test of resolveRunner alone.
 	if _, err := resolveRunner("pi", nil, launch{Prompt: "PROMPT-BODY", StateDir: "/state/attempt"}); err == nil {
-		t.Error("the pi runner launched with no harness directory")
-	} else if !strings.Contains(err.Error(), "harness_dir") {
+		t.Error("the pi runner launched with no harness bundle")
+	} else if !strings.Contains(err.Error(), "harness_bundle") {
 		t.Errorf("the refusal does not name the missing placeholder: %v", err)
 	}
+	// $TICFAC_HARNESS_DIR selects the pre-bundle, TypeScript-source shape
+	// instead (harness development) — and that shape still needs a state
+	// directory.
 	if _, err := resolveRunner("pi", nil, launch{Prompt: "PROMPT-BODY", HarnessDir: "/repo/harness"}); err == nil {
 		t.Error("the pi runner launched with no state directory")
 	}
