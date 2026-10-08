@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "ynd",
   "attempt": 11,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T05:56:19Z",
+  "triaged_at": "2026-10-08T05:56:27Z",
+  "triaged_by": "ticfac run run_af0e77b99c1540b7b8005cf04fd2795d absorbing y9g",
+  "promoted_as": "y9g",
   "provenance": {
     "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
     "tick_id": "ynd",
