@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 28,
-  "state": "collecting",
-  "reason": "collecting q6z attempt 6",
-  "updated_at": "2026-10-08T00:33:50Z",
+  "sequence": 29,
+  "state": "integrating",
+  "reason": "integrating q6z attempt 6 into epic/ex6",
+  "updated_at": "2026-10-08T00:39:38Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "q6z",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 6
     },
     {
