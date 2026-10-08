@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 132,
-  "state": "dispatching",
-  "reason": "dispatching 0bg as attempt 19",
-  "updated_at": "2026-10-08T02:39:41Z",
+  "sequence": 133,
+  "state": "running",
+  "reason": "0bg is running as attempt 19",
+  "updated_at": "2026-10-08T02:39:47Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -103,7 +103,8 @@
     },
     {
       "tick_id": "0bg",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 19
     },
     {
       "tick_id": "p4c",
