@@ -29,7 +29,7 @@ GOTEST_PARALLEL ?= 12
 # main and to an epic branch (a pull request runs its affected packages), so
 # everything the gate skips is still refused before a deploy.
 # internal/shorttest holds the guard that keeps a new test from forgetting.
-.PHONY: build vet test-short test test-race gate release
+.PHONY: build vet test-short test test-race gate suite release bombadil bombadil-seeded bombadil-all ts-gate
 
 build:
 	go build ./...
@@ -127,6 +127,24 @@ gate:
 # beside the 2s the lint itself costs.
 ts-gate:
 	cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm lint:test && pnpm contracts:check && pnpm exec tsc --noEmit && pnpm exec vitest run
+
+# The terminal property suite (tick z7w): Bombadil drives the real binary
+# over a real pty — the watch dashboard and the bare overview — against a
+# fixture world of registries and feeds. NOT part of the per-tick gate: the
+# gate is what every tick must pass on this host, and a pty-driver suite that
+# spawns the binary per property is CI's own job (ci.yml's `bombadil` job,
+# which the tick's acceptance names); `make gate` stays the in-process
+# half, whose properties live in internal/cli (agentjson_pbt_test.go,
+# watch_props_test.go). bombadil-seeded is the non-vacuity proof: each
+# property must FAIL against its deliberately broken program.
+bombadil:
+	cd tui && pnpm install --frozen-lockfile --prefer-offline && pnpm test
+
+bombadil-seeded:
+	cd tui && pnpm install --frozen-lockfile --prefer-offline && pnpm run test:seeded
+
+bombadil-all:
+	cd tui && pnpm install --frozen-lockfile --prefer-offline && pnpm run test:all
 
 # The gate, with the cache refused. Slower and unconditional.
 suite:
