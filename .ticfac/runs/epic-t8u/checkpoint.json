@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 154,
-  "state": "running",
-  "reason": "j1h is running as attempt 22",
-  "updated_at": "2026-10-08T05:29:10Z",
+  "sequence": 155,
+  "state": "collecting",
+  "reason": "collecting the closeout-epic job for j1h",
+  "updated_at": "2026-10-08T05:38:50Z",
   "ticks": [
     {
       "tick_id": "pqs",
