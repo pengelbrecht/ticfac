@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 115,
-  "state": "running",
-  "reason": "z7w is closed",
-  "updated_at": "2026-10-08T00:27:13Z",
+  "sequence": 116,
+  "state": "failed",
+  "reason": "x73 is blocked by cy2, which the tracker still reads as open, and nothing this run is doing can close it: the edge is honoured before the tick is dispatched rather than discovered by a worker after one. The blocker is outside this run's plan, so its repair belongs wherever the blocker lives; re-run the epic under this run id once it closes and the resume re-derives the plan from the tracker as it stands",
+  "updated_at": "2026-10-08T00:27:18Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -89,7 +89,7 @@
     },
     {
       "tick_id": "x73",
-      "state": "ready"
+      "state": "rejected"
     },
     {
       "tick_id": "r6v",
