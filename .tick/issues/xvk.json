@@ -3,6 +3,7 @@
   "title": "A queued cloud submission vanished: bo9's --queue run never started and the factory answers 404 for it",
   "gloss": "queued submission lost",
   "description": "2026-10-07 ~15:10 UTC 'ticfac cloud run bo9 --queue' answered 'Cloud run queued: run_719396b1f3de42d8815148836aee1c05, waiting for: run_69f8f578… (ex6)'. ex6's run ended failed at 22:36 UTC (lease released). On 2026-10-08 the queued run had never started, 'ticfac cloud status' lists no bo9 run and 'ticfac cloud status run_719396…' answers HTTP 404 no run. A queued submission must start when the lease frees (whatever way the holder ended) or stay visible as queued with its reason; never disappear. Find where the queue is held (lease/queue DO) and why it was dropped or never promoted.",
+  "notes": "2026-10-08 10:36 - Reopened 2026-10-08: not fixed in production after #263. dispatch_log shows run_e606 (bo9) was first parked at 23:40:14 by the pre-#263 deploy (hard 30-min window); the 00:08 re-queue after the deploy was answered already_queued with that same entry, which kept waits_for_release=0 and expired ~00:10. Fix: a repeat park widens the standing entry.",
   "status": "closed",
   "priority": 2,
   "type": "bug",
@@ -10,7 +11,7 @@
   "acceptance_criteria": "a queued submission starts when the holding run ends failed, stopped or completed, and is listed while queued; test reproducing the holder ending failed; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T23:26:02.995728Z",
-  "updated_at": "2026-10-07T23:37:41.738158Z",
-  "closed_at": "2026-10-07T23:37:41.738158Z",
-  "closed_reason": "queued submissions without an explicit window wait for the release (any holder ending), window restarts at release; queued runs visible by id and in listing"
+  "updated_at": "2026-10-08T08:36:22.865968Z",
+  "closed_at": "2026-10-08T08:36:22.865968Z",
+  "closed_reason": "repeat park of an epic widens the standing queue entry (waits_for_release, longer window, later deadline)"
 }
