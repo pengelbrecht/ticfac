@@ -1,3 +1,10 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ex6/attempt-10/lrd`, base `d78acf389500bba41ea1935b9278652bea66375f`, harness `pi-durable` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+
+_ticks-worker: a carried attempt — its base `d78acf389500bba41ea1935b9278652bea66375f` is the head of the work it continued, which was cut from `ff8ac1e8d84ac31e55a9eea780e601a5dd6945f1`; its work commits are counted from the carried head._
+
 # lrd — the harness half of the local gateway metering join
 
 Tick lrd (absorbed into epic ex6 as the final review's blocking finding):
