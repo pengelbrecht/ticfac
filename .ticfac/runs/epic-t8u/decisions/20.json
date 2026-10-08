@@ -1,0 +1,58 @@
+{
+  "schema_version": 3,
+  "decision": 20,
+  "role": "resolve-conflict",
+  "request": {
+    "base_branch": "main",
+    "base_head": "990bb6eb429df10d37ebfe99f6ee05bd7be2f981",
+    "conflict_files": [
+      "internal/cli/watch.go",
+      "internal/exec/cloudflaresandbox/collect_test.go",
+      "internal/reconcile/dispatch.go"
+    ],
+    "epic_head": "070e58db895cf4e213a7d327a948353ad7a369ca",
+    "epic_id": "t8u",
+    "job_id": "run-epic-t8u/base-fold-1",
+    "kind": "base-fold",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.1.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:c633779f728d661e9ec0206f2b449c80049b6c95415a8246f2bacc2134b2e1db",
+    "resolve_branch": "ticfac/run-epic-t8u/base-fold-1-990bb6eb429d",
+    "role": "resolve-conflict",
+    "source_grade": "write"
+  },
+  "response": {
+    "conflict_detail": "3 conflicts: content in internal/cli/watch.go; content in internal/exec/cloudflaresandbox/collect_test.go; content in internal/reconcile/dispatch.go",
+    "conflict_files": [
+      "internal/cli/watch.go",
+      "internal/exec/cloudflaresandbox/collect_test.go",
+      "internal/reconcile/dispatch.go"
+    ],
+    "job_id": "run-epic-t8u/base-fold-1",
+    "merge": "7154957c65f0739a7f3b76905aa8de834f2729cb",
+    "resolve_head": "64dac943836058bef538aa6b5be0e090fa9e59e9",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T00:33:36Z",
+  "answered_at": "2026-10-08T00:33:36Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "t8u",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "00e70f06569ef9cfa98759bb7d942efa03fa2d94",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "frontier",
+    "profile_digest": "sha256:c633779f728d661e9ec0206f2b449c80049b6c95415a8246f2bacc2134b2e1db",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
