@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 71,
-  "state": "integrating",
-  "reason": "integrating eno attempt 12 into epic/ex6",
-  "updated_at": "2026-10-08T07:58:06Z",
+  "sequence": 72,
+  "state": "gating",
+  "reason": "running the integrated gate for eno on de4fb597f98f",
+  "updated_at": "2026-10-08T07:58:13Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "eno",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 12
     },
     {
