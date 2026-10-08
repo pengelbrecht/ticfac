@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 19,
-  "state": "integrating",
-  "reason": "integrating 96s attempt 3 into epic/ex6",
-  "updated_at": "2026-10-07T23:57:21Z",
+  "sequence": 20,
+  "state": "gating",
+  "reason": "running the integrated gate for 96s on b52d34d2989f",
+  "updated_at": "2026-10-08T00:02:29Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "96s",
-      "state": "dispatched",
+      "state": "integrated",
       "attempt": 3
     },
     {
