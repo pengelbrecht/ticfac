@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 41,
-  "state": "publishing",
-  "reason": "closing 0rt behind its validated review-epic answer",
-  "updated_at": "2026-10-08T02:57:21Z",
+  "sequence": 42,
+  "state": "running",
+  "reason": "0rt is closed",
+  "updated_at": "2026-10-08T02:57:23Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "0rt",
-      "state": "reported",
+      "state": "closed",
       "attempt": 7
     },
     {
