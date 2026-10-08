@@ -27,11 +27,11 @@ func TestAMeteredDurableLaunchCarriesNoExtension(t *testing.T) {
 	}
 
 	at := launch{
-		Prompt:       "PROMPT-BODY",
-		GitCommonDir: "/repo/.git",
-		Model:        model,
-		HarnessDir:   e.harnessDir(),
-		StateDir:     t.TempDir(),
+		Prompt:        "PROMPT-BODY",
+		GitCommonDir:  "/repo/.git",
+		Model:         model,
+		HarnessBundle: "/cache/local-main.bundle.mjs",
+		StateDir:      t.TempDir(),
 	}
 	argv, err := resolveRunner("pi", nil, at)
 	if err != nil {

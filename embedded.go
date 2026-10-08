@@ -8,7 +8,10 @@
 // has to travel inside the executable.
 package ticfac
 
-import "embed"
+import (
+	"embed"
+	"strings"
+)
 
 // PinJSON is contracts.pin.json: which ticks ref the vendored bundle came
 // from, and which bundle version this build's code was written against.
@@ -180,6 +183,43 @@ var sandboxFS embed.FS
 // are rooted at "image", e.g. "image/Dockerfile".
 func SandboxFS() embed.FS {
 	return sandboxFS
+}
+
+// localHarnessBundleJS is harness/embed/local-main.bundle.mjs: the pi-durable
+// local worker host (harness/src/local/main.ts and everything it imports —
+// pi-durable, pi-ai and chord included) built by esbuild into one
+// self-contained ES module (tick 0ek, "harness as a machine prerequisite").
+// It travels in the binary so a local pi-durable run needs no checkout
+// beside it and no npm install: internal/exec/subprocess writes these bytes
+// to a cache directory once, keyed by their own content, and runs them with
+// plain `node`. $TICFAC_HARNESS_DIR still runs the TypeScript source
+// directly, for harness development.
+//
+// `harness/scripts/build-local-bundle.mjs` (run by `make harness-bundle` /
+// `make build`) regenerates this file; TestLocalHarnessBundleMatchesItsSources
+// (internal/exec/subprocess) fails the gate when it has drifted from
+// harness/src.
+//
+//go:embed harness/embed/local-main.bundle.mjs
+var localHarnessBundleJS []byte
+
+// LocalHarnessBundleJS returns the embedded local pi-durable harness bundle.
+func LocalHarnessBundleJS() []byte {
+	return localHarnessBundleJS
+}
+
+// localHarnessBundleSourcesHash is the committed fingerprint of the sources
+// LocalHarnessBundleJS was built from (harness/src, harness/package.json,
+// harness/pnpm-lock.yaml) — written by the same build script, alongside the
+// bundle. The gate test recomputes this hash from the tree and compares; it
+// never re-bundles, so the comparison costs a file walk, not an esbuild run.
+//
+//go:embed harness/embed/local-main.bundle.sources.sha256
+var localHarnessBundleSourcesHash string
+
+// LocalHarnessBundleSourcesHash returns the committed sources hash, trimmed.
+func LocalHarnessBundleSourcesHash() string {
+	return strings.TrimSpace(localHarnessBundleSourcesHash)
 }
 
 // SkillsFS is `skills/`: the agent skills this binary can install, shipped

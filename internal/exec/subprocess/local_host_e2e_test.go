@@ -156,6 +156,112 @@ func TestTheDurableRunnerRunsAWholeWorkerOnTheHarness(t *testing.T) {
 	}
 }
 
+// TestTheDurableRunnerRunsOnTheEmbeddedBundleWithNoHarnessCheckout is tick
+// 0ek's own acceptance, at the level only a Go test can prove: "in a
+// repository that is not ticfac, on a machine with only the ticfac binaries
+// and node, a local pi-durable run dispatches and completes a worker; no npm
+// install anywhere".
+//
+// Unlike TestTheDurableRunnerRunsAWholeWorkerOnTheHarness above, this test
+// sets NO $TICFAC_HARNESS_DIR and never looks for harness/node_modules: the
+// fixture's repository (newRepo) is already an unrelated temp checkout with
+// no harness/ of its own, which is exactly the scenario — the embedded
+// bundle (go:embed, embedded.go) is cached under $TICFAC_CACHE_DIR and run
+// with plain `node`, and the executor binary under test carries it whether
+// or not this tree's own harness/ has ever had `pnpm install` run in it.
+func TestTheDurableRunnerRunsOnTheEmbeddedBundleWithNoHarnessCheckout(t *testing.T) {
+	shorttest.EndToEnd(t)
+	if testing.Short() {
+		t.Skip("short mode: this one runs a real supervisor and a real Node harness")
+	}
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skipf("the embedded pi-durable harness bundle runs on node: %v", err)
+	}
+
+	// The socket the harness listens on has to live somewhere a Unix socket
+	// can be bound; this suite's own TMPDIR is deeper than that bound.
+	t.Setenv("TICFAC_STEER_SOCK_DIR", shortSocketDir(t))
+	// Isolated per test run, never the real machine's cache: a parallel test
+	// run, or a developer's own cached bundle from a different build, must
+	// not share this directory.
+	t.Setenv("TICFAC_CACHE_DIR", filepath.Join(t.TempDir(), "cache"))
+
+	const jobID = "run-0ek/tick-g7f/attempt-1"
+	const tick = "g7f"
+
+	reportRel := "runs/" + jobID + "/RESULT-" + tick + ".md"
+	writeReport := "mkdir -p runs/run-0ek && printf '# " + tick + "\\n\\nThe embedded harness bundle ran end to end.\\n\\nSTATUS: DONE\\n' > " + reportRel
+	transcript := filepath.Join(t.TempDir(), "transcript.json")
+	script, err := json.Marshal([]map[string]any{
+		{"toolCalls": []any{map[string]any{
+			"name": "bash",
+			"args": map[string]any{"command": "echo the bundled harness ran > harness-ran.txt"},
+		}}},
+		{"toolCalls": []any{map[string]any{
+			"name": "bash",
+			"args": map[string]any{"command": writeReport},
+		}}},
+		{"text": "the work is done and reported"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(transcript, script, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	f := newFixture(t, fixtureOptions{
+		runner:         "pi",
+		noFakeRunner:   true,
+		stuckAfter:     time.Minute,
+		fauxTranscript: transcript,
+		model:          "faux/faux-1",
+	})
+	handle := f.Start(f.spec(jobID, tick))
+	f.waitSettled(handle)
+
+	status := f.inspect(handle)
+	if status.State != StateSucceeded {
+		local, logErr := handle.Local()
+		if logErr == nil {
+			if raw, err := os.ReadFile(filepath.Join(local.State, fileRunnerLog)); err == nil {
+				t.Logf("the runner's log:\n%s", raw)
+			}
+		}
+		t.Fatalf("state %s, want succeeded:\n%s",
+			status.State, formatObservations(status.Observations))
+	}
+	collected := f.collect(handle)
+	if collected.Verdict != VerdictReadyToMerge {
+		t.Fatalf("verdict %s, want ready-to-merge:\n%s", collected.Verdict, collected.Message)
+	}
+	local, err := handle.Local()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ran, err := os.ReadFile(filepath.Join(local.Worktree, "harness-ran.txt")); err != nil || strings.TrimSpace(string(ran)) != "the bundled harness ran" {
+		t.Errorf("the tool round's file = %q, %v", string(ran), err)
+	}
+
+	// The argv the supervisor actually ran: the embedded bundle, cached under
+	// $TICFAC_CACHE_DIR, with plain node — never the TypeScript-source,
+	// register.mjs shape $TICFAC_HARNESS_DIR selects, and never a path into
+	// this checkout's own harness/ directory.
+	record, err := f.store(handle).readAttempt()
+	if err != nil {
+		t.Fatal(err)
+	}
+	argv := strings.Join(record.RunnerArgv, " ")
+	if strings.Contains(argv, "--experimental-strip-types") || strings.Contains(argv, "register.mjs") {
+		t.Errorf("the production launch used the TypeScript-source shape, not the embedded bundle: %v", record.RunnerArgv)
+	}
+	if i := indexOf(record.RunnerArgv, "node"); i < 0 || i+1 >= len(record.RunnerArgv) {
+		t.Errorf("the durable runner does not run under node: %v", record.RunnerArgv)
+	} else if bundlePath := record.RunnerArgv[i+1]; !strings.HasPrefix(bundlePath, filepath.Join(os.Getenv("TICFAC_CACHE_DIR"), "harness")) {
+		t.Errorf("the bundle did not run from the isolated $TICFAC_CACHE_DIR: %v", record.RunnerArgv)
+	}
+}
+
 // THE READ-ONLY HALF (tick x8e): a dispatched read-only attempt — the
 // review grade — on the local pi runner runs the same harness with the
 // workspace checkpoints OFF, because its grade pins every push to refusal

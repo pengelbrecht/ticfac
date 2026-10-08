@@ -65,8 +65,18 @@ const harnessRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
  * CI job that did not install the workspace, a fresh clone) installs them
  * here, once, before the imports: a local worker that cannot boot over a
  * missing node_modules is a worker no relaunch ever fixes.
+ *
+ * Skipped entirely in the esbuild-bundled build (tick 0ek): the bundle
+ * inlines pi-durable, pi-ai and chord, so there is no node_modules to check
+ * for, and this module's own `import.meta.url` is wherever the embedded
+ * bundle was cached, not this package — a check against THAT path would
+ * misdiagnose a working bundle as broken. `__TICFAC_HARNESS_BUNDLED__` is an
+ * esbuild `--define`, false (so this branch runs) under plain `node
+ * --experimental-strip-types` on the TypeScript source.
  */
+declare const __TICFAC_HARNESS_BUNDLED__: boolean;
 function ensureDependencies(): void {
+  if (typeof __TICFAC_HARNESS_BUNDLED__ !== "undefined" && __TICFAC_HARNESS_BUNDLED__) return;
   const pinned = join(harnessRoot, "node_modules", "@earendil-works", "pi-durable");
   if (existsSync(pinned)) return;
   const label = "the pi-durable dependencies";
