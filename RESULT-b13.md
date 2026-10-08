@@ -1,158 +1,152 @@
 <!-- ticks-worker: container facts, prepended after the harness exited. The
 agent's report, including its STATUS line, is unchanged below. -->
 
-_ticks-worker: branch `tick/ymf/attempt-3/b13`, base `8505bb2420f7434776c8c2a11232a10e89313d5e`, harness `pi-durable` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+_ticks-worker: branch `tick/ymf/attempt-5/b13`, base `7019eeb42de17299c0bdf49d4bc40df64cb4652a`, harness `pi-durable` exited 0, 1 work commit(s), 1 uncommitted path(s)._
+
+_ticks-worker: a carried attempt — its base `7019eeb42de17299c0bdf49d4bc40df64cb4652a` is the head of the work it continued, which was cut from `8505bb2420f7434776c8c2a11232a10e89313d5e`; its work commits are counted from the carried head._
 
 # b13 — Cost line: only when metered; a claude-sub run shows subscription window use
 
 ## What changed
 
-The dashboard's cost line (`internal/cli/watch_view.go`, `dashCost`) no longer
-renders the recital it used to — `config cla · cost decisions not metered ·
-Workers AI $0.00` — and now renders exactly the three cases the tick names:
+The three cases the tick names were already in this branch's base (the
+rendering in `dashCost`, `Cost.Subscription` in the model, the
+`/api/claude-sub` read, the 2.4.0 contract re-cut, goldens, and their
+tests). This attempt re-verified them against the factory's real answers
+and repaired the one seam the first delivery got wrong — the seam that
+decides whether the third case exists at all on a real run:
 
-1. **Nothing when there is no metered cost.** No "cost not metered", no
-   fabricated `$0.00`, and no config name floating on an otherwise empty
-   line: `dashCost` returns `""`, and `dashboardCICost` renders the CI
-   segment alone without padding to an edge that no longer exists.
-2. **The metered cost when there is one** — each measured river's number
-   (`cost Workers AI $0.41`), with the config still leading the line (tick
-   tda) whenever the line has something to say. Unmetered rivers and
-   measured zeros are silence on the glance line; the full per-river story
-   (including each unmetered line's basis and the coverage statement a
-   partially joined gateway number makes) stays in the model's own lines,
-   where `status --json` and the phone page read it.
-3. **On a run whose jobs lease the claude-sub subscription, the leased
-   subscription label and its 5h/7d window utilization** — `config claude ·
-   MAX1 · 34% of 5h · 8% of 7d` (the shape the design names), beside any
-   wallet money the run did spend. Never a token: the model's subscription
-   object carries the label only.
+- **`ClaudeSubSnapshot.LeasedLabels` matched leases by `<run-id>-`, a
+  shape no real lease carries.** The pool keys a lease by the job id of
+  the job that took it, and a run's own jobs arrive under two spellings,
+  both minted by the factory:
+  - the door's job id, `run-<run>/tick-<tick>/attempt-<n>` — every worker
+    the reconciler dispatches leases under it (`specJobID` →
+    `attemptJobID`, cloudflare/src/sandbox-executor.ts), the role
+    variants (`…/repair-1-r2`, `run-<run>/base-fold-2`) ride the same
+    `run-<run>/` prefix the attempt protocol bounds `job_id` at
+    (sandbox-dispatch.ts), and the factory's own suite pins
+    `active_leases` to exactly this spelling
+    (cloudflare/test/sandbox-dispatch.test.ts:477);
+  - the review boot's sandbox name, `<run>-<boot>` — the one job that
+    leases under its container's name (run-workflow.ts's
+    `pool.lease(name)`, pinned by run-workflow.test.ts:2352).
+  The old matcher matched only the second. On a real claude-sub run —
+  whose implement, review and close-out workers hold pool leases under
+  their door job ids — `ticfac watch` and `status --json` gathered
+  `cost.subscription: null` while the jobs ran: the tick's third case was
+  silent on the very run it describes, and the unit tests hid it because
+  their fixtures hand-typed `<run>-<tick>-<attempt>`, the "forgiving
+  fake" this repository's own learnings warn about. The real shape was
+  already pinned on the other side of the seam by the real-door e2e
+  (`internal/exec/cloudflaresandbox/claude_sub_e2e_test.go:143-146`
+  asserts the live lease IS the job id); the Go read just never keyed on
+  it.
+- **`LeasedLabels` now keys on both real spellings** (`run-<run>/` and
+  `<run>-`, plus the bare run id), with the separators stated as the
+  whole match: `run_abc` claims neither `run_abc12`'s worker lease (the
+  `/`) nor its review boot (the `-`). The comments on
+  `ClaudeSubView.ActiveLeases`, `LeasedLabels` and the CLI gathering now
+  state the two spellings and where each is minted, replacing the
+  invented `<run>-<tick>-<attempt>` claim.
 
-Supporting changes:
+Test-first, as the repo's fixture rule demands:
 
-- **`internal/statusmodel`** — `Cost` gains `Subscription *CostSubscription`
-  (`{label, five_hour, seven_day}`, utilization fractions 0–1, null per
-  window until the factory's proxy has answered for it), filled from a new
-  `Sources.ClaudeSub`. Required-and-null in the model's JSON, never omitted.
-- **`internal/factory/claudesub.go` (new)** — `FetchClaudeSub` reads the
-  pool's snapshot (`GET /api/claude-sub`, the operator's own bearer token from
-  `~/.ticfacrc` — the same auth `ticfac factory status` uses); `LeasedLabels`
-  matches the leases that belong to this run by the job id the factory mints
-  (sandbox names are built from the run id, `<run-id>-<tick>-<attempt>`, so
-  another run's lease on the same pool never reads as ours); `WindowUtilization`
-  reads the `anthropic-ratelimit-unified-5h/7d-utilization` headers the proxy
-  records. A factory with no pool or no route answers `ErrNoClaudeSubPool` —
-  the optional state, never a failure.
-- **`internal/cli`** — the cloud gathering wires the read
-  (`statusClaudeSub`, `modelGatherers.claudeSub`): a factory that *should*
-  have answered but did not degrades the model's new `claude-sub` source
-  (the same treatment the gateway cost read gets); no factory, no pool, or
-  no lease answers nil and degrades nothing. The watch caches it at the
-  shared 30s TTL (`watchClaudeSubCache`) so a frame every two seconds does
-  not ask the pool every two seconds. Local runs gather nothing here: a
-  local run's jobs lease nothing, the leases live in the factory's pool.
-- **Contract bundle re-cut 2.3.0 → 2.4.0** — `contracts/status-model.json`
-  gains `$defs/cost_subscription` and the cost object's `subscription`
-  field (required-and-null, nullable ref), all six goldens and the affected
-  negatives carry `"subscription": null`, the changelog documents the bump,
-  and `cloudflare/contracts.pin.json` moved to 2.4.0 in the same commit.
-  The factory's TypeScript reader (`cloudflare/src/status.ts`) types the
-  new field (`StatusCostSubscription`).
+- **The fixtures now reproduce the real identities** —
+  `TestLeasedLabelsMatchTheRunOwnJobs` spells the run's own four leases
+  (worker dispatch, gate repair, base fold, review boot) beside another
+  run's and the staging door's, and asserts the other run reads its own
+  two; `TestFetchClaudeSubReadsThePoolSnapshot`'s body carries one lease
+  of each spelling; `TestStatusModelCloudGathersTheLeasedSubscription`
+  gathers from a worker-job lease in one leg and a review-boot lease in
+  another — one spelling per leg, so one drifting alone is the failure
+  it is, not a wash beside the other. All of these failed on the base
+  (`run_abc12's leases are [MAX2]`, the worker-job leg gathered nil) and
+  pass on the fix.
+- **`TestTheLeaseMatchAgreesWithTheJobIdsTheFactoryMints` (new)** is the
+  parity guard for the seam, the same pattern as the subscription rung's
+  (`internal/profile/claude_sub_parity_test.go`): it reads
+  `attemptJobID`'s and `sandboxName`'s templates out of the factory's
+  TypeScript, spells ids with them for this run and for another, and
+  asserts the Go matcher agrees — each spelling on its own. A factory
+  change to either spelling now fails this table first, not a live run.
 
-Design note, stated plainly: "a run whose config is claude-sub" is
-implemented as **a run whose jobs actually hold a lease** — the pool's live
-answer is the run's own proof of being on the subscription, and it avoids
-parsing the config name against a repo's runner files. Consequences: a
-claude-sub run shows the line while its jobs hold leases and not between
-them or after they end (the pool releases leases at collect); a run whose
-every job stepped down to Workers AI shows no subscription line (nothing
-leased — the step-down story lives in the feed lines it already has); a GLM
-run never leases and never grows a segment. When several labels are leased
-the first in the snapshot's order is shown — one glance line, and the pool's
-per-label picture remains `/api/claude-sub`'s to give in full.
-
-## Tests
-
-- `TestDashboardCostLineRendersMeteredOnly` (rewritten from
-  `TestDashboardNeverPrintsZeroForUnmetered`): the three cases at the render
-  level — metered renders, unmetered is silent, a measured zero is silence,
-  nothing-at-all renders nothing.
-- `TestDashboardCostLineRendersTheSubscription` (new): the subscription
-  segment — both windows, one window, no utilization yet, rounding to whole
-  percents, money beside it, no lease no segment.
-- `TestDashboardRendersTheMeteredRiverOnly` (rewritten from tick kf4's
-  `TestDashboardCallsUnjoinedAttemptsNotMeteredBesideTheNumber`): the
-  partially joined river renders its measured number only; the split and its
-  coverage bases remain in the model's lines (asserted there).
-- `TestStatusModelCloudGathersTheLeasedSubscription` (new, `internal/cli`):
-  the cloud gathering reads the pool route under the operator's token, picks
-  only this run's leases, and degrades `claude-sub` only when the factory
-  should have answered.
-- `TestCostCarriesTheLeasedSubscription` (new, `internal/statusmodel`): the
-  field rides through and is required-and-null in the JSON.
-- `internal/factory`: the fetch, its refusals (503 no-pool, 404 route-less →
-  optional; 401 → real error), the lease matching (including the separator
-  that keeps `run_abc` from claiming `run_abc12`'s lease), and the
-  utilization parsing (decimal fractions from the spike, percent form,
-  out-of-range and unparsable refused).
-- Property tests updated: P3 is now "the cost line shows only what is
-  metered" (no `$0.00` anywhere, no "not metered", whole-line check kept),
-  with a new breaker; the generator draws the subscription segment so the
-  longest line shape is exercised.
-- Golden frames regenerated (`watch_dashboard_120/60`,
-  `watch_dashboard_epic_state`): the line now reads
-  `config claude · cost Workers AI $0.41`, and the unsynced-cloud frame's
-  cost segment is gone.
+The rest of the delivery is verified, not changed: the three render cases
+(`TestDashboardCostLineRendersMeteredOnly`,
+`TestDashboardCostLineRendersTheSubscription`,
+`TestDashboardRendersTheMeteredRiverOnly`), the model field
+(`TestCostCarriesTheLeasedSubscription`), the degradation policy (a
+factory that should answer but cannot degrades `claude-sub`; no pool, no
+route, no lease are the optional state), the watch's 30s cache, the
+property P3, and the goldens reading `config claude · cost Workers AI
+$0.41` all stand as the base left them.
 
 ## What I ran
 
-- `make gate` — gofmt, `go vet ./...`, and the short suite across the whole
-  repository: **48/48 packages pass**.
-- `make suite` (short suite, `-count=1`, cache refused): **no failures**.
-- `go test -count=1 ./internal/cli/` (full, not just `-short`): ok, 57s.
-- `go test -count=1 ./internal/statusmodel/ ./internal/factory/`: ok.
-- The TypeScript half: `pnpm lint`, `pnpm contracts:check` (bundle 2.4.0
-  verified from the factory side), `tsc --noEmit`, and the full `vitest run`
-  (80 files, 1880 tests) — all green, so the re-cut bundle is consistent for
-  both readers.
+- The failing tests first, at the base of my change:
+  `go test -count=1 -run 'TestLeasedLabelsMatchTheRunOwnJobs|TestTheLeaseMatchAgreesWithTheJobIdsTheFactoryMints' ./internal/factory/`
+  and the gathering leg — all three failed with the messages quoted
+  above; they pass on the fix.
+- The tick's named tests, green:
+  `go test -count=1 -run 'TestDashboardCostLineRendersMeteredOnly|TestDashboardCostLineRendersTheSubscription|TestDashboardRendersTheMeteredRiverOnly|TestStatusModelCloudGathersTheLeasedSubscription|TestCostCarriesTheLeasedSubscription|TestLeasedLabelsMatchTheRunOwnJobs|TestTheLeaseMatchAgreesWithTheJobIdsTheFactoryMints|TestFetchClaudeSub' ./internal/cli/ ./internal/statusmodel/ ./internal/factory/`.
+- `make gate` — gofmt, `go vet ./...`, short suite whole-repo: **green**.
+- `make suite` (short, `-count=1`, cache refused): **green**.
+- Full (not `-short`) package suites:
+  `./internal/cli/` (44s), `./internal/factory/`, `./internal/statusmodel/`,
+  and `./internal/exec/cloudflaresandbox/` — the last including the
+  real-door claude-sub e2e, which exercises the pool's real lease ids on
+  the deployed Durable Object: **all ok**.
+- The TypeScript half (`make ts-gate`'s checks and the suite):
+  `pnpm lint`, `pnpm contracts:check` (bundle 2.4.0), `tsc --noEmit`,
+  and `vitest run` — **80 files, 1880 tests, all green**.
+- `go test -count=1 ./internal/reconcile/` (full, 25m timeout, per
+  AGENTS.md, because the tick's surfaces touch the cloud executor path):
+  three failures, **all pre-existing at this branch's base and none
+  reachable from this change** — the two closeout red-CI tests are the
+  owned backlog defect (ticks e1k and hai, reproduced at base), and
+  `TestAResumedRunDoesNotCloseATickOnGateEvidenceFromAChangedCommand`
+  is a same-second timestamp flake reproduced at base with `-count=3`
+  (finding below). `make gate`'s short suite, which is the tick's
+  acceptance, skips all three (`shorttest.EndToEnd`).
 
 ## What the next tick has to know
 
-- **The contract bundle is now 2.4.0.** `status-model.json`'s cost object
-  gained `subscription` (required-and-null); `cloudflare/contracts.pin.json`
-  moved with it in the same commit. Any further model change this epic makes
-  (lck's status words) re-cuts again the same way — the ledger entry for
-  2.4.0 is already recorded.
-- **The cost line can now be empty.** `dashCost` returns `""` and
-  `dashboardCICost` renders the CI segment alone; ugm's rewrite should keep
-  that (or move config to the header per the design, dropping the prefix
-  here). The config prefix still leads whenever the line has content.
-- **The subscription facts live at `m.Cost.Subscription`** — ugm's new
-  layout renders it from the model, not from a side channel; the phone page
-  can pick it up from the same JSON (it currently still renders the old
-  per-line "not metered" story).
-- The lease match keys on the job id the factory mints (sandbox names built
-  from the run id). If the factory ever changes its sandbox naming, the
-  matching must move with it — the rule is documented at
-  `internal/factory/claudesub.go` (`LeasedLabels`).
+- **The lease match keys on the factory's two spellings** — the door's
+  job id `run-<run>/tick-…` and the review boot's sandbox name
+  `<run>-<boot>`. If the factory ever changes either speller
+  (`attemptJobID`, `sandboxName`), the parity guard
+  `TestTheLeaseMatchAgreesWithTheJobIdsTheFactoryMints` fails first and
+  must move with it — never hand-type the shapes in fixtures again.
+- The rest of the base's delivery stands: the contract bundle is 2.4.0
+  (`status-model.json`'s cost object carries `subscription`
+  required-and-null; any further model change this epic makes re-cuts
+  again); `dashCost` returns `""` when nothing is metered and the CI
+  segment renders alone; ugm's layout renders the subscription from
+  `m.Cost.Subscription`.
+- The phone page (cloudflare/src/phone.ts) still renders the old
+  "cost: not metered" recital and does not show `cost.subscription` —
+  that is the prior attempt's filed proposal (low, backlog); it is not
+  this tick's surface and it stays with that finding.
 
 ```findings v2
 [
   {
-    "kind": "proposal",
-    "title": "Phone page still renders the unmetered recital; subscription field is available",
-    "severity": "low",
-    "body": "b13 changed the watch dashboard's cost line only. The phone page (cloudflare/src/phone.ts) still renders one line per cost source with 'not metered' for unmetered rivers, and does not show cost.subscription, which the model now carries (bundle 2.4.0). The epic's A5 ('cost shows only when metered; a claude-sub run shows subscription window use') arguably reaches this surface too, since it reads the same model.",
-    "evidence": "cloudflare/src/phone.ts:930-945 (cost section), cloudflare/src/status.ts (StatusCostSubscription type now exists)"
+    "kind": "defect",
+    "title": "restart_test flake: same-second evidence timestamps fail late.After(dead)",
+    "severity": "medium",
+    "body": "TestAResumedRunDoesNotCloseATickOnGateEvidenceFromAChangedCommand fails intermittently in the full reconcile suite: the backing evidence's started_at and the dead incarnation's finished_at are both RFC3339 second-granular, so when both land in the same second late.After(dead) is false even though the evidence was produced after the gate. It reproduced at this branch's base with -count=3 (once in three), independent of any change here, and it only runs in the full suite (shorttest.EndToEnd skips it in the gate) — so it can turn a main or epic-branch CI shard red spuriously, and a red main blocks every deploy behind it.",
+    "evidence": "internal/reconcile/restart_test.go:351; go test -count=3 -run 'TestAResumedRunDoesNotCloseATickOnGateEvidenceFromAChangedCommand' ./internal/reconcile/ fails 'the evidence backing the close started at 2026-10-08T19:22:39Z, before the dead incarnation's gate had even finished at 2026-10-08T19:22:39Z'"
   }
 ]
 ```
 
 ## Status
 
-The three cases render as specified, are tested at the render, model, and
-factory layers, and `make gate` passes. Committed as f78abf2 on
-`tick/ymf/attempt-3/b13` (24 files: the rendering, the model field, the
-factory read, the gathering and caching, the contract re-cut, and the tests).
+The three cases render as specified and are tested at the render, model,
+gathering and factory layers — now against the lease spellings the
+factory actually mints, which the first delivery's matcher missed.
+`make gate` passes. Committed as 9e58be5 on `tick/ymf/attempt-5/b13`
+(4 files: the matcher, its parity guard, and the fixtures and gathering
+tests that reproduce the real shapes).
 
 STATUS: DONE
