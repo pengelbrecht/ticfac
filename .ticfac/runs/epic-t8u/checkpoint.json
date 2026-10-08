@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 152,
-  "state": "running",
-  "reason": "CI is green on the epic PR #264; the close-out of t8u is admitted",
-  "updated_at": "2026-10-08T05:28:56Z",
+  "sequence": 153,
+  "state": "dispatching",
+  "reason": "dispatching j1h as attempt 22",
+  "updated_at": "2026-10-08T05:28:58Z",
   "ticks": [
     {
       "tick_id": "pqs",
