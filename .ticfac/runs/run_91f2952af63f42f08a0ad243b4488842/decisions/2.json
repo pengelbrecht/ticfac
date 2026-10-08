@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "each running tick carries an activity line with its age, local and cloud, tested with recorded streams; no token or URL can appear; make gate",
+    "description": "A one-line excerpt of what each running worker is doing now: its latest tool call (summarised: 'running pytest', 'editing internal/x.go') or latest assistant sentence, from the conversation stream pi-durable and claude already produce (local: the runner log / worker.sqlite; cloud: the factory's worker stream that ticfac cloud logs reads). Add it to the status model per running tick with its age; cap length; never a secret (strip env, tokens). Remove the 'workers run in the cloud — not visible from here' line.",
+    "epic_id": "ymf",
+    "role": "classify-tick",
+    "tick_id": "93n",
+    "title": "Live activity excerpt per running worker, local and cloud"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 1,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 1,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1137,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T13:58:32Z",
+  "answered_at": "2026-10-08T13:58:32Z",
+  "provenance": {
+    "run_id": "run_91f2952af63f42f08a0ad243b4488842",
+    "tick_id": "93n",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "d25c437637b793e03eb917feb6c1d856b61a495c",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
