@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "lck",
   "attempt": 4,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T18:15:13Z",
+  "triaged_at": "2026-10-08T18:15:24Z",
+  "triaged_by": "ticfac run run_91f2952af63f42f08a0ad243b4488842 absorbing lgs",
+  "promoted_as": "lgs",
   "provenance": {
     "run_id": "run_91f2952af63f42f08a0ad243b4488842",
     "tick_id": "lck",
