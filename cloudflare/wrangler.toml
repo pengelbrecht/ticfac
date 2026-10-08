@@ -15,6 +15,13 @@ compatibility_date = "2026-08-11"
 # policy relies on (epic umq). Harmless on the current 0.x Sandbox path.
 compatibility_flags = ["nodejs_compat", "durable_object_io_tasks_prevent_eviction"]
 
+# Workers Logs (operator decision 2026-10-08): keep the factory's console output
+# and unhandled exceptions, so a 500 is diagnosable after the fact. The run feed
+# once answered Cloudflare's HTML 500 page and nothing recorded why (#261).
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 # One RunRoom per project (idFromName(project)) — the dispatch lease is per
 # project, so an epic-scoped room would hand every run its own lease and
 # arbitrate nothing (D4, D19). It owns the lease, the pending-question store and
