@@ -32,6 +32,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
+	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/statusmodel"
 )
@@ -1115,15 +1116,15 @@ func TestTheFrameCountsTheRunsPushesAndGitHubErrors(t *testing.T) {
 	}
 }
 
-// TestTheFrameTailIsTheFeedOwnWords: the tail is the feed's last two lines
-// through the same one-line form the stream path prints — the same words on
-// both paths — under the "─ recent" rule, with the key hint at the right.
-// The try each line's prefix names is the MODEL's own try for the event's
-// attempt (tick s71): the whole try history the rows carry, not the
+// TestTheFrameTailIsReadableSentences (tick 47j): the tail is the feed's
+// last two READABLE events, each as the clock, the tick's own id (or try)
+// and its sentence — never the raw stage and detail the [e] view still
+// carries. The try each line's prefix names is the MODEL's own try for the
+// event's attempt (tick s71): the whole try history the rows carry, not the
 // five-line window the tail itself is — expected here independently, off
 // the tick's own Try row, so the test says the number rather than the
 // implementation's way of counting it.
-func TestTheFrameTailIsTheFeedOwnWords(t *testing.T) {
+func TestTheFrameTailIsReadableSentences(t *testing.T) {
 	t.Parallel()
 	m := dashboardFixture()
 	frame := renderWatchFrame(m, plainStyles(), 0, 0, "")
@@ -1157,9 +1158,16 @@ func TestTheFrameTailIsTheFeedOwnWords(t *testing.T) {
 				who = fmt.Sprintf("%s#%d", who, try)
 			}
 		}
-		line := fmt.Sprintf("%s %-12s %s: %s", clockOf(e.At), who, e.Stage, e.Detail)
+		sentence, ok := feedSentenceFor(e)
+		if !ok {
+			t.Fatalf("the fixture's own event for %s is not one feedSentences covers — fix the fixture or the map", e.Stage)
+		}
+		line := fmt.Sprintf("%s %-12s %s", clockOf(e.At), who, sentence)
 		if !strings.Contains(joined, line) {
-			t.Errorf("the tail does not carry the feed's own line for %s:\n%s", e.Stage, joined)
+			t.Errorf("the tail does not carry the readable sentence for %s:\n%s", e.Stage, joined)
+		}
+		if strings.Contains(joined, e.Stage+": "+e.Detail) {
+			t.Errorf("the tail still carries the raw stage and detail for %s, not its sentence:\n%s", e.Stage, joined)
 		}
 		seen++
 	}
@@ -1178,6 +1186,36 @@ func TestTheFrameTailIsTheFeedOwnWords(t *testing.T) {
 	joined = strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
 	if !strings.Contains(joined, "─ recent") || !strings.Contains(joined, "[e] events  [enter] tick") {
 		t.Errorf("an empty feed lost the rule or the hint:\n%s", joined)
+	}
+}
+
+// TestTheTailDropsPureMechanicsAndReachesBack (tick 47j): a pushed/
+// push_queued/policy_stated/cleaned_up event is dropped from the tail
+// entirely rather than shown, and the tail reaches further back into the
+// feed to still show two readable lines.
+func TestTheTailDropsPureMechanicsAndReachesBack(t *testing.T) {
+	t.Parallel()
+	m := dashboardFixture()
+	m.Recent = append(m.Recent,
+		runfeed.Event{SchemaVersion: 1, At: "2026-09-28T19:05:00Z", RunID: "epic-rmod", Stage: reconcile.StagePushed,
+			Detail: "push 1 of this incarnation to origin landed"},
+		runfeed.Event{SchemaVersion: 1, At: "2026-09-28T19:06:00Z", RunID: "epic-rmod", Stage: reconcile.StageCleanedUp,
+			Detail: "attempt 2 of t2 cleaned up"},
+	)
+	joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
+	if strings.Contains(joined, "push 1 of this incarnation") || strings.Contains(joined, "cleaned up") {
+		t.Errorf("a pure-mechanic stage reached the tail instead of being dropped:\n%s", joined)
+	}
+	wantFirst, ok := feedSentenceFor(m.Recent[len(m.Recent)-4]) // "dispatched" (t2 try 2)
+	if !ok {
+		t.Fatal("fixture's own event is missing from feedSentences")
+	}
+	wantSecond, ok := feedSentenceFor(m.Recent[len(m.Recent)-3]) // "closeout_held"
+	if !ok {
+		t.Fatal("fixture's own event is missing from feedSentences")
+	}
+	if !strings.Contains(joined, wantFirst) || !strings.Contains(joined, wantSecond) {
+		t.Errorf("the tail did not reach back past the two mechanics for two readable lines:\n%s", joined)
 	}
 }
 
@@ -1206,19 +1244,19 @@ func TestTheTailCountsTheTryFromTheWholeModel(t *testing.T) {
 		// it, exactly what the model keeps, and none of the two tries before.
 		Recent: []runfeed.Event{
 			{SchemaVersion: runfeed.SchemaVersion, At: "2026-10-04T12:04:00Z", RunID: "epic-rmod",
-				TickID: ptr("t9"), Attempt: ptr(3), Stage: "dispatched",
+				TickID: ptr("t9"), Attempt: ptr(3), Stage: reconcile.StageDispatched,
 				Detail: "t9 dispatched again"},
 			{SchemaVersion: runfeed.SchemaVersion, At: "2026-10-04T12:05:00Z", RunID: "epic-rmod",
-				TickID: ptr("t9"), Attempt: ptr(3), Stage: "collected",
+				TickID: ptr("t9"), Attempt: ptr(3), Stage: reconcile.StageCollected,
 				Detail: "t9 collected its attempt"},
 			{SchemaVersion: runfeed.SchemaVersion, At: "2026-10-04T12:06:00Z", RunID: "epic-rmod",
-				TickID: ptr("t9"), Attempt: ptr(3), Stage: "report_ready",
+				TickID: ptr("t9"), Attempt: ptr(3), Stage: reconcile.StagePublished,
 				Detail: "t9 wrote its report"},
 			{SchemaVersion: runfeed.SchemaVersion, At: "2026-10-04T12:07:00Z", RunID: "epic-rmod",
-				TickID: ptr("t9"), Attempt: ptr(3), Stage: "gate_passed",
+				TickID: ptr("t9"), Attempt: ptr(3), Stage: reconcile.StageGatePassed,
 				Detail: "t9 passed the integrated gate"},
 			{SchemaVersion: runfeed.SchemaVersion, At: "2026-10-04T12:08:00Z", RunID: "epic-rmod",
-				TickID: ptr("t9"), Attempt: ptr(3), Stage: "merged",
+				TickID: ptr("t9"), Attempt: ptr(3), Stage: reconcile.StageClosed,
 				Detail: "t9 merged"},
 		},
 		Waves: &[]statusmodel.Wave{{
@@ -1238,13 +1276,13 @@ func TestTheTailCountsTheTryFromTheWholeModel(t *testing.T) {
 		}},
 	}
 	joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
-	// The tail's two lines (the merged and gate_passed events) both name the
+	// The tail's two lines (the closed and gate_passed events) both name the
 	// tick's THIRD try — the number the model's own row and the [e] feed say.
 	if !strings.Contains(joined, "t9#3") {
 		t.Errorf("the tail does not name the model's own try for its events:\n%s", joined)
 	}
-	if !strings.Contains(joined, "merged: t9 merged") || !strings.Contains(joined, "gate_passed: t9 passed the integrated gate") {
-		t.Errorf("the tail is not the feed's own last words:\n%s", joined)
+	if !strings.Contains(joined, "finished and merged") || !strings.Contains(joined, "tests passed") {
+		t.Errorf("the tail is not the feed's own readable sentences:\n%s", joined)
 	}
 	if strings.Contains(joined, "t9#1") || strings.Contains(joined, "t9#2") {
 		t.Errorf("the tail counted the try from the five-line window, not the model:\n%s", joined)

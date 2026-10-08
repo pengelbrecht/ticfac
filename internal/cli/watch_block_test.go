@@ -165,7 +165,7 @@ func TestWatchOnATerminalRendersTheEpicInPlace(t *testing.T) {
 	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "t2", &two,
 		reconcile.StageGateFailed, "the integrated gate refused: go test failed"))
 	watchWaitsFor(t, "the event in the tail", func() bool {
-		return strings.Contains(stdout.String(), "gate_failed: the integrated gate refused")
+		return strings.Contains(stdout.String(), "tests failed: the integrated gate refused")
 	}, &stdout, &stderr)
 
 	// The run's own last word ends the watch.

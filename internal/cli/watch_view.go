@@ -1137,12 +1137,15 @@ func modelTries(m statusmodel.Model) *runfeed.Tries {
 
 // dashboardTail is the feed shrunk to the two-line tail the spec names (hn6
 // rule 6), under a bold "─ recent" rule, with the key hint at the pane's
-// right in cyan. The lines are the feed's own words — the same one-line form
-// the stream path prints, through the styled variant that carries the
-// palette: the timestamp dim, the tick's own id cyan, a refusal red — and
-// the try a line's "<tick>#<n>" prefix names is counted from the model's own
-// whole try histories (modelTries, tick s71), the same number the rows and
-// the [e] feed say — never from the five-line window the tail itself is.
+// right in cyan. Each line is the event's own readable sentence (tick 47j,
+// feed_sentences.go) — never the raw "stage: detail" the [e] view still
+// carries — styled the same way: the timestamp dim, the tick's own id cyan.
+// A pure-mechanic stage (feedSentenceFor's false) is skipped rather than
+// shown, so the tail reaches back past it for a line actually worth two of
+// an operator's lines — and the try a line's "<tick>#<n>" prefix names is
+// counted from the model's own whole try histories (modelTries, tick s71),
+// the same number the rows and the [e] feed say — never from the window the
+// tail itself is.
 func dashboardTail(m statusmodel.Model, st watchStyles, width int) []string {
 	ruleWidth := width
 	if ruleWidth <= 0 {
@@ -1150,13 +1153,13 @@ func dashboardTail(m statusmodel.Model, st watchStyles, width int) []string {
 	}
 	hint := st.cyan("[e] events  [enter] tick")
 	tries := modelTries(m)
-	start := len(m.Recent) - dashRecentEvents
-	if start < 0 {
-		start = 0
-	}
 	events := make([]string, 0, dashRecentEvents)
-	for _, e := range m.Recent[start:] {
-		events = append(events, watchEventLineStyled(e, tries, st))
+	for i := len(m.Recent) - 1; i >= 0 && len(events) < dashRecentEvents; i-- {
+		sentence, ok := feedSentenceFor(m.Recent[i])
+		if !ok {
+			continue
+		}
+		events = append([]string{feedTailLineStyled(m.Recent[i], sentence, tries, st)}, events...)
 	}
 	if len(events) == 0 {
 		return []string{st.bold(dashRule(ruleWidth, hint))}
