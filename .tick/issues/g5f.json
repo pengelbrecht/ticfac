@@ -4,7 +4,7 @@
   "gloss": "skills diff",
   "description": "Nothing tells an operator that the ticfac skill installed in a repo (.claude/skills/ticfac, .agents/skills/ticfac — stamped with the version that installed it) is older than the binary. tk has tk skills diff for the ticks skill; add the same for ticfac (and/or a ticfac doctor line) naming the upgrade command, ticfac skills install ticfac.",
   "notes": "2026-10-08 09:58 - ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9: g5f try 1 (run dispatch #3) merged into epic/bo9 as 868d88b524c0; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -12,6 +12,6 @@
   "acceptance_criteria": "installed copy older than the binary is reported with the upgrade command; test; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T14:07:25.165607Z",
-  "updated_at": "2026-10-08T09:58:16.970432886Z",
-  "started_at": "2026-10-08T09:20:24.753087311Z"
+  "updated_at": "2026-10-08T09:58:17.168544424Z",
+  "closed_at": "2026-10-08T09:58:17.168544424Z"
 }
