@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
   "epic_id": "bo9",
-  "sequence": 12,
-  "state": "running",
-  "reason": "g5f is running as attempt 3",
-  "updated_at": "2026-10-08T09:20:40Z",
+  "sequence": 13,
+  "state": "collecting",
+  "reason": "collecting ba4 attempt 2",
+  "updated_at": "2026-10-08T09:20:44Z",
   "ticks": [
     {
       "tick_id": "0ek",
