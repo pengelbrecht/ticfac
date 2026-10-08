@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "52h",
   "attempt": 9,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T12:29:27Z",
+  "triaged_at": "2026-10-08T12:29:37Z",
+  "triaged_by": "ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9 absorbing na9",
+  "promoted_as": "na9",
   "provenance": {
     "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
     "tick_id": "52h",
