@@ -3,13 +3,14 @@
   "title": "Readable feed sentences for the dashboard's latest section",
   "gloss": "feed in sentences",
   "description": "Map run feed stages to short operator sentences without shas or internal terms ('v1g merged into the epic, now testing', 'ww2 finished and merged', 'review says not ready: \u003cone line\u003e', 'paused: needs you'), dropping pure mechanics (pushed, push_queued, policy_stated, cleaned_up) from this section. Raw events stay on the [e] view unchanged.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "parent": "ymf",
   "acceptance_criteria": "a mapping for every stage the feed emits (a test fails when a new stage has none); mechanics filtered; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.378131Z",
-  "updated_at": "2026-10-08T13:16:48.378131Z"
+  "updated_at": "2026-10-08T13:18:50.417542149Z",
+  "started_at": "2026-10-08T13:18:50.417540918Z"
 }
