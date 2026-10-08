@@ -2,7 +2,7 @@
   "id": "kwh",
   "title": "Re-review t8u after its NOT READY review's blocking findings (round 2)",
   "description": "Review the epic t8u again, AS INTEGRATED, now that the blocking findings of its NOT READY review are fixed. This is review round 2; 2 count toward the bound of 2.\n\nThe previous review (r6v, decision 22) judged it NOT READY: make epic/t8u's CI green by fixing fn8's ref-lock guard hook for git \u003e= 2.51 (hold only the first prepared transaction; fix verified on git 2.56), and meet [A1] with a recorded before/after full-suite measurement, which needs internal/reconcile's full suite cut, or have the operator re-scope A1 on t8u.; its blocking finding(s): \"fn8's ref-lock guard deadlocks on git \u003e= 2.51; epic CI red since 9a34b1001\"; \"A1 unmet: the full suite's floor, internal/reconcile, did not get faster\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY that spends the bound is not reviewed again by the run unless the tree changes after it: it holds for a person with your reasons.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -14,5 +14,6 @@
   "role": "review",
   "created_by": "ticfac run epic-t8u",
   "created_at": "2026-10-08T02:39:28Z",
-  "updated_at": "2026-10-08T02:39:28Z"
+  "updated_at": "2026-10-08T05:18:48.453613Z",
+  "started_at": "2026-10-08T05:18:48.453612Z"
 }
