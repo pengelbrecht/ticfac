@@ -1,0 +1,13 @@
+{
+  "id": "pl5",
+  "title": "status-model contract still says a cloud run's census cannot be taken",
+  "description": "Tick 93n takes a cloud run's workers census from the checkpoint's own word about which ticks it calls dispatched, so 'workers null means the census could not be taken (a cloud run)' is no longer the truth: null now means only that the records the census reads could not be read. The schema is unaffected (still an array-or-null); the two prose cells need the new statement so a close-out reading the contract does not hold the behavior against it. Exact edits, with the bundle version and changelog bump the ticfac-owned bundle's convention asks for: (1) in the checked_beyond_schema census clause, replace 'workers null means the census could not be taken (a cloud run), workers [] means no attempt stands' with 'workers null means the census could not be taken (the run's records could not be read), workers [] means the census read and no attempt stands - a cloud run's census is its checkpoint's own word about which ticks it calls dispatched'; (2) replace records.workers.description with 'One entry per live worker. Null when the census could not be taken (the run's records could not be read); empty when it read and nothing stands. A cloud run's census is its checkpoint's own word about which ticks it calls dispatched.'\nevidence: contracts/status-model.json line 63 (checked_beyond_schema census clause) and the records.workers.description cell (lines 365-369)\n\nticfac run run_91f2952af63f42f08a0ad243b4488842 filed this backlog tick from the finding 2e072a05346b9b5c4f73ac000d8efec4930504549d8e658e6ea6f92b10e4482b (reported by run-run_91f2952af63f42f08a0ad243b4488842/tick-93n/attempt-2) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/2e072a05346b9b5c4f73ac000d8efec4930504549d8e658e6ea6f92b10e4482b.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_91f2952af63f42f08a0ad243b4488842/tick-93n/attempt-2",
+  "created_by": "ticfac run run_91f2952af63f42f08a0ad243b4488842",
+  "created_at": "2026-10-08T15:46:27Z",
+  "updated_at": "2026-10-08T15:46:27Z"
+}
