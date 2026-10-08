@@ -22,6 +22,8 @@ import (
 // "which workspace belongs to that tick".
 
 func TestReclaimableListsClosedTickWorkspacesWithoutRemovingAnything(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -79,6 +81,8 @@ func TestReclaimableListsClosedTickWorkspacesWithoutRemovingAnything(t *testing.
 }
 
 func TestReclaimRefusesWithoutAuthorisation(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -114,6 +118,8 @@ func TestReclaimRefusesWithoutAuthorisation(t *testing.T) {
 }
 
 func TestReclaimRemovesOnlyWhatTheOperatorAuthorised(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -161,6 +167,8 @@ func TestReclaimRemovesOnlyWhatTheOperatorAuthorised(t *testing.T) {
 }
 
 func TestReclaimRefusesAWorkspaceWhoseAgentIsStillWorking(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -193,6 +201,8 @@ func TestReclaimRefusesAWorkspaceWhoseAgentIsStillWorking(t *testing.T) {
 // workspace evidence, and herdr not answering it must refuse the report, not
 // produce one from silence.
 func TestReclaimableRefusesWhenHerdrCannotSayWhichWorktreesExist(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	h.server.Route(herdtest.MethodWorktreeList, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {
 		return herdtest.RespondErr(w, req.ID, herdtest.CodeInvalidRequest, "herdr has nothing to say")

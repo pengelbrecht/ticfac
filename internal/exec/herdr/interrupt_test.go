@@ -25,6 +25,8 @@ import (
 //
 // short: a pure table lookup; no harness, no process, no git.
 func TestInterruptKeysPerKind(t *testing.T) {
+	t.Parallel()
+
 	for kind, want := range map[string][]string{
 		"claude": {"esc"},
 		"codex":  {"esc"},
@@ -54,6 +56,8 @@ func TestInterruptKeysPerKind(t *testing.T) {
 // TestCancelSendsEachKindsOwnInterrupt drives Cancel through the fake herdr
 // for each kind and asserts the keys herdr was asked to send.
 func TestCancelSendsEachKindsOwnInterrupt(t *testing.T) {
+	t.Parallel()
+
 	shorttest.EndToEnd(t)
 	for _, tc := range []struct {
 		kind string
@@ -94,6 +98,8 @@ func TestCancelSendsEachKindsOwnInterrupt(t *testing.T) {
 // grace (it will never exit or report on its own). The uncommitted work is
 // snapshotted before the close, as for any close.
 func TestAnEscapeOnlyAgentStopsWithinOnePoll(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{kind: "claude", spawnAgent: true, agentMode: "esc_only"})
 	clock := &wallClock{t: time.Now().UTC()}
 	h.ex.now = clock.now
@@ -177,6 +183,8 @@ func TestAnEscapeOnlyAgentStopsWithinOnePoll(t *testing.T) {
 // which it does not honour, so it is still working one poll later and the
 // grace — not the honoured-interrupt close — governs it.
 func TestAnUnverifiedKindKeepsTheGraceForAnAgentStillWorking(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{kind: "gemini", spawnAgent: true, agentMode: "esc_only"})
 	clock := &wallClock{t: time.Now().UTC()}
 	h.ex.now = clock.now

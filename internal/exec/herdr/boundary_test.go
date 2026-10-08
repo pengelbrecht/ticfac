@@ -65,6 +65,8 @@ func excludeLine(prefix string) string {
 // be a claude-only or prompt-following assumption, and this test says so by
 // construction.
 func TestStartExcludesTheArtifactPrefixBeforeTheAgentRuns(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{kind: "opencode"})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -99,6 +101,8 @@ func TestStartExcludesTheArtifactPrefixBeforeTheAgentRuns(t *testing.T) {
 // off the branch whatever the prompt said, and collect must still read it
 // from the worktree exactly as it would any other report.
 func TestAnOrdinaryAddAllCannotStageTheReport(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{spawnAgent: true, agentMode: "report_then_addall", kind: "codex"})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -146,6 +150,8 @@ func TestAnOrdinaryAddAllCannotStageTheReport(t *testing.T) {
 // with the boundary-violation verdict, and REPORTED: an observation, and the
 // violation carried in the collected record rather than dropped.
 func TestAForceAddedReportIsCaughtAtCollect(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{spawnAgent: true, agentMode: "force_report"})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -224,6 +230,8 @@ func TestAForceAddedReportIsCaughtAtCollect(t *testing.T) {
 // twenty, and keeps passing only for a wait that means "the agent's whole
 // turn is over".
 func TestASlowForceAddedReportIsStillCaughtAtCollect(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{spawnAgent: true, agentMode: "force_report_slow"})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -257,6 +265,8 @@ func TestASlowForceAddedReportIsStillCaughtAtCollect(t *testing.T) {
 // own: disposal removes it while the worktree it was resolved against still
 // exists, so nothing is orphaned in info/exclude once the worktree is gone.
 func TestDisposeRemovesTheExcludeLineWhileTheWorktreeExists(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {

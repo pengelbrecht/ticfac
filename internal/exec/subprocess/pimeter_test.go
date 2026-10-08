@@ -137,6 +137,8 @@ func TestGatewayMeteringWritesTheOverrideTheReaderJoins(t *testing.T) {
 }
 
 func TestTheGeneratedCredentialCommandReadsWhatGetReads(t *testing.T) {
+	t.Parallel()
+
 	if runtime.GOOS == "windows" {
 		t.Skip("the credential command runs where pi runs: a POSIX shell")
 	}

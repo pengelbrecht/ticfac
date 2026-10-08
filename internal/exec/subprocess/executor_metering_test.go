@@ -14,6 +14,8 @@ import (
 // resolution both local substrates share, and the herdr executor's pi CLI
 // panes still load it — but a durable launch carries none of it.
 func TestAMeteredDurableLaunchCarriesNoExtension(t *testing.T) {
+	t.Parallel()
+
 	const model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 	metered := &GatewayMetering{RunID: "epic-hn6", GatewayURL: "https://gateway.ai.cloudflare.com/v1/acct/gw"}
 

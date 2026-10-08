@@ -38,6 +38,8 @@ func agentStartArgs(t *testing.T, h *harness) []string {
 }
 
 func TestAMeteredPiWorkerLaunchesWithTheGatewayOverride(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{
 		kind: "pi", args: []string{"--approve", "--model", "cloudflare-workers-ai/@cf/zai-org/glm-5.3"},
 		model: "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
@@ -118,6 +120,8 @@ func TestTheJoinLeavesOtherDispatchesExactlyAsTheyWere(t *testing.T) {
 // writes and loads the override too: the join belongs to the ATTEMPT, not to
 // the first pane it tried.
 func TestTheRelaunchCarriesTheJoinToo(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{
 		kind: "pi", args: []string{"--approve"}, model: "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
 		metering: &subprocess.GatewayMetering{

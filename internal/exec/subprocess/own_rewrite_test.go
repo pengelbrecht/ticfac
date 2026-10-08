@@ -52,6 +52,8 @@ func originHead(t *testing.T, repo *testRepo, branch string) string {
 }
 
 func TestTheTimedPushFollowsAWorkerThatAmendedWhatItAlreadyPushed(t *testing.T) {
+	t.Parallel()
+
 	const branch = "ticfac/run-epic-2jn/tick-rix/attempt-45"
 	repo, worktree, pushed := ownRewriteFixture(t, branch)
 
@@ -71,6 +73,8 @@ func TestTheTimedPushFollowsAWorkerThatAmendedWhatItAlreadyPushed(t *testing.T) 
 }
 
 func TestTheTimedPushStillRefusesAnOriginHeadTheBranchNeverHeld(t *testing.T) {
+	t.Parallel()
+
 	const branch = "ticfac/run-x/tick-a/attempt-1"
 	repo, worktree, _ := ownRewriteFixture(t, branch)
 

@@ -32,6 +32,8 @@ import (
 //     exists to remove.
 
 func TestParseFindingsReadsATypedBlock(t *testing.T) {
+	t.Parallel()
+
 	body := "Some prose.\n\n" + "```findings\n" +
 		`[
   {
@@ -61,6 +63,8 @@ func TestParseFindingsReadsATypedBlock(t *testing.T) {
 }
 
 func TestParseFindingsAcceptsEveryKindAndAnUpstreamTarget(t *testing.T) {
+	t.Parallel()
+
 	body := "```findings\n" +
 		`[
   {"kind": "proposed-tick", "title": "one", "body": "", "severity": "low", "target": ""},
@@ -85,6 +89,8 @@ func TestParseFindingsAcceptsEveryKindAndAnUpstreamTarget(t *testing.T) {
 }
 
 func TestParseFindingsIgnoresOtherFencedBlocks(t *testing.T) {
+	t.Parallel()
+
 	body := "```json\n{\"kind\": \"not a finding\"}\n```\n\nSTATUS: DONE\n"
 	findings, problem, _ := ParseFindings(body)
 	if problem != "" || findings != nil {
@@ -93,6 +99,8 @@ func TestParseFindingsIgnoresOtherFencedBlocks(t *testing.T) {
 }
 
 func TestTheFinalFindingsBlockWins(t *testing.T) {
+	t.Parallel()
+
 	body := "```findings\n" +
 		`[{"kind": "defect", "title": "the draft the report quotes", "body": "", "severity": "low", "target": ""}]` +
 		"\n```\n\nThen the worker changed its mind.\n\n```findings\n" +
@@ -108,6 +116,8 @@ func TestTheFinalFindingsBlockWins(t *testing.T) {
 }
 
 func TestAnUnclosedFindingsBlockIsAProblemNotNothing(t *testing.T) {
+	t.Parallel()
+
 	// The load-bearing negative case: a truncated report must not read as one
 	// that carried no findings. Silently dropping the block is the exact
 	// failure (findings lost) this channel exists to remove.
@@ -134,6 +144,8 @@ func parseFindingsProblem(t *testing.T, block string) string {
 }
 
 func TestEveryMalformedFindingsBlockIsRefused(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name  string
 		block string
@@ -158,6 +170,8 @@ func TestEveryMalformedFindingsBlockIsRefused(t *testing.T) {
 }
 
 func TestAnEmptyFindingsBlockProposesNothing(t *testing.T) {
+	t.Parallel()
+
 	findings, problem, folded := ParseFindings("```findings\n[]\n```\n\nSTATUS: DONE\n")
 	if problem != "" || findings != nil || folded != nil {
 		t.Fatalf("an empty block is no findings: %v %q %v", findings, problem, folded)
@@ -178,6 +192,8 @@ func TestAnEmptyFindingsBlockProposesNothing(t *testing.T) {
 // finding's body, and the fold is named so the attempt's records can note
 // it — nothing is dropped and nothing is guessed at.
 func TestAnUnknownFindingKeyIsFoldedIntoTheBodyNotRefused(t *testing.T) {
+	t.Parallel()
+
 	body := "```findings\n" +
 		`[{
   "kind": "defect",
@@ -219,6 +235,8 @@ func TestAnUnknownFindingKeyIsFoldedIntoTheBodyNotRefused(t *testing.T) {
 // own answers. An empty body is not required to stay empty when the worker
 // said something the record had nowhere to put.
 func TestAnUnknownKeyFoldsIntoAnEmptyBody(t *testing.T) {
+	t.Parallel()
+
 	findings, problem, folded := ParseFindings("```findings\n" +
 		`[{"kind": "defect", "title": "t", "body": "", "severity": "low", "target": "", "title_note": "a bare note"}]` +
 		"\n```\n")
@@ -238,6 +256,8 @@ func TestAnUnknownKeyFoldsIntoAnEmptyBody(t *testing.T) {
 // FindingsProblem rides the Report: a fact only the parser can see has to
 // reach the surfaces that record it.
 func TestParseReportLiftsTheFoldedKeysBesideTheFindings(t *testing.T) {
+	t.Parallel()
+
 	report := ParseReport("```findings\n" +
 		`[{"kind": "defect", "title": "t", "body": "b", "severity": "low", "target": "", "title_note": "n"}]` +
 		"\n```\n\nSTATUS: DONE\n")
@@ -259,6 +279,8 @@ func TestParseReportLiftsTheFoldedKeysBesideTheFindings(t *testing.T) {
 // the classifier takes as one input where nothing can run yet, and what the
 // reporter is later scored against.
 func TestParseFindingsCarriesTheDoneEvidenceFields(t *testing.T) {
+	t.Parallel()
+
 	body := "```findings\n" +
 		`[
   {"kind": "defect", "title": "the gate is red at base", "body": "", "severity": "high", "target": "",
@@ -293,6 +315,8 @@ func TestParseFindingsCarriesTheDoneEvidenceFields(t *testing.T) {
 }
 
 func TestADoneItemThatIsNotAnAnswerIsRefused(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name     string
 		doneItem string
@@ -319,6 +343,8 @@ func TestADoneItemThatIsNotAnAnswerIsRefused(t *testing.T) {
 // the five required fields plus the two evidence fields, and nothing a
 // worker invented.
 func TestTheFindingFieldNamesAreTheClosedSet(t *testing.T) {
+	t.Parallel()
+
 	got := FindingFieldNames()
 	want := []string{"body", "demonstrating_check", "done_item", "kind", "severity", "target", "title"}
 	if fmt.Sprint(got) != fmt.Sprint(want) {
@@ -327,6 +353,8 @@ func TestTheFindingFieldNamesAreTheClosedSet(t *testing.T) {
 }
 
 func TestAReportWithoutABlockCarriesNoFindings(t *testing.T) {
+	t.Parallel()
+
 	report := ParseReport("STATUS: DONE — the work is in\n")
 	if report.Findings != nil || report.FindingsProblem != "" || report.FindingsFolded != nil {
 		t.Fatalf("report %+v", report)
@@ -334,6 +362,8 @@ func TestAReportWithoutABlockCarriesNoFindings(t *testing.T) {
 }
 
 func TestParseReportLiftsTheFindingsBlockBesideTheStatus(t *testing.T) {
+	t.Parallel()
+
 	report := ParseReport("```findings\n" +
 		`[{"kind": "defect", "title": "a stale test fixture", "body": "", "severity": "medium", "target": ""}]` +
 		"\n```\n\nSTATUS: DONE_WITH_CONCERNS — see the finding\n")
@@ -353,6 +383,8 @@ func TestParseReportLiftsTheFindingsBlockBesideTheStatus(t *testing.T) {
 // record states rather than a key a reader misses. The marshalling is on the
 // record itself, so a hand-built envelope cannot forget it either.
 func TestTheEnvelopeStatesFindingsEvenWhenEmpty(t *testing.T) {
+	t.Parallel()
+
 	withFindings := RoleResult{Findings: []Finding{{Kind: FindingKindContract, Title: "t", Body: "b", Severity: FindingSeverityHigh, Target: "pengelbrecht/ticks"}}}
 	raw, err := json.Marshal(withFindings)
 	if err != nil {
@@ -381,6 +413,8 @@ func TestTheEnvelopeStatesFindingsEvenWhenEmpty(t *testing.T) {
 // (ValidateRoleResult), and a record it refuses would fail a whole role job's
 // answer, not just the finding.
 func TestTheEnvelopeCarriesFindingsAsThePinnedRecord(t *testing.T) {
+	t.Parallel()
+
 	envelope := RoleResult{Findings: []Finding{{
 		Kind: FindingKindDefect, Title: "t", Body: "b", Severity: FindingSeverityHigh, Target: "",
 		DoneItem: "A1", DemonstratingCheck: "go",
@@ -407,6 +441,8 @@ func TestTheEnvelopeCarriesFindingsAsThePinnedRecord(t *testing.T) {
 // "pengelbrecht/ticks (contracts bundle)"). The original value always rides
 // in the body, so a triager sees what the worker wrote.
 func TestSlightlyWrongFindingValuesAreNormalisedNotRefused(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name, block, kind, severity, target, bodyHas string
 	}{

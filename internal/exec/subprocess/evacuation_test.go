@@ -13,6 +13,8 @@ import (
 
 // short: file reads and writes only: no repository, no subprocess
 func TestAttemptSettledReadsTheSettleMarker(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	if AttemptSettled(dir) {
 		t.Fatalf("a state directory with no runner.exit read as settled: an unsettled " +
@@ -28,6 +30,8 @@ func TestAttemptSettledReadsTheSettleMarker(t *testing.T) {
 
 // short: file reads and writes only: no repository, no subprocess
 func TestReadAttemptWorkNamesWhereTheWorkIs(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 
 	// A record that names neither worktree nor branch is a refusal, not a

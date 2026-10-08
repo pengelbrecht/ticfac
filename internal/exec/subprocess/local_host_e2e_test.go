@@ -34,6 +34,7 @@ import (
 // TheDurableRunnerRunsAWholeWorkerOnTheHarness skips itself, naming what is
 // missing, wherever this tree cannot run it: the same shape as the
 // cloudflaresandbox end-to-end test's node guards.
+// serial: t.Setenv names the harness dir and the steer socket dir the executor and the runner process both read from the environment — t.Setenv refuses a parallel test.
 func TestTheDurableRunnerRunsAWholeWorkerOnTheHarness(t *testing.T) {
 	shorttest.EndToEnd(t)
 	if testing.Short() {
@@ -169,6 +170,7 @@ func TestTheDurableRunnerRunsAWholeWorkerOnTheHarness(t *testing.T) {
 // The same shape of guards as the write-grade test above: the model is
 // scripted, everything else is real — the supervisor, the harness, the tools
 // in the attempt worktree, and the REAL report checker on every yield.
+// serial: t.Setenv names the harness dir and the steer socket dir the executor and the runner process both read from the environment — t.Setenv refuses a parallel test.
 func TestAReadOnlyLocalDurableRunHasNoWorkspaceCheckpoints(t *testing.T) {
 	shorttest.EndToEnd(t)
 	if testing.Short() {
@@ -309,6 +311,7 @@ func TestAReadOnlyLocalDurableRunHasNoWorkspaceCheckpoints(t *testing.T) {
 // the same watch as the conversation's input, after that tool's result —
 // the round trip, observed from outside the process that owns the
 // conversation.
+// serial: t.Setenv names the harness dir and the steer socket dir the executor and the runner process both read from the environment — t.Setenv refuses a parallel test.
 func TestAnOperatorWatchesAndSteersALiveDurableWorker(t *testing.T) {
 	shorttest.EndToEnd(t)
 	if testing.Short() {
@@ -448,6 +451,7 @@ func TestAnOperatorWatchesAndSteersALiveDurableWorker(t *testing.T) {
 // The kill is a real SIGKILL of the real harness process (the operator's
 // kill, the OOM); everything else is real — the supervisor, the harness, the
 // tools in the attempt worktree, and the REAL report checker on every yield.
+// serial: t.Setenv names the harness dir and the steer socket dir the executor and the runner process both read from the environment — t.Setenv refuses a parallel test.
 func TestAKilledDurableRunnerIsRelaunchedAndResumesMidTool(t *testing.T) {
 	shorttest.EndToEnd(t)
 	if testing.Short() {
@@ -581,6 +585,7 @@ func TestAKilledDurableRunnerIsRelaunchedAndResumesMidTool(t *testing.T) {
 // own abort ends one — and the conversation reads the steer and carries on
 // to its report. Before the fix the steer was placed after a round that
 // never ended, and the attempt was stopped as stuck one window later.
+// serial: t.Setenv names the harness dir and the steer socket dir the executor and the runner process both read from the environment — t.Setenv refuses a parallel test.
 func TestAStuckDurableWorkerInAHungToolIsSteeredThroughIt(t *testing.T) {
 	shorttest.EndToEnd(t)
 	if testing.Short() {

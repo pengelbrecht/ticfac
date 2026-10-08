@@ -57,6 +57,8 @@ func pushLog(t *testing.T, handle *JobHandle) string {
 // under the two grades. One advances a ref on origin and the other cannot —
 // and the one that cannot is not asked not to, it is launched unable to.
 func TestAReadOnlyAttemptCannotPushAndAWriteGradeAttemptStillCan(t *testing.T) {
+	t.Parallel()
+
 	t.Run("read-only", func(t *testing.T) {
 		f := newFixture(t, fixtureOptions{mode: "push", name: "readonly"})
 		handle := f.Start(readOnlySpec(f, "run-grade/tick-ro/attempt-1", "ro"))
@@ -99,6 +101,8 @@ func TestAReadOnlyAttemptCannotPushAndAWriteGradeAttemptStillCan(t *testing.T) {
 // out no push credential" has to be true of what is on disk, not only of what
 // the supervisor declines to spend.
 func TestAReadOnlyAttemptIsIssuedNoPushCredential(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report", name: "nocred"})
 	handle := f.Start(readOnlySpec(f, "run-grade/tick-nc/attempt-1", "nc"))
 	st := f.store(handle)
@@ -123,6 +127,8 @@ func TestAReadOnlyAttemptIsIssuedNoPushCredential(t *testing.T) {
 // They are different grants, and a source grade that cancelled the model's
 // would be a read-only review that cannot reach a model at all.
 func TestTheReadOnlySandboxScrubsSourceCredentialsAndKeepsTheModelGrant(t *testing.T) {
+	t.Parallel()
+
 	base := []string{
 		"PATH=/usr/bin",
 		"HOME=/home/worker",
@@ -217,6 +223,8 @@ func TestTheReadOnlySandboxScrubsSourceCredentialsAndKeepsTheModelGrant(t *testi
 // like a model error, which is why the property is a test rather than a
 // reading of the prefix list.
 func TestTheWorkersAiRouteSurvivesTheReadOnlyGrade(t *testing.T) {
+	t.Parallel()
+
 	base := []string{
 		"PATH=/usr/bin",
 		"HOME=/home/worker",
@@ -297,6 +305,8 @@ func pinMap(env []string) map[string][]string {
 // `lost`: not terminal, so every later restart re-adopts it and refuses it
 // again, forever.
 func TestASignalledSupervisorSettlesTheAttemptItStops(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "hang", name: "termed"})
 	handle := f.Start(f.spec("run-grade/tick-tm/attempt-1", "tm"))
 	st := f.store(handle)
@@ -329,6 +339,8 @@ func TestASignalledSupervisorSettlesTheAttemptItStops(t *testing.T) {
 // report), so its branch is still at the base and disposal may delete it: the
 // branch-safety refusal is about commits no remote has, and there are none.
 func TestDisposalRemovesTheExcludeLineItAdded(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "nocommit", name: "exclude"})
 	spec := readOnlySpec(f, "run-grade/tick-ex/attempt-1", "ex")
 	handle := f.Start(spec)
@@ -397,6 +409,8 @@ func pushUnder(dir string, env []string, args ...string) string {
 // land the ref — a case that cannot reach origin at all proves nothing — and
 // once under the read-only grade, where it must not.
 func TestAReadOnlyGradeRefusesEveryShapeAPushTargetCanBeWrittenAs(t *testing.T) {
+	t.Parallel()
+
 	repo := newRepo(t, "pushshapes")
 	origin, err := filepath.EvalSymlinks(repo.Origin)
 	if err != nil {
@@ -461,6 +475,8 @@ func TestAReadOnlyGradeRefusesEveryShapeAPushTargetCanBeWrittenAs(t *testing.T) 
 // internal/reconcile/doc.go and profiles/review-epic.md, which all say this
 // party is not stopped.
 func TestTheReadOnlyGradesResidualIsADeliberateOverrideOnTheCommandLine(t *testing.T) {
+	t.Parallel()
+
 	repo := newRepo(t, "residual")
 	origin, err := filepath.EvalSymlinks(repo.Origin)
 	if err != nil {

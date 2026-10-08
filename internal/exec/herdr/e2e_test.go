@@ -26,6 +26,8 @@ import (
 )
 
 func TestARealTickRunsEndToEndThroughThisExecutor(t *testing.T) {
+	t.Parallel()
+
 	// The tick: a real unit of work, recorded the way the tracker records
 	// one, pointed at by the prompt the executor renders.
 	h := newHarness(t, harnessOptions{spawnAgent: true, agentMode: "implement", kind: "codex"})
@@ -151,6 +153,8 @@ func printRun(t *testing.T, h *harness, handle *subprocess.JobHandle) {
 // what findAttemptState reconstructs for a reconciler that restarted on a
 // fresh clone — collects and disposes the attempt the first one dispatched.
 func TestTheRunSurvivesARestartOnTheMinimalHandle(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{spawnAgent: true, agentMode: "implement"})
 	tick := "t1"
 

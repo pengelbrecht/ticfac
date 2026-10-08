@@ -14,6 +14,8 @@ import (
 // question answered NEXT TO the removal, and never over work nobody kept.
 
 func TestDisposeTearsTheWorkspaceDown(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -51,6 +53,8 @@ func TestDisposeTearsTheWorkspaceDown(t *testing.T) {
 }
 
 func TestDisposeRefusesBeforeTheFactsArePersisted(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -76,6 +80,8 @@ func TestDisposeRefusesBeforeTheFactsArePersisted(t *testing.T) {
 }
 
 func TestDisposeRefusesAWorkingAgent(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -100,6 +106,8 @@ func TestDisposeRefusesAWorkingAgent(t *testing.T) {
 }
 
 func TestDisposeRefusesOnAnUnansweredLivenessQuestion(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -134,6 +142,8 @@ func TestDisposeRefusesOnAnUnansweredLivenessQuestion(t *testing.T) {
 // attempt forever: every later dispose would refuse on the same positive
 // answer, and the workspace would never go.
 func TestDisposeRemovesAProvablyGoneAgent(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -167,6 +177,8 @@ func TestDisposeRemovesAProvablyGoneAgent(t *testing.T) {
 }
 
 func TestDisposeToleratesAnAlreadyGoneWorkspace(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -191,6 +203,8 @@ func TestDisposeToleratesAnAlreadyGoneWorkspace(t *testing.T) {
 }
 
 func TestDisposeRefusesABranchNobodyKept(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -225,6 +239,8 @@ func TestDisposeRefusesABranchNobodyKept(t *testing.T) {
 }
 
 func TestDisposeArchivesTheOwnReportBeforeRemoving(t *testing.T) {
+	t.Parallel()
+
 	// The never-Force rule, and its one narrow exception: the attempt's own
 	// untracked report is the only dirt a collected worktree should carry,
 	// and it moves beside the attempt record rather than widening to Force.
@@ -265,6 +281,8 @@ func TestDisposeArchivesTheOwnReportBeforeRemoving(t *testing.T) {
 // trusted the id, believed `workspace_not_found`, and removed the manifest.
 
 func TestDisposeReclaimsByIdentityWhenTheRecordedWorkspaceIdIsStale(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -317,6 +335,8 @@ func TestDisposeReclaimsByIdentityWhenTheRecordedWorkspaceIdIsStale(t *testing.T
 }
 
 func TestDisposeReclaimsByBranchWhenTheSnapshotCannotAttribute(t *testing.T) {
+	t.Parallel()
+
 	// The snapshot without worktree blocks is the shape that forces the
 	// SECOND evidence: the branch. "A workspace whose worktree path names
 	// the tick is evidence; so is a branch."
@@ -348,6 +368,8 @@ func TestDisposeReclaimsByBranchWhenTheSnapshotCannotAttribute(t *testing.T) {
 }
 
 func TestDisposeRefusesToRemoveAWorkspaceIdNothingTiesToThisAttempt(t *testing.T) {
+	t.Parallel()
+
 	// The dangerous half of `workspace_not_found` read as success, inverted:
 	// herdr STILL has a workspace under the recorded id, but nothing — not
 	// the worktree, not the branch — says it is this attempt's. The id may
@@ -392,6 +414,8 @@ func TestDisposeRefusesToRemoveAWorkspaceIdNothingTiesToThisAttempt(t *testing.T
 }
 
 func TestDisposeNeverTouchesTheForeignWorkspaceTheStaleIdCollidesWith(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -430,6 +454,8 @@ func TestDisposeNeverTouchesTheForeignWorkspaceTheStaleIdCollidesWith(t *testing
 }
 
 func TestDisposeRefusesWhenHerdrCannotBeAskedWhatExists(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -460,6 +486,8 @@ func TestDisposeRefusesWhenHerdrCannotBeAskedWhatExists(t *testing.T) {
 }
 
 func TestAnInterruptedTeardownIsResumable(t *testing.T) {
+	t.Parallel()
+
 	// The kill lands between the steps of a disposal — the archive is done,
 	// herdr never accepted the removal — and the NEXT run must find the
 	// workspace from durable state and finish the job, not shrug because
@@ -512,6 +540,8 @@ func TestAnInterruptedTeardownIsResumable(t *testing.T) {
 }
 
 func TestDisposeTreatsALiveAgentOnMergedWorkAsAnOrdinaryCase(t *testing.T) {
+	t.Parallel()
+
 	// "Still live on a merged branch" was reported as a note to step around
 	// on this epic's own wave 1 — all three of ours produced it. A settled,
 	// live agent on merged work is the NORMAL end-of-run state, and the
@@ -546,6 +576,8 @@ func TestDisposeTreatsALiveAgentOnMergedWorkAsAnOrdinaryCase(t *testing.T) {
 }
 
 func TestTheAttemptRecordOutlivesTheTeardownAndCarriesTheProvenance(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -605,6 +637,8 @@ func observationMentioning(h *harness, state, text string) ([]subprocess.Observa
 // half of the evidence attribution is keyed on; herdr not answering it is an
 // unanswered question, never a "nothing there" verdict.
 func TestDisposeRefusesWhenHerdrCannotSayWhichWorktreesExist(t *testing.T) {
+	t.Parallel()
+
 	// The snapshot without worktree blocks forces the attribution onto the
 	// listing's evidence; the restart strands the recorded id so nothing in
 	// the snapshot alone can attribute — and then the listing herdr refuses
@@ -652,6 +686,8 @@ func TestDisposeRefusesWhenHerdrCannotSayWhichWorktreesExist(t *testing.T) {
 // behind. "Never confirmed" is not evidence that no agent is there; the
 // removal asks herdr, exactly as it does for a confirmed launch.
 func TestDisposeAsksAboutLivenessEvenWhenTheLaunchWasNeverConfirmed(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	// A launch that fails after the worktree and workspace exist: the
 	// record is written LaunchConfirmed=false, and whether an agent ended

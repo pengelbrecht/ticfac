@@ -15,6 +15,8 @@ import (
 // the prompt, always, because the prompt is a positional argument and a flag
 // after it is a flag one of these CLIs would read as part of it.
 func TestEveryKnownRunnerCarriesTheModelBeforeThePrompt(t *testing.T) {
+	t.Parallel()
+
 	want := map[string]string{"claude": "--model", "codex": "-m", "pi": "--model"}
 	for _, name := range KnownRunners() {
 		flag, ok := want[name]
@@ -44,6 +46,8 @@ func TestEveryKnownRunnerCarriesTheModelBeforeThePrompt(t *testing.T) {
 // No model routed, no flag: the runner is launched exactly as it was before,
 // on whatever model its own configuration chooses.
 func TestNoModelLeavesTheArgvAlone(t *testing.T) {
+	t.Parallel()
+
 	at := launch{Prompt: "P", GitCommonDir: "/repo/.git", HarnessDir: "/repo/harness", StateDir: "/state/attempt"}
 	for _, name := range KnownRunners() {
 		argv, err := resolveRunner(name, nil, at)
@@ -62,6 +66,8 @@ func TestNoModelLeavesTheArgvAlone(t *testing.T) {
 // what a build with a runner's flags wrong reaches for — so this executor does
 // not edit one, and the caller who set it owns whether it names a model.
 func TestAnArgvOverrideOwnsTheWholeInvocationIncludingTheModel(t *testing.T) {
+	t.Parallel()
+
 	argv, err := resolveRunner("claude", []string{"/bin/sh", "-c", "true"},
 		launch{Prompt: "P", Model: "a-model"})
 	if err != nil {
@@ -79,6 +85,8 @@ func TestAnArgvOverrideOwnsTheWholeInvocationIncludingTheModel(t *testing.T) {
 // a refusal: launching it anyway would run a model nobody asked for while every
 // record said otherwise.
 func TestAModelRoutedToARunnerWithNoModelFlagIsRefused(t *testing.T) {
+	t.Parallel()
+
 	silent := runnerDef{Argv: []string{"quiet", promptPlaceholder}}
 	if _, err := withModel("quiet", silent, "a-model"); err == nil {
 		t.Fatal("a model was accepted by a runner that has nowhere to put one")
@@ -95,6 +103,8 @@ func TestAModelRoutedToARunnerWithNoModelFlagIsRefused(t *testing.T) {
 // The question the reconciler asks BEFORE it claims a tick: can this runner be
 // told which model to use at all?
 func TestRunnerAcceptsModelAnswersForEveryKnownRunner(t *testing.T) {
+	t.Parallel()
+
 	for _, name := range KnownRunners() {
 		if !RunnerAcceptsModel(name) {
 			t.Errorf("%s takes no model, and a profile routing one to it would be unapplied", name)

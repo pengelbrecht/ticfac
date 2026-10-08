@@ -27,6 +27,8 @@ import (
 // moment — there is a report on disk and a branch in git, and the first
 // inspect after either appears reads them.
 func TestAFinishedWorkerIsSeenByTheNextInspectWithNobodyWatching(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 	handle := f.Start(f.spec("run-1/tick-aaa/attempt-1", "aaa"))
 
@@ -50,6 +52,8 @@ func TestAFinishedWorkerIsSeenByTheNextInspectWithNobodyWatching(t *testing.T) {
 // but the handle record asks. It must get the answer at once — not wait for a
 // process it never started, and not re-run anything.
 func TestAKilledAndReissuedWaitSeesSettledWorkImmediately(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 	handle := f.Start(f.spec("run-2/tick-bbb/attempt-1", "bbb"))
 	f.waitSettled(handle)
@@ -92,6 +96,8 @@ func TestAKilledAndReissuedWaitSeesSettledWorkImmediately(t *testing.T) {
 // working directory at the moment it writes is irrelevant — which is the whole
 // reason the path is not "RESULT-<id>.md in the repository root".
 func TestAWorkerThatWandersOffStillWritesTheReportWhereCollectReadsIt(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report_from_tmp"})
 	handle := f.Start(f.spec("run-3/tick-ccc/attempt-1", "ccc"))
 	f.waitSettled(handle)
@@ -124,6 +130,8 @@ func TestAWorkerThatWandersOffStillWritesTheReportWhereCollectReadsIt(t *testing
 // a handle's identity, one attempt's state directory, worktree and branch
 // would be the other's.
 func TestTwoRepositoriesRunningTheSameTickDoNotCollide(t *testing.T) {
+	t.Parallel()
+
 	shared := filepath.Join(t.TempDir(), "state")
 	first := newFixture(t, fixtureOptions{mode: "report", name: "alpha", stateDir: shared})
 	second := newFixture(t, fixtureOptions{mode: "report", name: "beta", stateDir: shared})
@@ -166,6 +174,8 @@ func TestTwoRepositoriesRunningTheSameTickDoNotCollide(t *testing.T) {
 // REQUIRED. Cleanup leaves zero run-created worktrees and zero run-created
 // branches.
 func TestCleanupLeavesNoRunCreatedWorktreeOrBranch(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 	handle := f.Start(f.spec("run-5/tick-eee/attempt-1", "eee"))
 	f.waitSettled(handle)
@@ -213,6 +223,8 @@ func TestCleanupLeavesNoRunCreatedWorktreeOrBranch(t *testing.T) {
 // Disposal refuses to delete a branch whose commits no remote has: cleanup
 // that also throws away the only copy of the work is not cleanup.
 func TestDisposalRefusesToDiscardWorkNoRemoteHas(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report", noRemote: true})
 	handle := f.Start(f.spec("run-6/tick-fff/attempt-1", "fff"))
 	f.waitSettled(handle)
@@ -241,6 +253,8 @@ func TestDisposalRefusesToDiscardWorkNoRemoteHas(t *testing.T) {
 // put in a group of its own at spawn. What is left behind is a handle, and the
 // handle is enough.
 func TestKillingTheExecutorMidJobLeavesAReconcilableHandle(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		// It runs the shipped binary and waits on a real runner.
 		t.Skip("short mode: this one kills a real process tree")
@@ -307,6 +321,8 @@ func TestKillingTheExecutorMidJobLeavesAReconcilableHandle(t *testing.T) {
 // committed, and nothing was reported. It is neither running nor done, and a
 // controller that rounded it to either would wait forever or merge silence.
 func TestSettledWithoutAReportIsItsOwnStatus(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "silent"})
 	handle := f.Start(f.spec("run-8/tick-hhh/attempt-1", "hhh"))
 	f.waitSettled(handle)
@@ -339,6 +355,8 @@ func TestSettledWithoutAReportIsItsOwnStatus(t *testing.T) {
 // worker left a readable report claiming an outcome, and the branch is still
 // empty — nothing above explains it, so the surprise gets its own name.
 func TestAReportOverAnEmptyBranchIsNoCommits(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "nocommit"})
 	handle := f.Start(f.spec("run-9/tick-iii/attempt-1", "iii"))
 	f.waitSettled(handle)
@@ -365,6 +383,8 @@ func TestAReportOverAnEmptyBranchIsNoCommits(t *testing.T) {
 // at its quota never reported, and the empty branch is a consequence of that.
 // The failure class is what carries the runner's own words forward.
 func TestAQuotaExhaustedRunnerCollectsWithItsOwnFailureClass(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "quota_exhausted"})
 	handle := f.Start(f.spec("run-19/tick-ttt/attempt-1", "ttt"))
 	f.waitSettled(handle)
@@ -391,6 +411,8 @@ func TestAQuotaExhaustedRunnerCollectsWithItsOwnFailureClass(t *testing.T) {
 // at its quota never reported, and the empty branch is a consequence of that.
 // The failure class is what carries the runner's own words forward.
 func TestAPiOutOfUsageRunnerCollectsWithItsOwnFailureClass(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "pi_out_of_usage"})
 	handle := f.Start(f.spec("run-21/tick-vvv/attempt-1", "vvv"))
 	f.waitSettled(handle)
@@ -415,6 +437,8 @@ func TestAPiOutOfUsageRunnerCollectsWithItsOwnFailureClass(t *testing.T) {
 // exited before it reached the model never reported, and the empty branch is
 // a consequence of that. The failure class carries the real cause.
 func TestAUsageErrorExitCollectsAsInfrastructureError(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "usage_error"})
 	handle := f.Start(f.spec("run-20/tick-uuu/attempt-1", "uuu"))
 	f.waitSettled(handle)
@@ -435,6 +459,8 @@ func TestAUsageErrorExitCollectsAsInfrastructureError(t *testing.T) {
 // including the exempt files, which are NOT violations: config, the runner
 // table and the learnings are a worker's to amend, the records are not.
 func TestTrackerRecordsAreABoundaryViolationAndTheLearningsAreNot(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "boundary"})
 	handle := f.Start(f.spec("run-10/tick-jjj/attempt-1", "jjj"))
 	f.waitSettled(handle)
@@ -467,6 +493,8 @@ func TestTrackerRecordsAreABoundaryViolationAndTheLearningsAreNot(t *testing.T) 
 // off the branch, and collect reads it from the worktree exactly as it would
 // any other report.
 func TestTheReportNeverRidesIntoTheBranch(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report_then_addall"})
 	handle := f.Start(f.spec("run-wtd/tick-www/attempt-1", "www"))
 	f.waitSettled(handle)
@@ -512,6 +540,8 @@ func TestTheReportNeverRidesIntoTheBranch(t *testing.T) {
 // the same boundary-class verdict a tracker-record write gets, whatever else
 // the attempt did.
 func TestACommittedArtifactIsCaughtAsABoundaryViolation(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "force_report"})
 	handle := f.Start(f.spec("run-wtd/tick-xxx/attempt-1", "xxx"))
 	f.waitSettled(handle)
@@ -537,6 +567,8 @@ func TestACommittedArtifactIsCaughtAsABoundaryViolation(t *testing.T) {
 // A live attempt is ADOPTED, never redispatched: the same handle comes back
 // and no second process is started.
 func TestALiveAttemptIsAdoptedRatherThanRedispatched(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "hang"})
 	spec := f.spec("run-11/tick-kkk/attempt-1", "kkk")
 	first := f.Start(spec)
@@ -562,6 +594,8 @@ func TestALiveAttemptIsAdoptedRatherThanRedispatched(t *testing.T) {
 // that depends on the job remembering to push at exit, which is exactly what a
 // killed job never does.
 func TestTheTimerPushesInProgressWorkToOrigin(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "hang", pushInterval: time.Second})
 	handle := f.Start(f.spec("run-12/tick-lll/attempt-1", "lll"))
 
@@ -580,6 +614,8 @@ func TestTheTimerPushesInProgressWorkToOrigin(t *testing.T) {
 // The wall clock stops a runner that will not stop itself, and the attempt
 // that comes back says so rather than reporting a generic failure.
 func TestTheWallClockStopsARunnerThatWillNotStop(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "hang"})
 	spec := f.spec("run-13/tick-mmm/attempt-1", "mmm")
 	spec.Limits.WallSeconds = 1
@@ -599,6 +635,8 @@ func TestTheWallClockStopsARunnerThatWillNotStop(t *testing.T) {
 // A cancel revokes first and stops second, is idempotent, and leaves an
 // attempt that can never boot again.
 func TestCancelRevokesBeforeItStopsAndRefusesEveryLaterBoot(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "hang"})
 	spec := f.spec("run-14/tick-nnn/attempt-1", "nnn")
 	handle := f.Start(spec)
@@ -662,6 +700,8 @@ func TestCancelRevokesBeforeItStopsAndRefusesEveryLaterBoot(t *testing.T) {
 // A recorded stop refuses the NEXT boot, not only the live one. It is a
 // refusal to ISSUE, checked before every start.
 func TestARecordedStopRefusesTheNextBoot(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 	if err := f.Executor.RequestStop("operator", "the run was called off"); err != nil {
 		t.Fatal(err)
@@ -678,6 +718,8 @@ func TestARecordedStopRefusesTheNextBoot(t *testing.T) {
 
 // The prompt reaches the runner, and it carries the absolute report path.
 func TestTheRunnerIsHandedThePromptAndTheReportPath(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "echo_prompt"})
 	handle := f.Start(f.spec("run-16/tick-ppp/attempt-1", "ppp"))
 	f.waitSettled(handle)
@@ -700,6 +742,8 @@ func TestTheRunnerIsHandedThePromptAndTheReportPath(t *testing.T) {
 // around it: a profile whose prompt stopped at the attempt record would be a
 // profile three of whose four fields did nothing.
 func TestTheRolePromptReachesTheRunner(t *testing.T) {
+	t.Parallel()
+
 	const rolePrompt = "# review-epic\n\nYou are reviewing an epic at its frontier, READ-ONLY."
 	f := newFixture(t, fixtureOptions{mode: "echo_prompt", rolePrompt: rolePrompt, model: "a-model"})
 	handle := f.Start(f.spec("run-17/tick-qqq/attempt-1", "qqq"))
@@ -850,6 +894,8 @@ func formatObservations(observations []Observation) string {
 // The ack contradicted what the cancel had just done, on the one path where a
 // person is trying to stop something that is still spending.
 func TestCancelStopsAWorkerThatWroteItsReportAndKeptRunning(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report_then_hang"})
 	spec := f.spec("run-15/tick-rrr/attempt-1", "rrr")
 	handle := f.Start(spec)
@@ -901,6 +947,8 @@ func TestCancelStopsAWorkerThatWroteItsReportAndKeptRunning(t *testing.T) {
 // ready-to-merge and rejected it. Deterministic: the runner lingers two
 // seconds past its report, and the cancel is issued inside them.
 func TestCancelInAFinishedWorkersTailLeavesItsVerdictAlone(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report_then_linger"})
 	handle := f.Start(f.spec("run-hol/tick-lll/attempt-1", "lll"))
 	st := f.store(handle)

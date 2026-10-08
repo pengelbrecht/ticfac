@@ -37,6 +37,8 @@ func (h *harness) doWork(t *testing.T, handle *subprocess.JobHandle, statusLine 
 }
 
 func TestInspectReportsARunningAgent(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -59,6 +61,8 @@ func TestInspectReportsARunningAgent(t *testing.T) {
 }
 
 func TestInspectAnswersFromTheReportBeforeAskingHerdr(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -83,6 +87,8 @@ func TestInspectAnswersFromTheReportBeforeAskingHerdr(t *testing.T) {
 }
 
 func TestInspectRecordsTheAgentGoneAndSettlesTheAttempt(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -117,6 +123,8 @@ func TestInspectRecordsTheAgentGoneAndSettlesTheAttempt(t *testing.T) {
 }
 
 func TestInspectAnswersLostWhenNobodyCanBeAsked(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -138,6 +146,8 @@ func TestInspectAnswersLostWhenNobodyCanBeAsked(t *testing.T) {
 }
 
 func TestInspectAnswersCancelledFromTheDurableRecord(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -167,6 +177,8 @@ func TestInspectAnswersCancelledFromTheDurableRecord(t *testing.T) {
 // enforced even on an attempt that reported, or dispose then refuses it as a
 // working agent forever.
 func TestAReportingAgentPastItsBoundIsStillStopped(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	clock := &wallClock{t: time.Now().UTC()}
 	h.ex.now = clock.now

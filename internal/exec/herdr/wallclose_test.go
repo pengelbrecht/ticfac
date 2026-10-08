@@ -31,6 +31,8 @@ import (
 // is preserved on a ref of its own BEFORE the close, and the attempt
 // settles as stopped at its wall clock.
 func TestAnAgentThatIgnoresTheInterruptIsClosedAtTheGrace(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{spawnAgent: true, agentMode: "ignore"})
 	clock := &wallClock{t: time.Now().UTC()}
 	h.ex.now = clock.now
@@ -205,6 +207,8 @@ func TestAnAgentThatIgnoresTheInterruptIsClosedAtTheGrace(t *testing.T) {
 // positive answer — and the escalation never fires. No pane is closed, and
 // no snapshot is taken, because nothing was ever at risk from a close.
 func TestAnAgentThatHonoursTheInterruptIsNeverClosed(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	clock := &wallClock{t: time.Now().UTC()}
 	h.ex.now = clock.now
@@ -262,6 +266,8 @@ func TestAnAgentThatHonoursTheInterruptIsNeverClosed(t *testing.T) {
 // the agent after the close holds the settlement to the next poll rather
 // than claiming the stop worked.
 func TestTheCloseSettlesOnThePositiveAnswerNotOnItsOwnAcceptance(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{paneCloseLingers: true})
 	clock := &wallClock{t: time.Now().UTC()}
 	h.ex.now = clock.now
@@ -322,6 +328,8 @@ func TestTheCloseSettlesOnThePositiveAnswerNotOnItsOwnAcceptance(t *testing.T) {
 // observation it is, re-attempted at every poll — rather than proceeding
 // into a stop that throws the work away to save the clock.
 func TestASnapshotThatCannotLandHoldsTheClose(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	clock := &wallClock{t: time.Now().UTC()}
 	h.ex.now = clock.now
