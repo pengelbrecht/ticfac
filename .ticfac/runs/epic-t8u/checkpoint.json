@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 122,
-  "state": "collecting",
-  "reason": "collecting x73 attempt 17",
-  "updated_at": "2026-10-08T02:10:59Z",
+  "sequence": 123,
+  "state": "integrating",
+  "reason": "integrating x73 attempt 17 into epic/t8u",
+  "updated_at": "2026-10-08T02:11:56Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -89,7 +89,7 @@
     },
     {
       "tick_id": "x73",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 17
     },
     {
