@@ -245,6 +245,136 @@ func TestSkillsInstallJSONReportsTargets(t *testing.T) {
 	_ = root
 }
 
+// `skills get --full` prints SKILL.md then every references/ file, each
+// under a separator naming its path — the only way to read those files
+// without installing the skill to disk first.
+func TestSkillsGetFullPrintsEveryFile(t *testing.T) {
+	t.Parallel()
+
+	paths, err := skills.Paths("ticfac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refs []string
+	for _, p := range paths {
+		if p != "SKILL.md" {
+			refs = append(refs, p)
+		}
+	}
+	if len(refs) == 0 {
+		t.Fatal("the ticfac skill carries no references/ files to test --full against")
+	}
+
+	var stdout, stderr stringsBuilder
+	code := Run([]string{"skills", "get", "ticfac", "--full"}, &stdout, &stderr)
+	if code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+
+	skillMD, err := skills.Read("ticfac", "SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out, string(skillMD)) {
+		t.Errorf("--full does not lead with SKILL.md's own content:\n%s", out)
+	}
+	for _, p := range refs {
+		header := "--- " + p + " ---"
+		if !strings.Contains(out, header) {
+			t.Errorf("--full does not print a header naming %q:\n%s", p, out)
+		}
+		content, err := skills.Read("ticfac", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out, string(content)) {
+			t.Errorf("--full does not print %s's content", p)
+		}
+	}
+	// References appear in the same order skills.Paths names them, after
+	// SKILL.md's own content.
+	prevIdx := strings.Index(out, string(skillMD))
+	for _, p := range refs {
+		idx := strings.Index(out, "--- "+p+" ---")
+		if idx < prevIdx {
+			t.Errorf("%s appears out of order in --full's output", p)
+		}
+		prevIdx = idx
+	}
+}
+
+// Without --full, `skills get` is unchanged: SKILL.md alone, no headers.
+func TestSkillsGetWithoutFullPrintsOnlySkillMD(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	code := Run([]string{"skills", "get", "ticfac"}, &stdout, &stderr)
+	if code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "--- references/") {
+		t.Errorf("without --full, skills get printed a references/ header:\n%s", stdout.String())
+	}
+}
+
+// --full --json reports every file as a {path, content} entry — SKILL.md
+// first, then every references/ file — the same content the plain text
+// carries, as fields.
+func TestSkillsGetFullJSONReportsEveryFile(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	code := Run([]string{"skills", "get", "ticfac", "--full", "--json"}, &stdout, &stderr)
+	if code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	var doc struct {
+		Schema string `json:"schema"`
+		State  string `json:"state"`
+		Skill  string `json:"skill"`
+		Files  []struct {
+			Path    string `json:"path"`
+			Content string `json:"content"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal([]byte(stdout.String()), &doc); err != nil {
+		t.Fatalf("the --json report does not parse: %v\n%s", err, stdout.String())
+	}
+	if doc.Schema != "ticfac.skills-get.v1" || doc.State != "done" || doc.Skill != "ticfac" {
+		t.Errorf("the report's header is wrong: %+v", doc)
+	}
+	wantPaths, err := skills.Paths("ticfac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Files) != len(wantPaths) {
+		t.Fatalf("got %d files, want %d: %+v", len(doc.Files), len(wantPaths), doc.Files)
+	}
+	for i, p := range wantPaths {
+		if doc.Files[i].Path != p {
+			t.Errorf("file %d is %q, want %q", i, doc.Files[i].Path, p)
+		}
+		want, err := skills.Read("ticfac", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if doc.Files[i].Content != string(want) {
+			t.Errorf("%s's content does not match the embedded bundle", p)
+		}
+	}
+}
+
+// An unknown skill is still the not-found code with --full.
+func TestSkillsGetFullUnknownSkill(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "get", "no-such-skill", "--full"}, &stdout, &stderr); code != exitNotFound {
+		t.Fatalf("exit %d, want %d", code, exitNotFound)
+	}
+}
+
 // A clean install has no drift: `skills diff` exits 0 and says so.
 func TestSkillsDiffNoDrift(t *testing.T) {
 	root := skillsRepoFixture(t, ".claude/skills")
