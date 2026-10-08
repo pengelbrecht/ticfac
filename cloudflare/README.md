@@ -36,12 +36,13 @@ orchestrator sandbox, watches it, enforces the budgets and finalizes — see
 | `src/observe.ts` | `GET /api/observe` — one read-only frame for `tk factory dashboard`: the listing, a focused run's phase/image/boot/gates, the `dispatch_log` refusals, and the `run_event` tail the room keeps. |
 | `src/env.d.ts` | Hand-written `Cloudflare.Env` (what `wrangler types` would generate). Keep in sync with `wrangler.toml`. |
 | `test/` | vitest + `@cloudflare/vitest-pool-workers`: real workerd, bindings read from `wrangler.toml`. |
+| `test/property/` | the plain-Node vitest leg (tick p0n): Hegel property tests over pure modules — the supervision loop's state machine (`src/run-watch.ts`), the dispatch door's request grammar, the dyo/94u report-only refusal, repo-config parsing, the gateway's Workers-AI-only allow-list — run by `vitest.config.hegel.ts` (`pnpm test:properties`), chained into `pnpm test`. This is the fallback the workerd question picked: Hegel's WASM build does not load under workerd (its browser entry fetches its own `.wasm` over `file://`, which workerd's `fetch` refuses — `test/hegel-probe.test.ts` pins the mechanism), so the property tests run over pure modules under plain Node, where the package's `node` condition picks its native engine. |
 
 ## Develop
 
 ```sh
 pnpm install
-pnpm test          # vitest in workerd
+pnpm test          # contracts + the property leg + vitest in workerd
 pnpm typecheck
 pnpm dev           # local worker on :8788
 ```

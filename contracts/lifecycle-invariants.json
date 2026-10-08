@@ -247,6 +247,11 @@
           "note": "the run record (updateRunState / writeRunRecord) is written BY the supervisor and is never read as liveness; `observe` asks the sandbox binding, and the lease is renewed against a Durable Object that outlives the isolate. askProcess reports WHICH thing happened (ticfac tick 3ed): the container answered — 'no such process' included, which is `gone` — or the question failed, which is `unknown`, a statement about the observer and never `gone`."
         },
         {
+          "file": "cloud/factory/src/run-watch.ts",
+          "symbols": ["watchLook", "MAX_UNANSWERED_LOOKS", "processEnded"],
+          "note": "tick p0n: the hold itself — a look whose question failed is `unknown` and can only hold or, past MAX_UNANSWERED_LOOKS, fail as its own class — is the machine's transition now, driven by property tests; observe/askProcess above remain where the question is asked and the answer kept apart."
+        },
+        {
           "file": "cloud/factory/src/sandbox-executor.ts",
           "symbols": ["namedAttemptStatus", "findWorkProcess", "statusFromProcess"],
           "note": "a per-tick worker's liveness is asked of its container BY NAME, from the live process list — never a remembered process id and never anything the worker wrote; an absent work process is `lost`, a statement about the observer and never `failed`"
@@ -409,7 +414,8 @@
           "symbols": ["start_keeper", "keeper_interval", "TICKS_KEEPER_INTERVAL", "run_branch"],
           "note": "the run keeper: pushes the run branch and prints a heartbeat every keeper_interval seconds, so a run that dies leaves its work on origin. Not pinned by any test today (see repo-wiki/phase0-compat-suite.md)."
         },
-        { "file": "cloud/factory/src/run-workflow.ts", "symbols": ["assessProgress", "applyProgress", "isTerminalExit", "finalize"], "note": "tick ehy: the exit status only decides whether to reboot; whether the epic MOVED is decided against the durable layer." },
+        { "file": "cloud/factory/src/run-workflow.ts", "symbols": ["assessProgress", "applyProgress", "finalize"], "note": "tick ehy: the exit status only decides whether to reboot; whether the epic MOVED is decided against the durable layer." },
+        { "file": "cloud/factory/src/run-watch.ts", "symbols": ["isTerminalExit", "terminalExitReason", "watchEnded"], "note": "tick p0n: the exit classification — which codes are configuration verdicts, and that a halted or terminal exit never reboots — moved into the watch's pure decision core so the property tests can drive it without workerd; supervisePass calls watchEnded where it used to ask isTerminalExit itself." },
         { "file": "cloud/factory/src/progress.ts", "symbols": ["snapshotRefs", "compareSnapshots", "unverifiedProgress"], "note": "the remote's refs before and after — the only completion evidence" },
         { "file": "cloud/factory/src/worker-dispatch.ts", "symbols": ["DEFAULT_SALVAGE_GRACE_MS"], "note": "the push margin a cancelled container is given before teardown" }
       ],
@@ -599,8 +605,13 @@
       "today": [
         {
           "file": "cloud/factory/src/run-workflow.ts",
-          "symbols": ["leaseLostTrip", "LeaseRenewal", "renewRunLease", "isTerminalExit", "terminalExitReason", "ProcessQuestion", "ObservedProcessState", "MAX_UNANSWERED_LOOKS"],
+          "symbols": ["leaseLostTrip", "LeaseRenewal", "renewRunLease", "ProcessQuestion", "ObservedProcessState", "MAX_UNANSWERED_LOOKS"],
           "note": "`null` from renewRunLease is 'the renewal could not be made' and is NOT a lost lease; `ok: false` is a verdict carrying WHICH of the two ways the lease went. An orchestrator that exited with a configuration verdict is named by its class and not rebooted, which is a different ending from one that died. A container that could not be asked (ProcessQuestion `answered: false`, observed as `unknown`) is a third ending: after MAX_UNANSWERED_LOOKS the run fails as unanswerable, in words neither an exit nor a sandbox death produces (ticfac tick 3ed)."
+        },
+        {
+          "file": "cloud/factory/src/run-watch.ts",
+          "symbols": ["watchLook", "watchEnded", "isTerminalExit", "terminalExitReason"],
+          "note": "tick p0n: the watch's decision core — the unknown hold, the unanswerable ending, and the exit classification that names a configuration verdict rather than a death — is a pure state machine the property tests drive over arbitrary look sequences. The words stay supervisePass's; the classes are the machine's."
         },
         {
           "file": "cloud/factory/src/gateway.ts",

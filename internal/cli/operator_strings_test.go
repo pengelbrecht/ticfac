@@ -18,10 +18,10 @@ package cli
 // registry in the factory names 'tk herd spawn' as an ACTOR on an operator's
 // laptop (who else creates tick/* branches), not as a command to run.
 import (
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -40,21 +40,23 @@ func TestOperatorFacingStringsNameThisBinarysCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Tracked files, not a directory walk (tick pqs): an agent worktree or a
+	// scratch clone under this checkout is no party to this tree, and a
+	// directory walk reads it.
 	sources := []string{}
-	for _, dir := range []string{"internal", "cmd"} {
-		err := filepath.WalkDir(filepath.Join(root, dir), func(path string, entry fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return nil
-			}
-			sources = append(sources, path)
-			return nil
-		})
-		if err != nil {
-			t.Fatalf("walk %s: %v", dir, err)
+	for _, path := range gittest.Tracked(t, root) {
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			t.Fatal(relErr)
 		}
+		rel = filepath.ToSlash(rel)
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			continue
+		}
+		if !strings.HasPrefix(rel, "internal/") && !strings.HasPrefix(rel, "cmd/") {
+			continue
+		}
+		sources = append(sources, path)
 	}
 	if len(sources) == 0 {
 		t.Fatal("found no Go sources to guard — the scan cannot be silently empty")

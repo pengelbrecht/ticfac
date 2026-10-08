@@ -1,0 +1,14 @@
+{
+  "id": "w3l",
+  "title": "Nice'd test runs can wedge the whole -timeout in forkExec under host overload",
+  "description": "Observed once while verifying tick x73: `nice -n 15 go test -race -count=2 -timeout 45m -parallel 12 ./internal/exec/subprocess/` with host load ~17 (17 on 10 cores) timed out at 45m with TestAFreshDiskStartRefusesAPushedHeadThatIsNotThisAttemptSWork blocked 44m45s in syscall.forkExec — the forked child inherits the niced priority and was starved of every time slice while the rest of the suite completed around it. The identical command at normal priority (82.7s) and 10 isolated -race passes of the same test (4.9s) are green, so this is a machine-verdict episode of exactly the class cy2 fenced, not a tree defect: AGENTS.md tells workers to run heavy commands at low priority, and a worker doing so during an overload episode can lose 45 minutes to a wedge that re-runs green. Worth a tick to decide the repo's answer (a documented exception to the low-priority rule for fork-heavy suites, or a bounded per-suite retry), since -parallel 12 makes fork storms more frequent.\nevidence: the command above; panic 'test timed out after 45m0s', running tests: TestAFreshDiskStartRefusesAPushedHeadThatIsNotThisAttemptSWork (44m45s), stack in syscall.forkExec/syscall.readlen; retried green 2026-10-08T01:57:29Z at load ~6\n\nticfac run epic-t8u filed this backlog tick from the finding 3e022430e49e2fd3ef7ed504c28e0138fa00ef35862d699af5a0abb85ee94753 (reported by run-epic-t8u/tick-x73/attempt-17) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/3e022430e49e2fd3ef7ed504c28e0138fa00ef35862d699af5a0abb85ee94753.json on the run branch.",
+  "notes": "2026-10-08 04:11 - ticfac run epic-t8u: created by absorbing finding 3e022430e49e2fd3ef7ed504c28e0138fa00ef35862d699af5a0abb85ee94753 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/3e022430e49e2fd3ef7ed504c28e0138fa00ef35862d699af5a0abb85ee94753.json on epic/t8u, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-x73/attempt-17",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-08T02:11:07Z",
+  "updated_at": "2026-10-08T02:11:12.804489Z"
+}

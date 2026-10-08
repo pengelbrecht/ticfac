@@ -1635,6 +1635,112 @@ func (r *Reconciler) rejectDurably(marker attemptHandle, verdict, message string
 	return err
 }
 
+// recordCollectVerdict is the collect's own checkpoint, written at the
+// ruling: it states the run's state (collecting) and, in its reason, the
+// verdict this collect ruled for the attempt — durable on origin BEFORE the
+// attempt's worker is released (tick o3q).
+//
+// The release is a Cancel, and a reported worker that is still running past
+// its grace is stopped and durably cancelled by it (#141) — the run's own
+// release, naming `cancelled` an attempt this run has just judged
+// `ready-to-merge`. Rejections have always had their verdict recorded
+// (rejectDurably, read back by disposition); the positive verdict had none,
+// so a restart re-collected the attempt and took the executor's word for it
+// again. Recorded here — one write, one push, the announce it replaced
+// folded in (tick f61) — the verdict is what a resume reads FIRST
+// (readRecordedVerdictFirst), and the release's own cancellation cannot
+// override the work it is the record of.
+func (r *Reconciler) recordCollectVerdict(marker attemptHandle) error {
+	_, err := r.checkpoint(runstate.StateCollecting,
+		fmt.Sprintf("%s is collected (%s)", r.attemptName(marker.TickID, marker.Attempt),
+			subprocess.VerdictReadyToMerge))
+	return err
+}
+
+// recordedCollectVerdict is the collect verdict this run's own records state
+// for one attempt, and "" when they state none: the checkpoint reason
+// recordCollectVerdict wrote, read back the way a recorded rejection is
+// (rejectDurably, recordedVerdict in rejected_work.go). The run's records
+// are the one place a restart can read what a previous incarnation ruled
+// without asking the executor to rule again — which is exactly what the
+// release's own cancellation would make it do.
+func (r *Reconciler) recordedCollectVerdict(marker attemptHandle) string {
+	history, err := r.store.CheckpointHistory()
+	if err != nil {
+		// A history that cannot be read is no history at all: without a
+		// recorded verdict there is nothing to restore, and the re-collect
+		// rules on the executor's answer exactly as a first collect does.
+		return ""
+	}
+	name := r.attemptName(marker.TickID, marker.Attempt)
+	for _, checkpoint := range history {
+		if !strings.Contains(checkpoint.Reason, name) {
+			continue
+		}
+		if m := recordedCollectVerdictReason.FindStringSubmatch(checkpoint.Reason); m != nil {
+			return m[1]
+		}
+	}
+	return ""
+}
+
+// recordedCollectVerdictReason is the sentence recordCollectVerdict writes,
+// keyed the way recordedVerdict keys rejectDurably's: one closed-vocabulary
+// word inside the reason a checkpoint carries, matched on the attempt's own
+// name by the caller.
+var recordedCollectVerdictReason = regexp.MustCompile(`is collected \(([a-z-]+)\)`)
+
+// readRecordedVerdictFirst restores the recorded verdict of a re-collected
+// attempt over the executor's cancelled answer (tick o3q).
+//
+// The trigger is the closed vocabulary's own `cancelled` outcome — the only
+// shape a later cancellation produces — and the recorded verdict must be
+// ready-to-merge, which is also the proof the cancellation FOLLOWED it: a
+// cancelled attempt collects as missing-result, so a recorded ready-to-merge
+// says no cancellation existed when the collect ruled, and whatever cancel
+// record the re-collect reads was written after it — by the run's own release
+// of the worker it had collected, or by a person stopping something already
+// judged. Either way the work stands judged, and the attempt is finished from
+// its recorded verdict: a cancel only counts when it precedes the verdict, and
+// one that did is baked into the verdict the collect recorded.
+//
+// Everything else in the collection is the attempt's own durable facts — the
+// report, the branch, the diff — read back exactly as the first collect read
+// them; only the verdict, the outcome and the message are the cancellation's.
+func (r *Reconciler) readRecordedVerdictFirst(marker attemptHandle, collected *subprocess.Collection) *subprocess.Collection {
+	if collected == nil || collected.Result == nil || collected.Result.Outcome != subprocess.OutcomeCancelled {
+		return collected
+	}
+	if r.recordedCollectVerdict(marker) != subprocess.VerdictReadyToMerge {
+		return collected
+	}
+	result := *collected.Result
+	result.Outcome = subprocess.OutcomeSucceeded
+	result.FailureClass = ""
+	if result.RoleResult != nil {
+		role := *result.RoleResult
+		role.Summary = subprocess.RoleSummary(role.Role, collected.Report, subprocess.VerdictReadyToMerge)
+		payload := make(map[string]any, len(role.Result))
+		for k, v := range role.Result {
+			payload[k] = v
+		}
+		if _, ok := payload["verdict"]; ok {
+			payload["verdict"] = subprocess.VerdictReadyToMerge
+		}
+		role.Result = payload
+		result.RoleResult = &role
+	}
+	corrected := *collected
+	corrected.Result = &result
+	corrected.Verdict = subprocess.VerdictReadyToMerge
+	corrected.Message = ""
+	r.record(marker.TickID, StageResumed,
+		"%s was collected as cancelled by a restart, but this run recorded its verdict %s before the "+
+			"cancellation: the recorded verdict stands and the attempt is finished from it, not re-judged",
+		r.attemptName(marker.TickID, marker.Attempt), subprocess.VerdictReadyToMerge)
+	return &corrected
+}
+
 // reattachSettled turns adopt's start of an attempt the executor reports
 // SETTLED into the collect it should have been: the executor re-addresses
 // the finished attempt (SettledReattacher) and the handle goes back to the
@@ -3195,9 +3301,6 @@ func (r *Reconciler) dispatchedAt(marker attemptHandle) (time.Time, bool) {
 // ---------------------------------------------------------- the collect ---
 
 func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subprocess.JobHandle, executor Executor, marker attemptHandle, status *subprocess.JobStatus) (*subprocess.Collection, error) {
-	if _, err := r.checkpoint(runstate.StateCollecting, fmt.Sprintf("collecting %s attempt %d", marker.TickID, marker.Attempt)); err != nil {
-		return nil, err
-	}
 	collected, err := r.collectDetail(executor, handle, marker.TickID)
 	if err != nil {
 		return nil, fmt.Errorf("collect %s: %w", marker.TickID, err)
@@ -3218,6 +3321,14 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 	// And a DONE whose only deliverable is a protected change it carries
 	// (protected_changes.go, epic ex6's 2pn) is a delivery too.
 	collected = r.acceptProtectedDelivery(marker, collected)
+	// The verdict this run has already recorded for the attempt is read
+	// BEFORE the executor's re-read of it (tick o3q): a restart re-collects
+	// an attempt whose work never merged, and the executor answers from the
+	// attempt's own state — where the release's Cancel may have recorded a
+	// durable cancellation over a verdict a previous incarnation had already
+	// ruled. The recorded verdict outranks the cancellation that followed it;
+	// a cancellation that PRECEDED one is baked into the verdict itself.
+	collected = r.readRecordedVerdictFirst(marker, collected)
 	r.setTick(marker.TickID, "reported")
 	// Tick 19l: what the worker answered and what the run concluded are two
 	// claims by two parties, stated separately — never one sentence that reads
@@ -3422,6 +3533,17 @@ func (r *Reconciler) collect(ctx context.Context, entry planEntry, handle *subpr
 		// Nothing is merged and the tick is not closed either way: a worker
 		// that asks is not answered by merging what it wrote.
 		return nil, r.answerBlocked(ctx, entry, marker, answer, RefusedNeedsHuman)
+	}
+	// The collect's own checkpoint lands HERE, at the ruling, stating the
+	// verdict it ruled (tick o3q) — not before the executor is read, as the
+	// announce it replaced did: the collect is one step, and a step's records
+	// land as one push (tick f61), so a second checkpoint beside the verdict
+	// would be a second push per tick. It is written before the worker is
+	// released below, which is the whole point: the release is a Cancel, and
+	// the verdict has to be durable in this run's own records before the
+	// executor's state can be renamed `cancelled` under it.
+	if err := r.recordCollectVerdict(marker); err != nil {
+		return nil, err
 	}
 	_ = status
 	return collected, nil

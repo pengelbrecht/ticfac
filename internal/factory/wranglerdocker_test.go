@@ -37,6 +37,18 @@ func wranglerDockerFixture(t *testing.T, failPushes int) (script string, env []s
 	}
 	script = filepath.Join(root, "cloudflare", "scripts", "wrangler-docker.sh")
 
+	// The script is read IN-PROCESS, before bash runs it (tick mbv). go's test
+	// cache keys a package's result on the files the test binary opens, and
+	// bash's opens never reach it: without this read, a cached pass would stand
+	// over an edited script — the audit demonstrated exactly that against
+	// ciwatchdog's watchdog script, and this package has the identical shape.
+	// The read also asserts the input exists.
+	if raw, err := os.ReadFile(script); err != nil {
+		t.Fatalf("read %s: %v", script, err)
+	} else if len(raw) == 0 {
+		t.Fatalf("%s is empty: there is no wrapper to run", script)
+	}
+
 	bin := t.TempDir()
 	state := t.TempDir()
 	log = filepath.Join(state, "calls.log")

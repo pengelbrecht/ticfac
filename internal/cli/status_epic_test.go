@@ -7,10 +7,10 @@ package cli
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 	"github.com/pengelbrecht/ticfac/internal/statusmodel"
@@ -29,7 +29,7 @@ func TestStatusWiringPassesPriorRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := exec.Command("git", "-C", repo, "rev-parse", "refs/remotes/origin/epic/qeu").Output()
+	out, err := gittest.Command(repo, "rev-parse", "refs/remotes/origin/epic/qeu").Output()
 	if err != nil {
 		t.Fatal(err)
 	}

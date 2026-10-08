@@ -1,0 +1,14 @@
+{
+  "id": "7kp",
+  "title": "Gate-kill guard passes vacuously when the kill lands after rejoinGrace",
+  "description": "TestAGateWhoseKillMissesAMemberReleasesItsSlotAnyway assumes the gate's kill is delivered within the joiner's 500ms rejoinGrace after GO.\n\nOn a loaded host the kill can land after the joiner has rejoined the group. The single kill then reaches it, and the test passes even with settleKilledGate removed. The guard does not fail falsely, but it can silently stop guarding.\n\nThe rejoin should be scheduled on an observable, for example a file the test writes after shell.wait's first kill is sent, rather than on a 500ms sleep.\nevidence: internal/reconcile/testdata/gatejoiner/main.go:37,72 (rejoinGrace); internal/reconcile/gatedir_orphan_unix_test.go:211-213\n\nticfac run epic-t8u filed this backlog tick from the finding 932e7f104c217af28e1318811224691bff1650fe882bbe19ad32a0d2fbed4461 (reported by run-epic-t8u/tick-r6v/attempt-18) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/932e7f104c217af28e1318811224691bff1650fe882bbe19ad32a0d2fbed4461.json on the run branch.",
+  "notes": "2026-10-08 04:38 - ticfac run epic-t8u: created by absorbing finding 932e7f104c217af28e1318811224691bff1650fe882bbe19ad32a0d2fbed4461 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/932e7f104c217af28e1318811224691bff1650fe882bbe19ad32a0d2fbed4461.json on epic/t8u, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-r6v/attempt-18",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-08T02:38:47Z",
+  "updated_at": "2026-10-08T02:38:52.728367Z"
+}

@@ -33,9 +33,10 @@ import (
 // is what keeps the not-yet-declared entry honest in the meantime: it pairs the
 // cell the run is to apply with this map's `harness-gate` target, byte for byte.
 var gateTargets = map[string]string{
-	"go":      "gate",
-	"ts":      "ts-gate",
-	"harness": "harness-gate",
+	"go":         "gate",
+	"go-touched": "gate-touched",
+	"ts":         "ts-gate",
+	"harness":    "harness-gate",
 }
 
 // TestTheGateTargetMatchesTheDeclaredGate pins the two spellings of "run this

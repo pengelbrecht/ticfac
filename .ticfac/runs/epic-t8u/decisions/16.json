@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 16,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "A test that spawns no agent does not pay the confirm wait, and the tests that DO exercise the confirm path still exercise it. internal/exec/herdr's wall clock drops materially (report before and after).",
+    "description": "internal/exec/herdr/harness_test.go:590 sets ConfirmTimeout to 1 second. After the prompt, Start waits for the agent to reach 'working' (internal/exec/herdr/gate.go:131). The fake herdr server polls a status file every 25ms and reports 'idle' while the file is absent; harnessOptions.spawnAgent defaults FALSE, so in most tests nothing ever writes it and the wait burns the full second. The harness comment at :586 says so outright - 'the confirm wait, which a dispatch with no visible work burns in full'.\n\nEstimated 70-85s of internal/exec/herdr's 185s: roughly 40% of the package spent waiting for workers that were never started.\n\nThe fix is not a shorter timeout - the wait is real behaviour worth testing. It is that a test dispatching no agent should not wait for one: let the harness say it spawns nothing and skip the confirm, or have the fake server answer definitively instead of staying silent.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "u51",
+    "title": "herdr tests burn the full confirm wait for a dispatch that never spawns an agent"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.26,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.41000000000000003,
+      "design": 0.33,
+      "diagnosis": 0.07,
+      "mechanical": 0.18,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1271,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T19:27:04Z",
+  "answered_at": "2026-10-07T19:27:04Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "u51",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "bc5f909b508fe4bb33016279b0f7a4aa7f3c50f1",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

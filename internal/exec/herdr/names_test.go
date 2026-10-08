@@ -198,6 +198,8 @@ func (h *harness) roleSpec(jobID, role, tick string) *subprocess.JobSpec {
 // Before the fix the repair was named for the ATTEMPT — tick-t1-a3, the name
 // the implement attempt's agent still held — and herdr refused it.
 func TestTheRepairJobOfAnAttemptLaunchesUnderItsOwnName(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	na := withNamedAgents(h)
 	h.ex.opts.Attempt = 3
@@ -257,6 +259,8 @@ func TestTheRepairJobOfAnAttemptLaunchesUnderItsOwnName(t *testing.T) {
 
 // short: pure name derivation, no herdr
 func TestJobAgentNamesAreJobScopedAndLegal(t *testing.T) {
+	t.Parallel()
+
 	spec := func(jobID, tick string) *subprocess.JobSpec {
 		return &subprocess.JobSpec{JobID: jobID, Inputs: []subprocess.Input{{Kind: "tick", ID: tick}}}
 	}
@@ -316,6 +320,8 @@ func TestJobAgentNamesAreJobScopedAndLegal(t *testing.T) {
 // closed and the launch retried once. Only the pane goes: the stale job's
 // workspace and worktree stay for the teardown that owns them.
 func TestANameHeldByASettledJobOfThisRunIsFreedAndTheLaunchRetried(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	na := withNamedAgents(h)
 	na.foreignWorkspace("w9", "ticfac/run-harness-earlier/tick-t1/attempt-1")
@@ -343,6 +349,8 @@ func TestANameHeldByASettledJobOfThisRunIsFreedAndTheLaunchRetried(t *testing.T)
 // A name held by a WORKING job of this run, or by a pane outside the run, is
 // refused with a classified reason naming the holder — and nothing is closed.
 func TestANameHeldByALiveOrForeignAgentIsRefusedAndNotClosed(t *testing.T) {
+	t.Parallel()
+
 	shorttest.EndToEnd(t)
 	for _, c := range []struct {
 		what, branch, status string
@@ -375,6 +383,8 @@ func TestANameHeldByALiveOrForeignAgentIsRefusedAndNotClosed(t *testing.T) {
 // A taken name held by this attempt's OWN pane is an earlier launch of it that
 // landed behind a lost reply: adopted, never launched twice.
 func TestANameHeldByThisAttemptsOwnPaneIsAdopted(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	na := withNamedAgents(h)
 	na.startHook = func(name, pane string, n int) (string, string) {
@@ -406,6 +416,8 @@ func TestANameHeldByThisAttemptsOwnPaneIsAdopted(t *testing.T) {
 // sent, so it is relaunched in its own workspace under its job's own name —
 // never answered from the implement attempt's agent, and never closing it.
 func TestAStrandedLaunchRefusedOverAnotherPanesNameIsRelaunchedUnderItsJobsName(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	na := withNamedAgents(h)
 	h.ex.opts.Attempt = 3
@@ -474,6 +486,8 @@ func TestAStrandedLaunchRefusedOverAnotherPanesNameIsRelaunchedUnderItsJobsName(
 // dispose read `working` and refused, and the attempt's pane outlived the run.
 // The interrupt this executor delivered is given a grace to land.
 func TestDisposeAfterTheInterruptWaitsForItToLand(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	h.ex.opts.InterruptGrace = 5 * time.Second
 	handle, err := h.start("t1")
@@ -509,6 +523,8 @@ func TestDisposeAfterTheInterruptWaitsForItToLand(t *testing.T) {
 // The grace is a grace, not a waiver: an agent still working when it runs out
 // is refused exactly as before.
 func TestDisposeStillRefusesAnAgentWorkingPastTheInterruptGrace(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	h.ex.opts.InterruptGrace = 500 * time.Millisecond
 	handle, err := h.start("t1")

@@ -30,48 +30,30 @@
 import { githubAuthorization } from "./github-app";
 import type { Env } from "./index";
 import { workerBootStoppedBranch, workerBootStoppedFile, workerExitClass } from "./worker-boot";
+import {
+  reportIsOnlyChange,
+  verdictFor,
+  WORKER_VERDICTS,
+  type WorkerVerdict,
+} from "./worker-verdict";
 
 // ------------------------------------------------------------- the verdict ---
 
-/**
- * The four verdicts `internal/herd/collect` defines, plus `unknown` — a fact
- * this module has that a local git read does not: a GitHub read can fail
- * (rate limit, outage, a bad token), and an unreadable remote must not be
- * reported as a failing verdict any more than `progress.ts` may report a run
- * that could not be checked as one that did nothing.
+/*
+ * The verdict vocabulary and the classification that reads it moved to
+ * src/worker-verdict.ts (tick p0n) so the dyo/94u seam — the TS collect and
+ * the Go executor agreeing that a report-only worker is no-commits — is a
+ * pure module the property tests can drive against the Go rule. Re-exported
+ * here: every importer of this module keeps one spelling, and the collect's
+ * WorkerReport still carries the same types as before.
  */
-export type WorkerVerdict =
-  | "ready-to-merge"
-  | "no-commits"
-  | "missing-result"
-  | "boundary-violation"
-  | "unknown";
-
-/**
- * The verdict strings as VALUES, so the vocabulary has one spelling per name in
- * this module rather than a literal at each `return` (tick hn1).
- *
- * This is the third implementation of a rule set `internal/herd/collect` and
- * `internal/cloud/collect` also implement, and the failure mode of three copies
- * is silent: re-spell one and a cloud run and a herd run disagree about what
- * happened to the same tick with nothing failing anywhere. Two things stop that
- * here. `satisfies Record<string, WorkerVerdict>` makes a re-spelling a TYPE
- * error — in either direction, since editing the union above orphans the value
- * below and editing a value below leaves the union unsatisfied. And
- * `test/collect-vocabulary.test.ts` checks these against
- * `contracts/collect-vocabulary.json`, the file the two Go implementations read.
- *
- * `unknown` is the one entry with no twin in `internal/herd/collect`: only an
- * implementation reading a REMOTE can fail to read the evidence at all. The
- * contract records it under `remote_only_verdicts` for that reason.
- */
-export const WORKER_VERDICTS = {
-  readyToMerge: "ready-to-merge",
-  noCommits: "no-commits",
-  missingResult: "missing-result",
-  boundaryViolation: "boundary-violation",
-  unknown: "unknown",
-} as const satisfies Record<string, WorkerVerdict>;
+export type { WorkerVerdictInput } from "./worker-verdict";
+export {
+  reportIsOnlyChange,
+  verdictFor,
+  WORKER_VERDICTS,
+  type WorkerVerdict,
+} from "./worker-verdict";
 
 /**
  * The line `image/worker.sh` prepends to `RESULT-<tick>.md` when its
@@ -503,33 +485,10 @@ export function parseBootStopped(body: string): { exit_code: number; reason: str
   return { exit_code: code, reason };
 }
 
-/**
- * Whether every path the branch changed beyond its base is the report the
- * container's own entrypoint commits — the shape a worker that did no work
- * leaves on this substrate, where the subprocess executor's empty branch is
- * impossible by construction. Ported from the Go executor's
- * `reportIsOnlyChange` (tick dyo) so the two reads of the same branch cannot
- * disagree about it. Nothing changed is NOT this shape: that is the push
- * that never landed or the honest empty branch, and it keeps its own verdict
- * and message.
+/*
+ * reportIsOnlyChange and verdictFor moved verbatim to worker-verdict.ts; the
+ * collect below calls the imported ones.
  */
-function reportIsOnlyChange(changed: string[], reportPath: string): boolean {
-  if (changed.length === 0) return false;
-  return changed.every((path) => path === reportPath);
-}
-
-function verdictFor(r: WorkerReport): WorkerVerdict {
-  if (!r.branch_exists || r.commits === 0) return WORKER_VERDICTS.noCommits;
-  if (!r.result_exists || r.status === "") return WORKER_VERDICTS.missingResult;
-  // The report-only branch (tick 94u, mirroring the Go executor's classify):
-  // the closed vocabulary's own word for a worker that delivered nothing is
-  // `no-commits`, never a fifth word. It is checked after missing-result for
-  // the same reason the Go side checks it there — an answer nobody can read
-  // is the more urgent fact.
-  if (r.report_only) return WORKER_VERDICTS.noCommits;
-  if (r.boundary_files.length > 0) return WORKER_VERDICTS.boundaryViolation;
-  return WORKER_VERDICTS.readyToMerge;
-}
 
 function detailFor(r: WorkerReport): string {
   switch (r.verdict) {

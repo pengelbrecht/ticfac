@@ -1,0 +1,14 @@
+{
+  "id": "ez7",
+  "title": "Delete the gate's -leave-to-ci budget once reconcile's suite is affordable",
+  "description": "r1f's per-package budget leaves internal/reconcile's full suite to CI on purpose: it measured 41m28s and 42m22s at the gate's own -parallel 12 on this host, against a short half of 1m33s, and most ticks reach reconcile through one import or another. The price, stated in the declaration: a dz1-shaped break in internal/reconcile ITSELF rides to the close-out's CI exactly as dz1 did, while every importer's suite (cli, factory, herdr, statusmodel, runlife) runs per tick. When this epic's [A1] halves the full suite and x73 lands, delete the name from .tick/runners.toml's go-touched command and the gate pays — a one-line change that deserves its own tick so the number is re-measured and re-justified rather than assumed.\nevidence: the measurements and the reasoning: .tick/runners.toml, the go-touched entry's BOUND paragraph; the budget flag: internal/gatescope/gatescope.go (leaveToCI, validateLeaveToCI)\n\nticfac run epic-t8u filed this backlog tick from the finding f972591e04f44b4ed14cd069ad15593fdbc659bfd278c088d7567d551c3050fa (reported by run-epic-t8u/tick-r1f/attempt-13) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/f972591e04f44b4ed14cd069ad15593fdbc659bfd278c088d7567d551c3050fa.json on the run branch.",
+  "notes": "2026-10-08 00:21 - ticfac run epic-t8u: created by absorbing finding f972591e04f44b4ed14cd069ad15593fdbc659bfd278c088d7567d551c3050fa — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/f972591e04f44b4ed14cd069ad15593fdbc659bfd278c088d7567d551c3050fa.json on epic/t8u, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-r1f/attempt-13",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-07T22:21:04Z",
+  "updated_at": "2026-10-07T22:21:10.041301Z"
+}

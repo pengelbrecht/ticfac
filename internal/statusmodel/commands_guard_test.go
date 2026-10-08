@@ -17,10 +17,10 @@ package statusmodel
 // repository: the reconciler's prose and the CLI's usage text tell their
 // own stories and answer to their own guards.
 import (
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -37,23 +37,18 @@ import (
 var clearingCommandWord = regexp.MustCompile(`ticfac (settle|triage|run-epic|run)\b`)
 
 func TestEveryClearingCommandInTheModelIsSpelledOnce(t *testing.T) {
+	// Tracked files, not a directory walk (tick pqs): an agent worktree or a
+	// scratch clone under this checkout is no party to this tree.
 	root, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
 	sources := []string{}
-	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
+	for _, path := range gittest.Tracked(t, root) {
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			continue
 		}
 		sources = append(sources, path)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk %s: %v", root, err)
 	}
 	if len(sources) == 0 {
 		t.Fatal("found no Go sources to guard — the scan cannot be silently empty")

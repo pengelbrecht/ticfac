@@ -19,6 +19,8 @@ import (
 // and state paths all intact — the conversation is in the storage, so a
 // relaunch needs nothing but the message.
 func TestADurableRunnersRepromptsAreTheSameArgvWithAMessage(t *testing.T) {
+	t.Parallel()
+
 	record := &attemptRecord{Branch: "b", ResultPath: "/abs/RESULT.md", TickID: "stk"}
 	at := launch{
 		Prompt:       "PROMPT-BODY",
@@ -69,6 +71,8 @@ func TestADurableRunnersRepromptsAreTheSameArgvWithAMessage(t *testing.T) {
 // A CLI runner keeps the old shapes: codex's nudge is the whole prompt plus
 // the fresh-run section, because its session died with its process.
 func TestACliRunnersNudgeStillAppendsTheFreshRunSection(t *testing.T) {
+	t.Parallel()
+
 	record := &attemptRecord{Branch: "b", ResultPath: "/abs/RESULT.md"}
 	at := launch{Prompt: "PROMPT-BODY", GitCommonDir: "/repo/.git"}
 	nudge, err := nudgeArgv("codex", nil, at, record)
@@ -83,6 +87,8 @@ func TestACliRunnersNudgeStillAppendsTheFreshRunSection(t *testing.T) {
 // The config the harness reads is the whole per-attempt interface, rendered
 // once at Start so every process the attempt runs reads the same one.
 func TestWorkerConfigCarriesTheWholeInterface(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	record := &attemptRecord{
 		Worktree:    filepath.Join(dir, "worktree"),
@@ -172,6 +178,8 @@ func TestWorkerConfigCarriesTheWholeInterface(t *testing.T) {
 // checkpoints are off" (worker-host.ts), which is what a read-only local run
 // must run with: it has no push, so there is nothing to checkpoint to.
 func TestAReadOnlyWorkersConfigCarriesNoRemote(t *testing.T) {
+	t.Parallel()
+
 	record := &attemptRecord{
 		Branch:      "ticfac/run-43y/tick-hpk/attempt-9",
 		ResultPath:  "/abs/RESULT.md",
@@ -229,6 +237,7 @@ func TestAReadOnlyWorkersConfigCarriesNoRemote(t *testing.T) {
 // config it composes its provider override from — the same facts the pi CLI
 // reads out of the generated extension, and nothing else.
 func TestAMeteredWorkersAIConfigCarriesTheJoin(t *testing.T) {
+	t.Parallel()
 	const model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 	metering := &GatewayMetering{
 		RunID:      "run-43y",
@@ -318,6 +327,7 @@ func extensionMetadata(t *testing.T, body string) string {
 // apply to, writes a config with no metering at all — the harness then runs
 // exactly as it did before the join existed.
 func TestAnUnmeteredConfigCarriesNoJoin(t *testing.T) {
+	t.Parallel()
 	metering := &GatewayMetering{RunID: "run-43y", GatewayURL: "https://gateway.ai.cloudflare.com/v1/acct/gw"}
 	record := &attemptRecord{
 		Branch:     "b",
@@ -370,6 +380,7 @@ func TestAnUnmeteredConfigCarriesNoJoin(t *testing.T) {
 // rather than leaving the harness to compose a relative route — the same
 // refusal WriteExtension makes, from the same check.
 func TestAConfigRefusesANonAbsoluteGatewayURL(t *testing.T) {
+	t.Parallel()
 	metering := &GatewayMetering{RunID: "run-43y", GatewayURL: "not a url"}
 	record := &attemptRecord{
 		Branch:     "b",
@@ -389,6 +400,8 @@ func TestAConfigRefusesANonAbsoluteGatewayURL(t *testing.T) {
 // cannot be read: a runner arming a wrong wall is a runner that may abort a
 // healthy conversation or never arm at all.
 func TestWorkerConfigRefusesAnUnreadableIssuedStamp(t *testing.T) {
+	t.Parallel()
+
 	record := &attemptRecord{WallSeconds: 60, IssuedAt: "not a stamp"}
 	err := writeWorkerConfig(func(string, []byte, os.FileMode) error { return nil }, t.TempDir(), record, &Options{SupervisorArgv: []string{"x"}})
 	if err == nil || !strings.Contains(err.Error(), "issued-at") {
@@ -399,6 +412,8 @@ func TestWorkerConfigRefusesAnUnreadableIssuedStamp(t *testing.T) {
 // A runner with no wall carries no deadline: the harness runs until its
 // supervisor's own wall stops it.
 func TestWorkerConfigWithNoWallCarriesNoDeadline(t *testing.T) {
+	t.Parallel()
+
 	record := &attemptRecord{WallSeconds: 0, IssuedAt: "2026-10-04T12:00:00Z"}
 	dir := t.TempDir()
 	if err := writeWorkerConfig(func(string, []byte, os.FileMode) error { return nil }, dir, record, &Options{SupervisorArgv: []string{"x"}}); err != nil {

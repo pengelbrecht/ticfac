@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/schema"
 )
 
@@ -458,8 +459,7 @@ func TestTheGitignoreFragmentIsAppliedByGit(t *testing.T) {
 
 func gitIgnores(t *testing.T, root, path string) bool {
 	t.Helper()
-	cmd := exec.Command("git", "check-ignore", "-q", "--no-index", path)
-	cmd.Dir = root
+	cmd := gittest.Command(root, "check-ignore", "-q", "--no-index", path)
 	err := cmd.Run()
 	if err == nil {
 		return true

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 )
 
 // The store's fetch starts no maintenance in the repository the store writes
@@ -64,8 +64,8 @@ func TestTheStoresFetchStartsNoMaintenanceInTheRepositoryItWritesTo(t *testing.T
 	}
 }
 
-// unpinnedGit is a git run WITHOUT the fixture's pins: an operator's own
-// command, which is a git that DOES end by starting background maintenance.
+// unpinnedGit is a git run WITHOUT the fixture's pins: a plain git, which is
+// a git that DOES end by starting background maintenance.
 //
 // It exists for the CONTROLS that need one — this file's (tick mel), and the
 // trace guard in maintenance_guard_test.go (tick 35l) — and both are the
@@ -74,22 +74,16 @@ func TestTheStoresFetchStartsNoMaintenanceInTheRepositoryItWritesTo(t *testing.T
 // package may build a git command; TestEveryGitTheTestsStartGoesThroughThePinnedRunner
 // is what says so.
 //
-// The GIT_CONFIG_COUNT pins are stripped rather than merely overridden by
-// GIT_CONFIG_GLOBAL=/dev/null, because git reads the env-config entries
-// ABOVE every config file; and the two /dev/null config files keep the
-// host's own global config out of the control as well, for the same reason
-// in the other direction: whether a plain git starts maintenance is a
-// property of the ENVIRONMENT, and a control under a host that pins or arms
-// it measures nothing and reports it as the tree's failure.
+// The environment is gittest.Control — this builder's own env, spelled out
+// once in the helper instead of re-stated per package (tick pqs): the
+// GIT_CONFIG_COUNT pins stripped rather than merely overridden (git reads
+// the env-config entries ABOVE every config file), the two /dev/null config
+// files keeping the host's own global config out of the control, identity
+// stated, and nothing else of the host's. Whether a plain git starts
+// maintenance is a property of the ENVIRONMENT, and a control under a host
+// that pins or arms it measures nothing and reports it as the tree's failure.
 func unpinnedGit(dir string, args ...string) *exec.Cmd {
-	cmd := exec.Command(gitbin.Path(), args...)
-	cmd.Dir = dir
-	cmd.Env = append(gitbin.WithoutPinnedConfig(os.Environ()),
-		"GIT_AUTHOR_NAME=ticfac test", "GIT_AUTHOR_EMAIL=ticfac@example.com",
-		"GIT_COMMITTER_NAME=ticfac test", "GIT_COMMITTER_EMAIL=ticfac@example.com",
-		"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
-		"GIT_TERMINAL_PROMPT=0")
-	return cmd
+	return gittest.Control(dir, args...)
 }
 
 // unpinnedGitRun is unpinnedGit with a helper's error reporting: fatal

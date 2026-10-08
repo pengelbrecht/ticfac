@@ -157,6 +157,7 @@ func observationsWhere(obs []subprocess.Observation, pred func(subprocess.Observ
 // (a long test suite): while the tool processes burn CPU nothing happens,
 // and once they stop, the agent is nudged after the window — the evidence
 // naming the in-flight tool call and the idle CPU.
+// serial: the rig points the harness's transcript home at a temp dir through t.Setenv (newStuckRig), and the stuck watch reads that env var from the process — t.Setenv refuses a parallel test.
 func TestABusyToolIsNotStuckButTheSameToolGoneIdleIs(t *testing.T) {
 	shorttest.EndToEnd(t)
 	r, handle := newStuckRig(t, "claude", time.Now().UTC())
@@ -202,6 +203,7 @@ func TestABusyToolIsNotStuckButTheSameToolGoneIdleIs(t *testing.T) {
 // quiet a window later — interrupted with the harness's own key, snapshotted,
 // closed, and settled failed as stuck; collect reads it as a runner error
 // that says so.
+// serial: the rig points the harness's transcript home at a temp dir through t.Setenv (newStuckRig), and the stuck watch reads that env var from the process — t.Setenv refuses a parallel test.
 func TestAStuckAgentIsNudgedOnceThenStopped(t *testing.T) {
 	shorttest.EndToEnd(t)
 	r, handle := newStuckRig(t, "claude", time.Now().UTC())
@@ -270,6 +272,7 @@ func TestAStuckAgentIsNudgedOnceThenStopped(t *testing.T) {
 // Activity after the nudge clears it: the agent answered, so the window
 // starts again, and a later silence earns a nudge of its own rather than a
 // stop.
+// serial: the rig points the harness's transcript home at a temp dir through t.Setenv (newStuckRig), and the stuck watch reads that env var from the process — t.Setenv refuses a parallel test.
 func TestActivityAfterTheNudgeClearsIt(t *testing.T) {
 	shorttest.EndToEnd(t)
 	r, handle := newStuckRig(t, "claude", time.Now().UTC())
@@ -301,6 +304,7 @@ func TestActivityAfterTheNudgeClearsIt(t *testing.T) {
 // [A5] A large uncommitted change on a branch that has not moved for the
 // interval is asked to be committed — once per interval, and never while the
 // agent is merely thinking about a small one.
+// serial: the rig points the harness's transcript home at a temp dir through t.Setenv (newStuckRig), and the stuck watch reads that env var from the process — t.Setenv refuses a parallel test.
 func TestALargeUncommittedChangeIsAskedToBeCommittedOncePerInterval(t *testing.T) {
 	shorttest.EndToEnd(t)
 	// The fake clock starts 40 minutes after the base commit and the

@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 4,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "A recorded measurement of the suite with fileParallelism enabled, repeated enough times to distinguish a pass from luck. Either the flag is on and the suite is stable across those runs, or it stays off and the comment records the version and date the corruption was last confirmed.",
+    "description": "cloud/factory's vitest config sets fileParallelism: false, so 53 test files run strictly serially. The comment (legacy tick 5qj) records why: the suite runs inside real workerd, and run-workflow.test.ts drives Workflows, Durable Objects and D1 with wall-clock budgets; beside other files on a 2-vCPU runner it failed with hung-context cancellations, 'evicted mid-commit' and 'no such table' - state torn out from under a live test, not code under test.\n\nThat was a real observation and the workaround was right. It may also be stale: @cloudflare/vitest-pool-workers has isolated storage per test file, and the versions have moved since. This tick is to MEASURE, not to flip the flag: run the suite with fileParallelism on, repeatedly, and see whether the corruption returns.\n\nIf it does, record that and leave the flag alone - the 5qj comment gets a date and a version rather than being quietly deleted. If it does not, the serial cost (most of a 345s run) comes back.\n\nThe trap to avoid is the one cy2 is about: five tests in this project have already refused innocent work because they sampled timing rather than waiting for it. Turning on parallelism without measuring would manufacture exactly that failure class in a second language.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "3xe",
+    "title": "Re-measure fileParallelism: the corruption it works around may be fixed"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.44,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.55,
+      "design": 0.05,
+      "diagnosis": 0.34,
+      "mechanical": 0.04,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1351,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T13:46:06Z",
+  "answered_at": "2026-10-07T13:46:06Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "3xe",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "8d12a7e74f935af9316653ecabee8cbbdb63d1ca",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

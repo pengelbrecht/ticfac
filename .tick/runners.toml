@@ -177,43 +177,162 @@ file = true
 # 2026-09-23 - gate green, epic PR red - and the close-out held on it.
 # `(! grep .)` prints any unformatted file and fails if there was one; it is
 # written without $ so the Makefile's gate target can carry the same line.
-go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout 45m -parallel 12 ./...", description = "Go: gofmt, vet and tests, as CI runs them" }
+#
+# 2026-10-08 - the go test half runs under a STRIPPED GIT ENVIRONMENT (tick
+# pqs): no global or system config file, and user.useConfigOnly refusing the
+# implicit identity fallback. That is CI's machine, reproduced on a laptop: a
+# fixture that commits with no identity of its own - relying on the developer's
+# global git identity - passed every local gate and failed CI with exit 128
+# (tick lkd, 2026-09-24), and a gate that cannot see the condition cannot catch
+# the next one. It is GIT's environment and not HOME=<empty> (the original
+# reproduction's recipe) on purpose: the go toolchain needs HOME for its build
+# cache, the run's own gate builds carry HOME by contract
+# (TestAGateDoesNotInheritTheRunsControlPlane), and the property library
+# resolves a user cache dir at init. The two /dev/null config files give git
+# exactly what an absent HOME gave it - no global config, no system config -
+# and useConfigOnly keeps the identity half honest.
+go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.useConfigOnly GIT_CONFIG_VALUE_0=true go test -short -timeout 45m -parallel 12 ./...", description = "Go: gofmt, vet and tests, as CI runs them" }
+
+# The touched half of the Go gate (tick r1f): the FULL — non-short — test
+# suites of the Go packages whose files the gated tick changed, plus every
+# package whose code or TESTS import them, transitively. The selection and
+# the rule live in internal/gatescope (cmd/gate-touched is the thin command);
+# the import graph is one `go list` invocation, so the reverse closure is as
+# cheap as the tick asked it to be.
+#
+# Why this is declared here and not built into the reconciler: the reconciler
+# is repo-neutral — it cannot know that a repository has Go packages at all.
+# What it exports is neutral and is this check's whole input: the two commits
+# whose three-dot diff is the tick's own change, TICFAC_GATE_TOUCHED_BASE
+# and TICFAC_GATE_TOUCHED_HEAD, both always present, empty when this gate
+# has no such diff (the close-out's fold, whose full suite is the CI the
+# close-out already waits for on the PR head). What a repository does with
+# that pair is the repository's own declaration, which is what this table
+# is. Run by a person with no gate above it, the command diffs the working
+# branch against origin/main — the same question for the tree a person is
+# about to push.
+#
+# What it is for: dz1's regression — a pinned-version change broke four
+# internal/reconcile end-to-end tests, the short suite skipped every one of
+# them, and the break surfaced at the epic's close-out in CI's full suite,
+# costing a repair and two ~30-minute CI cycles. The packages a tick's diff
+# reaches are exactly the ones whose behaviour that tick changed, and the
+# reverse-dep edge is the one dz1 rode in on: the tick touched internal/tk,
+# the tests that broke lived in internal/reconcile, which imports it.
+#
+# THE BOUND, decided and justified (the tick asked for one): per-package
+# budgets, plus the cap that already exists.
+#   - go test's own -timeout, 45m, PER PACKAGE BINARY — the whole-repo
+#     suite's number, for the Makefile's own stated reason: a loaded or
+#     slower host must fail on its own merits, never on go's 10m default.
+#   - The check's outer cap is the gate's existing harness bound (60m), the
+#     same one that bounds every declared check — a second, smaller clock
+#     here would refuse exactly the slow-but-honest suites cy2 spent this
+#     epic defending.
+#   - What bounds the WORK is the selection, and the budget is -leave-to-ci.
+#     THE ONE NAME ON THAT LIST IS internal/reconcile, and the number is
+#     why, measured on this host (10-core darwin/arm64, load ~3.5 with
+#     other runs live, under nice): internal/reconcile's full suite alone
+#     ran 41m28s at the gate's own -parallel 12, and the whole 23-package
+#     closure of this very tick 43m39s — against the short half of the
+#     same gate at 1m33s. Most ticks reach reconcile through one import or
+#     another (forge, tk, runstate, gitbin, subprocess), so paying it per
+#     tick would put ~40 minutes on most of the dozens of gates an epic
+#     runs (49 on epic-9pd) and invert this epic's own reason for existing.
+#     reconcile's full suite therefore stays where it already runs — CI's
+#     three sharded go-test jobs, which the close-out waits on — and every
+#     gate names it as left to CI in its own evidence rather than skipping
+#     it silently. The price of that decision is stated plainly: a
+#     dz1-shaped break IN internal/reconcile itself rides to the close-out
+#     exactly as dz1 did; what the gate keeps per tick for it is the short
+#     suite and the full suites of every importer — cli, factory, herdr,
+#     statusmodel, runlife — which is where a tick's reach is observable
+#     anyway. When this epic's [A1] halves the full suite and x73 lands,
+#     delete the name below and the gate pays.
+#   - Without -count=1, deliberately: a package among the selection whose
+#     inputs did not change answers from go's own test cache, which the mbv
+#     audit demonstrated is a true statement about this tree. That is what
+#     keeps a repair's re-gate from paying for the whole selection twice.
+go-touched = { command = "go run ./cmd/gate-touched -timeout 45m -parallel 12 -leave-to-ci github.com/pengelbrecht/ticfac/internal/reconcile", description = "Go: the full (non-short) suites of the packages this tick touched, and of the packages that import them" }
 
 # The TypeScript half, added by tick odc. Until it, NOTHING ran cloud/factory's
 # tests — not this gate, not CI — and the cost of that silence was tick b9w: the
 # control plane sat pinned to contract bundle 3.0.0 against a 5.2.0 bundle,
 # wrong about three record shapes, for two major versions.
 #
-# What is here and what is NOT is a measurement, not a preference. On this host:
-# pnpm install from a warm store 1s, contracts:check under 1s, tsc --noEmit 2s,
-# vitest 82s. Gate commands run SERIALLY, so vitest would take the gate from
-# 3m26s to about 4m48s on every tick — and the gate's speed is what made this
-# epic survivable at all.
+# vitest is IN this command now (tick tc9). Until it, the gate took the two
+# cheap checks and CI took behaviour — a split odc measured into being: gate
+# commands run SERIALLY, and 82s of vitest against ~3s of checks was a real
+# cost. The split was also a hole, and the hole had a shape: mn7's worker ran
+# cloud/factory's suite, the gate never did, so a TypeScript behaviour change
+# could settle a tick with no gate ever running its tests (yoh's final-review
+# finding dfae216d, filed as tc9). A gate that does not run the behaviour
+# suite is not a gate on the code a tick changed; it is a gate on the shape
+# of that code.
 #
-# So the gate takes the two cheap checks and CI takes vitest, where it runs as
-# its own job beside the 7m15s Go job and costs no wall clock at all. The split
-# is stated rather than implied: THIS GATE COVERS CONTRACTS AND TYPES, NOT
-# BEHAVIOUR. A behavioural TypeScript regression is caught by CI on the epic PR,
-# before anything reaches main, and never by this line.
+# The condition tc9 set for the move — deterministic under load — is met: both
+# known flakes are fixed (3cq's leaked Workflow booting containers into the
+# next test's sandboxes, #43; the refused publish-slot release, eg9, #21), and
+# what keeps the suite deterministic lives in cloudflare/vitest.config.ts —
+# files run serially (fileParallelism stays off: parallel failed one run in
+# five on exactly this host) and every test and hook is bounded at 30s.
 #
-# contracts:check is the one that earns its place here: it is the check that
-# would have caught b9w's drift the day it happened, and it costs a second.
+# The cost, measured on this host on 2026-10-07 with the machine at load ~5
+# (other runs' workers): 1864 tests in 80 files, green five times running —
+# three standalone `vitest run` at 208s, 233s and 353s, then this whole
+# command twice at 309s and 310s. The command declares no timeout of its
+# own — vitest has no global bound, and its per-test bounds are set in the
+# config — so the harness bound (60m) is the outer one, and the worst
+# observed run is a tenth of it. The ts command goes from ~6s to about
+# 3.5-6m; against the Go half's ~3m on this host the TypeScript half now
+# carries the gate's longer leg — the price of behaviour being gated per
+# tick rather than on the epic PR alone.
+#
+# The spelling is `vitest run`, the exit-when-done form: bare `vitest` is watch
+# mode, and a gate command that never exits is a gate that holds its harness
+# bound open for the full hour on every tick while refusing nothing.
+#
+# contracts:check is the one that earned its place before all this: it is the
+# check that would have caught b9w's drift the day it happened, and it costs a
+# second.
 #
 # `pnpm lint` is Biome (tick ncr) — this side's gofmt AND its vet, in one Rust
 # binary. It is IN this command rather than a sibling [testing.commands] entry
 # for one measured reason: a sibling would repeat `pnpm install`, which is ~0.7s
 # on a warm store, to learn nothing the &&-chain's own output does not already
-# name. Biome itself is 0.47/0.55/0.64s over three runs on these 109 files, so
-# the gate's TypeScript half goes from ~3s to ~3.6s and the whole gate is
-# unmoved against the 3m26s Go side.
+# name. The cost, re-measured 2026-10-07 (attempt 10 of ncr) with the tree at
+# 167 files rather than the 109 the first measurement saw: `pnpm lint` is
+# 3.19/2.89/2.32s wall over three runs (Biome's own line: "Checked 167 files in
+# 1.3s"), so the gate's TypeScript half goes from ~3s to ~6s and the whole gate
+# stays unmoved against the 3m26s Go side.
 #
 # `pnpm lint` is `biome ci --error-on-warnings`, and the flag matters: plain
 # `biome ci` exits 0 with warnings still on the floor, and most of what Biome
 # found here — the unused variable, the implicit anys — is warning severity, so
 # without it this half cannot refuse what it was added to catch.
 #
-# This is still CONTRACTS AND TYPES, not behaviour: Biome reads one file at a
-# time and answers about its shape, not about what the Worker does.
+# `pnpm lint:test` is that claim made executable — ncr's acceptance says the
+# format check and the lint check must both FAIL on a deliberately bad file,
+# and until it the proof was a probe a worker ran by hand ("it was also checked
+# that it CAN fire"), evidence that left with the terminal it ran in. It breaks
+# five throwaway trees, each a copy of biome.jsonc and one deliberately bad
+# file, against the real binary: a clean control, a mis-formatted module, a
+# floating promise (the nursery rule the config names by hand, so the case also
+# proves the config — not a fallback — is in force), the warning-severity probe
+# that plain `biome ci` passes and the flag refuses, and a file the config's
+# includes never named. 1.00/1.04/1.00s over three runs, beside the 2-3s the
+# lint itself costs.
+#
+# Biome itself is still shape, not behaviour: it reads one file at a time. The
+# behaviour half of this command is vitest, which is why it is here.
+#
+# What still rides with CI alone: the two node --test suites around the
+# scripts themselves (contracts:test, operator-strings — sub-second each,
+# run by ci.yml's `pnpm test`). The gate takes the behaviour suite the
+# finding was about, not every check that touches cloudflare/. lint:test is
+# the one exception, and it is in both deliberately: it is not a suite around
+# the scripts, it is the acceptance evidence for `pnpm lint` itself, which
+# the gate cannot run without.
 #
 # The two-layout fallback is GONE (tick 9a8). It existed only while Phase 4's
 # l9n moved cloud/factory to cloudflare/: this command is read from the RUN'S
@@ -221,7 +340,7 @@ go = { command = "gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./..
 # move the two disagreed and l9n could never have passed the gate whose job it
 # was to move. Phase 4 merged to main on 2026-09-19 and neither cloud/factory
 # nor cloud/sandbox exists any more, so the fallback arm named nothing.
-ts = { command = "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit", description = "TypeScript format, lint, contracts and types" }
+ts = { command = "cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm lint:test && pnpm contracts:check && pnpm exec tsc --noEmit && pnpm exec vitest run", description = "TypeScript format, lint, lint refusals, contracts, types and tests" }
 
 [environment.commands]
 which-go = { command = "which go", description = "Go toolchain on PATH" }

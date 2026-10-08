@@ -62,6 +62,8 @@ var uncoveredInvariants = map[string]string{
 // neither — and every covered invariant's guards are exactly the fixture's, so
 // a guard added upstream cannot land here as silence.
 func TestEveryInvariantIsCoveredOrNamed(t *testing.T) {
+	t.Parallel()
+
 	var c lifecycleFixture
 	readBundle(t, "lifecycle-invariants.json", &c)
 
@@ -112,6 +114,8 @@ func TestEveryInvariantIsCoveredOrNamed(t *testing.T) {
 // A1 — a stop is a durable refusal to ISSUE, checked before every boot; and
 // the credential dies before the executor does.
 func TestA1StopRefusesToIssueAndRevocationPrecedesTeardown(t *testing.T) {
+	t.Parallel()
+
 	t.Run("stop_refuses_issue", func(t *testing.T) {
 		f := newFixture(t, fixtureOptions{mode: "report"})
 		if err := f.Executor.RequestStop("operator", "called off"); err != nil {
@@ -166,6 +170,8 @@ func TestA1StopRefusesToIssueAndRevocationPrecedesTeardown(t *testing.T) {
 // A2 — a supervisor cannot report its own death. Liveness is observed from
 // OUTSIDE; what the job wrote about itself is not evidence.
 func TestA2LivenessIsObservedFromOutsideNotSelfReported(t *testing.T) {
+	t.Parallel()
+
 	start := func(t *testing.T, guardsOff map[string]bool) (*fixture, *JobHandle) {
 		f := newFixture(t, fixtureOptions{mode: "hang", guardsOff: guardsOff})
 		handle := f.Start(f.spec("run-a2/tick-t1/attempt-1", "t1"))
@@ -196,6 +202,8 @@ func TestA2LivenessIsObservedFromOutsideNotSelfReported(t *testing.T) {
 // A5 — in-progress work is pushed on a TIMER, so a job that dies without
 // warning leaves its partial work on origin.
 func TestA5InProgressWorkIsPushedOnATimer(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "hang", pushInterval: time.Second})
 	handle := f.Start(f.spec("run-a5/tick-u1/attempt-1", "u1"))
 	waitFor(t, "the timer to reach origin", 30*time.Second, func() bool {
@@ -228,6 +236,8 @@ func TestA5InProgressWorkIsPushedOnATimer(t *testing.T) {
 // A6 — a live job is never redispatched. Adopt by stable identity; a fresh
 // attempt is created only when the previous one is proven dead.
 func TestA6ALiveAttemptIsAdoptedAndAnUnansweredOneIsHeld(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "hang"})
 	spec := f.spec("run-a6/tick-v1/attempt-1", "v1")
 	first := f.Start(spec)
@@ -274,6 +284,8 @@ func TestA6ALiveAttemptIsAdoptedAndAnUnansweredOneIsHeld(t *testing.T) {
 // A7 — read back after write. A write that silently did not land must not look
 // like a job somebody can address.
 func TestA7TheAttemptRecordIsReadBackBeforeAHandleIsReturned(t *testing.T) {
+	t.Parallel()
+
 	dropAttempt := func(path string, data []byte, perm fs.FileMode) error {
 		if filepath.Base(path) == fileAttempt {
 			return nil // the write "succeeds" and lands nowhere.
@@ -306,6 +318,8 @@ func TestA7TheAttemptRecordIsReadBackBeforeAHandleIsReturned(t *testing.T) {
 // A8 — an in-flight state is settled by whoever finds it next, from durable
 // evidence (does the thing exist?), never by trusting the claimer to return.
 func TestA8SettlementComesFromDurableEvidence(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 	handle := f.Start(f.spec("run-a8/tick-x1/attempt-1", "x1"))
 	f.waitSettled(handle)
@@ -339,6 +353,8 @@ func TestA8SettlementComesFromDurableEvidence(t *testing.T) {
 // report and a branch with no commits are different problems and send the next
 // repair somewhere different.
 func TestA9DistinctFailuresDoNotShareAMessage(t *testing.T) {
+	t.Parallel()
+
 	messages := func(t *testing.T, guardsOff map[string]bool, suffix string) (noCommits, missing string) {
 		t.Helper()
 		a := newFixture(t, fixtureOptions{mode: "nocommit", name: "nocommit" + suffix, guardsOff: guardsOff})
@@ -370,6 +386,8 @@ func TestA9DistinctFailuresDoNotShareAMessage(t *testing.T) {
 // A10 — boundaries are enforced by the substrate, not requested of the model,
 // and every attempt is REPORTED.
 func TestA10TheBoundaryIsEnforcedAndEveryAttemptIsReported(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "boundary"})
 	handle := f.Start(f.spec("run-a10/tick-z1/attempt-1", "z1"))
 	f.waitSettled(handle)

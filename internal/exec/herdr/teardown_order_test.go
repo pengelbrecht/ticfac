@@ -77,6 +77,8 @@ func registered(t *testing.T, repo, path string) bool {
 }
 
 func TestAWallClockStopWhoseCloseTookTheWorkspaceIsDisposedCompletely(t *testing.T) {
+	t.Parallel()
+
 	shorttest.EndToEnd(t)
 	h, handle, loc := wallStopTookTheWorkspace(t)
 	if !registered(t, h.repo.Dir, loc.Worktree) {
@@ -119,6 +121,8 @@ func TestAWallClockStopWhoseCloseTookTheWorkspaceIsDisposedCompletely(t *testing
 }
 
 func TestAWorktreeRemovalThatFailsIsRetriedAndSucceeds(t *testing.T) {
+	t.Parallel()
+
 	shorttest.EndToEnd(t)
 	h, handle, loc := wallStopTookTheWorkspace(t)
 
@@ -161,6 +165,8 @@ func TestAWorktreeRemovalThatFailsIsRetriedAndSucceeds(t *testing.T) {
 // retry answers differently strands the attempt for a person. The dirt is
 // put on the job's wip ref first; then the removal forces past it.
 func TestADirtyWorktreeIsPreservedThenRemovedNotRefusedForever(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {

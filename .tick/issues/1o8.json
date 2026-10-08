@@ -1,0 +1,14 @@
+{
+  "id": "1o8",
+  "title": "fast-import commits now carry +0000; the byte-for-byte guard cannot see it",
+  "description": "importCommits writes 'author/committer ... \u003cunix\u003e +0000'. commit-tree, which it replaces, writes the host's local offset; on this host that is +0200, as every run commit on epic/t8u shows (git log --date=raw).\n\nThe instant is the same, but the commit header bytes, and so the shas, differ from what the per-record path would build. The date is also now the record's write time rather than the time the commit was built.\n\n0bg's commit message and fastimport.go both claim the commits are 'byte-for-byte' the same, with 'the same ... date'. TestAFastImportCommitIsByteForByteWhatTheIndexDanceBuilds reads the date, offset included, off the LANDED commit and feeds it back to commit-tree, so it cannot detect an offset change. Nor does gittest set TZ.\n\nI found no reader that depends on the offset: runprogress's branchMovedAt parses %cI as an RFC3339 instant. Under [A4] this needs either a note on 0bg stating the change, or the stream should write the local offset (time.Local) so the claim holds.\nevidence: internal/runstate/fastimport.go:126-127 ('+0000'); internal/runstate/fastimport_test.go:66-80 (date read back from the landed commit)\n\nticfac run epic-t8u filed this backlog tick from the finding a7fb70a21778b0923af9a80d90d795282a03abd8bc6c9c7dc7b317b162a4e0ae (reported by run-epic-t8u/tick-kwh/attempt-21) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/a7fb70a21778b0923af9a80d90d795282a03abd8bc6c9c7dc7b317b162a4e0ae.json on the run branch.",
+  "notes": "2026-10-08 07:28 - ticfac run epic-t8u: created by absorbing finding a7fb70a21778b0923af9a80d90d795282a03abd8bc6c9c7dc7b317b162a4e0ae — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/a7fb70a21778b0923af9a80d90d795282a03abd8bc6c9c7dc7b317b162a4e0ae.json on epic/t8u, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-kwh/attempt-21",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-08T05:28:12Z",
+  "updated_at": "2026-10-08T05:28:18.005897Z"
+}

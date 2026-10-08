@@ -22,6 +22,8 @@ import (
 // exactly the two-shapes-one-record drift the bundle was cut to retire.
 
 func TestCollectLiftsAReportsFindingsIntoTheEnvelopeAndTheCollection(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "findings"})
 	handle := f.Start(f.spec("run-42/tick-abc/attempt-1", "abc"))
 	f.waitSettled(handle)
@@ -94,6 +96,8 @@ func TestCollectLiftsAReportsFindingsIntoTheEnvelopeAndTheCollection(t *testing.
 // it too: the attempt's own durable record says the worker's unknown half
 // was KEPT rather than thrown away with the tick's work.
 func TestCollectFoldsAnUnknownFindingKeyAndNotesTheFold(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "findings_folds"})
 	handle := f.Start(f.spec("run-42/tick-fld/attempt-1", "fld"))
 	f.waitSettled(handle)
@@ -138,6 +142,8 @@ func TestCollectFoldsAnUnknownFindingKeyAndNotesTheFold(t *testing.T) {
 }
 
 func TestCollectCarriesAnUnparseableBlockAsAProblemNotSilence(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "findings_bad"})
 	handle := f.Start(f.spec("run-42/tick-bad/attempt-1", "bad"))
 	f.waitSettled(handle)

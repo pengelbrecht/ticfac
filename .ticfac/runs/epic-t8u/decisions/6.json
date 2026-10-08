@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 6,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "The race is reproduced deterministically, fixed, and the test passes 50/50 under -parallel 12 with CPU load",
+    "description": "From gvc finding 45e76fc4 (3h0): TestAGateThatOutlivesItsReconcilerKeepsHoldingItsSlot fails intermittently under the suite's own -parallel 12. Flaky means a bug: reproduce it deterministically (load, or a controlled delay), find the race, fix it.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "9si",
+    "title": "A test that holds a gate slot is not flaky under the suite's own -parallel 12"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.97,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.02,
+      "design": 0,
+      "diagnosis": 0.98,
+      "mechanical": 0,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1115,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T14:53:51Z",
+  "answered_at": "2026-10-07T14:53:51Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "9si",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "a40e0a8dfc786eaf2e5be1d57aabf18f36698a3b",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

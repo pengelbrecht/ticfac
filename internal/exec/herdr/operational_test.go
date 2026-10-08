@@ -121,6 +121,8 @@ func (h *harness) assertNothingTornDown(t *testing.T, where string, local *herdr
 // inspect, cancel, dispose, collect — turns that into a verdict, a teardown
 // or a deletion.
 func TestEveryHerdrCallFailingDecidesNothing(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -276,6 +278,8 @@ func TestEveryHerdrCallFailingDecidesNothing(t *testing.T) {
 // the unconfirmed launch as settled — an unconfirmed launch is the one case
 // liveness is UNKNOWN, which is the one case that must ASK herdr.
 func TestALaunchPastTheCallBoundProducesNoVerdictAndNoTeardown(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{spawnAgent: true})
 	h.clientBound(t, 300*time.Millisecond)
 	h.mu.Lock()
@@ -389,6 +393,8 @@ func TestALaunchPastTheCallBoundProducesNoVerdictAndNoTeardown(t *testing.T) {
 // constructor refuses, nothing is created, nothing is deleted, and no
 // verdict is carried.
 func TestAProtocolRefusalIsOperational(t *testing.T) {
+	t.Parallel()
+
 	repo := newRepo(t, "repo")
 	s := herdtest.New(t, herdtest.Config{
 		Strict: true, Version: "0.7.0", Protocol: int(client.MinProtocolVersion - 1),
@@ -447,6 +453,8 @@ func TestAProtocolRefusalIsOperational(t *testing.T) {
 // feature, it must RequireCapability BY NAME at that point — never assume
 // the feature, never discover its absence as a late failure.
 func TestACapabilityFreeServerRunsAWholeAttempt(t *testing.T) {
+	t.Parallel()
+
 	// A non-default version makes the fake's ping answer WITHOUT a
 	// capabilities block: a server that advertises nothing.
 	h := newHarness(t, harnessOptions{serverVersion: "0.9.0", serverProtocol: int(client.ProtocolWarnVersion)})
@@ -497,6 +505,8 @@ func TestACapabilityFreeServerRunsAWholeAttempt(t *testing.T) {
 // POSITIVELY know on the failure side of a call that cleans up nothing,
 // tears nothing down, and never speaks in verdicts.
 func TestARenamedPaneBusyCodeIsAnOperationalFailure(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	// The renamed code: herdr says what agent_pane_busy used to say, under
 	// a name this build has never heard.
@@ -565,6 +575,8 @@ func TestARenamedPaneBusyCodeIsAnOperationalFailure(t *testing.T) {
 // delivered and stops; the agent's own state stays a question for inspect,
 // which this fixture leaves answering normally.
 func TestAnyPromptFailureIsAnObservation(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	// The renamed stall code — a code this build has never heard, so the
 	// gate must treat it as a refusal it can only record.
@@ -617,6 +629,8 @@ func TestAnyPromptFailureIsAnObservation(t *testing.T) {
 // HELD for a person, never redispatched: a fresh worktree must not be
 // created behind a record nobody could read.
 func TestAnUnreadableAttemptRecordIsHeld(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {

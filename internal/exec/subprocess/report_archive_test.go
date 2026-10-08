@@ -19,6 +19,8 @@ import (
 // never gives the executor a chance to save anything — and the report must
 // still be readable, still referenced, and the reference must not dangle.
 func TestTheReportSurvivesTheWorktree(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 	handle := f.Start(f.spec("run-35h/tick-rrr/attempt-1", "rrr"))
 	f.waitSettled(handle)
@@ -80,6 +82,8 @@ func reportRef(t *testing.T, c *Collection) ArtifactRef {
 // concluded — was deleted with the worktree, unread. herdr's dispose archived
 // it; the local executor's did not.
 func TestDisposeKeepsTheReportWhenNothingCollected(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 	handle := f.Start(f.spec("run-35h/tick-sss/attempt-1", "sss"))
 	f.waitSettled(handle)

@@ -53,3 +53,35 @@ func lockGateSlot(path string) (*os.File, error) {
 	}
 	return file, nil
 }
+
+// gateSlotHeld asks whether anything still holds the gate slot's lock, without
+// taking it: a shared, non-blocking probe that lets go the moment it answers,
+// so it never holds anything a holder has to wait out — the same shape as
+// internal/exec/subprocess's lockHeld, for the same reason: an observer that
+// looked exclusive would be a holder.
+//
+// Errs towards held: a lock that cannot be opened or asked about is one nobody
+// has been shown to give, and the caller (gate.go's settleKilledGate) answers
+// that by going on killing the group it killed until its bound runs out. The
+// safe failure is a slot that stays held.
+func gateSlotHeld(path string) bool {
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return true
+	}
+	defer file.Close()
+	fd := int(file.Fd())
+	for {
+		switch err := syscall.Flock(fd, syscall.LOCK_SH|syscall.LOCK_NB); {
+		case err == nil:
+			_ = syscall.Flock(fd, syscall.LOCK_UN)
+			return false
+		case errors.Is(err, syscall.EWOULDBLOCK):
+			return true
+		case errors.Is(err, syscall.EINTR):
+			continue
+		default:
+			return true
+		}
+	}
+}

@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "key": "a7fb70a21778b0923af9a80d90d795282a03abd8bc6c9c7dc7b317b162a4e0ae",
+  "tick_id": "1o8",
+  "gating": false,
+  "basis": "backlog-default",
+  "reason": "its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "placement": "backlog",
+  "decided_at": "2026-10-08T05:28:10Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "kwh",
+    "attempt": 21,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "27a7aa7ccde3cf84e49d12f036fee9eb79b625ee",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:b0e2bfa26280693ae2d479fd3dbeec0b99b14f94c04fc3f006ca558fe2e1efc9",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}

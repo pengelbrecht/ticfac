@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 14,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "The workerd/WebAssembly question is answered; Hegel property tests cover the supervision loop as a state machine plus the four other targets; they run in pnpm test and CI; anything found is fixed or recorded with its minimal counterexample",
+    "description": "Operator, 2026-09-27: trial Hegel's TypeScript library (@hegeldev/hegel, https://hegel.dev/typescript; Node 20.11+; v0.4.7 adds a WebAssembly build of the engine) on the cloudflare/ side.\n\nFIRST: check whether the WebAssembly build loads under workerd (vitest-pool-workers). If it does not, run these tests under plain-Node vitest over pure modules, and say so.\n\nTargets:\n- The Run Workflow's supervision loop as a state machine: boot, observe, done signal, timeout, reboot, finalize. Properties:\n  - every path reaches finalize (0ye's bug class)\n  - a container that cannot be asked is never read as dead (3ed's class)\n  - two orchestrators never run at once\n- The sandbox dispatch door's request validation.\n- The report-only-worker refusal: the TS collect and the Go executor must agree (the dyo/94u pair).\n- Repo-config parsing.\n- The gateway's Workers-AI-only allow-list.\nLoad hegel-skill (github.com/hegeldev/hegel-skill) when writing these. Report what PBT found.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "p0n",
+    "title": "Property-test the Run Workflow's supervision loop with Hegel (TypeScript)"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.86,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.89,
+      "design": 0.03,
+      "diagnosis": 0.01,
+      "mechanical": 0,
+      "translation": 0.07
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1322,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T19:21:01Z",
+  "answered_at": "2026-10-07T19:21:01Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "p0n",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "3f737ebc56948eb7813b5835bfa5511d112f4ceb",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

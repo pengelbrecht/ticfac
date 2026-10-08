@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -311,28 +311,24 @@ func TestEveryHTTPClientUsesTheSharedTransport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Tracked files, not a directory walk (tick pqs): an agent worktree or
+	// a scratch clone under this checkout is no party to this tree, and the
+	// old walk had to name every stray directory (.claude already, the next
+	// one after the fact) to keep them out. Tracked files are the tree.
 	self, _ := filepath.Abs(".")
 	var offenders []string
-	err = filepath.WalkDir(root, func(path string, e fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if e.IsDir() {
-			switch e.Name() {
-			case ".git", "node_modules", "vendor", ".claude":
-				return filepath.SkipDir
-			}
-			if path == self {
-				return filepath.SkipDir
-			}
-			return nil
+	for _, path := range gittest.Tracked(t, root) {
+		// This package's own builder is the one client every other file must
+		// use, so it is excluded from the scan of its own rule.
+		if dir := filepath.Dir(path); dir == self {
+			continue
 		}
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
+			continue
 		}
 		src, err := os.ReadFile(path)
 		if err != nil {
-			return err
+			t.Fatal(err)
 		}
 		for i, line := range strings.Split(string(src), "\n") {
 			code := strings.TrimSpace(line)
@@ -345,10 +341,6 @@ func TestEveryHTTPClientUsesTheSharedTransport(t *testing.T) {
 				offenders = append(offenders, fmt.Sprintf("%s:%d: %s", rel, i+1, code))
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 	if len(offenders) > 0 {
 		t.Fatalf("build clients with httpnet.Client (or httpnet.Transport), not by hand:\n  %s",

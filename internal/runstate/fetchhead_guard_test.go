@@ -2,6 +2,7 @@ package runstate_test
 
 import (
 	"fmt"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,34 +27,24 @@ import (
 func TestNoProductionCodeReadsFetchHead(t *testing.T) {
 	t.Parallel()
 
+	// The scan reads the tree's TRACKED files (tick pqs): a checkout is not a
+	// clean room — an agent worktree or a scratch clone under it is no party
+	// to this tree, and a directory walk that reads it fails the gate on a
+	// file nobody here wrote.
 	root := repoRoot(t)
 	var offenders []string
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			switch info.Name() {
-			case ".git", "testdata", "vendor", "node_modules":
-				return filepath.SkipDir
-			}
-			return nil
-		}
+	for _, path := range gittest.Tracked(t, root) {
 		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
+			continue
 		}
-		body, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", path, err)
 		}
 		if strings.Contains(string(body), "\"FETCH_HEAD\"") {
 			rel, _ := filepath.Rel(root, path)
 			offenders = append(offenders, rel)
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk: %v", err)
 	}
 	if len(offenders) > 0 {
 		t.Fatalf("production code reads FETCH_HEAD in %v.\n"+

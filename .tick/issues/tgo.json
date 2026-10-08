@@ -1,0 +1,14 @@
+{
+  "id": "tgo",
+  "title": "the gate's installer test can go stale for CLI-source-only changes",
+  "description": "internal/release's load-bearing gate test builds ./cmd/ticfac and ./cmd/ticfac-exec-subprocess in subprocesses and asserts on the built binaries' behaviour. Subprocess builds are invisible to go's test cache, and internal/release's import closure does not reach cmd/ticfac/main.go or internal/cli, so a change confined to those sources cannot invalidate the package's cached pass — the gate's installer test can go stale for exactly the changes it most wants to see. install.sh itself is now tracked in-process (this tick); the binaries' source closure is the residual. The full-suite-only harnesses carry the same shape and run cold in CI (reconcile's and herdr's executor builds, cli's built-binary and tk_real tests). Remedy if wanted: -count=1 for internal/release in the gate, or accept with CI's cold full `make test` as the backstop — it runs the installer test on every push.\nevidence: internal/release/install_test.go:99\n\nticfac run epic-t8u filed this backlog tick from the finding 7cd8dc21fccbf696643583981c0133ce8e6376c69499a08ef56621b1ac0a5c42 (reported by run-epic-t8u/tick-mbv/attempt-9) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/7cd8dc21fccbf696643583981c0133ce8e6376c69499a08ef56621b1ac0a5c42.json on the run branch.",
+  "notes": "2026-10-07 21:21 - ticfac run epic-t8u: created by absorbing finding 7cd8dc21fccbf696643583981c0133ce8e6376c69499a08ef56621b1ac0a5c42 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/7cd8dc21fccbf696643583981c0133ce8e6376c69499a08ef56621b1ac0a5c42.json on epic/t8u, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-mbv/attempt-9",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-07T19:21:39Z",
+  "updated_at": "2026-10-07T19:21:44.61386Z"
+}

@@ -65,6 +65,11 @@ var endToEndPackages = map[string][]string{
 	filepath.Join("internal", "exec", "herdr"): {"newHarness", "newRepo"},
 	filepath.Join("internal", "runstate"):      {"newOrigin"},
 	filepath.Join("internal", "release"):       {"newInstallHarness"},
+	// The touched-packages check's own harness (tick r1f): a real git
+	// repository holding a real Go module, whose `go list` and `go test` are
+	// the check's whole point. Its unit tests over fixed inputs run in the
+	// short suite; the two that build the module do not.
+	filepath.Join("internal", "gatescope"): {"newProbeRepo"},
 	// The sandbox image's scripts, run for real against stub binaries and
 	// real git (tick r6w moved the suite here from ticks with image/). ~200s
 	// serial: CI's `make test` pays for it, the per-tick gate does not.

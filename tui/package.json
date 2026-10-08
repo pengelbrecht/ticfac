@@ -1,0 +1,14 @@
+{
+  "name": "ticfac-tui-properties",
+  "private": true,
+  "description": "The terminal-driver property suite (tick z7w): Bombadil drives the real ticfac binary over a real pty — the watch dashboard and the bare overview — against fixture worlds of registries and feeds, and holds the screens to the properties the tick names: a stale or orphaned run never shows as live, a registry entry whose checkout is gone never shows (#86), every held or failed run shows the one command that clears it, history collapses into one line (#87), the first frame appears within its bound (#112), and the hn6 dashboard layout's own rules from outside the process. Run with `pnpm test` (see tui/README.md); the seeded half (`pnpm run test:seeded`) proves each property can fail.",
+  "type": "module",
+  "scripts": {
+    "test": "node ./run-suite.mjs",
+    "test:seeded": "node ./run-suite.mjs --seeded",
+    "test:all": "node ./run-suite.mjs --all"
+  },
+  "devDependencies": {
+    "@antithesishq/bombadil": "0.7.8"
+  }
+}

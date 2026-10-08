@@ -1,0 +1,71 @@
+{
+  "schema_version": 3,
+  "decision": 26,
+  "role": "closeout-epic",
+  "request": {
+    "epic_id": "t8u",
+    "job_id": "run-epic-t8u/tick-j1h/attempt-22",
+    "output_schema": "ticfac.job-result.closeout-epic.v1",
+    "profile": "closeout-epic@1.1.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:6ca5cd493975542d3c3c0fcb3a585ccb17bc8503eb915dfad2fcc1c8411db4e0",
+    "role": "closeout-epic",
+    "source_grade": "write",
+    "source_sha": "aa4a3a79e06f9e51043e98e712d0a47d1a08ba74",
+    "tick_id": "j1h"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "Under -short, internal/cli is the gate's long pole: 154s of the uncached gate's 162s here, and 120s alone. Of that, 472 top-level tests run serially, summing ~78s, because 158 t.Setenv and 12 os.Chdir/t.Chdir lines bar t.Parallel(). The other ~40s is z7w's property tests, which zi6 owns. Thread the env and cwd inputs through the command's options, as yzk proposes for subprocess and herdr and as Options.Procs/Now already do, so the tests can join the parallel pack. With zi6, cli and so the gate should drop toward ~1 min. It does not move t8u's A1 (reconcile is that floor).\nevidence: go test -short -count=1 -parallel 12 -json ./internal/cli/: wall 120s; serial top-level tests 472 summing 78.0s; grep -c 't.Setenv(' internal/cli/*_test.go = 158",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Parallelise internal/cli's 472 serial tests: the per-tick gate's floor"
+      },
+      {
+        "body": "x73 left runstate as a follow-on. Measured now: -short 6.5s (no gate win), full suite 41s with 84 serial top-level tests summing 39s. Only remote_flap_test.go and http_stall_test.go use t.Setenv; the rest just never call t.Parallel(). The win is go-touched's full-suite run on ticks that touch runstate, about 41s down to under 10s. Low: reconcile, which imports it, is left to CI, so A1 does not move.\nevidence: go test -count=1 -parallel 12 -json ./internal/runstate/: wall 41s, serial tests 84 summing 39.35s",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "Parallelise internal/runstate's 84 serial tests (full suite 41s)"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-t8u/tick-j1h/attempt-22",
+      "commits": 1,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-t8u/j1h/RESULT-j1h.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "closeout-epic",
+    "schema_id": "ticfac.job-result.closeout-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "t8u's [A1] is unmet (both reviews NOT READY, bound spent); an operator must re-scope A1 on t8u or bring kf1/9xx in (xju). The gate figures were measured under load 6.5-15, not on a quiet host."
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T05:39:27Z",
+  "answered_at": "2026-10-08T05:39:27Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "j1h",
+    "attempt": 22,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "aa4a3a79e06f9e51043e98e712d0a47d1a08ba74",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "closeout",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:6ca5cd493975542d3c3c0fcb3a585ccb17bc8503eb915dfad2fcc1c8411db4e0",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}

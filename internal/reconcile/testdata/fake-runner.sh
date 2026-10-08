@@ -563,6 +563,30 @@ gate_break_wrong_repair)
 		report
 	fi
 	;;
+gate_break_touched)
+	# dz1's shape for the touched-packages check (tick r1f): the tick changes
+	# a Go package's code — alpha's Answer — in a way the whole-repo short
+	# suite cannot see (alpha's test skips under -short) and only that
+	# package's full suite fails. The repository the probe seeds (gate_
+	# touched_run_test.go) declares the real gate's two Go halves, and its
+	# cmd/gate-touched reads the pair the integrated gate exports. The
+	# plan-repair worker lands a fix for the OTHER half — a file no Go package
+	# owns, the wrong-repair shape above — so the re-gate over the repaired
+	# tree must still refuse, through the union pair: a repair of one check
+	# must not stop the gate covering the tick's own exposure.
+	if [ "$TICFAC_ROLE" = "plan-repair" ]; then
+		repair_gate_nothing
+		report
+	elif in_gate_break_tick; then
+		printf '%s\n' 'package alpha' '' '// Answer is what the tick changes; 2 is the broken value.' 'const Answer = 2' \
+			> "$TICFAC_WORKTREE/alpha/alpha.go"
+		commit
+		report
+	else
+		commit
+		report
+	fi
+	;;
 stall-then-report)
 	# The Phase 3 shape (tick 7zs), with an ending: the worker is alive,
 	# produces nothing — no commit, no file, no report — for long enough that
@@ -1370,6 +1394,22 @@ hang)
 	# transient window with a forked child a group signal could miss.
 	commit
 	exec sleep 86400
+	;;
+linger-past-grace)
+	# The o3q shape: the worker $LINGER_TICK names does its work, reports, and
+	# then keeps running PAST the grace a cancel of an attempt that has
+	# reported waits out (#141) — long enough that the release which follows
+	# its collect waits the grace out and records a durable cancellation over
+	# the verdict the run has already collected. Every other tick is the plain
+	# report mode, so the fixture costs one worker's seconds and not five.
+	if [ "$TICFAC_TICK" = "${LINGER_TICK:-a1}" ]; then
+		commit
+		report
+		sleep "${LINGER_SECONDS:-30}"
+	else
+		commit
+		report
+	fi
 	;;
 busy-a1)
 	# The 9fc shape (tick dh1): a1 keeps writing into its worktree and

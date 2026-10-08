@@ -7,12 +7,16 @@ and `make gate`. That is the bar to merge for most PRs: PR CI is advisory,
 not a required check, so you do not wait for it.
 
 **Exception: a PR that touches `internal/reconcile/` waits for its PR CI to be
-green before you merge it.** The full reconcile suite only runs in CI, and
-three merges that skipped it turned main red within two days (#225, #226,
-#233), blocking every other agent's deploy. Operator decision, 2026-10-06. Don't run the full `internal/reconcile`
-suite locally as a matter of course: it takes 20-30 minutes and this host is
-shared with live runs and other agents. Run heavy local commands at low
-priority (GOTEST_PARALLEL=4, GOFLAGS=-p=2).
+green before you merge it.** The three merges that skipped this turned main
+red within two days (#225, #226, #233), blocking every other agent's deploy.
+Operator decision, 2026-10-06. Since tick r1f the per-tick gate also runs the
+FULL suites of every package a tick's diff reaches — with one deliberate
+exception: internal/reconcile itself is left to CI (its full suite measured
+41m28s on this host; the reasoning and the numbers are in .tick/runners.toml's
+go-touched entry), so a person checking a reconcile PR still reads CI, and
+nobody runs that suite locally as a matter of course. This host is shared
+with live runs and other agents: run heavy local commands at low priority
+(GOTEST_PARALLEL=4, GOFLAGS=-p=2).
 
 ## What CI runs, and where it must be green
 
@@ -43,7 +47,11 @@ obvious.
 ## Before you push: run `make gate`, not just your package
 
 `make gate` is gofmt, `go vet ./...` and the short suite across the whole
-repository: exactly what a ticfac run's per-tick gate runs. A package-scoped
+repository — the short half of what a ticfac run's per-tick gate runs. The
+other Go half (tick r1f) is `make gate-touched`: the FULL, non-short suites
+of the packages your branch's diff touches, plus the packages that import
+them, so `make gate gate-touched` before a push runs over your branch the
+two halves the per-tick gate will run over its merge. A package-scoped
 `go test ./internal/reconcile/` is not enough. Some tests guard the repository
 rather than a package, and they only run in a whole-repo pass. The one that
 catches people is `internal/shorttest`: every end-to-end test must call

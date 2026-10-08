@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -46,13 +47,7 @@ func newFindingsRepo(t *testing.T) (repo string) {
 
 	run := func(dir string, args ...string) string {
 		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %s (in %s): %v\n%s", strings.Join(args, " "), dir, err, out)
-		}
-		return string(out)
+		return gittest.Run(t, dir, args...)
 	}
 	run(root, "init", "--quiet", "--bare", "-b", "main", bare)
 	run(root, "init", "--quiet", "-b", "epic/qeu", seed)

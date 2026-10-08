@@ -38,6 +38,8 @@ import (
 // exact shape: the bound fired, this executor recorded the stop and the
 // departure, the worker left no report, and the branch is where it started.
 func TestAWallClockStopOverAnEmptyBranchIsNeverRefusedAsNoCommits(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -97,6 +99,8 @@ func TestAWallClockStopOverAnEmptyBranchIsNeverRefusedAsNoCommits(t *testing.T) 
 // A refusal for an attempt whose work was preserved NAMES the snapshot: the
 // ref, the commit, what it is, and how to look at it. 9fc attempt 4's shape.
 func TestARefusalNamesTheWIPSnapshotThatHoldsTheWork(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -163,6 +167,8 @@ func TestARefusalNamesTheWIPSnapshotThatHoldsTheWork(t *testing.T) {
 // outcome and the branch is still empty. Nothing above explains that, which
 // is exactly why it deserves its own name and its own alarm.
 func TestARunnerThatClaimsSuccessOverAnEmptyBranchIsStillNoCommits(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {

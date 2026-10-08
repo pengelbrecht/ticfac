@@ -28,6 +28,8 @@ import (
 // lands somewhere an operator reads. The fixture is the local subject one
 // step on: herdr 0.9.0 speaking one protocol above the warn line.
 func TestAboveWarnProtocolWarningReachesTheWriter(t *testing.T) {
+	t.Parallel()
+
 	repo := newRepo(t, "repo")
 	root := t.TempDir()
 	// A non-default version/protocol pair also answers ping WITHOUT a
@@ -66,6 +68,8 @@ func TestAboveWarnProtocolWarningReachesTheWriter(t *testing.T) {
 // same fix: the only constructor is called without Options.ProtocolWarning,
 // so the default must be the operator's own stream, not a dropped writer.
 func TestTheProtocolWarningDefaultsToStderr(t *testing.T) {
+	t.Parallel()
+
 	repo := newRepo(t, "repo")
 	root := t.TempDir()
 	s := herdtest.New(t, herdtest.Config{}) // canonical 0.8.2 / protocol 20

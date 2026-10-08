@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "The FETCH_HEAD/concurrent-fetch guards provoke their contention deterministically, with no unthrottled loop and no iteration count chosen by feel. Reintroducing the wdb regression still fails them. internal/runstate's wall clock drops by at least 25 seconds, and the package no longer saturates a core while it runs.",
+    "description": "internal/runstate/concurrent_fetch_test.go:69 and :168 each run a bare goroutine:\n\n  for { select { case <-stop: return; default: exec.Command(\"git\",\"-C\",dir,\"fetch\",\"--quiet\",\"origin\").Run() } }\n\nNo sleep, no throttle - git fetch spawned back to back for the whole test, saturating a core and hammering the filesystem. Measured 26.47s and 5.37s, i.e. 32s of internal/runstate's 50.7s. The loops also run 60 and 30 iterations of record-writing, counts that look arbitrary: the FETCH_HEAD regression they guard (tick wdb) reproduces within a handful.\n\nThrottling the loop is a band-aid. What the tests actually want is one fact: ANOTHER WRITER MOVED THE REF BETWEEN MY READ AND MY WRITE. Spraying fetches and hoping to land inside that window is why they need 60 iterations and a spinning core. A seam that performs the competing write at exactly that moment makes the test deterministic, near-instant, and immune to machine load.\n\nThis is first in the epic because it is also a cy2 fix: these two tests are a load source that flips OTHER tests in the same run.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "1qy",
+    "title": "Replace the spinning watcher in concurrent_fetch tests with a deterministic contention seam"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.51,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.34,
+      "design": 0.61,
+      "diagnosis": 0.01,
+      "mechanical": 0.01,
+      "translation": 0.03
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1357,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T13:45:30Z",
+  "answered_at": "2026-10-07T13:45:30Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "1qy",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "49f892a7676fc112d43a82403f9ff818ce666b2a",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

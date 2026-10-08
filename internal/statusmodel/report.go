@@ -413,23 +413,13 @@ func mergedAttemptDiff(repo, runID, tickID string, attempt int, git gitCommand) 
 // spellings carry the resolution's story after it). A line that merely
 // starts with the needle and goes on to another digit — attempt 10 beside
 // attempt 1 — names another dispatch, never this one.
+//
+// Since tick r1f the reading itself lives beside the minting, in
+// reconcile.MergeNamingAttempt, and this is the delegation: the gate's
+// touched-diff derivation and this report drill-in read the same words
+// through the same line-exact rule rather than a copy of it.
 func mergeNamingAttempt(out, needle string) (string, bool) {
-	for _, record := range strings.Split(out, "\x1e") {
-		sha, body, ok := strings.Cut(record, "\x1f")
-		if !ok {
-			continue
-		}
-		sha = strings.TrimSpace(sha)
-		if sha == "" {
-			continue
-		}
-		for _, line := range strings.Split(body, "\n") {
-			if line == needle || strings.HasPrefix(line, needle+" ") {
-				return sha, true
-			}
-		}
-	}
-	return "", false
+	return reconcile.MergeNamingAttempt(out, needle)
 }
 
 // reportMergeBases are the run-ref spellings an attempt's diff is based

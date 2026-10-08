@@ -3,8 +3,8 @@
 package sandboximage
 
 import (
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -55,9 +55,7 @@ func (f *fixture) keeping(watch string) (commitRecord, pushRecord string) {
 // sourceRef reads a branch on the "remote", empty when it has none.
 func (f *fixture) sourceRef(branch string) string {
 	f.t.Helper()
-	cmd := exec.Command("git", "rev-parse", "--verify", "-q", "refs/heads/"+branch)
-	cmd.Dir = f.source
-	out, err := cmd.CombinedOutput()
+	out, err := gittest.Command(f.source, "rev-parse", "--verify", "-q", "refs/heads/"+branch).CombinedOutput()
 	if err != nil {
 		return ""
 	}
