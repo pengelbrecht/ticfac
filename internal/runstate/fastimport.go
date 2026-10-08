@@ -4,13 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/pengelbrecht/ticfac/internal/gitbin"
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
 
@@ -138,16 +136,16 @@ func (g *git) importCommits(ref string, commits []importCommit) ([]string, error
 	}
 	stream.WriteString("done\n")
 
-	cmd := exec.Command(gitbin.Path(), append(append([]string{}, safeArgs...),
-		"fast-import", "--force", "--quiet", "--export-marks="+marks)...)
-	cmd.Dir = g.dir
-	cmd.Env = g.env
-	cmd.Stdin = bytes.NewReader(stream.Bytes())
-	var errBuf bytes.Buffer
-	cmd.Stderr = &errBuf
-	runErr := cmd.Run()
+	// The invocation goes through once — the store's one way of starting
+	// git — so it carries the transport bound and the push queue like every
+	// other git this store runs. fast-import reaches no remote and pushes
+	// nothing, but the guards that hold those two facts for every spawn
+	// (gitbin's transport and push-queue tests) read the spawn site, and a
+	// stream that grows its own way around them is exactly what they exist
+	// to catch.
+	_, stderr, runErr := g.once(stream.Bytes(), nil, "fast-import", "--force", "--quiet", "--export-marks="+marks)
 	if runErr != nil {
-		return nil, fmt.Errorf("git fast-import: %w: %s", runErr, strings.TrimSpace(errBuf.String()))
+		return nil, fmt.Errorf("git fast-import: %w: %s", runErr, strings.TrimSpace(stderr))
 	}
 	exported, err := os.ReadFile(marks)
 	if err != nil {
