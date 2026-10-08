@@ -43,17 +43,22 @@
  *   acceptance criterion, and the one behaviour this host adds to the
  *   supervisor's ladder.
  *
- * The model access is the LOCAL rung's: pi-ai's own
- * `cloudflare-workers-ai` provider, credentials resolved from the host
- * environment exactly as the pi CLI resolved them (the operator's ambient
- * `CLOUDFLARE_API_KEY`/`CLOUDFLARE_ACCOUNT_ID`; this host holds no
+ * The model access is the LOCAL rung's, in two grades. Unmetered, it is
+ * pi-ai's own `cloudflare-workers-ai` provider, credentials resolved from
+ * the host environment exactly as the pi CLI resolved them (the operator's
+ * ambient `CLOUDFLARE_API_KEY`/`CLOUDFLARE_ACCOUNT_ID`; this host holds no
  * factory gateway), with the same per-model catalog corrections the gateway
  * provider applies (`GATEWAY_MODEL_OVERRIDES`: GLM 5.3's `maxTokens` and
- * `thinkingFormat`). A routed model that is not Workers AI (or the tests'
- * faux) is refused by name — claude is the frontier rung's CLI, not this
- * harness's; the operator's decision recorded on the epic keeps the claude
- * CLI as the local frontier exception, and everything this host runs is
- * Workers AI.
+ * `thinkingFormat`). Metered (tick lrd, the harness half of tick m1w), a
+ * dispatch whose worker.json carries a gateway metering join runs the same
+ * provider through the operator's own AI Gateway route with the join's
+ * headers — `./gateway-metering.ts`, the override the pi CLI's generated
+ * extension composes for a herdr pane — so its calls join the gateway's logs
+ * and the run's cost line states a measurement. A routed model that is not
+ * Workers AI (or the tests' faux) is refused by name — claude is the
+ * frontier rung's CLI, not this harness's; the operator's decision recorded
+ * on the epic keeps the claude CLI as the local frontier exception, and
+ * everything this host runs is Workers AI.
  */
 
 import { createHash } from "node:crypto";
@@ -93,6 +98,11 @@ import {
   type WorkspaceGit,
   workspaceCheckpointExtension,
 } from "../workspace/checkpoints.js";
+import {
+  type LocalMetering,
+  meteredWorkersAIProvider,
+  meteringApplies,
+} from "./gateway-metering.js";
 import { piAuthStore } from "./pi-auth-store.js";
 import { openSteerServer, type SteerServer } from "./steer-socket.js";
 
@@ -133,6 +143,18 @@ export type LocalWorkerConfig = {
    * config the executor's own tests wrote.
    */
   readonly fauxTranscript?: string;
+  /**
+   * The local gateway metering join (written into worker.json by tick m1w,
+   * read here by tick lrd): present on a dispatch whose resolver produced one
+   * AND whose routed model is one the join applies to (a Workers AI
+   * spelling), absent otherwise — the same rule the writer applies, so the
+   * tests' faux rung and a non-Workers-AI model never carry one. The harness
+   * composes its provider override from it (`./gateway-metering.ts`), and a
+   * metered worker's calls join the operator's AI Gateway logs; without one
+   * the local rung's provider is the ambient-credential one, unmetered and
+   * honest about it.
+   */
+  readonly metering?: LocalMetering;
 };
 
 /** How the worker's run ended, in the shape `main.ts` maps to exit codes. */
@@ -342,7 +364,20 @@ export async function runLocalWorker(options: LocalWorkerOptions): Promise<Local
     models.setProvider(faux.provider);
     modelRef = localModelRef(config.model);
   } else {
-    models.setProvider(localWorkersAIProvider());
+    // The metering join (tick lrd): a Workers AI model whose config carries
+    // one runs on the gateway-metered provider — the same override the pi
+    // CLI's generated extension composes for a herdr pane — and anything else
+    // keeps the ambient-credential provider exactly as it was. The join is
+    // composed only for the models it applies to: the writer puts none on
+    // the tests' faux rung, and a config carrying one anyway runs its faux
+    // transcript unmetered, never routed at a gateway it does not reach.
+    const join =
+      config.metering !== undefined && meteringApplies(config.model) ? config.metering : undefined;
+    models.setProvider(
+      join === undefined
+        ? localWorkersAIProvider()
+        : meteredWorkersAIProvider(localWorkersAIProvider(), join),
+    );
     modelRef = localModelRef(config.model);
   }
 
