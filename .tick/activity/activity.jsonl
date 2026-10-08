@@ -3333,3 +3333,4 @@
 {"ts":"2026-10-08T02:39:43.866979Z","tick":"0bg","action":"start","actor":"ticfac","epic":"t8u","data":{"title":"A1 unmet: the full suite's floor, internal/reconcile, did not get faster"}}
 {"ts":"2026-10-08T02:39:58.028705Z","tick":"p4c","action":"start","actor":"ticfac","epic":"t8u","data":{"title":"fn8's ref-lock guard deadlocks on git \u003e= 2.51; epic CI red since 9a34b1001"}}
 {"ts":"2026-10-08T03:17:15.839845Z","tick":"p4c","action":"note","actor":"ticfac","epic":"t8u","data":{"note":"\n2026-10-08 05:17 - ticfac run epic-t8u: p4c try 1 (run dispatch #20) merged into epic/t8u as 524bd92647ec; the integrated gate (go, ts) passed.","title":"fn8's ref-lock guard deadlocks on git \u003e= 2.51; epic CI red since 9a34b1001"}}
+{"ts":"2026-10-08T03:17:16.436217Z","tick":"p4c","action":"close","actor":"ticfac","epic":"t8u","data":{"title":"fn8's ref-lock guard deadlocks on git \u003e= 2.51; epic CI red since 9a34b1001"}}
