@@ -12,8 +12,11 @@
   "attempt": 7,
   "done_item": "A1",
   "demonstrating_check": "ticfac run <epic> --cloud --config claude",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T11:36:40Z",
+  "triaged_at": "2026-10-08T11:36:49Z",
+  "triaged_by": "ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9 absorbing ihr",
+  "promoted_as": "ihr",
   "provenance": {
     "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
     "tick_id": "52h",
