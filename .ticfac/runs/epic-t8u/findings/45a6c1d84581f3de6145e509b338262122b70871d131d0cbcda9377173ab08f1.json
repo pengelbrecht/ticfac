@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "x73",
   "attempt": 17,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T02:11:34Z",
+  "triaged_at": "2026-10-08T02:11:44Z",
+  "triaged_by": "ticfac run epic-t8u absorbing h60",
+  "promoted_as": "h60",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "x73",
