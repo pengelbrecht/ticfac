@@ -40,21 +40,6 @@ The bundle is version-matched to this build: 'ticfac skills list' reports the
 ticfac version each skill ships with, and 'ticfac skills get [name]' prints a
 skill's SKILL.md straight from the binary.
 
-<<<<<<< HEAD
-'ticfac skills install ticfac' is the one command: it installs the ticfac
-skill — the loop an agent runs an epic with, and its boundary with the ticks
-skill — into every skill directory the repository carries (.claude/skills/
-and .agents/skills/), the same way 'tk skills install ticks' installs the
-ticks skill, so the two land beside each other. Re-installing over a stamped
-directory is the upgrade path. A target with other content and no stamp is
-refused (pass --force to take it over); a target that holds OTHER skills as
-children is refused outright — --force does not override that, because that
-install would delete every sibling skill.
-
-'ticfac skills diff <name>' compares an installed copy against the embedded
-bundle and reports drift — missing, unstamped, a different version, or
-changed files — with the install command as the fix.`,
-=======
 'ticfac skills install' is the one command: with no name, it installs the
 ticfac skill — the binary embeds one, so naming it ('ticfac skills install
 ticfac') is equivalent — the loop an agent runs an epic with, and its
@@ -65,8 +50,11 @@ Re-installing over a stamped directory is the upgrade path. A target with
 other content and no stamp is refused (pass --force to take it over); a
 target that holds OTHER skills as children is refused outright — --force
 does not override that, because that install would delete every sibling
-skill.`,
->>>>>>> 4b8b263b7b86b54872d1f4276bceb1d5978e2a29
+skill.
+
+'ticfac skills diff <name>' compares an installed copy against the embedded
+bundle and reports drift — missing, unstamped, a different version, or
+changed files — with the install command as the fix.`,
 	}
 	cmd.AddCommand(
 		newSkillsListCommand(stdout, stderr),

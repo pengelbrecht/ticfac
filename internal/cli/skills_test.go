@@ -245,7 +245,6 @@ func TestSkillsInstallJSONReportsTargets(t *testing.T) {
 	_ = root
 }
 
-<<<<<<< HEAD
 // A clean install has no drift: `skills diff` exits 0 and says so.
 func TestSkillsDiffNoDrift(t *testing.T) {
 	root := skillsRepoFixture(t, ".claude/skills")
@@ -377,7 +376,6 @@ func TestSkillsDiffJSONReportsDrift(t *testing.T) {
 	_ = root
 }
 
-=======
 // `skills get` with no name acts on the embedded skill (tick rkk); the
 // explicit form stays equivalent.
 func TestSkillsGetWithNoNamePrintsTheEmbeddedSkill(t *testing.T) {
@@ -419,7 +417,6 @@ func TestSkillsGetTooManyArgs(t *testing.T) {
 	}
 }
 
->>>>>>> 4b8b263b7b86b54872d1f4276bceb1d5978e2a29
 // stringsBuilder is the test writer Run takes.
 type stringsBuilder struct {
 	b strings.Builder

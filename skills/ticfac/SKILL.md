@@ -11,19 +11,13 @@ starting, following, steering, triaging and finishing an epic run. Plan with
 `tk`; run with `ticfac`. When the task is "plan this" or "break this down",
 use ticks; when it is "run this epic" or "what is the run doing", use ticfac.
 
-<<<<<<< HEAD
-Install or update this skill with `ticfac skills install ticfac` — the same
-one command as the ticks skill's `tk skills install ticks`. Re-run it after
-upgrading ticfac: it replaces a stamped copy with the new binary's version.
-`ticfac skills diff ticfac` says whether a re-install is needed — missing,
-unstamped, an older version, or changed files all count as drift.
-=======
 Install or update this skill with `ticfac skills install` — the binary
 embeds one skill, so naming it (`ticfac skills install ticfac`) is the same
 command — the same shape as the ticks skill's `tk skills install ticks`.
 Re-run it after upgrading ticfac: it replaces a stamped copy with the new
-binary's version.
->>>>>>> 4b8b263b7b86b54872d1f4276bceb1d5978e2a29
+binary's version. `ticfac skills diff ticfac` says whether a re-install is
+needed — missing, unstamped, an older version, or changed files all count as
+drift.
 
 Detail lives in references/: `commands.md` (every command and the flags
 worth knowing), `holds.md` (every stop: who clears it, with what),
