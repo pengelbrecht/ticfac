@@ -12,8 +12,11 @@
   "attempt": 19,
   "done_item": "A1",
   "demonstrating_check": "go",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-08T05:14:51Z",
+  "triaged_at": "2026-10-08T05:15:00Z",
+  "triaged_by": "ticfac run epic-t8u absorbing 9xx",
+  "promoted_as": "9xx",
   "provenance": {
     "run_id": "epic-t8u",
     "tick_id": "0bg",
