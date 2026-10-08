@@ -1,0 +1,62 @@
+{
+  "schema_version": 3,
+  "decision": 9,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 5,
+    "attempt_head": "b2f06b98bca1699cb185702c6873119754f53bef",
+    "conflict_files": [
+      "contracts/bundle.json",
+      "internal/cli/status.go",
+      "internal/cli/status_model.go",
+      "internal/cli/watch.go"
+    ],
+    "conflicting_ticks": [
+      "b13"
+    ],
+    "epic_id": "ymf",
+    "job_id": "run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-5",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "resolve_branch": "ticfac/run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-5",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "b13"
+  },
+  "response": {
+    "conflict_detail": "4 conflicts: content in contracts/bundle.json; content in internal/cli/status.go; content in internal/cli/status_model.go; content in internal/cli/watch.go",
+    "conflict_files": [
+      "contracts/bundle.json",
+      "internal/cli/status.go",
+      "internal/cli/status_model.go",
+      "internal/cli/watch.go"
+    ],
+    "failure": "operational",
+    "job_id": "run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-5",
+    "merge": "",
+    "reason": "b13 try 2 (run dispatch #5) does not merge onto epic/ymf (4 conflicts: content in contracts/bundle.json; content in internal/cli/status.go; content in internal/cli/status_model.go; content in internal/cli/watch.go) and its resolve-conflict job failed: it answered with no report the run could read and the run's verdict is missing-result (failed): the harness wrote no report: the report at RESULT-b13.md on tick/ymf/attempt-5-resolve-5-e0ec461e/b13 is the container's fallback (NO AGENT REPORT), its account of a harness fault and not a question for a person — the tick is dispatched again, carryi…",
+    "resolve_head": "64f4e8fc0afd2bf5455137857d8e2821a8b3efa0",
+    "status": "failed"
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T19:42:07Z",
+  "answered_at": "2026-10-08T19:42:07Z",
+  "provenance": {
+    "run_id": "run_91f2952af63f42f08a0ad243b4488842",
+    "tick_id": "b13",
+    "attempt": 5,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "a3660a96d4617e5b58187addab2115c9a0bebfef",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
