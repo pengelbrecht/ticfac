@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching 47j as attempt 1",
-  "updated_at": "2026-10-08T13:58:11Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "47j is running as attempt 1",
+  "updated_at": "2026-10-08T13:58:21Z",
   "ticks": [
     {
       "tick_id": "47j",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "93n",
