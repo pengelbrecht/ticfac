@@ -7,28 +7,20 @@ substrate = "auto"
 max_parallel = 4
 
 [roles.implement]
-# Operator routing for Phase 2 (2026-09-10; the args line and the trust
-# comment it carried are gone since tick q6z). Implementation runs on GLM on
-# cloudflare through pi: GLM 5.3 for complex work (the default, and the
-# `strong` tier) and GLM 5.3-flash for simple work (`economy`). opus is a
-# claude-harness model, not a pi one: for implement it is the local frontier
-# escalation and the cloud's named claude config only, never a starting tier
-# — review and closeout are the roles the cells below run on it.
+# Operator routing for Phase 2 (2026-09-10). Implementation runs entirely on
+# GLM on cloudflare through pi: GLM 5.3 for complex work (the default, and the
+# `strong` tier) and GLM 5.3-flash for simple work (`economy`). opus is NOT an
+# implementation tier — it is the claude harness only, reserved for review and
+# closeout, and it is not available in pi at all.
 #
-# No `args` on this cell, deliberately (tick q6z). The roles table's args
-# have exactly one consumer — spawnArgv, in internal/cli/executor.go, read
-# only when a herdr dispatch compiles an agent's argv — and
-# runconfig.Compile refuses kind "pi" for a herdr pane (uxi), so no
-# implement dispatch can read a flag from here: since 2q5 implement routes
-# onto the local-subprocess executor, which launches the durable pi host
-# from its own runner table (internal/exec/subprocess), and a cloud
-# container is booted from the worker.json its sandbox door hands it. The
-# line that sat here was the deleted pi CLI's `--approve` — project-local
-# file trust, verified live 2026-09-10 (tick gjk;
-# .tick/logs/herd/av8/gjk.RESULT.md) — dead config on every substrate since
-# the CLI went with its worker path (jhp, uxi): it told a reader of this
-# file that implement workers somewhere run with --approve. pi needs no
-# permission-bypass flag in any case: it runs tools unprompted.
+# `pi` is the pi-durable harness (epic 43y, tick hpk; the pi CLI is deleted,
+# tick jhp): headless through the local-subprocess executor or hosted in a
+# cloud container. No `args`: neither launch reads roles-table args — that
+# key reaches an argv only through the herdr pane path (spawnArgv), and herdr
+# refuses kind pi — so tick 2p3 dropped the `--approve` the deleted pi CLI
+# used to take for project-local file trust (tick gjk). ticfac init's writers
+# emit the same shape, and internal/cli's TestAPiCellIsWrittenWithoutArgs
+# pins them.
 kind = "pi"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
@@ -39,10 +31,8 @@ model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
 effort = "medium"
 
 # Complex work, named explicitly. Same model as the default: GLM 5.3 IS the
-# strong tier for this epic. opus is not a starting tier for implement
-# anywhere: locally it is the frontier escalation only (runners.local.toml)
-# and in the cloud only the named claude config's strong rung — and it is a
-# claude-harness model, not a pi one.
+# strong tier for this epic. opus is not an implementation tier at all — it is
+# reserved for review and closeout, and it is not available in the pi harness.
 [roles.implement.tiers.strong]
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
