@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 147,
-  "state": "running",
-  "reason": "kwh is running as attempt 21",
-  "updated_at": "2026-10-08T05:18:57Z",
+  "sequence": 148,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for kwh",
+  "updated_at": "2026-10-08T05:27:47Z",
   "ticks": [
     {
       "tick_id": "pqs",
