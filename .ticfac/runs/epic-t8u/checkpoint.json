@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 150,
+  "sequence": 151,
   "state": "running",
-  "reason": "kwh is closed",
-  "updated_at": "2026-10-08T05:28:27Z",
+  "reason": "the epic PR #264 (epic/t8u → main) is open; close-out of t8u waits on CI",
+  "updated_at": "2026-10-08T05:28:43Z",
   "ticks": [
     {
       "tick_id": "pqs",
