@@ -1,3 +1,10 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ymf/attempt-1/47j`, base `1e6856e10498274aa79dd504f25952d4ce24f9b9`, harness `pi-durable` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
+_ticks-worker: a carried attempt — its base `1e6856e10498274aa79dd504f25952d4ce24f9b9` is the head of the work it continued, which was cut from `dda6796705730d2fc607a2bc10f2bf52ff7fca8a`; its work commits are counted from the carried head._
+
 # 47j: readable feed sentences for the dashboard's latest section
 
 ## State found on the branch
