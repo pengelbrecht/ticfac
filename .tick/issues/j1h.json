@@ -8,7 +8,8 @@
   "type": "task",
   "owner": "peter@engelbrecht.dk",
   "blocked_by": [
-    "r6v"
+    "r6v",
+    "kwh"
   ],
   "parent": "t8u",
   "role": "closeout",
