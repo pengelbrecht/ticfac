@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 75,
-  "state": "publishing",
-  "reason": "closing eno behind the integrated gate on de4fb597f98f",
-  "updated_at": "2026-10-08T08:09:44Z",
+  "sequence": 76,
+  "state": "running",
+  "reason": "eno is closed",
+  "updated_at": "2026-10-08T08:09:46Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "eno",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 12
     },
     {
