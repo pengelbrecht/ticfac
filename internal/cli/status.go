@@ -468,14 +468,10 @@ func statusCommand(ctx context.Context, args []string, repo *string, asJSON, fol
 		// cost — with liveness at the top so the questions an unattended
 		// factory is glanced at with keep their order. The exit code stays
 		// liveness's alone.
-<<<<<<< HEAD
-		model := localStatusModel(ctx, *repo, runID, status, modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: workerActivity})
-=======
 		// The local gathering carries no claude-sub reader (tick b13): a local
 		// run's jobs lease nothing — the leases live in the factory's pool —
 		// so the run's cost line has no subscription fact to gather.
-		model := localStatusModel(ctx, *repo, runID, status, modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost})
->>>>>>> 7019eeb42de17299c0bdf49d4bc40df64cb4652a
+		model := localStatusModel(ctx, *repo, runID, status, modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: workerActivity})
 		if err := printStatusModel(stdout, stderr, model); err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)
 			return 2
@@ -597,11 +593,7 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 		// unread for it (tick nyi): the model says so in its degraded list.
 		repoProject, _ := cloudProjectOf(repo)
 		model := cloudStatusModel(ctx, client, repo, runID, record, answer, stderr,
-<<<<<<< HEAD
-			modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: workerActivity},
-=======
-			modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, claudeSub: statusClaudeSub},
->>>>>>> 7019eeb42de17299c0bdf49d4bc40df64cb4652a
+			modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: workerActivity, claudeSub: statusClaudeSub},
 			cloudRecordBelongsToRepo(repoProject, record.Project))
 		if err := printStatusModel(stdout, stderr, model); err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)

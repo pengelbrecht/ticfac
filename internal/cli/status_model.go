@@ -547,7 +547,6 @@ type modelGatherers struct {
 	graph      func(context.Context, string, string) *tk.Graph
 	ci         func(context.Context, string, string) (*statusmodel.CIInput, error)
 	workerCost func(context.Context, string) (*statusmodel.WorkerCostInput, error)
-<<<<<<< HEAD
 	// activity answers one worker's activity (tick 93n), keyed by the
 	// host the caller names: a non-nil client is a cloud run — the factory's
 	// watch socket, opened just long enough for its first frame and closed;
@@ -557,12 +556,10 @@ type modelGatherers struct {
 	// worker's activity null, the same honest not-measured the model states
 	// wherever a source goes unread.
 	activity func(ctx context.Context, client *cloudClient, runID, tickID string, attempt int) *statusmodel.ActivityInput
-=======
 	// claudeSub answers the subscription the run's jobs lease (tick b13).
 	// Only the cloud gathering calls it: a local run's jobs lease nothing,
 	// and a nil reader is the local shape.
 	claudeSub func(context.Context, string) (*statusmodel.CostSubscription, error)
->>>>>>> 7019eeb42de17299c0bdf49d4bc40df64cb4652a
 }
 
 // epicIDOf derives the epic id a run id names: `epic-<id>` for a local run,
@@ -880,7 +877,6 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		workerCost = &statusmodel.WorkerCostInput{USD: *record.CostUSD, Source: "gateway"}
 	}
 
-<<<<<<< HEAD
 	// The cloud census: not a worktree walk (a cloud run's worktrees are the
 	// factory's, never this machine's) but the checkpoint's own word about
 	// which ticks it currently calls dispatched — the only standing-attempt
@@ -895,7 +891,9 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 	if gather.activity != nil {
 		remoteActivity = func(tickID string, attempt int) *statusmodel.ActivityInput {
 			return gather.activity(ctx, client, runID, tickID, attempt)
-=======
+		}
+	}
+
 	// The run's leased claude-sub subscription (tick b13): the pool's live
 	// snapshot under the operator's own token, reduced to this run. The
 	// subscription is the operator's — whose windows the run draws on — so
@@ -912,7 +910,6 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 			degraded = append(degraded, "claude-sub")
 		} else {
 			claudeSub = sub
->>>>>>> 7019eeb42de17299c0bdf49d4bc40df64cb4652a
 		}
 	}
 
