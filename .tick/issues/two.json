@@ -2,7 +2,7 @@
   "id": "two",
   "title": "Re-review bo9: its tree changed since its READY final review (round 2)",
   "description": "Review the epic bo9 again, AS INTEGRATED, before the run lands it: its final review (g2s, decision 8) judged it READY at ed3f1d2fc915, and the epic branch has changed since — now at 0547fcddf411, with a fold of the base that brought in cloudflare/test/run-routes.test.ts, which the epic is about (its own diff touches it, or its acceptance names it), so the epic is judged against the base as it now is. This is review round 2, made only because the tree changed; the run lands on YOUR verdict, not the earlier one.\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what blocks it.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -10,5 +10,6 @@
   "role": "review",
   "created_by": "ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9",
   "created_at": "2026-10-08T11:41:24Z",
-  "updated_at": "2026-10-08T11:41:24Z"
+  "updated_at": "2026-10-08T11:41:37.139814607Z",
+  "started_at": "2026-10-08T11:41:37.139813437Z"
 }
