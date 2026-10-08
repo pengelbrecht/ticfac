@@ -589,9 +589,9 @@ func lastToolCall(line transcriptLine) (string, bool) {
 			// (tick ghh), and a command's first argument can carry a credential.
 			// Redaction precedes the bound below on purpose: a cut line must
 			// not carry half a secret.
-			return boundLine(name + ": " + redactCredentials(arg)), true
+			return BoundLine(name + ": " + RedactCredentials(arg)), true
 		}
-		return boundLine(name), true
+		return BoundLine(name), true
 	}
 	return "", false
 }
@@ -690,12 +690,17 @@ var knownTokenLiterals = []*regexp.Regexp{
 	regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{30,40}`),
 }
 
-// redactCredentials replaces every credential-shaped part of a tool call's
+// RedactCredentials replaces every credential-shaped part of a tool call's
 // first argument with <redacted>: the known token literals first, then the
 // named shapes — header values, URL userinfo and parameters, flags and
 // assignments whose own NAME says credential. The output is the line a
 // person reads; what it must never contain is the credential itself.
-func redactCredentials(text string) string {
+//
+// Exported so every reader of a worker's own conversation stream — this
+// package's local transcript reader, and the cloud watch-socket reader in
+// internal/cli — redacts through the one pattern set, never a second copy
+// of the same regexes drifting from it.
+func RedactCredentials(text string) string {
 	for _, re := range knownTokenLiterals {
 		text = re.ReplaceAllString(text, redactedCredential)
 	}
@@ -713,7 +718,7 @@ func redactCredentials(text string) string {
 		// credential (--from-literal=password=…): the value is rescanned,
 		// never the name. Each rescan strips at least the name it matched,
 		// so the recursion bottoms out.
-		return name + redactCredentials(match[idx[3]:])
+		return name + RedactCredentials(match[idx[3]:])
 	})
 	text = credentialFlags.ReplaceAllString(text, `$1$2`+redactedCredential)
 	text = curlUserPassword.ReplaceAllString(text, `$1`+redactedCredential)
@@ -746,9 +751,9 @@ func firstArgument(raw json.RawMessage) string {
 	return text
 }
 
-// boundLine flattens a snippet to a single line no longer than
+// BoundLine flattens a snippet to a single line no longer than
 // transcriptActionBound characters, cut with an ellipsis when it had to be.
-func boundLine(text string) string {
+func BoundLine(text string) string {
 	text = strings.Join(strings.Fields(text), " ")
 	runes := []rune(text)
 	if len(runes) <= transcriptActionBound {

@@ -590,7 +590,7 @@ func cloudRunStatus(ctx context.Context, repo, runID string, asJSON bool, stdout
 		// unread for it (tick nyi): the model says so in its degraded list.
 		repoProject, _ := cloudProjectOf(repo)
 		model := cloudStatusModel(ctx, client, repo, runID, record, answer, stderr,
-			modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost},
+			modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: cloudWorkerActivity},
 			cloudRecordBelongsToRepo(repoProject, record.Project))
 		if err := printStatusModel(stdout, stderr, model); err != nil {
 			fmt.Fprintf(stderr, "ticfac status: %v\n", err)

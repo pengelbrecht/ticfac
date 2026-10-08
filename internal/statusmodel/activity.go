@@ -42,9 +42,11 @@ type ActivityInput struct {
 }
 
 // decorateWorkers fills the workers' activity windows and their executor
-// handles, from the durable records and the transcript reader. The workers
-// are already assembled (buildWorkers: their gaps, their silence, their
-// last turn); this reads the two facts the panel adds on top of them.
+// handles, from the durable records and the transcript reader — or, for a
+// worker no worktree names (a cloud run's, tick 93n), the RemoteActivity
+// reader keyed by the tick and attempt alone. The workers are already
+// assembled (buildWorkers: their gaps, their silence, their last turn);
+// this reads the two facts the panel adds on top of them.
 //
 // The nudges are counted for every worker whether or not its transcript
 // could be read: a nudge is the run's own typed line about the (tick,
@@ -75,8 +77,11 @@ func decorateWorkers(src Sources, recs Records, m *Model) {
 		w := &(*m.Workers)[i]
 		key := fmt.Sprintf("%s#%d", w.TickID, w.Attempt)
 		var input *ActivityInput
-		if src.Activity != nil && w.Worktree != "" {
+		switch {
+		case src.Activity != nil && w.Worktree != "":
 			input = src.Activity(runnerOf(src, w, attempts[key]), w.Worktree)
+		case src.RemoteActivity != nil:
+			input = src.RemoteActivity(w.TickID, w.Attempt)
 		}
 		n := nudges[key]
 		switch {

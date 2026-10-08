@@ -213,6 +213,36 @@ func TestActivityIsNullWithNothingToSay(t *testing.T) {
 	}
 }
 
+// TestActivityReadsRemoteActivityWhenNoWorktreeNamesTheWorker (tick 93n): a
+// cloud run's worker has no worktree on this machine, so Activity's own
+// reader — keyed by worktree — is never addressed; RemoteActivity, keyed by
+// the tick and attempt alone, answers in its place.
+func TestActivityReadsRemoteActivityWhenNoWorktreeNamesTheWorker(t *testing.T) {
+	src := runningEpicSources()
+	src.Standing[0].Worktree = ""
+	src.Activity = func(string, string) *ActivityInput {
+		t.Fatal("Activity was read for a worker with no worktree; RemoteActivity should have answered instead")
+		return nil
+	}
+	called := false
+	src.RemoteActivity = func(tickID string, attempt int) *ActivityInput {
+		called = true
+		if tickID != "6dh" || attempt != 3 {
+			t.Errorf("RemoteActivity was asked about %s#%d, want 6dh#3", tickID, attempt)
+		}
+		return &ActivityInput{LastAction: "bash: go test ./...", LastActionAt: testNow.Add(-10 * time.Second)}
+	}
+	model := Build(src)
+
+	if !called {
+		t.Fatal("RemoteActivity was never read for the worktree-less worker")
+	}
+	activity := (*model.Workers)[0].Activity
+	if activity == nil || activity.LastAction == nil || *activity.LastAction != "bash: go test ./..." {
+		t.Errorf("the activity reads %+v, want RemoteActivity's own last action", activity)
+	}
+}
+
 // TestTheHandleReaderNamesTheWorkerTheMarkerCannot (zl1): the attempt
 // marker's job handle never carries a worker's name — it is cut before the
 // start, and its existence is the dispatch's compare-and-swap — so the

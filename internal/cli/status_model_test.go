@@ -413,8 +413,12 @@ func TestStatusJSONEmitsTheModelForACloudRun(t *testing.T) {
 	if !model.Liveness.Alive || model.Liveness.State != "running" {
 		t.Errorf("the Workflow's own record says running and the model reads %+v", model.Liveness)
 	}
-	if model.Workers != nil {
-		t.Errorf("a cloud run's workers read %+v, want null: the census cannot be taken here", model.Workers)
+	// The records branch carries no checkpoint for this run id, read as the
+	// honest empty answer, not an error (tick 93n): the census is taken —
+	// nobody is standing — rather than left null, which now states "this
+	// machine could not take the census at all".
+	if model.Workers == nil || len(*model.Workers) != 0 {
+		t.Errorf("a cloud run with no checkpoint reads workers %+v, want an empty, non-nil census", model.Workers)
 	}
 	if model.Waves == nil || len(*model.Waves) != 1 || len((*model.Waves)[0].Ticks) != 1 {
 		t.Errorf("the fake tracker's wave did not ride: %+v", model.Waves)
@@ -583,6 +587,17 @@ func TestStatusCloudRunReadsTheContainersRecords(t *testing.T) {
 	state := (*model.Waves)[0].Ticks[0]
 	if state.State != "dispatched" || state.Try == nil || *state.Try != 1 {
 		t.Errorf("the wave's tick reads %+v, want the checkpoint's dispatched try 1", state)
+	}
+
+	// The checkpoint's own dispatched tick is a worker standing in the
+	// factory (tick 93n): the cloud census, read from the checkpoint rather
+	// than a worktree walk, with no local worktree to name.
+	if model.Workers == nil || len(*model.Workers) != 1 {
+		t.Fatalf("the checkpoint's dispatched tick did not become a standing worker: %+v", model.Workers)
+	}
+	worker := (*model.Workers)[0]
+	if worker.TickID != tickID || worker.Attempt != one || worker.Worktree != "" {
+		t.Errorf("the cloud worker reads %+v, want %s#%d with no worktree", worker, tickID, one)
 	}
 
 	// The untriaged finding the container filed is the model's attention,

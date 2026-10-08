@@ -106,6 +106,15 @@ type Sources struct {
 	// durable attempt's model-or-executor spelling (see runnerOf).
 	Activity func(runner, worktree string) *ActivityInput
 
+	// RemoteActivity answers the same activity window for a worker no
+	// worktree names (a cloud run's: its worktree is the factory's, not this
+	// machine's) — keyed by the tick and attempt alone, straight from the
+	// executor's own conversation stream wherever this machine reaches it
+	// (the factory's watch socket, tick 93n). Read only where Activity
+	// cannot be — a worker WITH a worktree reads Activity, never both — and
+	// nil-safe on the same terms: no reader leaves activity null.
+	RemoteActivity func(tickID string, attempt int) *ActivityInput
+
 	// Runner answers one (tick, attempt) worker's harness kind — the agent
 	// kind the executor launched: herdr's `kind`, the local supervisor's
 	// `runner` — from the attempt record in the dispatch's state directory

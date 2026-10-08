@@ -829,11 +829,14 @@ func dashAttempts(t statusmodel.Tick) string {
 // worker with its model, executor and handle, its activity sparkline, its
 // last action with its age, and an amber "nudged ×N" when the run has nudged
 // it as stuck. The buckets scale to the window's own maximum; a window with
-// nothing in it reads as dots. A census this machine cannot take — a cloud
-// run's workers are elsewhere — is said, not faked.
+// nothing in it reads as dots. Local and cloud both carry a census — the
+// checkpoint's own word about which ticks it currently calls dispatched
+// stands in for a cloud run's worktree walk (tick 93n) — so a census this
+// machine truly could not take (a local worktree read that failed) is said,
+// not faked, rather than rendered as an empty panel.
 func dashboardWorkers(m statusmodel.Model, st watchStyles, width int) []string {
 	if m.Workers == nil {
-		return []string{"", st.dim("workers run in the cloud — not visible from here")}
+		return []string{"", st.dim("workers: no census could be taken")}
 	}
 	workers := *m.Workers
 	if len(workers) == 0 {

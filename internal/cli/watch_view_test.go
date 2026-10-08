@@ -1057,8 +1057,8 @@ func TestTheFrameWorkersPanel(t *testing.T) {
 	// A census this machine cannot take is said, not faked.
 	m.Workers = nil
 	joined = strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
-	if !strings.Contains(joined, "workers run in the cloud — not visible from here") {
-		t.Errorf("a cloud run's workers are not said to be invisible:\n%s", joined)
+	if !strings.Contains(joined, "workers: no census could be taken") {
+		t.Errorf("a census this machine could not take is not said:\n%s", joined)
 	}
 
 	// A census that read and found nothing stands behind no empty panel.

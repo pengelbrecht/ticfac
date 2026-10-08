@@ -471,6 +471,12 @@ type modelGatherers struct {
 	graph      func(context.Context, string, string) *tk.Graph
 	ci         func(context.Context, string, string) (*statusmodel.CIInput, error)
 	workerCost func(context.Context, string) (*statusmodel.WorkerCostInput, error)
+	// activity answers one cloud worker's activity: the factory's watch
+	// socket, opened just long enough for its first frame and closed. Nil
+	// is a valid answer here too — a caller that never sets it leaves every
+	// cloud worker's activity null, the same honest not-measured the model
+	// states wherever a source goes unread.
+	activity func(ctx context.Context, client *cloudClient, runID, tickID string, attempt int) *statusmodel.ActivityInput
 }
 
 // epicIDOf derives the epic id a run id names: `epic-<id>` for a local run,
@@ -674,10 +680,13 @@ func cloudRecordBelongsToRepo(repoProject, recordProject string) bool {
 }
 
 // cloudStatusModel gathers everything a CLOUD run's model reads and builds
-// it. A cloud run's workers are not on this machine: the census is not
-// taken, and the model's workers field states null — "cannot be counted
-// here", which is a different claim from "none stand". Its records live on
-// origin like any run's; its feed is the factory's own stream.
+// it. A cloud run's worktrees are not on this machine, so its census is not
+// a git walk — it is the checkpoint's own word about which ticks it calls
+// dispatched (cloudStandingAttempts, tick 93n). Where the records themselves
+// could not be read the workers field states null — "cannot be counted
+// here", a different claim from "none stand", which an empty, successfully
+// read checkpoint states instead. Its records live on origin like any run's;
+// its feed is the factory's own stream.
 //
 // The records, the tracker and the forge are read ONLY for a run this
 // checkout's project can claim (tick nyi): a factory run of ANOTHER project
@@ -705,10 +714,12 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 	recordsID := runID
 	var records statusmodel.Records
 	var prior []statusmodel.Records
+	recordsOK := false
 	if ours {
 		if read, priors, err := statusRecords(repo, recordsID, epicID); err == nil {
 			records = read
 			prior = priors
+			recordsOK = true
 		} else {
 			degraded = append(degraded, "run-state")
 		}
@@ -765,32 +776,73 @@ func cloudStatusModel(ctx context.Context, client *cloudClient, repo, runID stri
 		workerCost = &statusmodel.WorkerCostInput{USD: *record.CostUSD, Source: "gateway"}
 	}
 
+	// The cloud census: not a worktree walk (a cloud run's worktrees are the
+	// factory's, never this machine's) but the checkpoint's own word about
+	// which ticks it currently calls dispatched — the only standing-attempt
+	// list a cloud run admits (tick 93n). Read only where the records
+	// themselves were read: a checkpoint this call never saw states nothing,
+	// never an empty "none stand".
+	var standing []runprogress.Attempt
+	if recordsOK {
+		standing = cloudStandingAttempts(records.Checkpoint)
+	}
+	var remoteActivity func(tickID string, attempt int) *statusmodel.ActivityInput
+	if gather.activity != nil {
+		remoteActivity = func(tickID string, attempt int) *statusmodel.ActivityInput {
+			return gather.activity(ctx, client, runID, tickID, attempt)
+		}
+	}
+
 	return statusBuild(statusmodel.Sources{
-		Now:          now,
-		RunID:        runID,
-		Host:         statusmodel.HostCloud,
-		EpicID:       epicID,
-		Degraded:     degraded,
-		Graph:        graph,
-		Records:      &records,
-		PriorRecords: prior,
-		PriorFeeds:   priorFeeds,
-		Feed:         feed,
-		StandingRead: false, // a cloud run's worktrees are not on this machine
+		Now:            now,
+		RunID:          runID,
+		Host:           statusmodel.HostCloud,
+		EpicID:         epicID,
+		Degraded:       degraded,
+		Graph:          graph,
+		Records:        &records,
+		PriorRecords:   prior,
+		PriorFeeds:     priorFeeds,
+		Feed:           feed,
+		Standing:       standing,
+		StandingRead:   recordsOK,
+		RemoteActivity: remoteActivity,
 		Liveness: statusmodel.LivenessInput{
 			Alive:  liveness.Alive,
 			State:  liveness.State,
 			Reason: liveness.Reason,
 			Source: liveness.Source,
 		},
-		// A cloud run's runners and attempt reports are not on this machine
-		// (its worktrees belong to the factory's containers): the readers pass
-		// nil and the model leaves the fields null, the honest not-measured.
+		// A cloud run's attempt reports are not on this machine (its
+		// worktrees belong to the factory's containers), and Activity is the
+		// worktree-keyed reader RemoteActivity stands in for above: the
+		// reader passes nil and the model leaves the field null, the honest
+		// not-measured.
 		Activity:   nil,
 		Report:     nil,
 		WorkerCost: workerCost,
 		CI:         ci,
 	})
+}
+
+// cloudStandingAttempts is the cloud run's own census, read from the
+// checkpoint's word alone rather than a worktree walk: every tick it
+// currently calls dispatched is a worker standing in the factory. Worktree
+// and the idle gaps stay unset — not this machine's to measure — the same
+// "empty when not local" the census type documents for any substrate that
+// is not a git worktree.
+func cloudStandingAttempts(cp *runstate.Checkpoint) []runprogress.Attempt {
+	if cp == nil {
+		return nil
+	}
+	standing := []runprogress.Attempt{}
+	for _, t := range cp.Ticks {
+		if t.State != "dispatched" || t.Attempt <= 0 {
+			continue
+		}
+		standing = append(standing, runprogress.Attempt{TickID: t.TickID, Attempt: t.Attempt})
+	}
+	return standing
 }
 
 // printStatusModel emits the model as the --json surface's answer: indented,
