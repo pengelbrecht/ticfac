@@ -1,3 +1,16 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/bo9/attempt-8/two`, base `e90a6ac091bbc764a92c9ae90a5814374842dff3`, harness `claude` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
+> **BOUNDARY VIOLATION ATTEMPTED.** This agent tried to write tracker state, which the
+> orchestrator owns. The container refused it, so nothing under `.tick/`
+> should have reached this branch — but the attempt is reported rather than
+> silently cleaned, because a model that ignored an explicit instruction is
+> something a human has to see. What it did:
+>
+> - the agent ran `tk comments two`
+
 # two — re-review of epic bo9, as integrated (round 2)
 
 Read-only review of `epic/bo9` at `e90a6ac0` (the frontier my checkout holds;
