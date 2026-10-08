@@ -237,6 +237,7 @@ func TestAReadOnlyWorkersConfigCarriesNoRemote(t *testing.T) {
 // config it composes its provider override from — the same facts the pi CLI
 // reads out of the generated extension, and nothing else.
 func TestAMeteredWorkersAIConfigCarriesTheJoin(t *testing.T) {
+	t.Parallel()
 	const model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 	metering := &GatewayMetering{
 		RunID:      "run-43y",
@@ -326,6 +327,7 @@ func extensionMetadata(t *testing.T, body string) string {
 // apply to, writes a config with no metering at all — the harness then runs
 // exactly as it did before the join existed.
 func TestAnUnmeteredConfigCarriesNoJoin(t *testing.T) {
+	t.Parallel()
 	metering := &GatewayMetering{RunID: "run-43y", GatewayURL: "https://gateway.ai.cloudflare.com/v1/acct/gw"}
 	record := &attemptRecord{
 		Branch:     "b",
@@ -378,6 +380,7 @@ func TestAnUnmeteredConfigCarriesNoJoin(t *testing.T) {
 // rather than leaving the harness to compose a relative route — the same
 // refusal WriteExtension makes, from the same check.
 func TestAConfigRefusesANonAbsoluteGatewayURL(t *testing.T) {
+	t.Parallel()
 	metering := &GatewayMetering{RunID: "run-43y", GatewayURL: "not a url"}
 	record := &attemptRecord{
 		Branch:     "b",

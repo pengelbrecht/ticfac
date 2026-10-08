@@ -170,6 +170,8 @@ func TestTheDurableRunnerRunsAWholeWorkerOnTheHarness(t *testing.T) {
 // bundle (go:embed, embedded.go) is cached under $TICFAC_CACHE_DIR and run
 // with plain `node`, and the executor binary under test carries it whether
 // or not this tree's own harness/ has ever had `pnpm install` run in it.
+//
+// serial: t.Setenv names the steer socket dir and the bundle cache dir the executor and the runner process both read from the environment — t.Setenv refuses a parallel test.
 func TestTheDurableRunnerRunsOnTheEmbeddedBundleWithNoHarnessCheckout(t *testing.T) {
 	shorttest.EndToEnd(t)
 	if testing.Short() {
