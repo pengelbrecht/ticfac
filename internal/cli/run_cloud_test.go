@@ -74,10 +74,13 @@ func recordCloudAttach(t *testing.T) *cloudAttachRecorder {
 }
 
 // runRunCloud drives `ticfac run ... --cloud` the way an operator does.
-func runRunCloud(t *testing.T, repo, epicArg string) (int, *bytes.Buffer, *bytes.Buffer) {
+// extra rides between --repo and the epic argument (e.g. "--config", "claude").
+func runRunCloud(t *testing.T, repo, epicArg string, extra ...string) (int, *bytes.Buffer, *bytes.Buffer) {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	code := Run([]string{"run", "--cloud", "--repo", repo, epicArg}, &stdout, &stderr)
+	args := append([]string{"run", "--cloud", "--repo", repo}, extra...)
+	args = append(args, epicArg)
+	code := Run(args, &stdout, &stderr)
 	return code, &stdout, &stderr
 }
 
