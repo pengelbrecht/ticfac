@@ -1,0 +1,63 @@
+{
+  "schema_version": 3,
+  "decision": 6,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 4,
+    "attempt_head": "4b8b263b7b86b54872d1f4276bceb1d5978e2a29",
+    "conflict_files": [
+      "internal/cli/skills.go",
+      "internal/cli/skills_test.go",
+      "skills/ticfac/SKILL.md",
+      "skills/ticfac/references/commands.md"
+    ],
+    "conflicting_ticks": [
+      "rkk",
+      "g5f"
+    ],
+    "epic_id": "bo9",
+    "job_id": "run-run_03aa9c8a71574ab3891b47df3dbd5ec9/tick-rkk/resolve-4",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (cloudflare-sandbox/claude, opus)",
+    "profile_digest": "sha256:3280afeeef2b8e6f08a0fcc15334e3b2d5bdc882695fa6ac6b9c65d23837a3e9",
+    "resolve_branch": "ticfac/run-run_03aa9c8a71574ab3891b47df3dbd5ec9/tick-rkk/resolve-4",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "rkk"
+  },
+  "response": {
+    "conflict_detail": "4 conflicts: content in internal/cli/skills.go; content in internal/cli/skills_test.go; content in skills/ticfac/SKILL.md; content in skills/ticfac/references/commands.md",
+    "conflict_files": [
+      "internal/cli/skills.go",
+      "internal/cli/skills_test.go",
+      "skills/ticfac/SKILL.md",
+      "skills/ticfac/references/commands.md"
+    ],
+    "job_id": "run-run_03aa9c8a71574ab3891b47df3dbd5ec9/tick-rkk/resolve-4",
+    "merge": "e28a6094b6998bbc09507e5e60412532a8ab8a7f",
+    "resolve_head": "251b30209877e115b4b313dca696605669cebb0a",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T10:14:23Z",
+  "answered_at": "2026-10-08T10:14:23Z",
+  "provenance": {
+    "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
+    "tick_id": "rkk",
+    "attempt": 4,
+    "source_ref": "refs/heads/epic/bo9",
+    "source_sha": "d9409399e30470105af979071a99510b1d6f6174",
+    "integration_ref": "refs/heads/epic/bo9",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "strong",
+    "profile_digest": "sha256:3280afeeef2b8e6f08a0fcc15334e3b2d5bdc882695fa6ac6b9c65d23837a3e9",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

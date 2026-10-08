@@ -79,33 +79,55 @@ func TestRunWithoutAConfigNameStartsThePlainArgv(t *testing.T) {
 	}
 }
 
-// TestRunRefusesTheConfigOnACloudSubmission: the cloud submission record
-// carries no --config (tick tda leaves the factory's submission surface to
-// its own tick), and the command refuses the flag rather than silently
-// dropping it — naming what a submitted run does select by (the epic's own
-// label, the declared default) and where the flag DOES apply
-// (--cloud-workers, whose orchestrator is this machine).
+// TestRunCloudForwardsTheNamedConfig: the cloud submission record carries
+// --config (tick ba4) as its own `config` field, so the factory's
+// orchestrator container resolves the operator's named config rather than
+// only the epic's own label and the declared default.
 //
-// short: a refusal before any factory is asked; no seams needed beyond
-// parseOnly's own.
-func TestRunRefusesTheConfigOnACloudSubmission(t *testing.T) {
-	saveRunSeams(t)
-	repo := t.TempDir()
+// short: a fake factory and the cloud attach seam; git runs against a temp
+// repo, as every `run --cloud` test does.
+func TestRunCloudForwardsTheNamedConfig(t *testing.T) {
+	stubCloudTk(t)
+	repo, _, _ := setupCloudRepo(t, true)
+	started := cloudRunIDOf("cc42")
 
-	var stdout, stderr syncBuffer
-	code := runBody(context.Background(), t, []string{"--repo", repo, "--cloud", "--config", "claude", "foo"}, &stdout, &stderr)
-	if code != exitUsage {
-		t.Fatalf("exit %d, want the usage class %d: %s%s", code, exitUsage, stdout.String(), stderr.String())
-	}
-	joined := stdout.String() + stderr.String()
-	for _, want := range []string{
-		"--config does not apply to a --cloud run",
-		"config: label",
-		"--cloud-workers",
-	} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("the refusal does not name %q: %s", want, joined)
+	endpoint, requests := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		switch {
+		case request.Method == http.MethodGet && request.Path == cloudIndexPath:
+			return 200, map[string]any{"runs": []any{}}
+		case request.Method == http.MethodPost && request.Path == cloudIndexPath:
+			return http.StatusCreated, map[string]any{
+				"run": map[string]any{"run_id": started, "state": "starting"},
+			}
 		}
+		t.Errorf("unexpected factory request %s %s", request.Method, request.Path)
+		return 404, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+	rec := recordCloudAttach(t)
+
+	code, stdout, stderr := runRunCloud(t, repo, "epic1", "--config", "claude")
+	if code != exitSuccess {
+		t.Fatalf("exit %d: %s\n%s", code, stderr.String(), stdout.String())
+	}
+	if len(rec.runIDs) != 1 || rec.runIDs[0] != started {
+		t.Fatalf("attached to %v, want the run the factory started (%s)", rec.runIDs, started)
+	}
+	if !strings.Contains(stdout.String(), "run config: claude") {
+		t.Errorf("the start says nothing about the named config: %q", stdout.String())
+	}
+
+	var post *cloudFactoryRequest
+	for i := range *requests {
+		if (*requests)[i].Method == http.MethodPost {
+			post = &(*requests)[i]
+		}
+	}
+	if post == nil {
+		t.Fatal("the epic was never submitted to the factory")
+	}
+	if got := post.Body["config"]; got != "claude" {
+		t.Errorf("the submission's config is %#v, want %q", got, "claude")
 	}
 }
 

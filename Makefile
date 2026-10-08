@@ -29,9 +29,22 @@ GOTEST_PARALLEL ?= 12
 # main and to an epic branch (a pull request runs its affected packages), so
 # everything the gate skips is still refused before a deploy.
 # internal/shorttest holds the guard that keeps a new test from forgetting.
-.PHONY: build vet test-short test test-race gate release
+.PHONY: build vet test-short test test-race gate release harness-bundle
 
-build:
+# Regenerates harness/embed/local-main.bundle.mjs — the esbuild bundle of
+# harness/src/local/main.ts (pi-durable, pi-ai and chord inlined) that
+# embedded.go go:embeds for the local "pi" runner (tick 0ek) — and the
+# sources hash beside it. Needs Node and harness/'s own pnpm packages
+# (installed here, frozen); `go build`/`go test` need neither; they just
+# read the committed output, the same way they read any other embedded
+# tree in this repository (profiles/, skills/). Run this and commit its
+# output after editing harness/src/local or anything it imports;
+# TestLocalHarnessBundleMatchesItsSources (internal/exec/subprocess) is
+# what fails the gate when someone forgets to.
+harness-bundle:
+	cd harness && pnpm install --frozen-lockfile --prefer-offline && node scripts/build-local-bundle.mjs
+
+build: harness-bundle
 	go build ./...
 
 vet:

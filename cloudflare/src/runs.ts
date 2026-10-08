@@ -204,6 +204,15 @@ export type RunWorkflowParams = {
    * supervises the operator's machine through its heartbeat instead.
    */
   orchestrator?: OrchestratorKind;
+  /**
+   * The named run config this submission carries (tick ba4), exported into
+   * the orchestrator container's environment as `TICKS_CONFIG` and forwarded
+   * verbatim to the `ticfac run-epic` it execs. Absent means the orchestrator
+   * selects by the epic's own `config:` label and the runners files'
+   * declared default — the same precedence a local run resolves, only
+   * without a flag's word over it.
+   */
+  config?: string;
 };
 
 export type WorkflowInstanceStatus = { status: string; error?: unknown; output?: unknown };
@@ -302,6 +311,11 @@ export type RunSubmission = {
    * 0.x class before it. Recorded once, at submit, and never changed.
    */
   substrate?: RunSubstrate;
+  /**
+   * The named run config `ticfac run --cloud`/`--cloud-workers --config`
+   * asked for (tick ba4). See {@link RunWorkflowParams.config}.
+   */
+  config?: string;
 };
 
 export type SubmissionParse =
@@ -357,6 +371,17 @@ export function parseSubmission(body: unknown): SubmissionParse {
   let notify: string | undefined;
   if (raw.notify !== undefined && raw.notify !== null) {
     const bad = text(raw.notify, "notify", (v) => (notify = v));
+    if (bad !== null) return { ok: false, detail: bad };
+  }
+
+  // The named run config (tick ba4): a free-text name, like notify — the
+  // factory never validates it against the repository's declared
+  // [configs.<name>] tables, because that table lives in the checkout at the
+  // submitted SHA and this route never reads it. An unknown name reaches the
+  // orchestrator's run-epic, which answers for it the way a local run's does.
+  let config: string | undefined;
+  if (raw.config !== undefined && raw.config !== null) {
+    const bad = text(raw.config, "config", (v) => (config = v));
     if (bad !== null) return { ok: false, detail: bad };
   }
 
@@ -543,6 +568,7 @@ export function parseSubmission(body: unknown): SubmissionParse {
       // it, or a run that asked for the 0.x application would silently ride
       // the new one.
       ...(substrate === undefined ? {} : { substrate }),
+      ...(config === undefined ? {} : { config }),
     },
   };
 }
@@ -620,6 +646,8 @@ export type StartRunInput = {
   orchestrator?: OrchestratorKind;
   /** See {@link RunSubmission.substrate}. Absent means the deployment's default substrate. */
   substrate?: RunSubstrate;
+  /** See {@link RunSubmission.config}. */
+  config?: string;
 };
 
 export type StartedRun = { run: Run; workflow: { id: string; status: string } };
@@ -754,6 +782,7 @@ export async function startRun(env: Env, input: StartRunInput): Promise<StartedR
           lease_token: input.lease_token,
           credential_grade: run.credential_grade as RunCredentialGrade,
           ...(input.orchestrator === "local" ? { orchestrator: "local" as const } : {}),
+          ...(input.config === undefined ? {} : { config: input.config }),
         },
       });
       return instance;
@@ -966,6 +995,7 @@ export async function submitRun(env: Env, submission: RunSubmission): Promise<Su
             ? {}
             : { orchestrator: submission.orchestrator }),
           ...(submission.substrate === undefined ? {} : { substrate: submission.substrate }),
+          ...(submission.config === undefined ? {} : { config: submission.config }),
         }),
       };
     } catch (error) {

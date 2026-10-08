@@ -35,6 +35,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,6 +79,8 @@ the command that clears it:
   .tick/runners.toml  the routing and the gate a run reads — init's to write
   tk                  the tracker binary the run reads and writes through
   herdr               a herdr server, when the substrate would dispatch through panes
+  node                Node 22+, the only machine prerequisite a local pi-durable
+                      run's embedded harness bundle needs
   github              the GitHub remote and credential the PR + CI close-out
                       rule needs — checked when the repository declares the rule
   git identity        the user.email and user.name a run's commits are attributed to
@@ -221,6 +224,31 @@ var (
 		return "docker daemon answers, server " + strings.TrimSpace(string(out)), nil
 	}
 
+	// doctorNode answers for Node, the one machine prerequisite a local
+	// pi-durable run has (tick 0ek, "harness as a machine prerequisite"): the
+	// embedded harness bundle (internal/exec/subprocess/harnessbundle.go)
+	// runs under plain `node`, no checkout and no npm install, but node:sqlite
+	// — the storage the harness opens — is on by default only from Node 22
+	// (flagged, --experimental-sqlite, before that). Checked whatever the
+	// substrate: the pi-durable host is a LOCAL process even in a cloud run's
+	// container, so a run that never touches the cloud still needs it.
+	doctorNode = func() (string, error) {
+		out, err := exec.Command("node", "--version").Output()
+		if err != nil {
+			return "", fmt.Errorf("node --version does not answer: %v", err)
+		}
+		version := strings.TrimSpace(string(out))
+		major, err := nodeMajorVersion(version)
+		if err != nil {
+			return "", fmt.Errorf("node --version printed %q, not a version this doctor can parse: %v", version, err)
+		}
+		if major < minNodeMajorVersion {
+			return "", fmt.Errorf("node %s answers, but a local pi-durable run needs Node %d+ (node:sqlite, the harness's own storage)",
+				version, minNodeMajorVersion)
+		}
+		return fmt.Sprintf("node %s answers", version), nil
+	}
+
 	// doctorWrangler answers for wrangler on PATH.
 	doctorWrangler = func() (string, error) {
 		out, err := exec.Command("wrangler", "--version").Output()
@@ -300,6 +328,7 @@ const (
 
 	doctorFixTK          = "install tk (github.com/pengelbrecht/ticks) and make sure `tk version` answers"
 	doctorFixHerdr       = "start herdr in this checkout (`herdr`)"
+	doctorFixNode        = "install Node 22 or newer (https://nodejs.org/) — the local pi-durable harness runs under it"
 	doctorFixGitHub      = "gh auth login, or export GITHUB_TOKEN"
 	doctorFixForgeRemote = "point origin at GitHub (`git remote add origin git@github.com:owner/name.git`), or remove the close-out rule from .tick/config.md"
 	doctorFixGit         = `git config --global user.email "you@example.com" && git config --global user.name "Your Name"`
@@ -311,6 +340,25 @@ const (
 	// the gateway URL names.
 	doctorFixClassifier = "ticfac factory setup --cloudflare-api-token <token> (a Cloudflare API token with Workers AI access, on the account factory_gateway_url names)"
 )
+
+// minNodeMajorVersion is the oldest Node the embedded pi-durable harness
+// bundle is built for (CI pins this version too) — node:sqlite, the
+// storage it opens, needs it.
+const minNodeMajorVersion = 22
+
+// nodeMajorVersion reads the major version out of `node --version`'s own
+// output, "v22.23.2".
+func nodeMajorVersion(version string) (int, error) {
+	v := strings.TrimPrefix(version, "v")
+	if i := strings.IndexByte(v, '.'); i >= 0 {
+		v = v[:i]
+	}
+	major, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, err
+	}
+	return major, nil
+}
 
 // runDoctor is `doctor`'s body.
 func runDoctor(ctx context.Context, fl *doctorFlags, stdout, stderr io.Writer) int {
@@ -455,6 +503,7 @@ func runDoctor(ctx context.Context, fl *doctorFlags, stdout, stderr io.Writer) i
 	checks = append(checks,
 		check("tk", doctorFixTK, func() (string, error) { return doctorTK(ctx, repo) }),
 		check("herdr", doctorFixHerdr, func() (string, error) { return doctorHerdr(ctx) }),
+		check("node", doctorFixNode, doctorNode),
 	)
 	// The github line carries both halves the rule needs, each with its own
 	// fix: a missing remote is not cleared by `gh auth login`, and a missing

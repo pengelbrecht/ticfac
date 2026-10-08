@@ -3,9 +3,11 @@ package cli
 // `ticfac skills` (tick 8v3): the embedded agent-skill bundle — inspect it,
 // read it, install it. The shape is tk's own `tk skills` (a group with
 // list, get and install), so the two tools' skills install the same way:
-// `ticfac skills install ticfac` is the one command, and it lands in the
-// same .claude/skills/ and .agents/skills/ directories `tk skills install
-// ticks` does.
+// `ticfac skills install` is the one command, and it lands in the same
+// .claude/skills/ and .agents/skills/ directories `tk skills install ticks`
+// does. The binary embeds exactly one skill, so the name is optional on
+// `install` and `get` (tick rkk): with none given, both act on the ticfac
+// skill; naming it explicitly still works.
 //
 // The skill the bundle carries teaches the loop an agent runs an epic with
 // (init, doctor, run, the overview, triage) and states its boundary with
@@ -20,6 +22,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -34,23 +37,30 @@ func newSkillsCommand(stdout, stderr io.Writer) *cobra.Command {
 		Long: `Inspect, read and install the agent skills embedded in this binary.
 
 The bundle is version-matched to this build: 'ticfac skills list' reports the
-ticfac version each skill ships with, and 'ticfac skills get <name>' prints a
+ticfac version each skill ships with, and 'ticfac skills get [name]' prints a
 skill's SKILL.md straight from the binary.
 
-'ticfac skills install ticfac' is the one command: it installs the ticfac
-skill — the loop an agent runs an epic with, and its boundary with the ticks
-skill — into every skill directory the repository carries (.claude/skills/
-and .agents/skills/), the same way 'tk skills install ticks' installs the
-ticks skill, so the two land beside each other. Re-installing over a stamped
-directory is the upgrade path. A target with other content and no stamp is
-refused (pass --force to take it over); a target that holds OTHER skills as
-children is refused outright — --force does not override that, because that
-install would delete every sibling skill.`,
+'ticfac skills install' is the one command: with no name, it installs the
+ticfac skill — the binary embeds one, so naming it ('ticfac skills install
+ticfac') is equivalent — the loop an agent runs an epic with, and its
+boundary with the ticks skill — into every skill directory the repository
+carries (.claude/skills/ and .agents/skills/), the same way 'tk skills
+install ticks' installs the ticks skill, so the two land beside each other.
+Re-installing over a stamped directory is the upgrade path. A target with
+other content and no stamp is refused (pass --force to take it over); a
+target that holds OTHER skills as children is refused outright — --force
+does not override that, because that install would delete every sibling
+skill.
+
+'ticfac skills diff <name>' compares an installed copy against the embedded
+bundle and reports drift — missing, unstamped, a different version, or
+changed files — with the install command as the fix.`,
 	}
 	cmd.AddCommand(
 		newSkillsListCommand(stdout, stderr),
 		newSkillsGetCommand(stdout, stderr),
 		newSkillsInstallCommand(stdout, stderr),
+		newSkillsDiffCommand(stdout, stderr),
 	)
 	return cmd
 }
@@ -91,38 +101,94 @@ func newSkillsListCommand(stdout, stderr io.Writer) *cobra.Command {
 	return cmd
 }
 
+// skillsGetFileJSON is one file's content as `skills get --full --json`
+// carries it.
+type skillsGetFileJSON struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
 // newSkillsGetCommand builds `skills get`.
 func newSkillsGetCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "get <name>",
-		Short: "print a skill's SKILL.md, straight from the binary",
+		Use:   "get [name]",
+		Short: "print a skill's SKILL.md, or the whole bundle with --full",
+		Long: fmt.Sprintf(`Print a skill's SKILL.md, straight from the binary.
+
+With no name, print the %s skill — the one this binary embeds.
+
+With --full, print the whole skill bundle instead: SKILL.md followed by
+every other file in the skill (its references/ files), each preceded by a
+separator line naming its path — the only way to read those files without
+installing the skill to disk first.`, skills.DefaultSkill),
 	}
 	fs := flag.NewFlagSet("skills get", flag.ContinueOnError)
-	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.skills-get.v1) holding the file's content instead of the bare text")
+	full := fs.Bool("full", false, "print the whole skill bundle, not just SKILL.md: SKILL.md then every other file, each under a header naming its path")
+	asJSON := fs.Bool("json", false, "print one versioned document (ticfac.skills-get.v1) holding the file content(s) instead of the bare text")
 	commandFlags(cmd, fs)
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		if len(args) != 1 || args[0] == "" {
-			return newExitError(exitUsage, "exactly one skill name is required")
+		if len(args) > 1 {
+			return newExitError(exitUsage, "at most one skill name is accepted")
 		}
-		name := args[0]
-		data, err := skills.Read(name, "SKILL.md")
+		name := skills.DefaultSkill
+		if len(args) == 1 {
+			if args[0] == "" {
+				return newExitError(exitUsage, "a skill name must not be empty")
+			}
+			name = args[0]
+		}
+		if !*full {
+			data, err := skills.Read(name, "SKILL.md")
+			if err != nil {
+				return newExitError(exitNotFound, "%v", err)
+			}
+			if *asJSON {
+				return emitAgentJSON(stdout, struct {
+					agentDoc
+					Skill   string `json:"skill"`
+					File    string `json:"file"`
+					Content string `json:"content"`
+				}{
+					agentDoc: agentDoc{Schema: agentSchemaID("skills-get"), State: agentStateDone},
+					Skill:    name,
+					File:     "SKILL.md",
+					Content:  string(data),
+				})
+			}
+			_, _ = stdout.Write(data)
+			fmt.Fprintln(stdout)
+			return nil
+		}
+
+		paths, err := skills.Paths(name)
 		if err != nil {
 			return newExitError(exitNotFound, "%v", err)
+		}
+		files := make([]skillsGetFileJSON, 0, len(paths))
+		for _, p := range paths {
+			data, err := skills.Read(name, p)
+			if err != nil {
+				return newExitError(exitNotFound, "%v", err)
+			}
+			files = append(files, skillsGetFileJSON{Path: p, Content: string(data)})
 		}
 		if *asJSON {
 			return emitAgentJSON(stdout, struct {
 				agentDoc
-				Skill   string `json:"skill"`
-				File    string `json:"file"`
-				Content string `json:"content"`
+				Skill string              `json:"skill"`
+				Files []skillsGetFileJSON `json:"files"`
 			}{
 				agentDoc: agentDoc{Schema: agentSchemaID("skills-get"), State: agentStateDone},
 				Skill:    name,
-				File:     "SKILL.md",
-				Content:  string(data),
+				Files:    files,
 			})
 		}
-		_, _ = stdout.Write(data)
+		for i, f := range files {
+			if i > 0 {
+				fmt.Fprintf(stdout, "\n--- %s ---\n\n", f.Path)
+			}
+			fmt.Fprint(stdout, f.Content)
+		}
 		fmt.Fprintln(stdout)
 		return nil
 	}
@@ -139,9 +205,12 @@ type skillsFlags struct {
 // newSkillsInstallCommand builds `skills install`.
 func newSkillsInstallCommand(stdout, stderr io.Writer) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "install <name>",
+		Use:   "install [name]",
 		Short: "install a skill from the embedded bundle to disk",
 		Long: `Install a skill from the embedded bundle to disk.
+
+With no name, install the ticfac skill — the one this binary embeds; naming
+it explicitly ('ticfac skills install ticfac') still works.
 
 Without --dir, ticfac detects skill directory conventions at the repo root:
 .claude/skills/ and .agents/skills/. It installs into every one that
@@ -179,13 +248,20 @@ Exit codes
 	}
 	commandFlags(cmd, fs)
 	cmd.Args = func(c *cobra.Command, args []string) error {
-		if len(args) != 1 || args[0] == "" {
-			return newExitError(exitUsage, "exactly one skill name is required")
+		if len(args) > 1 {
+			return newExitError(exitUsage, "at most one skill name is accepted")
+		}
+		if len(args) == 1 && args[0] == "" {
+			return newExitError(exitUsage, "a skill name must not be empty")
 		}
 		return nil
 	}
 	cmd.RunE = func(c *cobra.Command, args []string) error {
-		return codeToErr(skillsInstallCommand(args[0], fl, stdout, stderr))
+		name := skills.DefaultSkill
+		if len(args) == 1 {
+			name = args[0]
+		}
+		return codeToErr(skillsInstallCommand(name, fl, stdout, stderr))
 	}
 	return cmd
 }
@@ -229,6 +305,9 @@ type skillsInstallJSON struct {
 
 // skillsInstallCommand is `skills install`'s body.
 func skillsInstallCommand(name string, fl *skillsFlags, stdout, stderr io.Writer) int {
+	if parseOnly {
+		return exitSuccess
+	}
 	if _, err := skills.Paths(name); err != nil {
 		fmt.Fprintf(stderr, "ticfac skills install: %v\n", err)
 		return exitNotFound
@@ -319,4 +398,187 @@ func skillsInstallCommand(name string, fl *skillsFlags, stdout, stderr io.Writer
 		return failCode
 	}
 	return exitSuccess
+}
+
+// newSkillsDiffCommand builds `skills diff`.
+func newSkillsDiffCommand(stdout, stderr io.Writer) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "diff <name>",
+		Short: "compare installed skill directories against the embedded bundle",
+		Long: `Compare installed skill directories against the embedded bundle.
+
+Without --dir, ticfac detects skill directory conventions at the repo root:
+.claude/skills/ and .agents/skills/. It diffs every one that exists, one
+report each. Neither existing is an error: create one of them at the repo
+root, or pass --dir to compare elsewhere.
+
+Each report says whether that target is installed at all, and if it is:
+files added on disk (not in the bundle), removed (in the bundle but missing
+on disk) and changed (present in both with different bytes), plus the
+installed stamp's version against this binary's. Any of these — missing,
+unstamped, a different version, or changed files — is drift, and the fix is
+always the same: 'ticfac skills install <name>'.
+
+Exit codes
+  0  every detected (or given) target matches the embedded bundle exactly,
+     stamped with this binary's version
+  1  drift in any target: missing, unstamped, a version mismatch or changed
+     files; or (with no --dir) neither convention directory exists at the
+     repo root
+  2  usage error
+  3  no --dir and the working directory isn't inside a git repository
+  4  no such skill is embedded in this binary`,
+	}
+	fs := flag.NewFlagSet("skills diff", flag.ContinueOnError)
+	fl := &skillsDiffFlags{
+		dir:    fs.String("dir", "", "installed directory to compare (default: detect .claude/skills/, .agents/skills/ at the repo root)"),
+		asJSON: fs.Bool("json", false, "print one versioned document (ticfac.skills-diff.v1): each target's drift, as fields"),
+	}
+	commandFlags(cmd, fs)
+	cmd.Args = func(c *cobra.Command, args []string) error {
+		if len(args) != 1 || args[0] == "" {
+			return newExitError(exitUsage, "exactly one skill name is required")
+		}
+		return nil
+	}
+	cmd.RunE = func(c *cobra.Command, args []string) error {
+		return codeToErr(skillsDiffCommand(args[0], fl, stdout, stderr))
+	}
+	return cmd
+}
+
+// skillsDiffFlags is `skills diff`'s flag surface.
+type skillsDiffFlags struct {
+	dir    *string
+	asJSON *bool
+}
+
+// skillsDiffTargetJSON is one target's outcome as the --json document
+// carries it.
+type skillsDiffTargetJSON struct {
+	Dir       string   `json:"dir"`
+	Installed bool     `json:"installed"`
+	Stamp     string   `json:"stamp,omitempty"`
+	Drift     bool     `json:"drift"`
+	Added     []string `json:"added,omitempty"`
+	Removed   []string `json:"removed,omitempty"`
+	Changed   []string `json:"changed,omitempty"`
+}
+
+// skillsDiffJSON is `skills diff --json`'s answer, ticfac.skills-diff.v1.
+type skillsDiffJSON struct {
+	agentDoc
+	Skill   string                 `json:"skill"`
+	Version string                 `json:"version"`
+	Targets []skillsDiffTargetJSON `json:"targets"`
+}
+
+// skillsDiffCommand is `skills diff`'s body.
+func skillsDiffCommand(name string, fl *skillsDiffFlags, stdout, stderr io.Writer) int {
+	if _, err := skills.Paths(name); err != nil {
+		fmt.Fprintf(stderr, "ticfac skills diff: %v\n", err)
+		return exitNotFound
+	}
+
+	var targets []string
+	if *fl.dir != "" {
+		targets = []string{*fl.dir}
+	} else {
+		root, err := skillsRepoRoot()
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac skills diff: not inside a git repository; run this command inside a repo with "+
+				".claude/skills/ or .agents/skills/ at its root, or pass --dir\n")
+			return exitNoRepo
+		}
+		convDirs, err := skills.DetectConventionDirs(root)
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac skills diff: %v\n", err)
+			return exitGeneric
+		}
+		if len(convDirs) == 0 {
+			fmt.Fprintf(stderr, "ticfac skills diff: no skills convention directory found at %s (looked for "+
+				".claude/skills/ or .agents/skills/); create one of them, or pass --dir\n", root)
+			return exitGeneric
+		}
+		for _, d := range convDirs {
+			targets = append(targets, filepath.Join(d, name))
+		}
+	}
+
+	doc := skillsDiffJSON{
+		agentDoc: agentDoc{Schema: agentSchemaID("skills-diff")},
+		Skill:    name,
+		Version:  Version,
+		Targets:  []skillsDiffTargetJSON{},
+	}
+	report := io.Writer(stdout)
+	if *fl.asJSON {
+		report = stderr
+	}
+	anyDrift := false
+	for _, dir := range targets {
+		result, err := skills.Diff(name, dir, Version)
+		if err != nil {
+			fmt.Fprintf(stderr, "ticfac skills diff: %v\n", err)
+			return exitGeneric
+		}
+		if len(targets) > 1 {
+			fmt.Fprintf(report, "%s:\n", dir)
+		}
+		fmt.Fprint(report, skillsDiffReport(name, result))
+		doc.Targets = append(doc.Targets, skillsDiffTargetJSON{
+			Dir: dir, Installed: result.Installed, Stamp: result.Stamp, Drift: result.Drift(),
+			Added: result.Added, Removed: result.Removed, Changed: result.Changed,
+		})
+		if result.Drift() {
+			anyDrift = true
+		}
+	}
+	if *fl.asJSON {
+		doc.State = agentStateDone
+		if err := emitAgentJSON(stdout, doc); err != nil {
+			fmt.Fprintf(stderr, "ticfac skills diff: %v\n", err)
+			return exitGeneric
+		}
+	}
+	if anyDrift {
+		fmt.Fprintf(stderr, "ticfac skills diff: drift detected — fix with `ticfac skills install %s`\n", name)
+		return exitGeneric
+	}
+	return exitSuccess
+}
+
+// skillsDiffReport renders one target's result the way a person reads it:
+// what's wrong, then the one command that fixes it — never just "drift",
+// because an operator who has to guess the fix is the whole problem this
+// command exists to solve.
+func skillsDiffReport(name string, result skills.DiffResult) string {
+	var b strings.Builder
+	if !result.Installed {
+		fmt.Fprintf(&b, "not installed (run `ticfac skills install %s` to install it)\n", name)
+		return b.String()
+	}
+	if !result.Drift() {
+		fmt.Fprintf(&b, "no drift: matches the embedded bundle (version %s)\n", result.BundleVersion)
+		return b.String()
+	}
+	stamp := result.Stamp
+	if stamp == "" {
+		stamp = "(unstamped)"
+	}
+	fmt.Fprintf(&b, "drift against the embedded bundle: installed=%s bundle=%s\n", stamp, result.BundleVersion)
+	for _, label := range []struct {
+		name  string
+		paths []string
+	}{{"added", result.Added}, {"removed", result.Removed}, {"changed", result.Changed}} {
+		if len(label.paths) == 0 {
+			continue
+		}
+		fmt.Fprintf(&b, "%s (%d):\n", label.name, len(label.paths))
+		for _, p := range label.paths {
+			fmt.Fprintf(&b, "  %s\n", p)
+		}
+	}
+	fmt.Fprintf(&b, "upgrade with `ticfac skills install %s`\n", name)
+	return b.String()
 }

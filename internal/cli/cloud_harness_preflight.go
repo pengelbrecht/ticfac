@@ -70,11 +70,11 @@ import (
 // prose naming why. The error names every offending job and the runbook's
 // order for fixing either half.
 //
-// epicID and runConfig (the --config a `run --cloud-workers` forwards, ""
-// otherwise) say which named config the submitted run will select, so the
-// subscription half refuses only the config this run would ride — a GLM
-// epic is not refused because the branch also declares a claude config the
-// factory cannot serve yet.
+// epicID and runConfig (the --config a `run --cloud` or `run --cloud-workers`
+// carries, "" for neither) say which named config the submitted run will
+// select, so the subscription half refuses only the config this run would
+// ride — a GLM epic is not refused because the branch also declares a claude
+// config the factory cannot serve yet.
 func preflightCloudHarness(ctx context.Context, client *cloudClient, repo, epicID, runConfig string, prose io.Writer) error {
 	// The branch half. HEAD is the pushed boundary; a repo that declares no
 	// runners config there routes on the factory's defaults and is not this

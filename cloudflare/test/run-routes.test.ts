@@ -340,6 +340,27 @@ describe("submission on a free project", () => {
     await expect(roomFor(env, project).leaseStatus()).resolves.toBeNull();
   });
 
+  // tick ba4: `ticfac run --cloud --config <name>` carries the named config
+  // as a submission field, so the Workflow's params carry it into the
+  // orchestrator container's environment and on into the run-epic it execs.
+  it("carries a named run config into the Workflow params", async () => {
+    const project = await enrolled("named-config");
+
+    const res = await post("/api/runs", submission(project, { config: "claude" }));
+
+    expect(res.status).toBe(201);
+    expect(workflow.created[0]!.params).toMatchObject({ config: "claude" });
+  });
+
+  it("carries no config into the Workflow params when the submission names none", async () => {
+    const project = await enrolled("default-config");
+
+    const res = await post("/api/runs", submission(project));
+
+    expect(res.status).toBe(201);
+    expect(workflow.created[0]!.params).not.toHaveProperty("config");
+  });
+
   // The flags on `tk cloud run` are a per-invocation choice; nothing about
   // them is a redeploy, so they have to reach the Workflow's params.
   it("carries a per-run budget into the Workflow params", async () => {

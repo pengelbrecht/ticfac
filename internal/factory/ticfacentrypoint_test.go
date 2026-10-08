@@ -222,7 +222,7 @@ PATH="` + bin + `:$PATH"
 EXIT_CONFIG=3; EXIT_CLONE=4; EXIT_MODEL=5
 ACTOR="cloud:orchestrator"
 workdir="` + dir + `"
-epic="e1"; run_id="r1"; run_branch="tick-run/e1"; run_pass=""
+epic="e1"; run_id="r1"; run_branch="tick-run/e1"; run_pass=""; run_config=""
 base_sha="521b4805ff865a34265878c4d6b49ab113f61710"
 factory_url=""; factory_token=""; factory_project=""
 model="sonnet"
@@ -305,6 +305,31 @@ func TestOverrideRunsRunEpicOnTheCloudProfilesAndTheCloudSubstrate(t *testing.T)
 	}
 	if !strings.Contains(out, "TICKS_SUBSTRATE=cloud") {
 		t.Errorf("the override did not export the cloud substrate for the run to resolve role routing against:\n%s", out)
+	}
+}
+
+// TestOverrideForwardsTheNamedRunConfig: a boot whose submission carried a
+// named run config (TICKS_CONFIG, read into run_config by common.sh) passes
+// it on to the run-epic it execs as --config, verbatim — the same word a
+// local run's own --config rides into its argv (tick ba4).
+func TestOverrideForwardsTheNamedRunConfig(t *testing.T) {
+	out := runOverride(t, "run", `run_config="claude"`)
+	if !strings.Contains(out, "EXEC: ticfac run-epic") {
+		t.Fatalf("the override did not exec ticfac run-epic:\n%s", out)
+	}
+	if !strings.Contains(out, "--config claude") {
+		t.Errorf("the override did not forward the named run config:\n%s", out)
+	}
+}
+
+// TestOverrideLeavesOffTheConfigFlagWhenUnset: no TICKS_CONFIG, no --config
+// on the argv — a boot whose submission carried no named config leaves
+// run-epic to select by the epic's own label and the declared default,
+// exactly as before this variable existed.
+func TestOverrideLeavesOffTheConfigFlagWhenUnset(t *testing.T) {
+	out := runOverride(t, "run", "")
+	if strings.Contains(out, "--config") {
+		t.Errorf("the override named a --config nobody asked for:\n%s", out)
 	}
 }
 

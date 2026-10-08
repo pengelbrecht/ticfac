@@ -335,8 +335,15 @@ start_harness() {
 		--base "$base_sha"
 		--run-id "$run_id"
 		--profiles ` + cloudProfilesContainerPath + `
-		"$epic"
 	)
+	# The named run config this boot's submission carried (tick ba4): the
+	# flag over the epic's own config: label over the runners files' declared
+	# default, the same precedence --config gives a local run — only here the
+	# operator's word rode the submission rather than an argv on this machine.
+	if [[ -n $run_config ]]; then
+		cmd+=(--config "$run_config")
+	fi
+	cmd+=("$epic")
 
 	# --profiles is what makes this a CLOUD run (tick gbs): the compiled-in
 	# set is the LOCAL one — executor local-subprocess — and a run-epic that

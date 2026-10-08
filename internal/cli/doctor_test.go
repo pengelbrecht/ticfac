@@ -37,6 +37,7 @@ import (
 type doctorSeams struct {
 	tk          func(context.Context, string) (string, error)
 	herdr       func(context.Context) (string, error)
+	node        func() (string, error)
 	github      func() (string, error)
 	forgeRemote func(string) (string, error)
 	gitID       func(string) (string, error)
@@ -57,6 +58,7 @@ func saveDoctorSeams(t *testing.T, missing string, keepRealHerdr bool) {
 	saved := doctorSeams{
 		tk:          doctorTK,
 		herdr:       doctorHerdr,
+		node:        doctorNode,
 		github:      doctorGitHub,
 		forgeRemote: doctorForgeRemote,
 		claudeSub:   doctorClaudeSubLabels,
@@ -67,8 +69,8 @@ func saveDoctorSeams(t *testing.T, missing string, keepRealHerdr bool) {
 		classifier:  doctorClassifier,
 	}
 	t.Cleanup(func() {
-		doctorTK, doctorHerdr, doctorGitHub, doctorForgeRemote, doctorGitIdentity =
-			saved.tk, saved.herdr, saved.github, saved.forgeRemote, saved.gitID
+		doctorTK, doctorHerdr, doctorNode, doctorGitHub, doctorForgeRemote, doctorGitIdentity =
+			saved.tk, saved.herdr, saved.node, saved.github, saved.forgeRemote, saved.gitID
 		doctorDocker, doctorWrangler, doctorFactory = saved.docker, saved.wrangler, saved.factory
 		doctorClassifier = saved.classifier
 		doctorClaudeSubLabels = saved.claudeSub
@@ -83,6 +85,7 @@ func saveDoctorSeams(t *testing.T, missing string, keepRealHerdr bool) {
 	if !keepRealHerdr {
 		doctorHerdr = func(context.Context) (string, error) { return ok("herdr")() }
 	}
+	doctorNode = ok("node")
 	doctorGitHub = ok("github")
 	doctorForgeRemote = func(string) (string, error) {
 		if missing == "forge remote" {
@@ -153,6 +156,7 @@ func TestDoctorReportsEachMissingPrerequisiteWithItsFix(t *testing.T) {
 	}{
 		{check: "tk", fix: doctorFixTK},
 		{check: "herdr", fix: doctorFixHerdr},
+		{check: "node", fix: doctorFixNode},
 		{check: "github", fix: doctorFixGitHub},
 		{check: "git identity", fix: doctorFixGit},
 		{check: "classifier", fix: doctorFixClassifier},
@@ -187,7 +191,7 @@ func TestDoctorWithEverythingPresentExitsZero(t *testing.T) {
 	if code != exitSuccess {
 		t.Fatalf("doctor with everything exits %d, want %d:\n%s", code, exitSuccess, stdout)
 	}
-	for _, check := range []string{runconfigFileName(), "routing", "tk", "herdr", "github", "git identity", "classifier"} {
+	for _, check := range []string{runconfigFileName(), "routing", "tk", "herdr", "node", "github", "git identity", "classifier"} {
 		if !strings.Contains(stdout, "ok       "+check) {
 			t.Errorf("the report has no ok line for %s:\n%s", check, stdout)
 		}
@@ -343,6 +347,57 @@ func TestDoctorProbesTheRealHerdrSocket(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "degrade to a plain harness") {
 		t.Errorf("the missing herdr does not say what a run does without it:\n%s", stdout)
+	}
+}
+
+// TestDoctorProbesTheRealNode: node's probe is the real `node --version` —
+// the same binary a local pi-durable run's embedded harness bundle launches
+// under — so a host missing it, or too old, sees doctor's own fix rather
+// than a seam's canned answer. This dev/CI host has Node 22+ (the harness's
+// own gate needs it), so the real probe answers ok.
+func TestDoctorProbesTheRealNode(t *testing.T) {
+	real := doctorNode
+	saveDoctorSeams(t, "", false)
+	doctorNode = real
+	repo := doctorFixture(t, false)
+	code, stdout, _ := runDoctorOn(t, repo, false)
+	if code != exitSuccess {
+		t.Fatalf("doctor on a host with node exits %d, want %d:\n%s", code, exitSuccess, stdout)
+	}
+	if !strings.Contains(stdout, "ok       node") {
+		t.Errorf("node is not reported ok on a host that has it:\n%s", stdout)
+	}
+}
+
+// TestNodeMajorVersionParsesTheRealCLIsOutput: `node --version` prints
+// "v22.23.2" — the leading "v" and the trailing minor/patch doctorNode must
+// both fall away to read the one number the version floor compares against.
+func TestNodeMajorVersionParsesTheRealCLIsOutput(t *testing.T) {
+	for _, tc := range []struct {
+		version string
+		want    int
+		wantErr bool
+	}{
+		{version: "v22.23.2", want: 22},
+		{version: "v9.1.0", want: 9},
+		{version: "v100.0.0", want: 100},
+		{version: "not-a-version", wantErr: true},
+		{version: "", wantErr: true},
+	} {
+		got, err := nodeMajorVersion(tc.version)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("%q: want an error, got major %d", tc.version, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%q: %v", tc.version, err)
+			continue
+		}
+		if got != tc.want {
+			t.Errorf("%q: major %d, want %d", tc.version, got, tc.want)
+		}
 	}
 }
 
