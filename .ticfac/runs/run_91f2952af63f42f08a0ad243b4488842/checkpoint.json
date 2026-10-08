@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 17,
-  "state": "gating",
-  "reason": "running the integrated gate for 93n on a69efe518bc4",
-  "updated_at": "2026-10-08T15:52:20Z",
+  "sequence": 18,
+  "state": "publishing",
+  "reason": "closing 93n behind the integrated gate on a69efe518bc4",
+  "updated_at": "2026-10-08T16:02:41Z",
   "ticks": [
     {
       "tick_id": "47j",
