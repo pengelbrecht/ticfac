@@ -2,6 +2,7 @@
   "id": "flm",
   "title": "Guard the repo's own runners.toml: no pi cell declares args",
   "description": "Once the protected [roles.implement] change lands, a guard test can read this repository's .tick/runners.toml and refuse any cell pairing kind = \"pi\" with args — the same invariant TestAPiCellIsWrittenWithoutArgs (internal/cli) now pins on ticfac init's writers. It cannot be added by this tick: until the protected change is applied the cell still carries args, so the test would be red and would block the close-out's gate. The natural home is internal/reconcile beside the other TestThisRepositorys* guards.\nevidence: internal/cli/init_test.go TestAPiCellIsWrittenWithoutArgs (writer half, green); internal/reconcile/routing_check_test.go (the repo-file guards' home)\n\nticfac run run_af0e77b99c1540b7b8005cf04fd2795d filed this backlog tick from the finding 703f6f6e0f9d952758a4d450e9bc223fa856471778340605902c736b6fc7462b (reported by run-run_af0e77b99c1540b7b8005cf04fd2795d/tick-2p3/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_af0e77b99c1540b7b8005cf04fd2795d/absorptions/703f6f6e0f9d952758a4d450e9bc223fa856471778340605902c736b6fc7462b.json on the run branch.",
+  "notes": "2026-10-08 00:13 - ticfac run run_af0e77b99c1540b7b8005cf04fd2795d: created by absorbing finding 703f6f6e0f9d952758a4d450e9bc223fa856471778340605902c736b6fc7462b — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_af0e77b99c1540b7b8005cf04fd2795d/absorptions/703f6f6e0f9d952758a4d450e9bc223fa856471778340605902c736b6fc7462b.json on epic/ex6, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_af0e77b99c1540b7b8005cf04fd2795d/tick-2p3/attempt-1",
   "created_by": "ticfac run run_af0e77b99c1540b7b8005cf04fd2795d",
   "created_at": "2026-10-08T00:13:10Z",
-  "updated_at": "2026-10-08T00:13:10Z"
+  "updated_at": "2026-10-08T00:13:15.330849354Z"
 }
