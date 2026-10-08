@@ -1,0 +1,13 @@
+{
+  "id": "na9",
+  "title": "A close-out that follows its prompt commits nothing and is rejected",
+  "description": "closeout-epic's recorded commit rule says an empty branch is an undelivered deliverable because its deliverable is 'the retro, and the learnings the boundary permits it to write'. But on the cloud substrate the boundary refuses every .tick/ path, so the learnings can only travel as a finding's protected_change — and acceptProtectedDelivery, the waiver that makes a protected-change-only delivery count, returns early for every role that is not implement-tick. The role's prompt compounds it: it names no committable artefact and says 'Your report is the only channel that is read'. bo9's attempt 7 did exactly that and was rejected no-commits, costing a full opus close-out and a redispatch. The committable deliverable the role actually has is docs/\u003cepic\u003e-closeout-retro-\u003cdate\u003e.md, the convention v5t, umq and ilz already follow; either the prompt should name it or the waiver should cover closeout-epic.\nevidence: internal/reconcile/protected_changes.go:414 (the implement-tick gate) against internal/exec/subprocess/rolecommits.go:33-35; profiles/closeout-epic.md's closing line; checkpoint 47 of run_03aa9c8a71574ab3891b47df3dbd5ec9 records the rejection\n\nticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9 filed this backlog tick from the finding c3dfa521bdc9491174caaec8a057e9628ecd29117a54dc3edfadb90b05a331b9 (reported by run-run_03aa9c8a71574ab3891b47df3dbd5ec9/tick-52h/attempt-9) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_03aa9c8a71574ab3891b47df3dbd5ec9/absorptions/c3dfa521bdc9491174caaec8a057e9628ecd29117a54dc3edfadb90b05a331b9.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_03aa9c8a71574ab3891b47df3dbd5ec9/tick-52h/attempt-9",
+  "created_by": "ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9",
+  "created_at": "2026-10-08T12:29:33Z",
+  "updated_at": "2026-10-08T12:29:33Z"
+}
