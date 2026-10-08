@@ -1,80 +1,87 @@
-<!-- ticks-worker: container facts, prepended after the harness exited. The
-agent's report, including its STATUS line, is unchanged below. -->
-
-_ticks-worker: branch `tick/ymf/attempt-1/47j`, base `dda6796705730d2fc607a2bc10f2bf52ff7fca8a`, harness `claude` exited 0, 1 work commit(s), 0 uncommitted path(s)._
-
 # 47j: readable feed sentences for the dashboard's latest section
 
-## What changed
+## State found on the branch
 
-- `internal/cli/feed_sentences.go` (new): a map from every stage the run
-  feed can emit (every `Stage*` constant in `internal/reconcile` and
-  `internal/runfeed`) to a short, people-first sentence — no shas, no
-  internal stage names. The four stages the tick names as pure mechanics
-  (`pushed`, `push_queued`, `policy_stated`, `cleaned_up`) map to `nil` and
-  are dropped from this section entirely. `StageGitHubErrorPrefix`'s whole
-  family (`github_error_*`) is handled by prefix match. `feedSentenceFor`
-  is the lookup `dashboardTail` now calls.
-- `internal/cli/watch_view.go`: `dashboardTail` now walks `m.Recent`
-  backwards collecting the last two events `feedSentenceFor` accepts
-  (skipping filtered mechanics, reaching further back if needed) and
-  renders each as `clock  who  sentence` instead of `clock  who  stage:
-  detail`. The raw `[e]` events view (`watchEventLineWith`,
-  `renderFeedView`) is untouched — it still shows the feed's own words.
-- `internal/cli/feed_sentences_guard_test.go` (new): `go/ast`-parses every
-  non-test source file in `internal/reconcile` and `internal/runfeed`,
-  collects every `Stage*` constant's declared value (resolving the handful
-  that alias a `runfeed` constant, e.g. `reconcile.StageRunFinished =
+This branch (`tick/ymf/attempt-1/47j`) already carries tick 47j's
+implementation, delivered by the preceding harness invocation on this same
+attempt and committed as the branch's one work commit (`1e6856e`,
+"tick 47j: worker report" — a single whole-tree commit). I verified that
+implementation against the tick's acceptance criteria end-to-end rather than
+rewriting it. The pieces:
+
+- `internal/cli/feed_sentences.go`: `feedSentences`, a map from every stage
+  value the run feed can emit (every `Stage*` constant in
+  `internal/reconcile` and `internal/runfeed`) to a short people-first
+  sentence — no shas, no internal stage names. The four pure-mechanics
+  stages the tick names (`pushed`, `push_queued`, `policy_stated`,
+  `cleaned_up`) map to `nil` and are dropped from the dashboard's recent
+  section entirely. The `github_error_*` family is matched by prefix.
+  `feedSentenceFor(event)` is the lookup, returning `(sentence, ok)`;
+  `ok=false` means "drop this event from this section".
+- `internal/cli/watch_view.go`: `dashboardTail` walks `m.Recent` backwards
+  collecting the last two events `feedSentenceFor` accepts (skipping
+  filtered mechanics, reaching further back when needed) and renders each
+  as `clock  who  sentence`. The raw `[e]` events view
+  (`watchEventLineWith`/`renderFeedView`) is untouched — it still shows the
+  feed's own `stage: detail` words, as the description requires.
+- `internal/cli/feed_sentences_guard_test.go`:
+  `TestEveryFeedStageHasASentence` go/ast-parses every non-test source file
+  in `internal/reconcile` and `internal/runfeed`, resolves every
+  `Stage*` constant's declared value (including the handful that alias a
+  `runfeed` constant, e.g. `reconcile.StageRunFinished =
   runfeed.StageRunFinished`), and fails if any discovered value has no
-  entry — sentence or explicit `nil` — in `feedSentences`. This is the
-  acceptance's "a test fails when a new stage has none": a future stage
-  nobody taught a sentence breaks `TestEveryFeedStageHasASentence`, not
-  silently.
-- Test updates for the new behaviour: `TestTheFrameTailIsReadableSentences`
-  (renamed from `TestTheFrameTailIsTheFeedOwnWords`) asserts the tail shows
-  sentences and does NOT show the raw `stage: detail` form;
-  `TestTheTailDropsPureMechanicsAndReachesBack` (new) proves a
-  `pushed`/`cleaned_up` event is dropped and the tail reaches back for a
-  readable one instead; `TestTheTailCountsTheTryFromTheWholeModel`'s
-  fixture now uses real stage constants instead of invented ones
-  (`report_ready`, `merged` were never real feed stages);
-  `TestWatchOnATerminalRendersTheEpicInPlace` (watch_block_test.go) waits
-  on the new sentence text instead of the raw one.
-- Three golden dashboard frames regenerated with `-update`
-  (`watch_dashboard_120.txt`, `watch_dashboard_60.txt`,
-  `watch_dashboard_epic_state.txt`): only the "─ recent" tail lines changed,
-  from e.g. `dispatched: 46x try 2 dispatched (run dispatch #6, branch
-  ticfac/run-epic-6in/tick-46x/attempt-6)` to `dispatched, writing code`,
-  and `closeout_held: the close-out waits for CI green on the PR` to
-  `closing out is waiting on CI`. Diffs reviewed by hand.
+  entry — sentence or explicit `nil` — in `feedSentences`.
+- Three golden dashboard frames regenerated
+  (`testdata/watch_dashboard_120.txt`, `watch_dashboard_60.txt`,
+  `watch_dashboard_epic_state.txt`); their "─ recent" tail lines now read
+  e.g. `18:58:02 46x#2  dispatched, writing code` and
+  `19:04:12 run  closing out is waiting on CI`.
 
-## Scope note
+## What I verified this invocation
 
-The tick's acceptance and description name exactly four stages as "pure
-mechanics" to drop. I filtered exactly those four and gave every other
-declared stage (including ones the wider epic doc also calls mechanical,
-like `tier_derived`, `gate_running`, `push_queue_overdue`) a real sentence,
-since the tick's own acceptance criteria does not ask for a broader filter
-and nothing tests one. If the operator wants more stages hidden from this
-section, that is a follow-up, not a reading of this tick's scope.
+- **The guard fails when a new stage has none** (the acceptance's parenthetical):
+  I appended a temporary `StageProbeUnmapped47j` constant to
+  `internal/reconcile`, ran `go test -run TestEveryFeedStageHasASentence
+  ./internal/cli/`, and it failed naming exactly that constant
+  (`feedSentences (feed_sentences.go) has no entry … for: StageProbeUnmapped47j
+  ("probe_unmapped_47j")`). I then removed the probe file; `git status` is
+  clean and the probe is not committed.
+- **Mechanics filtered**: `TestTheTailDropsPureMechanicsAndReachesBack`
+  proves a `pushed`/`cleaned_up` event is dropped from the tail and the tail
+  reaches back for a readable line instead. All four mechanics map to
+  explicit `nil` in `feedSentences`.
+- **The tick's named tests all pass** (`go test -run
+  'TestEveryFeedStageHasASentence|TestTheFrameTailIsReadableSentences|TestTheTailDropsPureMechanicsAndReachesBack|TestTheTailCountsTheTryFromTheWholeModel|TestWatchOnATerminalRendersTheEpicInPlace'
+  -timeout 10m ./internal/cli/`): 5/5 pass.
+- `go build ./internal/cli/...` and `go vet ./internal/cli/...`: clean.
+- **`make gate`**: green, exit 0 — gofmt clean, `go vet ./...` clean,
+  `go test -short` green across all 53 packages, including
+  `internal/reconcile`'s short suite (14.2s). I did not run the full
+  non-short reconcile suite, per AGENTS.md's guidance against running it
+  locally as a matter of course.
 
-## What I ran
+## Scope notes
 
-- `go build ./internal/cli/...`
-- `go vet ./internal/cli/...`
-- `GOTEST_PARALLEL=4 GOFLAGS=-p=2 go test ./internal/cli/... -timeout 10m` — all pass
-- `GOTEST_PARALLEL=4 GOFLAGS=-p=2 make gate` — gofmt clean, `go vet ./...` clean, `go test -short ./...` green across all 53 packages (internal/reconcile's short suite included, 12.5s — I did not run the full non-short reconcile suite per AGENTS.md's guidance not to as a matter of course)
+- The tick's description names exactly four stages as pure mechanics. The
+  map filters exactly those four and gives every other declared stage
+  (including ones the wider epic prose also calls mechanical, like
+  `tier_derived`, `gate_running`, `push_queue_overdue`) a real sentence,
+  because the acceptance criteria do not ask for a broader filter and no
+  test asserts one. If the operator wants more stages hidden from this
+  section, that is a follow-up tick, not a reading of this one.
+- The description's four example sentences are reproduced:
+  `merged into the epic, now testing` (`integrated`), `finished and merged`
+  (`closed`), `review says not ready: <one line>` (`review_round`), and
+  `paused: needs you` (`run_held`).
 
 ## For the next tick
 
-`feedSentenceFor` and `feedSentences` (`internal/cli/feed_sentences.go`) are
-the one place to extend when the epic's later ticks build the NOW/DONE/UP
-NEXT groupings, the needs-you line, or anything else that wants a stage's
-words rather than its name — the guard test will catch a stage this map
-doesn't yet cover. The design doc's own example sentences ("v1g merged into
-the epic, now testing", "ww2 finished and merged", "paused: needs you")
-are reproduced close to verbatim for `StageIntegrated`, `StageClosed` and
-`StageRunHeld`.
+`feedSentenceFor`/`feedSentences` (`internal/cli/feed_sentences.go`) are the
+one place to extend when the epic's later ticks build the NOW/DONE/UP NEXT
+groupings, the needs-you line, or anything else that wants a stage's words
+rather than its name — `TestEveryFeedStageHasASentence` fails the moment a
+new feed stage lacks an entry there. The raw `[e]` view lives in
+`watch_drill.go` (`watchEventLineWith`), deliberately untouched.
 
 ## Findings
 
