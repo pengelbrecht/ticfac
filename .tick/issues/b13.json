@@ -3,13 +3,14 @@
   "title": "Cost line: only when metered; a claude-sub run shows subscription window use",
   "gloss": "cost / subscription line",
   "description": "Replace 'cost decisions not metered · Workers AI $0.00' with: nothing when there is no metered cost; the metered cost when there is; on a run whose config is claude-sub, the leased subscription label and its 5h/7d window utilization from the factory's /api/claude-sub (operator auth, already used by ticfac factory status). Never a token.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "parent": "ymf",
   "acceptance_criteria": "the three cases render as specified, tested; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.423276Z",
-  "updated_at": "2026-10-08T13:16:48.423276Z"
+  "updated_at": "2026-10-08T13:58:59.174331195Z",
+  "started_at": "2026-10-08T13:58:59.174330445Z"
 }
