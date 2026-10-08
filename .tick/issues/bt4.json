@@ -2,6 +2,7 @@
   "id": "bt4",
   "title": "Phone page still renders the unmetered recital; subscription field is available",
   "description": "b13 changed the watch dashboard's cost line only. The phone page (cloudflare/src/phone.ts) still renders one line per cost source with 'not metered' for unmetered rivers, and does not show cost.subscription, which the model now carries (bundle 2.4.0). The epic's A5 ('cost shows only when metered; a claude-sub run shows subscription window use') arguably reaches this surface too, since it reads the same model.\nevidence: cloudflare/src/phone.ts:930-945 (cost section), cloudflare/src/status.ts (StatusCostSubscription type now exists)\n\nticfac run run_91f2952af63f42f08a0ad243b4488842 filed this backlog tick from the finding d0f16c9e5b635e35305aead1404f810a7dac9b2471c781c1ecf3e96f7f0d61d7 (reported by run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/attempt-3) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/d0f16c9e5b635e35305aead1404f810a7dac9b2471c781c1ecf3e96f7f0d61d7.json on the run branch.",
+  "notes": "2026-10-08 16:03 - ticfac run run_91f2952af63f42f08a0ad243b4488842: created by absorbing finding d0f16c9e5b635e35305aead1404f810a7dac9b2471c781c1ecf3e96f7f0d61d7 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/d0f16c9e5b635e35305aead1404f810a7dac9b2471c781c1ecf3e96f7f0d61d7.json on epic/ymf, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/attempt-3",
   "created_by": "ticfac run run_91f2952af63f42f08a0ad243b4488842",
   "created_at": "2026-10-08T16:03:13Z",
-  "updated_at": "2026-10-08T16:03:13Z"
+  "updated_at": "2026-10-08T16:03:23.926615808Z"
 }
