@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
   "epic_id": "bo9",
-  "sequence": 55,
+  "sequence": 56,
   "state": "running",
-  "reason": "two is closed",
-  "updated_at": "2026-10-08T12:08:20Z",
+  "reason": "the epic PR #267 (epic/bo9 → main) is open; close-out of bo9 waits on CI",
+  "updated_at": "2026-10-08T12:08:32Z",
   "ticks": [
     {
       "tick_id": "0ek",
