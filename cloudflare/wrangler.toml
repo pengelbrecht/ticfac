@@ -358,7 +358,7 @@ RUN_WORKER_MODEL = "workers-ai/@cf/zai-org/glm-5.3"
 # routing. A claude-sub job that finds no free subscription (busy, or every
 # one benched on its quota) falls back to the Workers AI ladder for that
 # job; it never waits.
-CLAUDE_SUB_MAX_CONCURRENT = "2"
+CLAUDE_SUB_MAX_CONCURRENT = "4"
 
 # What a CLASSIFIED work type costs on this deployment (tick mrn, epic wne):
 # which model serves each kind of work. The vocabulary — mechanical,
