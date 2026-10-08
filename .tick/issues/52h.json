@@ -7,7 +7,8 @@
   "type": "task",
   "owner": "ticfac",
   "blocked_by": [
-    "g2s"
+    "g2s",
+    "two"
   ],
   "parent": "bo9",
   "role": "closeout",
