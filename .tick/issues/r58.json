@@ -1,0 +1,13 @@
+{
+  "id": "r58",
+  "title": "restart_test flake: same-second evidence timestamps fail late.After(dead)",
+  "description": "TestAResumedRunDoesNotCloseATickOnGateEvidenceFromAChangedCommand fails intermittently in the full reconcile suite: the backing evidence's started_at and the dead incarnation's finished_at are both RFC3339 second-granular, so when both land in the same second late.After(dead) is false even though the evidence was produced after the gate. It reproduced at this branch's base with -count=3 (once in three), independent of any change here, and it only runs in the full suite (shorttest.EndToEnd skips it in the gate) — so it can turn a main or epic-branch CI shard red spuriously, and a red main blocks every deploy behind it.\nevidence: internal/reconcile/restart_test.go:351; go test -count=3 -run 'TestAResumedRunDoesNotCloseATickOnGateEvidenceFromAChangedCommand' ./internal/reconcile/ fails 'the evidence backing the close started at 2026-10-08T19:22:39Z, before the dead incarnation's gate had even finished at 2026-10-08T19:22:39Z'\n\nticfac run run_91f2952af63f42f08a0ad243b4488842 filed this backlog tick from the finding be6e18cdf2d2b916c7abd1e8f380cdfdfc37acc0f3280a583fe317d5fe6e1fdb (reported by run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/attempt-5) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/be6e18cdf2d2b916c7abd1e8f380cdfdfc37acc0f3280a583fe317d5fe6e1fdb.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/attempt-5",
+  "created_by": "ticfac run run_91f2952af63f42f08a0ad243b4488842",
+  "created_at": "2026-10-08T19:36:40Z",
+  "updated_at": "2026-10-08T19:36:40Z"
+}
