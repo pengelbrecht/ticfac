@@ -6,10 +6,14 @@ import (
 	"encoding/json"
 	"flag"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pengelbrecht/ticfac/internal/profile"
+	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
 // The classification decision record, PINNED byte for byte as this package
@@ -106,5 +110,71 @@ func TestTheClassificationRecordIsPinnedAsItIsWritten(t *testing.T) {
 		t.Fatalf("the classification record this package writes is not what the pin holds.\n"+
 			"Adopt the change DELIBERATELY: go test ./internal/reconcile -run TestTheClassificationRecordIsPinnedAsItIsWritten -update-pin,\n"+
 			"then read the diff — both suites test against that pin.\nwritten:\n%s\npinned:\n%s", pinned, want)
+	}
+}
+
+// The pin's profile_digest has a SHORT side to its comparison (tick 3sd).
+//
+// The writer above was, until this test, the only comparison between the pin
+// and the profile set its run resolved — and it is EndToEnd, so the per-tick
+// gate skipped it. Tick 7sn edited profiles/closeout-epic.md, which moves
+// profileSetDigest and therefore the profile_digest of every classification
+// record the pin stands for; `make gate` stayed green at the tick that made
+// the edit and only the epic branch's CI went red on it, hours later (tick
+// 4w7 regenerated the pin; this guard is the recurrence half).
+//
+// So the digest is re-derived SHORT and held against the pin. It is derived
+// the way the writer's run derives it, minus the repository: the embedded
+// profile set, routed through the fixture's own gate cell — which mirrors the
+// shipped implement-tick profile, so it changes no resolved value — with no
+// tier and no named config. A profile edit now fails the gate at the tick
+// that made it, naming the pin to regenerate, instead of failing CI on an
+// epic branch nobody is watching.
+//
+// The substrate is resolved BLIND here rather than the way New resolves it.
+// The fixture's repository declares no runners.local.toml or runners.cloud.toml,
+// so no substrate the decision procedure can answer changes a routed value and
+// the blind resolution digests the same set; what a real repository's
+// resolution adds — an overlay file, a selected config, a tier — is the
+// EndToEnd writer's half, in CI and at close-out.
+//
+// short: resolves the embedded profiles over one temp config and reads the pin; no repository is built
+func TestTheClassificationPinsProfileDigestIsTheEmbeddedProfileSet(t *testing.T) {
+	t.Parallel()
+
+	// The pin, read through the same closed record type the store reads it
+	// with, so a pin that stops being a decision is refused here rather than
+	// quietly compared on one field.
+	raw, err := os.ReadFile(classificationPin)
+	if err != nil {
+		t.Fatalf("the pin is missing — regenerate it deliberately with -update-pin: %v", err)
+	}
+	var pinned runstate.Decision
+	if err := json.Unmarshal(raw, &pinned); err != nil {
+		t.Fatalf("the pin does not read back as a decision record: %v", err)
+	}
+	if pinned.Provenance.ProfileDigest == nil {
+		t.Fatal("the pin states no profile_digest, so nothing ties the record it pins to a profile set — " +
+			"regenerate it deliberately with -update-pin")
+	}
+
+	// The profile set, resolved as the writer's run resolves it over the
+	// fixture's own gate: the embedded profiles, the [roles.implement] cell
+	// the fixture declares, no tier, no named config.
+	gate := filepath.Join(t.TempDir(), "runners.toml")
+	if err := os.WriteFile(gate, []byte(passingGate), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	profiles, err := profile.ResolveAll(profile.Options{RunnersConfig: gate})
+	if err != nil {
+		t.Fatalf("the embedded profiles no longer resolve under the fixture's own gate: %v", err)
+	}
+	if got := profileSetDigest(profiles); got != *pinned.Provenance.ProfileDigest {
+		t.Fatalf("the pin's profile_digest is %q, but the embedded profile set it was pinned under digests to %q.\n"+
+			"Adopt the change DELIBERATELY: go test ./internal/reconcile -run TestTheClassificationRecordIsPinnedAsItIsWritten -update-pin,\n"+
+			"then read the diff — this test, the EndToEnd writer above and internal/runstate's reader all test against that pin.\n"+
+			"(This is the short half of the comparison, so the per-tick gate pays for it at the tick that edits a profile\n"+
+			"rather than an epic branch's CI paying for it hours later.)",
+			*pinned.Provenance.ProfileDigest, got)
 	}
 }

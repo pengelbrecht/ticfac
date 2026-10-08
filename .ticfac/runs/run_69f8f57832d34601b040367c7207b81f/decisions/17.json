@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 17,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The guard's isProcessCall only matches call expressions whose CALLEE identifier is in PROCESS_ENTRY_POINTS. A test that drives real processes via `execFileAsync = promisify(execFile)` passes execFile as an ARGUMENT (callee is `promisify`) and then calls `execFileAsync(...)` — an identifier the list does not know — so the guard classifies it as not process-driving and demands no bound from it. standin-worker-entry-env.test.ts's three tests (real bash through the real worker entry, declaring 300_000 voluntarily at :105, :116, :132) are therefore entirely unenforced: a future regression of their bounds to a quiet-host number passes every guard assertion. The fixing commit 3cecaa753's own message names the gap ('the guard's static entry-point list does not yet see' the shape). Fix belongs in the guard — recognize the promisify indirection, or add the assignment-target analysis drivenNames already has — and must not over-bind workerd-suite tests that cannot exec.\nevidence: harness/test/node/harness-timeout-discipline.test.ts:86-95 (PROCESS_ENTRY_POINTS, isProcessCall); harness/test/node/standin-worker-entry-env.test.ts:29 (promisify(execFile)), :87 (execFileAsync call), :105/:116/:132 (voluntary bounds)\n\nticfac run epic-43y filed this backlog tick from the finding 520027eebf7723e3438ae84c65a5d3ea0dadd45881164ce868081d1957a3fc5f (reported by run-epic-43y/tick-omq/attempt-62): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/520027eebf7723e3438ae84c65a5d3ea0dadd45881164ce868081d1957a3fc5f.json on the run branch.",
+    "epic_id": "ex6",
+    "role": "classify-tick",
+    "tick_id": "gzw",
+    "title": "timeout-discipline guard misses promisify(execFile) as a process entry point"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.45,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.16,
+      "design": 0.5599999999999999,
+      "diagnosis": 0.04,
+      "mechanical": 0.11,
+      "translation": 0.13
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1517,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T16:45:35Z",
+  "answered_at": "2026-10-07T16:45:35Z",
+  "provenance": {
+    "run_id": "run_69f8f57832d34601b040367c7207b81f",
+    "tick_id": "gzw",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "18043729b108c43a0ef9997e48f97a36cf116f8b",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:0fd84feaa6def26de94fef1a4da33b194dfa9b1fa1c66cc1c31a8a555019f2a4",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

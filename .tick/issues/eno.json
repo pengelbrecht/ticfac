@@ -1,16 +1,19 @@
 {
   "id": "eno",
   "title": "Close out pi-durable cloud hardening: retro, then the next feasible epic",
-  "status": "open",
+  "notes": "2026-10-08 07:58 - ticfac run run_af0e77b99c1540b7b8005cf04fd2795d: eno try 1 (run dispatch #12) reported a finding the run itself decided — defect \"The run promotes one finding twice when two attempts report it\" (key 3d419ca864cd090902180978a7b5af2eab38f165abd19bd9488f809a24c48a2e, severity low, for this repository) is promoted to a backlog tick with an owner, cv4; the decision record is on the run branch at .ticfac/runs/run_af0e77b99c1540b7b8005cf04fd2795d/absorptions/3d419ca864cd090902180978a7b5af2eab38f165abd19bd9488f809a24c48a2e.json, and the draft is triaged as promoted.\n2026-10-08 08:09 - ticfac run run_af0e77b99c1540b7b8005cf04fd2795d: eno try 1 (run dispatch #12) merged into epic/ex6 as de4fb597f98f; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "blocked_by": [
-    "0rt"
+    "0rt",
+    "ynd"
   ],
   "parent": "ex6",
   "role": "closeout",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-06T10:03:55.435655Z",
-  "updated_at": "2026-10-06T10:03:55.435655Z"
+  "updated_at": "2026-10-08T08:09:45.931856247Z",
+  "closed_at": "2026-10-08T08:09:45.931856247Z"
 }

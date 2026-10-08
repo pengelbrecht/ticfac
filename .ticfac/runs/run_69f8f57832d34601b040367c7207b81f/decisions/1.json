@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "[roles.implement] in .tick/runners.toml still explains kind = \"pi\" as the pi CLI (gjk's --approve trust story) and passes args = [\"--approve\"]. After 2q5 and uxi, kind pi in this repository only routes to the pi-durable runner through local-subprocess (or the cloud container), and neither of those reads args. The comment and the dead args mislead a reader into thinking a pi-CLI path still exists.\nevidence: .tick/runners.toml [roles.implement] (comment block and args line); profiles-herdr/implement-tick.json executor local-subprocess\n\nticfac run epic-43y filed this backlog tick from the finding c1dded501e26560d1d14df1ba4d3c3714450c8a17236ef265931ce6cd594d546 (reported by run-epic-43y/tick-uxi/attempt-34): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/c1dded501e26560d1d14df1ba4d3c3714450c8a17236ef265931ce6cd594d546.json on the run branch.",
+    "epic_id": "ex6",
+    "role": "classify-tick",
+    "tick_id": "2p3",
+    "title": "runners.toml implement cell still describes the deleted pi CLI"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.95,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.03,
+      "design": 0,
+      "diagnosis": 0.01,
+      "mechanical": 0.96,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1335,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T13:48:14Z",
+  "answered_at": "2026-10-07T13:48:14Z",
+  "provenance": {
+    "run_id": "run_69f8f57832d34601b040367c7207b81f",
+    "tick_id": "2p3",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "b1229d0d2a7fe7f8bee09a6758a7702ac146fbc9",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:0fd84feaa6def26de94fef1a4da33b194dfa9b1fa1c66cc1c31a8a555019f2a4",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

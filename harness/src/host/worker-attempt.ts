@@ -67,12 +67,13 @@ import {
   watchEvents,
 } from "@earendil-works/pi-durable";
 import { CodingTools } from "@earendil-works/pi-durable/tools";
-import { bashNonceMarker, FactorySandboxEnv } from "../env/factory-sandbox.js";
+import { bashNonceMarker, FactorySandboxEnv, type RestoreCause } from "../env/factory-sandbox.js";
 import type { SandboxBootOptions, SandboxDoor } from "../env/sandbox-door.js";
 import { gatewayModelRef } from "../gateway/workers-ai.js";
 import { createTrackedBashTool } from "../tools/tracked-bash.js";
 import { armWallDeadline, WORKER_HEADLESS_LINE, workerOnYield } from "../worker-contract.js";
 import {
+  type RestoreOutcome,
   retireWipSnapshot,
   type WorkspaceGit,
   workspaceCheckpointExtension,
@@ -153,6 +154,17 @@ export type WorkerAttemptSpec = {
   readonly name: string;
   readonly tick: string;
   readonly role: string;
+  /**
+   * What the attempt IS (tick 8gd). A `worker` implements one tick: its work
+   * lands on the branch its boot reports, its wip is checkpointed there, and
+   * its finish pushes a report. A `review` reads one pull request and writes
+   * one findings file: it commits nothing, so it has no branch to checkpoint
+   * to (the boot's `branch=` is the ref that was reviewed) and no workspace
+   * to restore — a container lost before the finish has lost its findings,
+   * and the finish fails honestly. Default `worker`, for every spec recorded
+   * before the field existed.
+   */
+  readonly kind?: "worker" | "review";
   /**
    * The container environment the boot and finish phases run with — the
    * factory's `workerBootEnv`: the run's inputs, the gateway, the git
@@ -262,6 +274,14 @@ export type WorkerAttemptDeps = {
 
 /** What a parsed boot handoff carries. */
 export type BootHandoff = { branch: string; result: string; prompt: string };
+
+/**
+ * The attempt's kind, defaulted: specs recorded before the field existed are
+ * workers, which is what they all were.
+ */
+export function kindOf(spec: { readonly kind?: "worker" | "review" }): "worker" | "review" {
+  return spec.kind ?? "worker";
+}
 
 // ------------------------------------------------------- the handoff parse ---
 
@@ -745,6 +765,12 @@ export class WorkerAttemptHost {
    * container never ran the boot, so the record is written again).
    */
   private async prepareFinish(record: WorkerAttemptRecord): Promise<void> {
+    // A review restores nothing (tick 8gd): its findings live in the
+    // container's /tmp, not on a pushed branch, so a container lost before
+    // the finish has lost them and the finish will fail honestly. The
+    // worker-only steps below — the workspace restore, the wip retirement,
+    // the branch record — are about work a review never holds.
+    if (kindOf(record.spec) === "review") return;
     const env = this.envFor(record);
     const ready = await env.ensureWorkspaceReady();
     if (ready.kind === "restored") {
@@ -820,25 +846,28 @@ export class WorkerAttemptHost {
       cwd: workdir,
       ...(this.deps.guardDir === undefined ? {} : { guardDir: this.deps.guardDir }),
       ...(this.deps.bashPollMs === undefined ? {} : { pollMs: this.deps.bashPollMs }),
-      ...(git.branch === "" ? {} : { workspace: git }),
-      // The nonce path's ear (tick dbi): a tracked bash whose nonce no
-      // container knows restores before it re-starts — until this wiring
-      // that restore reached no log anywhere, and the operator watching the
-      // run saw only a mysteriously slow tool round. The between-rounds
-      // loss keeps its own line (the checkpoint extension's onRestore in
-      // registryFor), so one restore says one line.
-      onRestore: (outcome) =>
-        void this.say(
-          outcome.kind === "restored"
-            ? `a tracked bash found a fresh container; the workspace was restored to ${outcome.sha.slice(0, 12)} (${outcome.subject})`
-            : `a tracked bash found a fresh container and the workspace could not be restored: ${outcome.error}`,
-        ),
+      // Only a worker's tools restore from an attempt branch (tick 8gd): a
+      // review commits nothing, so its boot's `branch=` (the reviewed ref)
+      // must never be given to the restore — restoring a review's workspace
+      // from the pull request would check out hostile code, the one thing
+      // the review phase exists not to do.
+      ...(kindOf(spec) === "worker" && git.branch !== "" ? { workspace: git } : {}),
+      // The env's own restores' ear (ticks dbi and qzg): a tracked bash whose
+      // nonce no container knows restores before it re-starts, and a
+      // container lost MID-COMMAND restores before the model is told to
+      // re-run — until the dbi wiring neither restore reached any log
+      // anywhere, and the operator watching the run saw only a mysteriously
+      // slow tool round. The between-rounds loss keeps its own line (the
+      // checkpoint extension's onRestore in registryFor), so one restore
+      // says one line — and the cause names which loss this one was.
+      onRestore: (outcome, cause) => void this.say(restoreSaid(outcome, cause)),
     });
     return this.env;
   }
 
   private registryFor(record: WorkerAttemptRecord, env: FactorySandboxEnv): Registry {
     const spec = record.spec;
+    const review = kindOf(spec) === "review";
     const result = record.boot?.result ?? `RESULT-${spec.tick}.md`;
     const workdir = env.cwd;
     const reportPath = result.startsWith("/") ? result : `${workdir}/${result}`;
@@ -854,21 +883,40 @@ export class WorkerAttemptHost {
           section(
             "ticfac-worker",
             () =>
-              `${WORKER_HEADLESS_LINE}\n\nYour working directory is ${workdir}, a checkout of the ` +
-              `repository on branch ${record.boot?.branch ?? "(unknown)"}. Every tool runs there.`,
+              review
+                ? // The review's own framing (tick 8gd): same headless line, but
+                  // what it works against and what it owes are the review's —
+                  // a diff to read as evidence, a findings file to write, no
+                  // branch to commit to and no report to push.
+                  `${WORKER_HEADLESS_LINE}\n\nYou are reviewing a pull request. Your working directory is ${workdir}, ` +
+                  `the checkout at its base; the pull request itself is fetched as ${record.boot?.branch ?? "(unknown ref)"}, ` +
+                  `read as evidence and never run. Every tool runs in the working directory. Write your ` +
+                  `findings to ${reportPath} — that file is this attempt's only output.`
+                : `${WORKER_HEADLESS_LINE}\n\nYour working directory is ${workdir}, a checkout of the ` +
+                  `repository on branch ${record.boot?.branch ?? "(unknown)"}. Every tool runs there.`,
             { tag: false },
           ),
         ],
         hooks: [
           hook(GenerationTask, {
-            onYield: workerOnYield(env, {
-              reportPath,
-              repoDir: workdir,
-              branch: record.boot?.branch ?? "",
-              tick: spec.tick,
-              role: spec.role,
-              log: (line) => void this.say(line),
-            }),
+            // The report contract (the yield pushback, the lint-report check)
+            // is a worker's: it commits on a branch and writes a STATUS'd
+            // report. A review has neither — its findings file is posted by
+            // the finish phase as-is — so no yield hook stands over it
+            // (tick 8gd); the boot prompt carries the review's whole
+            // instruction and the wall is the bound.
+            ...(review
+              ? {}
+              : {
+                  onYield: workerOnYield(env, {
+                    reportPath,
+                    repoDir: workdir,
+                    branch: record.boot?.branch ?? "",
+                    tick: spec.tick,
+                    role: spec.role,
+                    log: (line) => void this.say(line),
+                  }),
+                }),
             afterResponse: (message) => {
               const text = message.content
                 .flatMap((block) => (block.type === "text" ? [block.text] : []))
@@ -885,7 +933,7 @@ export class WorkerAttemptHost {
         ],
       }),
     );
-    if (record.boot?.branch !== undefined) {
+    if (!review && record.boot?.branch !== undefined) {
       registry.install(
         workspaceCheckpointExtension({
           shell: env.hostShell(),
@@ -1259,6 +1307,28 @@ export class WorkerAttemptHost {
 }
 
 // --------------------------------------------------------------- helpers ---
+
+/**
+ * The host's one log line for a restore the env performed on its own (ticks
+ * dbi and qzg), so the operator watching the say-stream can tell which loss
+ * they are hearing — a mid-command loss, or a tracked bash that found a
+ * fresh container — and not read a mysteriously slow round instead. Every
+ * line is spelled out in full, deliberately: the cloud runbook's [A2]
+ * observation criteria cite these by their text, and
+ * internal/cli/runbook_fault_evidence_test.go pins each one against both
+ * sides — a shared prefix and a shared suffix would move the whole line out
+ * from under the runbook, and under the guard, unread.
+ */
+function restoreSaid(outcome: RestoreOutcome, cause: RestoreCause): string {
+  if (outcome.kind === "restored") {
+    return cause === "mid-command"
+      ? `the container was lost mid-command; the workspace was restored to ${outcome.sha.slice(0, 12)} (${outcome.subject})`
+      : `a tracked bash found a fresh container; the workspace was restored to ${outcome.sha.slice(0, 12)} (${outcome.subject})`;
+  }
+  return cause === "mid-command"
+    ? `the container was lost mid-command and the workspace could not be restored: ${outcome.error}`
+    : `a tracked bash found a fresh container and the workspace could not be restored: ${outcome.error}`;
+}
 
 /**
  * The door every container call of the attempt goes through: the run's boot

@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 19,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "A local subprocess worker on pi-durable records its model spend (or says not measured) exactly as a herdr/pi-CLI worker does; tests.",
+    "description": "Found folding main into epic/hn6 (2026-10-06): main's pi runner is now the pi-durable Node harness (43y), which has no --extension flag and rejects unknown args, so gzv's metering-extension injection was removed from the subprocess launch. The metering setting is still resolved per dispatch, and herdr panes still load it through the pi CLI, but local subprocess workers' spend is unmetered until the harness reads it from worker.json.",
+    "epic_id": "ex6",
+    "role": "classify-tick",
+    "tick_id": "m1w",
+    "title": "Local subprocess workers on pi-durable are unmetered: carry the metering setting through worker.json"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.66,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.73,
+      "design": 0,
+      "diagnosis": 0.01,
+      "mechanical": 0.23,
+      "translation": 0.03
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1138,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T17:35:06Z",
+  "answered_at": "2026-10-07T17:35:06Z",
+  "provenance": {
+    "run_id": "run_69f8f57832d34601b040367c7207b81f",
+    "tick_id": "m1w",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "175d1d5e58cc33da15e40013fb5b11052d257501",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:0fd84feaa6def26de94fef1a4da33b194dfa9b1fa1c66cc1c31a8a555019f2a4",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

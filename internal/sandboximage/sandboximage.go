@@ -620,6 +620,37 @@ const (
 	WorkerBootPromptEnd = "ticks-worker-boot-prompt-end"
 )
 
+// The review job's boot and finish phases (epic ex6, tick 8gd).
+//
+// The PR-review job's conversation is hosted on the run's WorkerAgent like
+// every other cloud worker's, so the review container — which runs from the
+// same entrypoint the epic orchestrator does — gets the same two-phase
+// contract with the review's own markers: a reader can tell a review handoff
+// from a worker's. The commands are [OrchestratorCommand]'s, never
+// [WorkerCommand]'s. The marker line carries the same two fields the
+// worker's carries, spelled for what they mean here: the ref that was
+// reviewed, and the findings path the finish phase posts.
+const (
+	// ReviewBootArg turns [OrchestratorCommand] into the review's boot phase.
+	ReviewBootArg = "--boot"
+
+	// ReviewFinishArg turns [OrchestratorCommand] into the review's finish
+	// phase, which posts the findings file and exits with its status.
+	ReviewFinishArg = "--finish"
+
+	// ReviewBootMarker is what the review's boot phase prints once the
+	// container is booted. The prompt follows between ReviewBootPromptBegin
+	// and ReviewBootPromptEnd. Content, not an exit code.
+	ReviewBootMarker = "ticks-review-boot-ok"
+
+	// ReviewBootPromptBegin opens the rendered review prompt the boot hands
+	// the host.
+	ReviewBootPromptBegin = "ticks-review-boot-prompt-begin"
+
+	// ReviewBootPromptEnd closes the rendered review prompt.
+	ReviewBootPromptEnd = "ticks-review-boot-prompt-end"
+)
+
 // WorkerBootCommand is what the pi-durable host runs as its environment's
 // first command: the boot phase of one attempt's worker contract.
 func WorkerBootCommand() string { return WorkerCommand + " " + WorkerBootArg }
@@ -650,6 +681,14 @@ const (
 // WorkerSetupCommand is what the host's restore runs after it checks the
 // last wip snapshot out into the rebuilt container.
 func WorkerSetupCommand() string { return WorkerCommand + " " + WorkerSetupArg }
+
+// ReviewBootCommand is the review's boot phase, as the hosted review's agent
+// runs it first.
+func ReviewBootCommand() string { return OrchestratorCommand + " " + ReviewBootArg }
+
+// ReviewFinishCommand is the review's finish phase, as the hosted review's
+// agent runs it once the conversation settles.
+func ReviewFinishCommand() string { return OrchestratorCommand + " " + ReviewFinishArg }
 
 // The boundary guard (tick dxk).
 //

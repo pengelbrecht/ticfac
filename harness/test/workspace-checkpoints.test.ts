@@ -13,7 +13,11 @@ import {
 } from "@earendil-works/pi-durable";
 import { createReadTool, createWriteTool } from "@earendil-works/pi-durable/tools";
 import { describe, expect, it } from "vitest";
-import { BASH_NONCE_VAR, FactorySandboxEnv } from "../src/env/factory-sandbox.js";
+import {
+  BASH_NONCE_VAR,
+  FactorySandboxEnv,
+  type RestoreCause,
+} from "../src/env/factory-sandbox.js";
 import { PROCESS_CWD } from "../src/env/sandbox-door.js";
 import { createTrackedBashTool } from "../src/tools/tracked-bash.js";
 import {
@@ -225,6 +229,90 @@ describe("a container lost mid-turn", () => {
     expect(result.error.message).toContain("restored to cafef00d");
   });
 
+  // Tick qzg: the mid-command restore (containerLost) reached only the MODEL
+  // — the sha it rebuilt from went into the ExecutionError message the
+  // model reads — while the WorkerAgent host's own log said nothing: the
+  // operator watching the say-stream saw a mysteriously slow round and then
+  // a model that knew something they did not. The env now fires the same ear
+  // the nonce path fires (tick dbi), naming the loss that caused it, so the
+  // host's line and the model's message agree.
+  it("tells the host which sha the mid-command restore rebuilt from", async () => {
+    const door = lostDoor();
+    const restores: { outcome: RestoreOutcome; cause: RestoreCause }[] = [];
+    const env = new FactorySandboxEnv({
+      sandbox: door.sandbox,
+      guardDir: null,
+      pollMs: 10,
+      workspace: GIT,
+      onRestore: (outcome, cause) => {
+        restores.push({ outcome, cause });
+      },
+    });
+
+    const promise = env.exec(
+      "sleep 0.5; echo done",
+      { env: { [BASH_NONCE_VAR]: "bash-mid-heard-1" } },
+      BACKGROUND_CONTEXT,
+    );
+    await waitFor("the tracked command to start", () => door.starts.length === 1);
+    // The container is destroyed mid-command: its process is lost, and the
+    // restore the model is told about is the one the host must hear too.
+    door.loseRunning();
+    const result = await promise;
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("restored to cafef00d (wip: tool round)");
+    // One restore, one line: the outcome the model read, named for the loss
+    // that caused it — not the nonce path's word for a different loss.
+    expect(restores).toEqual([
+      {
+        outcome: { kind: "restored", sha: "cafef00d", subject: "wip: tool round" },
+        cause: "mid-command",
+      },
+    ]);
+  });
+
+  it("tells the host a mid-command restore that failed, and still fails the command", async () => {
+    // The restore's checkout of the attempt branch's tip fails: whatever the
+    // loss rebuilt, it is not the workspace the model was working on.
+    const door = fakeSandboxDoor({
+      commandMs: 500,
+      runExit: (command) => (command.includes('git checkout -q -B "$BRANCH" FETCH_HEAD') ? 128 : 0),
+    });
+    const restores: { outcome: RestoreOutcome; cause: RestoreCause }[] = [];
+    const env = new FactorySandboxEnv({
+      sandbox: door.sandbox,
+      guardDir: null,
+      pollMs: 10,
+      workspace: GIT,
+      onRestore: (outcome, cause) => {
+        restores.push({ outcome, cause });
+      },
+    });
+
+    const promise = env.exec(
+      "sleep 0.5; echo done",
+      { env: { [BASH_NONCE_VAR]: "bash-mid-heard-2" } },
+      BACKGROUND_CONTEXT,
+    );
+    await waitFor("the tracked command to start", () => door.starts.length === 1);
+    door.loseRunning();
+    const result = await promise;
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.message).toContain("the workspace restore failed");
+    // The ear hears the failure too, so the operator's line and the model's
+    // agree when there is nothing to re-run on.
+    expect(restores.length).toBe(1);
+    expect(restores[0]?.cause).toBe("mid-command");
+    const outcome = restores[0]?.outcome;
+    expect(outcome?.kind).toBe("failed");
+    if (outcome?.kind !== "failed") return;
+    expect(outcome.error).toContain("git checkout");
+  });
+
   it("fails loudly when no workspace git is configured to restore from", async () => {
     const door = lostDoor();
     const env = new FactorySandboxEnv({ sandbox: door.sandbox, guardDir: null, pollMs: 10 });
@@ -296,14 +384,14 @@ describe("a container lost mid-turn", () => {
         return undefined;
       },
     });
-    const restores: RestoreOutcome[] = [];
+    const restores: { outcome: RestoreOutcome; cause: RestoreCause }[] = [];
     const env = new FactorySandboxEnv({
       sandbox: door.sandbox,
       guardDir: null,
       pollMs: 10,
       workspace: GIT,
-      onRestore: (outcome) => {
-        restores.push(outcome);
+      onRestore: (outcome, cause) => {
+        restores.push({ outcome, cause });
       },
     });
 
@@ -315,7 +403,15 @@ describe("a container lost mid-turn", () => {
       BACKGROUND_CONTEXT,
     );
     expect(result.ok).toBe(true);
-    expect(restores).toEqual([{ kind: "restored", sha: "cafef00d", subject: "wip: tool round" }]);
+    // The same ear the mid-command path now fires too (tick qzg), so the
+    // outcome alone is not enough to say WHICH loss it was: the nonce path
+    // names itself, and a mid-command restore says another word.
+    expect(restores).toEqual([
+      {
+        outcome: { kind: "restored", sha: "cafef00d", subject: "wip: tool round" },
+        cause: "nonce-replay",
+      },
+    ]);
     // The restore really ran, and the command re-started on the rebuilt box.
     expect(door.runs.some((r) => r.command.includes("find . -mindepth 1 -maxdepth 1"))).toBe(true);
     expect(door.starts[0]?.command).toContain("echo replayed");

@@ -66,6 +66,7 @@
  */
 
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
+import type { WorkerAttemptSpec } from "ticfac-harness";
 
 import {
   type RunRecord,
@@ -150,8 +151,8 @@ import {
   sandboxName,
   terminalExitReason,
 } from "./sandbox";
-import { workerAgentsFromEnv } from "./worker-agent";
-import { reviewHarness, workerModel } from "./worker-boot";
+import { type WorkerAgentStub, workerAgentsFromEnv } from "./worker-agent";
+import { reviewHarness, WORKER_DEFAULT_HARNESS, workerModel } from "./worker-boot";
 
 // ------------------------------------------------------------- the shape ---
 
@@ -1254,6 +1255,47 @@ async function askProcess(
   return { answered: false, error };
 }
 
+/**
+ * The hosted conversation's equivalent of asking the process (tick 8gd): the
+ * agent's own state, mapped by {@link hostedAgentProcessView}, with the same
+ * two ways to fail — "no such attempt" is an answer, a failed question is
+ * only ever about the observer's reach.
+ */
+async function askHostedAgent(agent: WorkerAgentStub): Promise<ProcessQuestion> {
+  let error = "the hosted conversation could not be asked";
+  for (let attempt = 0; attempt < PROCESS_QUERY_ATTEMPTS; attempt += 1) {
+    try {
+      return { answered: true, view: hostedAgentProcessView(await agent.state()) };
+    } catch (thrown) {
+      error = thrown instanceof Error ? thrown.message : String(thrown);
+    }
+  }
+  return { answered: false, error };
+}
+
+/**
+ * Maps the hosted attempt's phase onto the process view the watch loop reads
+ * (tick 8gd): a phase under way is `running`; settled is the finish phase's
+ * own exit code — exit 0 `completed`, anything else `failed` — the same
+ * mapping the executor's statusFromProcess makes for a container process.
+ * An agent with no attempt recorded answers null, the process view's "gone":
+ * the attempt is not there, and the boot's gone handling takes it from there.
+ */
+export function hostedAgentProcessView(state: {
+  phase: string;
+  exit_code: number | null;
+}): SandboxProcessView | null {
+  if (state.phase === "absent") return null;
+  if (state.phase !== "settled") {
+    return { id: "hosted", state: "running", exit_code: null };
+  }
+  return {
+    id: "hosted",
+    state: state.exit_code === 0 ? "completed" : "failed",
+    exit_code: state.exit_code,
+  };
+}
+
 type Observation = {
   process: ObservedProcessState;
   exit_code: number | null;
@@ -1309,7 +1351,15 @@ type ObserveInput = {
   context: RunContext;
   boot: number;
   sandbox: string;
-  process_id: string;
+  /** The process to ask; null when the boot is hosted and there is none. */
+  process_id: string | null;
+  /**
+   * The hosted conversation's agent (tick 8gd). Present exactly when
+   * `process_id` is null: a hosted boot is watched through its agent — the
+   * log from the agent's own log, the state question from the agent's phase
+   * — while every other read (lease, budgets, stop record) is the same.
+   */
+  agent?: WorkerAgentStub;
   offset: number;
   seq: number;
   poll_ms: number;
@@ -1332,8 +1382,13 @@ type ObserveInput = {
  */
 export async function observe(env: Env, input: ObserveInput): Promise<Observation> {
   const { params } = input;
-  const binding = sandboxBinding(env);
-  if (binding === null) {
+  // A hosted conversation (tick 8gd) is watched through its agent: the same
+  // four reads — log, lease, the state question, the budgets — with the log
+  // and the state question answered by the agent instead of a process. Every
+  // other boot reads a process as before.
+  const agent = input.agent;
+  const binding = agent === undefined ? sandboxBinding(env) : null;
+  if (binding === null && agent === undefined) {
     return {
       process: "gone",
       exit_code: null,
@@ -1344,12 +1399,15 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
       cost_usd: null,
     };
   }
-  const sandbox = await binding.get(input.sandbox);
+  const sandbox = agent === undefined ? await binding!.get(input.sandbox) : null;
 
   let offset = input.offset;
   let seq = input.seq;
   try {
-    const output = await sandbox.readOutput(input.process_id, offset);
+    const output =
+      sandbox !== null
+        ? await sandbox.readOutput(input.process_id!, offset)
+        : await agent!.readLog(offset);
     if (output.text !== "") {
       const wrote = await writeHarnessSegment(
         env.ARTIFACTS,
@@ -1380,7 +1438,8 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
   // fact about the orchestrator and may report a state, while a FAILED
   // QUESTION is a fact about the observer's reach and reports `unknown`,
   // never `gone`.
-  const question = await askProcess(sandbox, input.process_id);
+  const question =
+    sandbox !== null ? await askProcess(sandbox, input.process_id!) : await askHostedAgent(agent!);
   const at = Date.now();
 
   // Budgets are enforced on every pass (tick dl8): the one pass that ever
@@ -1691,7 +1750,7 @@ async function supervisePass(
     const phase: OrchestratorPhase =
       options.job === "review" ? "review" : boot === 1 ? "run" : "reconcile";
 
-    let booted: { process_id: string; at_ms: number };
+    let booted: { process_id: string | null; hosted: boolean; at_ms: number };
     try {
       booted = await step.do(
         `${options.label}:boot:${attempt}`,
@@ -1750,10 +1809,22 @@ async function supervisePass(
           // so (below), and the pool's snapshot on /api/claude-sub says why.
           let claudeSub: { label: string; jobId: string } | undefined;
           let claudeSubNote = "";
+          // Whether this deployment hosts worker conversations (tick 8gd):
+          // what makes the hosted kind a servable REVIEW harness. The review
+          // is the last cloud boot that ran a CLI harness on the floor; on a
+          // deployment with a WORKER_AGENTS binding its conversation is
+          // hosted like every worker's, and the floor is only what a
+          // non-hosting deployment falls to.
+          const reviewHosts =
+            options.job === "review" ? workerAgentsFromEnv(env) !== undefined : false;
           const reviewRouting =
             options.job === "review"
               ? {
-                  harness: reviewHarness(context.config.harness, env.RUN_WORKER_HARNESS),
+                  harness: reviewHarness(
+                    context.config.harness,
+                    env.RUN_WORKER_HARNESS,
+                    reviewHosts,
+                  ),
                   model: workerModel(context.config.model, env.RUN_WORKER_MODEL),
                 }
               : undefined;
@@ -1771,10 +1842,11 @@ async function supervisePass(
               claudeSubNote = ` on claude subscription ${lease.label}`;
             } else {
               // The step-down (spike jvj's design): the same ladder with the
-              // rung dropped — the review's own floor and the deployment's
-              // standing model, both Workers AI. For THIS job only; the next
-              // dispatch asks the pool again.
-              reviewRouting.harness = reviewHarness(null, env.RUN_WORKER_HARNESS);
+              // rung dropped — on a hosting deployment that is the hosted
+              // kind, the deployment's standing route (tick 8gd); on any
+              // other it is the review's own floor, both Workers AI. For
+              // THIS job only; the next dispatch asks the pool again.
+              reviewRouting.harness = reviewHarness(null, env.RUN_WORKER_HARNESS, reviewHosts);
               reviewRouting.model = workerModel(null, env.RUN_WORKER_MODEL);
               claudeSubNote = ` — claude-sub ${claudeSubLeaseRefusal(lease)}, so this job steps down to the Workers AI rung (${reviewRouting.harness} on ${reviewRouting.model})`;
             }
@@ -1802,97 +1874,129 @@ async function supervisePass(
             keepAlive: true,
             ...(claudeSub === undefined ? {} : { claudeSub }),
           });
-          const started = await sandbox.startProcess(ORCHESTRATOR_COMMAND, {
-            env: {
-              ...orchestratorEnv({
-                run_id: params.run_id,
-                epic: params.epic,
-                base_sha: params.base_sha,
-                repo_url: context.repo_url,
-                gateway_base_url: context.gateway_base_url,
-                gateway_token: credential.token,
-                phase,
-                // The chain this container belongs to (tick hyi). Every boot of the
-                // orchestrator carries it, including a reconcile's replacement: the
-                // replacement is the same causal chain as the sandbox it succeeds.
-                ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
-                // The grade's teeth (tick pzf): `operator` hands over the token
-                // that can push, `run` hands over this run's own `tkr_` credential,
-                // which github.com will not accept and this factory's git door will
-                // not forward a push for.
-                github_token: containerGitToken(context.git, github.token, credential.token),
-                ...(github.token_url === undefined ? {} : { github_token_url: github.token_url }),
-                // Which harness and model the container's entrypoint probes before
-                // it starts its job. The two jobs are routed differently (tick dl8):
-                //
-                // - the ORCHESTRATOR container execs `ticfac run-epic`, so its
-                //   harness/model pair only has to satisfy the entrypoint's
-                //   pre-flight probes — the deployment's run-level choice
-                //   (RUN_HARNESS/RUN_MODEL) stands, as wrangler.toml pins it;
-                // - the REVIEW job is routed like every other cloud role, through
-                //   the worker ladder — with the review's own floor (`reviewHarness`,
-                //   epic 43y tick jhp): the workers are hosted on pi-durable and the
-                //   pi CLI is deleted, so the review — the one cloud boot that still
-                //   runs a CLI harness in its container — falls to omp on GLM, never
-                //   the image's own harness selection, which a deployment that
-                //   routes nothing would leave at claude (the xte finding dl8
-                //   absorbed).
-                ...(options.job === "review"
-                  ? {
-                      // The pair the lease decided on: the rung the config
-                      // selected, or the Workers AI rung a failed lease
-                      // stepped this job down to (never a wait).
-                      harness: reviewRouting!.harness,
-                      model: reviewRouting!.model,
-                    }
-                  : {
-                      ...(context.config.harness === null
-                        ? {}
-                        : { harness: context.config.harness }),
-                      ...(context.config.model === null ? {} : { model: context.config.model }),
-                      // The named run config this submission carried (tick
-                      // ba4): forwarded to the orchestrator container's
-                      // `ticfac run-epic`, which resolves it the same way a
-                      // local run's --config does.
-                      ...(params.config === undefined ? {} : { config: params.config }),
-                    }),
-                sandbox_image: image,
-                // The account's container ceiling (hn6's cloud run): the run the
-                // orchestrator drives keeps its live workers under it, less the
-                // orchestrator's own container, so it never asks the door for a
-                // slot it can count itself out of.
-                factory_max_instances: factoryMaxInstances(env),
-                // The factory URL is given per BOOT (tick 7eq): every orchestrator
-                // reports its own finish to the done door over it, and the same
-                // URL is what its `ticfac run-epic` hands the per-tick sandbox
-                // door's client — the one dispatch path a container has.
-                ...(factoryBaseURL(env) === null
-                  ? {}
-                  : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
-                // The review half (tick v7g). Given per BOOT, from the run's own row
-                // — a container is told which pull request it is reading, and there
-                // is no other way for it to find out. The factory URL comes with it
-                // because that is where the findings go; a review container that
-                // could not reach the door would have nowhere to put its one output.
-                ...(context.review === null || factoryBaseURL(env) === null
-                  ? {}
-                  : {
-                      review_pr: context.review.pr_number,
-                      review_head_sha: context.review.head_sha,
-                      factory_url: factoryBaseURL(env)!,
-                      factory_project: params.project,
-                    }),
-              }),
-              // The claude-sub process environment (tick 6fv): the OAuth
-              // PLACEHOLDER that puts the CLI in its subscription dialect, the
-              // interception's CA, and the marker the entrypoint's claude-sub
-              // route keys on. Nothing here is a credential — the subscription
-              // token is a Worker secret the proxy swaps in per request, and it
-              // never enters the container.
-              ...(claudeSub === undefined ? {} : claudeSubProcessEnv()),
-            },
-          });
-          return { process_id: started.id, at_ms: Date.now() };
+          // The environment the container (or, hosted, the boot and finish
+          // phases the agent runs in it) starts with — the same for both
+          // jobs, because both are routed like cloud roles (tick dl8).
+          const bootEnv: Record<string, string> = {
+            ...orchestratorEnv({
+              run_id: params.run_id,
+              epic: params.epic,
+              base_sha: params.base_sha,
+              repo_url: context.repo_url,
+              gateway_base_url: context.gateway_base_url,
+              gateway_token: credential.token,
+              phase,
+              // The chain this container belongs to (tick hyi). Every boot of the
+              // orchestrator carries it, including a reconcile's replacement: the
+              // replacement is the same causal chain as the sandbox it succeeds.
+              ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
+              // The grade's teeth (tick pzf): `operator` hands over the token
+              // that can push, `run` hands over this run's own `tkr_` credential,
+              // which github.com will not accept and this factory's git door will
+              // not forward a push for.
+              github_token: containerGitToken(context.git, github.token, credential.token),
+              ...(github.token_url === undefined ? {} : { github_token_url: github.token_url }),
+              // Which harness and model the container's entrypoint probes before
+              // it starts its job. The two jobs are routed differently (tick dl8):
+              //
+              // - the ORCHESTRATOR container execs `ticfac run-epic`, so its
+              //   harness/model pair only has to satisfy the entrypoint's
+              //   pre-flight probes — the deployment's run-level choice
+              //   (RUN_HARNESS/RUN_MODEL) stands; this config leaves
+              //   RUN_HARNESS unset and the entrypoint's omp default covers
+              //   the probe (tick 8gd);
+              // - the REVIEW job is routed like every other cloud role, through
+              //   the worker ladder — with the review's own floor (`reviewHarness`,
+              //   epic 43y tick jhp): since tick 8gd the ladder resolves the
+              //   HOSTED kind on a deployment that hosts conversations — the
+              //   review's conversation runs in the run's WorkerAgent, and the
+              //   container runs only the review's --boot/--finish halves —
+              //   and the CLI floor (omp on GLM) is what a deployment that
+              //   hosts nothing falls to, never the image's own harness
+              //   selection, which a deployment that routes nothing would
+              //   leave at claude (the xte finding dl8 absorbed).
+              ...(options.job === "review"
+                ? {
+                    // The pair the lease decided on: the rung the config
+                    // selected, or the Workers AI rung a failed lease
+                    // stepped this job down to (never a wait).
+                    harness: reviewRouting!.harness,
+                    model: reviewRouting!.model,
+                  }
+                : {
+                    ...(context.config.harness === null ? {} : { harness: context.config.harness }),
+                    ...(context.config.model === null ? {} : { model: context.config.model }),
+                    // The named run config this submission carried (tick
+                    // ba4): forwarded to the orchestrator container's
+                    // `ticfac run-epic`, which resolves it the same way a
+                    // local run's --config does.
+                    ...(params.config === undefined ? {} : { config: params.config }),
+                  }),
+              sandbox_image: image,
+              // The account's container ceiling (hn6's cloud run): the run the
+              // orchestrator drives keeps its live workers under it, less the
+              // orchestrator's own container, so it never asks the door for a
+              // slot it can count itself out of.
+              factory_max_instances: factoryMaxInstances(env),
+              // The factory URL is given per BOOT (tick 7eq): every orchestrator
+              // reports its own finish to the done door over it, and the same
+              // URL is what its `ticfac run-epic` hands the per-tick sandbox
+              // door's client — the one dispatch path a container has.
+              ...(factoryBaseURL(env) === null
+                ? {}
+                : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
+              // The review half (tick v7g). Given per BOOT, from the run's own row
+              // — a container is told which pull request it is reading, and there
+              // is no other way for it to find out. The factory URL comes with it
+              // because that is where the findings go; a review container that
+              // could not reach the door would have nowhere to put its one output.
+              ...(context.review === null || factoryBaseURL(env) === null
+                ? {}
+                : {
+                    review_pr: context.review.pr_number,
+                    review_head_sha: context.review.head_sha,
+                    factory_url: factoryBaseURL(env)!,
+                    factory_project: params.project,
+                  }),
+            }),
+            // The claude-sub process environment (tick 6fv): the OAuth
+            // PLACEHOLDER that puts the CLI in its subscription dialect, the
+            // interception's CA, and the marker the entrypoint's claude-sub
+            // route keys on. Nothing here is a credential — the subscription
+            // token is a Worker secret the proxy swaps in per request, and it
+            // never enters the container.
+            ...(claudeSub === undefined ? {} : claudeSubProcessEnv()),
+          };
+          // The hosted review (tick 8gd): its conversation is not a process
+          // in this container, it is the run's WorkerAgent's — the container
+          // runs only the review's --boot and --finish halves, which the
+          // agent drives. The supervisor watches the AGENT, not a process.
+          if (options.job === "review" && reviewRouting!.harness === WORKER_DEFAULT_HARNESS) {
+            const reviewSpec: WorkerAttemptSpec = {
+              name,
+              tick: params.epic,
+              role: "review",
+              kind: "review",
+              env: bootEnv,
+              model: reviewRouting!.model,
+              repoUrl: context.repo_url,
+              baseSha: params.base_sha,
+              // The conversation's wall is the run's own wall clock (the
+              // pass below enforces it too): a backstop that settles an
+              // abandoned conversation even if the run that watched it is
+              // gone, so no agent is left re-driving forever.
+              wallMs: context.config.max_wall_clock_ms,
+              boot: { keepAlive: true, ...(image === null ? {} : { pinnedImage: image }) },
+            };
+            const reviewHosting = await workerAgentsFromEnv(env)!(params.run_id);
+            // Non-null by construction: reviewHosts was true when the routing
+            // resolved to the hosted kind, and a resolver that returned null
+            // here would contradict it.
+            await reviewHosting!.agent(name).start(reviewSpec);
+            return { process_id: null, hosted: true, at_ms: Date.now() };
+          }
+          const started = await sandbox.startProcess(ORCHESTRATOR_COMMAND, { env: bootEnv });
+          return { process_id: started.id, hosted: false, at_ms: Date.now() };
         },
       );
     } catch (error) {
@@ -1972,6 +2076,12 @@ async function supervisePass(
       );
       return { ok: false, lost: renewal.lost, holder: renewal.holder, detail: renewal.detail };
     });
+
+    // The hosted conversation's agent (tick 8gd), when this boot hosts one:
+    // the watch and every stop below address it instead of a process.
+    const hostedAgent = booted.hosted
+      ? (await workerAgentsFromEnv(env)!(params.run_id))!.agent(name)
+      : undefined;
 
     // The container exists and is credentialed, so from here on every ending
     // of this boot — completed, tripped, out of looks, dead, thrown — destroys
@@ -2075,6 +2185,7 @@ async function supervisePass(
               boot,
               sandbox: name,
               process_id: booted.process_id,
+              ...(booted.hosted ? { agent: hostedAgent } : {}),
               offset,
               seq,
               poll_ms: pollMs,
@@ -2119,7 +2230,10 @@ async function supervisePass(
             await step.sleep(`${options.label}:grace:${attempt}`, context.config.stop_grace_ms);
           }
           await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
-            drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
+            drainAndKill(env, params, name, booted.process_id, boot, offset, seq, {
+              ...(booted.hosted ? { agent: hostedAgent } : {}),
+              reason: tripRevokeReason(trip),
+            }),
           );
           // A clean stop's credential outlives the grace window (that is the
           // point of the window) and dies with the run at finalize; a hard
@@ -2167,6 +2281,15 @@ async function supervisePass(
             });
             return { unanswerable: true };
           });
+          if (booted.hosted) {
+            // The agent that could not be asked is settled with the rest:
+            // an unsettled conversation keeps its heartbeat re-driving, and
+            // this run is not coming back to watch it. Settling it is a
+            // no-op when it already settled.
+            await step.do(`${options.label}:settle-hosted:${attempt}`, OBSERVE_RETRIES, () =>
+              stopHostedAgent(hostedAgent, "unanswerable"),
+            );
+          }
           bootEnded = `orchestrator boot ${boot}: ${detail}`;
           return { kind: "failed", detail, boots: counter.next - 1 };
         }
@@ -2185,7 +2308,10 @@ async function supervisePass(
           reported.since_ms ??= seen.at_ms;
           if (seen.at_ms - reported.since_ms >= settleMs) {
             await step.do(`${options.label}:linger:${attempt}`, OBSERVE_RETRIES, () =>
-              drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
+              drainAndKill(env, params, name, booted.process_id, boot, offset, seq, {
+                ...(booted.hosted ? { agent: hostedAgent } : {}),
+                reason: "lingered past its own report of the end",
+              }),
             );
             seen = { ...seen, process: "completed", exit_code: reported.outcome.exit_code ?? null };
             lingered = true;
@@ -2258,7 +2384,10 @@ async function supervisePass(
         // The orchestrator is still running and this instance is out of looks.
         // Stop it cleanly — never boot a replacement beside a live one.
         await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
-          drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
+          drainAndKill(env, params, name, booted.process_id, boot, offset, seq, {
+            ...(booted.hosted ? { agent: hostedAgent } : {}),
+            reason: "out of looks",
+          }),
         );
         // Unreachable on the paced backoff (hn6) — kept, and worded honestly,
         // for a pinned cadence or an early wake on the very last look.
@@ -2280,6 +2409,16 @@ async function supervisePass(
             };
       }
 
+      // A dead boot's hosted conversation (tick 8gd) is settled with the
+      // rest: the container is about to be destroyed, and an agent left
+      // unsettled keeps its heartbeat re-driving a conversation whose tools
+      // are all dead. Settling it is a no-op when it already settled —
+      // which is the common case here, a conversation that failed honestly.
+      if (booted.hosted) {
+        await step.do(`${options.label}:settle-hosted:${attempt}`, OBSERVE_RETRIES, () =>
+          stopHostedAgent(hostedAgent, "the boot's container was lost"),
+        );
+      }
       // The container is done for. Record why, then boot a replacement whose
       // first instruction reconciles.
       if (attempt < options.max_boots) {
@@ -2375,28 +2514,65 @@ function claudeSubLeaseRefusal(lease: Extract<LeaseOutcome, { ok: false }>): str
   }
 }
 
+/**
+ * Settles a hosted conversation the run is done with (tick 8gd): the agent's
+ * own reclaim, which stops it where it stands — no finish phase — and is a
+ * no-op on an already settled record. Every ending of a hosted boot passes
+ * through here or through `drainAndKill`'s reclaim, so no agent is left
+ * heartbeating over a conversation nothing will ever watch.
+ */
+async function stopHostedAgent(
+  agent: WorkerAgentStub | undefined,
+  reason: string,
+): Promise<{ settled: boolean }> {
+  if (agent === undefined) return { settled: false };
+  await agent.reclaim(reason).catch((error: unknown) => {
+    console.error(
+      `factory run-workflow: could not settle the hosted conversation: ${String(error)}`,
+    );
+  });
+  return { settled: true };
+}
+
 /** Last flush before the orchestrator is killed, so its final words survive. */
 async function drainAndKill(
   env: Env,
   params: RunWorkflowParams,
   name: string,
-  processID: string,
+  processID: string | null,
   boot: number,
   offset: number,
   seq: number,
+  stop?: { agent?: WorkerAgentStub; reason: string },
 ): Promise<{ killed: boolean }> {
   const binding = sandboxBinding(env);
   if (binding === null) return { killed: false };
   const sandbox = await binding.get(name);
+  const agent = stop?.agent;
   try {
-    const output = await sandbox.readOutput(processID, offset);
+    const output =
+      agent !== undefined
+        ? await agent.readLog(offset)
+        : await sandbox.readOutput(processID!, offset);
     await writeHarnessSegment(env.ARTIFACTS, params.project, params.run_id, boot, seq, output.text);
   } catch (error) {
     console.error(
       `factory run-workflow: ${params.run_id} could not make a final log flush: ${String(error)}`,
     );
   }
-  await sandbox.killProcess(processID).catch((error: unknown) => {
+  if (agent !== undefined) {
+    // A hosted conversation has no process to kill (tick 8gd): the run
+    // stops it where it stands — the conversation aborted, no finish
+    // phase, whatever the wip checkpoints pushed is already durable — and
+    // the container's destroy stays in the boot's own finally.
+    await agent.reclaim(stop!.reason).catch((error: unknown) => {
+      console.error(
+        `factory run-workflow: ${params.run_id} could not stop its hosted conversation: ${String(error)}`,
+      );
+    });
+    return { killed: true };
+  }
+  await sandbox.killProcess(processID!).catch((error: unknown) => {
     console.error(
       `factory run-workflow: ${params.run_id} could not kill its orchestrator: ${String(error)}`,
     );
@@ -2704,13 +2880,15 @@ export function applyProgress(outcome: RunOutcome, progress: RunProgress): RunOu
  *  - **The budgets are the same ones.** Cost and wall clock are enforced by
  *    the same pass machinery as any other run, because an autonomous loop with
  *    no ceiling is the one thing worse than a bad review.
- *  - **Routed like every other cloud role.** Its harness and model come from
- *    the worker ladder with the review's own floor (`reviewHarness`/
- *    `workerModel`): omp on GLM — the review is the one cloud boot that still
- *    runs a CLI harness in its container, the workers are hosted on
- *    pi-durable and the pi CLI is deleted (epic 43y, tick jhp) — never the
- *    image's own harness selection, which a deployment that routes nothing
- *    would leave at claude (the xte finding dl8 absorbed).
+ *  - **Routed like every other cloud role, hosted like every other worker.**
+ *    Its harness and model come from the worker ladder with the review's own
+ *    floor (`reviewHarness`/`workerModel`). Since tick 8gd the hosted kind is
+ *    a servable review route: on a deployment that hosts worker conversations
+ *    the review's conversation runs in the run's WorkerAgent and its container
+ *    runs only the review's `--boot`/`--finish` halves, with the CLI floor
+ *    (omp on GLM) as what a deployment that hosts nothing falls to — never
+ *    the image's own harness selection, which a deployment that routes
+ *    nothing would leave at claude (the xte finding dl8 absorbed).
  */
 export async function superviseReview(
   env: Env,

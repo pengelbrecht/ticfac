@@ -1,0 +1,79 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "ex6",
+    "job_id": "run-run_af0e77b99c1540b7b8005cf04fd2795d/tick-0rt/attempt-7",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (cloudflare-sandbox/pi-durable, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:c64677c8ed510391d85d8f252dd964bff0cfa948806715fd644320ecb29e56ea",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "a5e191bbdb288e15bf2fa67f4c21f58be1045d19",
+    "tick_id": "0rt"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "Tick m1w's finish line — \"local subprocess workers' spend is unmetered until the harness reads it from worker.json\" — is delivered on the Go side only: internal/exec/subprocess/workerconfig.go:137 writes the join (gateway URL, run id, composed cf-aig-metadata value, credential pipeline) into worker.json, but no harness code reads it, so the local durable worker still calls Workers AI through localWorkersAIProvider() on ambient credentials with no gateway route and no attribution, and the epic's criterion \"pi-durable workers are metered locally and in the cloud\" fails its local half. workerconfig.go:112 even cites \"harness/src/local/gateway-metering.ts, tick m1w\" — a file that exists on no branch — and the gate stayed green because the only tests (workerconfig_test.go, executor_metering_test.go) exercise the writer. Ready when the harness half exists and is exercised: read the join from worker.json, compose the same provider override the pi CLI extension composes on the models the join applies to, with a harness test that a metered local launch tags its calls.\nevidence: internal/exec/subprocess/workerconfig.go:100-160 (writes Metering, cites harness/src/local/gateway-metering.ts); harness/src/local/worker-host.ts:105-124 (LocalWorkerConfig declares no metering field) and :167-193 (localWorkersAIProvider, ambient credentials); `grep -rni metering harness/` finds nothing",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "m1w's metering join reaches worker.json and no harness code reads it"
+      },
+      {
+        "body": "The close-out applies each still-proposed protected change as one labelled commit, iterating the run's findings in key order (internal/runstate/findings_store.go:78), and a content proposal replaces its file whole (internal/exec/subprocess/protected_change.go Applied): 2pn's harness-cell append (finding 2911b0ce…) sorts first and applies, then q6z's and 2p3's whole-file .tick/runners.toml proposals (4fe8b808…, b916a378…, composed from bases before the cell existed) sort after it and each replace the file, so the cell the first commit added is gone from the branch the PR merges. Nothing catches it — the integrated gate ran before the protected changes, the append's finding is triaged FIXED by its own commit, and the parity guard documents an undeclared harness entry as the accepted window — so the epic's \"harness suites in the per-tick gate\" deliverable is silently lost at the moment of integration. Ready when those whole-file proposals carry the cell, or the apply path orders content replacements before appends per path, or it re-validates the declared gate commands after applying.\nevidence: internal/reconcile/protected_changes.go:153-198 (applyProtectedChanges, one commit per finding in Findings() key order); internal/exec/subprocess/protected_change.go:68-76 (content replaces the file whole); the payloads: .ticfac/runs/run_af0e77b99c1540b7b8005cf04fd2795d/findings/2911b0ce…json (append, [testing.commands.harness]), 4fe8b808…json and b916a378…json (whole-file .tick/runners.toml without the cell)",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "Protected changes applied in key order wipe 2pn's harness gate cell"
+      },
+      {
+        "body": "The epic's acceptance_criteria string puts all four [A<n>] marks on one line, and acceptance.Parse only counts a mark that leads its line, so the epic's done enumerates one item and A2–A4 are unaddressable: the close-out's done-evidence lists one mega-item, worker-asserted-high absorption can never match a finding naming A2–A4, and a review's typed breaks claim naming one is refused (this report hit exactly that). This is the same shape hn6's yjq repaired — the re-flow below keeps every item and its text, changing only the line breaks; the run applies it through its own tracker writer rather than filing a tick.\nevidence: .tick/issues/ex6.json acceptance_criteria (all four marks on one line); internal/acceptance/acceptance.go:15-17 (only a line-leading mark introduces an item); the lint's own answer: `ticfac-exec-subprocess lint-report … \"A3\" is not an acceptance item of the epic; the epic's items are A1`\ntracker edit: acceptance_criteria of ex6 (applied by the run)",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "ex6's acceptance criteria are one line, so only [A1] parses as an item"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/ex6/attempt-7/0rt",
+      "commits": 1,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/ex6/attempt-7/0rt:RESULT-0rt.md",
+      "review_verdict": "NOT READY",
+      "review_verdict_detail": "deliver m1w's harness half (read the metering join from worker.json, compose the provider override, with a harness test) and make the close-out's protected changes leave 2pn's harness gate cell in .tick/runners.toml (the whole-file proposals wipe it)"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "the review ran to completion over the integrated epic; its judgement is the REVIEW-VERDICT line above, its blocking findings are in the findings block"
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T02:57:20Z",
+  "answered_at": "2026-10-08T02:57:20Z",
+  "provenance": {
+    "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
+    "tick_id": "0rt",
+    "attempt": 7,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "a5e191bbdb288e15bf2fa67f4c21f58be1045d19",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:c64677c8ed510391d85d8f252dd964bff0cfa948806715fd644320ecb29e56ea",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

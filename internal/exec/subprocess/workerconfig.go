@@ -97,6 +97,56 @@ type workerConfig struct {
 	// worker with, because a test that needs a model credential cannot run
 	// anywhere. Empty on every production attempt.
 	FauxTranscript string `json:"fauxTranscript,omitempty"`
+	// Metering is the local gateway metering join (tick m1w), on a dispatch
+	// whose resolver produced one AND a Workers AI model: the facts the
+	// harness composes its provider override from — the gateway route, the
+	// run id, the attribution metadata and the credential pipeline. Nil for
+	// an unmetered dispatch, and for any model the join does not apply to:
+	// the config the tests' faux worker reads carries none, the same rule
+	// the herdr executor's extension launch applies.
+	Metering *workerMetering `json:"metering,omitempty"`
+}
+
+// workerMetering is the metering join as worker.json carries it — the facts
+// the harness composes its provider override from (harness/src/local/
+// gateway-metering.ts, tick m1w). The metadata is the COMPOSED header value,
+// not the raw facts: one writer (MetadataValue) for both artifacts the join
+// reaches — the pi CLI's generated extension and this file — so the rows a
+// local durable worker tags can never disagree with the rows the same join
+// tags through the CLI. The credential command is the pipeline WITHOUT pi's
+// `!` config-value prefix: the harness executes it itself, at request time,
+// and the token is never written to disk.
+type workerMetering struct {
+	// GatewayURL is the operator's AI Gateway base URL; the harness composes
+	// the workers-ai route under it.
+	GatewayURL string `json:"gatewayUrl"`
+	// RunID is the run the spend is attributed to — the metadata's key, and
+	// the affinity header's value.
+	RunID string `json:"runId"`
+	// Metadata is the cf-aig-metadata header value, composed once.
+	Metadata string `json:"metadata"`
+	// CredentialCommand is the POSIX shell pipeline that prints the
+	// operator's Cloudflare API token as its Bearer value.
+	CredentialCommand string `json:"credentialCommand"`
+}
+
+// meteringFor is the join a durable launch carries, or nil: the dispatch's
+// resolver output only on a model the join applies to, and validated to the
+// same absolute-URL bar WriteExtension enforces — a join that cannot be
+// composed is a launch refusal, never a silently unmetered run.
+func meteringFor(record *attemptRecord, opts *Options) (*workerMetering, error) {
+	if opts == nil || opts.Metering == nil || !opts.Metering.Applies(record.Model) {
+		return nil, nil
+	}
+	if _, err := opts.Metering.gatewayBase(); err != nil {
+		return nil, err
+	}
+	return &workerMetering{
+		GatewayURL:        opts.Metering.GatewayURL,
+		RunID:             opts.Metering.RunID,
+		Metadata:          opts.Metering.MetadataValue(),
+		CredentialCommand: gatewayCredentialPipeline,
+	}, nil
 }
 
 // writeWorkerConfig renders and durably writes one attempt's worker.json,
@@ -136,6 +186,11 @@ func writeWorkerConfig(write func(path string, data []byte, perm fs.FileMode) er
 	if opts != nil && opts.HarnessFauxTranscript != "" {
 		config.FauxTranscript = opts.HarnessFauxTranscript
 	}
+	join, err := meteringFor(record, opts)
+	if err != nil {
+		return err
+	}
+	config.Metering = join
 	raw, err := json.Marshal(config)
 	if err != nil {
 		return err

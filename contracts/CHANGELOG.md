@@ -53,6 +53,26 @@ loud.
 
 ---
 
+## 2.4.0
+
+MINOR: `worker-boot.json` gains the review job's own boot/finish contract —
+`review_boot_arg`/`review_boot_command`/`review_boot_marker`/
+`review_boot_prompt_begin`/`review_boot_prompt_end` and
+`review_finish_arg`/`review_finish_command`. Since the PR-review job's
+conversation is hosted on the run's WorkerAgent like every other cloud
+worker's (epic ex6, tick 8gd), the review container runs the orchestrator
+image's `--boot`/`--finish` halves — the same shape the worker host gave the
+workers in 1.x, with the review's own markers so a handoff is recognizable as
+a review's — and the marker line's two fields keep the worker's names but
+change meaning per role: for a review, `branch=` is the ref that was reviewed
+and `result=` the findings path the finish posts. An unchanged consumer is
+still correct: the worker contract's own fields are untouched.
+
+Consumers: `cloudflare/contracts.pin.json` moves to 2.4.0; the image
+(`image/entrypoint.sh`), the control plane (`cloudflare/src/worker-boot.ts`), and the
+host that drives the halves (`harness/src/host/worker-attempt.ts`, protocol
+selected by the spec's kind) gained the spellings in the same commit.
+
 ## 2.3.0
 
 MINOR: `job-protocol.json`'s observation `kind` gains `claude_sub_quota` — the

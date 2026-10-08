@@ -7,6 +7,22 @@
 # implement ladder starts on GLM 5.3 and climbs to claude after one failed
 # attempt: attempt 1 -> strong (pi on glm-5.3), after a failure -> frontier
 # (claude opus), capped there.
+#
+# Deliberately no [roles.review] or [roles.closeout] cells here (tick 96s):
+# the blessed local claude exception lives in .tick/runners.toml — its
+# [roles.review], [roles.review.tiers.frontier] and [roles.closeout] cells
+# name the claude CLI on opus for local final reviews and close-outs (the
+# 2026-10-04/05 decisions, tick j6o), and an overlay cell in this file
+# would move those jobs off the blessed decision. So the cells below
+# concern the implement ladder only: the frontier rung and the
+# [tier_policy] that climbs it (and sets the ceiling the on-demand
+# judgement jobs route at, through the review cell). A local run's review
+# and close-out therefore keep .tick/runners.toml's cells exactly as
+# written, and the claude CLI appears locally only in those cells and on
+# implement's frontier rung. Guards:
+# TestThisRepositorysLocalClaudeRoutingIsExactlyTheBlessedCells and
+# TestThisRepositorysLocalImplementTiersRouteOnTheOneHarness
+# (internal/reconcile/routing_check_test.go).
 version = 2
 
 [roles.implement.tiers.frontier]

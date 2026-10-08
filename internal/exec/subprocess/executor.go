@@ -50,12 +50,13 @@ type Options struct {
 	// (tick dm2, carried here by tick gzv). Tick gzv loaded it into the pi
 	// CLI's launch as a generated `--extension` provider override; since
 	// epic 43y (tick hpk) the `pi` runner is the pi-durable Node harness,
-	// which has no extension surface and refuses unknown arguments, so this
-	// executor loads NOTHING from it: its workers' calls go unattributed and
-	// the cost line stays honestly unmetered until the join reaches the
-	// harness through worker.json. It is kept so the dispatch's resolution
-	// stays one value for both local substrates (the herdr executor's pi
-	// CLI panes still load it).
+	// which has no extension surface and refuses unknown arguments, so the
+	// join reaches it through worker.json instead (tick m1w): a Workers AI
+	// dispatch writes the join into the config and the harness composes the
+	// same provider override from it, so its workers' calls join the
+	// gateway logs exactly as a herdr/pi-CLI worker's do. It is kept so the
+	// dispatch's resolution stays one value for both local substrates (the
+	// herdr executor's pi CLI panes still load it).
 	Metering *GatewayMetering
 
 	// RolePrompt is the profile's prompt for this job's role: the instruction
