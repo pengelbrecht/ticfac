@@ -1,0 +1,14 @@
+{
+  "id": "mvr",
+  "title": "Fold the epic's base before the final review, not after it",
+  "description": "g2s judged bo9 READY at ed3f1d2f; the run then folded main into epic/bo9 as 7287ad5, which changed the tree the verdict was about and brought in a file the epic's own diff touches. That correctly invalidated the verdict, so the run minted tick `two` and paid for a second full opus epic review to reach the same READY. Folding the base before dispatching the final review — or re-checking whether a fold is pending before taking a verdict — would have saved a whole review. The conservatism is right; the ordering is what costs.\nevidence: decision 8 (source_sha ed3f1d2fc915) then the merge 7287ad5fe6f3 'Merge branch main into epic/bo9', then .tick/issues/two.json's own description, then decision 9\n\nticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9 filed this backlog tick from the finding 97097a7023d0093828bd342f2e7395463cc6a948ea7133d3e69ad929299b9e84 (reported by run-run_03aa9c8a71574ab3891b47df3dbd5ec9/tick-52h/attempt-9) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_03aa9c8a71574ab3891b47df3dbd5ec9/absorptions/97097a7023d0093828bd342f2e7395463cc6a948ea7133d3e69ad929299b9e84.json on the run branch.",
+  "notes": "2026-10-08 12:30 - ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9: created by absorbing finding 97097a7023d0093828bd342f2e7395463cc6a948ea7133d3e69ad929299b9e84 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_03aa9c8a71574ab3891b47df3dbd5ec9/absorptions/97097a7023d0093828bd342f2e7395463cc6a948ea7133d3e69ad929299b9e84.json on epic/bo9, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_03aa9c8a71574ab3891b47df3dbd5ec9/tick-52h/attempt-9",
+  "created_by": "ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9",
+  "created_at": "2026-10-08T12:30:14Z",
+  "updated_at": "2026-10-08T12:30:20.278166054Z"
+}

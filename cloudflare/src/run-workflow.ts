@@ -1926,6 +1926,11 @@ async function supervisePass(
                 : {
                     ...(context.config.harness === null ? {} : { harness: context.config.harness }),
                     ...(context.config.model === null ? {} : { model: context.config.model }),
+                    // The named run config this submission carried (tick
+                    // ba4): forwarded to the orchestrator container's
+                    // `ticfac run-epic`, which resolves it the same way a
+                    // local run's --config does.
+                    ...(params.config === undefined ? {} : { config: params.config }),
                   }),
               sandbox_image: image,
               // The account's container ceiling (hn6's cloud run): the run the

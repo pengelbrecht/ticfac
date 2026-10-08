@@ -451,9 +451,21 @@ func (e *Executor) Start(spec *JobSpec) (*JobHandle, error) {
 		Prompt:       prompt,
 		GitCommonDir: common,
 		Model:        e.opts.Model,
-		HarnessDir:   e.harnessDir(),
+		HarnessDir:   e.harnessSourceDir(),
 		StateDir:     dir,
 		Session:      session,
+	}
+	// The "pi" runner's production path is the embedded bundle, staged into a
+	// cache directory (harnessbundle.go) — skipped entirely when
+	// $TICFAC_HARNESS_DIR named a source checkout above, or when an operator's
+	// own argv override replaces the table launch (and so never references
+	// the bundle placeholder at all).
+	if at.HarnessDir == "" && e.opts.Runner == "pi" && len(e.opts.RunnerArgv) == 0 {
+		bundle, err := cachedLocalHarnessBundle()
+		if err != nil {
+			return nil, fmt.Errorf("stage the embedded pi-durable harness bundle: %w", err)
+		}
+		at.HarnessBundle = bundle
 	}
 	argv, err := resolveRunner(e.opts.Runner, e.opts.RunnerArgv, at)
 	if err != nil {
@@ -694,16 +706,13 @@ func (e *Executor) spawnSupervisor(st *store, record *attemptRecord) (int, error
 	return pid, nil
 }
 
-// harnessDir is where the pi-durable harness package lives for THIS run: the
-// repository's own harness/ — the harness is package source in the repository
-// this executor works against — or $TICFAC_HARNESS_DIR where an operator
-// points it elsewhere (the operator-preference surface the environment is,
-// the same layer as TICFAC_RUNNER).
-func (e *Executor) harnessDir() string {
-	if dir := os.Getenv("TICFAC_HARNESS_DIR"); dir != "" {
-		return dir
-	}
-	return filepath.Join(e.repo, "harness")
+// harnessSourceDir is the harness checkout $TICFAC_HARNESS_DIR names, for
+// harness development: the "pi" runner's TypeScript source, run directly,
+// rather than the embedded esbuild bundle every other local run launches
+// (cachedLocalHarnessBundle, runner.go's piSourceArgv). Empty when unset,
+// which is the common case and what selects the bundle.
+func (e *Executor) harnessSourceDir() string {
+	return os.Getenv("TICFAC_HARNESS_DIR")
 }
 
 func (e *Executor) handleFor(record *attemptRecord) *JobHandle {

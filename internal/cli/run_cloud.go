@@ -199,10 +199,19 @@ func runCloudCommand(ctx context.Context, epicID, repo string, fl *runFlags, std
 				existing.RunID, liveness.Reason)
 		}
 	} else {
-		fmt.Fprintf(prose, "no cloud run for epic %s in the factory — starting one\n", epicID)
+		fmt.Fprintf(prose, "no cloud run for epic %s in the factory — starting one", epicID)
+		// The named config (tick ba4): which [configs.<name>] cell the
+		// factory's own orchestrator container resolves every dispatch
+		// against — the flag's word, the epic's label, or the declared
+		// default, as that container's run-epic re-derives from the argv
+		// the submission's config field carries it into.
+		if *fl.config != "" {
+			fmt.Fprintf(prose, " (run config: %s)", *fl.config)
+		}
+		fmt.Fprintln(prose)
 	}
 
-	runID, queued, err := submitCloudRun(ctx, client, repo, epicID, "", "", prose)
+	runID, queued, err := submitCloudRun(ctx, client, repo, epicID, "", *fl.config, prose)
 	if err != nil {
 		fmt.Fprintf(stderr, "ticfac run %s --cloud: %v\n", epicID, err)
 		return finish(action, agentStateFailed, "", err.Error())
@@ -280,10 +289,12 @@ func cloudSubstrate() string { return strings.TrimSpace(os.Getenv(CloudSubstrate
 // container, "local" is `run --cloud-workers` (this machine), which the
 // factory records so it boots no orchestrator container for the run.
 //
-// runConfig is the --config a `run --cloud-workers` forwards to the
-// orchestrator it starts here ("" for `run --cloud`, which carries none):
-// the preflight asks the subscription question of the config the run will
-// select.
+// runConfig is the --config a `run --cloud` or `run --cloud-workers` carries
+// for this submission ("" for neither): the preflight asks the subscription
+// question of the config the run will select, and the submission carries it
+// as the `config` field (tick ba4) so the factory's own orchestrator —
+// a container, for `run --cloud` — resolves the same named config the
+// operator asked for rather than only the epic's label and the default.
 func submitCloudRun(ctx context.Context, client *cloudClient, repo, epicID, orchestrator, runConfig string, stdout io.Writer) (runID string, queued bool, err error) {
 	// The harness preflight (tick kkt): refuse a submission whose every
 	// container would die at boot, BEFORE anything is pushed or parked behind
@@ -303,6 +314,7 @@ func submitCloudRun(ctx context.Context, client *cloudClient, repo, epicID, orch
 		Queue        bool   `json:"queue"`
 		Orchestrator string `json:"orchestrator,omitempty"`
 		Substrate    string `json:"substrate,omitempty"`
+		Config       string `json:"config,omitempty"`
 	}{
 		Project: project, Epic: epicID, BaseSHA: baseSHA, RequestedBy: requestedBy,
 		// The everyday surface has no queue flag: a lease another run holds is
@@ -311,6 +323,7 @@ func submitCloudRun(ctx context.Context, client *cloudClient, repo, epicID, orch
 		Queue:        false,
 		Orchestrator: orchestrator,
 		Substrate:    cloudSubstrate(),
+		Config:       runConfig,
 	}
 	data, err := client.request(ctx, http.MethodPost, "/api/runs", submission)
 	if err != nil {

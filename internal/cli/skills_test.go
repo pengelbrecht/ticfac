@@ -78,6 +78,43 @@ func TestSkillsInstallIsOneCommand(t *testing.T) {
 	}
 }
 
+// The short form (tick rkk): the binary embeds one skill, so a bare
+// `ticfac skills install` acts on it — no need to repeat the name.
+func TestSkillsInstallWithNoNameInstallsTheEmbeddedSkill(t *testing.T) {
+	root := skillsRepoFixture(t, ".claude/skills")
+
+	var stdout, stderr stringsBuilder
+	code := Run([]string{"skills", "install"}, &stdout, &stderr)
+	if code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	dir := filepath.Join(root, ".claude", "skills", "ticfac")
+	data, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("the skill was not installed to %s: %v", dir, err)
+	}
+	if !strings.Contains(string(data), "name: ticfac") {
+		t.Errorf("%s/SKILL.md is not the ticfac skill:\n%s", dir, data)
+	}
+	stamp, err := skills.ReadStamp(dir)
+	if err != nil {
+		t.Fatalf("%s carries no stamp: %v", dir, err)
+	}
+	if stamp.Skill != "ticfac" {
+		t.Errorf("the stamp names %q, want ticfac", stamp.Skill)
+	}
+}
+
+// Too many positional arguments is a usage error, named form or not.
+func TestSkillsInstallTooManyArgs(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "install", "ticfac", "extra"}, &stdout, &stderr); code != exitUsage {
+		t.Fatalf("two positional args exited %d, want %d", code, exitUsage)
+	}
+}
+
 // The refusal that keeps install honest: a target with other content and no
 // stamp may be hand-edited, so it is a usage error naming --force — and
 // --force takes it over deliberately.
@@ -206,6 +243,308 @@ func TestSkillsInstallJSONReportsTargets(t *testing.T) {
 		t.Errorf("the report's targets are wrong: %+v", doc.Targets)
 	}
 	_ = root
+}
+
+// `skills get --full` prints SKILL.md then every references/ file, each
+// under a separator naming its path — the only way to read those files
+// without installing the skill to disk first.
+func TestSkillsGetFullPrintsEveryFile(t *testing.T) {
+	t.Parallel()
+
+	paths, err := skills.Paths("ticfac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var refs []string
+	for _, p := range paths {
+		if p != "SKILL.md" {
+			refs = append(refs, p)
+		}
+	}
+	if len(refs) == 0 {
+		t.Fatal("the ticfac skill carries no references/ files to test --full against")
+	}
+
+	var stdout, stderr stringsBuilder
+	code := Run([]string{"skills", "get", "ticfac", "--full"}, &stdout, &stderr)
+	if code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	out := stdout.String()
+
+	skillMD, err := skills.Read("ticfac", "SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(out, string(skillMD)) {
+		t.Errorf("--full does not lead with SKILL.md's own content:\n%s", out)
+	}
+	for _, p := range refs {
+		header := "--- " + p + " ---"
+		if !strings.Contains(out, header) {
+			t.Errorf("--full does not print a header naming %q:\n%s", p, out)
+		}
+		content, err := skills.Read("ticfac", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(out, string(content)) {
+			t.Errorf("--full does not print %s's content", p)
+		}
+	}
+	// References appear in the same order skills.Paths names them, after
+	// SKILL.md's own content.
+	prevIdx := strings.Index(out, string(skillMD))
+	for _, p := range refs {
+		idx := strings.Index(out, "--- "+p+" ---")
+		if idx < prevIdx {
+			t.Errorf("%s appears out of order in --full's output", p)
+		}
+		prevIdx = idx
+	}
+}
+
+// Without --full, `skills get` is unchanged: SKILL.md alone, no headers.
+func TestSkillsGetWithoutFullPrintsOnlySkillMD(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	code := Run([]string{"skills", "get", "ticfac"}, &stdout, &stderr)
+	if code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	if strings.Contains(stdout.String(), "--- references/") {
+		t.Errorf("without --full, skills get printed a references/ header:\n%s", stdout.String())
+	}
+}
+
+// --full --json reports every file as a {path, content} entry — SKILL.md
+// first, then every references/ file — the same content the plain text
+// carries, as fields.
+func TestSkillsGetFullJSONReportsEveryFile(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	code := Run([]string{"skills", "get", "ticfac", "--full", "--json"}, &stdout, &stderr)
+	if code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	var doc struct {
+		Schema string `json:"schema"`
+		State  string `json:"state"`
+		Skill  string `json:"skill"`
+		Files  []struct {
+			Path    string `json:"path"`
+			Content string `json:"content"`
+		} `json:"files"`
+	}
+	if err := json.Unmarshal([]byte(stdout.String()), &doc); err != nil {
+		t.Fatalf("the --json report does not parse: %v\n%s", err, stdout.String())
+	}
+	if doc.Schema != "ticfac.skills-get.v1" || doc.State != "done" || doc.Skill != "ticfac" {
+		t.Errorf("the report's header is wrong: %+v", doc)
+	}
+	wantPaths, err := skills.Paths("ticfac")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Files) != len(wantPaths) {
+		t.Fatalf("got %d files, want %d: %+v", len(doc.Files), len(wantPaths), doc.Files)
+	}
+	for i, p := range wantPaths {
+		if doc.Files[i].Path != p {
+			t.Errorf("file %d is %q, want %q", i, doc.Files[i].Path, p)
+		}
+		want, err := skills.Read("ticfac", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if doc.Files[i].Content != string(want) {
+			t.Errorf("%s's content does not match the embedded bundle", p)
+		}
+	}
+}
+
+// An unknown skill is still the not-found code with --full.
+func TestSkillsGetFullUnknownSkill(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "get", "no-such-skill", "--full"}, &stdout, &stderr); code != exitNotFound {
+		t.Fatalf("exit %d, want %d", code, exitNotFound)
+	}
+}
+
+// A clean install has no drift: `skills diff` exits 0 and says so.
+func TestSkillsDiffNoDrift(t *testing.T) {
+	root := skillsRepoFixture(t, ".claude/skills")
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "install", "ticfac"}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("install: exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	code := Run([]string{"skills", "diff", "ticfac"}, &stdout, &stderr)
+	if code != exitSuccess {
+		t.Fatalf("diff exited %d, want 0: %s%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "no drift") {
+		t.Errorf("diff's output does not say no drift:\n%s", stdout.String())
+	}
+	_ = root
+}
+
+// A stamp from an older version is drift, reported with the exact upgrade
+// command — the acceptance criterion this command exists for.
+func TestSkillsDiffReportsAnOlderStampWithTheUpgradeCommand(t *testing.T) {
+	root := skillsRepoFixture(t, ".claude/skills")
+	dir := filepath.Join(root, ".claude", "skills", "ticfac")
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "install", "ticfac"}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("install: exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	stamp, err := skills.ReadStamp(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stamp.Version = "v0.0.1-older"
+	data, err := json.MarshalIndent(stamp, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, skills.StampFile), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code := Run([]string{"skills", "diff", "ticfac"}, &stdout, &stderr)
+	if code != exitGeneric {
+		t.Fatalf("a drifted stamp exited %d, want %d: %s%s", code, exitGeneric, stdout.String(), stderr.String())
+	}
+	out := stdout.String() + stderr.String()
+	if !strings.Contains(out, "v0.0.1-older") {
+		t.Errorf("the report does not name the installed (older) version:\n%s", out)
+	}
+	if !strings.Contains(out, "ticfac skills install ticfac") {
+		t.Errorf("the report does not name the upgrade command:\n%s", out)
+	}
+}
+
+// A skill never installed at all is drift too — reported as "not
+// installed" with the same upgrade command, not a stat error.
+func TestSkillsDiffReportsNotInstalled(t *testing.T) {
+	skillsRepoFixture(t, ".claude/skills")
+
+	var stdout, stderr stringsBuilder
+	code := Run([]string{"skills", "diff", "ticfac"}, &stdout, &stderr)
+	if code != exitGeneric {
+		t.Fatalf("an uninstalled skill exited %d, want %d: %s%s", code, exitGeneric, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "not installed") {
+		t.Errorf("the report does not say not installed:\n%s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "ticfac skills install ticfac") {
+		t.Errorf("the report does not name the install command:\n%s", stdout.String())
+	}
+}
+
+// --dir, exit codes for an unknown skill and outside a repository: the same
+// surface `skills install` already carries.
+func TestSkillsDiffUnknownSkill(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "diff", "no-such-skill"}, &stdout, &stderr); code != exitNotFound {
+		t.Fatalf("exit %d, want %d", code, exitNotFound)
+	}
+}
+
+func TestSkillsDiffOutsideARepository(t *testing.T) {
+	outside := t.TempDir()
+	t.Chdir(outside)
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "diff", "ticfac"}, &stdout, &stderr); code != exitNoRepo {
+		t.Fatalf("exit %d, want %d", code, exitNoRepo)
+	}
+}
+
+// --json reports each target's drift as fields, the same information the
+// prose carries.
+func TestSkillsDiffJSONReportsDrift(t *testing.T) {
+	root := skillsRepoFixture(t, ".claude/skills")
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "install", "ticfac"}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("install: exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	code := Run([]string{"skills", "diff", "ticfac", "--json"}, &stdout, &stderr)
+	if code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	var doc struct {
+		Schema  string `json:"schema"`
+		State   string `json:"state"`
+		Skill   string `json:"skill"`
+		Targets []struct {
+			Dir       string `json:"dir"`
+			Installed bool   `json:"installed"`
+			Drift     bool   `json:"drift"`
+		} `json:"targets"`
+	}
+	if err := json.Unmarshal([]byte(stdout.String()), &doc); err != nil {
+		t.Fatalf("the --json report does not parse: %v\n%s", err, stdout.String())
+	}
+	if doc.Schema != "ticfac.skills-diff.v1" || doc.State != "done" || doc.Skill != "ticfac" {
+		t.Errorf("the report's header is wrong: %+v", doc)
+	}
+	if len(doc.Targets) != 1 || !doc.Targets[0].Installed || doc.Targets[0].Drift {
+		t.Errorf("the report's targets are wrong: %+v", doc.Targets)
+	}
+	_ = root
+}
+
+// `skills get` with no name acts on the embedded skill (tick rkk); the
+// explicit form stays equivalent.
+func TestSkillsGetWithNoNamePrintsTheEmbeddedSkill(t *testing.T) {
+	t.Parallel()
+
+	var withName, withoutName, stderr stringsBuilder
+	if code := Run([]string{"skills", "get"}, &withoutName, &stderr); code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, withoutName.String(), stderr.String())
+	}
+	if code := Run([]string{"skills", "get", "ticfac"}, &withName, &stderr); code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, withName.String(), stderr.String())
+	}
+	if withoutName.String() != withName.String() {
+		t.Errorf("`skills get` without a name does not match `skills get ticfac`:\n%s\n---\n%s",
+			withoutName.String(), withName.String())
+	}
+	if !strings.Contains(withoutName.String(), "name: ticfac") {
+		t.Errorf("`skills get` did not print the ticfac skill:\n%s", withoutName.String())
+	}
+}
+
+// A named skill that does not exist is still the not-found exit code.
+func TestSkillsGetUnknownSkill(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "get", "no-such-skill"}, &stdout, &stderr); code != exitNotFound {
+		t.Fatalf("an unknown skill exited %d, want %d", code, exitNotFound)
+	}
+}
+
+// Too many positional arguments is a usage error.
+func TestSkillsGetTooManyArgs(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "get", "ticfac", "extra"}, &stdout, &stderr); code != exitUsage {
+		t.Fatalf("two positional args exited %d, want %d", code, exitUsage)
+	}
 }
 
 // stringsBuilder is the test writer Run takes.

@@ -713,11 +713,11 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
         .map((name) => [name, vars[name]]),
     );
     expect(declared).toEqual({
-      // The claude-sub rung's per-subscription cap (tick 6fv): 2 concurrent
-      // jobs per subscription — a quota budget, not a platform limit (4
-      // parallel ran clean on staging), so 2 at a time cannot drain the
-      // 5-hour window before the operator notices.
-      CLAUDE_SUB_MAX_CONCURRENT: "2",
+      // The claude-sub rung's per-subscription cap (tick 6fv): a quota
+      // budget, not a platform limit. Raised from 2 to 4 on 2026-10-08 by
+      // the operator for 4-worker epic runs (4 parallel ran clean on staging);
+      // a faster drain of the 5-hour window is the accepted cost.
+      CLAUDE_SUB_MAX_CONCURRENT: "4",
       FACTORY_MAX_INSTANCES: "12",
       GITHUB_CONSENT_LABEL: "tk",
       RUN_MAX_COST_USD: "250",
