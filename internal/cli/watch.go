@@ -1298,16 +1298,12 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 			// on this command must not read an interrupted watch as a
 			// finished run — the same contract the stream path holds.
 			return interrupted(model)
-<<<<<<< HEAD
-		case <-time.After(interval):
+		case <-time.After(wait):
 		case <-resized:
 			// A pane that changed shape gets the next frame at once: the
 			// loop top re-reads the size and starts over, so the pane never
 			// holds the terminal's reflow of the previous frame longer than
 			// it takes to redraw.
-=======
-		case <-time.After(wait):
->>>>>>> 990bb6eb429df10d37ebfe99f6ee05bd7be2f981
 		case key, ok := <-keys:
 			if !ok {
 				// The keyboard is gone (the reader ended); watch on without

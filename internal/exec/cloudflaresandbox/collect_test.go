@@ -8,11 +8,8 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
-<<<<<<< HEAD
 	"github.com/pengelbrecht/ticfac/internal/gittest"
-=======
 	"github.com/pengelbrecht/ticfac/internal/sandboximage"
->>>>>>> 990bb6eb429df10d37ebfe99f6ee05bd7be2f981
 )
 
 // Collect from the durable layer: the landing branch and the report the
