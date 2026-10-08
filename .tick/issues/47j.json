@@ -11,6 +11,6 @@
   "acceptance_criteria": "a mapping for every stage the feed emits (a test fails when a new stage has none); mechanics filtered; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.378131Z",
-  "updated_at": "2026-10-08T13:18:50.417542149Z",
+  "updated_at": "2026-10-08T13:58:15.5009999Z",
   "started_at": "2026-10-08T13:18:50.417540918Z"
 }
