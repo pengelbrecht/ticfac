@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/bo9/attempt-5-resolve-5-3e6ded19/u2g`, base `76383692f61376d37dcabe40720212a155c5b2dc`, harness `claude` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+
 # u2g — resolve the conflicted merge of attempt 5 into epic/bo9
 
 ## The two intents
