@@ -914,8 +914,17 @@ export class RunRoom extends DurableObject<Env> {
     const now = Date.now();
     this.#pruneExpiredQueued(now);
 
-    const existing = this.#liveQueue(now).find((row) => row.epic === request.epic);
-    if (existing !== undefined) {
+    const found = this.#liveQueue(now).find((row) => row.epic === request.epic);
+    if (found !== undefined) {
+      // The repeat is answered with the entry that stands, but what it ASKED
+      // for is not dropped (tick xvk, second half): bo9 was re-parked after
+      // the deploy that made entries wait for the release, was handed back
+      // the entry parked before it — a hard 30-minute window — and that entry
+      // expired minutes later behind a holder that ran eight more hours. A
+      // repeat only ever widens the entry: it waits for the release if either
+      // asked to, and its deadline is the later of the two.
+      const existing = this.#widenQueued(found, request, now);
+      await this.#armAlarm();
       return {
         ok: false,
         error: "already_queued",
@@ -1439,6 +1448,32 @@ export class RunRoom extends DurableObject<Env> {
         this.#leaseHeld(),
       ),
     ];
+  }
+
+  /**
+   * Merges a repeat park of the same epic into the entry that stands, never
+   * narrowing it: `waits_for_release` if either asked for it, the longer
+   * window, and the later deadline. Returns the entry as it now reads.
+   */
+  #widenQueued(existing: QueuedRecord, request: QueueSubmissionRequest, now: number): QueuedRecord {
+    const requestedWindow = request.ttl_ms ?? MAX_QUEUE_TTL_MS;
+    const existingWindow = existing.window_ms ?? existing.expires_at - existing.queued_at;
+    const widened: QueuedRecord = {
+      ...existing,
+      waits_for_release:
+        existing.waits_for_release === 1 || request.waits_for_release === true ? 1 : 0,
+      window_ms: Math.max(existingWindow, requestedWindow),
+      expires_at: Math.max(existing.expires_at, now + requestedWindow),
+    };
+    this.ctx.storage.sql.exec(
+      `UPDATE queued_submission SET waits_for_release = ?, window_ms = ?, expires_at = ?
+        WHERE run_id = ?`,
+      widened.waits_for_release,
+      widened.window_ms,
+      widened.expires_at,
+      existing.run_id,
+    );
+    return widened;
   }
 
   /**
