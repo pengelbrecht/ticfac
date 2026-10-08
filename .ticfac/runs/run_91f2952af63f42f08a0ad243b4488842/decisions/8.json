@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "triage-failure",
+  "request": {
+    "attempt": 3,
+    "epic_id": "ymf",
+    "job_id": "run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/attempt-3",
+    "op": "settle_attempt",
+    "run_id": "run_91f2952af63f42f08a0ad243b4488842",
+    "state": "rejected",
+    "tick_id": "b13"
+  },
+  "response": {
+    "by_run": true,
+    "carry_ref": "refs/heads/ticfac/run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/attempt-3",
+    "carry_sha": "7019eeb42de17299c0bdf49d4bc40df64cb4652a",
+    "disposition": "carry-work",
+    "reason": "merge_failed: b13 try 1 (run dispatch #3) does not merge onto epic/ymf (3 conflicts: content in internal/cli/status.go; content in internal/cli/status_model.go; content in internal/cli/watch.go) and 3 resolve-conflict jobs for this tick failed without delivering a resolution: ticfac/run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-3 (failed, operational: b13 try 1 (run dispatch #3) does not merge onto epic/ymf (3 conflicts: content in internal/cli/status.go; content in internal/cli/status_model.go; content in internal/cli/watch.go) and its resolve-conflict job failed: it answered with no report the run could read and the run's verdict is missing-result (failed): the container pushed tick/ymf/attempt-3-resolve-3-e2ec4944/b13 with no report at RESULT-b13.md committed to it: settled is not finished, and this is neither running nor done. The tick is neither resolved nor re-dispatched); ticfac/run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-3-r2 (failed, operational: b13 try 1 (run dispatch #3) does not merge onto epic/ymf (3 conflicts: content in internal/cli/status.go; content in internal/cli/status_model.go; content in internal/cli/watch.go) and its resolve-conflict job failed: it answered with no report the run could read and the run's verdict is missing-result (failed): the container pushed tick/ymf/attempt-3-resolve-3-r-36b702ab/b13 with no report at RESULT-b13.md committed to it: settled is not finished, and this is neither running nor done. The tick is neither resolved nor re-dispatched); ticfac/run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-3-r3 (failed, operational: b13 try 1 (run dispatch #3) does not merge onto epic/ymf (3 conflicts: content in internal/cli/status.go; content in internal/cli/status_model.go; content in internal/cli/watch.go) and the resolve-conflict job run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-3-r3 could not be started: attempt 3 of run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-3-r3 already settled as succeeded under this identity: a retry is a new attempt number, not this one again). 2 retries after the first is the bound, so the tick is neither resolved nor re-dispatched: read why the jobs did not answer, then release the attempt — `ticfac settle ymf b13 3 --run-id run_91f2952af63f42f08a0ad243b4488842 --release \"<who>\" --carry-work` — and run the epic again",
+    "released_by": "ticfac",
+    "settled": true,
+    "state": "rejected",
+    "step": "escalate"
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T18:14:41Z",
+  "answered_at": "2026-10-08T18:14:41Z",
+  "provenance": {
+    "run_id": "run_91f2952af63f42f08a0ad243b4488842",
+    "tick_id": "b13",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "8505bb2420f7434776c8c2a11232a10e89313d5e",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:f6d30e41f279e14ec58e01f070b5f9560dd75d0f23147e11fdef84a873c82087",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
