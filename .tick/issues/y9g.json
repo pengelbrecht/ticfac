@@ -1,0 +1,13 @@
+{
+  "id": "y9g",
+  "title": "Harness metering test's credential pipeline is unpinned from Go's",
+  "description": "local-metering.test.ts spells the credential pipeline by hand (CREDENTIAL_PIPELINE) as a copy of the Go builder's gatewayCredentialPipeline, and nothing compares the two: workerconfig_test.go pins that worker.json carries the real pipeline, and the field-spelling parity guard pins only the join's field names, so a change to credentials.ShellGetCommand or its key would leave the harness suite green against the old text while real launches execute the new one. The suite that proves \"a metered local launch tags its calls\" could then certify a credential path production no longer writes. Pin the fixture — the parity test already reads the harness sources, and one more assertion comparing the test's constant against gatewayCredentialPipeline closes it.\nevidence: harness/test/node/local-metering.test.ts:74-78 (CREDENTIAL_PIPELINE, hand-copied) vs internal/exec/subprocess/pimeter.go:172 (gatewayCredentialPipeline = credentials.ShellGetCommand(KeyCloudflareAPIToken) + Bearer prefix); internal/exec/subprocess/workerconfig_parity_test.go pins field spellings only\n\nticfac run run_af0e77b99c1540b7b8005cf04fd2795d filed this backlog tick from the finding 9a823431f410b204d2bf7b5a013bd738e806c28ff24e50dde9de2f0433c1ea1d (reported by run-run_af0e77b99c1540b7b8005cf04fd2795d/tick-ynd/attempt-11) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_af0e77b99c1540b7b8005cf04fd2795d/absorptions/9a823431f410b204d2bf7b5a013bd738e806c28ff24e50dde9de2f0433c1ea1d.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_af0e77b99c1540b7b8005cf04fd2795d/tick-ynd/attempt-11",
+  "created_by": "ticfac run run_af0e77b99c1540b7b8005cf04fd2795d",
+  "created_at": "2026-10-08T05:56:24Z",
+  "updated_at": "2026-10-08T05:56:24Z"
+}
