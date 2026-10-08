@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 119,
-  "state": "admitted",
-  "reason": "the epic graph is read and the run is admitted",
-  "updated_at": "2026-10-08T00:36:08Z",
+  "sequence": 120,
+  "state": "dispatching",
+  "reason": "dispatching x73 as attempt 17",
+  "updated_at": "2026-10-08T00:36:16Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -89,7 +89,7 @@
     },
     {
       "tick_id": "x73",
-      "state": "rejected"
+      "state": "ready"
     },
     {
       "tick_id": "r6v",
