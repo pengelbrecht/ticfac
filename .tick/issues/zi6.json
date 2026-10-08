@@ -1,0 +1,13 @@
+{
+  "id": "zi6",
+  "title": "z7w's property tests made internal/cli the short gate's long pole",
+  "description": "internal/cli is now the per-tick gate's slowest package under -short: 101-136s here.\n\nMost of that is z7w's Hegel properties:\n- TestPBTFlagsParseInAnyOrder: 28s\n- TestPBTWatchAlertsAHoldExactlyWhenTheRunHoldsIt: 19s\n- TestPBTExitCodeAgreesWithTheDocumentState: 18s\n- four more at 3-9s each\n\nCI's full cli suite went from 58s to 112s.\n\nIn an epic whose purpose is a faster gate, the property tests should take a smaller example budget under -short, keeping the full budget in the non-short suite, so the gate's floor is not set by a test-generation budget.\nevidence: go test -short -count=1 -json ./internal/cli/ (elapsed per test); CI packages job internal/cli 58.254s (run 37704846560) vs 112.381s (run 37716696321)\n\nticfac run epic-t8u filed this backlog tick from the finding 683b3db3444b4338af3d39c85dbb5cc8bf0b7060f912ae860f91427afe5eac47 (reported by run-epic-t8u/tick-r6v/attempt-18) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/683b3db3444b4338af3d39c85dbb5cc8bf0b7060f912ae860f91427afe5eac47.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-r6v/attempt-18",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-08T02:38:31Z",
+  "updated_at": "2026-10-08T02:38:31Z"
+}
