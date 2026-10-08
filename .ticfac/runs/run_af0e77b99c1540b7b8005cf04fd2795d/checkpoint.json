@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 66,
+  "sequence": 67,
   "state": "running",
-  "reason": "the epic PR #265 (epic/ex6 → main) is open; close-out of ex6 waits on CI",
-  "updated_at": "2026-10-08T05:56:52Z",
+  "reason": "CI is green on the epic PR #265; the close-out of ex6 is admitted",
+  "updated_at": "2026-10-08T05:57:01Z",
   "ticks": [
     {
       "tick_id": "2p3",
