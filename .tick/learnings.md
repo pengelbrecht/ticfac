@@ -1,7 +1,7 @@
 # Learnings
 
 Repo-specific gotchas, Problem → Cause → Rule. Hard cap 150 lines — compact every retro.
-Seeded from ticks' learnings 2026-09-02; last compacted at the 43y (2026-10-06) and v5t (2026-10-07) close-outs.
+Seeded from ticks' learnings 2026-09-02; last compacted at the v5t (2026-10-07) and t8u (2026-10-08) close-outs.
 
 ## Planning an epic
 
@@ -12,12 +12,17 @@ on the real door until the review (yhe). **Rule:** When an epic's gate is a run 
 tick wires the thinnest path through the PRODUCTION entry point, its tests binding what production
 binds (wrangler.toml), and a named tick INSIDE the epic performs it; a DEPLOYED-factory clause is post-merge.
 
+**Problem:** t8u's [A1] asked for the full suite halved "on a quiet host" with no BEFORE recorded and no tick on its floor
+(internal/reconcile, 41m serial): its ticks cut the per-tick gate 452s → 162s uncached while reconcile moved ~13%, and two reviews could not
+time a quiet host (load 8-17). **Rule:** A speed epic records its before at PLANNING — the command, the figure, and a measure this shared
+host can give (CI step durations, a serial test-elapsed sum) — and puts a tick on the measured floor first.
+
 **Problem:** gvc absorbed none of 21 findings; 2jn scored none of 30: the data the machinery reads was prose. **Rule:** An orchestrator epic names the
 NEXT run on the rebuilt binary as its demo; [A<n>] items AND a command per item land at planning, or the run absorbs on guesses.
 
-**Problem:** hn6 planned 9 ticks and closed 65: ten repairs each fixed ONE pairing of which word wins
-across nine runs. **Rule:** An epic that renders run state lists the state matrix (running, held,
-stopped, failed, prior, cloud, local …) × every surface at planning, ONE precedence table tested over it.
+**Problem:** hn6 planned 9 ticks and closed 65: ten repairs each fixed ONE pairing of which word wins across nine runs. **Rule:** An epic
+that renders run state lists the state matrix (running, held, stopped, failed, prior, cloud, local …) × every surface at planning, ONE
+precedence table tested over it.
 
 **Problem:** 2jn's NOT READY review's ten findings each became a parallel tick (16 ticks, 7 resolves, a
 silent same-function collision, 7o5); v5t's two became y38 (Go) and yhe (TS) on ONE step-down seam: a
@@ -27,31 +32,27 @@ naming every side of it: the run makes one tick per finding, so the report is th
 **Problem:** A policy held per layer and failed in the whole: xte checked the cloud overlay, then a tier overlay replaced the model; yoh keyed the
 Workers-AI rule on the substrate, not the executor (78v). **Rule:** Check a policy on the FINAL resolved value, keyed on what crosses the boundary.
 
-**Problem:** wne put a vocabulary (mrn) and its consumer (0ju) in one wave; hn6's wave 1 HAND-TYPED its
-status goldens and seven repairs removed values wave 2 could never produce. **Rule:** DECLARING and
-CONSUMING a vocabulary are different waves, and the declaring wave's fixtures are checked against the
-builder from day one (TestEveryGoldenAgreesWithThePipelineDerivation's shape).
+**Problem:** wne put a vocabulary (mrn) and its consumer (0ju) in one wave; hn6's wave 1 HAND-TYPED its status goldens and seven repairs
+removed values wave 2 could never produce. **Rule:** DECLARING and CONSUMING a vocabulary are different waves, and the declaring wave's
+fixtures are checked against the builder from day one (TestEveryGoldenAgreesWithThePipelineDerivation's shape).
 
-**Problem:** l6t deleted the wave path and four things only it produced; 6in findings named deleted
-verbs; after 43y's jhp deleted the pi CLI, six ticks chased kind "pi" in cells and fixtures (twa's
-would have killed every cloud container at boot). **Rule:** A deletion tick first LISTS every effect
-and pointer of the deleted path in BOTH repos (grep the NAME), naming each one's owner or "dropped".
+**Problem:** l6t deleted the wave path and four things only it produced; 6in findings named deleted verbs; after 43y's jhp deleted the pi
+CLI, six ticks chased kind "pi" in cells and fixtures (twa's would have killed every cloud container at boot). **Rule:** A deletion tick
+first LISTS every effect and pointer of the deleted path in BOTH repos (grep the NAME), naming each one's owner or "dropped".
 
 **Problem:** dz1's re-run held on the claim its STOPPED predecessor left. **Rule:** An enforcement
 moving into this repo brings its exemptions; test resume and re-run, not only the refusal.
 
 ## Orchestration
 
-**Problem:** Wave-2 branched from a base missing wave-1; two same-wave ticks cut additions to one
-file. **Rule:** Name the SHA; check `--is-ancestor`. Two additions to one file are a union in
-INTENT, not in text — hand the resolve to a worker holding the context. ONE owner per artifact.
+**Problem:** Wave-2 branched from a base missing wave-1; two same-wave ticks cut additions to one file. **Rule:** Name the SHA; check
+`--is-ancestor`. Two additions to one file are a union in INTENT, not text: a worker holding the context resolves it. ONE owner per artifact.
 
 **Problem:** A worker committed tracker state its prompt forbade. **Rule:** A boundary the substrate
 can enforce must not rest on instruction-following — make it impossible and REPORT every attempt.
 
-**Problem:** Parallel ticks sharing a return shape were green alone, broken together; an "in flight"
-state outlived its writer. **Rule:** The merge gate is the only test of a shared contract; settle
-in-flight state from durable evidence, never by trusting the claimer.
+**Problem:** Parallel ticks sharing a return shape were green alone, broken together; an "in flight" state outlived its writer. **Rule:**
+The merge gate is the only test of a shared contract; settle in-flight state from durable evidence, never by trusting the claimer.
 
 **Problem:** ncv stopped EIGHT times for untriaged findings; yoh needed a person ~20 times. **Rule:**
 A hold that fires when the system does its job (finding things) makes "unattended" impossible; put
@@ -109,9 +110,11 @@ bound was filed five times (h3c 7oy 4ao omq 30e). **Rule:** A gate verdict is ab
 (registrytest.GuardMain's per-process root); before filing "fails at base", grep `.tick/issues/` — the run dedupes on the test id.
 
 **Problem:** wne's gates went green with 7 of 10 relevant tests skipped under `-short`; yoh's ts gate
-ran no vitest; dz1's and 43y's (enb, 4w7) red EndToEnd epic CI sat unread until a review. **Rule:** A
+ran no vitest; dz1's, 43y's (enb, 4w7) and t8u's (p4c: 15 runs, Apple git 2.50 vs CI's 2.55) red epic CI
+sat unread until a review; z7w's -short properties doubled internal/cli's wall, unseen. **Rule:** A
 test the gate does not run is not evidence: add it or name the gap. A NEW package's suite joins
 `[testing.commands]` in its tick; a tick touching dispatch, claims or a profile runs `./internal/reconcile/`.
+A test of git's OWN behaviour (hooks, ref transactions) is green only on CI's git; a tick adding tests reports its package's -short wall.
 
 **Problem:** A NOT READY was recorded ready-to-merge; 6in's close-out read an all-SKIPPED head as CI
 green (#100). **Rule:** A verdict is a typed field, and a skip is not a pass: green needs a success.
@@ -123,11 +126,8 @@ work and report in ONE commit; v5t's Go executor said `cloudflare-workers-ai/…
 `workers-ai/…`, each green on its own fake (y38). **Rule:** A fake demands the identity and reproduces
 the real shape; fix a forgiving fake in the same change. A TS↔Go seam gets a parity guard over its
 spellings and one Go test driving the REAL door (claude_sub_e2e_test.go's shape). Fixture commits
-differ; "the tick's first try" keys on `$TICFAC_TRY`.
-
-**Problem:** hn6's activity fixture spelled a claude worker's model `claude-opus-5`; real attempts say
-`opus`, so a live claude worker's activity is never read. **Rule:** Copy a fixture's identity
-strings from a real record (`.ticfac/runs/*/attempts/*.json`), never type them.
+differ; "the tick's first try" keys on `$TICFAC_TRY`. Copy identity strings from a real record
+(`.ticfac/runs/*/attempts/*.json`), never type them: hn6 typed `claude-opus-5`, attempts say `opus`.
 
 ## Boundaries this repo pays to learn
 
