@@ -701,6 +701,37 @@ func TestCloudStatusSaysWhenNoImageWasRecorded(t *testing.T) {
 	}
 }
 
+// A parked submission answers as a run in state `queued` (tick xvk), naming
+// the run it waits for and claiming no image: it has booted nothing.
+func TestCloudStatusShowsAQueuedSubmission(t *testing.T) {
+	setupCloudRepo(t, true)
+	endpoint, _ := newCloudFactory(t, func(request cloudFactoryRequest) (int, any) {
+		if request.Method == http.MethodGet && request.Path == "/api/runs/run_parked" {
+			return http.StatusOK, map[string]any{
+				"run":    map[string]any{"run_id": "run_parked", "state": "queued", "epic": "bo9"},
+				"phase":  map[string]any{"state": "queued", "workflow": nil},
+				"lease":  map[string]any{"run_id": "run_holder", "epic": "ex6"},
+				"queued": []any{map[string]any{"run_id": "run_parked", "epic": "bo9", "blocked_by": "run_holder"}},
+			}
+		}
+		return http.StatusNotFound, map[string]any{"error": "not_found"}
+	})
+	configureCloudFactory(t, endpoint)
+
+	code, out, stderr := runCloudArgs(t, []string{"cloud", "status", "run_parked"})
+	if code != exitSuccess {
+		t.Fatalf("cloud status run_parked: %s\n%s", stderr.String(), out.String())
+	}
+	for _, want := range []string{"state: queued", "queued: run_parked (blocked by run_holder)"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("status lacks %q:\n%s", want, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "image:") {
+		t.Errorf("status claims an image for a submission that booted nothing:\n%s", out.String())
+	}
+}
+
 // TestCloudStopNowAsksForAHardStopAndSaysWhichItPerformed pins tick gyl's
 // operator-facing half: `--now` must reach the factory as a hard stop, and the
 // output must say which stop happened rather than leaving an operator to
