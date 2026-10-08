@@ -208,6 +208,137 @@ func TestSkillsInstallJSONReportsTargets(t *testing.T) {
 	_ = root
 }
 
+// A clean install has no drift: `skills diff` exits 0 and says so.
+func TestSkillsDiffNoDrift(t *testing.T) {
+	root := skillsRepoFixture(t, ".claude/skills")
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "install", "ticfac"}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("install: exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	code := Run([]string{"skills", "diff", "ticfac"}, &stdout, &stderr)
+	if code != exitSuccess {
+		t.Fatalf("diff exited %d, want 0: %s%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "no drift") {
+		t.Errorf("diff's output does not say no drift:\n%s", stdout.String())
+	}
+	_ = root
+}
+
+// A stamp from an older version is drift, reported with the exact upgrade
+// command — the acceptance criterion this command exists for.
+func TestSkillsDiffReportsAnOlderStampWithTheUpgradeCommand(t *testing.T) {
+	root := skillsRepoFixture(t, ".claude/skills")
+	dir := filepath.Join(root, ".claude", "skills", "ticfac")
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "install", "ticfac"}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("install: exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	stamp, err := skills.ReadStamp(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stamp.Version = "v0.0.1-older"
+	data, err := json.MarshalIndent(stamp, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, skills.StampFile), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code := Run([]string{"skills", "diff", "ticfac"}, &stdout, &stderr)
+	if code != exitGeneric {
+		t.Fatalf("a drifted stamp exited %d, want %d: %s%s", code, exitGeneric, stdout.String(), stderr.String())
+	}
+	out := stdout.String() + stderr.String()
+	if !strings.Contains(out, "v0.0.1-older") {
+		t.Errorf("the report does not name the installed (older) version:\n%s", out)
+	}
+	if !strings.Contains(out, "ticfac skills install ticfac") {
+		t.Errorf("the report does not name the upgrade command:\n%s", out)
+	}
+}
+
+// A skill never installed at all is drift too — reported as "not
+// installed" with the same upgrade command, not a stat error.
+func TestSkillsDiffReportsNotInstalled(t *testing.T) {
+	skillsRepoFixture(t, ".claude/skills")
+
+	var stdout, stderr stringsBuilder
+	code := Run([]string{"skills", "diff", "ticfac"}, &stdout, &stderr)
+	if code != exitGeneric {
+		t.Fatalf("an uninstalled skill exited %d, want %d: %s%s", code, exitGeneric, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "not installed") {
+		t.Errorf("the report does not say not installed:\n%s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "ticfac skills install ticfac") {
+		t.Errorf("the report does not name the install command:\n%s", stdout.String())
+	}
+}
+
+// --dir, exit codes for an unknown skill and outside a repository: the same
+// surface `skills install` already carries.
+func TestSkillsDiffUnknownSkill(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "diff", "no-such-skill"}, &stdout, &stderr); code != exitNotFound {
+		t.Fatalf("exit %d, want %d", code, exitNotFound)
+	}
+}
+
+func TestSkillsDiffOutsideARepository(t *testing.T) {
+	outside := t.TempDir()
+	t.Chdir(outside)
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "diff", "ticfac"}, &stdout, &stderr); code != exitNoRepo {
+		t.Fatalf("exit %d, want %d", code, exitNoRepo)
+	}
+}
+
+// --json reports each target's drift as fields, the same information the
+// prose carries.
+func TestSkillsDiffJSONReportsDrift(t *testing.T) {
+	root := skillsRepoFixture(t, ".claude/skills")
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "install", "ticfac"}, &stdout, &stderr); code != exitSuccess {
+		t.Fatalf("install: exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+
+	stdout.Reset()
+	code := Run([]string{"skills", "diff", "ticfac", "--json"}, &stdout, &stderr)
+	if code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	var doc struct {
+		Schema  string `json:"schema"`
+		State   string `json:"state"`
+		Skill   string `json:"skill"`
+		Targets []struct {
+			Dir       string `json:"dir"`
+			Installed bool   `json:"installed"`
+			Drift     bool   `json:"drift"`
+		} `json:"targets"`
+	}
+	if err := json.Unmarshal([]byte(stdout.String()), &doc); err != nil {
+		t.Fatalf("the --json report does not parse: %v\n%s", err, stdout.String())
+	}
+	if doc.Schema != "ticfac.skills-diff.v1" || doc.State != "done" || doc.Skill != "ticfac" {
+		t.Errorf("the report's header is wrong: %+v", doc)
+	}
+	if len(doc.Targets) != 1 || !doc.Targets[0].Installed || doc.Targets[0].Drift {
+		t.Errorf("the report's targets are wrong: %+v", doc.Targets)
+	}
+	_ = root
+}
+
 // stringsBuilder is the test writer Run takes.
 type stringsBuilder struct {
 	b strings.Builder
