@@ -689,6 +689,31 @@ func TestStatusModelLocalWiringPassesTheDashboardReaders(t *testing.T) {
 	if captured.Handle == nil {
 		t.Error("localStatusModel passes no Handle reader: the workers panel's handle cell renders null in every real run (zl1)")
 	}
+
+	// The fallback reader (tick 93n): the gathering with an activity
+	// gatherer wired passes RemoteActivity keyed by the tick and attempt —
+	// the local pi-durable workers whose conversation no transcript file
+	// holds read their watch door through it — and the reader answers
+	// through the gatherer itself.
+	captured = captureStatusSources(t)
+	called := false
+	localStatusModel(context.Background(), repo, "epic-none",
+		runlife.Status{State: runlife.Alive},
+		modelGatherers{
+			graph: func(context.Context, string, string) *tk.Graph { return nil },
+			ci:    func(context.Context, string, string) (*statusmodel.CIInput, error) { return nil, nil },
+			activity: func(context.Context, *cloudClient, string, string, int) *statusmodel.ActivityInput {
+				called = true
+				return nil
+			},
+		})
+	if captured.RemoteActivity == nil {
+		t.Fatal("the gathering with an activity gatherer wired passes no RemoteActivity reader: the local fallback would never fire")
+	}
+	captured.RemoteActivity("6dh", 3)
+	if !called {
+		t.Error("the wired RemoteActivity reader did not reach the gatherer")
+	}
 }
 
 // TestStatusModelCloudWiringCarriesTheHostCost (hn6 wave 1, tick r5i;

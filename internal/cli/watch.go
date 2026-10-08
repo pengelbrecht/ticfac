@@ -788,7 +788,7 @@ func watchRunStillAlive(source runfeed.Source, kind, repo, runID string) bool {
 // durable sources — so the watch's one document and the live view's last
 // frame cannot disagree.
 func watchGatherModel(ctx context.Context, source runfeed.Source, kind, repo, runID string) (statusmodel.Model, error) {
-	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: cloudWorkerActivity}
+	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: workerActivity}
 	if cloudSource, ok := source.(*cloudFeedSource); ok && kind == "cloud" {
 		record, err := readCloudRunRecord(ctx, cloudSource.client, cloudSource.runID)
 		if err != nil {
@@ -912,8 +912,11 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	costCache := &watchCostCache{ttl: watchSourceTTL, read: statusWorkerCost}
 	// Activity gets its own, shorter TTL: it is the one line the dashboard
 	// sells as LIVE ("what is happening right now"), so it is let go stale
-	// for seconds, never the graph's and the CI's thirty.
-	activityCache := &watchActivityCache{ttl: watchActivityTTL, read: cloudWorkerActivity}
+	// for seconds, never the graph's and the CI's thirty. Its read is the
+	// two-host dispatcher (tick 93n): a cloud watch reads the factory's
+	// sockets, a local watch the workers' doors — both bounded to one
+	// snapshot per TTL per worker.
+	activityCache := &watchActivityCache{ttl: watchActivityTTL, read: workerActivity}
 	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI, workerCost: costCache.WorkerCost, activity: activityCache.Activity}
 
 	// The model builder: local and cloud gather through their own sources

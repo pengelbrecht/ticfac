@@ -243,6 +243,61 @@ func TestActivityReadsRemoteActivityWhenNoWorktreeNamesTheWorker(t *testing.T) {
 	}
 }
 
+// TestActivityFallsBackToRemoteWhenTheTranscriptSaysNothing (tick 93n): a
+// local pi-durable worker HAS a worktree, but its conversation lives in the
+// harness's own storage — no session transcript file answers — so Activity
+// reads nothing and RemoteActivity, the worker's own watch stream, answers
+// in its place.
+func TestActivityFallsBackToRemoteWhenTheTranscriptSaysNothing(t *testing.T) {
+	src := runningEpicSources()
+	read := false
+	src.Activity = func(string, string) *ActivityInput {
+		read = true
+		return nil
+	}
+	called := false
+	src.RemoteActivity = func(tickID string, attempt int) *ActivityInput {
+		called = true
+		if tickID != "6dh" || attempt != 3 {
+			t.Errorf("RemoteActivity was asked about %s#%d, want 6dh#3", tickID, attempt)
+		}
+		return &ActivityInput{LastAction: "bash: running pytest", LastActionAt: testNow.Add(-30 * time.Second)}
+	}
+	model := Build(src)
+
+	if !read {
+		t.Fatal("Activity was never asked for the worktree-holding worker")
+	}
+	if !called {
+		t.Fatal("the transcript said nothing and RemoteActivity was never consulted")
+	}
+	activity := (*model.Workers)[0].Activity
+	if activity == nil || activity.LastAction == nil || *activity.LastAction != "bash: running pytest" {
+		t.Errorf("the activity reads %+v, want the fallback reader's own last action", activity)
+	}
+}
+
+// TestActivityAsksRemoteOnlyWhereTheTranscriptAnsweredNothing: a transcript
+// that answered is the whole answer — the fallback reader is never addressed
+// for a worker whose own stream file spoke, so a status read never opens a
+// worker's watch door behind a transcript that already said what it is doing.
+func TestActivityAsksRemoteOnlyWhereTheTranscriptAnsweredNothing(t *testing.T) {
+	src := runningEpicSources()
+	src.Activity = func(string, string) *ActivityInput {
+		return &ActivityInput{LastAction: "Bash: go vet ./...", LastActionAt: testNow.Add(-20 * time.Second)}
+	}
+	src.RemoteActivity = func(string, int) *ActivityInput {
+		t.Fatal("RemoteActivity was read although the transcript answered; the fallback is for silence only")
+		return nil
+	}
+	model := Build(src)
+
+	activity := (*model.Workers)[0].Activity
+	if activity == nil || activity.LastAction == nil || *activity.LastAction != "Bash: go vet ./..." {
+		t.Errorf("the activity reads %+v, want the transcript's own last action", activity)
+	}
+}
+
 // TestTheHandleReaderNamesTheWorkerTheMarkerCannot (zl1): the attempt
 // marker's job handle never carries a worker's name — it is cut before the
 // start, and its existence is the dispatch's compare-and-swap — so the

@@ -471,11 +471,14 @@ type modelGatherers struct {
 	graph      func(context.Context, string, string) *tk.Graph
 	ci         func(context.Context, string, string) (*statusmodel.CIInput, error)
 	workerCost func(context.Context, string) (*statusmodel.WorkerCostInput, error)
-	// activity answers one cloud worker's activity: the factory's watch
-	// socket, opened just long enough for its first frame and closed. Nil
-	// is a valid answer here too — a caller that never sets it leaves every
-	// cloud worker's activity null, the same honest not-measured the model
-	// states wherever a source goes unread.
+	// activity answers one worker's activity (tick 93n), keyed by the
+	// host the caller names: a non-nil client is a cloud run — the factory's
+	// watch socket, opened just long enough for its first frame and closed;
+	// a nil client is a local run — the worker's own watch door, for the
+	// pi-durable workers whose worktree names no session transcript. Nil is
+	// a valid answer here too — a caller that never sets it leaves every
+	// worker's activity null, the same honest not-measured the model states
+	// wherever a source goes unread.
 	activity func(ctx context.Context, client *cloudClient, runID, tickID string, attempt int) *statusmodel.ActivityInput
 }
 
@@ -613,6 +616,18 @@ func localStatusModelHosted(ctx context.Context, repo, runID string, probe runli
 		return statusmodel.SessionLog(home, worktree)
 	}
 
+	// The local run's fallback activity reader (tick 93n): a worker whose
+	// transcript has nothing to say — a pi-durable worker's conversation is
+	// its own storage — reads its watch door, keyed by the tick and attempt
+	// alone. No gatherer wired, no reader: the model states the field null,
+	// the honest not-measured.
+	var remoteActivity func(tickID string, attempt int) *statusmodel.ActivityInput
+	if gather.activity != nil {
+		remoteActivity = func(tickID string, attempt int) *statusmodel.ActivityInput {
+			return gather.activity(ctx, nil, runID, tickID, attempt)
+		}
+	}
+
 	return statusBuild(statusmodel.Sources{
 		Now:          now,
 		RunID:        runID,
@@ -639,8 +654,14 @@ func localStatusModelHosted(ctx context.Context, repo, runID string, probe runli
 		// name from the attempt record in the dispatch's state directory on
 		// this machine. All are nil-safe stubs where nothing answers.
 		Activity: statusmodel.TranscriptActivity(home),
-		Report:   statusmodel.AttemptReports(repo),
-		Handle:   statusmodel.WorkerHandles(runID),
+		// Where the transcript says nothing — a local pi-durable worker's
+		// conversation is its own storage, not a session file (tick 93n) —
+		// the worker's own watch door answers, keyed by the tick and
+		// attempt. Nil only where the gathering carries no gatherer at all:
+		// the model states the field null, the honest not-measured.
+		RemoteActivity: remoteActivity,
+		Report:         statusmodel.AttemptReports(repo),
+		Handle:         statusmodel.WorkerHandles(runID),
 		// The worker's harness kind, from the same executor record the handle
 		// reader walks (tick 5uq): the kind is what says which transcript
 		// layout the activity reader reads, and the durable attempt record

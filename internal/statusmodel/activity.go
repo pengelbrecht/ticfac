@@ -42,11 +42,13 @@ type ActivityInput struct {
 }
 
 // decorateWorkers fills the workers' activity windows and their executor
-// handles, from the durable records and the transcript reader — or, for a
-// worker no worktree names (a cloud run's, tick 93n), the RemoteActivity
-// reader keyed by the tick and attempt alone. The workers are already
-// assembled (buildWorkers: their gaps, their silence, their last turn);
-// this reads the two facts the panel adds on top of them.
+// handles, from the durable records and the transcript reader — and, where
+// that transcript reader answers nothing (a cloud run's worker has no
+// worktree this machine names, tick 93n; a local pi-durable worker's
+// worktree names a conversation no session transcript file holds), the
+// RemoteActivity reader keyed by the tick and attempt alone. The workers are
+// already assembled (buildWorkers: their gaps, their silence, their last
+// turn); this reads the two facts the panel adds on top of them.
 //
 // The nudges are counted for every worker whether or not its transcript
 // could be read: a nudge is the run's own typed line about the (tick,
@@ -80,6 +82,14 @@ func decorateWorkers(src Sources, recs Records, m *Model) {
 		switch {
 		case src.Activity != nil && w.Worktree != "":
 			input = src.Activity(runnerOf(src, w, attempts[key]), w.Worktree)
+			if input == nil && src.RemoteActivity != nil {
+				// The transcript had nothing to read — for a local
+				// pi-durable worker the conversation lives in its own
+				// storage, not a session transcript file (tick 93n): the
+				// worker's own watch stream answers in the transcript's
+				// place.
+				input = src.RemoteActivity(w.TickID, w.Attempt)
+			}
 		case src.RemoteActivity != nil:
 			input = src.RemoteActivity(w.TickID, w.Attempt)
 		}
@@ -215,12 +225,24 @@ func TranscriptActivity(home string) func(runner, worktree string) *ActivityInpu
 		if !ok {
 			return nil
 		}
-		return &ActivityInput{
-			Events:       events.Events,
-			LastAction:   events.LastToolCall,
-			LastActionAt: events.LastToolAt,
+		input := &ActivityInput{Events: events.Events}
+		if action, at := newestExcerpt(events.LastToolCall, events.LastToolAt, events.LastText, events.LastTextAt); action != "" {
+			input.LastAction, input.LastActionAt = action, at
 		}
+		return input
 	}
+}
+
+// newestExcerpt is the activity line's own choice (tick 93n): the worker's
+// NEWEST act states the line — its last tool call when the last thing it did
+// was call one, its latest assistant sentence when the newest act was
+// speaking — whichever the stream stamps later, ties to the tool call (a
+// concrete action is the better excerpt of a same-stamp turn).
+func newestExcerpt(toolCall string, toolAt time.Time, text string, textAt time.Time) (string, time.Time) {
+	if textAt.After(toolAt) {
+		return text, textAt
+	}
+	return toolCall, toolAt
 }
 
 // transcriptKind maps the runner string the Sources seam passes — the

@@ -439,6 +439,9 @@ type transcriptBlock struct {
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
 	Input     json.RawMessage `json:"input"`
+	// Text is an assistant answer block's own body (a "text" block); a
+	// tool block carries none.
+	Text string `json:"text"`
 }
 
 // transcriptTailBytes is how much of a session transcript is ever read: the
@@ -500,15 +503,22 @@ func lastEventIn(path string) (TranscriptEvent, bool) {
 // TranscriptEvents is the whole-tail read of one worktree's newest session
 // transcript: the stamp of every dated line — the moments the worker was
 // seen doing something, which the status model buckets into its activity
-// window — and the LAST tool call as a person reads it: the tool's own name
-// plus its first argument, one bounded line, with its own stamp. The line is
-// CREDENTIAL-REDACTED (see redactCredentials, tick ghh): it is what the
-// dashboard renders and the phone snapshot ships off-host, and a command's
-// first argument can carry a token.
+// window — the LAST tool call as a person reads it: the tool's own name
+// plus its first argument, one bounded line, with its own stamp — and the
+// LAST assistant sentence (tick 93n): the excerpt the activity line falls
+// back to when the worker's newest act was speaking rather than calling a
+// tool. Both lines are CREDENTIAL-REDACTED (see RedactCredentials, tick
+// ghh): they are what the dashboard renders and the phone snapshot ships
+// off-host, and a command's first argument and a model's answer can each
+// carry a token.
 type TranscriptEvents struct {
 	Events       []time.Time
 	LastToolCall string
 	LastToolAt   time.Time
+	// LastText is the newest assistant message's own text, flattened to
+	// one line, with its stamp. Empty when no line carries one.
+	LastText   string
+	LastTextAt time.Time
 }
 
 // transcriptActionBound is the last-action line's own bound: one line a
@@ -551,6 +561,9 @@ func ReadTranscriptEvents(home, kind, cwd string) (TranscriptEvents, bool) {
 		if call, ok := lastToolCall(line); ok {
 			out.LastToolCall, out.LastToolAt = call, at
 		}
+		if text, ok := lastAssistantSentence(line); ok {
+			out.LastText, out.LastTextAt = text, at
+		}
 	}
 	if len(out.Events) == 0 {
 		return TranscriptEvents{}, false
@@ -592,6 +605,35 @@ func lastToolCall(line transcriptLine) (string, bool) {
 			return BoundLine(name + ": " + RedactCredentials(arg)), true
 		}
 		return BoundLine(name), true
+	}
+	return "", false
+}
+
+// lastAssistantSentence answers the LAST assistant answer one transcript line
+// carries, as the activity line's excerpt when the worker's newest act was
+// speaking rather than calling a tool (tick 93n): the model's own words,
+// flattened to one line, REDACTED and bounded through the same pass the tool
+// call goes through — the line is what the dashboard renders and the phone
+// snapshot ships off-host, and a model's answer can carry a credential it was
+// handed. Only an assistant line's own text counts: a tool result's output
+// and a person's typed message are neither the worker's words nor its act.
+// False when the line carries no assistant answer at all.
+func lastAssistantSentence(line transcriptLine) (string, bool) {
+	if line.Message == nil || line.Message.Role != "assistant" {
+		return "", false
+	}
+	var blocks []transcriptBlock
+	if json.Unmarshal(line.Message.Content, &blocks) != nil {
+		return "", false
+	}
+	for i := len(blocks) - 1; i >= 0; i-- {
+		block := blocks[i]
+		if block.Type != "text" || strings.TrimSpace(block.Text) == "" {
+			continue
+		}
+		// Redaction precedes the bound, as with the tool call: a cut line
+		// must not carry half a secret.
+		return BoundLine(RedactCredentials(block.Text)), true
 	}
 	return "", false
 }

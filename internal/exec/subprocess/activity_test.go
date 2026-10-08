@@ -718,3 +718,90 @@ func TestReadTranscriptEventsRedactsCredentialsFromTheLastToolCall(t *testing.T)
 			events.LastToolCall, ok)
 	}
 }
+
+// The LAST assistant sentence is the excerpt the activity line falls back to
+// (tick 93n): a worker whose newest act was speaking — writing code, a
+// closing summary — is described by its own words, not by a stale tool call
+// from before it. Only the assistant's own answer counts: a tool result's
+// output and a person's typed message are neither the worker's words nor its
+// act. The sentence is REDACTED and bounded through the same pass the tool
+// call goes through, and the stamp is its own line's.
+func TestReadTranscriptEventsAnswersTheLastAssistantSentence(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(EnvTranscriptHome, home)
+	cwd := t.TempDir()
+
+	// The worker spoke last: the newest sentence is its own answer, newer
+	// than the older tool call still in the transcript.
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "assistant", "timestamp": "2026-10-08T09:00:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "tool_use", "name": "bash", "input": map[string]any{"command": "go build ./..."}},
+			}}},
+		map[string]any{"type": "assistant", "timestamp": "2026-10-08T09:05:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "text", "text": "Refactoring the reconciliation loop next"},
+			}}})
+	events, ok := ReadTranscriptEvents(home, "claude", cwd)
+	if !ok {
+		t.Fatal("the transcript stands and the tail reader answered nothing")
+	}
+	if at, _ := time.Parse(time.RFC3339Nano, "2026-10-08T09:05:00.000Z"); !events.LastTextAt.Equal(at) {
+		t.Errorf("the last sentence is stamped %v, want its own line's stamp", events.LastTextAt)
+	}
+	if events.LastText != "Refactoring the reconciliation loop next" {
+		t.Errorf("the last sentence is %q, want the assistant's own answer", events.LastText)
+	}
+
+	// A tool result and a person's message are not the worker's words: the
+	// newest of either does not displace the assistant's sentence. (The
+	// helper writes whole files, so the transcript is restated entire.)
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "assistant", "timestamp": "2026-10-08T09:00:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "tool_use", "name": "bash", "input": map[string]any{"command": "go build ./..."}},
+			}}},
+		map[string]any{"type": "assistant", "timestamp": "2026-10-08T09:05:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "text", "text": "Refactoring the reconciliation loop next"},
+			}}},
+		map[string]any{"type": "user", "timestamp": "2026-10-08T09:06:00.000Z",
+			"message": map[string]any{"role": "user", "content": "keep going"}},
+		map[string]any{"type": "user", "timestamp": "2026-10-08T09:07:00.000Z",
+			"message": map[string]any{"role": "user", "content": []any{
+				map[string]any{"type": "tool_result", "content": "ok"},
+			}}})
+	events, _ = ReadTranscriptEvents(home, "claude", cwd)
+	if events.LastText != "Refactoring the reconciliation loop next" {
+		t.Errorf("the last sentence is %q, want the assistant's own answer unchanged by later user lines", events.LastText)
+	}
+
+	// A credential the model echoed must not survive the line, the way it
+	// must not survive the tool call's.
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "assistant", "timestamp": "2026-10-08T09:08:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "text", "text": "the key is AKIAIOSFODNN7EXAMPLE rotate it"},
+			}}})
+	events, _ = ReadTranscriptEvents(home, "claude", cwd)
+	if strings.Contains(events.LastText, "AKIAIOSFODNN7EXAMPLE") {
+		t.Errorf("the last sentence %q carries the token whole — the model ships off-host", events.LastText)
+	}
+	if !strings.Contains(events.LastText, "rotate it") {
+		t.Errorf("the last sentence %q lost its ordinary words to the redaction", events.LastText)
+	}
+
+	// The line stays bounded however long the sentence was.
+	writeTranscript(t, "claude", cwd,
+		map[string]any{"type": "assistant", "timestamp": "2026-10-08T09:09:00.000Z",
+			"message": map[string]any{"role": "assistant", "content": []any{
+				map[string]any{"type": "text", "text": strings.Repeat("word ", 40)},
+			}}})
+	events, _ = ReadTranscriptEvents(home, "claude", cwd)
+	if len([]rune(events.LastText)) > 80 {
+		t.Errorf("the last sentence is %d runes, want it bounded to 80", len([]rune(events.LastText)))
+	}
+	if !strings.HasSuffix(events.LastText, "\u2026") {
+		t.Errorf("the bounded sentence %q lost the cut's ellipsis", events.LastText)
+	}
+}

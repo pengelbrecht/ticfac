@@ -792,15 +792,16 @@ function needsYouHTML(doc: StatusDoc): string {
  * renders, in the same words: who the worker is (its tick, its model, its
  * executor, the handle a person finds it by), its measured activity as the
  * sparkline, its last action with its age, and the amber fact when the run
- * has nudged it as stuck. A census this machine cannot take — a cloud run's
- * workers are not on the machine that gathered the doc — is SAID, never
- * faked, in the terminal's own words; empty says the census read and
- * nothing stands, and renders nothing at all.
+ * has nudged it as stuck. A census this machine cannot take is SAID, never
+ * faked, in the terminal's own words (tick 93n — the old cloud line went,
+ * because a cloud run's census is the checkpoint's word and its workers
+ * carry the same activity line a local one does); empty says the census
+ * read and nothing stands, and renders nothing at all.
  */
 function workersHTML(doc: StatusDoc, ticks: RunRowTick[]): string {
   const workers = doc.workers;
   if (workers === undefined || workers === null) {
-    return `<p class="workers cloud">workers run in the cloud — not visible from here</p>`;
+    return `<p class="workers cloud">workers: no census could be taken</p>`;
   }
   return workers
     .map((worker: StatusWorker) => {
