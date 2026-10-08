@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "epic-t8u",
   "epic_id": "t8u",
-  "sequence": 156,
-  "state": "integrating",
-  "reason": "integrating j1h attempt 22 into epic/t8u",
-  "updated_at": "2026-10-08T05:39:29Z",
+  "sequence": 157,
+  "state": "gating",
+  "reason": "running the integrated gate for j1h on f4d92372b4f3",
+  "updated_at": "2026-10-08T05:39:35Z",
   "ticks": [
     {
       "tick_id": "pqs",
@@ -99,7 +99,7 @@
     },
     {
       "tick_id": "j1h",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 22
     },
     {
