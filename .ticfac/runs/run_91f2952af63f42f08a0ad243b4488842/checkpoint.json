@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 27,
-  "state": "publishing",
-  "reason": "closing lck behind the integrated gate on 76af4578d5ca",
-  "updated_at": "2026-10-08T18:36:00Z",
+  "sequence": 28,
+  "state": "running",
+  "reason": "lck is closed",
+  "updated_at": "2026-10-08T18:36:02Z",
   "ticks": [
     {
       "tick_id": "47j",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "lck",
-      "state": "reported",
+      "state": "closed",
       "attempt": 4
     },
     {
