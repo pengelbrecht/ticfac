@@ -78,6 +78,43 @@ func TestSkillsInstallIsOneCommand(t *testing.T) {
 	}
 }
 
+// The short form (tick rkk): the binary embeds one skill, so a bare
+// `ticfac skills install` acts on it — no need to repeat the name.
+func TestSkillsInstallWithNoNameInstallsTheEmbeddedSkill(t *testing.T) {
+	root := skillsRepoFixture(t, ".claude/skills")
+
+	var stdout, stderr stringsBuilder
+	code := Run([]string{"skills", "install"}, &stdout, &stderr)
+	if code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, stdout.String(), stderr.String())
+	}
+	dir := filepath.Join(root, ".claude", "skills", "ticfac")
+	data, err := os.ReadFile(filepath.Join(dir, "SKILL.md"))
+	if err != nil {
+		t.Fatalf("the skill was not installed to %s: %v", dir, err)
+	}
+	if !strings.Contains(string(data), "name: ticfac") {
+		t.Errorf("%s/SKILL.md is not the ticfac skill:\n%s", dir, data)
+	}
+	stamp, err := skills.ReadStamp(dir)
+	if err != nil {
+		t.Fatalf("%s carries no stamp: %v", dir, err)
+	}
+	if stamp.Skill != "ticfac" {
+		t.Errorf("the stamp names %q, want ticfac", stamp.Skill)
+	}
+}
+
+// Too many positional arguments is a usage error, named form or not.
+func TestSkillsInstallTooManyArgs(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "install", "ticfac", "extra"}, &stdout, &stderr); code != exitUsage {
+		t.Fatalf("two positional args exited %d, want %d", code, exitUsage)
+	}
+}
+
 // The refusal that keeps install honest: a target with other content and no
 // stamp may be hand-edited, so it is a usage error naming --force — and
 // --force takes it over deliberately.
@@ -206,6 +243,47 @@ func TestSkillsInstallJSONReportsTargets(t *testing.T) {
 		t.Errorf("the report's targets are wrong: %+v", doc.Targets)
 	}
 	_ = root
+}
+
+// `skills get` with no name acts on the embedded skill (tick rkk); the
+// explicit form stays equivalent.
+func TestSkillsGetWithNoNamePrintsTheEmbeddedSkill(t *testing.T) {
+	t.Parallel()
+
+	var withName, withoutName, stderr stringsBuilder
+	if code := Run([]string{"skills", "get"}, &withoutName, &stderr); code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, withoutName.String(), stderr.String())
+	}
+	if code := Run([]string{"skills", "get", "ticfac"}, &withName, &stderr); code != exitSuccess {
+		t.Fatalf("exit %d: %s%s", code, withName.String(), stderr.String())
+	}
+	if withoutName.String() != withName.String() {
+		t.Errorf("`skills get` without a name does not match `skills get ticfac`:\n%s\n---\n%s",
+			withoutName.String(), withName.String())
+	}
+	if !strings.Contains(withoutName.String(), "name: ticfac") {
+		t.Errorf("`skills get` did not print the ticfac skill:\n%s", withoutName.String())
+	}
+}
+
+// A named skill that does not exist is still the not-found exit code.
+func TestSkillsGetUnknownSkill(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "get", "no-such-skill"}, &stdout, &stderr); code != exitNotFound {
+		t.Fatalf("an unknown skill exited %d, want %d", code, exitNotFound)
+	}
+}
+
+// Too many positional arguments is a usage error.
+func TestSkillsGetTooManyArgs(t *testing.T) {
+	t.Parallel()
+
+	var stdout, stderr stringsBuilder
+	if code := Run([]string{"skills", "get", "ticfac", "extra"}, &stdout, &stderr); code != exitUsage {
+		t.Fatalf("two positional args exited %d, want %d", code, exitUsage)
+	}
 }
 
 // stringsBuilder is the test writer Run takes.

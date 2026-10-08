@@ -13,9 +13,12 @@ where it reads a checkout.
 - `ticfac doctor` — what a run still needs on this machine; `--cloud` adds
   the cloud checks whatever the repo declares. Exit 0 ready, 1 missing.
 - `ticfac skills list|get|install` — the skills embedded in this binary.
-  `ticfac skills install ticfac` installs into `.claude/skills/` and
-  `.agents/skills/`; `--dir <the skill's own dir>`, `--force` to take over
-  an unstamped dir. `ticfac skills list` prints the version each ships with.
+  `ticfac skills install` installs into `.claude/skills/` and
+  `.agents/skills/` (the binary embeds one skill, so the name is optional —
+  `ticfac skills install ticfac` names it explicitly and still works);
+  `--dir <the skill's own dir>`, `--force` to take over an unstamped dir.
+  `ticfac skills get` prints its SKILL.md; `ticfac skills list` prints the
+  version each ships with.
 - `ticfac version` — this build and the contract bundle it serves.
 - `ticfac completion bash|zsh|fish` — shell completion.
 

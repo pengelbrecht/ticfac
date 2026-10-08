@@ -223,7 +223,7 @@ func LocalHarnessBundleSourcesHash() string {
 }
 
 // SkillsFS is `skills/`: the agent skills this binary can install, shipped
-// in the repo the way ticks ships its own — so `ticfac skills install ticfac`
+// in the repo the way ticks ships its own — so `ticfac skills install`
 // works from the executable alone, no checkout, no network (tick 8v3). The
 // skill teaches the loop an agent runs an epic with; the embed means what
 // the binary installs and what the repository reviewed are the same commit
