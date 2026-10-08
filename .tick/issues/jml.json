@@ -1,0 +1,16 @@
+{
+  "id": "jml",
+  "title": "Close out the watch redesign: retro, screenshots on the PR, then the next feasible epic",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "blocked_by": [
+    "8t5"
+  ],
+  "parent": "ymf",
+  "role": "closeout",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-08T13:16:48.56077Z",
+  "updated_at": "2026-10-08T13:16:48.56077Z"
+}

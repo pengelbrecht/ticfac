@@ -340,6 +340,27 @@ describe("submission on a free project", () => {
     await expect(roomFor(env, project).leaseStatus()).resolves.toBeNull();
   });
 
+  // tick ba4: `ticfac run --cloud --config <name>` carries the named config
+  // as a submission field, so the Workflow's params carry it into the
+  // orchestrator container's environment and on into the run-epic it execs.
+  it("carries a named run config into the Workflow params", async () => {
+    const project = await enrolled("named-config");
+
+    const res = await post("/api/runs", submission(project, { config: "claude" }));
+
+    expect(res.status).toBe(201);
+    expect(workflow.created[0]!.params).toMatchObject({ config: "claude" });
+  });
+
+  it("carries no config into the Workflow params when the submission names none", async () => {
+    const project = await enrolled("default-config");
+
+    const res = await post("/api/runs", submission(project));
+
+    expect(res.status).toBe(201);
+    expect(workflow.created[0]!.params).not.toHaveProperty("config");
+  });
+
   // The flags on `tk cloud run` are a per-invocation choice; nothing about
   // them is a redeploy, so they have to reach the Workflow's params.
   it("carries a per-run budget into the Workflow params", async () => {
@@ -790,6 +811,71 @@ describe("queued submissions (D22)", () => {
     expect(released.ignited).toMatchObject({ run_id: queuedID, epic: "bo9" });
     expect(workflow.created.map((c) => c.id)).toEqual([first.run.run_id, queuedID]);
     await expect(getRun(env.DB, queuedID)).resolves.toMatchObject({ state: "starting" });
+  });
+
+  // Tick xvk, the production sequence after #263 (dispatch_log, 2026-10-08):
+  // ex6 dispatched 23:38 and bo9 parked behind it at 23:40, both on the
+  // deploy BEFORE #263 — so bo9's entry carried a hard 30-minute window. The
+  // deploy landed, the operator ran `--queue` again at 00:08 and was handed
+  // back that same entry (`already_queued`), whose window still closed at
+  // 00:10. ex6 completed at 08:22 and released into an empty queue. A repeat
+  // park must widen the entry that stands, not just name it.
+  it("widens a pre-deploy hard-window entry when the epic is queued again, and ignites it when the holder completes", async () => {
+    const project = await enrolled("queue-xvk-predeploy");
+    // The holder, submitted before the deploy.
+    const first = (await (
+      await post("/api/runs", submission(project, { epic: "ex6" }))
+    ).json()) as {
+      run: { run_id: string };
+    };
+    const holderLease = workflow.created[0]!.params.lease_token;
+    if (holderLease === undefined) throw new Error("the route must hand the lease to the driver");
+
+    // bo9 parked by the OLD code: a hard window, no waiting for the release.
+    const room = roomFor(env, project);
+    const old = await room.queueSubmission({
+      run_id: "run_e606_predeploy",
+      project,
+      epic: "bo9",
+      base_sha: OTHER_SHA,
+      requested_by: "operator@example.com",
+      blocked_by: first.run.run_id,
+      ttl_ms: 1000,
+    });
+    if (!old.ok) throw new Error("expected the old park to succeed");
+    expect(old.queued.waits_for_release).toBeUndefined();
+
+    // After the deploy: the operator queues bo9 again, through the route.
+    const again = (await (
+      await post(
+        "/api/runs",
+        submission(project, { epic: "bo9", base_sha: OTHER_SHA, queue: true }),
+      )
+    ).json()) as { queued: QueuedSubmission };
+    expect(again.queued.run_id).toBe("run_e606_predeploy");
+    expect(again.queued.waits_for_release).toBe(true);
+
+    // The old window closes and the alarm fires: the entry stands.
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const stub = env.RUN_ROOMS.get(env.RUN_ROOMS.idFromName(project));
+    await runDurableObjectAlarm(stub as unknown as DurableObjectStub<RunRoom>);
+    const one = await get("/api/runs/run_e606_predeploy");
+    expect(one.status).toBe(200);
+    await expect(one.json()).resolves.toMatchObject({ run: { state: "queued" } });
+
+    // The holder completes and releases the way its Workflow's finalize does.
+    await updateRunState(env.DB, first.run.run_id, "completed", new Date().toISOString());
+    const released = await room.releaseDispatchLease({
+      run_id: first.run.run_id,
+      token: holderLease,
+    });
+    expect(released.ok).toBe(true);
+    if (released.ok) expect(released.ignited).toMatchObject({ run_id: "run_e606_predeploy" });
+    expect(workflow.created.map((c) => c.id)).toEqual([first.run.run_id, "run_e606_predeploy"]);
+    await expect(getRun(env.DB, "run_e606_predeploy")).resolves.toMatchObject({
+      epic: "bo9",
+      state: "starting",
+    });
   });
 
   // The window of a submission that waited counts from the release, not from

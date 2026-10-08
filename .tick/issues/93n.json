@@ -1,0 +1,15 @@
+{
+  "id": "93n",
+  "title": "Live activity excerpt per running worker, local and cloud",
+  "gloss": "worker activity line",
+  "description": "A one-line excerpt of what each running worker is doing now: its latest tool call (summarised: 'running pytest', 'editing internal/x.go') or latest assistant sentence, from the conversation stream pi-durable and claude already produce (local: the runner log / worker.sqlite; cloud: the factory's worker stream that ticfac cloud logs reads). Add it to the status model per running tick with its age; cap length; never a secret (strip env, tokens). Remove the 'workers run in the cloud — not visible from here' line.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "parent": "ymf",
+  "acceptance_criteria": "each running tick carries an activity line with its age, local and cloud, tested with recorded streams; no token or URL can appear; make gate",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-08T13:16:48.350244Z",
+  "updated_at": "2026-10-08T13:16:48.350244Z"
+}

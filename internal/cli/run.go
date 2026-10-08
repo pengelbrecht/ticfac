@@ -411,18 +411,11 @@ func runCommand(ctx context.Context, args []string, fl *runFlags, stdout, stderr
 				"keeps it on this machine; name one\n")
 			return 2
 		}
-		// The cloud submission carries no --config today (tick tda): the
-		// factory's submission record has no field for it, and a flag that
-		// silently did nothing would be a lie an everyday command must not
-		// tell. A --cloud run selects by the epic's own label and the
-		// declared default — the in-factory orchestrator resolves the same
-		// precedence from the repository and the tracker it is handed.
-		if *fl.config != "" {
-			fmt.Fprintf(stderr, "ticfac run: --config does not apply to a --cloud run — a submitted run "+
-				"selects by the epic's own config: label and the [configs] default; set the epic's label, or run "+
-				"--cloud-workers, whose orchestrator is here and takes the flag\n")
-			return 2
-		}
+		// The cloud submission carries --config too (tick ba4): the factory's
+		// submission record carries the named config as a field, and the
+		// in-factory orchestrator forwards it to the run-epic it execs, which
+		// resolves the same precedence (the flag over the epic's own label
+		// over the [configs] default) the local command does.
 	}
 	if *fl.cloudWorkers && (*fl.noHerdr || *fl.profiles != "") {
 		fmt.Fprintf(stderr, "ticfac run: --cloud-workers dispatches every job through the factory with the "+

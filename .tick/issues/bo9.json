@@ -3,7 +3,7 @@
   "title": "Operator surface follow-ups: --config on cloud runs, skills diff/get --full, the harness inside the binary",
   "gloss": "operator surface follow-ups",
   "description": "Follow-ups found 2026-10-07 while setting ticfac up on a second machine (ralph) and refreshing the ticfac skill (#259): ba4 lets ticfac run --cloud take --config; g5f reports a stale installed skill copy; u2g prints a skill's references from the binary; 0ek ships the local pi harness inside the ticfac binary (esbuild bundle, go:embed, run with node — no npm), so local pi runs work in any repository and on any machine. Prerequisite for the first release (y9v).",
-  "status": "open",
+  "status": "closed",
   "priority": 2,
   "type": "epic",
   "owner": "ticks-sandbox@ticks.invalid",
@@ -13,5 +13,7 @@
   "acceptance_criteria": "[A1] ticfac run \u003cepic\u003e --cloud --config claude runs the epic on the claude config (ba4). [A2] ticfac skills diff (or doctor) reports an installed ticfac skill older than the binary with the upgrade command (g5f). [A3] ticfac skills get ticfac --full prints SKILL.md and every references file (u2g). [A4] a local pi-durable run in a repository that is not ticfac, with only the ticfac binaries and node, dispatches and completes a worker; a stale embedded harness bundle fails the gate (0ek). [A5] make gate passes and CI is green on the epic PR.",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T15:18:21.642427Z",
-  "updated_at": "2026-10-07T15:18:21.694978Z"
+  "updated_at": "2026-10-08T14:38:42.452157Z",
+  "closed_at": "2026-10-08T14:38:42.452157Z",
+  "closed_reason": "landed as PR #267 (merge 032c3745b, 2026-10-08)"
 }

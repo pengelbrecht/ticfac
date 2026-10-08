@@ -1,0 +1,70 @@
+{
+  "schema_version": 3,
+  "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
+  "epic_id": "bo9",
+  "sequence": 68,
+  "state": "completed",
+  "reason": "every tick of bo9 is closed behind the integrated gate; the epic PR #267 is ready: main at 8ea97851217d folded in, CI green on edd6931cd6ab. This incarnation was reached after 1 AUTOMATIC CONTINUATION(S) of this run, each one an intervention nobody typed: the run did not reach here unattended",
+  "updated_at": "2026-10-08T12:50:11Z",
+  "ticks": [
+    {
+      "tick_id": "0ek",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "ba4",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "g5f",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "rkk",
+      "state": "closed",
+      "attempt": 4
+    },
+    {
+      "tick_id": "u2g",
+      "state": "closed",
+      "attempt": 5
+    },
+    {
+      "tick_id": "g2s",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "52h",
+      "state": "closed",
+      "attempt": 9
+    },
+    {
+      "tick_id": "two",
+      "state": "closed",
+      "attempt": 8
+    }
+  ],
+  "provenance": {
+    "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/bo9",
+    "source_sha": "edd6931cd6ab2a5f5d4324f2890eecce4f42324f",
+    "integration_ref": "refs/heads/epic/bo9",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:38b72ba23ed02264ab3b10124b3b6616fb7078ea0dddfb2871cc3b4e02f52914",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

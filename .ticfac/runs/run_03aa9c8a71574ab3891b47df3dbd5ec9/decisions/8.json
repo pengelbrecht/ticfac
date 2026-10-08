@@ -1,0 +1,100 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "bo9",
+    "job_id": "run-run_03aa9c8a71574ab3891b47df3dbd5ec9/tick-g2s/attempt-6",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (cloudflare-sandbox/claude, opus)",
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "ed3f1d2fc915fef66481900b14e3f73f09f5a2da",
+    "tick_id": "g2s"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "TestOverrideForwardsTheNamedRunConfig declares run_config=\"claude\" by hand in its own harness script, so it proves the override's argv but never image/common.sh's run_config=\"${TICKS_CONFIG:-}\" — the single link between the Worker's orchestratorEnv output and the entrypoint's argv. Every other hop of ba4's chain has a test on both sides; this one has none, and internal/sandboximage's fixture (f.env[EnvModel], f.env[EnvHarness]) is exactly the level that could assert it. A rename or typo on either side would ship a green gate while every `run --cloud --config <name>` silently fell back to the epic's label and the declared default. sandboximage.EnvConfig is declared and referenced by no Go code at all, which is the same gap seen from the other end.\nevidence: internal/factory/ticfacentrypoint_test.go:225 declares run_config=\"\"; image/common.sh:162 is the untested line; internal/sandboximage/sandboximage.go:61 declares EnvConfig, `grep -rn EnvConfig --include=*.go` finds no non-test use",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "No test covers common.sh reading TICKS_CONFIG into run_config"
+      },
+      {
+        "body": "submitRun parks a contended submission with room.queueSubmission, and that call does not carry submission.config — so an entry that ignites later from the RunRoom's alarm starts a run on the epic's label and the declared default instead of the config its submitter named. The same block's own comments explain why the budget and the credential grade ARE parked (\"a budget that survives the submission but not the queue is a run the operator believes is bounded and is not\"); config is that class of value. Latent today rather than live: `ticfac run --cloud` always sends queue:false, and `ticfac cloud run`, the only surface with --queue, has no --config to send. The fix is one field on QueueSubmissionRequest/QueuedSubmission and one line at each end, beside the ones already there.\nevidence: cloudflare/src/runs.ts:1030-1058 (the queueSubmission call, no config), against cloudflare/src/runs.ts:998 (the started path, which does carry it); cloudflare/src/run-room.ts:146-189 (QueuedSubmission) and :190-209 (QueueSubmissionRequest)",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "A queued cloud submission drops the named config at ignition"
+      },
+      {
+        "body": "`skills get --full` prints skills.Paths(name) in order and writes the \"--- <path> ---\" separator only for i > 0, so the contract u2g states — SKILL.md, then every references file under a header naming its path — holds only because skills.Paths sorts lexicographically and 'S' (0x53) sorts before 'r' (0x72). A top-level file added to the bundle that sorts before SKILL.md (README.md, CHANGELOG.md, AGENTS.md) would be printed FIRST and, being index 0, with no header at all — silently inverting the documented order and leaving the reader no way to tell where one file ends and the next begins. Leading with SKILL.md explicitly, or giving every file its header, makes the contract true by construction.\nevidence: internal/cli/skills.go:185-190 (the `if i > 0` separator) with internal/skills/skills.go:111 (sort.Strings); TestSkillsGetFullPrintsEveryFile asserts strings.HasPrefix(out, SKILL.md) and so encodes the same accident",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "skills get --full puts SKILL.md first only by lexicographic luck"
+      },
+      {
+        "body": "u2g exists because an agent cannot read the skill's references/ files out of the binary without installing it first, and --full is the fix. But references/commands.md — the file SKILL.md introduces as \"every command and the flags worth knowing\" — was edited in this epic and still says only \"`ticfac skills get` prints its SKILL.md\". An agent reading the skill is therefore told the opposite of what the epic shipped: that SKILL.md is all it can get. rkk's short form and g5f's diff both reached this file; u2g's flag did not.\nevidence: skills/ticfac/references/commands.md:15-24 (the skills bullet, as rewritten by this epic) and skills/ticfac/SKILL.md:14-20, neither naming --full; internal/cli/skills.go:120-126 is where the flag IS documented",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "The ticfac skill's command reference never mentions skills get --full"
+      },
+      {
+        "body": "`build: harness-bundle` makes a plain `make build` run `pnpm install --frozen-lockfile --prefer-offline` under harness/ and regenerate harness/embed/local-main.bundle.mjs before `go build ./...`. That target was pure Go before this epic, so on a machine without node or pnpm, or without network for a cold pnpm store, `make build` now fails where it used to work — and on a machine where it succeeds it rewrites a tracked file as a side effect of building. Nothing automated depends on it (CI, image/Dockerfile, .goreleaser.yaml and image/build.sh all read the committed bundle; `make gate` does not depend on harness-bundle), so the cost falls only on a human, and the Makefile's own comment documents it. Keeping `build` as `go build ./...` and leaving regeneration to the explicit `make harness-bundle` — which the gate test already names as the fix — matches how the rest of the embedded trees (profiles/, skills/) are built.\nevidence: Makefile:44-48; `grep -rn 'make build' .github/ image/ .goreleaser.yaml` finds no consumer",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "make build now needs node and a pnpm install, and rewrites a committed file"
+      },
+      {
+        "body": "harness/src/local/main.ts opens with \"THE ARGV, as internal/exec/subprocess's runner table spells it\" followed by the node --experimental-strip-types --import <harness>/runtime/register.mjs form. After 0ek the runner table spells `node <bundle> --config … --message …`; the documented shape is now only what $TICFAC_HARNESS_DIR selects. The file's ensureDependencies comment was updated for the bundle and this one was not, so the entry point's own contract statement contradicts the table it cites. harness/README.md gets this right, which makes the stale copy the more misleading of the two.\nevidence: harness/src/local/main.ts:7-14 against internal/exec/subprocess/runner.go:156-164 (the \"pi\" table entry) and runner.go:178-185 (piSourceArgv)",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "main.ts's header still documents the pre-bundle argv as the argv"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/bo9/attempt-6/g2s",
+      "commits": 2,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/bo9/attempt-6/g2s:RESULT-g2s.md",
+      "review_verdict": "READY",
+      "review_verdict_detail": ""
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (READY)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T11:10:25Z",
+  "answered_at": "2026-10-08T11:10:25Z",
+  "provenance": {
+    "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
+    "tick_id": "g2s",
+    "attempt": 6,
+    "source_ref": "refs/heads/epic/bo9",
+    "source_sha": "ed3f1d2fc915fef66481900b14e3f73f09f5a2da",
+    "integration_ref": "refs/heads/epic/bo9",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:a3ec59877a8df59649b3f56ad7812adc2be1f35a7e525b1a5dbe087668099b17",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

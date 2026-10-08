@@ -1,0 +1,14 @@
+{
+  "id": "mr0",
+  "title": "Staging proof's announced-line regex matches only the between-rounds path",
+  "description": "harness/proof/restore-setup-staging.ts matches the log for one line only ('the container was lost between rounds; …'), while its own comment says the loss may be met by the ready check or the tracked bash's nonce check, and now by the mid-command path too. A proof run whose restore fires through any path but the ready check records announced_line: null in its evidence, which reads as 'nothing announced' when a line did land.\nevidence: harness/proof/restore-setup-staging.ts:149,172 (the regex), :245-248 (announced_line)\n\nticfac run run_69f8f57832d34601b040367c7207b81f filed this backlog tick from the finding 9ee4f1cc6c4efa4bf74ea817742397b21a7be1513479e805552eb9ad7560d92b (reported by run-run_69f8f57832d34601b040367c7207b81f/tick-qzg/attempt-23) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/9ee4f1cc6c4efa4bf74ea817742397b21a7be1513479e805552eb9ad7560d92b.json on the run branch.",
+  "notes": "2026-10-07 22:19 - ticfac run run_69f8f57832d34601b040367c7207b81f: created by absorbing finding 9ee4f1cc6c4efa4bf74ea817742397b21a7be1513479e805552eb9ad7560d92b — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/9ee4f1cc6c4efa4bf74ea817742397b21a7be1513479e805552eb9ad7560d92b.json on epic/ex6, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_69f8f57832d34601b040367c7207b81f/tick-qzg/attempt-23",
+  "created_by": "ticfac run run_69f8f57832d34601b040367c7207b81f",
+  "created_at": "2026-10-07T22:19:00Z",
+  "updated_at": "2026-10-07T22:19:07.227094394Z"
+}

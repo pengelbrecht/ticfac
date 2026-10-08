@@ -713,14 +713,13 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
         .map((name) => [name, vars[name]]),
     );
     expect(declared).toEqual({
-      // The claude-sub rung's per-subscription cap (tick 6fv): 2 concurrent
-      // jobs per subscription — a quota budget, not a platform limit (4
-      // parallel ran clean on staging), so 2 at a time cannot drain the
-      // 5-hour window before the operator notices.
-      CLAUDE_SUB_MAX_CONCURRENT: "2",
+      // The claude-sub rung's per-subscription cap (tick 6fv): a quota
+      // budget, not a platform limit. Raised from 2 to 4 on 2026-10-08 by
+      // the operator for 4-worker epic runs (4 parallel ran clean on staging);
+      // a faster drain of the 5-hour window is the accepted cost.
+      CLAUDE_SUB_MAX_CONCURRENT: "4",
       FACTORY_MAX_INSTANCES: "12",
       GITHUB_CONSENT_LABEL: "tk",
-      RUN_HARNESS: "omp",
       RUN_MAX_COST_USD: "250",
       RUN_MAX_WALL_CLOCK_MS: "86400000",
       RUN_MODEL: "workers-ai/@cf/zai-org/glm-5.3",
@@ -751,22 +750,33 @@ describe("SPEC §8.1/§8.4: the orchestrator image and the vars that select it",
     // factory's gateway. Nothing runs claude per token — the claude-sub rung
     // (claude on a versionless alias, against the operator's subscription)
     // is OFF until a config selects it: these pins name Workers AI pairings
-    // and the ladder keeps them. Workers are hosted on pi-durable; the
-    // review, the one cloud boot that still runs a CLI harness in a
-    // container, runs omp. The pin is explicit in the deployable config
-    // (tick uqi) rather than left to the built-in default, so the config
-    // itself says the rule. Still deliberately unset:
-    // GATEWAY_ALLOWED_PROVIDERS (workers-ai alone — the rung billed to the
-    // operator's own Cloudflare account rather than to a card), SANDBOX_IMAGE
-    // and BOARD_BASE_URL.
+    // and the ladder keeps them. Workers are hosted on pi-durable; since
+    // tick 8gd the review is hosted the same way — and its first rung is
+    // RUN_HARNESS, so this config deliberately does not pin it (see
+    // wrangler.toml): a pinned harness there would hold the review on that
+    // CLI no matter what the worker route says. The remaining pins are
+    // explicit in the deployable config (tick uqi) rather than left to the
+    // built-in default, so the config itself says the rule. Still
+    // deliberately unset: GATEWAY_ALLOWED_PROVIDERS (workers-ai alone —
+    // the rung billed to the operator's own Cloudflare account rather than
+    // to a card), SANDBOX_IMAGE, BOARD_BASE_URL — and RUN_HARNESS, which
+    // is the review's first rung and the one var this config must leave to
+    // the ladder it routes on.
     const vars = env as unknown as Record<string, unknown>;
-    for (const name of ["GATEWAY_ALLOWED_PROVIDERS", "SANDBOX_IMAGE", "BOARD_BASE_URL"]) {
+    for (const name of [
+      "GATEWAY_ALLOWED_PROVIDERS",
+      "SANDBOX_IMAGE",
+      "BOARD_BASE_URL",
+      // The review's first rung (tick 8gd): the orchestrator needs no
+      // harness pin (its entrypoint probes default to omp), so the var
+      // stays unset and the lever stays documented in wrangler.toml.
+      "RUN_HARNESS",
+    ]) {
       expect(`${name}=${String(vars[name])}`).toBe(`${name}=undefined`);
     }
     // The orchestrator's own route: an unset RUN_MODEL would leave the
     // container to the repository's role/tier routing, which is the LOCAL
     // worker CLI's route, not a factory-served one.
-    expect(`RUN_HARNESS=${String(vars.RUN_HARNESS)}`).toBe("RUN_HARNESS=omp");
     expect(`RUN_MODEL=${String(vars.RUN_MODEL)}`).toBe("RUN_MODEL=workers-ai/@cf/zai-org/glm-5.3");
     // The per-tick worker's standing route: an unset RUN_WORKER_MODEL would
     // leave the boot to WORKER_DEFAULT_* in src/worker-boot.ts.

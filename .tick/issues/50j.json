@@ -1,0 +1,14 @@
+{
+  "id": "50j",
+  "title": "A queued cloud submission drops the named config at ignition",
+  "description": "submitRun parks a contended submission with room.queueSubmission, and that call does not carry submission.config — so an entry that ignites later from the RunRoom's alarm starts a run on the epic's label and the declared default instead of the config its submitter named. The same block's own comments explain why the budget and the credential grade ARE parked (\"a budget that survives the submission but not the queue is a run the operator believes is bounded and is not\"); config is that class of value. Latent today rather than live: `ticfac run --cloud` always sends queue:false, and `ticfac cloud run`, the only surface with --queue, has no --config to send. The fix is one field on QueueSubmissionRequest/QueuedSubmission and one line at each end, beside the ones already there.\nevidence: cloudflare/src/runs.ts:1030-1058 (the queueSubmission call, no config), against cloudflare/src/runs.ts:998 (the started path, which does carry it); cloudflare/src/run-room.ts:146-189 (QueuedSubmission) and :190-209 (QueueSubmissionRequest)\n\nticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9 filed this backlog tick from the finding 6cbc04f840b06dce3078d587aa67286c951d9a32e2b8c6decf4933c684c97308 (reported by run-run_03aa9c8a71574ab3891b47df3dbd5ec9/tick-g2s/attempt-6) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_03aa9c8a71574ab3891b47df3dbd5ec9/absorptions/6cbc04f840b06dce3078d587aa67286c951d9a32e2b8c6decf4933c684c97308.json on the run branch.",
+  "notes": "2026-10-08 11:09 - ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9: created by absorbing finding 6cbc04f840b06dce3078d587aa67286c951d9a32e2b8c6decf4933c684c97308 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_03aa9c8a71574ab3891b47df3dbd5ec9/absorptions/6cbc04f840b06dce3078d587aa67286c951d9a32e2b8c6decf4933c684c97308.json on epic/bo9, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_03aa9c8a71574ab3891b47df3dbd5ec9/tick-g2s/attempt-6",
+  "created_by": "ticfac run run_03aa9c8a71574ab3891b47df3dbd5ec9",
+  "created_at": "2026-10-08T11:08:57Z",
+  "updated_at": "2026-10-08T11:09:03.011509322Z"
+}

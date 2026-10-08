@@ -29,9 +29,22 @@ GOTEST_PARALLEL ?= 12
 # main and to an epic branch (a pull request runs its affected packages), so
 # everything the gate skips is still refused before a deploy.
 # internal/shorttest holds the guard that keeps a new test from forgetting.
-.PHONY: build vet test-short test test-race gate suite release bombadil bombadil-seeded bombadil-all ts-gate
+.PHONY: build vet test-short test test-race gate suite release bombadil bombadil-seeded bombadil-all ts-gate harness-bundle
 
-build:
+# Regenerates harness/embed/local-main.bundle.mjs — the esbuild bundle of
+# harness/src/local/main.ts (pi-durable, pi-ai and chord inlined) that
+# embedded.go go:embeds for the local "pi" runner (tick 0ek) — and the
+# sources hash beside it. Needs Node and harness/'s own pnpm packages
+# (installed here, frozen); `go build`/`go test` need neither; they just
+# read the committed output, the same way they read any other embedded
+# tree in this repository (profiles/, skills/). Run this and commit its
+# output after editing harness/src/local or anything it imports;
+# TestLocalHarnessBundleMatchesItsSources (internal/exec/subprocess) is
+# what fails the gate when someone forgets to.
+harness-bundle:
+	cd harness && pnpm install --frozen-lockfile --prefer-offline && node scripts/build-local-bundle.mjs
+
+build: harness-bundle
 	go build ./...
 
 vet:
@@ -165,6 +178,44 @@ bombadil-seeded:
 
 bombadil-all:
 	cd tui && pnpm install --frozen-lockfile --prefer-offline && pnpm run test:all
+
+# The pi-durable harness package's half of the gate (tick 2pn, epic ex6), kept
+# as its own target and its own [testing.commands] entry for the same reason as
+# ts-gate above: a reader can see which half refused a tick. Until it, the
+# harness package's suites ran in CI ('harness conformance and replay') and in
+# no gate, so a tick that changed harness/ merged on a gate that had said
+# nothing about it — and one of its node-half tests sat red at base, found and
+# absorbed five times by five different workers (h3c, 7oy, 4ao, omq, 30e).
+#
+# It is the whole suite, not the fast half: measured on this host (4 cores) the
+# command is 1m24s warm — install 0.4s (11.3s the first ever run, a store fill,
+# not a gate cost), lint 1.5s, typecheck 15.3s (two tsc projects), both vitest
+# suites 56-65s (the workerd half 30-37s, the node half 26-28s) — against the
+# 60m bound under a gate command and a Go half measured in minutes. The node
+# half (real bash, real git, the real local door) is where the red-at-base test
+# lived, so a gate that took only the workerd half would have covered the
+# package and missed it anyway.
+#
+# `pnpm test` is harness/package.json's own script, which is BOTH vitest configs
+# (vitest.config.ts and vitest.node.config.ts): the target spells the package's
+# scripts rather than restating them, so CI's step and this check cannot drift —
+# and gate_target_test.go pins both halves of that spellings to the script.
+#
+# STATE, stated so a reader is not left to guess: the [testing.commands] twin of
+# this target is NOT yet declared in .tick/runners.toml. That one line is the
+# half of tick 2pn a worker could not write — the substrate refuses a worker
+# commit under .tick/ wholesale (image/worker.sh's pre-commit hook and
+# cloudflare/src/worker-collect.ts, where the Go boundary exempts the runner
+# table: tick 9sy) — so it is carried as the tick's protected change and the
+# run applies it at the close-out, for the merger to review. Until it does this
+# target is the human/CI half alone, and
+# TestTheDeclaredHarnessGatePairsWithItsMakefileTwin pins the cell the run is to
+# apply to this recipe, byte for byte — while gate_target_test.go's `gateTargets`
+# map already names this target as the `harness` command's twin, so the parity
+# guard holds from whichever half lands first and neither order can leave the
+# gate red.
+harness-gate:
+	cd harness && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm typecheck && pnpm test
 
 # The gate, with the cache refused. Slower and unconditional.
 suite:

@@ -1,0 +1,38 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "implement-tick",
+  "request": {
+    "attempt": 4,
+    "job_id": "run-run_69f8f57832d34601b040367c7207b81f/tick-8gd/attempt-4",
+    "kind": "infrastructure_failure",
+    "tick_id": "8gd",
+    "tier": "economy"
+  },
+  "response": {
+    "exit_code": 7,
+    "service": "the model route"
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T13:52:21Z",
+  "answered_at": "2026-10-07T13:52:21Z",
+  "provenance": {
+    "run_id": "run_69f8f57832d34601b040367c7207b81f",
+    "tick_id": "8gd",
+    "attempt": 4,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "3fc4675f8e4f28c34178e3d201c169cfa40b834a",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:7c05ab8f3edfc8a1b700bc12e6a6b7f8d540590fffc8bc026cdecaf5cb0209da",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

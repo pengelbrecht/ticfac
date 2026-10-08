@@ -1,0 +1,21 @@
+{
+  "id": "ugm",
+  "title": "Render the new dashboard layout at 80x24 and 120x40, with golden frames through a terminal emulator",
+  "gloss": "new watch layout",
+  "description": "Rewrite the dashboard view (internal/cli/watch_view.go and friends) to the layout in docs/design/watch-redesign-2026-10.md from the new status-model fields: header (epic title, config, where, elapsed), needs-you line/box, health line, phase track, NOW/DONE/UP NEXT/HELD groups (UP NEXT collapsed to one line beyond the screen), latest sentences, key hints. Keep enter (tick drill-down) and e (events) working. Golden frames for the five scenarios at 80x24 and 120x40 rendered through the repo's terminal-emulator test harness (see existing watch_pty tests); attach vhs/freeze screenshots of the five at 120x40 to the report.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "blocked_by": [
+    "lck",
+    "93n",
+    "47j",
+    "b13"
+  ],
+  "parent": "ymf",
+  "acceptance_criteria": "golden frames for 5 scenarios x 2 sizes committed and checked in the gate; nothing wraps or truncates the needs-you line; screenshots in the report; make gate",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-08T13:16:48.452677Z",
+  "updated_at": "2026-10-08T13:16:48.452677Z"
+}

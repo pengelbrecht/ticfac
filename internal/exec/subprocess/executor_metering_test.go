@@ -10,9 +10,9 @@ import (
 // Node harness: it has no extension surface and refuses any argument it does
 // not know (harness/src/local/main.ts parseArgs), so a join loaded into its
 // argv would turn every metered local dispatch into a worker that never
-// starts. The executor still holds the join the dispatch resolved — the one
-// resolution both local substrates share, and the herdr executor's pi CLI
-// panes still load it — but a durable launch carries none of it.
+// starts. The launch therefore carries NONE of it in the argv — the join
+// travels through worker.json instead (tick m1w), and this test pins the
+// argv side of that: no extension flag, the routed model intact.
 func TestAMeteredDurableLaunchCarriesNoExtension(t *testing.T) {
 	t.Parallel()
 
@@ -29,11 +29,11 @@ func TestAMeteredDurableLaunchCarriesNoExtension(t *testing.T) {
 	}
 
 	at := launch{
-		Prompt:       "PROMPT-BODY",
-		GitCommonDir: "/repo/.git",
-		Model:        model,
-		HarnessDir:   e.harnessDir(),
-		StateDir:     t.TempDir(),
+		Prompt:        "PROMPT-BODY",
+		GitCommonDir:  "/repo/.git",
+		Model:         model,
+		HarnessBundle: "/cache/local-main.bundle.mjs",
+		StateDir:      t.TempDir(),
 	}
 	argv, err := resolveRunner("pi", nil, at)
 	if err != nil {

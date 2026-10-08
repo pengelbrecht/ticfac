@@ -91,6 +91,13 @@ type GuardedTest = {
  * dumb-git-origin's second test drove real git over a live socket at a
  * 60s bound the guard never saw, because the vocabulary knew `exec` but
  * not the `execFileAsync` every git call in that file goes through.
+ *
+ * The alias itself is NOT a matter for the list (tick gzw): the list is a
+ * vocabulary of ENTRY points, and `isPromisifiedProcessEntry` below
+ * recognizes the indirection — an assignment from `promisify(<entry
+ * point>)` — so any local spelling of it works. `execFileAsync` stays on
+ * the list for a promisified helper IMPORTED under that name, which no
+ * single-file analysis can trace an assignment to.
  */
 const PROCESS_ENTRY_POINTS = new Set([
   "exec",
@@ -139,6 +146,44 @@ function isProcessCall(node: ts.Node): boolean {
     ts.isCallExpression(node) &&
     ts.isIdentifier(node.expression) &&
     PROCESS_ENTRY_POINTS.has(node.expression.text)
+  );
+}
+
+/**
+ * Whether an expression names a real-process entry point: a listed
+ * identifier, or a property access whose last name is one —
+ * `child_process.execFile`, the way the entry is reached when the module is
+ * namespace-imported. Only the argument of a `promisify(...)` call is read
+ * this way; the call criterion above stays identifier-only, because a
+ * METHOD call (`something.exec(...)`) is how this suite's own objects spell
+ * everything, process-driving or not.
+ */
+function isProcessEntry(node: ts.Node | undefined): boolean {
+  if (node === undefined) return false;
+  if (ts.isIdentifier(node)) return PROCESS_ENTRY_POINTS.has(node.text);
+  if (ts.isPropertyAccessExpression(node)) return PROCESS_ENTRY_POINTS.has(node.name.text);
+  return false;
+}
+
+/**
+ * Whether the node is a `promisify(<entry point>)` call: the indirection
+ * this suite writes when it wants a promise-returning exec
+ * (`const execFileAsync = promisify(execFile)`). The list above is a
+ * vocabulary of entry points and can never carry every local name the
+ * promisified one is assigned to (tick gzw: a test spelling the alias
+ * `runScript` drove real bash at a bound the guard demanded nothing for),
+ * so the shape is recognized here and the ASSIGNED name joins the
+ * vocabulary through drivenNames' assignments — which is also how an alias
+ * reached through a helper (`runInRestoreEnv` calling the promisified
+ * name) binds the tests that call the helper.
+ */
+function isPromisifiedProcessEntry(node: ts.Node): boolean {
+  return (
+    ts.isCallExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "promisify" &&
+    node.arguments.length === 1 &&
+    isProcessEntry(node.arguments[0])
   );
 }
 
@@ -323,7 +368,9 @@ function guardedTests(source: string): {
   const harnessDriven = drivenNames(helpers, assignments, (node) => {
     return walk(node, isHarnessOpen) || walk(node, isWholeHostConstruction);
   });
-  const processDriven = drivenNames(helpers, assignments, (node) => walk(node, isProcessCall));
+  const processDriven = drivenNames(helpers, assignments, (node) => {
+    return walk(node, isProcessCall) || walk(node, isPromisifiedProcessEntry);
+  });
   const workerDriven = drivenNames(helpers, assignments, (node) => walk(node, isWorkerLaunch));
   const calls = (body: ts.Node, names: Set<string>): boolean =>
     walk(body, (node) => {
@@ -482,6 +529,26 @@ describe("the load-dependent tests of both suites state their own wall clock", (
       ),
     ).toBe(true);
     expect(processTitles.has("keeps the fast-forward-only push a dumb origin must")).toBe(true);
+    // The three real-bash tests of standin-worker-entry-env are named, not
+    // just counted (the tick gzw instance): real bash through the real
+    // worker entry, driven through the runInRestoreEnv helper over the
+    // promisified execFile — the shape that made their 300_000 bounds
+    // voluntary until the guard could see the promisify indirection. A
+    // classification that loses any of the three is a bound no longer
+    // enforced there.
+    expect(
+      processTitles.has(
+        "source time demands none of the boot's inputs — a restored box gets no TICKS_REPO_URL",
+      ),
+    ).toBe(true);
+    expect(
+      processTitles.has(
+        "--boot without TICKS_REPO_URL refuses legibly with the boot's config exit (2)",
+      ),
+    ).toBe(true);
+    expect(
+      processTitles.has("the script parses (bash -n), whatever the heredoc edits did to it"),
+    ).toBe(true);
     // The two spellings fim added the harness criterion for: the helper that
     // opens (the gateway tests) and the whole host whose open is in src.
     const workerdHarnessTitles = new Set(
@@ -497,6 +564,75 @@ describe("the load-dependent tests of both suites state their own wall clock", (
         "boots, converses on the boot's prompt, finishes and settles with the finish phase's exit code",
       ),
     ).toBe(true);
+  });
+
+  it("classifies a promisified entry point under any local name, not only the ones on the list", () => {
+    // The shape tick gzw named: the process criterion matches call
+    // expressions whose CALLEE identifier is on PROCESS_ENTRY_POINTS, so a
+    // test that writes `const runScript = promisify(execFile)` and then
+    // calls `runScript(...)` hid behind a name the list had never heard of
+    // — execFile appears only as promisify's argument. The three tests of
+    // standin-worker-entry-env were exactly this shape; tick 30e unblocked
+    // them only by teaching the list the one spelling `execFileAsync`, and
+    // the fixing commit's own message named the gap. The list can never
+    // carry every local spelling, so the recognition is of the SHAPE: an
+    // assignment from `promisify(<entry point>)` puts the assigned name in
+    // the vocabulary, and the same fixture-variable and helper analysis
+    // carries it from there — here through a helper, the way the real file
+    // drives its bash.
+    const source = [
+      'import * as child_process from "node:child_process";',
+      'import { execFile } from "node:child_process";',
+      'import { promisify } from "node:util";',
+      "const runScript = promisify(execFile);",
+      "const runOther = promisify(child_process.execFile);",
+      "async function run(script: string, args: string[]): Promise<void> {",
+      "  await runScript(script, args);",
+      "}",
+      'describe("fixture", () => {',
+      '  it("drives real bash through an alias the list does not know", { timeout: 300_000 }, async () => {',
+      '    await run("bash", ["-c", "true"]);',
+      "  });",
+      '  it("drives real bash through a namespaced alias", { timeout: 300_000 }, async () => {',
+      '    await runOther("bash", ["-c", "true"]);',
+      "  });",
+      '  it("touches no process", () => {',
+      "    expect(1).toBe(1);",
+      "  });",
+      "});",
+    ].join("\n");
+    const found = guardedTests(source);
+    // Both process-driving tests are classified, and with their own
+    // declared bounds — the classification is what makes a bound required.
+    expect(found).toEqual([
+      {
+        title: "drives real bash through an alias the list does not know",
+        kinds: ["process"],
+        timeout: 300_000,
+      },
+      {
+        title: "drives real bash through a namespaced alias",
+        kinds: ["process"],
+        timeout: 300_000,
+      },
+    ]);
+  });
+
+  it("classifies nothing from a promisify of something that is not an entry point", () => {
+    // The counterweight, and the reason the recognition stays tied to the
+    // entry points: the workerd half of this package's suites cannot exec
+    // at all, and a promisified utility there — a timer, a reader — must
+    // never start owing a process bound it cannot earn.
+    const source = [
+      'import { promisify } from "node:util";',
+      "const sleep = promisify(setTimeout);",
+      'describe("fixture", () => {',
+      '  it("waits on a timer", async () => {',
+      "    await sleep(1);",
+      "  });",
+      "});",
+    ].join("\n");
+    expect(guardedTests(source)).toEqual([]);
   });
 
   it("declares a timeout of at least 120_000 ms on every full-Harness test", () => {

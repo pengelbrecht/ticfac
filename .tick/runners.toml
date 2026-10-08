@@ -13,13 +13,17 @@ max_parallel = 4
 # implementation tier — it is the claude harness only, reserved for review and
 # closeout, and it is not available in pi at all.
 #
-# pi needs no permission-bypass flag: verified live 2026-09-10 (tick gjk) that it
-# runs tools unprompted. `--approve` covers project-local file trust, and that is
-# the whole of its full-auto story. Evidence: .tick/logs/herd/av8/gjk.RESULT.md
+# `pi` is the pi-durable harness (epic 43y, tick hpk; the pi CLI is deleted,
+# tick jhp): headless through the local-subprocess executor or hosted in a
+# cloud container. No `args`: neither launch reads roles-table args — that
+# key reaches an argv only through the herdr pane path (spawnArgv), and herdr
+# refuses kind pi — so tick 2p3 dropped the `--approve` the deleted pi CLI
+# used to take for project-local file trust (tick gjk). ticfac init's writers
+# emit the same shape, and internal/cli's TestAPiCellIsWrittenWithoutArgs
+# pins them.
 kind = "pi"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
-args = ["--approve"]
 
 # Simple work: mechanical, compiler-guided, low judgement.
 [roles.implement.tiers.economy]

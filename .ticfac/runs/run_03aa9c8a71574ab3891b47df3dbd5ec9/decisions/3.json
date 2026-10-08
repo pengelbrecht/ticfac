@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "installed copy older than the binary is reported with the upgrade command; test; make gate",
+    "description": "Nothing tells an operator that the ticfac skill installed in a repo (.claude/skills/ticfac, .agents/skills/ticfac — stamped with the version that installed it) is older than the binary. tk has tk skills diff for the ticks skill; add the same for ticfac (and/or a ticfac doctor line) naming the upgrade command, ticfac skills install ticfac.",
+    "epic_id": "bo9",
+    "role": "classify-tick",
+    "tick_id": "g5f",
+    "title": "ticfac skills diff (or a doctor line): say when an installed skill copy is older than the binary"
+  },
+  "response": {
+    "choice": "translation",
+    "confidence": 0.64,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.29,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0,
+      "translation": 0.71
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1100,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T09:20:17Z",
+  "answered_at": "2026-10-08T09:20:17Z",
+  "provenance": {
+    "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
+    "tick_id": "g5f",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/bo9",
+    "source_sha": "e9b3b684e1b034375952d09a5d79c07a475b3670",
+    "integration_ref": "refs/heads/epic/bo9",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:38b72ba23ed02264ab3b10124b3b6616fb7078ea0dddfb2871cc3b4e02f52914",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

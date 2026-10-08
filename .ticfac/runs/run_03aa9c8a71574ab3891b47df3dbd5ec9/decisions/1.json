@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "In a repository that is not ticfac, on a machine with only the ticfac binaries and node, a local pi-durable run dispatches and completes a worker; no npm install anywhere; doctor checks node; a stale embedded bundle fails the gate; make gate passes",
+    "description": "Today a local pi-durable worker runs node <repo>/harness/src/local/main.ts (internal/exec/subprocess/executor.go harnessDir(), TICFAC_HARNESS_DIR override), so it only works inside the ticfac repository, with harness/node_modules installed. Decision (operator, 2026-10-07): no npm packages — the harness is part of ticfac. Build harness/src/local/main.ts with esbuild (already a dev dependency) into ONE self-contained JS file with pi-durable, pi-ai and chord inlined, as a build step of the Go binary (make build / goreleaser / the image build), and go:embed it. At run time the local executor writes it once to a versioned cache dir (keyed by the build) and runs it with node; the only machine prerequisite is Node, the same Node the claude CLI already needs. TICFAC_HARNESS_DIR still overrides for harness development. ticfac doctor checks node is present and new enough. The embedded bundle must stay in sync with harness/src: a test or the gate rebuilds and compares, so a stale bundle fails CI.",
+    "epic_id": "bo9",
+    "role": "classify-tick",
+    "tick_id": "0ek",
+    "title": "Ship the local pi harness inside the ticfac binary: one bundled JS file, embedded, run with node"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.97,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.98,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.02,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1306,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T08:28:20Z",
+  "answered_at": "2026-10-08T08:28:20Z",
+  "provenance": {
+    "run_id": "run_03aa9c8a71574ab3891b47df3dbd5ec9",
+    "tick_id": "0ek",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/bo9",
+    "source_sha": "ffd680ee6a12d5afeb9e237bc55e0709d653d257",
+    "integration_ref": "refs/heads/epic/bo9",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:38b72ba23ed02264ab3b10124b3b6616fb7078ea0dddfb2871cc3b4e02f52914",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

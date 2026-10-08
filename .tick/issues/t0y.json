@@ -3,6 +3,7 @@
   "title": "watch on an ended, merged run: tick count, CI and ci-phase disagree with the facts",
   "gloss": "ended-run dashboard truths",
   "description": "Screenshots 2026-10-06 of `ticfac watch hn6` after hn6 merged (PR #219, main CI green at ce124e8c): the header says '80/80 ticks' while the table says '✓ 83 closed'; the CI line says 'CI: no PR yet' although the PR merged and CI was green; the phase strip shows '◐ ci' (in progress) next to '✓ merge'. The ended-run dashboard must show one consistent tick count (and say what the difference is, e.g. role/duplicate ticks), the PR as merged with its CI verdict, and ci as done when land_verified. Colour accents and the 80x24 fit are now right.",
+  "notes": "2026-10-08 15:16 - 2026-10-08: fixed under epic ymf (tick jym).",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -10,5 +11,5 @@
   "acceptance_criteria": "Frame tests on an ended+merged fixture run: counts agree, CI line names the merged PR and green CI, ci phase is done. make gate passes.",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-06T04:35:55.11128Z",
-  "updated_at": "2026-10-06T04:35:55.11128Z"
+  "updated_at": "2026-10-08T13:16:48.591471Z"
 }

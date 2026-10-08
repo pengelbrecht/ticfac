@@ -131,6 +131,41 @@ review_not_ready_report() {
 	} > "$TICFAC_RESULT_PATH"
 }
 
+# json_string turns stdin's bytes into the body of one JSON string literal:
+# backslashes and quotes escaped, each newline the two characters \n. The
+# whole-file proposals below embed the .tick/runners.toml the worktree
+# carries, and shell has no JSON encoder.
+json_string() {
+	sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | awk '{printf "%s\\n", $0}'
+}
+
+# content_proposal is a whole-file replacement of .tick/runners.toml: the
+# file as the worktree carries it — BEFORE any proposal has been applied,
+# the appends land only at the close-out — with one marker comment after the
+# version line. Two ticks composing from the same base produce two
+# different proposals, so neither deduplicates against the other.
+content_proposal() {
+	awk -v marker="# whole-file replacement proposed by $TICFAC_TICK" \
+		'{print} /^version = 2$/ {print marker}' \
+		< "$TICFAC_WORKTREE/.tick/runners.toml" | json_string
+}
+
+# report_protected_change reports DONE with one finding (given as $1, one
+# JSON object without the wrapping block) whose protected_change is the
+# tick's proposal: the protected_change_finding shape, over committed work.
+report_protected_change() {
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf '%s\n' '```findings v2'
+		printf '%s\n' "$1"
+		printf '%s\n' '```'
+		printf '\n'
+		verdict_line
+		printf 'STATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+}
+
 # The gate-repair worker (tick wj6): the gate failed because a deletion left
 # a stale reference — a check that reads a file the tick deleted. The fake
 # stands in for an agent that read the failing check's output out of the
@@ -744,6 +779,33 @@ protected_change_only)
 			printf '\nSTATUS: %s\n' "$status"
 		} > "$TICFAC_RESULT_PATH"
 	fi
+	;;
+protected_change_order)
+	# Epic ex6's tgx: THREE findings propose changes to the SAME protected
+	# file — a1 an append (the 2pn shape: the gate cell the run's deliverable
+	# lives in) and a2 and b1 whole-file contents composed from bases before
+	# the appended lines existed (the q6z/2p3 shape). Applied in findings-key
+	# order, the append landed first and both replacements then wiped it off
+	# the branch; the run must apply a file's content replacements before its
+	# appends. The Go test keys this scenario on the titles below — their
+	# finding keys sort append, a2, b1, exactly the order that lost the cell.
+	commit
+	case "$TICFAC_TICK" in
+	a1)
+		report_protected_change '[{"kind": "defect", "title": "The per-tick gate runs no lint suite", "severity": "high", "protected_change": {"path": ".tick/runners.toml", "append": "\n# the lint suite, declared for the gate\n[testing.commands.lint]\ncommand = \"test -f work-a1.txt\"\ndescription = \"the lint suite\"\n"}}]'
+		;;
+	a2)
+		content="$(content_proposal)"
+		report_protected_change "$(printf '[{"kind": "defect", "title": "%s", "severity": "medium", "protected_change": {"path": ".tick/runners.toml", "content": "%s"}}]' 'runners.toml carries a stale comment' "$content")"
+		;;
+	b1)
+		content="$(content_proposal)"
+		report_protected_change "$(printf '[{"kind": "defect", "title": "%s", "severity": "low", "protected_change": {"path": ".tick/runners.toml", "content": "%s"}}]' 'The implement cell still carries the dead --approve arg' "$content")"
+		;;
+	*)
+		report
+		;;
+	esac
 	;;
 protected_edit_prose)
 	# The same discovery as protected_change_finding, as the incident's

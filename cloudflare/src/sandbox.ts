@@ -640,6 +640,14 @@ export type OrchestratorEnvInput = {
   github_token_url?: string;
   harness?: string;
   model?: string;
+  /**
+   * The named run config this submission carried (tick ba4), exported as
+   * `TICKS_CONFIG`. Absent means the container's `ticfac run-epic` selects
+   * by the epic's own `config:` label and the runners files' declared
+   * default — the same precedence a local run resolves, only without a
+   * flag's word over it.
+   */
+  config?: string;
   workdir?: string;
   cache_dir?: string;
   /**
@@ -743,6 +751,7 @@ export function orchestratorEnv(input: OrchestratorEnvInput): Record<string, str
   }
   if (input.harness !== undefined && input.harness !== "") env.TICKS_HARNESS = input.harness;
   if (input.model !== undefined && input.model !== "") env.TICKS_MODEL = input.model;
+  if (input.config !== undefined && input.config !== "") env.TICKS_CONFIG = input.config;
   if (input.workdir !== undefined && input.workdir !== "") env.TICKS_WORKDIR = input.workdir;
   if (input.cache_dir !== undefined && input.cache_dir !== "")
     env.TICKS_CACHE_DIR = input.cache_dir;

@@ -505,6 +505,7 @@ starts a command in a sandbox.
 | `AI_GATEWAY_TOKEN` | yes | The run's gateway credential (D17). It is the ONLY model credential in the container, and it is what every vendor key variable is set to. |
 | `TICKS_HARNESS` | no | `omp` (default), `claude`, or `pi-durable` — the HOSTED kind: a worker dispatched on it runs only the `--boot`/`--finish` halves here while its conversation runs in the factory's WorkerAgent, so no CLI harness is routed or probed. The factory always sets it, so the default is a last resort only. The pi CLI is deleted from the image (epic 43y, tick jhp). |
 | `TICKS_MODEL` | no | The model the harness runs on. When unset, the entrypoint asks the checkout (`ticfac sandbox model`); when nothing routes one, the boot is refused with exit 7 rather than started. |
+| `TICKS_CONFIG` | no | The named run config this boot's submission carried (tick ba4), forwarded to a `run`-phase boot's `ticfac run-epic` as its own `--config`. Unset, run-epic selects by the epic's own `config:` label and the runners files' declared default. |
 | `TICKS_MODEL_PROBE_TIMEOUT` | no | Seconds the one-token gateway probe may take (default 30). |
 | `TICKS_MODEL_PROBE_TRIES` | no | How many times the gateway probe is asked in all when it gets no usable answer — none at all, or a transient 408/429/502/504/52x (default 4, about three minutes with the backoff). Still silent after the last try is exit 14. A refusal the gateway answered is never retried. |
 | `TICKS_MODEL_PROBE_BACKOFF` | no | Seconds × the try number waited between those tries (default 10). |

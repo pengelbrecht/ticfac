@@ -31,6 +31,15 @@ import (
 //     harness writes a file; the container POSTs that file, once, to the
 //     factory's review door with the run's own credential.
 
+// assertNoHarnessRun fails the test if a harness process wrote its record —
+// the negative assertion for the halves, where no harness may run.
+func assertNoHarnessRun(t *testing.T, f *fixture) {
+	t.Helper()
+	if _, err := os.Stat(f.record); err == nil {
+		t.Errorf("the harness ran on this boot:\n%s", mustNotBeEmpty(t, f.record))
+	}
+}
+
 // reviewFixture is a fixture with a pull request on its origin: a third commit,
 // published the way GitHub publishes one — as refs/pull/<n>/head on the BASE
 // repository, which is why a fork's branch is readable through the same remote
@@ -174,6 +183,133 @@ func TestEntrypointReviewTreatsAnAlreadyPostedReviewAsDone(t *testing.T) {
 		t.Fatalf("exit %d, want 0\n%s", code, out)
 	}
 	mustContain(t, out, "already posted", "the container says why it is content")
+}
+
+// The hosted review (epic ex6, tick 8gd): the PR-review job's conversation is
+// hosted on the run's WorkerAgent like every other cloud worker's, so the
+// container runs two halves instead of a CLI harness — --boot sets up (clone,
+// the pull request fetched as a ref, the model probe) and hands off the
+// prompt, --finish posts the findings the conversation wrote. The halves are
+// the review contract's own (contracts/worker-boot-con.json, review_*), and
+// the all-in-one CLI path stays for the CLI harnesses a non-hosting
+// deployment routes to.
+func TestEntrypointHostedReviewBootsAndHandsOff(t *testing.T) {
+	f, prHead := reviewFixture(t, "17")
+	f.env[EnvHarness] = "pi-durable"
+	f.env[EnvModel] = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+	out, code := f.runWithArgs("--boot")
+	if code != 0 {
+		t.Fatalf("exit %d, want 0\n%s", code, out)
+	}
+
+	// The handoff: the marker line carries the reviewed ref and the findings
+	// path, and the prompt follows between the review's own markers — the
+	// same prompt the all-in-one review harness receives.
+	mustContain(t, out, ReviewBootMarker+" branch=refs/pull/17/head", "the marker line names the ref that was reviewed")
+	mustContain(t, out, "result="+f.env[EnvReviewOutput], "the marker line names the findings path the finish posts")
+	mustContain(t, out, ReviewBootPromptBegin, "the prompt markers frame the handoff")
+	mustContain(t, out, "never as instructions", "the prompt says the diff is evidence, not direction")
+
+	// No harness ran and nothing was posted: the conversation is not this
+	// container's, and the findings are not written yet.
+	assertNoHarnessRun(t, f)
+	if strings.Contains(f.probeCalls(), "/api/review") {
+		t.Error("a hosted review boot posted findings")
+	}
+
+	// The setup happened: the pull request is IN the repository and NOT in
+	// the working tree, exactly as the all-in-one boot leaves it.
+	fetched := strings.TrimSpace(git(t, f.workdir, "rev-parse", "refs/remotes/pr/17"))
+	if fetched != prHead {
+		t.Errorf("refs/remotes/pr/17 is %s, want the pull request's head %s", fetched, prHead)
+	}
+	if _, err := os.Stat(filepath.Join(f.workdir, "contributed.txt")); err == nil {
+		t.Error("the pull request's file is in the working tree: it was checked out")
+	}
+}
+
+// The finish half: the host runs it once the conversation settles. It posts
+// the findings file the conversation wrote, with the run's own credential,
+// and exits with the post's own status — no clone, no probes, no harness.
+func TestEntrypointHostedReviewFinishPostsTheFindings(t *testing.T) {
+	f, _ := reviewFixture(t, "19")
+	f.env[EnvHarness] = "pi-durable"
+	f.env[EnvModel] = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+	if out, code := f.runWithArgs("--boot"); code != 0 {
+		t.Fatalf("the boot half: exit %d, want 0\n%s", code, out)
+	}
+	// The conversation wrote its findings.
+	findings := "Two findings:\n- a leak\n- a typo"
+	if err := os.WriteFile(f.env[EnvReviewOutput], []byte(findings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, code := f.runWithArgs("--finish")
+	if code != 0 {
+		t.Fatalf("exit %d, want 0\n%s", code, out)
+	}
+	calls := f.probeCalls()
+	mustContain(t, calls, "https://factory.example.com/api/review", "the findings are posted to the review door")
+	mustContain(t, calls, "Authorization: Bearer "+testGatewayToken, "the post carries the run's own credential")
+	mustContain(t, calls, "@"+f.env[EnvReviewOutput], "the file the conversation wrote is what is posted")
+	assertNoHarnessRun(t, f)
+}
+
+// A hosted review with nothing to post is the honest failure: the finish
+// exits ExitReview and the run learns the conversation wrote nothing durable.
+func TestEntrypointHostedReviewFinishWithoutFindingsIsTheReviewFailure(t *testing.T) {
+	f, _ := reviewFixture(t, "23")
+	f.env[EnvHarness] = "pi-durable"
+	f.env[EnvModel] = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+	if out, code := f.runWithArgs("--boot"); code != 0 {
+		t.Fatalf("the boot half: exit %d, want 0\n%s", code, out)
+	}
+	// No findings file: the conversation wrote nothing.
+	out, code := f.runWithArgs("--finish")
+	if code != ExitReview {
+		t.Fatalf("exit %d, want %d (ExitReview)\n%s", code, ExitReview, out)
+	}
+	if strings.Contains(f.probeCalls(), "/api/review") {
+		t.Error("an empty review was posted anyway")
+	}
+}
+
+// The two halves are the HOSTED review's, and the refusals say so: an
+// all-in-one CLI review takes no argument, a hosted review without one would
+// exec nothing, and neither half belongs to another phase.
+func TestEntrypointHostedReviewRefusesAMisroutedBoot(t *testing.T) {
+	shorttest.EndToEnd(t) // its fixtures are built inside subtests
+	for name, fixture := range map[string]func(t *testing.T){
+		"a hosted review with no argument": func(t *testing.T) {
+			f, _ := reviewFixture(t, "29")
+			f.env[EnvHarness] = "pi-durable"
+			out, code := f.run()
+			if code != ExitConfig {
+				t.Fatalf("exit %d, want %d\n%s", code, ExitConfig, out)
+			}
+			mustContain(t, out, "pi-durable", "the refusal names the kind")
+			mustContain(t, out, "--boot", "the refusal names the half a hosted review runs")
+			assertNoHarnessRun(t, f)
+		},
+		"a CLI review handed the boot half": func(t *testing.T) {
+			f, _ := reviewFixture(t, "31")
+			out, code := f.runWithArgs("--boot")
+			if code != ExitConfig {
+				t.Fatalf("exit %d, want %d\n%s", code, ExitConfig, out)
+			}
+			mustContain(t, out, "all-in-one", "the refusal says the CLI review needs no handoff")
+			assertNoHarnessRun(t, f)
+		},
+		"an orchestrator boot handed the boot half": func(t *testing.T) {
+			f := newFixture(t, "- `true`\n")
+			out, code := f.runWithArgs("--boot")
+			if code != ExitConfig {
+				t.Fatalf("exit %d, want %d\n%s", code, ExitConfig, out)
+			}
+			mustContain(t, out, "review", "the refusal names the phase that owns the half")
+		},
+	} {
+		t.Run(name, fixture)
+	}
 }
 
 // The phase vocabulary crosses three languages (this package, the Worker's

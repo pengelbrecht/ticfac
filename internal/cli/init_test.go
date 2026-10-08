@@ -497,6 +497,59 @@ func TestInitOnAPiRepositoryWritesCellsEverySubstrateCanRun(t *testing.T) {
 	}
 	constructs("harness", "")
 	constructs("herdr", profile.EmbeddedHerdr)
+
+	// tick 2p3: the written implement cell declares no args — no launch of
+	// the pi-durable harness reads roles-table args, so the parsed cell must
+	// carry none. See TestAPiCellIsWrittenWithoutArgs for the writers.
+	if cell := cfg.Roles["implement"]; len(cell.Args) != 0 {
+		t.Errorf("the written implement cell declares args %v — no launch of the pi-durable harness reads roles-table args", cell.Args)
+	}
+}
+
+// TestAPiCellIsWrittenWithoutArgs pins tick 2p3's code half at the writers.
+// The `pi` kind is the pi-durable harness — headless through the
+// local-subprocess executor or hosted in a cloud container — and neither
+// launch reads roles-table `args`: that key reaches an argv only through the
+// herdr pane path (spawnArgv), and herdr refuses kind pi. The writers used
+// to emit `args = ["--approve"]` beside the deleted pi CLI's trust story
+// (tick gjk's `--approve` covers project-local file trust), telling a reader
+// a pi-CLI path still existed. Both are gone: no pi cell carries args, and
+// the base writer says why in one line.
+//
+// short: two string builds and a substring scan; no files written.
+func TestAPiCellIsWrittenWithoutArgs(t *testing.T) {
+	t.Parallel()
+	model := "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
+	gates := []guessedGate{{ID: "go", Command: "go test ./...", Description: "tests"}}
+
+	base := runnersTOML("harness", initRunnerPi, model, gates)
+	if strings.Contains(base, "args = [") {
+		t.Errorf("the base writer still emits an args line beside a pi cell — no launch of the pi-durable harness reads roles-table args:\n%s", base)
+	}
+	if !strings.Contains(base, "no launch of this harness reads them") {
+		t.Errorf("the base writer's pi cell does not say why args are absent — a reader back from the deleted CLI's story deserves the reason:\n%s", base)
+	}
+	for _, story := range []string{"permission-bypass", "file trust", "full-auto story"} {
+		if strings.Contains(base, story) {
+			t.Errorf("the base writer still tells the deleted pi CLI's trust story (%q) beside a pi cell:\n%s", story, base)
+		}
+	}
+	if !strings.Contains(base, "kind = \"pi\"") || !strings.Contains(base, "model = \""+model+"\"") {
+		t.Errorf("the base writer's implement cell lost the answer's harness or model:\n%s", base)
+	}
+
+	cloud := cloudTOML(model)
+	if strings.Contains(cloud, "args = [") {
+		t.Errorf("the cloud writer still emits an args line beside a pi cell:\n%s", cloud)
+	}
+	for _, story := range []string{"permission-bypass", "file trust", "full-auto story"} {
+		if strings.Contains(cloud, story) {
+			t.Errorf("the cloud writer still tells the deleted pi CLI's trust story (%q):\n%s", story, cloud)
+		}
+	}
+	if got := strings.Count(cloud, "kind = \"pi\""); got != 3 {
+		t.Errorf("the cloud writer names pi in %d cells, want all three roles on the cloud's own harness:\n%s", got, cloud)
+	}
 }
 
 // TestInitRefusesACloudModelTheBillingRuleDoesNotAdmit pins the cloud rule
@@ -578,4 +631,103 @@ func TestInitWithNoAnswerOnStdinRefuses(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(repo, filepath.FromSlash(runconfig.FileName))); err == nil {
 		t.Errorf("the refusal still wrote a routing — a refusal must write nothing")
 	}
+}
+
+// assertNoDeadRunnerArgs holds one initialised repository to tick q6z's
+// claim: init writes no `args` into the routing it generates, on the base
+// file or the cloud file, and the deleted pi CLI's `--approve` is not in the
+// text either. Three assertions, because the tick is about a reader as much
+// as an executor — the text is what a reader of runners.toml sees, the raw
+// cells are what a reader of the table sees, and the resolutions are the
+// exact values a herdr dispatch's spawnArgv would read.
+func assertNoDeadRunnerArgs(t *testing.T, repo string, substrates ...runconfig.Substrate) {
+	t.Helper()
+	for _, name := range []string{runconfig.FileName, initCloudName} {
+		raw, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(name)))
+		if os.IsNotExist(err) {
+			continue // this answer writes no cloud file
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(raw), "--approve") {
+			t.Errorf("%s still names the deleted pi CLI's --approve, which no worker can be passed any more:\n%s", name, raw)
+		}
+	}
+	for _, substrate := range append([]runconfig.Substrate{""}, substrates...) {
+		cfg, err := runconfig.LoadFor(initRunnersPath(repo), substrate)
+		if err != nil {
+			t.Fatalf("the written routing does not load for %q: %v", substrate, err)
+		}
+		for role, cell := range cfg.Roles {
+			if cell == nil {
+				continue
+			}
+			if len(cell.Args) != 0 {
+				t.Errorf("the %q view's [roles.%s] cell declares args %v: dead config in a routing init generates — no cell init writes has a flag to add",
+					substrate, role, cell.Args)
+			}
+			for tier, variant := range cell.Tiers {
+				if variant != nil && len(variant.Args) != 0 {
+					t.Errorf("[roles.%s.tiers.%s] in the %q view declares args %v: dead config in a routing init generates",
+						role, tier, substrate, variant.Args)
+				}
+			}
+			for sub, variant := range cell.Substrates {
+				if variant != nil && len(variant.Args) != 0 {
+					t.Errorf("the %s override of [roles.%s] in the %q view declares args %v: dead config in a routing init generates",
+						sub, role, substrate, variant.Args)
+				}
+			}
+		}
+		for _, role := range []string{"implement", "review", "closeout"} {
+			w, err := cfg.ResolveOn(substrate, role, "")
+			if err != nil {
+				t.Fatalf("the %s routing of %s does not resolve on %q: %v", role, initRunnersPath(repo), substrate, err)
+			}
+			if len(w.Args) != 0 {
+				t.Errorf("%s resolves on %q with args %v — the one reader of them is a herdr dispatch's spawnArgv, and no cell init writes has a flag to add",
+					role, substrate, w.Args)
+			}
+		}
+	}
+}
+
+// TestInitWritesNoArgsIntoTheRoutingItGenerates (tick q6z): the roles
+// table's `args` reach a worker's argv through exactly one consumer —
+// spawnArgv, reached only for a herdr dispatch (internal/cli/executor.go) —
+// and runconfig.Compile has refused `kind = "pi"` for a herdr pane since
+// tick uxi, so the pi-CLI trust flag init used to write beside
+// `kind = "pi"` could not reach a worker on ANY substrate: the
+// local-subprocess executor launches the durable host off its own runner
+// table (internal/exec/subprocess's `runners`, the whole argv), and the
+// cloud container's interface is the door's worker.json, not the roles
+// table. The line was dead config that told a reader of every repository
+// init creates that its implement workers run with `--approve` — the same
+// dead pairing this repository's own .tick/runners.toml carries and q6z
+// exists to remove. init writes no `args` at all, for the local answer's pi
+// cell, for a cloud-only answer's three cells, and for a both answer's
+// cloud cells, and neither the flag nor the table can come back unnoticed.
+func TestInitWritesNoArgsIntoTheRoutingItGenerates(t *testing.T) {
+	t.Run("the local pi answer", func(t *testing.T) {
+		repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+		if code, _, stderr := runInitOn(t, repo, "", "--yes", "--runner", "pi"); code != exitSuccess {
+			t.Fatalf("init --runner pi exits %d: %s", code, stderr)
+		}
+		assertNoDeadRunnerArgs(t, repo, runconfig.SubstrateHarness, runconfig.SubstrateHerdr)
+	})
+	t.Run("the both answer", func(t *testing.T) {
+		repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+		if code, stdout, _ := runInitOn(t, repo, "both\n\n\n\n"); code != exitSuccess {
+			t.Fatalf("init on the both answer exits %d: %s", code, stdout)
+		}
+		assertNoDeadRunnerArgs(t, repo, runconfig.SubstrateHarness, runconfig.SubstrateHerdr, runconfig.SubstrateCloud)
+	})
+	t.Run("the cloud-only answer", func(t *testing.T) {
+		repo := initFixture(t, map[string]string{"go.mod": "module example.com/fresh\n"})
+		if code, stdout, _ := runInitOn(t, repo, "cloud\n\n\n"); code != exitSuccess {
+			t.Fatalf("init on the cloud answer exits %d: %s", code, stdout)
+		}
+		assertNoDeadRunnerArgs(t, repo, runconfig.SubstrateCloud)
+	})
 }

@@ -1,0 +1,17 @@
+{
+  "id": "ymf",
+  "title": "ticfac watch answers the operator's three questions: needs me? healthy? what's happening now?",
+  "gloss": "watch redesign",
+  "description": "Operator, 2026-10-08: 'frankly i don't think the tui is very intuitive/clear'. Redesign the ticfac watch dashboard per docs/design/watch-redesign-2026-10.md: needs-you first, one health/progress line, one epic-level phase track with a you-are-here marker, ticks grouped NOW/DONE/UP NEXT/HELD with plain-language status words instead of unlabelled stage dots, a live one-line activity excerpt per running worker (local and cloud), exceptions inline (retries, escalated model, stalls, failures), mechanics (pushes, shas, tiers) behind keys, readable feed sentences, cost only when metered and subscription window use on a claude-sub run. Keep the existing drill-down (enter) and events (e) views working. Fold in the open watch defects t0y, dfb, 4dn, zrl.",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "labels": [
+    "config:glm"
+  ],
+  "acceptance_criteria": "[A1] For the five scenarios in docs/design/watch-redesign-2026-10.md (fresh run, busy wave, held tick, ended landed run, ended failed run) the dashboard renders through a terminal emulator at 80x24 and 120x40 with: the needs-you line first; health + N of M done + ETA on one line; the phase track; ticks grouped by state with status words (no unlabelled symbol); golden frames committed and checked by tests in the gate. [A2] Each running worker row shows a one-line excerpt of its latest activity, local and cloud. [A3] No TIER/ATTEMPTS columns; a retry or escalation shows inline only when it happens. [A4] The recent-activity section shows readable sentences (no shas); raw events remain on [e]. [A5] Cost shows only when metered; a claude-sub run shows subscription window use. [A6] t0y, dfb, 4dn and zrl are fixed. [A7] Screenshots of the five scenarios at 120x40 are attached to the epic PR. [A8] make gate passes and CI is green.",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-08T13:16:48.274307Z",
+  "updated_at": "2026-10-08T13:52:04.003269Z"
+}

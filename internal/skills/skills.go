@@ -25,6 +25,10 @@ import (
 // tree.
 const bundleRoot = "skills"
 
+// DefaultSkill is the skill `skills install` and `skills get` act on when no
+// name is given: the binary embeds exactly one.
+const DefaultSkill = "ticfac"
+
 // ticfacSkills is the embedded bundle, behind a one-line seam so tests can
 // hold it (the embed is a compile-time fact, the function is the callable
 // one).

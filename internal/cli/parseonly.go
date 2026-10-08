@@ -13,4 +13,5 @@ var parseOnly bool
 var parseOnlyCommands = map[string]bool{
 	"settle": true, "finding": true, "findings": true, "status": true, "events": true,
 	"triage": true, "run": true, "factory": true, "amendment": true, "amendments": true,
+	"skills": true,
 }

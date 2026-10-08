@@ -53,6 +53,48 @@ loud.
 
 ---
 
+## 2.4.1
+
+PATCH: the fold of main into epic/t8u — two parallel cuts of 2.3.0 become one,
+for the reason 2.1.0 and 1.2.0 state. The epic cut 2.3.1 (tick p0n:
+`lifecycle-invariants.json`'s `today` cross-references follow the watch's
+decision core into `run-watch.ts` — full text below) and main cut 2.4.0 (epic
+ex6, tick 8gd: `worker-boot-contract.json` gains the review job's boot/finish
+contract — full text below). The two halves touch different files, so the
+union is main's 2.4.0 plus the epic's comment-only cross-references: the next
+PATCH over 2.4.0. `version_digests` keeps both cuts' bindings, 2.3.1
+(6cc4290a3c22df572bc49d42c885cae3eeb496b158f2b00a952c171dfa683637) and 2.4.0
+(7c62c5e707b87f9350ce22bcf9aa481b942f972e8547409a0ce3639f160646b2), and the
+union re-cuts here. A consumer pinned to 2.4.0 has nothing to do; one pinned
+to 2.3.1 adopts main's review boot/finish contract by moving here — the 2.4.0
+entry says what that costs.
+
+Consumers: `cloudflare/contracts.pin.json` moves to 2.4.1.
+
+---
+
+## 2.4.0
+
+MINOR: `worker-boot.json` gains the review job's own boot/finish contract —
+`review_boot_arg`/`review_boot_command`/`review_boot_marker`/
+`review_boot_prompt_begin`/`review_boot_prompt_end` and
+`review_finish_arg`/`review_finish_command`. Since the PR-review job's
+conversation is hosted on the run's WorkerAgent like every other cloud
+worker's (epic ex6, tick 8gd), the review container runs the orchestrator
+image's `--boot`/`--finish` halves — the same shape the worker host gave the
+workers in 1.x, with the review's own markers so a handoff is recognizable as
+a review's — and the marker line's two fields keep the worker's names but
+change meaning per role: for a review, `branch=` is the ref that was reviewed
+and `result=` the findings path the finish posts. An unchanged consumer is
+still correct: the worker contract's own fields are untouched.
+
+Consumers: `cloudflare/contracts.pin.json` moves to 2.4.0; the image
+(`image/entrypoint.sh`), the control plane (`cloudflare/src/worker-boot.ts`), and the
+host that drives the halves (`harness/src/host/worker-attempt.ts`, protocol
+selected by the spec's kind) gained the spellings in the same commit.
+
+---
+
 ## 2.3.1
 
 PATCH: `lifecycle-invariants.json`'s `today` cross-references follow the code
@@ -69,8 +111,6 @@ half of A6) name run-watch.ts as a second site. No rule, fixture shape or
 sequence changed — a consumer of the invariants has nothing to do.
 
 Consumers: `cloudflare/contracts.pin.json` moves to 2.3.1.
-
----
 
 ## 2.3.0
 
