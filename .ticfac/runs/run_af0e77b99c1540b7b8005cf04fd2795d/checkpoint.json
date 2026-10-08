@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
   "epic_id": "ex6",
-  "sequence": 45,
-  "state": "dispatching",
-  "reason": "dispatching tgx as attempt 9",
-  "updated_at": "2026-10-08T02:58:01Z",
+  "sequence": 46,
+  "state": "running",
+  "reason": "tgx is running as attempt 9",
+  "updated_at": "2026-10-08T02:58:08Z",
   "ticks": [
     {
       "tick_id": "2p3",
@@ -43,7 +43,8 @@
     },
     {
       "tick_id": "tgx",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 9
     },
     {
       "tick_id": "ynd",
