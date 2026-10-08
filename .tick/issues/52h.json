@@ -1,10 +1,10 @@
 {
   "id": "52h",
   "title": "Close out the operator surface follow-ups: retro, then the next feasible epic",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "blocked_by": [
     "g2s"
   ],
@@ -12,5 +12,6 @@
   "role": "closeout",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-07T15:18:22.018769Z",
-  "updated_at": "2026-10-07T15:18:22.018769Z"
+  "updated_at": "2026-10-08T11:11:09.72031447Z",
+  "started_at": "2026-10-08T11:11:09.72031323Z"
 }
