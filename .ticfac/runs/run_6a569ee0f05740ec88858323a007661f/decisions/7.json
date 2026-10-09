@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "decision": 7,
+  "role": "triage-failure",
+  "request": {
+    "attempt": 4,
+    "epic_id": "ymf",
+    "job_id": "run-run_6a569ee0f05740ec88858323a007661f/tick-vii/attempt-4",
+    "op": "settle_attempt",
+    "run_id": "run_6a569ee0f05740ec88858323a007661f",
+    "state": "rejected",
+    "tick_id": "vii"
+  },
+  "response": {
+    "by_run": true,
+    "carry_ref": "refs/heads/ticfac/run-run_6a569ee0f05740ec88858323a007661f/tick-vii/attempt-4",
+    "carry_sha": "fcc9be9290e3c53698d00cb8dd8898f9c470c8b6",
+    "disposition": "carry-work",
+    "reason": "missing-result",
+    "released_by": "ticfac",
+    "settled": true,
+    "state": "rejected",
+    "step": "escalate"
+  },
+  "validated": true,
+  "requested_at": "2026-10-09T11:12:05Z",
+  "answered_at": "2026-10-09T11:12:05Z",
+  "provenance": {
+    "run_id": "run_6a569ee0f05740ec88858323a007661f",
+    "tick_id": "vii",
+    "attempt": 4,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "5dc592bdbdfef3d0e95cb48e9ac7b6d2903d7c43",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:f6d30e41f279e14ec58e01f070b5f9560dd75d0f23147e11fdef84a873c82087",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
