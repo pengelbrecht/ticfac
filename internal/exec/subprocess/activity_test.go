@@ -753,6 +753,7 @@ func TestReadTranscriptEventsRedactsCredentialsFromTheLastToolCall(t *testing.T)
 // output and a person's typed message are neither the worker's words nor its
 // act. The sentence is REDACTED and bounded through the same pass the tool
 // call goes through, and the stamp is its own line's.
+// serial: t.Setenv points the transcript home writeTranscript writes through, and t.Setenv refuses a parallel test.
 func TestReadTranscriptEventsAnswersTheLastAssistantSentence(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(EnvTranscriptHome, home)
