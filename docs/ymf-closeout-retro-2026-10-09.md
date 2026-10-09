@@ -191,7 +191,7 @@ decision records, all named, none silent:
    reason no command could bind evidence to A2–A8 all epic. This close-out
    carries the one-item-per-line re-flow as a `tracker_edit` finding for the
    run to apply; baq remains the record of it.
-5. **The backlog.** Twenty open backlog ticks across the two runs that reported
+5. **The backlog.** Eighteen open backlog ticks across the two runs that reported
    findings: from this run — h4u, ugt, c3i, zvj, 5u1, ijh, pzi, baq, kv3, xbf,
    k6z; from the failed run — pl5 (the one contract finding: the status-model
    contract still says a cloud run's census cannot be taken), pta, 0by, r58,
