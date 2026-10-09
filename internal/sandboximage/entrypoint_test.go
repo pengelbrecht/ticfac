@@ -1503,6 +1503,53 @@ func TestEntrypointStopsWhenTheGatewayNeverAnswersTheProbe(t *testing.T) {
 	}
 }
 
+// The orchestrator's own boot, in the incident it died of (ymf run_91f2952a):
+// Workers AI answered the probe 500 AiError 4007 through the gateway, and the
+// entrypoint called it a configuration to fix (exit 7). It is a provider
+// outage: asked again over the window, then exit 14 for the Workflow to back
+// off and reboot on.
+func TestEntrypointReadsAProviderServerErrorAsInfrastructure(t *testing.T) {
+	f := newFixture(t, "- `true`\n")
+	f.env["TICKS_TEST_CURL_STATUS"] = "500"
+	f.env["TICKS_TEST_CURL_BODY"] = incidentAiError
+	f.env[EnvModelProbeBackoff] = "0"
+	out, code := f.run()
+	if code != ExitGatewayUnavailable {
+		t.Fatalf("exit %d, want %d (a provider's 500 is not a configuration verdict)\n%s", code, ExitGatewayUnavailable, out)
+	}
+	if got := strings.Count(f.probeCalls(), "URL="); got != 4 {
+		t.Errorf("the probe was asked %d times, want 4:\n%s", got, f.probeCalls())
+	}
+	mustContain(t, out, "asked 4 time(s)", "the stop says it asked as often as it may")
+	mustContain(t, out, "AiError", "the stop quotes the provider")
+	if strings.Contains(out, "This is a stop, not a warning") {
+		t.Errorf("a provider outage got the configuration stop:\n%s", out)
+	}
+	if f.harnessStarted() {
+		t.Error("the harness started against a provider that never answered")
+	}
+}
+
+// A real configuration error stays 7, at once: a refused credential and a
+// model the provider does not serve.
+func TestEntrypointKeepsARouteRefusalAConfigurationVerdict(t *testing.T) {
+	for _, status := range []string{"401", "404"} {
+		t.Run(status, func(t *testing.T) {
+			f := newFixture(t, "- `true`\n")
+			f.env["TICKS_TEST_CURL_STATUS"] = status
+			f.env["TICKS_TEST_CURL_BODY"] = `{"error":"no"}`
+			f.env[EnvModelProbeBackoff] = "30"
+			out, code := f.run()
+			if code != ExitModel {
+				t.Fatalf("exit %d, want %d\n%s", code, ExitModel, out)
+			}
+			if got := strings.Count(f.probeCalls(), "URL="); got != 1 {
+				t.Errorf("a refusal was asked %d times, want once", got)
+			}
+		})
+	}
+}
+
 // One silence is not a dead gateway. hn6 run_ee8e: 378's resolve job booted,
 // its one-token probe to a cold Workers AI model got nothing in 30s, and the
 // container exited before the harness started — no report, nothing pushed,
@@ -1702,6 +1749,29 @@ func TestEntrypointStopsWhenTheHarnessCannotCallTheGateway(t *testing.T) {
 	}
 }
 
+// The provider can flap between the two probes: the model probe green, then
+// the harness's own call answered by ymf run_91f2952a's 500 AiError. That is
+// the provider, not the harness's wiring: asked again, and infrastructure (14)
+// when it never clears — never the harness stop that ends a worker's run.
+func TestEntrypointReadsAProviderErrorInTheHarnessProbeAsInfrastructure(t *testing.T) {
+	f := newFixture(t, "- `true`\n")
+	f.env[EnvHarness] = "omp"
+	f.env[EnvModel] = "workers-ai/@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+	f.env["TICKS_TEST_HARNESS_PROBE_EXIT"] = "1"
+	f.env["TICKS_TEST_HARNESS_PROBE_ANSWER"] = "Error: 500 " + incidentAiError
+	f.env[EnvModelProbeBackoff] = "0"
+	out, code := f.run()
+	if code != ExitGatewayUnavailable {
+		t.Fatalf("exit %d, want %d\n%s", code, ExitGatewayUnavailable, out)
+	}
+	if got := strings.Count(f.harnessProbeCalls(), "CWD="); got != 4 {
+		t.Errorf("the harness was probed %d times, want 4", got)
+	}
+	if f.harnessStarted() {
+		t.Error("the run started on a provider that never answered")
+	}
+}
+
 // A harness that exits 0 saying nothing is the green-start trap: the run would
 // have begun and done nothing.
 func TestEntrypointStopsWhenTheHarnessProbeAnswersNothing(t *testing.T) {
@@ -1750,7 +1820,7 @@ func TestEntrypointAcceptsTheProbeAnswerInAnyCase(t *testing.T) {
 // the exit code to tell them apart.
 func TestEntrypointKeepsTheHarnessFailureDistinctFromTheGatewayFailure(t *testing.T) {
 	f := newFixture(t, "- `true`\n")
-	f.env["TICKS_TEST_CURL_STATUS"] = "503"
+	f.env["TICKS_TEST_CURL_STATUS"] = "401"
 	out, code := f.run()
 	if code != ExitModel {
 		t.Fatalf("exit %d, want %d (a refused gateway is not a harness failure)\n%s", code, ExitModel, out)

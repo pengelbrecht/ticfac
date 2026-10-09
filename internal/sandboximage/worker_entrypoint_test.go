@@ -290,7 +290,7 @@ for a in "$@"; do
   prev="$a"
 done
 printf '%s\n' "$*" >> "$TICKS_TEST_CURL_RECORD"
-[ -z "$out" ] || printf '{"ok":true}' > "$out"
+[ -z "$out" ] || printf '%s' "${TICKS_TEST_CURL_BODY:-{\"ok\":true}}" > "$out"
 # TICKS_TEST_CURL_STATUS_SEQ answers successive calls in turn — "000 000 200"
 # is a gateway that answers on the third try — and its last entry answers
 # every call after it.
