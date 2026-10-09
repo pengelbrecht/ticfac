@@ -1534,19 +1534,17 @@ func TestEntrypointReadsAProviderServerErrorAsInfrastructure(t *testing.T) {
 // model the provider does not serve.
 func TestEntrypointKeepsARouteRefusalAConfigurationVerdict(t *testing.T) {
 	for _, status := range []string{"401", "404"} {
-		t.Run(status, func(t *testing.T) {
-			f := newFixture(t, "- `true`\n")
-			f.env["TICKS_TEST_CURL_STATUS"] = status
-			f.env["TICKS_TEST_CURL_BODY"] = `{"error":"no"}`
-			f.env[EnvModelProbeBackoff] = "30"
-			out, code := f.run()
-			if code != ExitModel {
-				t.Fatalf("exit %d, want %d\n%s", code, ExitModel, out)
-			}
-			if got := strings.Count(f.probeCalls(), "URL="); got != 1 {
-				t.Errorf("a refusal was asked %d times, want once", got)
-			}
-		})
+		f := newFixture(t, "- `true`\n")
+		f.env["TICKS_TEST_CURL_STATUS"] = status
+		f.env["TICKS_TEST_CURL_BODY"] = `{"error":"no"}`
+		f.env[EnvModelProbeBackoff] = "30"
+		out, code := f.run()
+		if code != ExitModel {
+			t.Fatalf("exit %d, want %d\n%s", code, ExitModel, out)
+		}
+		if got := strings.Count(f.probeCalls(), "URL="); got != 1 {
+			t.Errorf("a refusal was asked %d times, want once", got)
+		}
 	}
 }
 

@@ -66,20 +66,18 @@ func TestAGatewayRefusalIsNotRetried(t *testing.T) {
 		{"the gateway's own configuration refusal", "503",
 			`{"error":"provider_not_configured","detail":"this factory has no key for workers-ai; run 'ticfac factory setup'"}`},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			f := newWorkerFixture(t)
-			f.env["TICKS_TEST_CURL_STATUS"] = tc.status
-			f.env["TICKS_TEST_CURL_BODY"] = tc.body
-			f.env[EnvModelProbeBackoff] = "30"
-			out, code := f.run()
-			if code != ExitModel {
-				t.Fatalf("a worker whose gateway refused (HTTP %s) exited %d, want %d (ExitModel):\n%s",
-					tc.status, code, ExitModel, out)
-			}
-			if tries := strings.Count(readFile(t, f.env["TICKS_TEST_CURL_RECORD"]), "\n"); tries != 1 {
-				t.Errorf("a refusal was asked %d times, want once", tries)
-			}
-		})
+		f := newWorkerFixture(t)
+		f.env["TICKS_TEST_CURL_STATUS"] = tc.status
+		f.env["TICKS_TEST_CURL_BODY"] = tc.body
+		f.env[EnvModelProbeBackoff] = "30"
+		out, code := f.run()
+		if code != ExitModel {
+			t.Fatalf("a worker whose gateway refused (HTTP %s) exited %d, want %d (ExitModel):\n%s",
+				tc.status, code, ExitModel, out)
+		}
+		if tries := strings.Count(readFile(t, f.env["TICKS_TEST_CURL_RECORD"]), "\n"); tries != 1 {
+			t.Errorf("a refusal was asked %d times, want once", tries)
+		}
 	}
 }
 
