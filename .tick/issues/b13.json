@@ -4,7 +4,7 @@
   "gloss": "cost / subscription line",
   "description": "Replace 'cost decisions not metered · Workers AI $0.00' with: nothing when there is no metered cost; the metered cost when there is; on a run whose config is claude-sub, the leased subscription label and its 5h/7d window utilization from the factory's /api/claude-sub (operator auth, already used by ticfac factory status). Never a token.",
   "notes": "2026-10-08 16:03 - ticfac run run_91f2952af63f42f08a0ad243b4488842: b13 try 1 (run dispatch #3) reported a finding the run itself decided — proposed-tick \"Phone page still renders the unmetered recital; subscription field is available\" (key d0f16c9e5b635e35305aead1404f810a7dac9b2471c781c1ecf3e96f7f0d61d7, severity low, for this repository) is promoted to a backlog tick with an owner, bt4; the decision record is on the run branch at .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/d0f16c9e5b635e35305aead1404f810a7dac9b2471c781c1ecf3e96f7f0d61d7.json, and the draft is triaged as promoted.\n2026-10-08 19:36 - ticfac run run_91f2952af63f42f08a0ad243b4488842: b13 try 2 (run dispatch #5) reported a finding the run itself decided — defect \"restart_test flake: same-second evidence timestamps fail late.After(dead)\" (key be6e18cdf2d2b916c7abd1e8f380cdfdfc37acc0f3280a583fe317d5fe6e1fdb, severity medium, for this repository) is promoted to a backlog tick with an owner, r58; the decision record is on the run branch at .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/be6e18cdf2d2b916c7abd1e8f380cdfdfc37acc0f3280a583fe317d5fe6e1fdb.json, and the draft is triaged as promoted.\n2026-10-08 23:14 - ticfac run run_91f2952af63f42f08a0ad243b4488842: b13 try 3 (run dispatch #6) reported a finding the run itself decided — defect \"restart evidence tests demand strictly-after on second-granular stamps\" (key 907c8f2cb12f8aa0e39fea26bf331f54f7de94ef3364fa46ea8e2d653bface14, severity medium, for this repository) is promoted to a backlog tick with an owner, 0by; the decision record is on the run branch at .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/907c8f2cb12f8aa0e39fea26bf331f54f7de94ef3364fa46ea8e2d653bface14.json, and the draft is triaged as promoted.\n2026-10-08 23:14 - ticfac run run_91f2952af63f42f08a0ad243b4488842: b13 try 3 (run dispatch #6) reported a finding the run itself decided — proposed-tick \"the phone page's cost section ignores cost.subscription and recites not metered\" (key c94af41f72efcf857de0baf384bc240ab0ff637035b932fe851eeb48fe5b1809, severity low, for this repository) is promoted to a backlog tick with an owner, rpc; the decision record is on the run branch at .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/c94af41f72efcf857de0baf384bc240ab0ff637035b932fe851eeb48fe5b1809.json, and the draft is triaged as promoted.\n2026-10-09 00:04 - ticfac run run_91f2952af63f42f08a0ad243b4488842: b13 try 3 (run dispatch #6) merged into epic/ymf as 39a19d87737a; the integrated gate (go, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -12,6 +12,6 @@
   "acceptance_criteria": "the three cases render as specified, tested; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.423276Z",
-  "updated_at": "2026-10-09T00:04:57.88856882Z",
-  "started_at": "2026-10-08T13:58:59.174330445Z"
+  "updated_at": "2026-10-09T00:04:58.081415902Z",
+  "closed_at": "2026-10-09T00:04:58.081415902Z"
 }
