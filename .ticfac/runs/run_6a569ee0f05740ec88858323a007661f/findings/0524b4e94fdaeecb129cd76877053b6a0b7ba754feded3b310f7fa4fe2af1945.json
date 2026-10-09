@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "jym",
   "attempt": 2,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-09T08:12:37Z",
+  "triaged_at": "2026-10-09T08:12:49Z",
+  "triaged_by": "ticfac run run_6a569ee0f05740ec88858323a007661f absorbing 5u1",
+  "promoted_as": "5u1",
   "provenance": {
     "run_id": "run_6a569ee0f05740ec88858323a007661f",
     "tick_id": "jym",
