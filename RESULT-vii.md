@@ -13,8 +13,9 @@ claim by claim, before changing anything:
 - `pnpm run test:seeded` (the non-vacuity half) passed as inherited: 7 of 7.
 - I read the honest frames out of the driver's own traces rather than trusting
   the verdicts: the watch frame at every generated size (60×18 … 140×40) draws
-  the key-hints footer the new marker keys on, the needs-you box with the
-  clearing command, and the collapsed `UP NEXT (4)` line in plan order; the
+  the key-hints footer the new marker keys on — every settled frame, one
+  state per resize being the pane before the redraw — the needs-you box with
+  the clearing command, and the collapsed `UP NEXT (4)` line in plan order; the
   overview frame at 100×45 seats the whole ~40-line listing, so the held runs'
   rows and their commands stay on screen. The first frame lands at +0.91s
   against the 5s bound.
@@ -48,7 +49,7 @@ nothing for the one run a person would be debugging. Reproduced on the old
 code with a 550 MB trace (the same states five times over): exit 1. It now
 streams line by line; the frames it prints are unchanged (diffed identical
 against the old tool on the watch trace, in both `last` and `all` modes), and
-it reads all ten of the current traces, 105 MB to 484 MB.
+it reads all ten of the current traces, 1 MB to 489 MB.
 
 Nothing outside `tui/` was touched, and nothing in `tui/` was re-pointed a
 second time: attempt 4's marker, property, spelling, pane and seeded screens
