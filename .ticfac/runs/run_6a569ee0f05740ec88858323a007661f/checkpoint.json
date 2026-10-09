@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 40,
-  "state": "running",
-  "reason": "jml is running as attempt 7",
-  "updated_at": "2026-10-09T13:30:58Z",
+  "sequence": 41,
+  "state": "collecting",
+  "reason": "collecting the closeout-epic job for jml",
+  "updated_at": "2026-10-09T14:36:23Z",
   "ticks": [
     {
       "tick_id": "ugm",
