@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 17,
-  "state": "dispatching",
-  "reason": "dispatching 8t5 as attempt 3",
-  "updated_at": "2026-10-09T08:43:51Z",
+  "sequence": 18,
+  "state": "running",
+  "reason": "8t5 is running as attempt 3",
+  "updated_at": "2026-10-09T08:44:00Z",
   "ticks": [
     {
       "tick_id": "ugm",
@@ -19,7 +19,8 @@
     },
     {
       "tick_id": "8t5",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 3
     },
     {
       "tick_id": "jml",
