@@ -1,0 +1,78 @@
+{
+  "schema_version": 3,
+  "decision": 9,
+  "role": "closeout-epic",
+  "request": {
+    "epic_id": "ymf",
+    "job_id": "run-run_6a569ee0f05740ec88858323a007661f/tick-jml/attempt-7",
+    "output_schema": "ticfac.job-result.closeout-epic.v1",
+    "profile": "closeout-epic@1.0.0 (cloudflare-sandbox/pi-durable, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:f083fe6b9410166a3480b4a729d1ba6272f1f7bcf1e97fb5f5e5f3e926c72124",
+    "role": "closeout-epic",
+    "source_grade": "write",
+    "source_sha": "92cac3b93bb21b7fc907e60fc7ac6014db7daa48",
+    "tick_id": "jml"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "The epic's definition of done states its eight [A<n>] marks on one line, and internal/acceptance's parser takes a bracketed [A<n>] only at a line's start (a mid-line bracket is a reference, never a definition), so the record carries exactly one item of record — A1 — and [A2]..[A8] are references nothing can key on: no command can bind evidence to them and a finding cannot name the item it breaks. The round-1 review hit this live (its blocking finding could claim A8 only in prose) and tick baq, still open, records it. The tracker edit this finding carries re-marks the same eight items one per line — the same words, nothing dropped — so the machinery the epic's close-out feeds (the epic PR's done-evidence section, the [evidence.acceptance] table, a future finding's breaks claim) can address all eight.\nevidence: .tick/issues/ymf.json acceptance_criteria (one line, [A1]..[A8]); internal/acceptance/acceptance.go attemptedMark ('^[ \\t]*\\[A([^\\]]*)\\]', line-anchored)\ntracker edit: acceptance_criteria of ymf (applied by the run)",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Re-flow ymf's acceptance criteria so [A1]..[A8] parse as eight items"
+      },
+      {
+        "body": "The ymf close-out's retro, as the whole new .tick/learnings.md. It is a compaction, not an append: the file is at its 150-line hard cap, so one new Problem → Rule pair goes in (a screen that renders two facts from one model — a count and a grouping, a word and a state — gets a property pinning their agreement, with a seeded program that breaks only that claim; kv3 stood green on the watch suite's own honest frame), two rules gain the halves ymf paid for (the prose-data rule gains ONE ITEM PER LINE — ymf's eight marks on one line parsed as item A1 alone all epic, ex6's four had done the same; the render-state rule gains the suite half — ymf shipped its goldens and left tui/'s pty suite pinning the old screen, so CI ran red from the first merge while the per-tick gate stayed green), and four same-family merges come out (the reproduce/shape pair, the 6in/promotion pair, the two fixture-identity entries, the two small boundaries entries), at exactly 150 lines. A cloud close-out still cannot commit the file itself (tick 3hw, open: the container's pre-commit hook refuses every .tick/ path), so it rides this protected change as bo9's did.\nprotected change: a new .tick/learnings.md (applied by the run after its close-out, for the merger to review)",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Apply the ymf close-out retro: the compacted .tick/learnings.md"
+      },
+      {
+        "body": "ymf's round-2 review named kv3 blocking — a deferred finding, first named blocking there — and because that round also spent the bound of 2, answerNotReadyReview absorbed nothing and the run ends at a landing hold for a person, over a fix the run could have made in the same shape vii fixed round 1's (one status-word rule, one test). The bound's design reads a second NOT READY as \"a disagreement the run cannot settle by itself — another round is the same judgement asked again\"; round 2's was a NEW finding, not a re-asked question. Whether a review that adopts a deferred finding on its last round should buy the round the fix needs, or whether the hold is the intended cost of the deferral, is an operator decision on the machinery, made visible by this epic's outcome.\nevidence: internal/reconcile/review_rounds.go:66 (maxReviewRounds) with answerNotReadyReview's spent() branch (review_rounds.go:527-532); .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/e740036384f66facdd6df48f826a9d5ce79abbd8f3978be771e23f438f99bbdf.json (kv3, basis worker-asserted-high, placement deferred-to-review)",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "A blocking finding adopted at the review bound's last round ends the run held"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/ymf/attempt-7/jml",
+      "commits": 3,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/ymf/attempt-7/jml:RESULT-jml.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "closeout-epic",
+    "schema_id": "ticfac.job-result.closeout-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "the epic's final review (4oj, decision 8) is NOT READY on kv3, so the run will hold the landing for a person; a person must choose between fixing kv3 and re-running, merging PR #272 by hand, or closing the epic — and the four fixed defect ticks (t0y, dfb, 4dn, zrl) are still open in the tracker (pzi)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-09T14:37:07Z",
+  "answered_at": "2026-10-09T14:37:07Z",
+  "provenance": {
+    "run_id": "run_6a569ee0f05740ec88858323a007661f",
+    "tick_id": "jml",
+    "attempt": 7,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "92cac3b93bb21b7fc907e60fc7ac6014db7daa48",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "closeout",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:f083fe6b9410166a3480b4a729d1ba6272f1f7bcf1e97fb5f5e5f3e926c72124",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
