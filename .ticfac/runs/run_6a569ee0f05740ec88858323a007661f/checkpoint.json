@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 29,
-  "state": "gating",
-  "reason": "running the integrated gate for vii on 35a5caa91309",
-  "updated_at": "2026-10-09T12:33:48Z",
+  "sequence": 30,
+  "state": "publishing",
+  "reason": "closing vii behind the integrated gate on 35a5caa91309",
+  "updated_at": "2026-10-09T12:59:09Z",
   "ticks": [
     {
       "tick_id": "ugm",
