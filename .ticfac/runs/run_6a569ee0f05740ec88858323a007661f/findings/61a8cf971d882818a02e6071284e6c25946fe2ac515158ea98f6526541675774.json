@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "jml",
   "attempt": 7,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-09T14:36:47Z",
+  "triaged_at": "2026-10-09T14:36:57Z",
+  "triaged_by": "ticfac run run_6a569ee0f05740ec88858323a007661f absorbing ze7",
+  "promoted_as": "ze7",
   "provenance": {
     "run_id": "run_6a569ee0f05740ec88858323a007661f",
     "tick_id": "jml",
