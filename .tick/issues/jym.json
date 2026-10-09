@@ -4,7 +4,7 @@
   "gloss": "watch defects",
   "description": "Fix the open watch defects on the new layout, each with a test: t0y (an ended, merged run's tick count, CI and phase disagree with the facts), dfb (the hold alert dereferences a nil clearing command), 4dn (an ended run's dispatched row still grows a live elapsed), zrl (below 48 cells a child row's columns shift by its indent — may disappear with the layout; prove it). Close those ticks.",
   "notes": "2026-10-09 08:12 - ticfac run run_6a569ee0f05740ec88858323a007661f: jym try 1 (run dispatch #2) reported a finding the run itself decided — proposed-tick \"A dead run's open tick still grows the row TIME cell (duration, not elapsed)\" (key 0524b4e94fdaeecb129cd76877053b6a0b7ba754feded3b310f7fa4fe2af1945, severity low, for this repository) is promoted to a backlog tick with an owner, 5u1; the decision record is on the run branch at .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/0524b4e94fdaeecb129cd76877053b6a0b7ba754feded3b310f7fa4fe2af1945.json, and the draft is triaged as promoted.\n2026-10-09 08:43 - ticfac run run_6a569ee0f05740ec88858323a007661f: jym try 1 (run dispatch #2) merged into epic/ymf as 6e95c4c2ad00; the integrated gate (go, go-touched, ts) passed.",
-  "status": "in_progress",
+  "status": "closed",
   "priority": 2,
   "type": "task",
   "owner": "ticfac",
@@ -15,6 +15,6 @@
   "acceptance_criteria": "t0y, dfb, 4dn, zrl each fixed with a test and closed; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.487984Z",
-  "updated_at": "2026-10-09T08:43:41.793057057Z",
-  "started_at": "2026-10-09T06:57:04.851990184Z"
+  "updated_at": "2026-10-09T08:43:41.991724175Z",
+  "closed_at": "2026-10-09T08:43:41.991724175Z"
 }
