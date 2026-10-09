@@ -1,33 +1,36 @@
 # Learnings
 
 Repo-specific gotchas, Problem → Cause → Rule. Hard cap 150 lines — compact every retro.
-Seeded from ticks' learnings 2026-09-02; last compacted at the v5t (2026-10-07), bo9 and t8u (2026-10-08) close-outs.
+Seeded from ticks' learnings 2026-09-02; last compacted at the bo9, t8u (2026-10-08) and ymf (2026-10-09) close-outs.
 
 ## Planning an epic
 
-**Problem:** EIGHT epics closed without the run their acceptance names (Phase 4, xte, yoh, 2jn, hn6's `ticfac watch`; 43y's [A4]/[A2]; v5t's
-[A1]; bo9's [A1], verified by READING all eight hops — no factory was reachable). 43y's and v5t's COULD not: the factory deploys main only.
-v5t's 6fv tested its door with WORKER_AGENTS unbound, which production binds (yhe). **Rule:** When an epic's gate is a run or a view, the
-FIRST tick wires the thinnest path through the PRODUCTION entry point, its tests binding what production binds (wrangler.toml), and a named
-tick INSIDE performs it; a hop-by-hop READ is not that run.
+**Problem:** EIGHT epics closed without the run their acceptance names (Phase 4, xte, yoh, 2jn, hn6's `ticfac watch`, 43y's [A4]/[A2], v5t's
+[A1], bo9's [A1] — all verified by READING the hops, no factory reachable; 43y's and v5t's COULD not: the factory deploys main only). v5t's
+6fv tested its door with WORKER_AGENTS unbound, which production binds (yhe). **Rule:** When an epic's gate is a run or a view, the FIRST
+tick wires the thinnest path through the PRODUCTION entry point, its tests binding what production binds, and a named tick INSIDE performs
+it; a hop-by-hop READ is not that run.
 
 **Problem:** t8u's [A1] asked for the full suite halved "on a quiet host" with no BEFORE recorded and no tick on its floor
-(internal/reconcile, 41m serial): its ticks cut the per-tick gate 452s → 162s uncached while reconcile moved ~13%, and two reviews could not
-time a quiet host (load 8-17). **Rule:** A speed epic records its before at PLANNING — the command, the figure, and a measure this shared
-host can give (CI step durations, a serial test-elapsed sum) — and puts a tick on the measured floor first.
+(internal/reconcile, 41m serial): its ticks cut the per-tick gate 452s → 162s uncached while reconcile moved ~13%, and no review could time
+a quiet host (load 8-17). **Rule:** A speed epic records its before at PLANNING — the command, the figure, a measure this shared host can
+give (CI step durations, a serial test-elapsed sum) — and puts a tick on the measured floor first.
 
 **Problem:** gvc absorbed none of 21 findings; 2jn scored none of 30: the data the machinery reads was prose. 0ek's four decisions are prose
-too — one NARROWED its own tick — because the envelope's `decisions` field has no report block filling it. **Rule:** An orchestrator epic
-names the NEXT run on the rebuilt binary as its demo; [A<n>] items AND a command per item at planning. A NARROWED scope is typed, or unseen.
+too — one NARROWED its own tick — because the envelope's `decisions` field has no report block filling it; ymf's eight [A<n>] marks sat on
+ONE line, so the done parsed as item A1 and [A2]..[A8] stayed unaddressable all epic (ex6's four marks did the same). **Rule:** An
+orchestrator epic names the NEXT run on the rebuilt binary as its demo; [A<n>] items AND a command per item at planning, ONE PER LINE. A
+NARROWED scope is typed, or unseen.
 
-**Problem:** hn6 planned 9 ticks and closed 65: ten repairs each fixed ONE pairing of which word wins across nine runs. **Rule:** An epic
-that renders run state lists the state matrix (running, held, stopped, failed, prior, cloud, local …) × every surface at planning, ONE
-precedence table tested over it.
+**Problem:** hn6 planned 9 ticks and closed 65: ten repairs each fixed ONE pairing of which word wins; ymf redesigned the dashboard and left
+tui/'s pty suite pinning the old screen — every CI run on the branch red from the first merge while the per-tick gate stayed green, and the
+final review was CI's first reader. **Rule:** An epic that renders state lists the state matrix (running, held, stopped, failed, prior,
+cloud, local …) × every surface, AND every suite that asserts each surface — gate or CI-only, its re-pointing a tick in scope — at planning,
+ONE precedence table tested over it.
 
-**Problem:** 2jn's NOT READY review's ten findings each became a parallel tick (16 ticks, 7 resolves, a
-silent same-function collision, 7o5); v5t's two became y38 (Go) and yhe (TS) on ONE step-down seam: a
-resolve and a duplicate high finding (bw7). **Rule:** A reviewer reports ONE blocking finding per SEAM,
-naming every side of it: the run makes one tick per finding, so the report is the only fold there is.
+**Problem:** 2jn's NOT READY review's ten findings each became a parallel tick (16 ticks, 7 resolves, a silent same-function collision, 7o5);
+v5t's two became y38 (Go) and yhe (TS) on ONE step-down seam, plus a duplicate high finding (bw7). **Rule:** A reviewer reports ONE blocking
+finding per SEAM, naming every side of it: the run makes one tick per finding, so the report is the only fold there is.
 
 **Problem:** A policy held per layer and failed in the whole: xte checked the cloud overlay, then a tier overlay replaced the model; yoh keyed the
 Workers-AI rule on the substrate, not the executor (78v). **Rule:** Check a policy on the FINAL resolved value, keyed on what crosses the boundary.
@@ -52,9 +55,9 @@ moving into this repo brings its exemptions; test resume and re-run, not only th
 can enforce must not rest on instruction-following — make it impossible and REPORT every attempt.
 
 **Problem:** FOUR of bo9's six ticks carried "BOUNDARY VIOLATION ATTEMPTED — a model ignored an explicit instruction"; only 0ek's `tk
-decide` was a write. The guard matches `$1` alone and omits tk's read-only `skills`/`decisions`/`frontier`, so `tk skills diff ticks` reads
-as a violation. **Rule:** A refused READ is not a violation: track tk's read vocabulary, match the SUBCOMMAND past global flags, banner
-WRITES only — or the one real attempt is lost in the noise.
+decide` was a write: the guard matches `$1` alone, so the read-only `tk skills diff ticks` read as a violation. **Rule:** A refused READ is
+not a violation: track tk's read vocabulary, match the SUBCOMMAND past global flags, banner WRITES only — or the one real attempt is lost
+in the noise.
 
 **Problem:** Parallel ticks sharing a return shape were green alone, broken together; an "in flight" state outlived its writer. **Rule:**
 The merge gate is the only test of a shared contract; settle in-flight state from durable evidence, never by trusting the claimer.
@@ -63,10 +66,9 @@ The merge gate is the only test of a shared contract; settle in-flight state fro
 A hold that fires when the system does its job (finding things) makes "unattended" impossible; put
 it where a person already is (the PR). A resume replays a recorded decision, never re-buys one.
 
-**Problem:** 6in's close-out took four attempts: a BLOCKED no rule disposed of (#117), a re-verify
-rejected "no-commits". **Rule:** Every honest answer needs a terminal verdict; a verifier commits evidence.
-
-**Problem:** `tk close` usage prints; promotions pointed at uncommitted ticks. **Rule:** Usage is a REFUSAL; a promotion is finished when the tick is COMMITTED.
+**Problem:** 6in's close-out took four attempts: a BLOCKED no rule disposed of (#117), a re-verify rejected "no-commits"; `tk close` usage
+printed where promotions pointed at uncommitted ticks. **Rule:** Every honest answer needs a terminal verdict; a verifier commits evidence;
+usage is a REFUSAL; a promotion is finished when the tick is COMMITTED.
 
 **Problem:** Ticks changing the ticks repo were undispatchable (ha9: SEVEN dispatches); twa's (43y) and
 tda's (v5t) runners.cloud.toml cells sat outside the boundary (7vp, lxo). **Rule:** A tick lives where its
@@ -83,18 +85,16 @@ in the feed; a reader of "the last terminal line" is only as true as the writer'
 
 ## Waiting and watching
 
-**Problem:** Blind `sleep 300` loops; three hand-rolled watchers, each wrong; `pgrep -f` read ALIVE by
-matching its own argv; PR #11's CI called "unsatisfiable" before its checks existed. **Rule:** Wait on a
-CONDITION over durable evidence, a push stream or a held PID's exit, covering every terminal state; no `tail`/`head` in a watcher pipeline; absence right after creation is "not yet" — bound it to APPEAR.
+**Problem:** Blind `sleep 300` loops; hand-rolled watchers; `pgrep -f` read ALIVE by matching its own argv; PR #11's CI called
+"unsatisfiable" before its checks existed. **Rule:** Wait on a CONDITION over durable evidence, a push stream or a held PID's exit,
+covering every terminal state; no `tail`/`head` in a watcher pipeline; absence right after creation is "not yet" — bound it to APPEAR.
 
 ## Reviews and repairs
 
-**Problem:** A regression test "failed before the fix" only on an unrelated assertion. **Rule:**
-REPRODUCE a reported defect at the base, and read WHICH assertion fails there.
-
-**Problem:** A defect that is a SHAPE was repaired one site at a time (dyo Go, 94u TS); nine hn6 repairs
-fixed a printed "clear with" command that could not clear its hold. **Rule:** A repair names EVERY
-implementation of the seam, leaves a guard test and reproduces on the old code; a command printed for a person comes from ONE builder and a test PARSES it with the real CLI.
+**Problem:** A regression test "failed before the fix" only on an unrelated assertion; a defect that is a SHAPE was repaired one site at a
+time (dyo Go, 94u TS); nine hn6 repairs fixed a printed "clear with" command that could not clear its hold. **Rule:** REPRODUCE a reported
+defect at the base and read WHICH assertion fails there; a repair names EVERY implementation of the seam, leaves a guard test and reproduces
+on the old code; a command printed for a person comes from ONE builder and a test PARSES it with the real CLI.
 
 **Problem:** 06t deleted stray RESULT-*.md reports and passed its gate; the integration merge (keepReportsOut) restored all seven; only round two's
 `git ls-tree epic/hn6` saw it (obk). **Rule:** A repair whose effect is a TREE state is accepted on the INTEGRATED head, never the branch.
@@ -110,34 +110,34 @@ the last CODE-BEARING commit and PROVES the remainder code-free (`git diff --sta
 harness bound was filed five times (h3c 7oy 4ao omq 30e). **Rule:** A gate verdict is about the tree only if the host is bounded
 (registrytest.GuardMain); before filing "fails at base", grep `.tick/issues/` — the run must dedupe on the test id.
 
-**Problem:** wne's gates went green with 7 of 10 relevant tests skipped under `-short`; yoh's ts gate ran
-no vitest; dz1's, 43y's (enb, 4w7) and t8u's (p4c: 15 runs, Apple git 2.50 vs CI's 2.55) red
-epic CI sat unread until a review; z7w's -short properties doubled internal/cli's wall, unseen. **Rule:** A test the
-gate does not run is not evidence: add it or name the gap. A NEW package's suite joins
-`[testing.commands]` in its tick; a tick touching dispatch, claims or a profile runs `./internal/reconcile/`.
-A test of git's OWN behaviour (hooks, ref transactions) is green only on CI's git; a tick adding tests reports its package's -short wall.
+**Problem:** wne's gates went green with 7 of 10 relevant tests skipped under `-short`; yoh's ts gate ran no vitest; dz1's, 43y's (enb, 4w7)
+and t8u's (p4c: Apple git 2.50 vs CI's 2.55) red epic CI sat unread until a review; z7w's -short properties doubled internal/cli's wall,
+unseen. **Rule:** A test the gate does not run is not evidence: add it or name the gap. A NEW package's suite joins `[testing.commands]` in
+its tick; a tick touching dispatch, claims or a profile runs `./internal/reconcile/`. A test of git's OWN behaviour (hooks, ref
+transactions) is green only on CI's git; a tick adding tests reports its package's -short wall.
+
+**Problem:** The re-pointed watch suite pinned the dashboard's wording, order and pane fit, and held green over a frame whose health line
+read "2 of 4 done" while UP NEXT held all four ticks — kv3, ymf's round-2 blocker, stood green on the suite's own honest frame. **Rule:** A
+screen that renders two facts from one model — a count and a grouping, a word and a state — gets a property pinning their AGREEMENT, with
+a seeded program that breaks only that claim.
 
 **Problem:** A NOT READY was recorded ready-to-merge; 6in's close-out read an all-SKIPPED head as CI
 green (#100). **Rule:** A verdict is a typed field, and a skip is not a pass: green needs a success.
 
 ## Fixtures
 
-**Problem:** A lost sandbox handle was green because the fake keyed on job_id; yoh's collect fake put
-work and report in ONE commit; v5t's Go executor said `cloudflare-workers-ai/…` where the door said
-`workers-ai/…`, each green on its own fake (y38). **Rule:** A fake demands the identity and reproduces
-the real shape; fix a forgiving fake in the same change. A TS↔Go seam gets a parity guard over its
-spellings and one Go test driving the REAL door (claude_sub_e2e_test.go's shape); "first try" is `$TICFAC_TRY`.
-
-**Problem:** hn6's activity fixture spelled a claude worker's model `claude-opus-5`; real attempts say `opus`, so a live claude worker's
-activity is never read. **Rule:** Copy a fixture's identity strings from a real record (`.ticfac/runs/*/attempts/*.json`), never type them.
+**Problem:** A lost sandbox handle was green because the fake keyed on job_id; yoh's collect fake put work and report in ONE commit; v5t's
+Go executor said `cloudflare-workers-ai/…` where the door said `workers-ai/…`, each green on its own fake (y38); hn6's activity fixture
+spelled a claude worker's model `claude-opus-5` where real attempts say `opus`, so a live worker's activity was never read. **Rule:** A fake
+demands the identity and reproduces the real shape; fix a forgiving fake in the same change; copy identity strings from a real record
+(`.ticfac/runs/*/attempts/*.json`), never type them. A TS↔Go seam gets a parity guard over its spellings and one Go test driving the REAL
+door; "first try" is `$TICFAC_TRY`.
 
 ## Boundaries this repo pays to learn
 
-**Problem:** A new `factory_*` key in ~/.ticfacrc broke the pinned contract. **Rule:** The config
-FILE's keys are the bundle's; $TICFAC_* is the operator-preference surface.
-
-**Problem:** A login-route test read the login page's own 401: `SELF.fetch` FOLLOWS a 303. **Rule:**
-A redirect-asserting route test passes `redirect: "manual"`.
+**Problem:** A new `factory_*` key in ~/.ticfacrc broke the pinned contract; a login-route test read the login page's own 401 because
+`SELF.fetch` FOLLOWS a 303. **Rule:** The config FILE's keys are the bundle's ($TICFAC_* is the operator-preference surface); a
+redirect-asserting route test passes `redirect: "manual"`.
 
 **Problem:** A 1,000,000 max-output drew a bodyless 400 pi read as context overflow; 8,192 truncated GLM; GLM via `cloudflare-workers-ai`
 leaked `<think>` tags. dm2 blamed row-less pi runs on pi abandoning the stream; 648 showed pi drains it — the gateway passes pi's own
