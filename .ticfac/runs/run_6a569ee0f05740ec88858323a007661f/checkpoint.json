@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 47,
-  "state": "gating",
-  "reason": "running the integrated gate for jml on 22dda2557015",
-  "updated_at": "2026-10-09T15:03:42Z",
+  "sequence": 48,
+  "state": "completed",
+  "reason": "every tick of ymf is closed behind the integrated gate; the epic PR #272 is ready: main at ac93b8b8c4fc folded in, CI green on 22dda2557015",
+  "updated_at": "2026-10-09T15:20:12Z",
   "ticks": [
     {
       "tick_id": "ugm",
