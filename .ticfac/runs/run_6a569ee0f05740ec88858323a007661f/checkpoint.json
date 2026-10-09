@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 37,
+  "sequence": 38,
   "state": "running",
-  "reason": "the epic PR #272 (epic/ymf → main) is open; close-out of ymf waits on CI",
-  "updated_at": "2026-10-09T13:30:34Z",
+  "reason": "CI is green on the epic PR #272; the close-out of ymf is admitted",
+  "updated_at": "2026-10-09T13:30:46Z",
   "ticks": [
     {
       "tick_id": "ugm",
