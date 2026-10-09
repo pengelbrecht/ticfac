@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 8,
-  "state": "publishing",
-  "reason": "closing ugm behind the integrated gate on 52d7cced0f7e",
-  "updated_at": "2026-10-09T06:56:45Z",
+  "sequence": 9,
+  "state": "running",
+  "reason": "ugm is closed",
+  "updated_at": "2026-10-09T06:56:47Z",
   "ticks": [
     {
       "tick_id": "ugm",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 1
     },
     {
