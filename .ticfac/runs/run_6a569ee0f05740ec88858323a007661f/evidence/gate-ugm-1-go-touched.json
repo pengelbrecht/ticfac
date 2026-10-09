@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-ugm-1-go-touched",
+  "provenance": {
+    "run_id": "run_6a569ee0f05740ec88858323a007661f",
+    "tick_id": "ugm",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "c8c57d30c5ad3fc3124a2ac49e5b81cb83cc77f8",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "integrated",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:f6d30e41f279e14ec58e01f070b5f9560dd75d0f23147e11fdef84a873c82087",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "go-touched",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go run ./cmd/gate-touched -timeout 45m -parallel 12 -leave-to-ci github.com/pengelbrecht/ticfac/internal/reconcile"
+    ]
+  },
+  "started_at": "2026-10-09T05:52:43Z",
+  "finished_at": "2026-10-09T05:57:43Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "gate-touched: the diff 9521a412c468...a55a13f7b0aa; full (non-short) suites of 2 package(s):\n  github.com/pengelbrecht/ticfac/cmd/ticfac\n  github.com/pengelbrecht/ticfac/internal/cli\n$ go test -timeout 45m -parallel 12 github.com/pengelbrecht/ticfac/cmd/ticfac github.com/pengelbrecht/ticfac/internal/cli\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t48.501s\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:e8286c2b0a83ea35f16576745c8e9dbeaed174b37ae37d74d1b98d588999406e",
+  "persistence_uri": "git:refs/heads/epic/ymf:.ticfac/runs/run_6a569ee0f05740ec88858323a007661f/evidence/gate-ugm-1-go-touched.json"
+}
