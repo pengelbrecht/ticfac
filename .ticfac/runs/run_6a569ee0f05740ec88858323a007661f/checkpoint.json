@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 30,
-  "state": "publishing",
-  "reason": "closing vii behind the integrated gate on 35a5caa91309",
-  "updated_at": "2026-10-09T12:59:09Z",
+  "sequence": 31,
+  "state": "running",
+  "reason": "vii is closed",
+  "updated_at": "2026-10-09T12:59:12Z",
   "ticks": [
     {
       "tick_id": "ugm",
@@ -28,7 +28,7 @@
     },
     {
       "tick_id": "vii",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 5
     },
     {
