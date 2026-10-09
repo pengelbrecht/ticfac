@@ -989,8 +989,8 @@ func TestTheBareOverviewShowsTheDashboardHeadline(t *testing.T) {
 		t.Errorf("the running run's first line changed shape: %q", first)
 	}
 	joined := strings.Join(block, "\n")
-	if !strings.Contains(joined, "5/6 ticks") {
-		t.Errorf("the running run's headline does not carry the progress bar's count:\n%s", joined)
+	if !strings.Contains(joined, "5 of 6 done") {
+		t.Errorf("the running run's headline does not carry the progress count:\n%s", joined)
 	}
 	if !strings.Contains(joined, "● healthy") {
 		t.Errorf("the running run's headline does not carry the health verdict:\n%s", joined)
@@ -1155,11 +1155,14 @@ func TestTheBareOverviewHeadlineStylesAndWidth(t *testing.T) {
 	}
 	_, block := overviewBlock(stdout.String(), "epic-hd5")
 	joined := strings.Join(block, "\n")
-	if strings.Contains(joined, "█") {
-		t.Errorf("a 40-column terminal still gets the progress bar it cannot seat:\n%s", joined)
-	}
 	if !strings.Contains(joined, "\x1b[32m● healthy\x1b[0m") {
 		t.Errorf("a terminal's headline is not in the verdict's own colour:\n%s", joined)
+	}
+	// The 40-column terminal's health line splits rather than overflows.
+	for _, line := range block {
+		if w := ansi.StringWidth(line); w > 40 {
+			t.Errorf("a 40-column terminal's headline line is %d wide:\n%s", w, line)
+		}
 	}
 
 	// Not a terminal — a pipe, a log: the identity set at the fallback
@@ -1172,8 +1175,8 @@ func TestTheBareOverviewHeadlineStylesAndWidth(t *testing.T) {
 	}
 	_, block = overviewBlock(stdout.String(), "epic-hd5")
 	joined = strings.Join(block, "\n")
-	if !strings.Contains(joined, "█") {
-		t.Errorf("the fallback width drops the progress bar it can seat:\n%s", joined)
+	if !strings.Contains(joined, "5 of 6 done") {
+		t.Errorf("the fallback width drops the progress count it can seat:\n%s", joined)
 	}
 	if strings.Contains(joined, "\x1b[") {
 		t.Errorf("a piped listing carries escape codes:\n%s", joined)

@@ -537,7 +537,7 @@ func TestRunAttachAnswersAKeyboardInterruptWithTheRunningClass(t *testing.T) {
 		code <- runBody(context.Background(), t, []string{"--repo", repo, "rmod"}, &stdout, &stderr)
 	}()
 	watchWaitsFor(t, "the attached dashboard", func() bool {
-		return strings.Contains(stdout.String(), "attaching") && strings.Contains(stdout.String(), "◐ waves 2/3")
+		return strings.Contains(stdout.String(), "attaching") && strings.Contains(stdout.String(), "▲ here (wave 2 of 3)")
 	}, &stdout, &stderr)
 
 	// Ctrl-C, the key the raw mode hands the watch instead of a signal.

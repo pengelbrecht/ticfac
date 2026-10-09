@@ -278,11 +278,11 @@ func TestDashboardEpicStateGolden(t *testing.T) {
 // TestDashboardEpicStateAnnouncesTheHold (tick qwb): the story carries a
 // hold run bbb left on at3 that nobody answered — the model's own Build
 // yields an attention entry for it — so the frame can never answer
-// "needs you: nothing" beside it. P2: a hold shows in the header with the
-// one command that clears it, and the quiet answer belongs to the frames
-// where it is true. The hand-built fixture this test replaced answered
-// quiet beside the hold and pinned it; rendered from Build's output, the
-// golden cannot lie about what the model states.
+// "Needs you: nothing" beside it. P2: a hold shows in its box above the
+// health line, with the one command that clears it, and the quiet answer
+// belongs to the frames where it is true. The hand-built fixture this test
+// replaced answered quiet beside the hold and pinned it; rendered from
+// Build's output, the golden cannot lie about what the model states.
 func TestDashboardEpicStateAnnouncesTheHold(t *testing.T) {
 	t.Parallel()
 	m := epicStateFixture()
@@ -290,12 +290,12 @@ func TestDashboardEpicStateAnnouncesTheHold(t *testing.T) {
 		t.Fatalf("the fixture's model states no attention entry beside run bbb's hold on at3: %+v", m.WaitsOn)
 	}
 	joined := strings.Join(renderWatchFrame(m, plainStyles(), 0, 0, ""), "\n")
-	if strings.Contains(joined, "needs you: nothing") {
+	if strings.Contains(joined, "Needs you: nothing") {
 		t.Errorf("the frame answers nothing-needs-you beside run bbb's standing hold on at3:\n%s", joined)
 	}
 	for _, want := range []string{
-		"needs you: run run_bbb held at3 for a person",
-		`ticfac settle hpd at3 12 --run-id run_bbb --release "<who>"`,
+		"Needs you: run run_bbb held at3 for a person",
+		`clear with: ticfac settle hpd at3 12 --run-id run_bbb --release "<who>"`,
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the frame does not carry %q:\n%s", want, joined)
@@ -303,40 +303,26 @@ func TestDashboardEpicStateAnnouncesTheHold(t *testing.T) {
 	}
 }
 
-// TestDashboardDuplicateRowIsDimmedAndNamed: a duplicate keeps its row (rows
-// never move) but reads dim, with the tick its work belongs to in the WHAT
-// column — the fact a person reads without drilling in. A plain tick is
-// never dimmed for its state.
-func TestDashboardDuplicateRowIsDimmedAndNamed(t *testing.T) {
+// TestDashboardDuplicateRowIsNamedAndDimmed: a duplicate keeps its place in
+// the model's own groups — queued here, because the newest run never touched
+// it — and the collapsed line that names it carries the tick its work
+// belongs to. A duplicate that renders as a row is dimmed whole; that part
+// of the rule is pinned in watch_view_test.go's absorbed-and-duplicate test.
+// A plain closed tick is never dimmed for its state.
+func TestDashboardDuplicateRowIsNamedAndDimmed(t *testing.T) {
 	t.Parallel()
 	m := epicStateFixture()
 	frame := renderWatchFrame(m, plainStyles(), 0, 0, "")
 	joined := strings.Join(frame, "\n")
-	if !strings.Contains(joined, "dup   duplicate of at2") {
-		t.Errorf("the duplicate row does not name the tick the work belongs to:\n%s", joined)
+	if !strings.Contains(joined, "dup duplicate of at2") {
+		t.Errorf("the duplicate tick is not named with the tick its work belongs to:\n%s", joined)
 	}
-	coloured := renderWatchFrame(m, ansiWatchStyles(), 0, 0, "")
-	var dupLine string
-	for _, line := range coloured {
-		if strings.Contains(line, "duplicate of at2") {
-			dupLine = line
-			break
-		}
-	}
-	if dupLine == "" {
-		t.Fatalf("the duplicate row is missing:\n%s", strings.Join(coloured, "\n"))
-	}
-	if !strings.HasPrefix(dupLine, "\x1b[2m") || !strings.HasSuffix(dupLine, "\x1b[0m") {
-		t.Errorf("the duplicate row is not dimmed whole: %q", dupLine)
-	}
-	// The closed neighbour beside it is not dimmed: dimming is the
-	// duplicate's own marker, not a rendering of closed.
-	for _, line := range coloured {
-		if strings.Contains(line, " at1 ") && strings.Contains(line, "merged") {
-			if strings.HasPrefix(line, "\x1b[2m") {
-				t.Errorf("the closed tick at1's row is dimmed like a duplicate: %q", line)
-			}
-			break
+	// The duplicate is queued (the newest run's own seeds never reached it),
+	// so it is the up-next line that carries it — and the done ticks beside
+	// it carry no dimming at all, plain rows in the DONE group.
+	for _, line := range frame {
+		if strings.HasPrefix(line, "  at1 ") && strings.HasPrefix(line, "\x1b[2m") {
+			t.Errorf("a done tick's row is dimmed like a duplicate: %q", line)
 		}
 	}
 }
