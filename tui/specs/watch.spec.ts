@@ -34,7 +34,6 @@ const screenRows = (s: State): string[] => {
   for (let i = 0; i < s.grid.size.rows; i++) out.push(s.grid.rowText(i));
   return out;
 };
-const rows = extract(screenRows);
 const screen = extract((s: State): string => screenRows(s).join("\n"));
 const frameShown = extract((s: State): boolean =>
   screenRows(s).some((line) => line.includes(frameMarker)),

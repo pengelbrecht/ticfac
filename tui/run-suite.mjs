@@ -165,6 +165,13 @@ if (mode === "seeded" || mode === "all") {
       want: "violation",
     },
     {
+      name: "watch: groups standing in an order the design never drew violate the grouped-order property",
+      spec: "watch.spec.ts",
+      sut: join(here, "seeded", "groups-reordered.sh"),
+      seconds: "8s",
+      want: "violation",
+    },
+    {
       name: "watch: a fabricated $0.00 violates never-a-fabricated-zero",
       spec: "watch.spec.ts",
       sut: join(here, "seeded", "fabricated-zero.sh"),
