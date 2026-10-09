@@ -606,6 +606,53 @@ func TestWatchHoldAlertForAnUnrecognisedHoldWithNoAttemptNamesNoCommand(t *testi
 	}
 }
 
+// The hold alert's wording reads the clearing command the decision returned,
+// never the pointer it arrives behind. The builder can legitimately answer
+// nil — an epic it cannot state names no command (tick mwt), and a hold no
+// closed rule knows names none either — and the stream path's inline switch
+// dereferenced the pointer in five cases with no nil check: a hold whose
+// clearing command is nil would panic the watch instead of alerting it
+// (tick dfb, found on the model path; the stream path is its echo, ugt).
+// Every reason now reads through one nil-safe wording, and the nil answer is
+// the no-command wording the unrecognised-hold case already spoke.
+func TestTheHoldAlertWordingsReadANilCommandAsNoCommand(t *testing.T) {
+	reasons := []string{
+		reconcile.RefusedFindingUntriaged,
+		reconcile.RefusedEpicAmendmentUnconfirmed,
+		reconcile.RefusedClaimWidth,
+		reconcile.RefusedForeignClaim,
+		reconcile.RefusedAbsorptionDepth,
+		reconcile.RefusedLandReviewNotReady,
+		"some_future_hold", // a hold kind the decision does not know
+		"",                 // a line that names no reason at all
+	}
+	for _, reason := range reasons {
+		got := holdAlertWording(reason, nil, "")
+		if !strings.Contains(got, "No one command clears this hold") {
+			t.Errorf("a nil command for reason %q reads %q, want the no-command wording", reason, got)
+		}
+		if strings.Contains(got, "%!") {
+			t.Errorf("a nil command for reason %q leaves a format artifact: %q", reason, got)
+		}
+	}
+
+	// The command wordings are the same sentences the CLI tests parse with
+	// the real binary (TestWatchHoldAlertNamesTheEpicNotAPlaceholder and
+	// siblings): the wording carries the command whole, once, in backticks.
+	triage := "ticfac triage hpd --run-id run_old"
+	if got := holdAlertWording(reconcile.RefusedFindingUntriaged, &triage, "hpd"); !strings.Contains(got, "`"+triage+"`") {
+		t.Errorf("the triage wording reads %q, want the command it was given", got)
+	}
+	resume := "ticfac run hpd --cloud"
+	if got := holdAlertWording(reconcile.RefusedClaimWidth, &resume, "hpd"); !strings.Contains(got, "`"+resume+"`") {
+		t.Errorf("the run-again wording reads %q, want the command it was given", got)
+	}
+	settle := "ticfac settle hpd t1 2 --release \"<who>\""
+	if got := holdAlertWording("", &settle, "hpd"); !strings.Contains(got, "`"+settle+"`") {
+		t.Errorf("the settle wording reads %q, want the command it was given", got)
+	}
+}
+
 // The '<tick>#<n>' prefix is the tick's own TRY (tick h58), not the run-wide
 // dispatch number the line's `attempt` field carries. The operator's run: 0ju
 // was dispatch 1, mrn 2, and w9b 3, 4 and 5 — so dispatch 5 is w9b#3, and a

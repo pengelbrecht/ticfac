@@ -400,6 +400,15 @@ func buildWaves(src Sources, merged *mergedRuns, absorbed map[string]bool) (*[]W
 	if src.Graph == nil || len(src.Graph.Waves) == 0 {
 		return nil, progress
 	}
+	// Whether the SUBJECT run has ended, by the same authority the run-level
+	// clock freezes at (tick 4dn): an attempt the ended run dispatched or
+	// reported is that run's last word, not live work, and its per-tick
+	// clock stops where the run's own does.
+	recs := Records{}
+	if src.Records != nil {
+		recs = *src.Records
+	}
+	_, subjectEnded := runEndedAt(src, recs)
 
 	// The gate evidence grouped per (tick, attempt): what each try produced.
 	// The owner run's evidence only — attempt numbers are per run.
@@ -429,7 +438,7 @@ func buildWaves(src Sources, merged *mergedRuns, absorbed map[string]bool) (*[]W
 		for _, task := range w.Tasks {
 			state, attempt, owner := merged.stateOf(task)
 			t := buildTick(src, merged, task, state, attempt, owner, absorbed[task.ID],
-				evidenceByTry, standing)
+				evidenceByTry, standing, subjectEnded)
 			t.DuplicateOf = duplicateOf(task)
 			if t.State != tickClosed {
 				// A duplicate that is not closed is a dedup the epic has not
@@ -465,9 +474,12 @@ func buildWaves(src Sources, merged *mergedRuns, absorbed map[string]bool) (*[]W
 // buildTick assembles one tick's whole entry: state, try history, the
 // current attempt's provenance and its elapsed time — read from the LAST
 // run that has records for the tick, never across runs (attempt numbers are
-// per run, so the same number in two runs names two dispatches).
+// per run, so the same number in two runs names two dispatches). subjectEnded
+// says whether the SUBJECT run has ended, by runEndedAt's authority — the
+// fact isLiveAttempt needs to leave a dead run's stale row unmeasured
+// (tick 4dn).
 func buildTick(src Sources, merged *mergedRuns, task tk.GraphTask, state string, attempt *int, owner int,
-	absorbed bool, evidenceByTry map[string][]runstate.Evidence, standing map[string]bool) Tick {
+	absorbed bool, evidenceByTry map[string][]runstate.Evidence, standing map[string]bool, subjectEnded bool) Tick {
 
 	t := Tick{
 		TickID:   task.ID,
@@ -521,7 +533,7 @@ func buildTick(src Sources, merged *mergedRuns, task tk.GraphTask, state string,
 			// does not watch — is history, and a duration from its stamp to
 			// now would be a countdown nobody asked for.
 			if at, err := time.Parse(time.RFC3339, a.DispatchedAt); err == nil &&
-				isLiveAttempt(state, owner, merged.subjectRun(), standing[fmt.Sprintf("%s#%d", task.ID, current)]) {
+				isLiveAttempt(state, owner, merged.subjectRun(), standing[fmt.Sprintf("%s#%d", task.ID, current)], subjectEnded) {
 				elapsed := int64(src.Now.Sub(at).Round(time.Second).Seconds())
 				t.ElapsedSeconds = &elapsed
 			}
@@ -532,16 +544,25 @@ func buildTick(src Sources, merged *mergedRuns, task tk.GraphTask, state string,
 
 // isLiveAttempt says whether the tick's current attempt is one the epic is
 // still working: an attempt the subject run's census says stands, or one
-// the SUBJECT run dispatched or reported while it is not over. A state
-// the subject run wrote is that run's own present tense; the same state in
-// another run's records is history — that run's attempt is not live here,
-// whatever its own census would have said when it ran (tick c9n: the
-// subject is not necessarily the chronologically newest run).
-func isLiveAttempt(state string, owner, subject int, stands bool) bool {
+// the SUBJECT run dispatched or reported while it is not over — and while
+// the SUBJECT run itself has not ended (tick 4dn). A state the subject run
+// wrote is that run's own present tense only for as long as the run is
+// there to make it true: a run that ended with a tick still marked
+// dispatched left that run's LAST word, not live work, and measuring its
+// elapsed to now grows a countdown over a run the run-level clock has
+// already frozen. The ended fact is runEndedAt's — the same authority the
+// run-level clock clamps at — so the two clocks stop together. A state in
+// another run's records is history in any case — that run's attempt is not
+// live here, whatever its own census would have said when it ran (tick
+// c9n: the subject is not necessarily the chronologically newest run).
+func isLiveAttempt(state string, owner, subject int, stands, subjectEnded bool) bool {
 	if stands {
 		return true
 	}
 	if owner != subject {
+		return false
+	}
+	if subjectEnded {
 		return false
 	}
 	return state == tickDispatched || state == tickReported
@@ -789,6 +810,17 @@ func buildLifecycle(src Sources, recs Records, m Model) Lifecycle {
 		case "red", "pending":
 			ciState = PhaseStateActive
 		}
+	}
+	// A completed run with no PR left has finished the CI chapter too (tick
+	// t0y): the close-out's held line may still stand in the feed — it was
+	// the run's last word before it completed — but the PR it waited on is
+	// gone, merged, and a chapter whose subject is gone is done. The same
+	// fact the merge phase below reads, derived once here so the phases and
+	// the track cannot say two things about one PR: the old dashboard showed
+	// ci in progress beside a done merge, and the phase record must not be
+	// where that disagreement survives the track that folds them.
+	if runCompleted(src, recs) && (m.CI == nil || m.CI.PR == nil) {
+		ciState = PhaseStateDone
 	}
 
 	// Merge: a person's, always. Active while the PR stands open behind a

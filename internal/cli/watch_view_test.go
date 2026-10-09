@@ -1045,6 +1045,65 @@ func TestDashboardScenariosAnswerTheThreeQuestions(t *testing.T) {
 	}
 }
 
+// landedWithDuplicate is the landed scenario with one more closed tick: a
+// duplicate promotion, closed as l1's duplicate — the row the epic's
+// dedup leaves behind, which the model's progress counts exclude (the
+// contract pins a duplicate out of total and closed) while its group lists
+// it. It is the shape that made the old dashboard disagree with itself
+// (tick t0y's count, folding h4u).
+func landedWithDuplicate() statusmodel.Model {
+	m := scenarioLanded()
+	waves := *m.Waves
+	waves[0].Ticks = append(waves[0].Ticks, statusmodel.Tick{
+		TickID: "l1d", Title: "the duplicate promotion", Gloss: "the duplicate promotion",
+		State: "closed", Status: statusmodel.WordMerged,
+		DuplicateOf: ptr("l1"), Absorbed: true,
+	})
+	m.Waves = &waves
+	m.Groups = &statusmodel.TickGroups{Done: []string{"l1", "l2", "l3", "l4", "l1d"}}
+	return m
+}
+
+// TestTheDashboardCountsDuplicatesTheWayTheHealthLineDoes (tick t0y, folding
+// h4u): the health line's "N of M done" and the DONE header are two renderings
+// of one number, so they cannot disagree. The epic's real ticks are what both
+// count — the model's progress excludes a closed duplicate, and the DONE
+// header now does too — while the duplicate's row still stands, dimmed, naming
+// the tick its work belongs to: the difference is said, exactly as t0y asked,
+// on the row itself.
+func TestTheDashboardCountsDuplicatesTheWayTheHealthLineDoes(t *testing.T) {
+	t.Parallel()
+	for _, size := range []struct {
+		width, height int
+	}{
+		{120, 40}, {80, 24},
+	} {
+		frame := renderWatchFrame(landedWithDuplicate(), plainStyles(), size.width, size.height, "")
+		joined := strings.Join(frame, "\n")
+		// The health line counts the epic's real ticks: the duplicate is not
+		// work the epic owes, so it is 4 of 4, never 5 of 5.
+		if !strings.Contains(joined, "4 of 4 done") {
+			t.Errorf("the health line does not read 4 of 4 done at %dx%d:\n%s", size.width, size.height, joined)
+		}
+		if !strings.Contains(joined, "DONE (4)") {
+			t.Errorf("the DONE header does not read DONE (4) at %dx%d:\n%s", size.width, size.height, joined)
+		}
+		if strings.Contains(joined, "DONE (5)") {
+			t.Errorf("the DONE header counts the duplicate at %dx%d, disagreeing with the health line:\n%s",
+				size.width, size.height, joined)
+		}
+		// The row still stands — the contract pins it — and says what it is:
+		// the difference between the counts is named on the row itself.
+		if got := dashRowIDs(frame, []string{"l1", "l2", "l3", "l4", "l1d"}); strings.Join(got, " ") != "l1 l2 l3 l4 l1d" {
+			t.Errorf("the duplicate's row is not among the DONE rows at %dx%d: %v", size.width, size.height, got)
+		}
+		if !strings.Contains(joined, "duplicate of l1") {
+			t.Errorf("the duplicate's row does not say what it duplicates at %dx%d:\n%s",
+				size.width, size.height, joined)
+		}
+	}
+}
+
 // TestDashboardGroupsFollowTheModel: the rows are exactly the model's own
 // groups, in the model's group order (NOW, DONE, UP NEXT, HELD), each
 // group's rows in the order its ids carry — and a successor's rows move
@@ -1076,6 +1135,54 @@ func TestDashboardGroupsFollowTheModel(t *testing.T) {
 	for _, want := range []string{"NOW", "DONE (2)", "UP NEXT (1)"} {
 		if !strings.Contains(strings.Join(now, "\n"), want) {
 			t.Errorf("the frame does not announce %q:\n%s", want, strings.Join(now, "\n"))
+		}
+	}
+}
+
+// childRowFixture is a landed epic with one absorbed child under its parent
+// — the shape the old dashboard indented ("└ +t1c") and shifted at narrow
+// widths. Every status word is the same short one, so the row table's
+// columns are the minimal set the width test needs.
+func childRowFixture() statusmodel.Model {
+	m := scenarioLanded()
+	waves := *m.Waves
+	waves[0].Ticks = append(waves[0].Ticks, statusmodel.Tick{
+		TickID: "l1c", Title: "the absorbed child", Gloss: "the absorbed child",
+		State: "closed", Status: statusmodel.WordMerged,
+		ParentTickID: ptr("l1"), Absorbed: true, DurationSeconds: ptr(int64(2070)),
+	})
+	m.Waves = &waves
+	m.Groups = &statusmodel.TickGroups{Done: []string{"l1", "l2", "l3", "l4", "l1c"}}
+	return m
+}
+
+// TestNarrowChildRowsAlignWithTheirParent (tick zrl, proved on the new
+// layout): below the WHAT threshold the old dashboard shifted a child row's
+// pipeline and time columns 3 cells right of its parent's — the child's
+// indent had no WHAT cell to give the cells up. The redesigned groups have
+// no child indentation at all (groups make row adjacency meaningless, and
+// the only indent a row carries is the drill-in cursor's), so a parent and
+// its absorbed child align at every width the columns exist at: the status
+// word and the time start in the same column on both rows. The defect's
+// original width (40) and the width just below the WHAT drop (47) are the
+// two the tick named.
+func TestNarrowChildRowsAlignWithTheirParent(t *testing.T) {
+	t.Parallel()
+	for _, width := range []int{40, 47} {
+		frame := renderWatchFrame(childRowFixture(), plainStyles(), width, 0, "")
+		joined := strings.Join(frame, "\n")
+		if strings.Contains(joined, "└") {
+			t.Errorf("a child row still carries the old indent glyph at width %d:\n%s", width, joined)
+		}
+		parent := frame[dashRowLine(frame, "l1")]
+		child := frame[dashRowLine(frame, "l1c")]
+		if pi, ci := strings.Index(parent, "merged"), strings.Index(child, "merged"); pi < 0 || ci < 0 || pi != ci {
+			t.Errorf("the child row's status column sits at %d, the parent's at %d (width %d):\n%s\n%s",
+				ci, pi, width, parent, child)
+		}
+		if pt, ct := strings.Index(parent, "12m"), strings.Index(child, "34m"); pt < 0 || ct < 0 || pt != ct {
+			t.Errorf("the child row's time column sits at %d, the parent's at %d (width %d):\n%s\n%s",
+				ct, pt, width, parent, child)
 		}
 	}
 }

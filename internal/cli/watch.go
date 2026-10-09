@@ -482,55 +482,11 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 			}
 			clearing := statusmodel.HoldClearingCommand(epicOf(), host, address, runID, event)
 			head := fmt.Sprintf("\nticfac watch: run %s is HOLDING %s for a person:\n%s\n", runID, what, event.Detail)
-			switch statusmodel.HoldReason(event.Detail) {
-			case reconcile.RefusedFindingUntriaged:
-				fmt.Fprintf(stderr, "%s"+
-					"Nothing proceeds until somebody decides. Triage the finding(s) with `%s` — "+
-					"every untriaged finding of the run settles there, by short key prefix — "+
-					"or answer what the tick is waiting for. The "+
-					"evidence is on the integration branch, not in this line.\n\n", head, *clearing)
-			case reconcile.RefusedEpicAmendmentUnconfirmed:
-				fmt.Fprintf(stderr, "%s"+
-					"Nothing proceeds until the operator decides. `%s` lists the "+
-					"worker-proposed notes on the epic's own record; settle each with "+
-					"`ticfac amendment %s <key> --confirm --by <who>` — or the same command with --reject to "+
-					"disown it — or answer what the tick is waiting for. The evidence is on the "+
-					"integration branch, not in this line.\n\n", head, *clearing, epicOf())
-			case reconcile.RefusedClaimWidth, reconcile.RefusedForeignClaim:
-				fmt.Fprintf(stderr, "%s"+
-					"Nothing proceeds until the world changes — and a release is not what changes it: "+
-					"no attempt was ever dispatched, so settle refuses the hold's dash attempt. "+
-					"The hold ends when the claim it names does, and `%s` runs the epic again, "+
-					"re-deriving from the graph and proceeding the moment it has. The evidence is on "+
-					"the integration branch, not in this line.\n\n", head, *clearing)
-			case reconcile.RefusedAbsorptionDepth:
-				fmt.Fprintf(stderr, "%s"+
-					"Nothing proceeds until somebody judges the chain the line carries: decide the "+
-					"finding with `%s` — or take the escape the line itself names, raising the bound "+
-					"with --absorption-depth and running the epic again. The evidence is on the "+
-					"integration branch, not in this line.\n\n", head, *clearing)
-			case reconcile.RefusedLandReviewNotReady:
-				fmt.Fprintf(stderr, "%s"+
-					"Nothing proceeds until a person accepts or rejects the work the run's own review "+
-					"refused — and the release the attempt above might suggest clears nothing: the "+
-					"hold is the review's verdict recorded on the PR, which a resume re-reads. The "+
-					"moves are the line's own: fix what the review says would make it ready and run "+
-					"the epic again with `%s`, merge the PR by hand to accept it (a re-run then "+
-					"finds it merged), or close it. The evidence is on the integration branch, not "+
-					"in this line.\n\n", head, *clearing)
-			default:
-				if clearing != nil {
-					fmt.Fprintf(stderr, "%s"+
-						"Nothing proceeds until somebody decides. Release it with `%s` — add --carry-work to base the "+
-						"next try on the commits the released one left — or answer what the tick is waiting for. The "+
-						"evidence is on the integration branch, not in this line.\n\n", head, *clearing)
-				} else {
-					fmt.Fprintf(stderr, "%s"+
-						"Nothing proceeds until somebody decides. No one command clears this hold — "+
-						"answer what the tick is waiting for. The evidence is on the integration branch, not in this line.\n\n",
-						head)
-				}
-			}
+			// The wording handles the nil the builder can return (tick mwt): an
+			// epic the model cannot state, or a hold no command clears, reads the
+			// no-command wording — a nil pointer is a decision to read, never one
+			// to dereference (tick dfb, and its stream-path echo ugt).
+			fmt.Fprint(stderr, head+holdAlertWording(statusmodel.HoldReason(event.Detail), clearing, epicOf()))
 		}
 		if event.Stage == reconcile.StageRunFinished || event.Stage == reconcile.StageRunDied {
 			// The run's own last word ends the watch: a watcher must not
@@ -671,6 +627,61 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 		return finish(agentStateCancelled, nil)
 	}
 	return finish(agentStateDone, nil)
+}
+
+// holdAlertWording words one hold's alert, after the head the caller prints:
+// the sentence the hold's reason carries, with the clearing command that
+// reason decided on (the same decision HoldClearingCommand made, tick gf0)
+// — or, when that decision is nil, the no-command wording. The builder can
+// legitimately answer nil: an epic it cannot state names no command (tick
+// mwt), and a hold no closed rule knows names none either. The old inline
+// switch dereferenced the pointer in five cases with no nil check — a
+// stream-path hold on a run whose epic is unstated would panic the watch
+// instead of alerting it (tick dfb, found on the model path, whose
+// stream-path echo ugt reported) — and every case now reads the command
+// through this one wording, nil-safe, so the guard lives in one place.
+func holdAlertWording(reason string, clearing *string, epic string) string {
+	if clearing == nil {
+		return "Nothing proceeds until somebody decides. No one command clears this hold — " +
+			"answer what the tick is waiting for. The evidence is on the integration branch, not in this line.\n\n"
+	}
+	command := *clearing
+	switch reason {
+	case reconcile.RefusedFindingUntriaged:
+		return "Nothing proceeds until somebody decides. Triage the finding(s) with `" + command + "` — " +
+			"every untriaged finding of the run settles there, by short key prefix — " +
+			"or answer what the tick is waiting for. The " +
+			"evidence is on the integration branch, not in this line.\n\n"
+	case reconcile.RefusedEpicAmendmentUnconfirmed:
+		return "Nothing proceeds until the operator decides. `" + command + "` lists the " +
+			"worker-proposed notes on the epic's own record; settle each with " +
+			"`ticfac amendment " + epic + " <key> --confirm --by <who>` — or the same command with --reject to " +
+			"disown it — or answer what the tick is waiting for. The evidence is on the " +
+			"integration branch, not in this line.\n\n"
+	case reconcile.RefusedClaimWidth, reconcile.RefusedForeignClaim:
+		return "Nothing proceeds until the world changes — and a release is not what changes it: " +
+			"no attempt was ever dispatched, so settle refuses the hold's dash attempt. " +
+			"The hold ends when the claim it names does, and `" + command + "` runs the epic again, " +
+			"re-deriving from the graph and proceeding the moment it has. The evidence is on " +
+			"the integration branch, not in this line.\n\n"
+	case reconcile.RefusedAbsorptionDepth:
+		return "Nothing proceeds until somebody judges the chain the line carries: decide the " +
+			"finding with `" + command + "` — or take the escape the line itself names, raising the bound " +
+			"with --absorption-depth and running the epic again. The evidence is on the " +
+			"integration branch, not in this line.\n\n"
+	case reconcile.RefusedLandReviewNotReady:
+		return "Nothing proceeds until a person accepts or rejects the work the run's own review " +
+			"refused — and the release the attempt above might suggest clears nothing: the " +
+			"hold is the review's verdict recorded on the PR, which a resume re-reads. The " +
+			"moves are the line's own: fix what the review says would make it ready and run " +
+			"the epic again with `" + command + "`, merge the PR by hand to accept it (a re-run then " +
+			"finds it merged), or close it. The evidence is on the integration branch, not " +
+			"in this line.\n\n"
+	default:
+		return "Nothing proceeds until somebody decides. Release it with `" + command + "` — add --carry-work to base the " +
+			"next try on the commits the released one left — or answer what the tick is waiting for. The " +
+			"evidence is on the integration branch, not in this line.\n\n"
+	}
 }
 
 // watchLineEndedFailed says whether the run's own terminal line says the run

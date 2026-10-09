@@ -851,11 +851,55 @@ func goldenLineDispatchesLater(line *runfeed.Event, tickID string, attempt int) 
 
 // isLive is the contract suite's elapsed rule over a golden document (one
 // run's model): the state says dispatched or reported, or a standing
-// worktree answers for it. The BUILDER's own live question is
-// isLiveAttempt, which also knows which run's records the state came from —
-// a state an earlier run wrote is history, not a present tense.
-func isLive(state string, stands bool) bool {
-	return stands || state == tickDispatched || state == tickReported
+// worktree answers for it — and the run has not ended, by the end the
+// document itself states (tick 4dn): a terminal line the tail or the
+// liveness hint carries, no resume standing after it, or the probe's own
+// end-word vocabulary — completed, stopped, failed — the state a cloud
+// run's record writes and a stopped run's liveness carries. The BUILDER's
+// own live question is isLiveAttempt, which also knows which run's records
+// the state came from and reads the run's whole records for the end — a
+// state an earlier run wrote is history, not a present tense. What the
+// builder reads from the checkpoint this mirror reads from the state word
+// the document carries instead: a golden's checkpoint is not in the
+// document, and the end-word is the same durable word that checkpoint
+// wrote.
+func isLive(state string, stands, ended bool) bool {
+	if stands {
+		return true
+	}
+	if ended {
+		return false
+	}
+	return state == tickDispatched || state == tickReported
+}
+
+// goldenRunEnded reads the run's end off the document the way the elapsed
+// rule needs it: a terminal line (run_finished or run_died) that the tail's
+// five lines or the liveness hint carries and no resume answers, or the
+// probe's own end-word vocabulary in the state field. A local run's dead
+// without a word is NOT an end the elapsed rule reads — the builder's
+// runEndedAt answers the same for it.
+func goldenRunEnded(model *Model) bool {
+	lastTerminal, lastResume := -1, -1
+	lines := make([]*runfeed.Event, 0, len(model.Recent)+1)
+	for i := range model.Recent {
+		lines = append(lines, &model.Recent[i])
+	}
+	if model.Liveness.LastEvent != nil {
+		lines = append(lines, model.Liveness.LastEvent)
+	}
+	for i, line := range lines {
+		switch line.Stage {
+		case reconcile.StageRunFinished, reconcile.StageRunDied:
+			lastTerminal = i
+		case reconcile.StageResumed, reconcile.StageResumedAutomatically:
+			lastResume = i
+		}
+	}
+	if lastTerminal >= 0 && lastResume < lastTerminal {
+		return true
+	}
+	return livenessNamesAnEnd(model.Liveness.State)
 }
 
 // goldenStandsFor is the census half of workState's and isLive's standing
@@ -1044,7 +1088,7 @@ func goldenElapsedAgreesWithTheStamps(t *testing.T, golden string, model *Model,
 		}
 		return
 	}
-	if !isLive(tick.State, goldenStandsFor(model, tick.TickID, current)) {
+	if !isLive(tick.State, goldenStandsFor(model, tick.TickID, current), goldenRunEnded(model)) {
 		if got != nil {
 			t.Errorf("%s's elapsed is %d, want null: the current attempt is not live — no standing worker answers for it and the state is %q",
 				where, *got, tick.State)
