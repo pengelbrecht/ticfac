@@ -53,7 +53,76 @@ loud.
 
 ---
 
-<<<<<<< HEAD
+## 2.6.0
+
+MINOR: the fold of main into epic/ymf — two parallel cuts become one again,
+for the reason 2.5.0 and 2.1.0 state. The two lines last shared 2.3.0 and each
+cut on alone. Main cut 2.3.1 (tick p0n: `lifecycle-invariants.json`'s `today`
+cross-references follow the watch's decision core into `run-watch.ts` — full
+text below) and 2.4.0 (epic ex6, tick 8gd: `worker-boot-contract.json` gains
+the review job's boot/finish contract — full text below), then folded the
+pair as its own 2.4.1. The epic had already cut 2.4.0 through 2.5.0 with
+different bytes (tick lck's watch-redesign fields, tick b13's
+`cost.subscription` and its words-only patch — the entries below), so main's
+2.4.0 and 2.4.1 cannot keep their numbers — a version string must never mean
+two different sets of bytes — and the union re-cuts here, at the next MINOR
+over the epic's 2.5.0, the surviving line. The two halves touch different
+files (the epic's `status-model.json`, main's `worker-boot-contract.json` and
+`lifecycle-invariants.json`), so the union is each side's bytes unchanged.
+`version_digests` keeps the epic's bindings of 2.4.0
+(3f5cc4ca809c6078c9cdb2098a3d9659673b2428980617fa24e60248367bd2dc) and 2.4.1
+(ebd89846424951d2c41470bcb0d95309b7ecb6f18e759fac534a2e502d362e89), the
+entries the fold's surviving line had already written; main's own cuts of the
+same versions,
+7c62c5e707b87f9350ce22bcf9aa481b942f972e8547409a0ce3639f160646b2 (2.4.0) and
+f8b3b3765a9b1806d4ca7327b40c0174374c009f508e676164e7ae8973a1b099 (2.4.1),
+are recorded here instead, the way 2.5.0 recorded the tick's; and main's
+2.3.1 (6cc4290a3c22df572bc49d42c885cae3eeb496b158f2b00a952c171dfa683637) is a
+version the epic never cut, so it keeps its number, its ledger entry and its
+entry below. Consumers: an unchanged reader is still correct but no longer
+complete; a consumer pinned to the epic's 2.5.0 adopts main's review
+boot/finish contract by moving here, and one pinned to main's 2.4.1 adopts
+the epic's watch-redesign fields and `cost.subscription` the same way. The
+cloudflare pin bumps in the same commit.
+
+### main's 2.4.1, re-cut here
+
+PATCH: the fold of main into epic/t8u — two parallel cuts of 2.3.0 become one,
+for the reason 2.1.0 and 1.2.0 state. The epic cut 2.3.1 (tick p0n:
+`lifecycle-invariants.json`'s `today` cross-references follow the watch's
+decision core into `run-watch.ts` — full text below) and main cut 2.4.0 (epic
+ex6, tick 8gd: `worker-boot-contract.json` gains the review job's boot/finish
+contract — full text below). The two halves touch different files, so the
+union is main's 2.4.0 plus the epic's comment-only cross-references: the next
+PATCH over 2.4.0. `version_digests` keeps both cuts' bindings, 2.3.1
+(6cc4290a3c22df572bc49d42c885cae3eeb496b158f2b00a952c171dfa683637) and 2.4.0
+(7c62c5e707b87f9350ce22bcf9aa481b942f972e8547409a0ce3639f160646b2), and the
+union re-cuts here. A consumer pinned to 2.4.0 has nothing to do; one pinned
+to 2.3.1 adopts main's review boot/finish contract by moving here — the 2.4.0
+entry says what that costs.
+
+Consumers: `cloudflare/contracts.pin.json` moves to 2.4.1.
+
+### main's 2.4.0, re-cut here
+
+MINOR: `worker-boot.json` gains the review job's own boot/finish contract —
+`review_boot_arg`/`review_boot_command`/`review_boot_marker`/
+`review_boot_prompt_begin`/`review_boot_prompt_end` and
+`review_finish_arg`/`review_finish_command`. Since the PR-review job's
+conversation is hosted on the run's WorkerAgent like every other cloud
+worker's (epic ex6, tick 8gd), the review container runs the orchestrator
+image's `--boot`/`--finish` halves — the same shape the worker host gave the
+workers in 1.x, with the review's own markers so a handoff is recognizable as
+a review's — and the marker line's two fields keep the worker's names but
+change meaning per role: for a review, `branch=` is the ref that was reviewed
+and `result=` the findings path the finish posts. An unchanged consumer is
+still correct: the worker contract's own fields are untouched.
+
+Consumers: `cloudflare/contracts.pin.json` moves to 2.4.0; the image
+(`image/entrypoint.sh`), the control plane (`cloudflare/src/worker-boot.ts`), and the
+host that drives the halves (`harness/src/host/worker-attempt.ts`, protocol
+selected by the spec's kind) gained the spellings in the same commit.
+
 ## 2.5.0
 
 MINOR: the fold of tick b13 into epic/ymf — two parallel cuts become one
@@ -150,48 +219,6 @@ moves to 2.4.0; the Go model and builder gained the fields in the same
 commit, and renderers that read fields by name (the phone page's snapshot
 parser) are unchanged and correct — the watch redesign's rendering ticks
 (ugm) and the phone page's shared model are what the fields exist for.
-=======
-## 2.4.1
-
-PATCH: the fold of main into epic/t8u — two parallel cuts of 2.3.0 become one,
-for the reason 2.1.0 and 1.2.0 state. The epic cut 2.3.1 (tick p0n:
-`lifecycle-invariants.json`'s `today` cross-references follow the watch's
-decision core into `run-watch.ts` — full text below) and main cut 2.4.0 (epic
-ex6, tick 8gd: `worker-boot-contract.json` gains the review job's boot/finish
-contract — full text below). The two halves touch different files, so the
-union is main's 2.4.0 plus the epic's comment-only cross-references: the next
-PATCH over 2.4.0. `version_digests` keeps both cuts' bindings, 2.3.1
-(6cc4290a3c22df572bc49d42c885cae3eeb496b158f2b00a952c171dfa683637) and 2.4.0
-(7c62c5e707b87f9350ce22bcf9aa481b942f972e8547409a0ce3639f160646b2), and the
-union re-cuts here. A consumer pinned to 2.4.0 has nothing to do; one pinned
-to 2.3.1 adopts main's review boot/finish contract by moving here — the 2.4.0
-entry says what that costs.
-
-Consumers: `cloudflare/contracts.pin.json` moves to 2.4.1.
-
----
-
-## 2.4.0
-
-MINOR: `worker-boot.json` gains the review job's own boot/finish contract —
-`review_boot_arg`/`review_boot_command`/`review_boot_marker`/
-`review_boot_prompt_begin`/`review_boot_prompt_end` and
-`review_finish_arg`/`review_finish_command`. Since the PR-review job's
-conversation is hosted on the run's WorkerAgent like every other cloud
-worker's (epic ex6, tick 8gd), the review container runs the orchestrator
-image's `--boot`/`--finish` halves — the same shape the worker host gave the
-workers in 1.x, with the review's own markers so a handoff is recognizable as
-a review's — and the marker line's two fields keep the worker's names but
-change meaning per role: for a review, `branch=` is the ref that was reviewed
-and `result=` the findings path the finish posts. An unchanged consumer is
-still correct: the worker contract's own fields are untouched.
-
-Consumers: `cloudflare/contracts.pin.json` moves to 2.4.0; the image
-(`image/entrypoint.sh`), the control plane (`cloudflare/src/worker-boot.ts`), and the
-host that drives the halves (`harness/src/host/worker-attempt.ts`, protocol
-selected by the spec's kind) gained the spellings in the same commit.
-
----
 
 ## 2.3.1
 
@@ -209,7 +236,6 @@ half of A6) name run-watch.ts as a second site. No rule, fixture shape or
 sequence changed — a consumer of the invariants has nothing to do.
 
 Consumers: `cloudflare/contracts.pin.json` moves to 2.3.1.
->>>>>>> daffbf60a988f18cf6856537fc8b61862ecc17d8
 
 ## 2.3.0
 
