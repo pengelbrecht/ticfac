@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-jym-2-go-touched",
+  "provenance": {
+    "run_id": "run_6a569ee0f05740ec88858323a007661f",
+    "tick_id": "jym",
+    "attempt": 2,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "6e95c4c2ad00a4f74d4aa06804a70cf46f7b404e",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "integrated",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:f6d30e41f279e14ec58e01f070b5f9560dd75d0f23147e11fdef84a873c82087",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "go-touched",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go run ./cmd/gate-touched -timeout 45m -parallel 12 -leave-to-ci github.com/pengelbrecht/ticfac/internal/reconcile"
+    ]
+  },
+  "started_at": "2026-10-09T08:23:24Z",
+  "finished_at": "2026-10-09T08:28:24Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "gate-touched: the diff 1afcc0cc3fa3...7237a4746c4b; full (non-short) suites of 4 package(s):\n  github.com/pengelbrecht/ticfac/cmd/ticfac\n  github.com/pengelbrecht/ticfac/internal/cli\n  github.com/pengelbrecht/ticfac/internal/contracts/parity\n  github.com/pengelbrecht/ticfac/internal/statusmodel\n$ go test -timeout 45m -parallel 12 github.com/pengelbrecht/ticfac/cmd/ticfac github.com/pengelbrecht/ticfac/internal/cli github.com/pengelbrecht/ticfac/internal/contracts/parity github.com/pengelbrecht/ticfac/internal/statusmodel\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t126.381s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t0.269s\nok  \tgithub.com/pengelbrecht/ticfac/internal/statusmodel\t2.103s\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:c591be291e8d9c42dc56b3b5fc3b56c7dfeba762db3efbdf3d3d487854f97f69",
+  "persistence_uri": "git:refs/heads/epic/ymf:.ticfac/runs/run_6a569ee0f05740ec88858323a007661f/evidence/gate-jym-2-go-touched.json"
+}
