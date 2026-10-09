@@ -1,6 +1,7 @@
 {
   "id": "8t5",
   "title": "Final review of the watch redesign diff",
+  "notes": "2026-10-09 10:14 - ticfac run run_6a569ee0f05740ec88858323a007661f: 8t5 try 1 (run dispatch #3) reported a finding the run itself decided — defect \"CI red on epic/ymf: the bombadil property suite still pins the old dashboard\" (key a38f01ceee36945de64f119a8634025ad067c0b5db03b0f7271f0e3b6cc8ae54, severity high, for this repository) is promoted to a backlog tick with an owner, vii; the decision record is on the run branch at .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/a38f01ceee36945de64f119a8634025ad067c0b5db03b0f7271f0e3b6cc8ae54.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -12,6 +13,6 @@
   "role": "review",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.523215Z",
-  "updated_at": "2026-10-09T08:43:54.584077235Z",
+  "updated_at": "2026-10-09T10:14:50.672387026Z",
   "started_at": "2026-10-09T08:43:54.584076555Z"
 }
