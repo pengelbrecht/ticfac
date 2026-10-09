@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "8t5",
   "attempt": 3,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-09T10:14:35Z",
+  "triaged_at": "2026-10-09T10:14:44Z",
+  "triaged_by": "ticfac run run_6a569ee0f05740ec88858323a007661f absorbing vii",
+  "promoted_as": "vii",
   "provenance": {
     "run_id": "run_6a569ee0f05740ec88858323a007661f",
     "tick_id": "8t5",
