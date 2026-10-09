@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 19,
-  "state": "collecting",
-  "reason": "collecting the review-epic job for 8t5",
-  "updated_at": "2026-10-09T10:14:28Z",
+  "sequence": 20,
+  "state": "publishing",
+  "reason": "closing 8t5 behind its validated review-epic answer",
+  "updated_at": "2026-10-09T10:16:01Z",
   "ticks": [
     {
       "tick_id": "ugm",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "8t5",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 3
     },
     {
