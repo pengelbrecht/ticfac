@@ -1,0 +1,13 @@
+{
+  "id": "k6z",
+  "title": "The watch suite pins order and wording but nothing pins the counts agree",
+  "description": "The re-pointed terminal property suite holds the dashboard's frame marker, group order, needs-you wording, pane fit and first-frame bound honest, but no property asserts that the health line's \"N of M done\" agrees with the grouping — the gap through which the blocking contradiction stood green on the suite's own honest frame. A property (with its seeded program) that a tick the health line counts done never reads \"up next\" would close it, and would have caught this round's defect in CI instead of a worker's eye.\nevidence: tui/specs/watch.spec.ts (P1-P5 are the suite's whole watch property set); the honest frame it holds green shows \"2 of 4 done\" over \"UP NEXT (4)\" containing the two counted-done ticks\n\nticfac run run_6a569ee0f05740ec88858323a007661f filed this backlog tick from the finding 9cec73d78012b94efe3f35d5b2b1d1e29bb65148b5bbac2aaa3c226a1230be6f (reported by run-run_6a569ee0f05740ec88858323a007661f/tick-4oj/attempt-6) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/9cec73d78012b94efe3f35d5b2b1d1e29bb65148b5bbac2aaa3c226a1230be6f.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_6a569ee0f05740ec88858323a007661f/tick-4oj/attempt-6",
+  "created_by": "ticfac run run_6a569ee0f05740ec88858323a007661f",
+  "created_at": "2026-10-09T13:29:55Z",
+  "updated_at": "2026-10-09T13:29:55Z"
+}
