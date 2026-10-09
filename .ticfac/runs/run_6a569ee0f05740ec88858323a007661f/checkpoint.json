@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 45,
-  "state": "publishing",
-  "reason": "closing jml behind the integrated gate on 11f06f2dcb30",
-  "updated_at": "2026-10-09T15:03:08Z",
+  "sequence": 46,
+  "state": "running",
+  "reason": "jml is closed",
+  "updated_at": "2026-10-09T15:03:10Z",
   "ticks": [
     {
       "tick_id": "ugm",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "jml",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 7
     },
     {
