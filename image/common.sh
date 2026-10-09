@@ -166,17 +166,23 @@ factory_project="${TICKS_FACTORY_PROJECT:-}"
 # How long the pre-flight model probe may take before it is a failure. Bounded
 # by construction: an unbounded probe for a hang is itself a hang.
 probe_timeout="${TICKS_MODEL_PROBE_TIMEOUT:-30}"
-# A probe that got NO answer (a timeout, a refused connection) or a gateway's
-# transient 408/429/502/504/52x is asked again, this many times in all, waiting
-# backoff × the try number seconds between — about three minutes at the
-# defaults: a Workers AI model that is cold, or a factory Worker being
-# redeployed, can take longer than one bounded call to answer, and one such
-# silence used to end the boot (hn6 run_ee8e: 378's resolve job exited at its
-# probe; hn6 run_37b36bfe: 0rx's worker probed mid-deploy and the run spent a
-# rung of its ladder on it). A gateway still silent after the last try is
-# EXIT_GATEWAY_UNAVAILABLE — infrastructure, not the tick.
+# A probe that got NO answer (a timeout, a refused connection) or a transient
+# answer from the gateway or the provider behind it (probe_status_transient: a
+# 408, a 429, a 5xx that is not the gateway's own configuration refusal) is
+# asked again, this many times in all, waiting backoff × the try number seconds
+# between — two minutes of waits at the defaults, four with every try timing
+# out: a Workers AI model that is cold, a provider having an outage, or a
+# factory Worker being redeployed can take longer than one bounded call to
+# answer, and one such answer used to end the boot (hn6 run_ee8e: 378's resolve
+# job exited at its probe; hn6 run_37b36bfe: 0rx's worker probed mid-deploy and
+# the run spent a rung of its ladder on it; ymf run_91f2952a: Workers AI
+# answered 500 AiError 4007 for twenty minutes and two orchestrator boots
+# exited 7, which ended the run). A gateway still not answering after the last
+# try is EXIT_GATEWAY_UNAVAILABLE — infrastructure, not the tick — and the
+# cloud Workflow keeps rebooting an orchestrator that exits with it, with
+# backoff, for a bounded window (cloudflare/src/run-workflow.ts).
 probe_tries="${TICKS_MODEL_PROBE_TRIES:-4}"
-probe_backoff="${TICKS_MODEL_PROBE_BACKOFF:-10}"
+probe_backoff="${TICKS_MODEL_PROBE_BACKOFF:-20}"
 # How long the boot keeps retrying a fetch origin did not answer before it
 # gives up with EXIT_ORIGIN_UNAVAILABLE, and the first wait between tries
 # (doubling to 30).
@@ -525,7 +531,7 @@ probe_model() {
 			return 0
 			;;
 		esac
-		if ! probe_status_transient "$probe_status"; then
+		if ! probe_status_transient "$probe_status" "$probe_body"; then
 			break
 		fi
 		((try < probe_tries)) || break
@@ -534,17 +540,19 @@ probe_model() {
 		try=$((try + 1))
 	done
 
-	if probe_status_transient "$probe_status"; then
-		# No usable answer through every try: the gateway is down or
-		# unreachable, which says nothing about the tick. Its own code, so the
-		# orchestrator dispatches the job again at the same tier instead of
-		# reading a failed attempt (EXIT_GATEWAY_UNAVAILABLE).
-		die $EXIT_GATEWAY_UNAVAILABLE "the gateway did not answer a one-token request within ${probe_timeout}s (asked $try time(s)); the last try got $(probe_outcome).
+	if probe_status_transient "$probe_status" "$probe_body"; then
+		# No usable answer through every try: the gateway or the provider
+		# behind it is down, overloaded or unreachable, which says nothing about
+		# the tick or the route. Its own code, so the orchestrator dispatches
+		# the job again at the same tier instead of reading a failed attempt,
+		# and the cloud Workflow reboots an orchestrator after a backoff instead
+		# of spending a boot (EXIT_GATEWAY_UNAVAILABLE).
+		die $EXIT_GATEWAY_UNAVAILABLE "the gateway did not answer a one-token request usably within ${probe_timeout}s (asked $try time(s)); the last try got $(probe_outcome).
   POST $probe_url
   model: $model_id (provider $model_provider, routed from '$model')
   curl: ${probe_curl_error:-no diagnostic}
   body: ${probe_body:-<empty>}
-The harness would have started and hung on this same call, so the boot stops here (gateway unavailable, exit $EXIT_GATEWAY_UNAVAILABLE: infrastructure, not the tick). Check that AI_GATEWAY_BASE_URL is reachable from the sandbox and that the factory is deployed."
+Every try failed the way a busy, failing or unreachable service does (no answer, a rate limit, a timeout, or a server error from the gateway or the provider behind it), so the boot stops here (gateway unavailable, exit $EXIT_GATEWAY_UNAVAILABLE: infrastructure, not the tick or the route). If it persists, check the provider's status, that AI_GATEWAY_BASE_URL is reachable from the sandbox and that the factory is deployed."
 	fi
 	# The gateway's own refusals name the command that fixes them, so the body
 	# is quoted rather than summarised: collapsing "this factory has no key for
@@ -558,15 +566,31 @@ The harness would have started and hung on this same call, so the boot stops her
 This is a stop, not a warning: the harness would have started, reached the skill loop and hung on its first call. Configure the provider behind the gateway with 'ticfac factory setup', or route [orchestrator].model in .tick/runners.toml at a model that provider serves."
 }
 
-# probe_status_transient says whether one probe's status is the gateway (or
-# what is behind it) not answering, rather than answering no: no HTTP answer at
-# all (a timeout, DNS, a refused connection), a request timeout, a rate limit,
-# or a bad-gateway/timeout from the edge or the upstream. A 503 is NOT one: the
-# factory's gateway answers its own configuration refusals with 503, and those
-# name the fix — retrying them would only delay the message.
+# probe_status_transient says whether one probe's answer is the gateway (or the
+# provider behind it) not answering usably, rather than answering no: no HTTP
+# answer at all (a timeout, DNS, a refused connection), a request timeout, a
+# rate limit, or a server error from the edge, the gateway or the upstream —
+# Workers AI's own outages arrive as a 500 with an AiError body (internalCode
+# 4007, "An internal server error occured"; ymf run_91f2952a), and its
+# capacity errors (internalCode 3040, "Capacity temporarily exceeded") as a
+# 429 or a 5xx, whatever status they ride on.
+#
+# The one 5xx that is NOT transient is the factory gateway's own configuration
+# refusal: it answers 503 with an `…_not_configured` error naming the fix
+# (cloudflare/src/gateway.ts), and retrying it would only delay that message.
+# Every other 4xx is the route answering no — 401/403 a refused credential,
+# 404 an unknown model or route, 400 a request the route will not take — and
+# stays the config stop (EXIT_MODEL) at once.
 probe_status_transient() {
-	case "$1" in
-	"" | 000 | 408 | 429 | 502 | 504 | 520 | 521 | 522 | 523 | 524 | 529) return 0 ;;
+	local status="$1" body="${2:-}"
+	if [[ $body == *'_not_configured"'* ]]; then
+		return 1
+	fi
+	case "$body" in
+	*'"internalCode":3040'* | *'Capacity temporarily exceeded'*) return 0 ;;
+	esac
+	case "$status" in
+	"" | 000 | 408 | 429 | 5??) return 0 ;;
 	esac
 	return 1
 }
@@ -881,9 +905,20 @@ probe_harness() {
 		status=$?
 		unset TICKS_HARNESS_PROBE
 		answer="$(printf '%s' "$answer" | tail -c 600)"
-		[[ -n $claude_sub ]] || break
 		((status != 0)) || break
-		claude_sub_probe_transient "$status" "$answer" || break
+		if [[ -n $claude_sub ]]; then
+			claude_sub_probe_transient "$status" "$answer" || break
+		else
+			gateway_harness_probe_transient "$status" "$answer" || break
+		fi
+		if ((try >= probe_tries)) && [[ -z $claude_sub ]]; then
+			rm -rf "$dir"
+			die $EXIT_GATEWAY_UNAVAILABLE "the $harness harness could not get a one-word round-trip through the gateway in $try tries (the last exited $status), and every try failed with a provider-side error.
+  provider: $harness_provider (gateway route $model_provider at ${model_base_url#*://})
+  model: $harness_model_selector
+  output: ${answer:-<none>}
+The model probe above was green, so the route is configured; the provider behind it answered with a rate limit or a server error on every try. The boot stops here as infrastructure, not the tick or the harness's wiring (gateway unavailable, exit $EXIT_GATEWAY_UNAVAILABLE)."
+		fi
 		if ((try >= probe_tries)); then
 			rm -rf "$dir"
 			die $EXIT_GATEWAY_UNAVAILABLE "the claude CLI could not get a one-word round-trip through to the subscription in $try tries (the last exited $status).
@@ -892,7 +927,7 @@ probe_harness() {
   output: ${answer:-<none>}
 Every try failed the way a busy or unreachable service does (rate limiting, overload, a 5xx, a timeout or a dropped connection), so the boot stops here as infrastructure, not the tick (exit $EXIT_GATEWAY_UNAVAILABLE): the job is dispatched again at the same tier, and a subscription the proxy benched on its quota steps the next job down to Workers AI."
 		fi
-		warn "harness probe try $try of $probe_tries on the subscription exited $status with a transient answer; asking again in $((probe_backoff * try))s: ${answer:-<none>}"
+		warn "harness probe try $try of $probe_tries${claude_sub:+ on the subscription} exited $status with a transient answer; asking again in $((probe_backoff * try))s: ${answer:-<none>}"
 		sleep "$((probe_backoff * try))"
 		try=$((try + 1))
 	done
@@ -952,6 +987,28 @@ claude_sub_probe_transient() {
 	((status == 124)) && return 0
 	printf '%s' "$answer" | grep -Eiq \
 		'((^|[^0-9])(429|5[0-9][0-9])([^0-9]|$)|overloaded|rate.?limit|temporarily limiting|too many requests|internal server error|bad gateway|service unavailable|gateway time-?out|timed? ?out|econnrefused|econnreset|etimedout|eai_again|enotfound|epipe|socket hang up|unable to connect|fetch failed|connection error|network error)'
+}
+
+# gateway_harness_probe_transient says whether one failed harness probe through
+# the GATEWAY (every harness but claude-sub's) is the provider behind it
+# failing for the moment, rather than the harness's wiring. The model probe has
+# just been green, so a route that is configured and then answers a rate limit
+# or a server error a moment later is the provider flapping — the same outage
+# probe_model retries (ymf run_91f2952a: Workers AI's 500 AiError 4007) — and a
+# harness stop (EXIT_HARNESS) for it would stop a worker's whole run as a boot
+# fault. Narrower than claude_sub_probe_transient on purpose: a harness that
+# HANGS (bounded's 124, or its own "timed out") after a green model probe is
+# the green-start trap this probe exists for, so it stays the harness's stop,
+# and so does every wiring refusal, which is asked first and wins.
+gateway_harness_probe_transient() {
+	local status="$1" answer="$2"
+	((status == 124)) && return 1
+	if printf '%s' "$answer" | grep -Eiq \
+		'((^|[^0-9])40[134]([^0-9]|$)|no api key|api key found|unauthori[sz]ed|forbidden|invalid api key|invalid bearer|authentication_error|permission_error|_not_configured|not found|unknown model|unknown option|unknown argument|error: unknown)'; then
+		return 1
+	fi
+	printf '%s' "$answer" | grep -Eiq \
+		'((^|[^0-9])(429|500|502|503|504|529)([^0-9]|$)|aierror|internal server error|overloaded|rate.?limit|too many requests|service unavailable|bad gateway|capacity temporarily exceeded|econnrefused|econnreset|socket hang up)'
 }
 
 # claude_sub_probe_verdict is the claude-sub probe's stop, in the route's own

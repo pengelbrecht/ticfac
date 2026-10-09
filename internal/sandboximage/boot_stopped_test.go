@@ -31,7 +31,7 @@ func TestAWorkerThatStopsInItsBootLeavesTheReasonOnOrigin(t *testing.T) {
 		code   int
 		reason string
 	}{
-		{"the gateway refused the route", map[string]string{"TICKS_TEST_CURL_STATUS": "503"},
+		{"the gateway refused the route", map[string]string{"TICKS_TEST_CURL_STATUS": "401"},
 			ExitModel, "could not answer a one-token request"},
 		{"the gateway never answered", map[string]string{"TICKS_TEST_CURL_STATUS": "000",
 			EnvModelProbeBackoff: "0", EnvModelProbeTimeout: "1"},
