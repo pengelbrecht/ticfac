@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 42,
-  "state": "integrating",
-  "reason": "integrating jml attempt 7 into epic/ymf",
-  "updated_at": "2026-10-09T14:37:08Z",
+  "sequence": 43,
+  "state": "gating",
+  "reason": "running the integrated gate for jml on 11f06f2dcb30",
+  "updated_at": "2026-10-09T14:37:17Z",
   "ticks": [
     {
       "tick_id": "ugm",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "jml",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 7
     },
     {
