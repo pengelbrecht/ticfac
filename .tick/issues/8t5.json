@@ -1,10 +1,10 @@
 {
   "id": "8t5",
   "title": "Final review of the watch redesign diff",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "blocked_by": [
     "jym"
   ],
@@ -12,5 +12,6 @@
   "role": "review",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.523215Z",
-  "updated_at": "2026-10-08T13:16:48.523215Z"
+  "updated_at": "2026-10-09T08:43:54.584077235Z",
+  "started_at": "2026-10-09T08:43:54.584076555Z"
 }
