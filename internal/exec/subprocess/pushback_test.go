@@ -25,6 +25,8 @@ func pushbacks(observations []Observation) []Observation {
 // Before 4m6 this attempt collected with a findings problem and the
 // reconciler held the run for a person (finding_report_invalid).
 func TestAnUnreadableFindingsBlockIsPushedBackAndAcceptedOnTheCorrectedAnswer(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "findings_fixed_on_pushback"})
 	handle := f.Start(f.spec("run-4m6/tick-fix/attempt-1", "fix"))
 	f.waitSettled(handle)
@@ -63,6 +65,8 @@ func TestAnUnreadableFindingsBlockIsPushedBackAndAcceptedOnTheCorrectedAnswer(t 
 // times and then collects as missing-result: the attempt fails and retries
 // like any attempt that never said what it did.
 func TestAReportThatStaysUnreadableIsMissingResultAfterThePushbacks(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "findings_bad"})
 	handle := f.Start(f.spec("run-4m6/tick-bad/attempt-1", "bad"))
 	f.waitSettled(handle)
@@ -83,6 +87,8 @@ func TestAReportThatStaysUnreadableIsMissingResultAfterThePushbacks(t *testing.T
 // Before 4m6 a review with no REVIEW-VERDICT line collected, and the
 // reconciler refused its answer and held the run.
 func TestAReviewWithNoVerdictIsPushedBack(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "review_verdict_on_pushback"})
 	spec := f.spec("run-4m6/tick-rvw/attempt-1", "rvw")
 	spec.Role = "review-epic"
@@ -110,6 +116,8 @@ func TestAReviewWithNoVerdictIsPushedBack(t *testing.T) {
 
 // A clean report is never pushed back.
 func TestACleanReportIsNotPushedBack(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 	handle := f.Start(f.spec("run-4m6/tick-cln/attempt-1", "cln"))
 	f.waitSettled(handle)
@@ -121,6 +129,8 @@ func TestACleanReportIsNotPushedBack(t *testing.T) {
 // The prompt names the check, with this job's own role, tick and worktree,
 // and states the v2 findings shape.
 func TestThePromptTellsTheWorkerToRunTheReportCheck(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "echo_prompt"})
 	handle := f.Start(f.spec("run-4m6/tick-pmt/attempt-1", "pmt"))
 	f.waitSettled(handle)

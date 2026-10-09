@@ -27,6 +27,14 @@ type merge struct {
 	EpicHead    string
 	GateSHA     string
 	Merged      bool
+
+	// TouchedBase and TouchedHead are the two commits whose three-dot diff
+	// is the files the tick being gated changed — what the gate exports to
+	// its commands as gatescope.EnvBase/EnvHead (gate_touched.go, the
+	// contract). Empty in both means this gate has no touched diff to offer.
+	// Set by the merge's construction site, each with its own reason.
+	TouchedBase string
+	TouchedHead string
 }
 
 func (r *Reconciler) integrate(ctx context.Context, marker attemptHandle, collected *subprocess.Collection) (merge, error) {
@@ -80,9 +88,17 @@ func (r *Reconciler) integrate(ctx context.Context, marker attemptHandle, collec
 		if r.git.contains(head, epicHead) {
 			// Already integrated — by an earlier incarnation of this run, or by
 			// somebody else. Nothing is merged twice.
+			//
+			// The head being gated carries the tick rather than merging it, so
+			// the pair is read from the tick's own merge below it — found by the
+			// needle this run's merges name. A foreign run's merge is not found,
+			// and the pair is empty: that tree was gated by the run that merged
+			// it (gate_touched.go).
+			base, touched := r.git.touchedPair(epicHead, AttemptMergeNeedle(r.runID, tick, marker.Attempt))
 			r.setTick(tick, "integrated")
 			r.record(tick, StageIntegrated, "%s is already contained in %s", short(head), r.branch)
-			return merge{AttemptHead: head, EpicHead: epicHead, GateSHA: epicHead, Merged: false}, nil
+			return merge{AttemptHead: head, EpicHead: epicHead, GateSHA: epicHead, Merged: false,
+				TouchedBase: base, TouchedHead: touched}, nil
 		}
 
 		// A resolve in flight: set once the conflict is handed to the
@@ -122,9 +138,17 @@ func (r *Reconciler) integrate(ctx context.Context, marker attemptHandle, collec
 					return merge{}, err
 				}
 			}
+			// The pair is the merge's own two sides: the branch head merged
+			// onto and the attempt carried in — the tick's whole change, and
+			// the same three-dot shape the status model reads a merged
+			// attempt's diff with (gate_touched.go). The resolve's merged
+			// commit is read the same way, its second side being the resolution
+			// branch: the union of the two intents the resolve carried.
+			base, touched := r.git.touchedPair(merged, AttemptMergeNeedle(r.runID, tick, marker.Attempt))
 			r.setTick(tick, "integrated")
 			r.record(tick, StageIntegrated, "merged %s into %s as %s", short(head), r.branch, short(merged))
-			return merge{AttemptHead: head, EpicHead: merged, GateSHA: merged, Merged: true}, nil
+			return merge{AttemptHead: head, EpicHead: merged, GateSHA: merged, Merged: true,
+				TouchedBase: base, TouchedHead: touched}, nil
 		}
 		if !leaseRefused(stderr) {
 			// Not a lease race: an authentication failure, an unreachable
@@ -197,7 +221,12 @@ func (r *Reconciler) integratedAlready(marker attemptHandle, branch string) (mer
 	}
 	r.setTick(tick, "integrated")
 	r.record(tick, StageIntegrated, "%s is already contained in %s", short(head), r.branch)
-	return merge{AttemptHead: head, EpicHead: epicHead, GateSHA: epicHead, Merged: false}, nil
+	// The pair is the tick's own merge's sides, read from the history the
+	// branch carries (integrate's already-contained case has the same
+	// reason; gate_touched.go has the rule).
+	base, touched := r.git.touchedPair(epicHead, AttemptMergeNeedle(r.runID, tick, marker.Attempt))
+	return merge{AttemptHead: head, EpicHead: epicHead, GateSHA: epicHead, Merged: false,
+		TouchedBase: base, TouchedHead: touched}, nil
 }
 
 // AttemptMergeNeedle is the words every merge commit that carries one

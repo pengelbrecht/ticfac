@@ -20,6 +20,12 @@ type git struct {
 	dir string
 	env []string
 
+	// name and email are the identity the environment below carries, as
+	// strings: a fast-import stream spells the author and committer on its
+	// own command lines, where an environment variable cannot reach.
+	name  string
+	email string
+
 	// retry is the bound on waiting through a transient remote failure (tick
 	// enj). It applies to the subcommands that reach the network and to
 	// nothing else — see try.
@@ -29,6 +35,11 @@ type git struct {
 	// and means every read spawns its own process, which is what this store
 	// did before.
 	reader *objectReader
+
+	// fastImport is the write-path seam (fastimport.go): a field so a test
+	// can count materializations or break the stream and watch the fallback
+	// hold. Nil is never seen: newGit sets it.
+	fastImport func(ref string, commits []importCommit) ([]string, error)
 }
 
 func newGit(dir, authorName, authorEmail string, retry RemoteRetry) *git {
@@ -45,8 +56,11 @@ func newGit(dir, authorName, authorEmail string, retry RemoteRetry) *git {
 	// must give up) is added per invocation, in once, where the guard that
 	// every network git carries it can see it. The held-open object reader
 	// never reaches a remote and does without it.
-	g := &git{dir: dir, env: env, retry: retry}
+	g := &git{dir: dir, env: env, name: authorName, email: authorEmail, retry: retry}
 	g.reader = newObjectReader(dir, env)
+	g.fastImport = func(ref string, commits []importCommit) ([]string, error) {
+		return g.importCommits(ref, commits)
+	}
 	return g
 }
 

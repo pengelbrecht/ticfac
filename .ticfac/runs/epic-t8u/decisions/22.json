@@ -1,0 +1,100 @@
+{
+  "schema_version": 3,
+  "decision": 22,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "t8u",
+    "job_id": "run-epic-t8u/tick-r6v/attempt-18",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.1.0 (herdr/claude, opus)",
+    "profile_digest": "sha256:b0e2bfa26280693ae2d479fd3dbeec0b99b14f94c04fc3f006ca558fe2e1efc9",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "e05a5271d91ed4562cbc825332ce46a653eadaa5",
+    "tick_id": "r6v"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "TestTheEvacuationWaitsOutTheSupervisorsPushThatHoldsTheRefLock (internal/reconcile/evacuate_test.go, added by fn8) fails on EVERY CI run of epic/t8u since fn8 merged: 15 consecutive red runs, head 9b03556be included (run 37716696321, job 'go test (reconcile 2/3)').\n\nWhat goes wrong on git >= 2.51:\n- receive-pack uses batched reference updates, so a push whose ref lock is refused STILL runs the reference-transaction hook in state 'prepared', with the refused ref on stdin.\n- The test's hook holds ANY prepared transaction naming the attempt branch until fn8-go appears. So it holds the flush's own push too.\n- fn8-go is written only when a THIRD push arrives. That cannot happen while the second push is held, so the flush's first push burns the whole budget.\n- That matches the account on CI: 'did not finish inside its bound: context deadline exceeded', and 'only 2 pushes'.\n\nPlatform difference:\n- Apple git 2.50.1 refuses the second push before the hook runs, so the test passes locally and the gate passes. CI has git 2.55.\n- Reproduced deterministically in alpine:edge (git 2.56, go 1.27): the same three assertion failures.\n- A shell repro (two pushes, one held at 'prepared') shows git 2.56 running the second push's hook with the refused ref, while git 2.50 does not.\n\nFix, verified in that container:\n- Hold only the FIRST prepared transaction. Insert `mkdir <held>.once 2>/dev/null || exit 0` before `echo held` in the hook, and add one Sprintf argument.\n- With it, the test passes in 1.3s on git 2.56.\n- With fn8's production fix reverted (one read of origin), it still FAILS with all three assertions, so the guard keeps discriminating.\n\nProduction code is unaffected: without a hook, the refused push fails fast and evacuateBranch's loop re-reads origin. The close-out cannot be readied while epic CI is red.\nevidence: internal/reconcile/evacuate_test.go:256-275 (the reference-transaction hook); CI run 37716696321 job 'go test (reconcile 2/3)': evacuate_test.go:336/342/349",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "fn8's ref-lock guard deadlocks on git >= 2.51; epic CI red since 9a34b1001"
+      },
+      {
+        "body": "[A1] asks for the full suite (go test -timeout 45m -parallel 12 ./...) to finish in under half its wall clock on a quiet host, measured before and after. Neither figure is recorded on the epic.\n\nThe wall clock of that command is bounded by internal/reconcile's full suite, and no tick in this epic made it faster:\n- CI, same runner class and command: shards 266/239/232s at base main 990bb6eb4 (run 37704846560) against 287/238/226s at head 9b03556be (run 37716696321).\n- .tick/runners.toml still records reconcile's full suite at 41m28s on this host, and keeps it -leave-to-ci for that reason.\n\nThe cuts that did land are in other packages: herdr 132s->8.6s and subprocess 118s->61s on CI. internal/cli doubled, 58s->112s, from z7w's property tests. None of these moves the floor.\n\nWhat would make the epic ready:\n- a measured before and after of the full suite showing the halving, which needs reconcile's full suite cut (f61's noted next step, riding the integrating checkpoint on the merge push, and ez7 follow from that); or\n- an operator decision recorded on t8u that re-scopes A1.\n\nA faster per-tick gate (144s here) is not what A1 measures.\nevidence: CI runs 37704846560 (base) vs 37716696321 (head), the 'go test (reconcile n/3)' jobs; .tick/runners.toml go-touched comment (41m28s)",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "A1 unmet: the full suite's floor, internal/reconcile, did not get faster"
+      },
+      {
+        "body": "collect() no longer writes the 'collecting <tick> attempt <n>' checkpoint before reading the executor. The collecting checkpoint now lands only at the ruling, as '<attempt> is collected (ready-to-merge)', via recordCollectVerdict.\n\nThat changes the run's checkpoint history. A run killed mid-collect now shows its previous state on origin rather than 'collecting'.\n\nThe o3q tick authorises recording the verdict, not removing the announce. The removal is justified only in a code comment that cites f61.\n\nI found no Go reader of the old reason, so nothing breaks. But [A4] asks for every durable-evidence change to be stated on its tick: a note on o3q recording the change, and that no reader depends on it, closes this.\nevidence: internal/reconcile/dispatch.go: the removed r.checkpoint(StateCollecting, \"collecting %s attempt %d\") at the top of collect(), and recordCollectVerdict",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "o3q dropped the pre-collect 'collecting' checkpoint; no tick says so"
+      },
+      {
+        "body": "internal/cli is now the per-tick gate's slowest package under -short: 101-136s here.\n\nMost of that is z7w's Hegel properties:\n- TestPBTFlagsParseInAnyOrder: 28s\n- TestPBTWatchAlertsAHoldExactlyWhenTheRunHoldsIt: 19s\n- TestPBTExitCodeAgreesWithTheDocumentState: 18s\n- four more at 3-9s each\n\nCI's full cli suite went from 58s to 112s.\n\nIn an epic whose purpose is a faster gate, the property tests should take a smaller example budget under -short, keeping the full budget in the non-short suite, so the gate's floor is not set by a test-generation budget.\nevidence: go test -short -count=1 -json ./internal/cli/ (elapsed per test); CI packages job internal/cli 58.254s (run 37704846560) vs 112.381s (run 37716696321)",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "z7w's property tests made internal/cli the short gate's long pole"
+      },
+      {
+        "body": "TestAGateWhoseKillMissesAMemberReleasesItsSlotAnyway assumes the gate's kill is delivered within the joiner's 500ms rejoinGrace after GO.\n\nOn a loaded host the kill can land after the joiner has rejoined the group. The single kill then reaches it, and the test passes even with settleKilledGate removed. The guard does not fail falsely, but it can silently stop guarding.\n\nThe rejoin should be scheduled on an observable, for example a file the test writes after shell.wait's first kill is sent, rather than on a 500ms sleep.\nevidence: internal/reconcile/testdata/gatejoiner/main.go:37,72 (rejoinGrace); internal/reconcile/gatedir_orphan_unix_test.go:211-213",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Gate-kill guard passes vacuously when the kill lands after rejoinGrace"
+      },
+      {
+        "body": "pqs moved TestNoProductionCodeReadsFetchHead onto gittest.Tracked, because a checkout is not a clean room: an agent worktree under .claude/worktrees/ is no party to this tree.\n\nIts sibling in the same file, TestEveryProductionFetchStaysOffSharedRefs, still uses filepath.Walk. It skips only .git, testdata, vendor and node_modules, so a stale branch checked out under the repo can fail the gate on a file nobody here wrote. That is the class pqs exists to close.\nevidence: internal/runstate/fetchhead_guard_test.go:90-110",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Shared-ref fetch guard still walks the directory, not tracked files"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "ticfac/run-epic-t8u/tick-r6v/attempt-18",
+      "commits": 0,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "runs/epic-t8u/r6v/RESULT-r6v.md",
+      "review_verdict": "NOT READY",
+      "review_verdict_detail": "make epic/t8u's CI green by fixing fn8's ref-lock guard hook for git >= 2.51 (hold only the first prepared transaction; fix verified on git 2.56), and meet [A1] with a recorded before/after full-suite measurement, which needs internal/reconcile's full suite cut, or have the operator re-scope A1 on t8u."
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE_WITH_CONCERNS",
+    "summary": "the full suite could not be timed on a quiet host (load 8-16, shared with live runs), so A1 is judged from CI's per-shard durations at base and head. The per-tick gate figure (144s) is an upper bound taken under that load."
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T02:39:15Z",
+  "answered_at": "2026-10-08T02:39:15Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "r6v",
+    "attempt": 18,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "e05a5271d91ed4562cbc825332ce46a653eadaa5",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "review",
+    "executor": "herdr",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:b0e2bfa26280693ae2d479fd3dbeec0b99b14f94c04fc3f006ca558fe2e1efc9",
+    "model": "opus",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": 22,
+    "substrate_server_version": "0.9.3"
+  }
+}

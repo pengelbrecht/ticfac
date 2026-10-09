@@ -17,6 +17,8 @@ import (
 // on what herdr was actually asked: the branch and the base the spec named,
 // the kind and args the host configured, the pane the create handed back.
 func TestStartCreatesTheWorkspaceAndLaunchesTheAgent(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{kind: "codex", args: []string{"-m", "gpt-5.6-luna"}})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -107,6 +109,8 @@ func TestStartCreatesTheWorkspaceAndLaunchesTheAgent(t *testing.T) {
 // TestStartRefusesAWriteRefOutsideTheGrant is the issuer-enforced boundary,
 // the same rule the local executor applies at the same place.
 func TestStartRefusesAWriteRefOutsideTheGrant(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	spec := h.spec("run-harness/tick-t1/attempt-1", "t1")
 	spec.Source.WriteRef = "refs/heads/main"
@@ -119,6 +123,8 @@ func TestStartRefusesAWriteRefOutsideTheGrant(t *testing.T) {
 // returns the SAME job — the same workspace, the same agent — and never
 // dispatches a second worker over a live one.
 func TestStartAdoptsARunningAttempt(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -149,6 +155,8 @@ func TestStartAdoptsARunningAttempt(t *testing.T) {
 // TestStartRefusesASettledAttempt: a retry is a new attempt number, and the
 // refusal says so rather than redispatching.
 func TestStartRefusesASettledAttempt(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	if _, err := h.start("t1"); err != nil {
 		t.Fatal(err)
@@ -170,6 +178,8 @@ func TestStartRefusesASettledAttempt(t *testing.T) {
 // TestStartHoldsAnAttemptNobodyCanAddress is the held-not-redispatched rule:
 // herdr not answering about a live attempt is nobody's to start over.
 func TestStartHoldsAnAttemptNobodyCanAddress(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	if _, err := h.start("t1"); err != nil {
 		t.Fatal(err)
@@ -190,6 +200,8 @@ func TestStartHoldsAnAttemptNobodyCanAddress(t *testing.T) {
 // worktree.create hands back is not an interactive shell for the first few
 // hundred milliseconds, and agent.start answers agent_pane_busy until it is.
 func TestStartRetriesAPaneBusyLaunch(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	h.server.RouteN(herdtest.MethodAgentStart, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter, n int) error {
 		if n == 1 {
@@ -215,6 +227,8 @@ func TestStartRetriesAPaneBusyLaunch(t *testing.T) {
 // that answers pending despite the startup wait is the one case left to
 // the poll, so the poll must still exist and still work.
 func TestStartPollsForInteractiveReady(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	h.server.RouteN(herdtest.MethodAgentStart, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter, n int) error {
 		var p struct {
@@ -283,6 +297,8 @@ func TestStartPollsForInteractiveReady(t *testing.T) {
 // time out on a trivial tick that finishes before working is rendered. That
 // is an observation and a flag on the record, never a failure.
 func TestAnUnconfirmedDispatchIsRecordedNotFailed(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	// The agent never visibly works: agent.wait answers timeout.
 	h.server.Route(herdtest.MethodAgentWait, func(t *testing.T, req herdtest.Request, w *herdtest.ConnWriter) error {

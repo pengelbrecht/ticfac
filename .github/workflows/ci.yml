@@ -93,6 +93,7 @@ jobs:
       mode: ${{ steps.plan.outputs.mode }}
       go: ${{ steps.plan.outputs.go }}
       ts: ${{ steps.plan.outputs.ts }}
+      bombadil: ${{ steps.plan.outputs.bombadil }}
       race_pkgs: ${{ steps.plan.outputs.race_pkgs }}
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
@@ -295,6 +296,48 @@ jobs:
             exit 1
           fi
 
+  # The terminal property suite (tick z7w): Bombadil drives the real ticfac
+  # binary over a real pty against a fixture world of registries and feeds —
+  # the outside half of this tick's acceptance, which the in-process gate
+  # cannot see: the pane, the resizes, the scrollback, the frame timing. The
+  # acceptance lets this be its own job on purpose ("the Bombadil job may be
+  # separate"): a pty-driver suite is CI hardware's work, not the per-tick
+  # gate's, so `make gate` keeps the in-process half (internal/cli's
+  # agentjson_pbt_test.go and watch_props_test.go) and this job runs both
+  # halves here: the honest run, whose every property must pass, and the
+  # seeded run, where each property must FAIL against its deliberately
+  # broken program — a property that cannot fail pins nothing.
+  bombadil:
+    name: bombadil
+    needs: plan
+    if: needs.plan.outputs.bombadil == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.3.4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: tui/pnpm-lock.yaml
+
+      - name: Install
+        working-directory: tui
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: The terminal properties, honest and seeded
+        working-directory: tui
+        run: pnpm run test:all
+
   contracts:
     name: contracts
     # An epic branch already gets a push-triggered run on the same head
@@ -406,14 +449,19 @@ jobs:
       # against a 5.2.0 bundle, wrong about three record shapes, for two major
       # versions, silently.
       #
-      # vitest is HERE and not in the per-tick gate because it is 82s against
-      # the gate's other TypeScript checks at 3s, and gate commands run
-      # serially: it would take every tick's gate from 3m26s to about 4m48s.
-      # Here it runs beside the Go job, which is several times longer, so it
-      # costs no wall clock at all.
+      # The per-tick gate runs vitest too now (tick tc9): the odc split - the
+      # gate for contracts and types, CI for behaviour - let a TypeScript
+      # change settle a tick without its tests ever running in the gate. So
+      # this step is no longer the only behaviour check. It still carries the
+      # suites the gate does not run (contracts:test and operator-strings, the
+      # node --test suites around the scripts themselves), and a second,
+      # independent run of vitest on a 2-vCPU runner - the environment the
+      # file-parallelism decision in cloudflare/vitest.config.ts says cannot
+      # be settled on a laptop.
       #
-      # The split, stated so neither side can quietly claim the other's work:
-      # the GATE covers contracts and types, THIS covers behaviour.
+      # The split, restated so neither side can quietly claim the other's
+      # work: the GATE covers contracts, types and behaviour; THIS runs the
+      # whole suite on CI's own hardware, before anything reaches main.
       - name: pnpm test
         working-directory: cloudflare
         run: pnpm test

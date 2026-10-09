@@ -30,6 +30,20 @@ import (
 // operator's machine and worker hosts, where `make test` and
 // `make test-short` execute it on every suite.
 //
+// 2026-10-07 (tick mbv's audit): that "every suite" has one exception, and
+// it is not this package's to fix. go's test cache never rechecks an input
+// outside the module — cmd/go skips outside-module reads at input-hashing
+// time, deliberately — and herdr is exactly such an input: a host binary,
+// reached through a subprocess the cache cannot see. So a warm cache can
+// answer for this package across a herdr upgrade, and the drift check runs
+// for real only where `make test` and `make test-short` execute it, or on
+// any -count=1 run (`make suite`) — never by cache alone. The structural
+// fix — keeping this package uncached in the gate — is filed as a finding
+// for its own decision; no read this test could perform would close it.
+// The audit's demonstration of the shape this package inherits lives in
+// internal/reconcile/gate_cache_soundness_test.go,
+// TestACachedPassCanHideAnEditToAFileOutsideTheModule.
+//
 // `herdr api schema --json` answers with no server running, so this test
 // needs no live session and stays cheap enough for every run.
 //

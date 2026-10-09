@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/jev"
 	"github.com/pengelbrecht/ticfac/internal/runlife"
 	"github.com/pengelbrecht/ticfac/internal/statusmodel"
@@ -215,7 +215,7 @@ func TestStatusModelLocalWiringCarriesTheGatewayCost(t *testing.T) {
 	// A bare repository stands for the checkout (the wiring under test is
 	// what the gathering PASSES, not what any source answers).
 	repo := t.TempDir()
-	if out, err := exec.Command("git", "init", "--quiet", "-b", "main", repo).CombinedOutput(); err != nil {
+	if out, err := gittest.Command(repo, "init", "--quiet", "-b", "main", repo).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
 

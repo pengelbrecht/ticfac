@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "The fake tracker's claim counting matches tk's (a re-claim by the same claimant is not a new claim); a test pins the parity; go test ./internal/reconcile/ passes",
+    "description": "Found by #50's author: internal/reconcile/harness_test.go's fake tracker counts a re-claim of an already-claimed tick against the width, which the real tk does not. Tests that depend on width can then pass or fail for a reason production never has. Make the fake match tk's claim semantics and add a test pinning it against tk's own behaviour.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "krh",
+    "title": "The reconcile test tracker counts a re-claim as a new claim; real tk does not"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.76,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.8099999999999999,
+      "design": 0,
+      "diagnosis": 0.01,
+      "mechanical": 0.16,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1119,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T16:06:30Z",
+  "answered_at": "2026-10-07T16:06:30Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "krh",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "5170c4f265431efaab9759625c0f14365a1cc82a",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

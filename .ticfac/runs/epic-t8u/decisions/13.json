@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 13,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "A test releases a worker that keeps running past the grace, restarts the run, and the attempt is integrated from its recorded verdict, not rejected as cancelled",
+    "description": "Follow-up from hol (#141, 2026-09-29): #141 gives a reported worker up to 10s to exit before Cancel records cancel.json. If the run releases a worker (after collecting ready-to-merge) that is still running past that window, the attempt is still recorded cancelled, and a restart re-reads it, finds 'cancelled' and rejects/redoes work the run already judged. Root fix: once the run has recorded an attempt's collect verdict in its own records, resume reads that verdict first and a later executor-side cancel (from the run's own release) cannot override it; a cancel only counts when it precedes the verdict.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "o3q",
+    "title": "A worker released after its ready-to-merge verdict is never re-judged as cancelled on resume"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.64,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.71,
+      "design": 0,
+      "diagnosis": 0.02,
+      "mechanical": 0.26,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1180,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T19:18:00Z",
+  "answered_at": "2026-10-07T19:18:00Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "o3q",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "ee4d45845ef020b629e73a91db88562d92dcf931",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

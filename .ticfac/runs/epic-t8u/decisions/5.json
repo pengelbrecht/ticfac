@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 5,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "Hegel property tests cover the five pure-logic areas and a reconciler state-machine model with at least the eight operations and five invariants listed; they run in go test and CI; any failure found is fixed or recorded with its minimal counterexample; the report says what PBT found and whether the model is worth growing",
+    "description": "Operator, 2026-09-27: trial Hegel (hegel.dev/go/hegel, beta; loads the Rust libhegel at run time, no cgo) in ticfac.\n\n1. Pure logic first:\n   - runconfig layering (5uo): tables merge field-wise, arrays replace, and the override cell applies last.\n   - The Workers-AI-only rule (nwn/78v): no generated config ever resolves a cloud role, or a cloudflare-sandbox dispatch, to a model outside Workers AI. The rule is the provider namespace, not a model list.\n   - forge CI aggregation: the latest run per check decides, and a skipped run never hides a failure. That was a real bug found 2026-09-26.\n   - The findings parser: arbitrary JSON never silently loses a finding.\n   - ClassifyRemote.\n2. Then a first stateful model of the reconciler (Hegel's state-machine testing) over the existing fake tracker and fake runner.\n   - Operations: dispatch; a worker settles succeeded / failed / with no report; the reconciler crashes and restarts; a transient remote failure; a write whose ack is lost; a same-wave merge conflict; a gate failure; a tick added mid-run.\n   - Invariants (the lifecycle contract A1-A12): a live job is never redispatched; nothing closes behind a failing gate; the width is never exceeded; a cold restart reaches the same state; absorption stays bounded.\n   - This week's bugs were all sequence bugs of this kind: the #50 resume order, the claim refusal that earned a rung, #53's unaskable remote, o82's lost-ack write.\nLoad hegel-skill (github.com/hegeldev/hegel-skill) when writing these. Wire libhegel into CI. Report what PBT found.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "89g",
+    "title": "Property-test config layering, the Workers-AI rule and a reconciler state machine with Hegel (Go)"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.96,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.97,
+      "design": 0.02,
+      "diagnosis": 0,
+      "mechanical": 0,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1487,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T14:36:16Z",
+  "answered_at": "2026-10-07T14:36:16Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "89g",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "e546d849d6d08a2000b074fd11aec036908d9291",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

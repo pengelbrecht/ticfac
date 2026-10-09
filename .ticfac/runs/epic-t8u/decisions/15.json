@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 15,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "A tick that breaks an end-to-end test in a package it touched fails its per-tick gate (fixture reproducing dz1's shape); untouched packages' full suites are not run; gate time on a typical tick measured before/after and reported",
+    "description": "epic-6in (2026-09-28): dz1's regression (tk 0.32.0 stopped refusing over-width claims → TestARunUnderANewRunIDIsOfferedThePreviousRunsReports and three more reconcile tests red) passed every per-tick gate, because the gate runs the short suite and those tests are end-to-end (newFixture skips under -short). It surfaced only at close-out in CI's full suite, costing a repair and two ~30-min CI cycles. Make the integrated gate additionally run ?   \tgithub.com/pengelbrecht/ticfac\t[no test files] (non-short, with -timeout and the gate's parallelism) for the Go packages whose files the tick changed, plus packages that import them if cheap to compute (go list -deps reverse); keep the whole-repo short suite as today. Bound it (a package's full suite can be 20+ min: reconcile) — decide per-package budgets or a cap, and justify. Evidence keyed as today so an unchanged package is a cache hit.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "r1f",
+    "title": "The per-tick gate also runs the full (non-short) tests of the packages a tick touched"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.64,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.29,
+      "design": 0.71,
+      "diagnosis": 0,
+      "mechanical": 0,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1287,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T19:24:09Z",
+  "answered_at": "2026-10-07T19:24:09Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "r1f",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "15615de094be0b4004396b718b491788b1dfbe7e",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

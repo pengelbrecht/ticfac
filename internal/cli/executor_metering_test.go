@@ -2,11 +2,11 @@ package cli
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/profile"
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 )
@@ -123,10 +123,7 @@ func oneCommitRepo(t *testing.T) string {
 	dir := t.TempDir()
 	mustGit := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, out)
-		}
+		gittest.Run(t, dir, args...)
 	}
 	mustGit("init", "--quiet", "-b", "main")
 	mustGit("config", "user.email", "cli@example.com")

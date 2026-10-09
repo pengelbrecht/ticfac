@@ -131,7 +131,11 @@ never deployed.
   A tracked-bash replay whose process is gone checks the workspace is there
   before re-starting on it, so a container that died while no harness
   watched is restored too. `restoreLostWorkspace()` is public for the host
-  that owns the container's lifetime (epic step 6).
+  that owns the container's lifetime (epic step 6). Both of the env's OWN
+  restores — this one and the replay's — announce through
+  `FactorySandboxEnvOptions.onRestore`, which carries the outcome and names
+  the loss that caused it (tick qzg), so a host's log says the sha the model
+  is told rather than a mysteriously slow round.
 - **The pre-round ready check** (tick 4fs, same extension): a container
   destroyed BETWEEN tool rounds — no harness call in flight, so none of the
   restore triggers above can fire — boots empty, and the next round's first
@@ -179,13 +183,29 @@ The tests are split by what they can prove where:
   `createGuardedNodeExecutionEnv`. It assembles the pieces the earlier steps
   built — `workerOnYield` and `armWallDeadline` (tick pom),
   `workspaceCheckpointExtension` (tick dwn) — plus the local rung's model
-  access: pi-ai's own `cloudflare-workers-ai` provider with the GLM
-  catalog corrections, credentials resolved exactly the way the pi CLI
-  resolves them — the stored credential in pi's own
-  `~/.pi/agent/auth.json` first, the ambient environment as pi-ai's own
-  fallback (`src/local/pi-auth-store.ts`). There is no factory gateway
-  locally: no run token, no exchange, and the harness holds no credential
-  the host did not already have.
+  access, in two grades. Unmetered, it is pi-ai's own
+  `cloudflare-workers-ai` provider with the GLM catalog corrections,
+  credentials resolved exactly the way the pi CLI resolves them — the stored
+  credential in pi's own `~/.pi/agent/auth.json` first, the ambient
+  environment as pi-ai's own fallback (`src/local/pi-auth-store.ts`). There
+  is no factory gateway locally: no run token, no exchange, and the harness
+  holds no credential the host did not already have. Metered (tick lrd, the
+  harness half of m1w), a dispatch whose worker.json carries a gateway
+  metering join runs the same catalog through the operator's own AI Gateway
+  route with the join's headers, so its calls join the gateway's logs.
+- **`src/local/gateway-metering.ts`** (tick lrd): the metering join's harness
+  half — the join the Go executor writes into worker.json (tick m1w's writer;
+  the field spellings are pinned from the Go side), composed into the
+  provider override the pi CLI's generated extension composes for a herdr
+  pane: same route (`<gateway>/workers-ai/v1`), same four headers
+  (`Authorization` and `cf-aig-authorization` both carrying the credential
+  the join's pipeline prints, `cf-aig-metadata` and `x-session-affinity`
+  naming the run), every catalog entry kept. The credential pipeline executes
+  at request time — the token is never written anywhere — and an empty
+  answer is a refusal naming the provider, never an anonymous call. The node
+  suite's `local-metering.test.ts` drives the real entry against a fake AI
+  Gateway: a metered local launch tags its calls, the tests' faux rung never
+  does, and a join that cannot compose refuses the boot.
 - **The steer socket** (`src/local/steer-socket.ts`): a Unix domain socket
   beside the storage, and the one door the Go supervisor has into a RUNNING
   conversation. One JSON line in (`{"requestId","text"}`), one JSON line out

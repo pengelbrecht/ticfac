@@ -29,7 +29,7 @@ GOTEST_PARALLEL ?= 12
 # main and to an epic branch (a pull request runs its affected packages), so
 # everything the gate skips is still refused before a deploy.
 # internal/shorttest holds the guard that keeps a new test from forgetting.
-.PHONY: build vet test-short test test-race gate release harness-bundle
+.PHONY: build vet test-short test test-race gate suite release bombadil bombadil-seeded bombadil-all ts-gate harness-bundle
 
 # Regenerates harness/embed/local-main.bundle.mjs — the esbuild bundle of
 # harness/src/local/main.ts (pi-durable, pi-ai and chord inlined) that
@@ -86,16 +86,58 @@ test-race:
 # `make suite` below keeps -count=1 for when you want the paranoid answer —
 # notably for the drift guards that read .tick/runners.toml by absolute path,
 # which are the one place caching is known to be able to serve a stale pass.
+#
+# 2026-10-07 — the go test half now runs under a STRIPPED GIT ENVIRONMENT
+# (tick pqs): no global or system config file, and user.useConfigOnly
+# refusing the implicit identity fallback. That is CI's machine, reproduced
+# on a laptop: a fixture that commits with no identity of its own — relying
+# on the developer's global git identity — passed every local gate and
+# failed CI with exit 128 (tick lkd, 2026-09-24), and a gate that cannot see
+# the condition cannot catch the next one. It is GIT's environment and not
+# HOME=<empty> (the original reproduction's recipe) on purpose: the go
+# toolchain needs HOME for its build cache, the run's own gate builds carry
+# HOME by contract (TestAGateDoesNotInheritTheRunsControlPlane), and the
+# property library resolves a user cache dir at init. The two /dev/null
+# config files give git exactly what an absent HOME gave it — no global
+# config, no system config — and useConfigOnly keeps the identity half
+# honest.
 gate:
-	gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && go test -short -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
+	gofmt -l . | grep -v '^contracts/' | (! grep .) && go vet ./... && env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=user.useConfigOnly GIT_CONFIG_VALUE_0=true go test -short -timeout $(GOTEST_TIMEOUT) -parallel $(GOTEST_PARALLEL) ./...
+
+# The touched half of the Go gate (tick r1f): the FULL — non-short — suites
+# of the Go packages whose files the gated tick changed, plus every package
+# whose code or tests import them. The recipe is byte-identical to the
+# declared gate's `go-touched` command (.tick/runners.toml), as `gate` is
+# to `go`: this is what a person runs, that is what the integrated gate
+# runs, and TestTheGateTargetMatchesTheDeclaredGate holds the two together.
+#
+# Without a gate above it the command diffs the working branch against
+# origin/main — so `make gate gate-touched` before a push runs the same two
+# halves over your branch that the per-tick gate will run over its merge.
+# The reconciler exports the pair a TICK's gate is about
+# (TICFAC_GATE_TOUCHED_BASE/HEAD, internal/reconcile/gate_touched.go); the
+# selection is internal/gatescope's. The -leave-to-ci budget is
+# internal/reconcile — its full suite measured 41m28s on this host, too
+# expensive for most of the dozens of gates an epic runs; the reasoning and
+# the numbers are in .tick/runners.toml's go-touched entry, which this
+# recipe is byte-identical to.
+gate-touched:
+	go run ./cmd/gate-touched -timeout 45m -parallel 12 -leave-to-ci github.com/pengelbrecht/ticfac/internal/reconcile
 
 # The TypeScript half of the gate (tick odc). Kept as its own target, and its
 # own [testing.commands] entry, so each check records its own evidence and a
 # reader can see which half refused a tick.
 #
-# vitest is deliberately NOT here: it is 82s against these two at 3s, gate
-# commands run serially, and CI runs it as its own job beside the Go one for no
-# wall clock at all. This target covers CONTRACTS AND TYPES, not behaviour.
+# vitest IS here (tick tc9): until it, a TypeScript behaviour change could
+# settle a tick without its tests ever running in the gate — the worker ran
+# the suite, the gate did not (yoh review finding dfae216d). The suite is
+# deterministic now (3cq's leaked Workflow and the refused-slot flake are
+# both fixed; cloudflare/vitest.config.ts runs files serially and bounds
+# every test at 30s), and five consecutive green runs on this host at load
+# ~5 took 208-353s — a tenth of the 60m harness bound that bounds a gate
+# command with no timeout of its own. This target now covers CONTRACTS,
+# TYPES AND BEHAVIOUR; the two node --test suites around the scripts
+# themselves still ride with CI's `pnpm test`.
 #
 # `pnpm lint` is Biome (tick ncr), the formatter and linter this side had
 # neither of. It rides inside this one command rather than taking a target of
@@ -108,8 +150,72 @@ gate:
 # Biome found in this tree — the unused variable, the implicit anys, the
 # optional-chain misses — is warning severity. Without the flag this is a gate
 # that cannot refuse the things it was added to catch.
+#
+# `pnpm lint:test` is the refusal half made executable (tick ncr's own
+# acceptance): the format check and the lint check must both FAIL on a
+# deliberately bad file, and until it that proof was a probe a worker ran by
+# hand — evidence that left with the terminal it ran in. It breaks five
+# throwaway trees (each a copy of biome.jsonc and one deliberately bad file)
+# against the real binary, so the gate re-runs the proof every tick. ~2s
+# beside the 2s the lint itself costs.
 ts-gate:
-	cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm contracts:check && pnpm exec tsc --noEmit
+	cd cloudflare && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm lint:test && pnpm contracts:check && pnpm exec tsc --noEmit && pnpm exec vitest run
+
+# The terminal property suite (tick z7w): Bombadil drives the real binary
+# over a real pty — the watch dashboard and the bare overview — against a
+# fixture world of registries and feeds. NOT part of the per-tick gate: the
+# gate is what every tick must pass on this host, and a pty-driver suite that
+# spawns the binary per property is CI's own job (ci.yml's `bombadil` job,
+# which the tick's acceptance names); `make gate` stays the in-process
+# half, whose properties live in internal/cli (agentjson_pbt_test.go,
+# watch_props_test.go). bombadil-seeded is the non-vacuity proof: each
+# property must FAIL against its deliberately broken program.
+bombadil:
+	cd tui && pnpm install --frozen-lockfile --prefer-offline && pnpm test
+
+bombadil-seeded:
+	cd tui && pnpm install --frozen-lockfile --prefer-offline && pnpm run test:seeded
+
+bombadil-all:
+	cd tui && pnpm install --frozen-lockfile --prefer-offline && pnpm run test:all
+
+# The pi-durable harness package's half of the gate (tick 2pn, epic ex6), kept
+# as its own target and its own [testing.commands] entry for the same reason as
+# ts-gate above: a reader can see which half refused a tick. Until it, the
+# harness package's suites ran in CI ('harness conformance and replay') and in
+# no gate, so a tick that changed harness/ merged on a gate that had said
+# nothing about it — and one of its node-half tests sat red at base, found and
+# absorbed five times by five different workers (h3c, 7oy, 4ao, omq, 30e).
+#
+# It is the whole suite, not the fast half: measured on this host (4 cores) the
+# command is 1m24s warm — install 0.4s (11.3s the first ever run, a store fill,
+# not a gate cost), lint 1.5s, typecheck 15.3s (two tsc projects), both vitest
+# suites 56-65s (the workerd half 30-37s, the node half 26-28s) — against the
+# 60m bound under a gate command and a Go half measured in minutes. The node
+# half (real bash, real git, the real local door) is where the red-at-base test
+# lived, so a gate that took only the workerd half would have covered the
+# package and missed it anyway.
+#
+# `pnpm test` is harness/package.json's own script, which is BOTH vitest configs
+# (vitest.config.ts and vitest.node.config.ts): the target spells the package's
+# scripts rather than restating them, so CI's step and this check cannot drift —
+# and gate_target_test.go pins both halves of that spellings to the script.
+#
+# STATE, stated so a reader is not left to guess: the [testing.commands] twin of
+# this target is NOT yet declared in .tick/runners.toml. That one line is the
+# half of tick 2pn a worker could not write — the substrate refuses a worker
+# commit under .tick/ wholesale (image/worker.sh's pre-commit hook and
+# cloudflare/src/worker-collect.ts, where the Go boundary exempts the runner
+# table: tick 9sy) — so it is carried as the tick's protected change and the
+# run applies it at the close-out, for the merger to review. Until it does this
+# target is the human/CI half alone, and
+# TestTheDeclaredHarnessGatePairsWithItsMakefileTwin pins the cell the run is to
+# apply to this recipe, byte for byte — while gate_target_test.go's `gateTargets`
+# map already names this target as the `harness` command's twin, so the parity
+# guard holds from whichever half lands first and neither order can leave the
+# gate red.
+harness-gate:
+	cd harness && pnpm install --frozen-lockfile --prefer-offline && pnpm lint && pnpm typecheck && pnpm test
 
 # The gate, with the cache refused. Slower and unconditional.
 suite:

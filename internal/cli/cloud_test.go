@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/factory/credentials"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 )
 
 type cloudFactoryRequest struct {
@@ -293,8 +294,16 @@ func writeCloudTick(t *testing.T, repo, id, epic string) {
 	})
 }
 
+// execTestOutput and execTestCmd are cli's generic runners, and a git handed
+// to a generic runner is a git start the hermeticity guard cannot see — so
+// the git case is routed through the one hermetic helper and everything else
+// stays generic (tick pqs). That is what the guard's sanctionedRunners table
+// buys a runner: the routing, stated here, not just the name.
 func execTestOutput(t *testing.T, dir, name string, args ...string) []byte {
 	t.Helper()
+	if name == "git" {
+		return []byte(gittest.Run(t, dir, args...))
+	}
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
@@ -306,6 +315,10 @@ func execTestOutput(t *testing.T, dir, name string, args ...string) []byte {
 
 func execTestCmd(t *testing.T, dir string, name string, args ...string) {
 	t.Helper()
+	if name == "git" {
+		gittest.Run(t, dir, args...)
+		return
+	}
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()

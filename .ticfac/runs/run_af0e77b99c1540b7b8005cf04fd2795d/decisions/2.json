@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 2,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The harness package 43y created runs lint, typecheck and tests in CI (ci.yml 'harness conformance and replay'), but the per-tick gate's ts cell is cloudflare format, lint, contracts and tsc only. So a tick could merge with the harness suite red. One test's timeout bound (dumb-git-origin under the 300 s discipline guard) was found red at base by five workers and absorbed five times (h3c, 7oy, 4ao, omq, 30e). Add the harness suite to [testing.commands], or at least its fast half, and measure its wall time against the gate bound first, as t8u's tc9 asks for cloudflare vitest.\nevidence: .tick/runners.toml:220 (ts command); .github/workflows/ci.yml:410-412\n\nticfac run epic-43y created this tick by absorbing the finding bf280200414f42c5a8562abacc26d1a799205cb2090339c18f72ce545549931f (reported by run-epic-43y/tick-j2k/attempt-69): the finding was judged against the epic's definition of done and gates done item A5. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/bf280200414f42c5a8562abacc26d1a799205cb2090339c18f72ce545549931f.json on the run branch.",
+    "epic_id": "ex6",
+    "role": "classify-tick",
+    "tick_id": "2pn",
+    "title": "Put the harness package's suites in the per-tick gate"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.14,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.31,
+      "design": 0.25,
+      "diagnosis": 0.01,
+      "mechanical": 0.14,
+      "translation": 0.29
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1398,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T23:40:09Z",
+  "answered_at": "2026-10-07T23:40:09Z",
+  "provenance": {
+    "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
+    "tick_id": "2pn",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "0c85e86769f138a2ae5550936a2a909588c3e543",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

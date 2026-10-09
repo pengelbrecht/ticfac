@@ -140,8 +140,16 @@ export const DEFAULT_QUEUE_TTL_MS = 1_800_000;
 export const MIN_QUEUE_TTL_MS = 100;
 export const MAX_QUEUE_TTL_MS = 86_400_000;
 
-/** A pushed commit, in full 40-hex form — the submission boundary is a pushed SHA (D3). */
-export const BASE_SHA_PATTERN = /^[0-9a-f]{40}$/;
+/**
+ * A pushed commit, in full 40-hex form — the submission boundary is a pushed
+ * SHA (D3). Defined in `sandbox-dispatch-validation.ts` since tick p0n so the
+ * door's request grammar (its property tests are the reason it moved) and
+ * this boundary share ONE spelling; re-exported here because this module is
+ * where run-done and the dispatch door already read it from.
+ */
+import { BASE_SHA_PATTERN } from "./sandbox-dispatch-validation";
+
+export { BASE_SHA_PATTERN };
 
 /** A tick id: 3-4 lowercase base36 characters, mirroring `internal/tick.IDGenerator`. */
 export const TICK_ID_PATTERN = /^[a-z0-9]{3,4}$/;

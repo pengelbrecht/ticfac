@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
@@ -173,12 +173,12 @@ type gitCmd struct {
 }
 
 func gitCommand(args ...string) gitCmd {
-	return gitCmd{args: args,
-		env: gitbin.WithNoAutoMaintenance(append(os.Environ(),
-			"GIT_AUTHOR_NAME=ticfac test", "GIT_AUTHOR_EMAIL=ticfac@example.com",
-			"GIT_COMMITTER_NAME=ticfac test", "GIT_COMMITTER_EMAIL=ticfac@example.com",
-			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
-			"GIT_TERMINAL_PROMPT=0"))}
+	// gittest.Env is the one hermetic environment this repository's tests
+	// run git under (tick pqs): the entries this builder used to spell out —
+	// no host config file, identity stated, maintenance pinned off — plus
+	// the ones it did not (no inherited GIT_CONFIG_* pins, transports
+	// bounded), owned in one place instead of re-stated per package.
+	return gitCmd{args: args, env: gittest.Env()}
 }
 
 // withEnv appends environment entries AFTER the pins, which is where a
@@ -192,10 +192,7 @@ func (c gitCmd) withEnv(entries ...string) gitCmd {
 }
 
 func (c gitCmd) command(dir string) *exec.Cmd {
-	cmd := exec.Command(gitbin.Path(), c.args...)
-	cmd.Dir = dir
-	cmd.Env = c.env
-	return cmd
+	return gittest.Under(c.env, dir, c.args...)
 }
 
 func gitRun(t *testing.T, dir string, args ...string) string {

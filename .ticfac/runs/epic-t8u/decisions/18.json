@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 18,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "The Hegel CLI properties and the Bombadil TUI properties run in CI (Bombadil job may be separate); each property was shown to fail against a seeded bug; the report lists real bugs found",
+    "description": "Planned 2026-09-27 as notes on 8v3 and 2jn (both now closed, so it was never filed); unblocked since r6w put the toolchain on Go ≥1.26 (Hegel needs it). CLI with Hegel (hegel-go, stateful where useful): for generated argument sequences and run states — every --json command emits one document valid against its versioned schema; the exit code is always one from the documented table and agrees with the document's state word; --json never writes to stderr; flags parse in any order (#75's remedy rule). TUI with Bombadil (@antithesishq/bombadil, terminal driver) over 89m's ticfac watch and 2qz's bare ticfac overview, driven by fixture registries/feeds: a stale or orphaned run never shows as live (today's phantom 'running — in phase plan' cloud runs); a registry entry whose checkout is gone never shows (#86); every held or failed run shows the one command that clears it; history collapses into one line (#87); the first frame appears within its bound (#112). Browser driver for i1r's phone page if cheap. Load hegel-skill for the Hegel half. End with a short report of what the properties found.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "z7w",
+    "title": "Property-test the ticfac CLI and TUI: Hegel for --json/exit codes, Bombadil for watch and the overview"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.95,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.96,
+      "design": 0.02,
+      "diagnosis": 0,
+      "mechanical": 0,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1338,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T21:40:19Z",
+  "answered_at": "2026-10-07T21:40:19Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "z7w",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "58566fe2f1713490b29417157ba94ac941d8ea8d",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

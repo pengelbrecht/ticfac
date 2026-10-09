@@ -1,0 +1,65 @@
+{
+  "schema_version": 3,
+  "decision": 12,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "ex6",
+    "job_id": "run-run_af0e77b99c1540b7b8005cf04fd2795d/tick-ynd/attempt-11",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (cloudflare-sandbox/pi-durable, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:c64677c8ed510391d85d8f252dd964bff0cfa948806715fd644320ecb29e56ea",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "e698666f5d985f26824ec0494cbd33a70355f025",
+    "tick_id": "ynd"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "local-metering.test.ts spells the credential pipeline by hand (CREDENTIAL_PIPELINE) as a copy of the Go builder's gatewayCredentialPipeline, and nothing compares the two: workerconfig_test.go pins that worker.json carries the real pipeline, and the field-spelling parity guard pins only the join's field names, so a change to credentials.ShellGetCommand or its key would leave the harness suite green against the old text while real launches execute the new one. The suite that proves \"a metered local launch tags its calls\" could then certify a credential path production no longer writes. Pin the fixture — the parity test already reads the harness sources, and one more assertion comparing the test's constant against gatewayCredentialPipeline closes it.\nevidence: harness/test/node/local-metering.test.ts:74-78 (CREDENTIAL_PIPELINE, hand-copied) vs internal/exec/subprocess/pimeter.go:172 (gatewayCredentialPipeline = credentials.ShellGetCommand(KeyCloudflareAPIToken) + Bearer prefix); internal/exec/subprocess/workerconfig_parity_test.go pins field spellings only",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Harness metering test's credential pipeline is unpinned from Go's"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/ex6/attempt-11/ynd",
+      "commits": 2,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/ex6/attempt-11/ynd:RESULT-ynd.md",
+      "review_verdict": "READY",
+      "review_verdict_detail": ""
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "the review ran to completion over the integrated epic; its judgement is the REVIEW-VERDICT line above, its findings are in the findings block"
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T05:56:34Z",
+  "answered_at": "2026-10-08T05:56:34Z",
+  "provenance": {
+    "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
+    "tick_id": "ynd",
+    "attempt": 11,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "e698666f5d985f26824ec0494cbd33a70355f025",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:c64677c8ed510391d85d8f252dd964bff0cfa948806715fd644320ecb29e56ea",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

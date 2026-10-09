@@ -51,6 +51,9 @@ import (
 //     carrying a protected change for a person: the merge is where it is
 //     reviewed. The finding is triaged FIXED by that commit, so the
 //     close-out's findings gate meets a decision, not a person's queue.
+//     Per path the replacements are applied before the appends (epic ex6's
+//     tgx: applied in key order, two whole-file proposals composed without
+//     2pn's harness cell erased the cell the append had already laid down).
 //
 // The boundary itself is unchanged: a worker that writes the file in its own
 // commits is refused exactly as before.
@@ -155,6 +158,7 @@ func (r *Reconciler) applyProtectedChanges(ctx context.Context, marker attemptHa
 	if err != nil {
 		return fmt.Errorf("read the run's findings to apply their protected changes: %w", err)
 	}
+	findings = orderForApplication(findings)
 	for _, finding := range findings {
 		change, ok := finding.ProtectedChange()
 		if !ok || finding.Status != runstate.FindingProposed {
@@ -202,6 +206,28 @@ func (r *Reconciler) applyProtectedChanges(ctx context.Context, marker attemptHa
 		}
 	}
 	return nil
+}
+
+// orderForApplication orders the findings for the application loop below:
+// per path, every whole-file content replacement is applied before every
+// append. An append is relative to the file that finally stands — applied
+// before a replacement composed without its lines, each later replacement
+// wiped it (epic ex6's tgx: 2pn's harness cell landed first in key order and
+// both whole-file proposals that followed erased it from the branch the PR
+// merges). Within each group the findings keep their key order, the order
+// Findings() answers; and because proposals for different paths do not
+// interact, one stable pass serves every path at once.
+func orderForApplication(findings []runstate.Finding) []runstate.Finding {
+	contents := make([]runstate.Finding, 0, len(findings))
+	appends := make([]runstate.Finding, 0, len(findings))
+	for _, finding := range findings {
+		if change, ok := finding.ProtectedChange(); ok && change.Append != "" {
+			appends = append(appends, finding)
+			continue
+		}
+		contents = append(contents, finding)
+	}
+	return append(contents, appends...)
 }
 
 // protectedCommitSubject is the label every protected-change commit carries,

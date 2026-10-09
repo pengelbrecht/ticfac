@@ -1,6 +1,6 @@
 {
   "$comment": "The versioned cross-language contract bundle, authored by TICFAC since tick 4i8. Read contracts/README.md for what the fixtures are and contracts/CHANGELOG.md for the rule that governs this file. `version` is pinned by exact value by every consumer — cloudflare/contracts.pin.json here, and any repository that vendors this bundle. Regenerate `files` and `digests` when a fixture changes; never re-cut them without bumping `version`. `version_digests` is the append-only ledger that makes that rule executable: each version records a sha256 over its own `version` + `digests`, written the first time it is cut and never rewritten, so a re-cut at an unchanged version contradicts it and both verifiers refuse. The ledger begins at 1.0.0, ticfac's first cut: 2.1.1-6.3.0 were ticks' bundle and their history lives in the ticks repository; 1.0.0 carries the 6.3.0 bytes across unchanged except where its own changelog entry says. Two files in this bundle are not ticfac's to edit: tk-json-manifest.json and tracker-layout.json are vendored from a pinned ticks release (contracts.pin.json) and change only by moving that pin.",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "files": [
     "collect-vocabulary.json",
     "credential-ownership.json",
@@ -23,7 +23,7 @@
     "collect-vocabulary.json": "b2094cfbeec03ea2d6df78dab40eb6cbe8b0a9c256b7fe91c10ab679759e705e",
     "credential-ownership.json": "2648e83088dfe42ab626ffed07985205996d9b317a5c0bfe6833bc44cc67a3ba",
     "job-protocol.json": "4aafee8e87ad402f9c506bb6a49933a620737fcfd31be778e7bdf130adc96e88",
-    "lifecycle-invariants.json": "26306e2afba5ead25eefa05d9f1b48b6deef4ea736e41ac973dbd020c1845d60",
+    "lifecycle-invariants.json": "363e0d49500305a319fceefd614d0a64a6d16f7413b51af2d1ba29c0843352ed",
     "message-context.json": "9cceb63c00266692fc1938d60b7c61162d22794c2a64184167635938060581d5",
     "run-event-feed.json": "c97bd6ee166e6f5aaae45fe24aaf6c75f354748a0cd52618c1b073f3afd57296",
     "runners-config-contract.json": "602c3b077261ed745201b8d0a49c0133f17d87bea86d32282394721b6dfc861f",
@@ -35,7 +35,7 @@
     "ticfac-run-state.json": "a1cf745f00b4982c4b59a3aa7a6dac3766365e4b479ece03ef5d8f0280f15ca7",
     "tk-json-manifest.json": "01ea3a1956cec3bab40b4f79880665eb906653e59427fb8c2c07930aa2311678",
     "tracker-layout.json": "ce015d8d7fd5b788e09f491b4b69e6af6f78f823be092a5c73a99fead2bb3a4c",
-    "worker-boot-contract.json": "1ab16dd2fd522d5fd47ab67e257df77eb4cd1e25954e976cae68f693a568ac70"
+    "worker-boot-contract.json": "b7e5d24c0fa6aa11402c9b0b3e9af86157044de89613820c12701572fd617d21"
   },
   "version_digests": {
     "1.0.0": "4f25c9ef0f3da37693c249194cbcfefd5b86c2890543bad6f50c422661d9aa86",
@@ -58,8 +58,10 @@
     "2.1.0": "882899b81dbbca83dee1c53e2c4a56cad9c5b0e25f30da2111b753947071c594",
     "2.2.0": "b3c5f75194190ae02447e116b2426d4789b9843811914be66257158523dfa494",
     "2.3.0": "2870159d662a6021e82317f4c4f88ce1dcce7df77a65ec6ca13c43159181a7a9",
+    "2.3.1": "6cc4290a3c22df572bc49d42c885cae3eeb496b158f2b00a952c171dfa683637",
     "2.4.0": "3f5cc4ca809c6078c9cdb2098a3d9659673b2428980617fa24e60248367bd2dc",
     "2.4.1": "ebd89846424951d2c41470bcb0d95309b7ecb6f18e759fac534a2e502d362e89",
-    "2.5.0": "0dccd5d38a28c9324b40ff783284743219cb4000651cdc0539bd2b516505027b"
+    "2.5.0": "0dccd5d38a28c9324b40ff783284743219cb4000651cdc0539bd2b516505027b",
+    "2.6.0": "7cb3cff06b80a6feb3d16053398e56b1e94d8a6dd4daeec203bdca15f0fb23e7"
   }
 }

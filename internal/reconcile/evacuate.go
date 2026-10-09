@@ -240,15 +240,60 @@ func (r *Reconciler) evacuateAttempt(attempt evacuationAttempt, stopAt time.Time
 		// the ref's lock. Origin holding exactly this HEAD is the push done.
 		// Origin holding a commit the worker itself has since amended,
 		// rebased or reset away is its own history, and the branch replaces
-		// it under a lease (epic-2jn, rix attempt 45).
-		run := func(args ...string) (string, error) { return r.evacGit(work.Worktree, stopAt, args...) }
-		if replaced, _ := subprocess.ReplaceOwnEarlierHead(run, work.Remote, work.Branch, ""); !replaced &&
-			!r.evacRemoteHolds(work, stopAt) {
+		// it under a lease (epic-2jn, rix attempt 45). But NEITHER reading may
+		// be taken once: the push that won the lock is over only moments
+		// after the one that lost it, and a flush that samples origin inside
+		// that window reports "could not push" for a push that is being made
+		// for it — exactly the once-under-load failure this path was
+		// unconfirmed against (tick fn8). So the failure waits for the
+		// winner, bounded by this attempt's share of the budget, and retries
+		// the push itself when no winner ever lands: a peer that failed
+		// leaves the lock free.
+		say("%s: the push of %s did not land (%s); re-reading origin and retrying within the budget",
+			name, work.Branch, firstLine(err.Error()))
+		if !r.evacuateBranch(work, stopAt) {
 			say("%s: could not push %s (%s)", name, work.Branch, firstLine(err.Error()))
 			return
 		}
 	}
 	say("%s: pushed %s to %s", name, work.Branch, work.Remote)
+}
+
+// evacuateBranch finishes the branch push a concurrent writer made this
+// flush lose, answering whether origin ends up holding the attempt branch.
+// It is the bounded wait the push's failure path is: a condition over the two
+// durable answers — origin's copy of the branch, and the push itself — and
+// never a guess at when the concurrent push will be done, because no such
+// guess exists. The single reading of origin it replaced failed once under
+// load exactly there (tick fn8): between the flush's own failed push and the
+// winner's ref landing.
+//
+// Each look is three questions, in the order of how often each is the answer.
+// Whether origin already holds this worktree's HEAD — the winner's identical
+// push, landed — is ReplaceOwnEarlierHead's own first case; whether the
+// worker's own rewritten history needs replacing under its lease is its
+// second (epic-2jn, rix attempt 45); and while budget remains, the push
+// itself, for a winner that failed and left the lock free.
+func (r *Reconciler) evacuateBranch(work subprocess.AttemptWork, stopAt time.Time) bool {
+	run := func(args ...string) (string, error) { return r.evacGit(work.Worktree, stopAt, args...) }
+	for {
+		if replaced, _ := subprocess.ReplaceOwnEarlierHead(run, work.Remote, work.Branch, ""); replaced {
+			return true
+		}
+		if r.evacRemoteHolds(work, stopAt) {
+			return true
+		}
+		if !time.Now().Before(stopAt) {
+			return false
+		}
+		if _, err := r.evacGit(work.Worktree, stopAt, "push", work.Remote, "HEAD:refs/heads/"+work.Branch); err == nil {
+			return true
+		}
+		// The wait's cadence, not a guess at the work: the winner this loop
+		// exists for is over in moments on any transport, and a slower one
+		// paces itself by the cost of its own pushes.
+		time.Sleep(evacRetryEvery)
+	}
 }
 
 // evacRemoteHolds reports whether origin's copy of the attempt branch is the
@@ -418,6 +463,14 @@ func (r *Reconciler) evacuationCheckpoint(signal string, deadline time.Time, say
 // it is seconds, not the gate's five, because the flush's whole budget is
 // thirty of them.
 const evacWaitDelay = time.Second
+
+// evacRetryEvery is the cadence of the branch push's bounded wait: how often
+// a flush whose push lost the attempt branch's ref lock to a concurrent
+// push of the same ref looks again. It is the interval of a condition wait,
+// not a guess at the work — the concurrent push this wait is for is over in
+// moments on any transport, and a slower one paces the wait by the cost of
+// its own pushes, which is why the retry itself is one of the looks.
+const evacRetryEvery = 100 * time.Millisecond
 
 // evacGit runs one bounded git command and returns its trimmed stdout. The
 // environment is the run's own stated one — no host hooks, no maintenance, no

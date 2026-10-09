@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
 
@@ -123,6 +124,12 @@ func newRepo(t *testing.T, name string) *testRepo {
 
 func mustRun(t *testing.T, dir string, name string, args ...string) string {
 	t.Helper()
+	// A git handed to a generic runner is a git start the hermeticity guard
+	// cannot see, so the git case is routed through the one hermetic helper
+	// (tick pqs); everything else stays generic.
+	if name == "git" {
+		return gittest.Run(t, dir, args...)
+	}
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")

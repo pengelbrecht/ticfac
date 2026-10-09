@@ -15,6 +15,8 @@ import (
 // is easy to forget is the repository, which is why two checkouts running one
 // tick is a test of its own — this is the same claim, one layer down.
 func TestAttemptIdentityIsRepositoryJobAndAttempt(t *testing.T) {
+	t.Parallel()
+
 	base := attemptKey("repo-a", "run-1/tick-x/attempt-1", 1)
 	for _, other := range []struct{ key, why string }{
 		{attemptKey("repo-b", "run-1/tick-x/attempt-1", 1), "a different repository"},
@@ -34,6 +36,8 @@ func TestAttemptIdentityIsRepositoryJobAndAttempt(t *testing.T) {
 // and a write_ref outside the namespace the grant bounds is refused by the
 // issuer rather than trusted from the runner.
 func TestTheBranchIsTheWriteRefAndTheGrantBoundsIt(t *testing.T) {
+	t.Parallel()
+
 	spec := func(ref, prefix string) *JobSpec {
 		s := &JobSpec{Source: Source{WriteRef: ref}}
 		if prefix != "" {
@@ -67,6 +71,8 @@ func TestTheBranchIsTheWriteRefAndTheGrantBoundsIt(t *testing.T) {
 // refused rather than normalised, because the escape is the interesting part
 // of such a spec.
 func TestTheReportPathIsOwnedByTheExecutorAndCannotEscape(t *testing.T) {
+	t.Parallel()
+
 	rel, abs, err := resultPath("/work/attempt", "runs/run-42/jobs/tick-abc/attempt-1/", "abc")
 	if err != nil {
 		t.Fatal(err)
@@ -89,6 +95,8 @@ func TestTheReportPathIsOwnedByTheExecutorAndCannotEscape(t *testing.T) {
 // a revoked credential stops it, because the process that revokes and the
 // process that would spend are not the same process.
 func TestThePushTimerIsAClockAndACredential(t *testing.T) {
+	t.Parallel()
+
 	now := time.Unix(1_000_000, 0)
 	pushes := 0
 	p := &pusher{
@@ -134,6 +142,8 @@ func TestThePushTimerIsAClockAndACredential(t *testing.T) {
 // the harness and state directories the durable host runs from — the CLI
 // runners need neither.
 func TestEveryKnownRunnerTakesThePrompt(t *testing.T) {
+	t.Parallel()
+
 	at := launch{Prompt: "PROMPT-BODY", GitCommonDir: "/repo/.git", HarnessDir: "/repo/harness", StateDir: "/state/attempt"}
 	for _, name := range KnownRunners() {
 		argv, err := resolveRunner(name, nil, at)
@@ -189,6 +199,8 @@ func TestEveryKnownRunnerTakesThePrompt(t *testing.T) {
 // empty one, because `--add-dir ""` parses, sandboxes nothing, and surfaces
 // two steps later as a branch with no commits.
 func TestTheCodexArgvCarriesTheResolvedGitCommonDir(t *testing.T) {
+	t.Parallel()
+
 	argv, err := resolveRunner("codex", nil, launch{Prompt: "P", GitCommonDir: "/checkouts/repo/.git"})
 	if err != nil {
 		t.Fatal(err)
@@ -209,6 +221,8 @@ func TestTheCodexArgvCarriesTheResolvedGitCommonDir(t *testing.T) {
 // worktree's repository — never the literal `.git`, which in a worktree is a
 // file, and never the worktree's own path.
 func TestTheGitCommonDirIsTheRepositorysAndNotTheWorktreesDotGit(t *testing.T) {
+	t.Parallel()
+
 	repo := newRepo(t, "common")
 	linked := filepath.Join(t.TempDir(), "linked")
 	mustRun(t, repo.Dir, "git", "worktree", "add", "--quiet", "-b", "linked-branch", linked)
@@ -250,6 +264,8 @@ func fileExists(path string) bool {
 // still running and terminal at the same time — the disagreement the contract
 // cross-checks with its anyOf.
 func TestTerminalAgreesWithState(t *testing.T) {
+	t.Parallel()
+
 	for state, want := range map[string]bool{
 		StatePending: false, StateStarting: false, StateRunning: false, StateLost: false,
 		StateSucceeded: true, StateFailed: true, StateCancelled: true,

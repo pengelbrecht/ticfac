@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 23,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "[A1] asks for the full suite (go test -timeout 45m -parallel 12 ./...) to finish in under half its wall clock on a quiet host, measured before and after. Neither figure is recorded on the epic.\n\nThe wall clock of that command is bounded by internal/reconcile's full suite, and no tick in this epic made it faster:\n- CI, same runner class and command: shards 266/239/232s at base main 990bb6eb4 (run 37704846560) against 287/238/226s at head 9b03556be (run 37716696321).\n- .tick/runners.toml still records reconcile's full suite at 41m28s on this host, and keeps it -leave-to-ci for that reason.\n\nThe cuts that did land are in other packages: herdr 132s->8.6s and subprocess 118s->61s on CI. internal/cli doubled, 58s->112s, from z7w's property tests. None of these moves the floor.\n\nWhat would make the epic ready:\n- a measured before and after of the full suite showing the halving, which needs reconcile's full suite cut (f61's noted next step, riding the integrating checkpoint on the merge push, and ez7 follow from that); or\n- an operator decision recorded on t8u that re-scopes A1.\n\nA faster per-tick gate (144s here) is not what A1 measures.\nevidence: CI runs 37704846560 (base) vs 37716696321 (head), the 'go test (reconcile n/3)' jobs; .tick/runners.toml go-touched comment (41m28s)\n\nticfac run epic-t8u filed this backlog tick from the finding 4f3e48305b570ca0fc26a6ad5171511a8c5175221157828b7aa98346eab2df5e (reported by run-epic-t8u/tick-r6v/attempt-18) rather than absorb it into the running epic: its reporter rated it high severity and named the done it breaks, but the epic's work was done when it was reported, so it is deferred to the final reviewer. The decision record is .ticfac/runs/epic-t8u/absorptions/4f3e48305b570ca0fc26a6ad5171511a8c5175221157828b7aa98346eab2df5e.json on the run branch.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "0bg",
+    "title": "A1 unmet: the full suite's floor, internal/reconcile, did not get faster"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.42,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.07,
+      "design": 0.37,
+      "diagnosis": 0.54,
+      "mechanical": 0.01,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1656,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T02:39:38Z",
+  "answered_at": "2026-10-08T02:39:38Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "0bg",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "616891b09c8438300d392f449725bef0ac239b34",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:31672567dae49f31cc97fe717f29c4083dd98caf4037614d4555a54f6d755719",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

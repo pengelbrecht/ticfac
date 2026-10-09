@@ -2,14 +2,15 @@
   "id": "3sd",
   "title": "Pin the classification profile digest in a short test so make gate catches it",
   "description": "This is the second time in this epic that the per-tick integrated gate passed while CI on the epic branch went red on a shorttest.EndToEnd test (enb: cloud runner fixtures; now: the classification pin after a profile edit). The pin's only moving part from a profile edit is profile_digest. A short (non-EndToEnd) test that compares profileSetDigest of the embedded profiles against the pinned record's profile_digest would fail the gate at the tick that edits a profile, not hours later on the epic branch.\nevidence: internal/reconcile/harness_test.go:1065 (newFixture calls shorttest.EndToEnd); internal/reconcile/reconcile.go:1613 (profileSetDigest)\n\nticfac run epic-43y filed this backlog tick from the finding c23a820dd7b23ed180f7e1170f73d65156afbe077625e45e76d05d036959c260 (reported by run-epic-43y/tick-o68/attempt-66): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/c23a820dd7b23ed180f7e1170f73d65156afbe077625e45e76d05d036959c260.json on the run branch.",
-  "notes": "2026-10-06 00:14 - ticfac run epic-43y: created by absorbing finding c23a820dd7b23ed180f7e1170f73d65156afbe077625e45e76d05d036959c260 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-43y/absorptions/c23a820dd7b23ed180f7e1170f73d65156afbe077625e45e76d05d036959c260.json on epic/43y, and it says: the classifier put 0.31 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb",
-  "status": "open",
+  "notes": "2026-10-06 00:14 - ticfac run epic-43y: created by absorbing finding c23a820dd7b23ed180f7e1170f73d65156afbe077625e45e76d05d036959c260 — a backlog tick: the done is reachable with the finding standing. The decision record is .ticfac/runs/epic-43y/absorptions/c23a820dd7b23ed180f7e1170f73d65156afbe077625e45e76d05d036959c260.json on epic/43y, and it says: the classifier put 0.31 of its probability mass on the items rather than on none, below the deliberately cheap absorb threshold of 0.35: the done is predicted reachable with the finding standing, and a real defect the done does not need is a backlog tick with an owner rather than the epic's to absorb\n2026-10-07 14:41 - ticfac run run_69f8f57832d34601b040367c7207b81f: 3sd try 3 (run dispatch #11) merged into epic/ex6 as aafb2538c2b0; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "peter@engelbrecht.dk",
+  "owner": "ticfac",
   "parent": "ex6",
   "discovered_from": "run-epic-43y/tick-o68/attempt-66",
   "created_by": "ticfac run epic-43y",
   "created_at": "2026-10-05T22:14:41Z",
-  "updated_at": "2026-10-07T13:43:50.339687Z"
+  "updated_at": "2026-10-07T14:41:44.961650861Z",
+  "closed_at": "2026-10-07T14:41:44.961650861Z"
 }

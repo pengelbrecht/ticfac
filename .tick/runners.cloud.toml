@@ -17,11 +17,15 @@
 # does not exist here: the cloud never reads that file.
 version = 2
 
+# No `args` on this cell (tick q6z): the roles table's args are read only
+# when a herdr dispatch compiles an agent's argv, and a cloud container is
+# booted over its sandbox door from the worker.json the door hands it. The
+# line that sat here was the deleted pi CLI's `--approve`, dead config on
+# this substrate too.
 [roles.implement]
 kind = "pi"
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3"
 effort = "high"
-args = ["--approve"]
 
 [roles.implement.tiers.economy]
 model = "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash"
@@ -152,9 +156,11 @@ default = "economy"
 ceiling = "strong"
 step = 2
 
-# `args = []` clears the `--approve` the cloud's own implement cell hands pi:
-# a cell that switches kind keeps the argv beneath it unless it says so, and
-# claude does not take pi's flag.
+# `args = []` keeps this claude cell from inheriting whatever argv the cells
+# beneath it may one day declare: a cell that switches kind keeps the argv
+# beneath it unless it says so (the operator's 2026-09-10 rule), and the
+# claude harness takes no pi flag. It cleared the `--approve` the implement
+# cell above carried until tick q6z removed it, and it stays as the guard.
 [configs.claude.roles.implement]
 kind = "claude"
 model = "sonnet"

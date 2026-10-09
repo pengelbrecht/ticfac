@@ -50339,13 +50339,13 @@ var init_base = __esm({
           editLength++;
         };
         if (callback) {
-          (function exec() {
+          (function exec2() {
             setTimeout(function() {
               if (editLength > maxEditLength || Date.now() > abortAfterTimestamp) {
                 return callback(void 0);
               }
               if (!execEditLength()) {
-                exec();
+                exec2();
               }
             }, 0);
           })();
@@ -52878,6 +52878,90 @@ var init_checkpoints3 = __esm({
   }
 });
 
+// src/local/gateway-metering.ts
+import { exec } from "node:child_process";
+function meteringGatewayBase(raw) {
+  const base = raw.trim().replace(/\/+$/, "");
+  let parsed;
+  try {
+    parsed = new URL(base);
+  } catch {
+    throw new Error(
+      `the metering join's gateway URL is not a base URL: "${raw}" \u2014 the provider override would point the worker at a relative address`
+    );
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(
+      `the metering join's gateway URL is not an http(s) base URL: "${raw}" \u2014 the provider override would point the worker at an address no request can reach`
+    );
+  }
+  return base;
+}
+function meteringWorkersAIRoute(gatewayUrl) {
+  return `${meteringGatewayBase(gatewayUrl)}/${METERING_WORKERS_AI_ROUTE}`;
+}
+function meteringApplies(routed) {
+  for (const namespace of ["cloudflare-workers-ai/", "workers-ai/", "@cf/"]) {
+    if (routed.startsWith(namespace) && routed.slice(namespace.length) !== "") return true;
+  }
+  return false;
+}
+function resolveMeteringCredential(command, signal) {
+  return new Promise((resolve3, reject) => {
+    exec(command, { signal }, (error, stdout) => {
+      if (error !== null && error !== void 0) {
+        reject(
+          new Error(
+            `the metering join's credential command did not answer: ${String(error)} \u2014 a metered dispatch's requests cannot be sent without the credential it names`
+          )
+        );
+        return;
+      }
+      resolve3(stdout.trim());
+    });
+  });
+}
+function meteredWorkersAIProvider(base, join4, route = meteringWorkersAIRoute(join4.gatewayUrl)) {
+  const { credentialCommand, runId, metadata } = join4;
+  return {
+    ...base,
+    auth: {
+      apiKey: {
+        name: "Operator gateway credential command",
+        resolve: async ({ signal }) => {
+          const bearer = await resolveMeteringCredential(credentialCommand, signal);
+          if (bearer === "") {
+            return void 0;
+          }
+          return {
+            auth: {
+              headers: {
+                [METERING_UPSTREAM_AUTH_HEADER]: bearer,
+                [METERING_GATEWAY_AUTH_HEADER]: bearer,
+                [METERING_METADATA_HEADER]: metadata,
+                [METERING_AFFINITY_HEADER]: runId
+              },
+              baseUrl: route
+            },
+            source: "operator gateway credential command"
+          };
+        }
+      }
+    }
+  };
+}
+var METERING_WORKERS_AI_ROUTE, METERING_UPSTREAM_AUTH_HEADER, METERING_GATEWAY_AUTH_HEADER, METERING_METADATA_HEADER, METERING_AFFINITY_HEADER;
+var init_gateway_metering = __esm({
+  "src/local/gateway-metering.ts"() {
+    "use strict";
+    METERING_WORKERS_AI_ROUTE = "workers-ai/v1";
+    METERING_UPSTREAM_AUTH_HEADER = "Authorization";
+    METERING_GATEWAY_AUTH_HEADER = "cf-aig-authorization";
+    METERING_METADATA_HEADER = "cf-aig-metadata";
+    METERING_AFFINITY_HEADER = "x-session-affinity";
+  }
+});
+
 // src/local/pi-auth-store.ts
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir as homedir2 } from "node:os";
@@ -53186,7 +53270,10 @@ async function runLocalWorker(options) {
     models.setProvider(faux.provider);
     modelRef = localModelRef(config.model);
   } else {
-    models.setProvider(localWorkersAIProvider());
+    const join4 = config.metering !== void 0 && meteringApplies(config.model) ? config.metering : void 0;
+    models.setProvider(
+      join4 === void 0 ? localWorkersAIProvider() : meteredWorkersAIProvider(localWorkersAIProvider(), join4)
+    );
     modelRef = localModelRef(config.model);
   }
   const registry = createRegistry();
@@ -53355,6 +53442,7 @@ var init_worker_host = __esm({
     init_workers_ai();
     init_worker_contract();
     init_checkpoints3();
+    init_gateway_metering();
     init_pi_auth_store();
     init_steer_socket();
   }

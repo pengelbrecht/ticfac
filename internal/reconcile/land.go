@@ -605,6 +605,14 @@ func (r *Reconciler) landingAttemptHead(co *landingCloseout, fallback string) st
 // starts again from the branches as they now stand.
 func (r *Reconciler) gateLanding(ctx context.Context, co *landingCloseout, base, folded string) (bool, error) {
 	tick := co.marker.TickID
+	// The fold is not a tick, and its gate exports NO touched pair (the
+	// merge's TouchedBase/Head stay empty): the fold carries the BASE
+	// branch's whole movement since the epic forked, and running full suites
+	// for it at the readying would bill the close-out for a full local suite
+	// the close-out is already waiting for on the PR head — CI's run is the
+	// fold's full suite, and the repository's close-out rule holds the
+	// readying on it (gate_touched.go). A repair the fold's gate dispatches
+	// is gated like any repair, over the repair's own union pair.
 	merged := merge{AttemptHead: r.landingAttemptHead(co, folded), EpicHead: folded, GateSHA: folded, Merged: true}
 	g, err := r.beginGate(co.marker, merged)
 	if err != nil {
@@ -716,6 +724,10 @@ func (r *Reconciler) repairRedCI(ctx context.Context, entry planEntry, marker at
 			attemptHead = head
 		}
 	}
+	// This merge is a repair job's INPUT, not a tree the gate runs over: its
+	// GateSHA names the PR head the red CI was read from, and the pair the
+	// re-gate exports is set where the repair's own merge is built
+	// (repairFailedGate → repairTouched). Empty here on purpose.
 	merged := merge{AttemptHead: attemptHead, EpicHead: sha, GateSHA: sha, Merged: true}
 	return r.repairFailedGate(ctx, entry, marker, merged, g)
 }

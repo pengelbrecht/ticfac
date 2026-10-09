@@ -2,13 +2,13 @@ package cloudflaresandbox
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/sandboximage"
 )
 
@@ -93,14 +93,7 @@ func (g *gitRepo) workerDir(name string) string {
 
 func mustGit(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s (in %s): %v\n%s", strings.Join(args, " "), dir, err, out)
-	}
-	return string(out)
+	return gittest.Run(t, dir, args...)
 }
 
 // newCollectHarness starts one attempt against the door with the repository

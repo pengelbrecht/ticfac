@@ -137,6 +137,52 @@ export const WORKER_SETUP_ARG = "--setup";
  */
 export const WORKER_SETUP_COMMAND = `${WORKER_COMMAND} ${WORKER_SETUP_ARG}`;
 
+// ------------------------------------------------ the review's own halves --
+
+// The PR-review job's boot/finish contract (tick 8gd), pinned in
+// contracts/worker-boot-contract.json beside the worker's: the review's
+// conversation is hosted on the run's WorkerAgent like every other cloud
+// worker's, so the orchestrator image runs the same two phases for it —
+// `--boot` sets up and hands off the prompt, `--finish` posts the findings
+// the conversation wrote. The markers are the review's own so a reader can
+// tell a review handoff from a worker's; the commands are the ORCHESTRATOR
+// image's, not the worker's, because a review boots from the entrypoint the
+// epic orchestrator does (image/entrypoint.sh).
+
+/** The argument that runs the BOOT half of the review contract (tick 8gd). */
+export const REVIEW_BOOT_ARG = "--boot";
+
+/** The review's boot phase, as the hosted review's agent runs it first. */
+export const REVIEW_BOOT_COMMAND = `${ORCHESTRATOR_COMMAND} ${REVIEW_BOOT_ARG}`;
+
+/**
+ * What a booted review container prints once its essentials answer and its
+ * prompt is rendered: the same two fields the worker's marker carries,
+ * spelled for what they mean here — `branch=` is the ref that was reviewed,
+ * `result=` the findings path the finish phase posts. The rendered review
+ * prompt follows between the two prompt markers, for the agent to submit as
+ * the conversation's input.
+ */
+export const REVIEW_BOOT_MARKER = "ticks-review-boot-ok";
+
+/** Opens the rendered review prompt the boot hands the host. */
+export const REVIEW_BOOT_PROMPT_BEGIN = "ticks-review-boot-prompt-begin";
+
+/** Closes the rendered review prompt the boot hands the host. */
+export const REVIEW_BOOT_PROMPT_END = "ticks-review-boot-prompt-end";
+
+/** The argument that runs the FINISH half of the review contract (tick 8gd). */
+export const REVIEW_FINISH_ARG = "--finish";
+
+/**
+ * The review's finish phase, as the hosted review's agent runs it once the
+ * conversation settles: it posts the findings file to the factory's review
+ * door — the one durable thing a review produces — and exits with the
+ * post's own status. Exit 12 (EXIT_REVIEW) is the findings that never
+ * reached the factory; the boot's other faults keep their all-in-one classes.
+ */
+export const REVIEW_FINISH_COMMAND = `${ORCHESTRATOR_COMMAND} ${REVIEW_FINISH_ARG}`;
+
 /** Where the container keeps the harness pid the door needs to find. */
 export const WORKER_STATE_DIR_ENV = "TICKS_WORKER_STATE_DIR";
 
@@ -510,15 +556,20 @@ export function workerHarness(run?: string | null, deployment?: string | null): 
 /**
  * The review job's own harness floor (epic 43y, tick jhp).
  *
- * The review is the one cloud boot that still runs a CLI harness in its
- * container: it reads a pull request and posts prose, one pass, no
- * reconcile. Its floor is NOT the worker ladder's — `pi-durable` names a
- * HOSTED conversation, and a review container would refuse it at boot —
- * but `omp`, the CLI the image carries that reaches the review's Workers AI
- * route through the gateway. A deployment that pins `RUN_HARNESS` or
- * `RUN_WORKER_HARNESS` to a CLI harness it has verified may still route the
- * review there; this floor is what an unset ladder falls to, and it must
- * name a harness the image can actually run.
+ * The review is the one cloud boot that once had to run a CLI harness in its
+ * container: it reads a pull request and posts prose, one pass, no reconcile.
+ * Its floor is NOT the worker ladder's — `pi-durable` names a HOSTED
+ * conversation — but `omp`, the CLI the image carries that reaches the
+ * review's Workers AI route through the gateway. A deployment that pins
+ * `RUN_HARNESS` or `RUN_WORKER_HARNESS` to a CLI harness it has verified may
+ * still route the review there; this floor is what an unset ladder falls to
+ * when the deployment hosts no conversations.
+ *
+ * Since tick 8gd the floor is only HALF the story: on a deployment that hosts
+ * worker conversations (a `WORKER_AGENTS` binding), the review's conversation
+ * is hosted on the run's WorkerAgent exactly like every worker's, and the
+ * floor is only what a non-hosting deployment falls to. See
+ * {@link reviewHarness} for the whole ladder.
  */
 export const REVIEW_DEFAULT_HARNESS = "omp";
 
@@ -539,13 +590,14 @@ export const REVIEW_DEFAULT_HARNESS = "omp";
 export const IMAGE_HARNESS_KINDS = ["omp", "claude", "pi-durable"] as const;
 
 /**
- * The harness names no review container can run: the hosted kind, whose
- * conversation is a WorkerAgent's and never a CLI in the container, and the
- * deleted pi CLI. Both still reach the review's ladder — the run's profile
- * runner and the deployment's `RUN_WORKER_HARNESS` (pinned `pi-durable`) are
- * WORKER choices — and the container refuses both at boot.
+ * The harness name no review can run: `pi`, the deleted CLI. It still reaches
+ * the review's ladder through a stale profile or rung — the run's profile
+ * runner can name it — and no container in the image can run it, so it is
+ * passed over. The hosted kind is deliberately not in this set since tick
+ * 8gd: its conversation is hosted, and on a deployment that hosts, that is
+ * exactly what the review should run.
  */
-const NOT_A_REVIEW_HARNESS = new Set([WORKER_DEFAULT_HARNESS, "pi"]);
+const NOT_A_REVIEW_HARNESS = new Set(["pi"]);
 
 /** A configured rung, unless it names a harness no review container runs. */
 function reviewRung(value: string | null | undefined): string | null {
@@ -556,10 +608,29 @@ function reviewRung(value: string | null | undefined): string | null {
 /**
  * Which harness a review container is actually told to run — the same
  * ladder as {@link workerHarness} with the review's own floor under it, a
- * rung naming a worker-only harness passed over.
+ * rung naming a harness no review can run (`pi`, the deleted CLI) passed
+ * over.
+ *
+ * Since tick 8gd the hosted kind is a REVIEW harness too, on a deployment
+ * that hosts conversations (`hosts`): the review's conversation runs on the
+ * run's WorkerAgent exactly like every worker's (image/entrypoint.sh's
+ * `--boot`/`--finish` halves), so an explicit `pi-durable` rung is honored
+ * there — and, with nothing pinned, the floor IS the hosted kind, the same
+ * default every other cloud boot now has. A deployment that hosts nothing
+ * keeps the old shape exactly: an explicit hosted rung is not servable there
+ * (the container would refuse it at boot), so it falls to the CLI floor, and
+ * the CLI floor stands.
  */
-export function reviewHarness(run?: string | null, deployment?: string | null): string {
-  return reviewRung(run) ?? reviewRung(deployment) ?? REVIEW_DEFAULT_HARNESS;
+export function reviewHarness(
+  run?: string | null,
+  deployment?: string | null,
+  hosts = false,
+): string {
+  const routed = reviewRung(run) ?? reviewRung(deployment);
+  if (routed !== null) {
+    return routed === WORKER_DEFAULT_HARNESS && !hosts ? REVIEW_DEFAULT_HARNESS : routed;
+  }
+  return hosts ? WORKER_DEFAULT_HARNESS : REVIEW_DEFAULT_HARNESS;
 }
 
 /**

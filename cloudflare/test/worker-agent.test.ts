@@ -13,7 +13,7 @@
  * attempt host, the harness, the tools, the hooks.
  */
 import { env, runInDurableObject, SELF } from "cloudflare:test";
-import type { SandboxDoor } from "ticfac-harness";
+import type { SandboxDoor, WorkerAttemptSpec } from "ticfac-harness";
 import {
   type FauxResponseFactory,
   fauxAssistantMessage,
@@ -489,5 +489,116 @@ describe("a cloud worker attempt on its WorkerAgent", () => {
     const stub = namespace.get(namespace.idFromName(attemptSandboxName(RUN_ID, TICK, 9)));
     expect((await stub.state()).phase).toBe("absent");
     expect((await stub.reclaim("run_ended:failed")).phase).toBe("absent");
+  });
+});
+
+/** The review handoff a hosted review's boot prints, per the pinned contract. */
+const REVIEW_REF = "refs/pull/42/head";
+const REVIEW_OUTPUT = "/tmp/ticks-review-run_xd3_review.md";
+const REVIEW_PROMPT = "You are reviewing one pull request. Write your findings.";
+const REVIEW_BOOT_OUTPUT = [
+  `ticks-orchestrator: ${contract.review_boot_marker} branch=${REVIEW_REF} result=${REVIEW_OUTPUT}`,
+  contract.review_boot_prompt_begin,
+  REVIEW_PROMPT,
+  contract.review_boot_prompt_end,
+  "",
+].join("\n");
+
+/**
+ * The review job on its WorkerAgent (tick 8gd): the supervisor composes the
+ * spec (run-workflow.test.ts asserts that half); this is the agent's half —
+ * the container halves come from the REVIEW contract, never the worker's,
+ * and the conversation is driven on the handoff's prompt with no workspace
+ * machinery around it, because a review commits nothing.
+ */
+describe("a hosted review on its WorkerAgent (tick 8gd)", () => {
+  /** The spec the supervisor composes for a review, minimally. */
+  function reviewSpec(name: string): WorkerAttemptSpec {
+    return {
+      name,
+      tick: "pr-42-review",
+      role: "review",
+      kind: "review",
+      env: { TICKS_RUN_ID: RUN_ID, TICKS_EPIC: "pr-42-review", TICKS_PHASE: "review" },
+      model: "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+      repoUrl: "https://github.com/example/repo.git",
+      baseSha: BASE_SHA,
+    };
+  }
+
+  /** A container that answers the REVIEW contract's two halves. */
+  function reviewContainer(finishExit: number) {
+    return fakeSandboxDoor({
+      runOutput: () => "",
+      processScript: (command) => {
+        if (command === contract.review_boot_command) {
+          return { output: REVIEW_BOOT_OUTPUT, exit: 0, ms: 10 };
+        }
+        if (command.startsWith(contract.review_finish_command)) {
+          return { output: "posted\n", exit: finishExit, ms: 10 };
+        }
+        return { output: "ok\n", exit: 0, ms: 10 };
+      },
+    });
+  }
+
+  async function settle(stub: { state(): Promise<{ phase: string }> }): Promise<string> {
+    let status = await stub.state();
+    const deadline = Date.now() + 20_000;
+    while (status.phase !== "settled" && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      status = await stub.state();
+    }
+    return status.phase;
+  }
+
+  it("runs the review's own boot/finish halves, never the worker's, and settles on the finish's exit", async () => {
+    const container = reviewContainer(0);
+    const { stub } = await seededAgent(container, [
+      () =>
+        fauxAssistantMessage(
+          [fauxToolCall("bash", { command: `echo findings > ${REVIEW_OUTPUT}` })],
+          {
+            stopReason: "toolUse",
+          },
+        ),
+      () => fauxAssistantMessage("the review is written"),
+    ]);
+
+    await stub.start(reviewSpec(attemptSandboxName(RUN_ID, TICK, 1)));
+    expect(await settle(stub)).toBe("settled");
+
+    // The container ran exactly the review's two halves — the REVIEW
+    // contract's spellings, never the worker's — with the conversation
+    // between them.
+    const commands = container.starts.map((s) => s.command);
+    expect(commands[0]).toBe(contract.review_boot_command);
+    expect(commands.at(-1)).toBe(`${contract.review_finish_command} 0`);
+    expect(commands).not.toContain(contract.boot_command);
+    // A review commits nothing: no push or commit reached the container.
+    expect(container.starts.filter((s) => /git (push|commit)/.test(s.command))).toHaveLength(0);
+
+    const state = (await stub.state()) as WorkerAgentState;
+    expect(state).toMatchObject({ phase: "settled", exit_code: 0, branch: REVIEW_REF });
+    const log = (await stub.readLog(0)).text;
+    expect(log).toContain(`branch ${REVIEW_REF}`);
+    expect(log).toContain("the review is written");
+  });
+
+  it("reports the findings that never reached the factory as the failure they are", async () => {
+    const container = reviewContainer(12);
+    const { stub } = await seededAgent(container, [
+      () => fauxAssistantMessage("nothing worth reporting"),
+    ]);
+
+    await stub.start(reviewSpec(attemptSandboxName(RUN_ID, TICK, 2)));
+    expect(await settle(stub)).toBe("settled");
+
+    const state = (await stub.state()) as WorkerAgentState;
+    // The finish argument is the CONVERSATION's outcome (0: it answered);
+    // the settled exit code is the finish's own (12: nothing was posted).
+    expect(state).toMatchObject({ phase: "settled", exit_code: 12 });
+    const commands = container.starts.map((s) => s.command);
+    expect(commands.at(-1)).toBe(`${contract.review_finish_command} 0`);
   });
 });

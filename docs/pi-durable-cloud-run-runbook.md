@@ -55,11 +55,11 @@ live view (Ctrl-C detaches without stopping; run it again to re-attach or,
 once finished, to resume). The run's implement and closeout workers boot
 factory sandbox containers as hosted WorkerAgents on pi-durable: the
 conversation in the factory's Durable Object, the tools in the container,
-the substrate recorded per dispatch on the run branch. Two boots are not
-hosted, by design: the orchestrator container execs `ticfac run-epic`
-itself, and the review — "the one cloud boot that still runs a CLI harness
-in its container" (run-workflow.ts, tick jhp) — runs omp on GLM through
-its own floor (`reviewHarness`), whatever the overlay's review cell names.
+the substrate recorded per dispatch on the run branch. The review boots the
+same way since tick 8gd — its conversation is hosted on the run's
+WorkerAgent and its container runs only the review's `--boot`/`--finish`
+halves, like every other worker — while the orchestrator container remains
+the one boot that is not hosted, execing `ticfac run-epic` itself.
 
 ## What "observed" means for [A4]'s cloud half
 
@@ -73,12 +73,13 @@ The cloud half is **observed** — not predicted — when all three hold:
 3. The run's implement (and closeout) dispatches record their workers on
    `pi-durable` containers (`harness: pi-durable` in the attempt records) —
    a cloud run whose workers ran `omp` or `claude` completes fine and
-   observes nothing about [A4]. The review's omp boot is the designed
+   observes nothing about [A4]. The review's CLI boot is the designed
    exception above, not a gap in the observation: what [A4] must show is
-   the WORKERS hosted. (Whether the review's CLI boot satisfies [A1]'s
-   "every worker … runs on pi-durable" is a question for the epic's
-   close-out, not for this runbook — the review's floor is a recorded
-   design decision inside the epic, tick jhp.)
+   the WORKERS hosted. (Whether a review that still ran on the CLI floor
+   satisfies [A1]'s "every worker … runs on pi-durable" is a question for
+   the epic's close-out, not for this runbook — since tick 8gd the review
+   is hosted like the workers, and only a deployment that hosts nothing
+   falls back to the CLI floor.)
 
 Record the result beside qdg's local-half record (a doc under `docs/`, plus
 the run's artifact space), and note in the epic's tracker record that [A4]'s
@@ -123,8 +124,9 @@ the report pushback, the stuck re-prompt — remain supervisor relaunches of
 a runner that is still an attempt, never recoveries from a kill.
 
 The two faults are injected into the run above, once each, during one hosted
-worker dispatch's turn (implement or closeout — the review's omp boot is the
-recorded [A1] exception, not a hosted dispatch):
+worker dispatch's turn (implement or closeout — the review is hosted like
+the workers since tick 8gd, and its injection, if any, is the worker
+contract's own):
 
 1. **The host's life lost mid-tool.** While the worker's tool call is in
    flight — watch it live on `ticfac watch`, or `ticfac cloud logs <run-id>
@@ -160,10 +162,17 @@ recorded [A1] exception, not a hosted dispatch):
 
    Observed when all three hold:
 
-   - the attempt's log carries `ticfac-harness: the container was lost
-     between rounds; workspace restored to <sha>` — or, when the loss lands
-     under a tracked bash, `ticfac-harness: a tracked bash found a fresh
-     container; the workspace was restored to <sha> (<subject>)`;
+   - the attempt's log carries one of the three restore lines, one per loss
+     path — `ticfac-harness: the container was lost between rounds;
+     workspace restored to <sha>` for a loss no harness call was in flight
+     to see; `ticfac-harness: a tracked bash found a fresh container; the
+     workspace was restored to <sha> (<subject>)` when the resumed bash's
+     nonce is known by no process anywhere (tick dbi); or `ticfac-harness:
+     the container was lost mid-command; the workspace was restored to
+     <sha> (<subject>)` when the loss lands under a tracked bash whose
+     process is gone or ended with no exit code — the likeliest of the
+     three for this destroy, and until tick qzg the one loss path that
+     restored without saying a line anywhere;
    - the restored `<sha>` is the last `wip checkpoint … pushed` line the lost
      life's own log shows;
    - the turn completed on the restored tree: the attempt settles 0, its

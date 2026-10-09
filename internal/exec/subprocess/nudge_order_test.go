@@ -94,6 +94,8 @@ func pollLikeTheRun(t *testing.T, f *fixture, handle *JobHandle) []Observation {
 }
 
 func TestANudgeIsAnnouncedBeforeTheNudgedRunnerCanReport(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "stop_early",
 		supervisorArgv: []string{os.Args[0], superviseHeldAnnouncementArg}})
 	handle := f.Start(f.spec("run-hol/tick-nnn/resolve-1", "nnn"))
@@ -114,6 +116,7 @@ func TestANudgeIsAnnouncedBeforeTheNudgedRunnerCanReport(t *testing.T) {
 	}
 }
 
+// serial: swaps the package-level statusBetweenReads seam, which every Inspect in this process reads.
 func TestAnObservationWrittenBeforeTheEvidenceReachesTheReader(t *testing.T) {
 	f := newFixture(t, fixtureOptions{mode: "slow_report"})
 	handle := f.Start(f.spec("run-hol/tick-ooo/resolve-1", "ooo"))

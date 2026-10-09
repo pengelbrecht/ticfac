@@ -141,6 +141,8 @@ func assertEveryCallErrors(t *testing.T, h *harness) {
 // response could change a verdict, this fixture is where it would have to
 // show, and it has nowhere to show because nothing is asked.
 func TestCollectAnswersFromDurableEvidenceWhenEveryHerdrCallErrors(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -214,6 +216,8 @@ func TestCollectAnswersFromDurableEvidenceWhenEveryHerdrCallErrors(t *testing.T)
 // erroring: the verdict must come from the archive, the branch and the
 // settlement record, and nothing may dial herdr to get it.
 func TestCollectAfterTeardownAnswersFromDurableEvidenceWhenEveryHerdrCallErrors(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -296,6 +300,8 @@ func TestCollectAfterTeardownAnswersFromDurableEvidenceWhenEveryHerdrCallErrors(
 // power to hide that than to overturn a real success — for the same reason:
 // it is never asked.
 func TestEveryHerdrCallErroringCannotFlipAFailedVerdictEither(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -344,6 +350,8 @@ func TestEveryHerdrCallErroringCannotFlipAFailedVerdictEither(t *testing.T) {
 // renamed status word, a new rendering — and the shape this tick exists to
 // make survivable.
 func TestHerdrAnswersCannotChangeAVerdict(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {

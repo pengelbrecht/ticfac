@@ -80,6 +80,8 @@ func pointPIDsAt(t *testing.T, st *store, pid int) {
 
 // A dead attempt whose pids now belong to somebody else is not running.
 func TestADeadAttemptWhosePIDWasReusedIsNotRunning(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "hang"})
 	handle := f.Start(f.spec("run-rmc/tick-r1/attempt-1", "r1"))
 	st := f.store(handle)
@@ -105,6 +107,8 @@ func TestADeadAttemptWhosePIDWasReusedIsNotRunning(t *testing.T) {
 // Cancelling that dead attempt signals nothing — least of all the process
 // group of whoever holds its old pid now.
 func TestCancellingADeadAttemptNeverSignalsTheProcessThatInheritedItsPID(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "hang"})
 	handle := f.Start(f.spec("run-rmc/tick-r2/attempt-1", "r2"))
 	st := f.store(handle)
@@ -130,6 +134,8 @@ func TestCancellingADeadAttemptNeverSignalsTheProcessThatInheritedItsPID(t *test
 // every test, on a host where every pid it ever saw may already be someone
 // else's.
 func TestTheHarnessNeverSignalsAProcessItDidNotStart(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "hang"})
 	handle := f.Start(f.spec("run-rmc/tick-r3/attempt-1", "r3"))
 	st := f.store(handle)

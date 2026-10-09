@@ -1,0 +1,14 @@
+{
+  "id": "12f",
+  "title": "Shared-ref fetch guard still walks the directory, not tracked files",
+  "description": "pqs moved TestNoProductionCodeReadsFetchHead onto gittest.Tracked, because a checkout is not a clean room: an agent worktree under .claude/worktrees/ is no party to this tree.\n\nIts sibling in the same file, TestEveryProductionFetchStaysOffSharedRefs, still uses filepath.Walk. It skips only .git, testdata, vendor and node_modules, so a stale branch checked out under the repo can fail the gate on a file nobody here wrote. That is the class pqs exists to close.\nevidence: internal/runstate/fetchhead_guard_test.go:90-110\n\nticfac run epic-t8u filed this backlog tick from the finding 6ed5fa02862a9f0483faffad24d5c64b4a7516e6abb6da13cc495e3a5ed7361e (reported by run-epic-t8u/tick-r6v/attempt-18) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/6ed5fa02862a9f0483faffad24d5c64b4a7516e6abb6da13cc495e3a5ed7361e.json on the run branch.",
+  "notes": "2026-10-08 04:39 - ticfac run epic-t8u: created by absorbing finding 6ed5fa02862a9f0483faffad24d5c64b4a7516e6abb6da13cc495e3a5ed7361e — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/6ed5fa02862a9f0483faffad24d5c64b4a7516e6abb6da13cc495e3a5ed7361e.json on epic/t8u, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-r6v/attempt-18",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-08T02:39:04Z",
+  "updated_at": "2026-10-08T02:39:09.630319Z"
+}

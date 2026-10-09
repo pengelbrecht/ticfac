@@ -25,6 +25,8 @@ import (
 // worker's next commit sits ON the work that already exists and the attempt's
 // own push is a fast-forward.
 func TestAFreshDiskStartContinuesFromTheAttemptSPushedBranch(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 
 	// The dead worker's work: one commit beyond the base, pushed to this
@@ -69,6 +71,8 @@ func TestAFreshDiskStartContinuesFromTheAttemptSPushedBranch(t *testing.T) {
 // attempt's base is not this attempt's work at any point in its life, and
 // the boot says so rather than merging over it.
 func TestAFreshDiskStartRefusesAPushedHeadThatIsNotThisAttemptSWork(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "report"})
 
 	// An orphan commit — a history with no relation to the base — pushed
@@ -99,6 +103,8 @@ func TestAFreshDiskStartRefusesAPushedHeadThatIsNotThisAttemptSWork(t *testing.T
 // The FIRST boot is the same path, a no-op: with nothing pushed, the
 // worktree is cut at the base and the attempt is an ordinary one.
 func TestAFirstBootCutsTheWorktreeAtTheBase(t *testing.T) {
+	t.Parallel()
+
 	// nocommit settles without moving the branch, so where the worktree was
 	// cut is still readable after settlement — no race with a fast runner.
 	f := newFixture(t, fixtureOptions{mode: "nocommit"})

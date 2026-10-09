@@ -1,0 +1,20 @@
+{
+  "id": "kwh",
+  "title": "Re-review t8u after its NOT READY review's blocking findings (round 2)",
+  "description": "Review the epic t8u again, AS INTEGRATED, now that the blocking findings of its NOT READY review are fixed. This is review round 2; 2 count toward the bound of 2.\n\nThe previous review (r6v, decision 22) judged it NOT READY: make epic/t8u's CI green by fixing fn8's ref-lock guard hook for git \u003e= 2.51 (hold only the first prepared transaction; fix verified on git 2.56), and meet [A1] with a recorded before/after full-suite measurement, which needs internal/reconcile's full suite cut, or have the operator re-scope A1 on t8u.; its blocking finding(s): \"fn8's ref-lock guard deadlocks on git \u003e= 2.51; epic CI red since 9a34b1001\"; \"A1 unmet: the full suite's floor, internal/reconcile, did not get faster\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY that spends the bound is not reviewed again by the run unless the tree changes after it: it holds for a person with your reasons.",
+  "notes": "2026-10-08 07:28 - ticfac run epic-t8u: kwh try 1 (run dispatch #21) reported a finding the run itself decided — defect \"A1 still unmet: reconcile's full suite ~13% faster after 0bg, not halved\" (key f7eb8119b2df2270fb4435f5d7c18f099de3f580f6dce9c2cdfdae7aeacd1900, severity high, for this repository) is promoted to a backlog tick with an owner, xju; the decision record is on the run branch at .ticfac/runs/epic-t8u/absorptions/f7eb8119b2df2270fb4435f5d7c18f099de3f580f6dce9c2cdfdae7aeacd1900.json, and the draft is triaged as promoted.\n2026-10-08 07:28 - ticfac run epic-t8u: kwh try 1 (run dispatch #21) reported a finding the run itself decided — defect \"fast-import commits now carry +0000; the byte-for-byte guard cannot see it\" (key a7fb70a21778b0923af9a80d90d795282a03abd8bc6c9c7dc7b317b162a4e0ae, severity low, for this repository) is promoted to a backlog tick with an owner, 1o8; the decision record is on the run branch at .ticfac/runs/epic-t8u/absorptions/a7fb70a21778b0923af9a80d90d795282a03abd8bc6c9c7dc7b317b162a4e0ae.json, and the draft is triaged as promoted.\n2026-10-08 07:28 - ticfac run epic-t8u: the review-epic job, kwh try 1 (run dispatch #21), returned a validated ticfac.job-result.review-epic.v1 envelope at 27a7aa7ccde3 — DONE_WITH_CONCERNS: A1 is judged from CI step durations and 0bg's serial measurement, not a quiet-host timing (this host's load was 9.9-16.9, and it is shared with live runs)",
+  "status": "closed",
+  "priority": 1,
+  "type": "task",
+  "owner": "ticfac",
+  "blocked_by": [
+    "p4c",
+    "0bg"
+  ],
+  "parent": "t8u",
+  "role": "review",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-08T02:39:28Z",
+  "updated_at": "2026-10-08T05:28:26.8711Z",
+  "closed_at": "2026-10-08T05:28:26.8711Z"
+}

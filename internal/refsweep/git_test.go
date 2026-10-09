@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -35,14 +35,9 @@ func newFakeRemote(t *testing.T) *fakeRemote {
 
 func (f *fakeRemote) git(dir string, args ...string) string {
 	f.t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t",
-		"GIT_COMMITTER_EMAIL=t@t", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		f.t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-	}
-	return strings.TrimSpace(string(out))
+	// gittest.Run states the whole hermetic environment (tick pqs): the
+	// entries this builder spelled out and the ones it never did.
+	return strings.TrimSpace(gittest.Run(f.t, dir, args...))
 }
 
 // commit writes one file on the current HEAD and answers the new sha.

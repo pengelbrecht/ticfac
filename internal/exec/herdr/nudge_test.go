@@ -70,6 +70,8 @@ func formatObs(observations []subprocess.Observation) string {
 }
 
 func TestAnIdleAgentWithNoReportIsNudgedInItsPaneAndFinishes(t *testing.T) {
+	t.Parallel()
+
 	shorttest.EndToEnd(t)
 	h := nudgeHarness(t, "stop_early")
 	handle, err := h.start("t1")
@@ -95,6 +97,8 @@ func TestAnIdleAgentWithNoReportIsNudgedInItsPaneAndFinishes(t *testing.T) {
 }
 
 func TestAnAgentThatNeverReportsIsMissingResultAfterTheNudgesAreSpent(t *testing.T) {
+	t.Parallel()
+
 	shorttest.EndToEnd(t)
 	h := nudgeHarness(t, "never_report")
 	handle, err := h.start("t1")
@@ -135,6 +139,8 @@ func TestAnAgentThatNeverReportsIsMissingResultAfterTheNudgesAreSpent(t *testing
 
 // An agent that is WORKING is never nudged, however long it works.
 func TestAWorkingAgentIsNotNudged(t *testing.T) {
+	t.Parallel()
+
 	shorttest.EndToEnd(t)
 	h := nudgeHarness(t, "sleep")
 	handle, err := h.start("t1")

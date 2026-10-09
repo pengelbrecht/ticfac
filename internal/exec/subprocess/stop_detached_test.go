@@ -82,6 +82,8 @@ func waitDetachedTool(t *testing.T, st *store) int {
 // short: one real supervisor, one node runner and two sleeps, settling in
 // seconds
 func TestAStoppedSupervisorInterruptsTheRunnersDetachedTools(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{runnerArgv: detachedToolRunnerArgv(t)})
 	handle := f.Start(f.spec("run-ug0/tick-ug0/attempt-1", "ug0"))
 	st := f.store(handle)
@@ -113,6 +115,8 @@ func TestAStoppedSupervisorInterruptsTheRunnersDetachedTools(t *testing.T) {
 // short: one real supervisor, one node runner and two sleeps, cancelling in
 // seconds
 func TestACancelInterruptsTheRunnersDetachedTools(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{runnerArgv: detachedToolRunnerArgv(t)})
 	handle := f.Start(f.spec("run-ug0/tick-ug0/attempt-2", "ug0"))
 	st := f.store(handle)
