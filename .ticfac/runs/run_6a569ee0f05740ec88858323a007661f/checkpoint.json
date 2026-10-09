@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 3,
-  "state": "running",
-  "reason": "ugm is running as attempt 1",
-  "updated_at": "2026-10-09T01:05:13Z",
+  "sequence": 4,
+  "state": "collecting",
+  "reason": "ugm try 1 (run dispatch #1) is collected (ready-to-merge)",
+  "updated_at": "2026-10-09T05:42:25Z",
   "ticks": [
     {
       "tick_id": "ugm",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 1
     },
     {
