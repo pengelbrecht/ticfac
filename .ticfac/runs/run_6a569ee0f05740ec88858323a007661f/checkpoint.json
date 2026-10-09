@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 46,
-  "state": "running",
-  "reason": "jml is closed",
-  "updated_at": "2026-10-09T15:03:10Z",
+  "sequence": 47,
+  "state": "gating",
+  "reason": "running the integrated gate for jml on 22dda2557015",
+  "updated_at": "2026-10-09T15:03:42Z",
   "ticks": [
     {
       "tick_id": "ugm",
@@ -43,7 +43,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/ymf",
-    "source_sha": "ac181a948f91a26abca79ee64381d44f23fcb42e",
+    "source_sha": "22dda2557015f01a51bd119a7645e67ea7aa9d4d",
     "integration_ref": "refs/heads/epic/ymf",
     "phase": "worker",
     "executor": null,
