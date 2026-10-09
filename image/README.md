@@ -972,14 +972,14 @@ distinct, because these are read from a log after the sandbox is gone:
 | 7 | A gateway with no usable model behind it: nothing routed, a model whose provider cannot be named, a model the chosen harness does not speak, or a gateway that refused the probe. |
 | 8 | The gateway answers and the harness cannot use it: no provider wired for the route, a credential the harness looks for under another name, or a harness round-trip that failed, timed out, or exited clean without answering. |
 | 13 | The start commit is not on origin: the fetch worked and the dispatched SHA is not among what it brought. |
-| 14 | The gateway, or the provider behind it, gave no usable answer to the one-token probe (or answered the harness probe's call with a rate limit or server error) through every try (`TICKS_MODEL_PROBE_TRIES`). Infrastructure, not the tick: on a worker the orchestrator dispatches the job again at the same tier, spending no rung of the ladder, at most three times per tick, and the next one stops the run with a refusal naming the gateway; on the cloud orchestrator's own boot the Workflow reboots it after a backoff (1, 2, 5, then 10 minutes) outside its three-boot crash budget, for up to an hour of consecutive such boots. |
+| 14 | The gateway, or the provider behind it, gave no usable answer to the one-token probe (or answered the harness probe's call with a rate limit or server error) through every try (`TICKS_MODEL_PROBE_TRIES`). Infrastructure, not the tick: on a worker the orchestrator dispatches the job again at the same tier after a backoff (1, 2, 5, then 10 minutes), spending no rung of the ladder, for up to an hour of backoff per tick, and the next one stops the run with a refusal naming the gateway; on the cloud orchestrator's own boot the Workflow reboots it after a backoff (1, 2, 5, then 10 minutes) outside its three-boot crash budget, for up to an hour of consecutive such boots. |
 | 15 | Origin did not answer the fetch through the whole retry window (`TICKS_FETCH_WINDOW`). Infrastructure, handled like 14. |
 | other | The harness's own exit status — the entrypoint `exec`s it. |
 
 On a **worker**, none of 2–8, 14 or 15 is a verdict on the tick: the harness
 never ran, so the orchestrator spends no rung of the tier ladder on it. 14 and
-15 are transient, and the job is dispatched again at the same tier (at most
-three times per tick). 2, 4, 5, 6, 7 and 8 are deterministic environment
+15 are transient, and the job is dispatched again at the same tier after a backoff
+(1, 2, 5, then 10 minutes; up to an hour of backoff per tick). 2, 4, 5, 6, 7 and 8 are deterministic environment
 faults: a retry boots the same image on the same repository, at any tier, and
 stops the same way. So the run stops at once with `worker_boot_fault`, naming
 the cause, the boot's own reason and what to fix.

@@ -3,6 +3,7 @@ package reconcile
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/exec/subprocess"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
@@ -39,13 +40,37 @@ func gatewayDownFor(tries int) func(string, int, *subprocess.Collection) {
 	}
 }
 
+// gatewayDownUntil is gatewayDownFor on a clock: every try of a1 dispatched
+// before `until` collects as a boot that died on the gateway, and every try
+// after it runs. The outage is a stretch of time, as a provider's is, not a
+// number of tries.
+func gatewayDownUntil(clock *lockedClock, until time.Time) func(string, int, *subprocess.Collection) {
+	down := gatewayDownFor(1 << 30)
+	return func(tick string, try int, collected *subprocess.Collection) {
+		if clock.now().Before(until) {
+			down(tick, try, collected)
+		}
+	}
+}
+
+// onAFakeClock runs the reconciler on a clock its own sleeps advance: the
+// infrastructure backoff is minutes, and a test waits none of them.
+func onAFakeClock(opts Options) (Options, *lockedClock) {
+	clock := &lockedClock{at: time.Now()}
+	opts.Now = clock.now
+	opts.Sleep = clock.advance
+	return opts, clock
+}
+
 // Jobs that died in their boot on the gateway are dispatched again in-run at
 // the SAME tier: no rung of the ladder is spent on them, and the tick finishes
 // once the gateway answers.
 func TestAJobThatNeverReachedItsHarnessIsDispatchedAgainAtTheSameTier(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{gate: tierGate})
-	r, err := New(f.landingOptions(fixtureOptions{}, gatewayDownFor(2)))
+	opts, clock := onAFakeClock(f.landingOptions(fixtureOptions{}, gatewayDownFor(2)))
+	start := clock.now()
+	r, err := New(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,6 +99,63 @@ func TestAJobThatNeverReachedItsHarnessIsDispatchedAgainAtTheSameTier(t *testing
 	if !strings.Contains(detail, "the model gateway") || !strings.Contains(detail, "same tier") {
 		t.Errorf("the redispatch line does not name the service and the tier rule: %s", detail)
 	}
+	if !strings.Contains(detail, "in 1 minute, at") {
+		t.Errorf("the redispatch line does not say when the next try is: %s", detail)
+	}
+	// The two redispatches waited out their backoff (1 + 2 minutes) before
+	// the third try was dispatched.
+	if waited := clock.now().Sub(start); waited < 3*time.Minute {
+		t.Errorf("the run waited %s in all, want at least the 3 minutes of backoff", waited)
+	}
+}
+
+// Epic ymf's cloud run (run_91f2952a, 2026-10-09): Workers AI answered 500
+// AiError 4007 for about twenty minutes. A worker that booted into it died at
+// its probe, exit 14, and three immediate redispatches — the old bound, each
+// a few minutes of probe window — would have stopped the run inside the
+// outage. With the backoff (1, 2, 5, 10 minutes) the tick is dispatched again
+// across the outage and runs once the provider answers, at the same tier.
+func TestAWorkerRidesOutATwentyMinuteProviderOutage(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, fixtureOptions{gate: tierGate})
+	clock := &lockedClock{at: time.Now()}
+	outageEnds := clock.now().Add(20 * time.Minute)
+	opts := f.landingOptions(fixtureOptions{}, gatewayDownUntil(clock, outageEnds))
+	opts.Now = clock.now
+	opts.Sleep = clock.advance
+	r, err := New(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := r.RunProtected(t.Context())
+	if err != nil {
+		t.Fatalf("the run did not finish: %v\n%s", err, journalText(r))
+	}
+	if result.State != runstate.StateCompleted {
+		t.Fatalf("the run ended %s (%+v): a twenty-minute provider outage is not a reason to stop\n%s",
+			result.State, result.Failure, journalText(r))
+	}
+	attempts := tickAttempts(t, r, "a1")
+	// Tries at 0, 1, 3, 8 and 18 minutes died in the outage; the one at 28
+	// ran. More than the old bound's four jobs.
+	if len(attempts) != 6 {
+		t.Fatalf("a1 was dispatched %d times, want 6 (five inside the outage, then one that ran)\n%s",
+			len(attempts), journalText(r))
+	}
+	if !clock.now().After(outageEnds) {
+		t.Errorf("the run finished at %s, inside the outage that ends at %s", clock.now(), outageEnds)
+	}
+	for try := 1; try <= len(attempts); try++ {
+		if got := markerTierOfTry(t, r, "a1", try); got != "balanced" {
+			t.Errorf("a1 try %d ran at tier %q, want balanced", try, got)
+		}
+	}
+	text := journalText(r)
+	for _, want := range []string{"in 1 minute, at", "in 2 minutes, at", "in 5 minutes, at", "in 10 minutes, at"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("the feed never said the next try is %q:\n%s", want, text)
+		}
+	}
 }
 
 // A gateway that never answers does not loop: after the bound, the run stops
@@ -81,7 +163,9 @@ func TestAJobThatNeverReachedItsHarnessIsDispatchedAgainAtTheSameTier(t *testing
 func TestAGatewayThatStaysDownStopsTheRunNamingIt(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, fixtureOptions{gate: tierGate})
-	r, err := New(f.landingOptions(fixtureOptions{}, gatewayDownFor(1000)))
+	opts, clock := onAFakeClock(f.landingOptions(fixtureOptions{}, gatewayDownFor(1000)))
+	start := clock.now()
+	r, err := New(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,9 +184,14 @@ func TestAGatewayThatStaysDownStopsTheRunNamingIt(t *testing.T) {
 		t.Errorf("the stop does not name the gateway: %s", result.Failure.Message)
 	}
 	attempts := tickAttempts(t, r, "a1")
-	if len(attempts) != maxInfrastructureRedispatches+1 {
+	if len(attempts) != maxInfrastructureRedispatches()+1 {
 		t.Errorf("a1 was dispatched %d times, want %d: the bound is what keeps a dead gateway from looping",
-			len(attempts), maxInfrastructureRedispatches+1)
+			len(attempts), maxInfrastructureRedispatches()+1)
+	}
+	// The bound is the window: the run waited out (nearly) an hour of
+	// backoff before it stopped, and not longer.
+	if waited := clock.now().Sub(start); waited < 50*time.Minute || waited > infrastructureWindow+10*time.Minute {
+		t.Errorf("the run stopped after %s of waiting, want the window of %s", waited, infrastructureWindow)
 	}
 	for try := 1; try <= len(attempts); try++ {
 		if got := markerTierOfTry(t, r, "a1", try); got != "balanced" {

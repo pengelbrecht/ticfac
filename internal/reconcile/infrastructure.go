@@ -34,10 +34,23 @@ import (
 //     "failed" means a worker had its chance and did not pass.
 //
 // THE BOUND. A service that is down for good would otherwise loop forever at
-// one container boot (and one retry window) per pass, so at most
-// maxInfrastructureRedispatches such redispatches of one tick are made per
-// incarnation. The next one is a run-level refusal naming the service — the
-// fix is the factory's (deploy it, check its gateway), never the tick's.
+// one container boot (and one retry window) per pass. A boot that stopped on
+// a service is therefore dispatched again after a BACKOFF —
+// infrastructureBackoff: 1, 2, 5, then 10 minutes — and only while the
+// backoff one tick has waited out in this incarnation stays inside
+// infrastructureWindow (an hour, the window the cloud Workflow gives its own
+// orchestrator boots: cloudflare/src/run-workflow.ts). The next one is a
+// run-level refusal naming the service — the fix is the factory's (deploy it,
+// check its gateway and its provider), never the tick's. The bound used to be
+// a COUNT of three immediate redispatches, about a quarter of an hour of
+// probe windows: epic ymf's cloud run (run_91f2952a, 2026-10-09) met a
+// twenty-minute Workers AI outage (HTTP 500, AiError 4007), which three quick
+// redispatches would not have outlasted. While a tick waits out its backoff
+// the window does not dispatch it (mayAdmit), and the ticks queued behind it
+// wait with it: the same provider is failing for them too. A service that
+// gave out MID-job (a claude-sub job's quota) keeps the old count of
+// maxMidJobRedispatches immediate redispatches: its next dispatch steps down
+// to another route rather than waiting on the same one.
 //
 // THE OTHER BOOT FAULTS. Every other stop before the harness — the inputs the
 // factory sent (2), the image's tk (4), the repository's pre-flight (5) or
@@ -57,7 +70,8 @@ const (
 	RefusedInfrastructureRedispatch = "infrastructure_redispatched"
 
 	// RefusedInfrastructure is that bound spent: the service did not answer
-	// for maxInfrastructureRedispatches+1 consecutive jobs of one tick. It is
+	// through a tick's whole backoff window (or, mid-job, for
+	// maxMidJobRedispatches+1 consecutive jobs of one tick). It is
 	// a stop, not a hold: nothing about the tick waits on a person, the
 	// factory does, and running the epic again once it answers is the repair.
 	RefusedInfrastructure = "worker_infrastructure_unavailable"
@@ -79,30 +93,116 @@ const (
 	infrastructureKind = "infrastructure_failure"
 )
 
-// maxInfrastructureRedispatches is how many times one incarnation dispatches a
-// tick again after jobs that died in their boot on infrastructure. Each one
-// already spent the container's own retry window (minutes), so three is a
-// quarter of an hour of a service not answering before the run says so.
-const maxInfrastructureRedispatches = 3
+// infrastructureBackoff is how long a tick whose job died in its boot on a
+// service waits before it is dispatched again, by how many such redispatches
+// came before it in this incarnation: 1, 2, 5, then 10 minutes for every one
+// after. Each job already spent the container's own retry window (minutes)
+// before it gave up, and the provider an outage takes down is the one every
+// other worker of the run is waiting on too.
+var infrastructureBackoff = []time.Duration{time.Minute, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute}
 
-// infrastructureBound counts the infrastructure redispatches of each tick in
-// this incarnation.
+// infrastructureWindow is the most backoff one tick may wait out in one
+// incarnation before the run stops naming the service: an hour, matching the
+// cloud Workflow's window for its orchestrator's own boots.
+const infrastructureWindow = time.Hour
+
+// maxMidJobRedispatches is how many times one incarnation dispatches a tick
+// again, at once, after jobs a service gave out under MID-job (a claude-sub
+// job's subscription quota). The next dispatch's lease steps down to another
+// route, so there is nothing to wait out.
+const maxMidJobRedispatches = 3
+
+// infrastructureDelay is the wait before the redispatch that follows `n`
+// earlier ones of the same tick.
+func infrastructureDelay(n int) time.Duration {
+	if n >= len(infrastructureBackoff) {
+		n = len(infrastructureBackoff) - 1
+	}
+	return infrastructureBackoff[n]
+}
+
+// maxInfrastructureRedispatches is how many boot-time infrastructure
+// redispatches of one tick fit infrastructureWindow.
+func maxInfrastructureRedispatches() int {
+	var waited time.Duration
+	n := 0
+	for waited+infrastructureDelay(n) <= infrastructureWindow {
+		waited += infrastructureDelay(n)
+		n++
+	}
+	return n
+}
+
+// infrastructureBound tracks the infrastructure redispatches of each tick in
+// this incarnation: how many, how much backoff they have waited out, and
+// when the next may be dispatched.
 type infrastructureBound struct {
 	mu     sync.Mutex
-	byTick map[string]int
+	byTick map[string]*infrastructureStreak
+}
+
+type infrastructureStreak struct {
+	n         int
+	waited    time.Duration
+	notBefore time.Time
 }
 
 // take counts one more infrastructure failure of `tick` and says whether it
-// may still be redispatched, and how many it has had.
-func (b *infrastructureBound) take(tick string) (int, bool) {
+// may still be redispatched, how many it has had, and how long the
+// redispatch waits (zero mid-job).
+func (b *infrastructureBound) take(tick string, midJob bool, now time.Time) (int, time.Duration, bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.byTick == nil {
-		b.byTick = map[string]int{}
+		b.byTick = map[string]*infrastructureStreak{}
 	}
-	b.byTick[tick]++
-	n := b.byTick[tick]
-	return n, n <= maxInfrastructureRedispatches
+	streak := b.byTick[tick]
+	if streak == nil {
+		streak = &infrastructureStreak{}
+		b.byTick[tick] = streak
+	}
+	streak.n++
+	if midJob {
+		return streak.n, 0, streak.n <= maxMidJobRedispatches
+	}
+	delay := infrastructureDelay(streak.n - 1)
+	if streak.waited+delay > infrastructureWindow {
+		return streak.n, 0, false
+	}
+	streak.waited += delay
+	streak.notBefore = now.Add(delay)
+	return streak.n, delay, true
+}
+
+// deferredUntil says whether `tick` is waiting out an infrastructure backoff
+// at `now`, and until when.
+func (b *infrastructureBound) deferredUntil(tick string, now time.Time) (time.Time, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	streak := b.byTick[tick]
+	if streak == nil || !now.Before(streak.notBefore) {
+		return time.Time{}, false
+	}
+	return streak.notBefore, true
+}
+
+// waited is how much backoff `tick` has waited out in this incarnation.
+func (b *infrastructureBound) waited(tick string) time.Duration {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if streak := b.byTick[tick]; streak != nil {
+		return streak.waited
+	}
+	return 0
+}
+
+// minutes renders a backoff for a feed line.
+func minutes(d time.Duration) string {
+	m := int(d.Round(time.Minute) / time.Minute)
+	if m == 1 {
+		return "1 minute"
+	}
+	return fmt.Sprintf("%d minutes", m)
 }
 
 // answerInfrastructure is the collect's answer to a job that never reached its
@@ -137,7 +237,7 @@ func (r *Reconciler) answerInfrastructure(marker attemptHandle, handle *subproce
 				"fix: %s",
 			name, failure.Service, failure.ExitCode, collected.Message, infrastructureRemedy(failure))
 	}
-	n, again := r.infrastructure.take(tick)
+	n, delay, again := r.infrastructure.take(tick, failure.MidJob, r.now())
 	if failure.MidJob {
 		// The service gave out DURING the job (a claude-sub job's
 		// subscription quota, cloudflaresandbox): the harness ran, so "never
@@ -148,7 +248,7 @@ func (r *Reconciler) answerInfrastructure(marker attemptHandle, handle *subproce
 				"%s. That is %s, not the tick, so it is dispatched again at the same tier (%s) and spends no "+
 					"rung of the ladder (%d of at most %d such redispatches). %s",
 				infrastructureStop(name, failure), failure.Service, tierOrUnchanged(marker.Tier), n,
-				maxInfrastructureRedispatches, collected.Message)
+				maxMidJobRedispatches, collected.Message)
 			return r.refuse(RefusedInfrastructureRedispatch, tick,
 				"%s; the tick is dispatched again at the same tier", infrastructureStop(name, failure))
 		}
@@ -161,20 +261,25 @@ func (r *Reconciler) answerInfrastructure(marker attemptHandle, handle *subproce
 		if tier == "" {
 			tier = "unchanged"
 		}
+		at := r.now().Add(delay).UTC().Format("15:04:05Z")
 		r.record(tick, StageInfrastructureRedispatched,
-			"%s never reached its harness: %s did not answer through the container's retry window (exit %d). "+
-				"That is infrastructure, not the tick, so it is dispatched again at the same tier (%s) and spends "+
-				"no rung of the ladder (%d of at most %d such redispatches)",
-			name, failure.Service, failure.ExitCode, tier, n, maxInfrastructureRedispatches)
+			"%s never reached its harness: %s did not answer through the container's retry window (exit %d) — "+
+				"the provider behind it is failing or unreachable. That is infrastructure, not the tick, so it is "+
+				"dispatched again at the same tier (%s) in %s, at %s, and spends no rung of the ladder (%d of at most "+
+				"%d such redispatches, %s of backoff in a window of %s)",
+			name, failure.Service, failure.ExitCode, tier, minutes(delay), at, n, maxInfrastructureRedispatches(),
+			minutes(r.infrastructure.waited(tick)), minutes(infrastructureWindow))
 		return r.refuse(RefusedInfrastructureRedispatch, tick,
-			"%s never reached its harness: %s did not answer (exit %d); the tick is dispatched again at the same tier",
-			name, failure.Service, failure.ExitCode)
+			"%s never reached its harness: %s did not answer (exit %d); the tick is dispatched again at the same "+
+				"tier in %s, at %s", name, failure.Service, failure.ExitCode, minutes(delay), at)
 	}
 	return r.refuse(RefusedInfrastructure, tick,
 		"%s never reached its harness: %s did not answer through the container's retry window (exit %d), and "+
-			"that is %d jobs of %s in a row. The run stops here rather than paying for containers that die in "+
-			"their boot. Nothing about the tick was tried and no rung of its ladder was spent: %s",
-		name, failure.Service, failure.ExitCode, n, tick, infrastructureRemedy(failure))
+			"that is %d jobs of %s in a row over %s of backoff. The run stops here rather than paying for "+
+			"containers that die in their boot. Nothing about the tick was tried and no rung of its ladder was "+
+			"spent: %s",
+		name, failure.Service, failure.ExitCode, n, tick, minutes(r.infrastructure.waited(tick)),
+		infrastructureRemedy(failure))
 }
 
 // infrastructureRecord is one recorded infrastructure failure, as the

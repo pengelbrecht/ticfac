@@ -567,6 +567,16 @@ func (r *Reconciler) runPlan(ctx context.Context, plan []planEntry) ([]string, e
 
 		if len(window.live) == 0 {
 			holders := window.holders()
+			// Nothing live, nothing held, and the head of the queue is waiting
+			// out an infrastructure backoff (infrastructure.go): wait it out
+			// here. It is not a hold — the run is only waiting for the
+			// provider — and nothing else could have been dispatched meanwhile.
+			if len(holders) == 0 && len(queue) > 0 && !behindParked(queue[0]) {
+				if until, deferred := r.infrastructure.deferredUntil(queue[0].TickID, r.now()); deferred {
+					r.sleep(until.Sub(r.now()))
+					continue
+				}
+			}
 			if len(queue) == 0 && len(holders) == 0 {
 				if len(parkOrder) > 0 {
 					return endHeld()
@@ -1468,6 +1478,12 @@ func (r *Reconciler) announceAbandoned(live []*inflightAttempt) {
 // principle is 3mp's, unchanged: a run must never ask the tracker for
 // something the tracker's own count refuses.
 func (r *Reconciler) mayAdmit(next planEntry, window *held, plan []planEntry) bool {
+	// A tick waiting out an infrastructure backoff (infrastructure.go) is not
+	// dispatched until it is over, and what is queued behind it waits with
+	// it: the provider that failed its boot is every worker's provider.
+	if _, deferred := r.infrastructure.deferredUntil(next.TickID, r.now()); deferred {
+		return false
+	}
 	holders := window.holders()
 	// An attempt this run already has in flight is ADOPTED, not dispatched: it
 	// takes no new claim and starts no new work, so neither the width nor a
