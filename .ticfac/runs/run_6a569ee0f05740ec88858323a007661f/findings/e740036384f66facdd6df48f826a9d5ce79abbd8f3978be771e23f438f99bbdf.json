@@ -12,8 +12,11 @@
   "attempt": 5,
   "done_item": "A1",
   "demonstrating_check": "pnpm -C tui test",
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-09T12:27:53Z",
+  "triaged_at": "2026-10-09T12:28:04Z",
+  "triaged_by": "ticfac run run_6a569ee0f05740ec88858323a007661f absorbing kv3",
+  "promoted_as": "kv3",
   "provenance": {
     "run_id": "run_6a569ee0f05740ec88858323a007661f",
     "tick_id": "vii",
