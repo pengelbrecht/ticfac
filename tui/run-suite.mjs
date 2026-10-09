@@ -158,7 +158,7 @@ if (mode === "seeded" || mode === "all") {
       want: "violation",
     },
     {
-      name: "watch: reordered rows violate rows-never-reorder",
+      name: "watch: reordered rows violate the grouped-order property",
       spec: "watch.spec.ts",
       sut: join(here, "seeded", "rows-reordered.sh"),
       seconds: "8s",
@@ -199,7 +199,13 @@ for (const run of runs) {
       "terminal", "test",
       "--specification", join(here, "specs", run.spec),
       "--time-limit", run.seconds,
-      "--columns", "100", "--rows", "30",
+      // 45 rows: the pane the overview's listing must seat whole — the
+      // redesign (epic ymf) grew each run's block to the dashboard's own
+      // headline (health line, phase track, you-are-here), taking the
+      // listing from ~25 to ~40 lines. The properties assert the VISIBLE
+      // answer, so the pane the honest run is driven on seats the whole
+      // listing and a held run's row never scrolls off its own screen.
+      "--columns", "100", "--rows", "45",
       "--output-path", trace,
       "--output-path-overwrite",
       "--exit-on-violation",

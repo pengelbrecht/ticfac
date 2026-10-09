@@ -27,10 +27,11 @@ for (const line of readFileSync(path, "utf8").split("\n")) {
 const decode = (record) => {
   const { cells } = record.state.grid;
   const size = record.state.grid.size;
+  // Bombadil 0.7.x records a cell as Empty or Occupied (contents + style
+  // separate — the text is plain, the colours are not in it).
   const text = cells.map((cell) => {
     const key = Object.keys(cell)[0];
-    if (key === "Glyph") return cell[key].contents ?? cell[key].char ?? "?";
-    if (key === "Wide") return cell[key].contents ?? cell[key].char ?? "?";
+    if (key === "Occupied" || key === "Wide") return cell[key].contents ?? "?";
     return " ";
   });
   const rows = [];

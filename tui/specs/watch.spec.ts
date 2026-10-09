@@ -8,6 +8,13 @@
 // pins nothing, so each one is shown to fail against a deliberately broken
 // screen there.
 //
+// The properties are pointed at the dashboard the 2026-10 redesign drew
+// (docs/design/watch-redesign-2026-10.md; re-pointed by tick vii, whose
+// subject was that this suite still pinned the layout the redesign
+// removed): the frame's marker is the key-hints footer the design draws on
+// every frame, the ticks stand grouped by state, and the needs-you answer
+// is spelled "Needs you: …".
+//
 // The world's facts come from world.json (the runner writes it beside this
 // file before each run): the plan order the tracker answers, the run the
 // watch holds, and the command that clears it.
@@ -15,44 +22,88 @@ import { always, eventually, type Formula } from "@antithesishq/bombadil";
 import { extract, type State, actions, type ActionTemplate } from "@antithesishq/bombadil/terminal";
 import world from "./world.json" with { type: "json" };
 
-// The screen as one text block, and the frame's own marker: the tick
-// table's header. A state that shows the marker is a state a person is
-// reading the dashboard in; the properties are about exactly those states.
-const screen = extract((s: State): string => {
-  const rows: string[] = [];
-  for (let i = 0; i < s.grid.size.rows; i++) rows.push(s.grid.rowText(i));
-  return rows.join("\n");
-});
+// The screen as rows, and as one text block. The frame's marker is the
+// dashboard's own signature — the key-hints footer, the last thing the
+// design's layout draws ("[enter] details  [e] all events  [q] quit"): a
+// state that shows it is a state a person is reading the dashboard in; the
+// properties are about exactly those states. The old marker, the tick
+// table's "TICK" header, was a column of the pre-redesign layout.
+const frameMarker = "[enter] details  [e] all events  [q] quit";
+const screenRows = (s: State): string[] => {
+  const out: string[] = [];
+  for (let i = 0; i < s.grid.size.rows; i++) out.push(s.grid.rowText(i));
+  return out;
+};
+const rows = extract(screenRows);
+const screen = extract((s: State): string => screenRows(s).join("\n"));
+const frameShown = extract((s: State): boolean =>
+  screenRows(s).some((line) => line.includes(frameMarker)),
+);
 const columns = extract((s: State): number => s.grid.size.columns);
-const frameShown = extract((s: State): boolean => {
-  for (let i = 0; i < s.grid.size.rows; i++) {
-    if (s.grid.rowText(i).includes("TICK")) return true;
+
+// The state groups the redesign draws, and the lines that open them: a
+// group's header stands at the line's first column — "NOW", "DONE (2)",
+// "UP NEXT (4)   t01 …" (the collapsed group's ticks seated after it),
+// "HELD (1)" — while every row beneath it is indented. The header is where
+// the grouping is asserted; the lines beneath are where the order is.
+const groupNames = ["NOW", "DONE", "UP NEXT", "HELD"];
+const isGroupHeader = (line: string): boolean => {
+  const text = line.replace(/^\s+/, "");
+  if (text === "") return false;
+  for (const name of groupNames) {
+    if (text === name) return true;
+    if (text.startsWith(name + " (")) return true;
   }
   return false;
-});
+};
 
-// The tick ids the frame's rows carry, in the order the rows appear — the
-// dashboard's own row order, read back off the screen. The feed lines name
-// ticks as "t1#1"; the plan's ids are "t01"-shaped, so only table rows
-// match, and drill-in views (one tick's own rows) keep the plan's order by
-// construction.
-const rowIDs = extract((s: State): string[] => {
-  const found: string[] = [];
-  for (let i = 0; i < s.grid.size.rows; i++) {
-    const text = s.grid.rowText(i);
-    for (const id of world.planOrder) {
-      if (text.includes(id) && !found.includes(id)) found.push(id);
+// The screen's state groups, each the lines from one group header to the
+// next, with the header's own group name. Lines above the first header
+// (the identity, the needs-you answer, the phase track) belong to no group,
+// and the tail beneath the latest rule is dropped with the rule: its
+// sentences name ticks in the feed's own "t1#1" spelling, never the plan's.
+const groupSections = extract((s: State): { name: string; lines: string[] }[] => {
+  const sections: { name: string; lines: string[] }[] = [];
+  let current: { name: string; lines: string[] } | null = null;
+  for (const line of screenRows(s)) {
+    if (line.startsWith("─ latest")) break;
+    if (isGroupHeader(line)) {
+      const text = line.replace(/^\s+/, "");
+      const name = groupNames.find((n) => text === n || text.startsWith(n + " (")) ?? "";
+      current = { name, lines: [line] };
+      sections.push(current);
+      continue;
     }
+    if (current !== null && line.trim() !== "") current.lines.push(line);
   }
-  return found;
+  return sections;
 });
 
-const isSubsequence = (plan: string[], rows: string[]): boolean => {
-  let i = 0;
-  for (const id of rows) {
-    if (i < plan.length && id === plan[i]) i++;
+// The plan ids a group's lines carry, in the order they FIRST appear
+// reading down the screen — first occurrence only, so a mention inside a
+// row's other cells (a duplicate's "duplicate of …") cannot re-order what
+// the row's own id already placed.
+const idsInScreenOrder = (lines: string[]): string[] => {
+  const text = lines.join("\n");
+  const first = new Map<string, number>();
+  for (const id of world.planOrder) {
+    const at = text.indexOf(id);
+    if (at >= 0) first.set(id, at);
   }
-  return i === plan.length;
+  return [...first.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id);
+};
+
+// inPlanOrder says whether the ids, in the order they appear, follow the
+// plan's: each one at or after the one before, with plan entries between
+// allowed — a fold or a narrow pane may hide some, and hiding keeps order.
+const inPlanOrder = (plan: string[], ids: string[]): boolean => {
+  let at = 0;
+  for (const id of ids) {
+    while (at < plan.length && plan[at] !== id) at++;
+    if (at >= plan.length) return false;
+    at++;
+  }
+  return true;
 };
 
 // The watch never outlives its run here, so a plain boolean in the thunk is
@@ -61,19 +112,31 @@ const isSubsequence = (plan: string[], rows: string[]): boolean => {
 const overTheFrame = (holds: () => boolean): Formula =>
   always(() => !frameShown.current || holds());
 
-// P1 (outside): the rows never reorder — the ids the screen's rows carry,
-// in their screen order, are a subsequence of the plan's order, at every
-// pane shape the generator resizes to.
-export const rowsNeverReorder = overTheFrame(() => isSubsequence(world.planOrder, rowIDs.current));
+// P1 (outside): the dashboard groups the ticks by state — the redesign's
+// own rule, replacing the plan-order table — and within each group the rows
+// keep the plan's order. The group headers are part of the property: a
+// dashboard that dropped them and printed one flat table fails here, as one
+// that reordered the groups themselves does (the design draws them NOW,
+// DONE, UP NEXT, HELD). A group whose rows reshuffle between frames is a
+// table nobody can read.
+export const groupedTicksKeepPlanOrder = overTheFrame(() => {
+  const sections = groupSections.current;
+  if (sections.length === 0) return false;
+  if (!inPlanOrder(groupNames, sections.map((s) => s.name))) return false;
+  for (const section of sections) {
+    if (!inPlanOrder(world.planOrder, idsInScreenOrder(section.lines))) return false;
+  }
+  return true;
+});
 
 // P2 (outside): a run that ended holding something for a person never says
-// "needs you: nothing" — and the hold's clearing command is on screen,
+// "Needs you: nothing" — and the hold's clearing command is on screen,
 // every word of it. A wrap is by design (u4l's P2, tick 9um: the pane that
 // cannot seat the whole line wraps the command under the announcement), so
 // the assertion is the command's WORDS, not its one-line spelling.
 export const needsYouCarriesTheHold = overTheFrame(() => {
   const text = screen.current;
-  if (text.includes("needs you: nothing")) return false;
+  if (text.includes("Needs you: nothing")) return false;
   for (const word of world.clearingCommand.split(" ")) {
     if (word !== "" && !text.includes(word)) return false;
   }
@@ -97,8 +160,8 @@ export const frameFitsThePane = overTheFrame(() => {
 });
 
 // P5 (#112, outside): the first frame appears within its bound — the
-// dashboard's own header, on the screen, within five seconds of the watch
-// starting. The Go side pins the tight bound (status_firstframe_test.go);
+// dashboard's own signature, on the screen, within five seconds of the
+// watch starting. The Go side pins the tight bound (status_firstframe_test.go);
 // this is the outside half, over a real spawn.
 export const firstFrameWithinItsBound = eventually(() => frameShown.current).within(5, "seconds");
 

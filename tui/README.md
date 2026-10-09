@@ -32,17 +32,28 @@ of registries and feeds:
   code (0 — attention is data, not a failure).
 
 `specs/watch.spec.ts` — the watch dashboard (`ticfac watch epic-hld`), over
-generated resizes:
+generated resizes. The properties are pointed at the dashboard the 2026-10
+redesign drew (docs/design/watch-redesign-2026-10.md): the frame's marker is
+the key-hints footer the design's layout ends with
+(`[enter] details  [e] all events  [q] quit`), drawn on every frame — the
+redesign removed the tick table whose `TICK` header the suite used before
+(tick vii) — so a state that shows the marker is a state a person is reading
+the dashboard in:
 
-- **rows never reorder**: the tick ids the screen's rows carry, in screen
-  order, are a subsequence of the plan order (u4l's P1, from outside);
-- **needs-you carries the hold**: never `needs you: nothing` over a run that
-  ended holding, and every word of the clearing command on screen (u4l's P2;
-  a wrap is by design);
+- **the dashboard groups the ticks by state, and each group's rows keep the
+  plan's order**: the group headers (NOW / DONE / UP NEXT / HELD) are part of
+  the property — a dashboard that dropped them for one flat table fails here
+  — and within a group the ids appear in plan order (u4l's P1, re-pointed:
+  grouping by state is the redesign's own rule, so plan order across groups
+  is no longer true);
+- **needs-you carries the hold**: never `Needs you: nothing` over a run that
+  ended holding — the redesign spells the answer with a leading capital — and
+  every word of the clearing command on screen (u4l's P2; a wrap is by
+  design);
 - **never a fabricated `$0.00`** for the world's unmeasured spend (u4l's P3);
 - **the frame fits the pane** at every generated size (u4l's P4);
 - **the first frame appears within its bound** (#112): five seconds from
-  spawn to the dashboard's own header.
+  spawn to the dashboard's own marker.
 
 ## How it runs
 
