@@ -17,6 +17,6 @@
   "acceptance_criteria": "golden frames for 5 scenarios x 2 sizes committed and checked in the gate; nothing wraps or truncates the needs-you line; screenshots in the report; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.452677Z",
-  "updated_at": "2026-10-09T00:15:44.88819018Z",
+  "updated_at": "2026-10-09T01:05:09.309235429Z",
   "started_at": "2026-10-09T00:05:15.253955689Z"
 }
