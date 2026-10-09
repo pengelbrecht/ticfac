@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "jml",
   "attempt": 7,
-  "status": "proposed",
+  "status": "fixed",
   "proposed_at": "2026-10-09T14:36:27Z",
+  "triaged_at": "2026-10-09T14:36:35Z",
+  "triaged_by": "ticfac run run_6a569ee0f05740ec88858323a007661f applying the tracker edit the finding carries",
+  "fixed_as": "f8a96e224d6468fab78265823e92aa6a099a3a02",
   "provenance": {
     "run_id": "run_6a569ee0f05740ec88858323a007661f",
     "tick_id": "jml",
