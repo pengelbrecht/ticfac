@@ -62,7 +62,7 @@ whole middle — and it never trims the drill-in cursor's row (the cap
 extends to include it; this fixed a real defect the pty harness caught:
 at 80x24 with two holds, `j` moved a cursor the frame no longer showed).
 
-**Kept working unchanged:** `enter` (tick drill-down, `watch_drind.go`'s
+**Kept working unchanged:** `enter` (tick drill-down, `watch_drill.go`'s
 `renderTickView`) and `e` (the raw feed view) — the keys, the reducer, the
 raw `stage: detail` lines and the whole stream path are untouched. The
 bare `ticfac` overview still renders the dashboard headline from the same
