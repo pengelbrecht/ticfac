@@ -85,6 +85,8 @@ func startSteerStandIn(t *testing.T, path string, ok bool) *steerStandIn {
 // A delivered steer is one ack line for one request line, with the text and
 // the idempotent request id both intact.
 func TestSteerRunnerDeliversOneRequestAndReadsTheAck(t *testing.T) {
+	t.Parallel()
+
 	sock := filepath.Join(shortSocketDir(t), "steer.sock")
 	standIn := startSteerStandIn(t, sock, true)
 
@@ -107,6 +109,8 @@ func TestSteerRunnerDeliversOneRequestAndReadsTheAck(t *testing.T) {
 // A refused steer is an error the caller falls back from, carrying the
 // harness's own reason.
 func TestARefusedSteerIsAnErrorNamingWhy(t *testing.T) {
+	t.Parallel()
+
 	sock := filepath.Join(shortSocketDir(t), "steer.sock")
 	startSteerStandIn(t, sock, false)
 	err := steerRunner(sock, "steer me", "s-1")
@@ -118,6 +122,8 @@ func TestARefusedSteerIsAnErrorNamingWhy(t *testing.T) {
 // A socket nobody listens on is an error, not a hang: the whole exchange is
 // bounded, and the watch falls back rather than waits.
 func TestAMissingSocketRefusesFast(t *testing.T) {
+	t.Parallel()
+
 	start := time.Now()
 	if err := steerRunner(filepath.Join(t.TempDir(), "no.sock"), "steer me", "s-1"); err == nil {
 		t.Fatal("a steer to a missing socket was delivered")
@@ -130,6 +136,8 @@ func TestAMissingSocketRefusesFast(t *testing.T) {
 // A reply that is not the pinned shape is an error: the protocol is a
 // contract, and a drifted harness is a fallback now, not a silent nothing.
 func TestAGarbageReplyIsAnError(t *testing.T) {
+	t.Parallel()
+
 	sock := filepath.Join(shortSocketDir(t), "steer.sock")
 	listener, err := net.Listen("unix", sock)
 	if err != nil {
@@ -153,6 +161,7 @@ func TestAGarbageReplyIsAnError(t *testing.T) {
 // The socket's path is short, stable for one attempt's state directory,
 // and different for another — the kernel bounds a Unix socket path, and a
 // real run's state directories sit deeper than that bound.
+// serial: t.Setenv names the socket dir steerSockPath reads — the env var is the input under test, and t.Setenv refuses a parallel test.
 func TestTheSteerSockPathIsStableAndPerAttempt(t *testing.T) {
 	t.Setenv("TICFAC_STEER_SOCK_DIR", shortSocketDir(t))
 	state := filepath.Join("x", "state")
@@ -169,6 +178,7 @@ func TestTheSteerSockPathIsStableAndPerAttempt(t *testing.T) {
 // process LIVES through the nudge, the conversation takes the message, and
 // only a second silence earns the stop. The stand-in socket is the harness's
 // half; what this test exercises is the supervisor's ladder.
+// serial: t.Setenv names the harness dir and the steer socket dir the executor and the runner process both read from the environment — t.Setenv refuses a parallel test.
 func TestTheStuckNudgeOnADurableRunnerIsASteer(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short mode: this one runs a real supervisor, a real runner process and a real socket")
@@ -252,6 +262,7 @@ func TestTheStuckNudgeOnADurableRunnerIsASteer(t *testing.T) {
 // A steer that cannot be delivered — the socket gone, the harness dead —
 // falls back to the CLI runner's interrupt-and-re-prompt, and the ladder
 // still ends the attempt rather than waiting on a door that never opens.
+// serial: t.Setenv names the harness dir and the steer socket dir the executor and the runner process both read from the environment — t.Setenv refuses a parallel test.
 func TestAnUndeliverableSteerFallsBackToTheInterruptRePrompt(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short mode: this one runs a real supervisor and a real runner process")
@@ -298,6 +309,7 @@ func TestAnUndeliverableSteerFallsBackToTheInterruptRePrompt(t *testing.T) {
 // does — a shell spawned `detached`, leading its own process group — and
 // does what the real harness does when that tool's round ends and a steer is
 // waiting: it carries on, here by writing its report and finishing.
+// serial: t.Setenv names the harness dir and the steer socket dir the executor and the runner process both read from the environment — t.Setenv refuses a parallel test.
 func TestAStuckSteerInterruptsAHungToolAndTheWorkerRecovers(t *testing.T) {
 	if testing.Short() {
 		t.Skip("short mode: this one runs a real supervisor, a real runner process and a real socket")

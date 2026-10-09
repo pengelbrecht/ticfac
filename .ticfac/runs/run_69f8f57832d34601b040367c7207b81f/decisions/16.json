@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 16,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "Tick j6o records the blessed local claude exception at the review/closeout cells in .tick/runners.toml. The matching one-paragraph note in .tick/runners.local.toml's header (why it declares no review/closeout overlay) could not be written by a worker: runners.local.toml is outside the files a worker may write, and attempt 32 was rejected for exactly that edit. An operator or a run with that authority could add it; the guard test already enforces the behaviour, so this is documentation only.\nevidence: .tick/runners.local.toml header; .ticfac/runs/epic-43y/decisions/40.json (boundary violation: .tick/runners.local.toml)\n\nticfac run epic-43y filed this backlog tick from the finding 8665113a586565d93a9629cc08d86a60038b8c86c835140c177e3ffd56886a93 (reported by run-epic-43y/tick-j6o/attempt-35): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/8665113a586565d93a9629cc08d86a60038b8c86c835140c177e3ffd56886a93.json on the run branch.",
+    "epic_id": "ex6",
+    "role": "classify-tick",
+    "tick_id": "96s",
+    "title": "runners.local.toml header: note review/closeout are deliberately not overlaid"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.91,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.04,
+      "design": 0.01,
+      "diagnosis": 0,
+      "mechanical": 0.93,
+      "translation": 0.02
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1374,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T16:24:13Z",
+  "answered_at": "2026-10-07T16:24:13Z",
+  "provenance": {
+    "run_id": "run_69f8f57832d34601b040367c7207b81f",
+    "tick_id": "96s",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "6acab9f6e6afc1abd401a76098d0d0285f529ff9",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:0fd84feaa6def26de94fef1a4da33b194dfa9b1fa1c66cc1c31a8a555019f2a4",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

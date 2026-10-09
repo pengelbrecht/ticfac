@@ -10,3 +10,8 @@ import "os"
 // did before tick 6wh. A shared gate directory would be worse than a slow one —
 // it decides verdicts.
 func lockGateSlot(string) (*os.File, error) { return nil, errNoGateSlotLock }
+
+// gateSlotHeld on a platform with no flock: no slot can exist here (see
+// lockGateSlot), so nothing calls this — and were it called, the honest answer
+// errs towards held: see gatedir_unix.go.
+func gateSlotHeld(string) bool { return true }

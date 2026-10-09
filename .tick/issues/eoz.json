@@ -1,0 +1,14 @@
+{
+  "id": "eoz",
+  "title": "o3q dropped the pre-collect 'collecting' checkpoint; no tick says so",
+  "description": "collect() no longer writes the 'collecting \u003ctick\u003e attempt \u003cn\u003e' checkpoint before reading the executor. The collecting checkpoint now lands only at the ruling, as '\u003cattempt\u003e is collected (ready-to-merge)', via recordCollectVerdict.\n\nThat changes the run's checkpoint history. A run killed mid-collect now shows its previous state on origin rather than 'collecting'.\n\nThe o3q tick authorises recording the verdict, not removing the announce. The removal is justified only in a code comment that cites f61.\n\nI found no Go reader of the old reason, so nothing breaks. But [A4] asks for every durable-evidence change to be stated on its tick: a note on o3q recording the change, and that no reader depends on it, closes this.\nevidence: internal/reconcile/dispatch.go: the removed r.checkpoint(StateCollecting, \"collecting %s attempt %d\") at the top of collect(), and recordCollectVerdict\n\nticfac run epic-t8u filed this backlog tick from the finding 6cd123070f5db4e0d88751f321822af25459702883a698d36bec27cd6ddd606a (reported by run-epic-t8u/tick-r6v/attempt-18) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/6cd123070f5db4e0d88751f321822af25459702883a698d36bec27cd6ddd606a.json on the run branch.",
+  "notes": "2026-10-08 04:38 - ticfac run epic-t8u: created by absorbing finding 6cd123070f5db4e0d88751f321822af25459702883a698d36bec27cd6ddd606a — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/6cd123070f5db4e0d88751f321822af25459702883a698d36bec27cd6ddd606a.json on epic/t8u, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-r6v/attempt-18",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-08T02:38:15Z",
+  "updated_at": "2026-10-08T02:38:20.271579Z"
+}

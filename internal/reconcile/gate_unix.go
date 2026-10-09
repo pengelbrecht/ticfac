@@ -25,6 +25,14 @@ func gateProcessGroup() *syscall.SysProcAttr {
 // which is the shell's, and the negative pid is what reaches its children. If
 // the group is already gone — the leader exited and its children with it — the
 // single-pid kill is the honest fallback rather than a reported failure.
+//
+// Aimed only at a shell that has not been REAPED: an unreaped corpse still
+// holds its number, so both the group kill and this fallback can reach nothing
+// but this gate's own leftovers. Once the reap has handed the number back, a
+// signal to it is aimed at a stranger — which is why wait() settles the group
+// before it reaps, and why the tests belt only a gate they never collected
+// (tick rmc; internal/exec/subprocess's exitwait.go for the same rule on
+// attempts).
 func killGateGroup(pid int) error {
 	if pid <= 0 {
 		return nil

@@ -1,0 +1,14 @@
+{
+  "id": "gqh",
+  "title": "TS and Go collects answer different verdict words for an unpushed branch",
+  "description": "The dyo/94u seam — the TS collect (src/worker-verdict.ts, verdictFor) and the Go executor (internal/exec/cloudflaresandbox/collect.go, classify) — agree on the report-only refusal, but disagree on the verdict WORD for a branch that carries nothing at all (the push never landed): TS answers no-commits (its checks order no-commits first), Go answers missing-result (its checks the report first, by tick 19l's recorded order, which subprocess/collect.go documents as deliberate). Both fail the attempt, so no run misbehaves today — each attempt is collected by exactly one of the two — but these are two readers of one branch shape speaking different words of the closed verdict vocabulary, the drift class contracts/collect-vocabulary.json exists to catch. The property test test/property/worker-verdict.test.ts records the divergence, its minimal counterexample, and skips exactly that shape; a fix is either re-ordering verdictFor to the two-Go-consensus order, or recording the TS fact in the contract.\nevidence: cloudflare/src/worker-verdict.ts verdictFor (no-commits checked first) vs internal/exec/cloudflaresandbox/collect.go classify (missing-result first); counterexample {branch_exists: true, commits: 0, result_exists: false, status: \"\"} → TS no-commits, Go missing-result\n\nticfac run epic-t8u filed this backlog tick from the finding a74051682e8bfc9a7098b36e29e1bebf67459e8e129a3091ea9980753bcfe42d (reported by run-epic-t8u/tick-p0n/attempt-12) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/a74051682e8bfc9a7098b36e29e1bebf67459e8e129a3091ea9980753bcfe42d.json on the run branch.",
+  "notes": "2026-10-07 23:40 - ticfac run epic-t8u: created by absorbing finding a74051682e8bfc9a7098b36e29e1bebf67459e8e129a3091ea9980753bcfe42d — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/a74051682e8bfc9a7098b36e29e1bebf67459e8e129a3091ea9980753bcfe42d.json on epic/t8u, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-p0n/attempt-12",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-07T21:40:52Z",
+  "updated_at": "2026-10-07T21:40:59.195909Z"
+}

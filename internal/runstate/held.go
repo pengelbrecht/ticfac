@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"path/filepath"
+	"time"
 
 	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
@@ -89,6 +90,7 @@ func (c *HeldConflict) Error() string {
 // heldWrite is one record chained locally and not yet on origin.
 type heldWrite struct {
 	message string
+	when    time.Time
 
 	// A store record: one path, under its guard. guard is the blob origin
 	// held at the path when the chain began ("" = absent), which is what the
@@ -100,6 +102,15 @@ type heldWrite struct {
 
 	// A change set (the tracker's): unguarded.
 	changes []TreeChange
+
+	// parent is the commit this record builds on, stated once at chain time:
+	// the head the chain began on for the first record, "" for every later
+	// one, which builds on the record before it. It is DATA until the chain
+	// materializes — the deferred half of this file — because the chain is
+	// rebuilt whenever origin moves under it, and a rebuilt record is a
+	// different commit built on a different base, not a mistake to redo
+	// five git processes at.
+	parent string
 
 	onLanded func(commit string)
 	commit   string
@@ -168,29 +179,109 @@ func (s *Store) guardFor(path string) string {
 	return s.view[path]
 }
 
-// chain commits one write on top of the chain (or origin's head, for the
-// first) and makes it this writer's view.
+// chain records one write on top of the chain (or origin's head, for the
+// first) and makes it this writer's view. The record is DATA here, not a
+// commit: the chain is deferred until it is about to be pushed
+// (materialize), so that a rebuild onto a moved origin costs nothing — the
+// old path built five git processes per record, and a rebuilt record threw
+// every one of them away — and a step that dies before its release has
+// written nothing to git at all.
 func (s *Store) chain(w *heldWrite) error {
 	if len(s.held) == 0 {
 		s.baseView = maps.Clone(s.view)
+		w.parent = s.head
+	} else {
+		w.parent = ""
 	}
-	parent := s.head
-	if s.tip != "" {
-		parent = s.tip
-	}
-	commit, err := s.build(parent, w)
-	if err != nil {
-		if len(s.held) == 0 {
-			s.baseView = nil
-		}
-		return err
-	}
-	w.commit, s.tip = commit, commit
+	w.when = s.now()
+	// A record chained onto a chain that has already been materialized (a
+	// mid-step history read builds the head it answers from) invalidates that
+	// materialization: the tip it named is no longer the chain's end, and a
+	// flush that trusted it would push a head that strands every record the
+	// read never saw. materialize rebuilds the whole chain; it is one process.
+	s.tip = ""
 	s.held = append(s.held, w)
 	if w.path != "" {
 		s.view[w.path] = w.blob
 	}
 	return nil
+}
+
+// materialize builds the held chain's commits, if it has not: one
+// `git fast-import` process for every record the step holds, with the
+// per-record path (git.go's commitWithFile and commitWithChanges) as the
+// fallback a broken stream degrades to — the same shape as the batch
+// reader's fallback (batch.go): a store that cannot fast-import keeps
+// working, and the only cost is speed.
+//
+// The commits are byte-for-byte what the per-record path builds — the same
+// tree, message, author, committer and date — which is what the byte-for-byte
+// guard beside this change asserts. Materialization is idempotent: a chain
+// that is already built (s.tip set) answers at once.
+func (s *Store) materialize() error {
+	if len(s.held) == 0 || s.tip != "" {
+		return nil
+	}
+	commits := make([]importCommit, 0, len(s.held))
+	for _, w := range s.held {
+		commits = append(commits, s.importCommit(w))
+	}
+	shas, err := s.git.fastImport(s.importRef(), commits)
+	if err == nil {
+		for i, w := range s.held {
+			w.commit = shas[i]
+		}
+		s.tip = shas[len(shas)-1]
+		return nil
+	}
+	return s.materializeEager()
+}
+
+// importCommit states one held record as the stream fast-import writes it.
+func (s *Store) importCommit(w *heldWrite) importCommit {
+	c := importCommit{parent: w.parent, message: w.message, when: w.when}
+	if w.path != "" {
+		c.changes = []importChange{{mode: "100644", blob: w.blob, path: w.path}}
+		return c
+	}
+	for _, change := range w.changes {
+		c.changes = append(c.changes, importChange{
+			removed: change.Removed,
+			mode:    or(change.Mode, "100644"),
+			blob:    change.Blob,
+			path:    change.Path,
+		})
+	}
+	return c
+}
+
+// materializeEager is the per-record path, run once per record: the fallback
+// a failing fast-import degrades to, and the exact code this store ran for
+// every write before the materializer existed.
+func (s *Store) materializeEager() error {
+	parent := ""
+	for _, w := range s.held {
+		base := w.parent
+		if base == "" {
+			base = parent
+		}
+		commit, err := s.build(base, w)
+		if err != nil {
+			return err
+		}
+		w.commit, parent, s.tip = commit, commit, commit
+	}
+	return nil
+}
+
+// importRef is the throwaway ref the materializer's stream is pointed at:
+// per store instance, local only, never pushed (fastimport.go says why the
+// ref exists at all).
+func (s *Store) importRef() string {
+	// The instance id comes first, for the same reason peekRef's does: a ref
+	// and a directory cannot share one path, and leading with the id keeps
+	// each instance's namespace disjoint from anything an older build wrote.
+	return "refs/ticfac/import/" + s.fetchID + "/" + s.runID
 }
 
 func (s *Store) build(parent string, w *heldWrite) (string, error) {
@@ -218,8 +309,22 @@ func (s *Store) flush(subject *heldWrite) (Outcome, error) {
 	var pushed []string
 	uncertain := false
 	for try := 0; try < maxContendedPushes; try++ {
+		// Each attempt materializes the chain as it NOW stands: the first
+		// pass builds it, and a pass after a rebuild builds it again onto the
+		// new base — the one fast-import a step costs is the push's own.
+		if err := s.materialize(); err != nil {
+			s.dropHeld()
+			return "", err
+		}
 		tip := s.tip
 		pushed = append(pushed, tip)
+		if s.contend != nil {
+			// The contention seam: another writer pushing to origin right now
+			// moves the ref between this store's read and its write, which is
+			// the lease this push is about to lose. The guards place their
+			// competitor here; see Store.contend.
+			s.contend(pushAboutToLeave)
+		}
 		_, stderr, tries, pushErr := s.git.tryCounted(nil, nil, "push",
 			"--force-with-lease="+s.branchRef()+":"+base,
 			s.remote, tip+":"+s.branchRef())
@@ -294,6 +399,7 @@ func (s *Store) flush(subject *heldWrite) (Outcome, error) {
 		held := s.held
 		s.held, s.tip = nil, ""
 		for _, w := range held {
+			w.commit = ""
 			if err := s.chain(w); err != nil {
 				s.dropHeld()
 				return "", err
@@ -332,6 +438,7 @@ func (s *Store) refreshHeld() error {
 	s.head, s.view = freshHead, freshView
 	s.held, s.tip, s.baseView = nil, "", nil
 	for _, w := range held {
+		w.commit = ""
 		if err := s.chain(w); err != nil {
 			s.dropHeld()
 			return err
@@ -397,12 +504,18 @@ func (s *Store) dropHeld() {
 }
 
 // readHead is the commit this writer's reads are answered from: its own chain
-// when it holds one, origin's head as last seen otherwise.
-func (s *Store) readHead() string {
-	if s.tip != "" {
-		return s.tip
+// when it holds one, origin's head as last seen otherwise. A chain that is
+// held but not yet materialized is built here — a history read mid-step
+// (CheckpointHistory) answers over the records the step has written, exactly
+// as it did when every record was its own five git processes.
+func (s *Store) readHead() (string, error) {
+	if err := s.materialize(); err != nil {
+		return "", err
 	}
-	return s.head
+	if s.tip != "" {
+		return s.tip, nil
+	}
+	return s.head, nil
 }
 
 // commitWithChanges builds a commit that is `base` plus a change set, in a

@@ -85,6 +85,20 @@ function memoryRecords(): WorkerAttemptRecordStore & { saves: WorkerAttemptRecor
   };
 }
 
+/** The section texts the conversation's system messages carry. */
+function systemSectionsOf(context: { messages: Message[] }): string[] {
+  const out: string[] = [];
+  for (const message of context.messages) {
+    if (message.role !== "system") continue;
+    const sections = (message as { sections?: Record<string, string | null> }).sections;
+    if (sections === undefined) continue;
+    for (const value of Object.values(sections)) {
+      if (typeof value === "string" && value !== "") out.push(value);
+    }
+  }
+  return out;
+}
+
 function textOf(message: Message): string {
   if (typeof message.content === "string") return message.content;
   return message.content.map((block) => (block.type === "text" ? block.text : "")).join("");
@@ -480,6 +494,84 @@ describe("a worker attempt driven by the host", () => {
     // Not twice, and not as a between-rounds loss: this loss sat mid-tool,
     // where only the nonce path sees it.
     expect(lines.some((l) => l.includes("the container was lost between rounds"))).toBe(false);
+  });
+
+  // Tick qzg: the MID-COMMAND loss — a tracked bash whose process is gone,
+  // or ended with no exit code — restored the workspace and told the MODEL
+  // which sha it rebuilt from, while the host's own log stream said nothing:
+  // the operator watching the say-stream read a mysteriously slow round and
+  // then a model that knew something they did not. The env fires the same
+  // ear the nonce path fires, naming the loss, so the say-stream says it too.
+  it("says which sha a mid-command loss restored the workspace from", {
+    timeout: 120_000,
+  }, async () => {
+    const door = fakeSandboxDoor({
+      // The restore's read-back answers the attempt branch's tip; the wip
+      // snapshot's rev-parse answers the round's sha.
+      runOutput: (command) =>
+        command.includes("git rev-parse HEAD && git log -1 --format=%s")
+          ? "cafef00d\nwip: tool round\n"
+          : command.includes("git rev-parse HEAD")
+            ? "cafef00d\n"
+            : "",
+      processScript: (command) => {
+        if (command === WORKER_BOOT_PROTOCOL.bootCommand) {
+          return { output: bootOutput(), exit: 0, ms: 20 };
+        }
+        if (command.startsWith(WORKER_BOOT_PROTOCOL.finishCommand)) {
+          return { output: "ticks-worker: pushed\n", exit: 0, ms: 20 };
+        }
+        // The model's bash runs long enough to be lost under.
+        return { output: "bash ran\n", exit: 0, ms: 400 };
+      },
+    });
+    const { models } = gatewayFaux([
+      () =>
+        fauxAssistantMessage([fauxToolCall("bash", { command: "make test" })], {
+          stopReason: "toolUse",
+        }),
+      // The model is told of the loss and the restore — the second response
+      // is the turn continuing on the message the env hands back.
+      () => fauxAssistantMessage("finished after the restore"),
+    ]);
+    const records = memoryRecords();
+    const lines: string[] = [];
+    const host = new WorkerAttemptHost({
+      door: door.sandbox,
+      storage: async () => new MemoryStorage(),
+      models,
+      records,
+      log: async (text) => {
+        lines.push(text);
+      },
+      pollMs: 5,
+      bashPollMs: 5,
+      guardDir: null,
+    });
+
+    await host.start(spec());
+    const driving = host.drive();
+    await waitFor("the model's bash to start", () =>
+      door.starts.some((s) => s.command.includes("make test")),
+    );
+    // The container is destroyed under the model's bash — the host life
+    // SURVIVES: the tracked process ends with no exit code, which is the
+    // env's own mid-command loss, not a harness death.
+    door.loseRunning();
+    const settled = await driving;
+    expect(settled.settled).toMatchObject({ exitCode: 0, phase: "finishing" });
+
+    // The env restored rather than re-running: the command started once, and
+    // the model read the loss and the sha it was restored to.
+    expect(door.starts.filter((s) => s.command.includes("make test")).length).toBe(1);
+    const restored = lines.filter((l) => l.includes("the container was lost mid-command"));
+    expect(restored).toHaveLength(1);
+    expect(restored[0]).toContain("restored to cafef00d");
+    expect(restored[0]).toContain("wip: tool round");
+    // Neither other restore path claims it: this loss was not between
+    // rounds, and no tracked bash had to go looking for a fresh container.
+    expect(lines.some((l) => l.includes("the container was lost between rounds"))).toBe(false);
+    expect(lines.some((l) => l.includes("a tracked bash found a fresh container"))).toBe(false);
   });
 
   it("places an operator's steer after the running tool round", {
@@ -1037,6 +1129,173 @@ describe("a worker attempt driven by the host", () => {
     const settled = await life().drive();
     expect(lines.join("")).not.toContain("appears stuck");
     expect(settled.settled).toMatchObject({ exitCode: 0, phase: "finishing" });
+    expect(settled.harnessStatus).toBe(0);
+  });
+
+  // The review attempt (tick 8gd): the PR-review job's conversation is
+  // hosted on the same host, but a review commits nothing — no branch to
+  // checkpoint, no report to check, no workspace to restore. Its two
+  // container halves are the review contract's own.
+  it("drives a review attempt on the review's own halves, with none of the worker's machinery", {
+    timeout: 120_000,
+  }, async () => {
+    const protocol = {
+      bootCommand: contract.review_boot_command,
+      finishCommand: contract.review_finish_command,
+      setupCommand: contract.setup_command,
+      bootMarker: contract.review_boot_marker,
+      promptBegin: contract.review_boot_prompt_begin,
+      promptEnd: contract.review_boot_prompt_end,
+    };
+    const reviewRef = "refs/pull/42/head";
+    const findings = "/tmp/ticks-review-run_1.md";
+    const reviewPrompt = "You are reviewing one pull request. Write your findings.";
+    const boot = [
+      `ticks-orchestrator: ${contract.review_boot_marker} branch=${reviewRef} result=${findings}`,
+      contract.review_boot_prompt_begin,
+      reviewPrompt,
+      contract.review_boot_prompt_end,
+      "",
+      "",
+    ].join("\n");
+    const door = fakeSandboxDoor({
+      runOutput: (command) => (command.includes("git rev-parse HEAD") ? "cafef00d\n" : ""),
+      processScript: (command) => {
+        if (command === protocol.bootCommand) return { output: boot, exit: 0, ms: 20 };
+        if (command.startsWith(protocol.finishCommand)) {
+          return { output: "posted\n", exit: 0, ms: 20 };
+        }
+        return { output: "bash ran\n", exit: 0, ms: 20 };
+      },
+    });
+    // The first response's TranscriptContext carries the conversation's
+    // messages. A prompt section rides a system message's `sections` record,
+    // not its text — that is how pi-durable replays them — so the section
+    // assertions below read that record.
+    const seen: string[] = [];
+    const sectionsSeen: string[] = [];
+    const { models } = gatewayFaux([
+      (context) => {
+        seen.push(context.messages.map((m) => textOf(m as Message)).join("\n---\n"));
+        sectionsSeen.push(...systemSectionsOf(context));
+        return fauxAssistantMessage(
+          [fauxToolCall("bash", { command: `printf 'findings' > ${findings}` })],
+          { stopReason: "toolUse" },
+        );
+      },
+      (context) => {
+        seen.push(context.messages.map((m) => textOf(m as Message)).join("\n---\n"));
+        sectionsSeen.push(...systemSectionsOf(context));
+        return fauxAssistantMessage("the review is written");
+      },
+    ]);
+    const records = memoryRecords();
+    const log: string[] = [];
+    const host = new WorkerAttemptHost({
+      door: door.sandbox,
+      storage: async () => new MemoryStorage(),
+      models,
+      records,
+      log: (text) => {
+        log.push(text);
+      },
+      pollMs: 5,
+      bashPollMs: 5,
+      guardDir: null,
+      protocol,
+    });
+
+    const started = await host.start(
+      spec({ kind: "review", tick: "pr-42-review", role: "review" }),
+    );
+    expect(started.fresh).toBe(true);
+    const settled = await host.drive();
+
+    expect(settled.phase).toBe("settled");
+    expect(settled.settled).toMatchObject({ exitCode: 0, phase: "finishing" });
+    expect(settled.boot).toMatchObject({
+      branch: reviewRef,
+      result: findings,
+      prompt: reviewPrompt,
+    });
+
+    // The container ran exactly the review's two halves, in order.
+    const commands = door.starts.map((s) => s.command);
+    expect(commands[0]).toBe(protocol.bootCommand);
+    expect(commands.at(-1)).toBe(`${protocol.finishCommand} 0`);
+    // The model was asked the boot's prompt, verbatim.
+    expect(seen.length).toBeGreaterThanOrEqual(1);
+
+    // None of the worker machinery ran: no wip checkpoint or its retirement
+    // (a review has no branch to snapshot to), no branch record written for
+    // the finish, no report checker (a review's findings are not a STATUS'd
+    // report).
+    expect(door.runs.some((r) => r.command.includes("git commit-tree"))).toBe(false);
+    expect(door.runs.some((r) => r.command.includes("git push"))).toBe(false);
+    expect(door.runs.some((r) => r.env.B === reviewRef && r.command.includes("/branch"))).toBe(
+      false,
+    );
+    expect(door.runs.some((r) => r.command.includes("lint-report"))).toBe(false);
+    // The review section, not the worker's, framed the conversation: it
+    // names the findings file and the reviewed ref, never a branch to
+    // commit to.
+    const section = sectionsSeen.filter((s) => s.includes("reviewing a pull request")).join("\n");
+    expect(section).toContain(findings);
+    expect(section).toContain(reviewRef);
+    expect(section).not.toContain("checkout of the repository on branch");
+    // The prompt itself reached the conversation verbatim.
+    expect(seen.join("\n")).toContain(reviewPrompt);
+  });
+
+  it("settles a review whose findings never reached the factory as the failure it is", {
+    timeout: 120_000,
+  }, async () => {
+    const protocol = {
+      bootCommand: contract.review_boot_command,
+      finishCommand: contract.review_finish_command,
+      setupCommand: contract.setup_command,
+      bootMarker: contract.review_boot_marker,
+      promptBegin: contract.review_boot_prompt_begin,
+      promptEnd: contract.review_boot_prompt_end,
+    };
+    const reviewRef = "refs/pull/42/head";
+    const boot = [
+      `ticks-orchestrator: ${contract.review_boot_marker} branch=${reviewRef} result=/tmp/ticks-review-run_1.md`,
+      contract.review_boot_prompt_begin,
+      "You are reviewing one pull request. Write your findings.",
+      contract.review_boot_prompt_end,
+      "",
+      "",
+    ].join("\n");
+    const door = fakeSandboxDoor({
+      runOutput: (command) => (command.includes("git rev-parse HEAD") ? "cafef00d\n" : ""),
+      processScript: (command) => {
+        if (command === protocol.bootCommand) return { output: boot, exit: 0, ms: 20 };
+        if (command.startsWith(protocol.finishCommand)) {
+          // The finish found no findings file to post: EXIT_REVIEW (12).
+          return { output: "nothing to post\n", exit: 12, ms: 20 };
+        }
+        return { output: "bash ran\n", exit: 0, ms: 20 };
+      },
+    });
+    const { models } = gatewayFaux([() => fauxAssistantMessage("nothing worth reporting")]);
+    const host = new WorkerAttemptHost({
+      door: door.sandbox,
+      storage: async () => new MemoryStorage(),
+      models,
+      records: memoryRecords(),
+      log: () => {},
+      pollMs: 5,
+      bashPollMs: 5,
+      guardDir: null,
+      protocol,
+    });
+
+    await host.start(spec({ kind: "review", tick: "pr-42-review", role: "review" }));
+    const settled = await host.drive();
+    // The conversation answered (status 0); the finish's own exit is the
+    // attempt's — 12, the findings that never reached the factory.
+    expect(settled.settled).toMatchObject({ exitCode: 12, phase: "finishing" });
     expect(settled.harnessStatus).toBe(0);
   });
 

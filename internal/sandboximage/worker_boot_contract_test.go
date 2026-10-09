@@ -48,6 +48,13 @@ type workerContract struct {
 	FinishCommand       string `json:"finish_command"`
 	SetupArg            string `json:"setup_arg"`
 	SetupCommand        string `json:"setup_command"`
+	ReviewBootArg       string `json:"review_boot_arg"`
+	ReviewBootCommand   string `json:"review_boot_command"`
+	ReviewBootMarker    string `json:"review_boot_marker"`
+	ReviewBootPromptBeg string `json:"review_boot_prompt_begin"`
+	ReviewBootPromptEnd string `json:"review_boot_prompt_end"`
+	ReviewFinishArg     string `json:"review_finish_arg"`
+	ReviewFinishCommand string `json:"review_finish_command"`
 	WorkerActor         string `json:"worker_actor"`
 	BranchPrefix        string `json:"branch_prefix"`
 	BranchExample       struct {
@@ -145,6 +152,19 @@ func TestWorkerBootContractMatchesThisPackage(t *testing.T) {
 		// host's WorkspaceGit) reads the spelling.
 		{"setup arg", WorkerSetupArg, c.SetupArg},
 		{"setup command", WorkerSetupCommand(), c.SetupCommand},
+		// The review job's own halves (epic ex6, tick 8gd): the PR-review
+		// conversation is hosted like every worker's, and the review container
+		// runs the orchestrator image's --boot/--finish. Three readers again
+		// — entrypoint.sh answers the args and prints the markers, this
+		// package asserts them, and worker-boot.ts is where the control
+		// plane reads the spellings.
+		{"review boot arg", ReviewBootArg, c.ReviewBootArg},
+		{"review boot command", ReviewBootCommand(), c.ReviewBootCommand},
+		{"review boot marker", ReviewBootMarker, c.ReviewBootMarker},
+		{"review boot prompt begin", ReviewBootPromptBegin, c.ReviewBootPromptBeg},
+		{"review boot prompt end", ReviewBootPromptEnd, c.ReviewBootPromptEnd},
+		{"review finish arg", ReviewFinishArg, c.ReviewFinishArg},
+		{"review finish command", ReviewFinishCommand(), c.ReviewFinishCommand},
 		{"worker actor", WorkerActor, c.WorkerActor},
 		{"branch prefix", WorkerBranchPrefix, c.BranchPrefix},
 		{"tick env", EnvTick, c.Env.Tick},

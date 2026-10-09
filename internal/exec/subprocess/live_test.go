@@ -29,6 +29,8 @@ import (
 // tick record, make one commit, write the report at the absolute path this
 // executor owns.
 func TestLiveRunnerCompletesARealTick(t *testing.T) {
+	t.Parallel()
+
 	runner := os.Getenv("TICFAC_LIVE_RUNNER")
 	if runner == "" {
 		t.Skip("set TICFAC_LIVE_RUNNER=claude|codex|pi to run one job through a real agent")

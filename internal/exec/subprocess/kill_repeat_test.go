@@ -66,6 +66,7 @@ func dropSignals(t *testing.T, misses ...missing) func() int {
 
 // The fixture teardown's kill (and the evacuation's): a SIGKILL that missed the
 // runner is sent again while the runner's lock is held.
+// serial: dropSignals swaps the package-level groupSignal seam, which every other stop path in this process reads.
 func TestAKillThatMissesTheRunnerIsSentAgainWhileItsLockIsHeld(t *testing.T) {
 	f := newFixture(t, fixtureOptions{mode: "hang"})
 	handle := f.Start(f.spec("run-kil/tick-k1/attempt-1", "k1"))
@@ -90,6 +91,7 @@ func TestAKillThatMissesTheRunnerIsSentAgainWhileItsLockIsHeld(t *testing.T) {
 // Cancel's stop: the TERMs miss both groups — so the supervisor never gets
 // to stop its runner itself — and the first KILL misses the runner. The
 // cancel still does not return with the runner alive.
+// serial: dropSignals swaps the package-level groupSignal seam, which every other stop path in this process reads.
 func TestACancelWhoseSignalsMissTheRunnerStillStopsIt(t *testing.T) {
 	f := newFixture(t, fixtureOptions{mode: "hang"})
 	handle := f.Start(f.spec("run-kil/tick-k2/attempt-1", "k2"))

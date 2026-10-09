@@ -36,6 +36,7 @@ export {
   bashNonceMarker,
   FactorySandboxEnv,
   type FactorySandboxEnvOptions,
+  type RestoreCause,
   SandboxUnavailableError,
 } from "./env/factory-sandbox.js";
 export {

@@ -30,6 +30,8 @@ func relaunches(observations []Observation) []Observation {
 // is evidence the exit code cannot carry: Go reports a signalled process as
 // -1, the number a wall-clock stop and an OOM kill would otherwise share.
 func TestARunnerThatDiesBySignalIsNamedAsSuch(t *testing.T) {
+	t.Parallel()
+
 	cmd := exec.Command("/bin/sh", "-c", "kill -9 $$")
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
@@ -55,6 +57,8 @@ func TestARunnerThatDiesBySignalIsNamedAsSuch(t *testing.T) {
 // relaunch: a recovery is for a death nobody chose. A clean durable signal
 // death — the operator's kill, the OOM — is the one that is due.
 func TestRelaunchDue(t *testing.T) {
+	t.Parallel()
+
 	durable := &attemptRecord{Runner: "pi", SteerSock: "/tmp/a.sock", Worktree: t.TempDir()}
 	plain := &attemptRecord{Runner: "claude", Worktree: durable.Worktree}
 
@@ -113,6 +117,8 @@ func nonExistentPath(t *testing.T) string {
 // The relaunch observation is a `started` observation the feed can pick out of
 // the stream — the nudge's own shape, and a prefix the nudge's does not match.
 func TestTheRelaunchObservationSaysWhatHappened(t *testing.T) {
+	t.Parallel()
+
 	detail := RelaunchDetail(1, "pi", "signal 9 (killed)")
 	o := Observation{Kind: ObsStarted, Detail: detail}
 	if !IsRelaunch(o) {

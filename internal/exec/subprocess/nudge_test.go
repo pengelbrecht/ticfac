@@ -24,6 +24,8 @@ func nudges(observations []Observation) []Observation {
 }
 
 func TestARunnerThatEndsEarlyAndFinishesWhenNudgedSucceeds(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "stop_early"})
 	handle := f.Start(f.spec("run-2jn/tick-vqc/resolve-50", "vqc"))
 	f.waitSettled(handle)
@@ -57,6 +59,8 @@ func TestARunnerThatEndsEarlyAndFinishesWhenNudgedSucceeds(t *testing.T) {
 }
 
 func TestARunnerThatNeverReportsIsMissingResultAfterTheNudgesAreSpent(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "silent"})
 	handle := f.Start(f.spec("run-2jn/tick-nnn/attempt-1", "nnn"))
 	f.waitSettled(handle)
@@ -74,6 +78,8 @@ func TestARunnerThatNeverReportsIsMissingResultAfterTheNudgesAreSpent(t *testing
 // what collect classifies, and prompting it again would spend a turn on a
 // broken argv or an exhausted quota.
 func TestAFailedRunnerIsNotNudged(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "usage_error"})
 	handle := f.Start(f.spec("run-2jn/tick-fff/attempt-1", "fff"))
 	f.waitSettled(handle)
@@ -86,6 +92,8 @@ func TestAFailedRunnerIsNotNudged(t *testing.T) {
 // claude runs without background tasks: in print mode a background task is
 // a turn that ends while the work it waits on is still running.
 func TestClaudeIsLaunchedWithoutBackgroundTasks(t *testing.T) {
+	t.Parallel()
+
 	f := newFixture(t, fixtureOptions{mode: "background_env"})
 	handle := f.Start(f.spec("run-2jn/tick-bbb/attempt-1", "bbb"))
 	f.waitSettled(handle)
@@ -107,6 +115,8 @@ func TestClaudeIsLaunchedWithoutBackgroundTasks(t *testing.T) {
 // own storage, so a nudge is the same argv with the nudge text as the
 // message, and the relaunched runner continues the same conversation.
 func TestTheNudgeResumesTheRunnersOwnSession(t *testing.T) {
+	t.Parallel()
+
 	record := &attemptRecord{Branch: "b", ResultPath: "/abs/RESULT.md"}
 	cases := map[string]struct{ start, resume string }{
 		"claude": {"--session-id", "--resume"},

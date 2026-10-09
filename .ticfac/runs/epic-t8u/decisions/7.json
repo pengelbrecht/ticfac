@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 7,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "The interleaving is reproduced deterministically in a test, the cause is confirmed, and the fix makes that test pass",
+    "description": "From #68 (2026-09-27): it failed once under -parallel load, with the evacuation output not reporting the attempt-branch push. It was not reproduced in 48 reruns. The suspected cause, the evacuation's branch push racing the supervisor's identical push for the ref lock, got a fallback that is unconfirmed. Flaky means bug: force the interleaving deterministically (block the supervisor's push at the ref lock), confirm or refute the race, and fix the real cause.",
+    "epic_id": "t8u",
+    "role": "classify-tick",
+    "tick_id": "fn8",
+    "title": "TestTheEvacuationFlushesInFlightWorkAndWritesTheCheckpoint failed once under load: reproduce and fix"
+  },
+  "response": {
+    "choice": "diagnosis",
+    "confidence": 0.99,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.01,
+      "design": 0,
+      "diagnosis": 0.99,
+      "mechanical": 0,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1153,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T15:02:27Z",
+  "answered_at": "2026-10-07T15:02:27Z",
+  "provenance": {
+    "run_id": "epic-t8u",
+    "tick_id": "fn8",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/t8u",
+    "source_sha": "2a292ee09c438d9ad3a55a4d38e61127c5379f2f",
+    "integration_ref": "refs/heads/epic/t8u",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:57fe062b157ace0948c7c96da183430e641f8e9c0ab2ec5e66b14dcd2194a87e",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

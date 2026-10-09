@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 21,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The args are pi-CLI trust flags that the HERDR executor compiles into an implement agent's argv — but after tick 2q5 the herdr profile set routes implement onto the local-subprocess executor, which never reads roles-table args, and the durable Node host takes no --approve flag. On every substrate the pairing now does nothing, while its comment still explains pi's trust model as if it launched. A reader of runners.toml will believe implement workers somewhere run with --approve. Cleanup (drop the args, reword the comment) belongs to the operator's routing file; jhp's sweep of the pi-CLI remnants is a natural moment.\nevidence: .tick/runners.toml [roles.implement] args = [\"--approve\"] beside kind = \"pi\"; internal/cli/executor.go spawnArgv is the only consumer, reached only for herdr dispatches\n\nticfac run epic-43y filed this backlog tick from the finding bab4366201a0f1e317912ce9ea784b40efe43500974250511bb99770f33b46d2 (reported by run-epic-43y/tick-2q5/attempt-12): the done is reachable with the finding standing, so it is a backlog tick with an owner rather than the epic's to absorb. The decision record is .ticfac/runs/epic-43y/absorptions/bab4366201a0f1e317912ce9ea784b40efe43500974250511bb99770f33b46d2.json on the run branch.",
+    "epic_id": "ex6",
+    "role": "classify-tick",
+    "tick_id": "q6z",
+    "title": "[roles.implement] args = [\"--approve\"] is dead config after the herdr re-cut"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.99,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.01,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0.99,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1392,
+      "output_tokens": 60
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T18:12:29Z",
+  "answered_at": "2026-10-07T18:12:29Z",
+  "provenance": {
+    "run_id": "run_69f8f57832d34601b040367c7207b81f",
+    "tick_id": "q6z",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "65bedab24659aaede99d10fbde27cfd56f11af5c",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:0fd84feaa6def26de94fef1a4da33b194dfa9b1fa1c66cc1c31a8a555019f2a4",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

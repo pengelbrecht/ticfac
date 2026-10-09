@@ -66,6 +66,7 @@
  */
 
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloudflare:workers";
+import type { WorkerAttemptSpec } from "ticfac-harness";
 
 import {
   type RunRecord,
@@ -122,7 +123,7 @@ import {
   unverifiedProgress,
 } from "./progress";
 import { readDeclaredSandboxImage } from "./repo-config";
-import { DONE_EVENT_TYPE, type DoneOutcome, type DoneSignal, readDoneSignal } from "./run-done";
+import { DONE_EVENT_TYPE, type DoneSignal, readDoneSignal } from "./run-done";
 import { epicCompleted, epicStarted, publishRunEvents } from "./run-events";
 import {
   appendFeed,
@@ -134,10 +135,29 @@ import {
   UNANSWERABLE_FEED_SEQ,
 } from "./run-feed";
 import { type LeaseLostReason, MAX_LEASE_TTL_MS } from "./run-room";
+// The watch's decision core (tick p0n): a pure state machine, extracted so
+// the Hegel property tests can drive the supervision loop's decisions
+// without workerd. isTerminalExit and terminalExitReason moved there (from
+// ./sandbox, which re-exports them, and the lifecycle contract's `today`
+// cross-reference names run-watch.ts for them since bundle 2.3.1);
+// MAX_UNANSWERED_LOOKS and DONE_SETTLE_LOOK_MS moved there from below. Both
+// are re-exported for every importer this file already served, so the
+// extraction changes no spelling.
+import {
+  DONE_SETTLE_LOOK_MS,
+  MAX_UNANSWERED_LOOKS,
+  type WatchConfig,
+  type WatchDecision,
+  watchDelay,
+  watchEnded,
+  watchHear,
+  watchLook,
+  watchOut,
+  watchStart,
+} from "./run-watch";
 import { logDispatch, type RunWorkflowParams, roomFor } from "./runs";
 import {
   deploymentImage,
-  isTerminalExit,
   ORCHESTRATOR_COMMAND,
   type OrchestratorPhase,
   type OrchestratorSandbox,
@@ -148,10 +168,12 @@ import {
   type SandboxProcessView,
   sandboxBinding,
   sandboxName,
-  terminalExitReason,
 } from "./sandbox";
-import { workerAgentsFromEnv } from "./worker-agent";
-import { reviewHarness, workerModel } from "./worker-boot";
+
+export { DONE_SETTLE_LOOK_MS, MAX_UNANSWERED_LOOKS } from "./run-watch";
+
+import { type WorkerAgentStub, workerAgentsFromEnv } from "./worker-agent";
+import { reviewHarness, WORKER_DEFAULT_HARNESS, workerModel } from "./worker-boot";
 
 // ------------------------------------------------------------- the shape ---
 
@@ -187,18 +209,14 @@ export const MAX_SANDBOX_BOOTS = 3;
  */
 export const PROCESS_QUERY_ATTEMPTS = 3;
 
-/**
- * How many consecutive looks may fail to ask before the pass gives up on the
- * container (tick 3ed).
- *
- * Bounded on purpose, like every allowance in this file: a container nobody
- * can reach is usually a broken platform, and holding forever would burn the
- * run's whole watch on a question that is never answered. The bound is in
- * LOOKS, not wall clock, so it costs a fixed number of steps inside the
- * instance's budget — and reaching it fails the pass as its own class rather
- * than rebooting, because an unanswered question is not a death (A2/A6).
+/*
+ * MAX_UNANSWERED_LOOKS and DONE_SETTLE_LOOK_MS moved to src/run-watch.ts
+ * with the watch's decision core (tick p0n) and are re-exported above, so
+ * every importer of this module keeps one spelling. The bound's reasons
+ * travel with the constant: see run-watch.ts, which is where a look that
+ * could not ask its container is held and, after the bound, failed as its
+ * own class.
  */
-export const MAX_UNANSWERED_LOOKS = 3;
 
 /**
  * Cloudflare's cap on the steps one Workflow instance may run: 10,000 by
@@ -265,8 +283,10 @@ export const DEFAULT_STOP_GRACE_MS = 300_000; // 5 minutes
  */
 export const DEFAULT_DONE_SETTLE_MS = 30_000;
 
-/** The look cadence while a signalled orchestrator settles (tick 1y4). */
-export const DONE_SETTLE_LOOK_MS = 10_000;
+/*
+ * DONE_SETTLE_LOOK_MS (the settle cadence, tick 1y4) moved to run-watch.ts
+ * with the watch machine that consumes it; re-exported above.
+ */
 
 /**
  * Observation cadence. Fast at first — a broken boot, a missing toolchain and
@@ -1254,6 +1274,47 @@ async function askProcess(
   return { answered: false, error };
 }
 
+/**
+ * The hosted conversation's equivalent of asking the process (tick 8gd): the
+ * agent's own state, mapped by {@link hostedAgentProcessView}, with the same
+ * two ways to fail — "no such attempt" is an answer, a failed question is
+ * only ever about the observer's reach.
+ */
+async function askHostedAgent(agent: WorkerAgentStub): Promise<ProcessQuestion> {
+  let error = "the hosted conversation could not be asked";
+  for (let attempt = 0; attempt < PROCESS_QUERY_ATTEMPTS; attempt += 1) {
+    try {
+      return { answered: true, view: hostedAgentProcessView(await agent.state()) };
+    } catch (thrown) {
+      error = thrown instanceof Error ? thrown.message : String(thrown);
+    }
+  }
+  return { answered: false, error };
+}
+
+/**
+ * Maps the hosted attempt's phase onto the process view the watch loop reads
+ * (tick 8gd): a phase under way is `running`; settled is the finish phase's
+ * own exit code — exit 0 `completed`, anything else `failed` — the same
+ * mapping the executor's statusFromProcess makes for a container process.
+ * An agent with no attempt recorded answers null, the process view's "gone":
+ * the attempt is not there, and the boot's gone handling takes it from there.
+ */
+export function hostedAgentProcessView(state: {
+  phase: string;
+  exit_code: number | null;
+}): SandboxProcessView | null {
+  if (state.phase === "absent") return null;
+  if (state.phase !== "settled") {
+    return { id: "hosted", state: "running", exit_code: null };
+  }
+  return {
+    id: "hosted",
+    state: state.exit_code === 0 ? "completed" : "failed",
+    exit_code: state.exit_code,
+  };
+}
+
 type Observation = {
   process: ObservedProcessState;
   exit_code: number | null;
@@ -1309,7 +1370,15 @@ type ObserveInput = {
   context: RunContext;
   boot: number;
   sandbox: string;
-  process_id: string;
+  /** The process to ask; null when the boot is hosted and there is none. */
+  process_id: string | null;
+  /**
+   * The hosted conversation's agent (tick 8gd). Present exactly when
+   * `process_id` is null: a hosted boot is watched through its agent — the
+   * log from the agent's own log, the state question from the agent's phase
+   * — while every other read (lease, budgets, stop record) is the same.
+   */
+  agent?: WorkerAgentStub;
   offset: number;
   seq: number;
   poll_ms: number;
@@ -1332,8 +1401,13 @@ type ObserveInput = {
  */
 export async function observe(env: Env, input: ObserveInput): Promise<Observation> {
   const { params } = input;
-  const binding = sandboxBinding(env);
-  if (binding === null) {
+  // A hosted conversation (tick 8gd) is watched through its agent: the same
+  // four reads — log, lease, the state question, the budgets — with the log
+  // and the state question answered by the agent instead of a process. Every
+  // other boot reads a process as before.
+  const agent = input.agent;
+  const binding = agent === undefined ? sandboxBinding(env) : null;
+  if (binding === null && agent === undefined) {
     return {
       process: "gone",
       exit_code: null,
@@ -1344,12 +1418,15 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
       cost_usd: null,
     };
   }
-  const sandbox = await binding.get(input.sandbox);
+  const sandbox = agent === undefined ? await binding!.get(input.sandbox) : null;
 
   let offset = input.offset;
   let seq = input.seq;
   try {
-    const output = await sandbox.readOutput(input.process_id, offset);
+    const output =
+      sandbox !== null
+        ? await sandbox.readOutput(input.process_id!, offset)
+        : await agent!.readLog(offset);
     if (output.text !== "") {
       const wrote = await writeHarnessSegment(
         env.ARTIFACTS,
@@ -1380,7 +1457,8 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
   // fact about the orchestrator and may report a state, while a FAILED
   // QUESTION is a fact about the observer's reach and reports `unknown`,
   // never `gone`.
-  const question = await askProcess(sandbox, input.process_id);
+  const question =
+    sandbox !== null ? await askProcess(sandbox, input.process_id!) : await askHostedAgent(agent!);
   const at = Date.now();
 
   // Budgets are enforced on every pass (tick dl8): the one pass that ever
@@ -1406,10 +1484,12 @@ export async function observe(env: Env, input: ObserveInput): Promise<Observatio
   };
 }
 
-/** Whether a look saw the orchestrator's process over: exited, or gone. */
-function processEnded(state: ObservedProcessState): boolean {
-  return state === "completed" || state === "failed" || state === "gone";
-}
+/*
+ * processEnded (whether a look saw the orchestrator's process over) moved to
+ * run-watch.ts as part of the watch machine (tick p0n): the trip decision it
+ * fed now arrives on the decision itself, so supervisePass reads
+ * `decision.ended` where it used to ask.
+ */
 
 /**
  * One wait between looks (ticks 7eq and cr4): the completion signal when it
@@ -1691,7 +1771,7 @@ async function supervisePass(
     const phase: OrchestratorPhase =
       options.job === "review" ? "review" : boot === 1 ? "run" : "reconcile";
 
-    let booted: { process_id: string; at_ms: number };
+    let booted: { process_id: string | null; hosted: boolean; at_ms: number };
     try {
       booted = await step.do(
         `${options.label}:boot:${attempt}`,
@@ -1750,10 +1830,22 @@ async function supervisePass(
           // so (below), and the pool's snapshot on /api/claude-sub says why.
           let claudeSub: { label: string; jobId: string } | undefined;
           let claudeSubNote = "";
+          // Whether this deployment hosts worker conversations (tick 8gd):
+          // what makes the hosted kind a servable REVIEW harness. The review
+          // is the last cloud boot that ran a CLI harness on the floor; on a
+          // deployment with a WORKER_AGENTS binding its conversation is
+          // hosted like every worker's, and the floor is only what a
+          // non-hosting deployment falls to.
+          const reviewHosts =
+            options.job === "review" ? workerAgentsFromEnv(env) !== undefined : false;
           const reviewRouting =
             options.job === "review"
               ? {
-                  harness: reviewHarness(context.config.harness, env.RUN_WORKER_HARNESS),
+                  harness: reviewHarness(
+                    context.config.harness,
+                    env.RUN_WORKER_HARNESS,
+                    reviewHosts,
+                  ),
                   model: workerModel(context.config.model, env.RUN_WORKER_MODEL),
                 }
               : undefined;
@@ -1771,10 +1863,11 @@ async function supervisePass(
               claudeSubNote = ` on claude subscription ${lease.label}`;
             } else {
               // The step-down (spike jvj's design): the same ladder with the
-              // rung dropped — the review's own floor and the deployment's
-              // standing model, both Workers AI. For THIS job only; the next
-              // dispatch asks the pool again.
-              reviewRouting.harness = reviewHarness(null, env.RUN_WORKER_HARNESS);
+              // rung dropped — on a hosting deployment that is the hosted
+              // kind, the deployment's standing route (tick 8gd); on any
+              // other it is the review's own floor, both Workers AI. For
+              // THIS job only; the next dispatch asks the pool again.
+              reviewRouting.harness = reviewHarness(null, env.RUN_WORKER_HARNESS, reviewHosts);
               reviewRouting.model = workerModel(null, env.RUN_WORKER_MODEL);
               claudeSubNote = ` — claude-sub ${claudeSubLeaseRefusal(lease)}, so this job steps down to the Workers AI rung (${reviewRouting.harness} on ${reviewRouting.model})`;
             }
@@ -1802,97 +1895,129 @@ async function supervisePass(
             keepAlive: true,
             ...(claudeSub === undefined ? {} : { claudeSub }),
           });
-          const started = await sandbox.startProcess(ORCHESTRATOR_COMMAND, {
-            env: {
-              ...orchestratorEnv({
-                run_id: params.run_id,
-                epic: params.epic,
-                base_sha: params.base_sha,
-                repo_url: context.repo_url,
-                gateway_base_url: context.gateway_base_url,
-                gateway_token: credential.token,
-                phase,
-                // The chain this container belongs to (tick hyi). Every boot of the
-                // orchestrator carries it, including a reconcile's replacement: the
-                // replacement is the same causal chain as the sandbox it succeeds.
-                ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
-                // The grade's teeth (tick pzf): `operator` hands over the token
-                // that can push, `run` hands over this run's own `tkr_` credential,
-                // which github.com will not accept and this factory's git door will
-                // not forward a push for.
-                github_token: containerGitToken(context.git, github.token, credential.token),
-                ...(github.token_url === undefined ? {} : { github_token_url: github.token_url }),
-                // Which harness and model the container's entrypoint probes before
-                // it starts its job. The two jobs are routed differently (tick dl8):
-                //
-                // - the ORCHESTRATOR container execs `ticfac run-epic`, so its
-                //   harness/model pair only has to satisfy the entrypoint's
-                //   pre-flight probes — the deployment's run-level choice
-                //   (RUN_HARNESS/RUN_MODEL) stands, as wrangler.toml pins it;
-                // - the REVIEW job is routed like every other cloud role, through
-                //   the worker ladder — with the review's own floor (`reviewHarness`,
-                //   epic 43y tick jhp): the workers are hosted on pi-durable and the
-                //   pi CLI is deleted, so the review — the one cloud boot that still
-                //   runs a CLI harness in its container — falls to omp on GLM, never
-                //   the image's own harness selection, which a deployment that
-                //   routes nothing would leave at claude (the xte finding dl8
-                //   absorbed).
-                ...(options.job === "review"
-                  ? {
-                      // The pair the lease decided on: the rung the config
-                      // selected, or the Workers AI rung a failed lease
-                      // stepped this job down to (never a wait).
-                      harness: reviewRouting!.harness,
-                      model: reviewRouting!.model,
-                    }
-                  : {
-                      ...(context.config.harness === null
-                        ? {}
-                        : { harness: context.config.harness }),
-                      ...(context.config.model === null ? {} : { model: context.config.model }),
-                      // The named run config this submission carried (tick
-                      // ba4): forwarded to the orchestrator container's
-                      // `ticfac run-epic`, which resolves it the same way a
-                      // local run's --config does.
-                      ...(params.config === undefined ? {} : { config: params.config }),
-                    }),
-                sandbox_image: image,
-                // The account's container ceiling (hn6's cloud run): the run the
-                // orchestrator drives keeps its live workers under it, less the
-                // orchestrator's own container, so it never asks the door for a
-                // slot it can count itself out of.
-                factory_max_instances: factoryMaxInstances(env),
-                // The factory URL is given per BOOT (tick 7eq): every orchestrator
-                // reports its own finish to the done door over it, and the same
-                // URL is what its `ticfac run-epic` hands the per-tick sandbox
-                // door's client — the one dispatch path a container has.
-                ...(factoryBaseURL(env) === null
-                  ? {}
-                  : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
-                // The review half (tick v7g). Given per BOOT, from the run's own row
-                // — a container is told which pull request it is reading, and there
-                // is no other way for it to find out. The factory URL comes with it
-                // because that is where the findings go; a review container that
-                // could not reach the door would have nowhere to put its one output.
-                ...(context.review === null || factoryBaseURL(env) === null
-                  ? {}
-                  : {
-                      review_pr: context.review.pr_number,
-                      review_head_sha: context.review.head_sha,
-                      factory_url: factoryBaseURL(env)!,
-                      factory_project: params.project,
-                    }),
-              }),
-              // The claude-sub process environment (tick 6fv): the OAuth
-              // PLACEHOLDER that puts the CLI in its subscription dialect, the
-              // interception's CA, and the marker the entrypoint's claude-sub
-              // route keys on. Nothing here is a credential — the subscription
-              // token is a Worker secret the proxy swaps in per request, and it
-              // never enters the container.
-              ...(claudeSub === undefined ? {} : claudeSubProcessEnv()),
-            },
-          });
-          return { process_id: started.id, at_ms: Date.now() };
+          // The environment the container (or, hosted, the boot and finish
+          // phases the agent runs in it) starts with — the same for both
+          // jobs, because both are routed like cloud roles (tick dl8).
+          const bootEnv: Record<string, string> = {
+            ...orchestratorEnv({
+              run_id: params.run_id,
+              epic: params.epic,
+              base_sha: params.base_sha,
+              repo_url: context.repo_url,
+              gateway_base_url: context.gateway_base_url,
+              gateway_token: credential.token,
+              phase,
+              // The chain this container belongs to (tick hyi). Every boot of the
+              // orchestrator carries it, including a reconcile's replacement: the
+              // replacement is the same causal chain as the sandbox it succeeds.
+              ...(params.trace_id === undefined ? {} : { trace_id: params.trace_id }),
+              // The grade's teeth (tick pzf): `operator` hands over the token
+              // that can push, `run` hands over this run's own `tkr_` credential,
+              // which github.com will not accept and this factory's git door will
+              // not forward a push for.
+              github_token: containerGitToken(context.git, github.token, credential.token),
+              ...(github.token_url === undefined ? {} : { github_token_url: github.token_url }),
+              // Which harness and model the container's entrypoint probes before
+              // it starts its job. The two jobs are routed differently (tick dl8):
+              //
+              // - the ORCHESTRATOR container execs `ticfac run-epic`, so its
+              //   harness/model pair only has to satisfy the entrypoint's
+              //   pre-flight probes — the deployment's run-level choice
+              //   (RUN_HARNESS/RUN_MODEL) stands; this config leaves
+              //   RUN_HARNESS unset and the entrypoint's omp default covers
+              //   the probe (tick 8gd);
+              // - the REVIEW job is routed like every other cloud role, through
+              //   the worker ladder — with the review's own floor (`reviewHarness`,
+              //   epic 43y tick jhp): since tick 8gd the ladder resolves the
+              //   HOSTED kind on a deployment that hosts conversations — the
+              //   review's conversation runs in the run's WorkerAgent, and the
+              //   container runs only the review's --boot/--finish halves —
+              //   and the CLI floor (omp on GLM) is what a deployment that
+              //   hosts nothing falls to, never the image's own harness
+              //   selection, which a deployment that routes nothing would
+              //   leave at claude (the xte finding dl8 absorbed).
+              ...(options.job === "review"
+                ? {
+                    // The pair the lease decided on: the rung the config
+                    // selected, or the Workers AI rung a failed lease
+                    // stepped this job down to (never a wait).
+                    harness: reviewRouting!.harness,
+                    model: reviewRouting!.model,
+                  }
+                : {
+                    ...(context.config.harness === null ? {} : { harness: context.config.harness }),
+                    ...(context.config.model === null ? {} : { model: context.config.model }),
+                    // The named run config this submission carried (tick
+                    // ba4): forwarded to the orchestrator container's
+                    // `ticfac run-epic`, which resolves it the same way a
+                    // local run's --config does.
+                    ...(params.config === undefined ? {} : { config: params.config }),
+                  }),
+              sandbox_image: image,
+              // The account's container ceiling (hn6's cloud run): the run the
+              // orchestrator drives keeps its live workers under it, less the
+              // orchestrator's own container, so it never asks the door for a
+              // slot it can count itself out of.
+              factory_max_instances: factoryMaxInstances(env),
+              // The factory URL is given per BOOT (tick 7eq): every orchestrator
+              // reports its own finish to the done door over it, and the same
+              // URL is what its `ticfac run-epic` hands the per-tick sandbox
+              // door's client — the one dispatch path a container has.
+              ...(factoryBaseURL(env) === null
+                ? {}
+                : { factory_url: factoryBaseURL(env)!, factory_project: params.project }),
+              // The review half (tick v7g). Given per BOOT, from the run's own row
+              // — a container is told which pull request it is reading, and there
+              // is no other way for it to find out. The factory URL comes with it
+              // because that is where the findings go; a review container that
+              // could not reach the door would have nowhere to put its one output.
+              ...(context.review === null || factoryBaseURL(env) === null
+                ? {}
+                : {
+                    review_pr: context.review.pr_number,
+                    review_head_sha: context.review.head_sha,
+                    factory_url: factoryBaseURL(env)!,
+                    factory_project: params.project,
+                  }),
+            }),
+            // The claude-sub process environment (tick 6fv): the OAuth
+            // PLACEHOLDER that puts the CLI in its subscription dialect, the
+            // interception's CA, and the marker the entrypoint's claude-sub
+            // route keys on. Nothing here is a credential — the subscription
+            // token is a Worker secret the proxy swaps in per request, and it
+            // never enters the container.
+            ...(claudeSub === undefined ? {} : claudeSubProcessEnv()),
+          };
+          // The hosted review (tick 8gd): its conversation is not a process
+          // in this container, it is the run's WorkerAgent's — the container
+          // runs only the review's --boot and --finish halves, which the
+          // agent drives. The supervisor watches the AGENT, not a process.
+          if (options.job === "review" && reviewRouting!.harness === WORKER_DEFAULT_HARNESS) {
+            const reviewSpec: WorkerAttemptSpec = {
+              name,
+              tick: params.epic,
+              role: "review",
+              kind: "review",
+              env: bootEnv,
+              model: reviewRouting!.model,
+              repoUrl: context.repo_url,
+              baseSha: params.base_sha,
+              // The conversation's wall is the run's own wall clock (the
+              // pass below enforces it too): a backstop that settles an
+              // abandoned conversation even if the run that watched it is
+              // gone, so no agent is left re-driving forever.
+              wallMs: context.config.max_wall_clock_ms,
+              boot: { keepAlive: true, ...(image === null ? {} : { pinnedImage: image }) },
+            };
+            const reviewHosting = await workerAgentsFromEnv(env)!(params.run_id);
+            // Non-null by construction: reviewHosts was true when the routing
+            // resolved to the hosted kind, and a resolver that returned null
+            // here would contradict it.
+            await reviewHosting!.agent(name).start(reviewSpec);
+            return { process_id: null, hosted: true, at_ms: Date.now() };
+          }
+          const started = await sandbox.startProcess(ORCHESTRATOR_COMMAND, { env: bootEnv });
+          return { process_id: started.id, hosted: false, at_ms: Date.now() };
         },
       );
     } catch (error) {
@@ -1973,6 +2098,12 @@ async function supervisePass(
       return { ok: false, lost: renewal.lost, holder: renewal.holder, detail: renewal.detail };
     });
 
+    // The hosted conversation's agent (tick 8gd), when this boot hosts one:
+    // the watch and every stop below address it instead of a process.
+    const hostedAgent = booted.hosted
+      ? (await workerAgentsFromEnv(env)!(params.run_id))!.agent(name)
+      : undefined;
+
     // The container exists and is credentialed, so from here on every ending
     // of this boot — completed, tripped, out of looks, dead, thrown — destroys
     // it in the finally below (tick cr4). A container booted under keepAlive
@@ -1990,36 +2121,37 @@ async function supervisePass(
       // closeout pass (the only pass that ever carried a window of its own).
       const cadenceDeadline = context.started_at_ms + context.config.max_wall_clock_ms;
 
+      // The watch's DECISIONS come from the pure state machine in
+      // src/run-watch.ts (tick p0n): every verdict below is the machine's, in
+      // its order, so the decisions the live runs paid for are testable
+      // without workerd — the property tests in test/property/ drive this
+      // very transition function. What stays here is everything that touches
+      // a step, a binding or the durable layer: the wait, the observe, the
+      // revocations, the drains, the feed lines, the reconcile. The machine
+      // owns the look budget (watchOut), the unanswered streak, the settle
+      // cadence and the exit classification; this loop owns offset/seq and
+      // the spend sample the pacing reads.
+      const watchConfig: WatchConfig = {
+        max_observations: context.config.max_observations,
+        settle_ms: context.config.done_settle_ms ?? DEFAULT_DONE_SETTLE_MS,
+        settle_look_ms: DONE_SETTLE_LOOK_MS,
+      };
+      let watch = watchStart(booted.at_ms);
       let offset = 0;
       let seq = 1;
-      // Assume the container outlives the watch until an observation says
-      // otherwise: falling out of the loop with this unchanged means the
-      // orchestrator is still ALIVE, which is a different problem from a dead one.
-      let ending: "dead" | "exhausted" = "exhausted";
       // What the last look knew about spend, and when it knew it. Both come from
       // checkpointed step results, never a live `Date.now()`, so a replayed
       // Workflow recomputes the identical cadence.
       let spend: SpendSample | null = null;
-      let lastAt = booted.at_ms;
-      /**
-       * How many consecutive looks could not ASK the container (tick 3ed).
-       * Reset by any answered look, because a streak is a streak: the bound
-       * below is about a container that STAYS unanswerable, not one that
-       * flickered through a transient.
-       */
-      let unasked = 0;
-      /**
-       * The orchestrator's own report of its end, once a done signal carried
-       * one, and the look time it was first seen still running after it
-       * (tick 1y4). From then on the watch looks on the short settle cadence,
-       * and a process still alive past the settle window is stopped and
-       * concluded as the exit it reported. Both come from checkpointed step
-       * results, so a replay recomputes the same decision.
-       */
-      let reported: { outcome: DoneOutcome; since_ms: number | null } | null = null;
-      const settleMs = context.config.done_settle_ms ?? DEFAULT_DONE_SETTLE_MS;
+      // The pass's verdict, set by every terminal decision below; `reboot`
+      // is the one ending that is not terminal — it leaves the try block for
+      // the reconcile and the next attempt, exactly as `ending === "dead"`
+      // did before the extraction.
+      let outcome: PassOutcome | null = null;
+      let reboot = false;
 
-      for (let look = 0; look < context.config.max_observations; look++) {
+      while (outcome === null && !reboot && !watchOut(watch, watchConfig)) {
+        const look = watch.looksTaken;
         // Paced by the looks left (hn6): the last one lands on the deadline,
         // so a healthy orchestrator meets its wall clock, never this loop's end.
         // An orchestrator that has reported its end is looked at on the
@@ -2028,10 +2160,10 @@ async function supervisePass(
         const paced = pollDelay(
           context.config,
           look,
-          { now_ms: lastAt, deadline_ms: cadenceDeadline, spend },
+          { now_ms: watch.lastAt, deadline_ms: cadenceDeadline, spend },
           context.config.max_observations - look,
         );
-        const pollMs = reported === null ? paced : Math.min(paced, DONE_SETTLE_LOOK_MS, settleMs);
+        const pollMs = watchDelay(paced, watch, watchConfig);
         // The wait for THIS look (ticks cr4 and 7eq): `step.waitForEvent` on
         // the orchestrator's completion signal, with the poll cadence as its
         // timeout — whichever lands first. The container's own "I am done"
@@ -2060,12 +2192,10 @@ async function supervisePass(
           // Only a signal that carries the run's own outcome starts the
           // settle window: a bare wake-up (an older client) says nothing about
           // how the process will exit, so it is never a reason to stop one.
-          if (reported === null && signal.outcome !== undefined) {
-            reported = { outcome: signal.outcome, since_ms: null };
-          }
+          watch = watchHear(watch, signal);
         }
 
-        let seen = await step.do(
+        const seen = await step.do(
           `${options.label}:watch:${attempt}:${look}`,
           OBSERVE_RETRIES,
           async () =>
@@ -2075,6 +2205,7 @@ async function supervisePass(
               boot,
               sandbox: name,
               process_id: booted.process_id,
+              ...(booted.hosted ? { agent: hostedAgent } : {}),
               offset,
               seq,
               poll_ms: pollMs,
@@ -2083,10 +2214,50 @@ async function supervisePass(
         offset = seen.offset;
         seq = seen.seq;
         spend = spendSample(spend, seen.cost_usd, seen.at_ms);
-        lastAt = seen.at_ms;
 
-        if (seen.trip !== null) {
-          const trip = seen.trip;
+        let decision: WatchDecision = watchLook(watch, seen, watchConfig);
+        // The linger (tick 1y4): the orchestrator said it was done, with its
+        // outcome, and is still running a settle window later. Whatever keeps
+        // it alive — a hung final push, a child it is waiting on — is not
+        // work: run-epic posts the door only after Supervise has returned and
+        // the feed relay has drained. So it is stopped, and the boot is
+        // concluded as the exit it reported, by re-asking the machine with the
+        // synthesized look — through exactly its classification (a halt is
+        // still a halt, a terminal code still terminal) — never left to the
+        // next full-cadence look.
+        if (decision.kind === "linger") {
+          await step.do(`${options.label}:linger:${attempt}`, OBSERVE_RETRIES, () =>
+            drainAndKill(env, params, name, booted.process_id, boot, offset, seq, {
+              ...(booted.hosted ? { agent: hostedAgent } : {}),
+              reason: "lingered past its own report of the end",
+            }),
+          );
+          decision = watchLook(
+            decision.state,
+            {
+              ...seen,
+              process: "completed" as const,
+              exit_code: decision.reported_exit_code ?? null,
+              lingered: true,
+            },
+            watchConfig,
+          );
+        }
+        const lingered = decision.kind !== "hold" && "lingered" in decision && decision.lingered;
+        const lingerNote = lingered
+          ? `; it had not exited ${Math.round(watchConfig.settle_ms / 1000)}s after reporting its end on the done ` +
+            "door, so it was stopped"
+          : "";
+
+        if (decision.kind === "hold") {
+          // Nothing tripped, the container answered, the process is live:
+          // watch on, on the cadence.
+          watch = decision.state;
+          continue;
+        }
+
+        if (decision.kind === "trip") {
+          const trip = decision.trip;
           const reason = tripRevokeReason(trip);
           const revoke = (label: string) =>
             step.do(`${options.label}:${label}:${attempt}`, OBSERVE_RETRIES, async () => {
@@ -2115,41 +2286,35 @@ async function supervisePass(
           // it gets no window (tick 1y4): epic ilz's halted runs were
           // hard-stopped after their processes had ended and each still sat
           // out five minutes of grace on a dead process.
-          if (!processEnded(seen.process)) {
+          if (!decision.ended) {
             await step.sleep(`${options.label}:grace:${attempt}`, context.config.stop_grace_ms);
           }
           await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
-            drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
+            drainAndKill(env, params, name, booted.process_id, boot, offset, seq, {
+              ...(booted.hosted ? { agent: hostedAgent } : {}),
+              reason: tripRevokeReason(trip),
+            }),
           );
           // A clean stop's credential outlives the grace window (that is the
           // point of the window) and dies with the run at finalize; a hard
           // stop's already died above.
           if (!trip.hard) await revoke("revoke:clean");
           bootEnded = `orchestrator boot ${boot} was stopped: ${trip.detail}`;
-          return { kind: "tripped", trip, boots: counter.next - 1 };
+          outcome = { kind: "tripped", trip, boots: counter.next - 1 };
+          continue;
         }
 
-        if (seen.process === "unknown") {
-          // The question failed (tick 3ed): a container the supervisor cannot
-          // ASK is UNKNOWN, not dead (A2/A6), and rebooting here would be a
-          // guess — the old container might be alive, working and spending, and
-          // the only thing a failed question proves is that nobody can ask it.
-          // So the watch HOLDS: the next look asks again on the cadence, and
-          // the budgets keep being enforced on every look above, failed
-          // question or not — holding is not unwatched spending.
-          unasked += 1;
-          if (unasked < MAX_UNANSWERED_LOOKS) continue;
-
-          // Out of bounds: give up asking, and fail the pass as its own class
-          // — never a reboot, and never the words a dying container gets. The
-          // feed line is written before the return so a subscriber still
-          // following the run learns the hold ended here rather than reading
-          // silence into it; the decision in the dispatch log is its own name
-          // for the same reason (A9: a failed question is neither a death nor
-          // a reboot, and may not share either's message).
+        if (decision.kind === "unanswerable") {
+          // Out of bounds (tick 3ed): give up asking, and fail the pass as
+          // its own class — never a reboot, and never the words a dying
+          // container gets. The feed line is written before the verdict so a
+          // subscriber still following the run learns the hold ended here
+          // rather than reading silence into it; the decision in the dispatch
+          // log is its own name for the same reason (A9: a failed question is
+          // neither a death nor a reboot, and may not share either's message).
           const detail =
             `the orchestrator's container could not be asked how it was doing for ` +
-            `${MAX_UNANSWERED_LOOKS} looks (last: ${seen.unanswered ?? "the question failed"}) — ` +
+            `${MAX_UNANSWERED_LOOKS} looks (last: ${decision.unanswered ?? "the question failed"}) — ` +
             "the run failed as unanswerable rather than guessing the container dead, " +
             "and no replacement was booted";
           await step.do(`${options.label}:unanswerable:${attempt}`, OBSERVE_RETRIES, async () => {
@@ -2167,105 +2332,115 @@ async function supervisePass(
             });
             return { unanswerable: true };
           });
+          if (booted.hosted) {
+            // The agent that could not be asked is settled with the rest:
+            // an unsettled conversation keeps its heartbeat re-driving, and
+            // this run is not coming back to watch it. Settling it is a
+            // no-op when it already settled.
+            await step.do(`${options.label}:settle-hosted:${attempt}`, OBSERVE_RETRIES, () =>
+              stopHostedAgent(hostedAgent, "unanswerable"),
+            );
+          }
           bootEnded = `orchestrator boot ${boot}: ${detail}`;
-          return { kind: "failed", detail, boots: counter.next - 1 };
+          outcome = { kind: "failed", detail, boots: counter.next - 1 };
+          continue;
         }
-        unasked = 0;
 
-        // The linger (tick 1y4): the orchestrator said it was done, with its
-        // outcome, and is still running a settle window later. Whatever keeps
-        // it alive — a hung final push, a child it is waiting on — is not
-        // work: run-epic posts the door only after Supervise has returned and
-        // the feed relay has drained. So it is stopped, and the boot is
-        // concluded as the exit it reported, through exactly the
-        // classification below (a halt is still a halt, a terminal code still
-        // terminal) — never left to the next full-cadence look.
-        let lingered = false;
-        if (reported !== null && seen.process === "running") {
-          reported.since_ms ??= seen.at_ms;
-          if (seen.at_ms - reported.since_ms >= settleMs) {
-            await step.do(`${options.label}:linger:${attempt}`, OBSERVE_RETRIES, () =>
-              drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
-            );
-            seen = { ...seen, process: "completed", exit_code: reported.outcome.exit_code ?? null };
-            lingered = true;
-          }
-        }
-        const lingerNote = lingered
-          ? `; it had not exited ${Math.round(settleMs / 1000)}s after reporting its end on the done ` +
-            "door, so it was stopped"
-          : "";
-
-        if (seen.process === "completed" && (seen.exit_code ?? 0) === 0) {
+        if (decision.kind === "completed") {
           bootEnded = `the orchestrator exited 0 (boot ${boot})${lingerNote}`;
-          return { kind: "completed", boots: counter.next - 1 };
+          outcome = { kind: "completed", boots: counter.next - 1 };
+          continue;
         }
 
-        if (seen.process === "completed" || seen.process === "failed" || seen.process === "gone") {
-          const code = seen.exit_code;
-          lastDetail =
-            seen.process === "gone"
-              ? orchestratorContainerGone(boot)
-              : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})${lingerNote}`;
-          bootEnded = lastDetail;
-          // An orchestrator that EXITED after its supervisor halted is a
-          // decision, not a death (epic hn6's cloud run: boots 1 and 2 both
-          // exited 1 right after a supervision_halted line, and each was
-          // rebooted and spent a boot). The halt's own line is on the run
-          // feed, relayed before the process exited; a replacement would only
-          // re-derive the stop the halt already made. Asked BEFORE the exit
-          // code is classified: a halt exits 3 when the reconciler held (hn6's
-          // run_be66ff09, claim_width), and 3 is also a configuration verdict's
-          // code — the halt line on the feed is what says which it was.
-          if (seen.process !== "gone") {
-            const halted = await step.do(
-              `${options.label}:halted:${attempt}`,
-              OBSERVE_RETRIES,
-              async () => ({
-                detail: await supervisionHaltOf(env.ARTIFACTS, params.project, params.run_id, boot),
-              }),
-            );
-            if (halted.detail !== null) {
-              const detail =
-                `the orchestrator stopped deliberately (boot ${boot}, exit ${code ?? "unknown"}): its ` +
-                `supervisor halted rather than continue — ${halted.detail} — so no sandbox was rebooted` +
-                lingerNote;
-              bootEnded = detail;
-              return { kind: "failed", detail, boots: counter.next - 1 };
-            }
-          }
-          if (isTerminalExit(code)) {
-            bootEnded = `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)})`;
-            // A configuration verdict from the boot: the SHA still will not check
-            // out, the pre-flight still fails, the epic the run was submitted
-            // for is still missing from the submitted tree. Another container
-            // reaches the identical answer and only costs money — so the reason
-            // the run STOPS with names the class, not just the code
-            // (terminalExitReason, ticfac tick rf3).
-            return {
-              kind: "failed",
-              detail: `${lastDetail} — a configuration failure (${terminalExitReason(code ?? -1)}), so no sandbox was rebooted`,
-              boots: counter.next - 1,
-            };
-          }
-          lastSeen = { state: seen.process, exit_code: code };
-          ending = "dead";
-          break;
+        if (decision.kind !== "ended") {
+          // The machine's own invariant: a look that reached the
+          // classification can only be one of the kinds handled above. Loud
+          // rather than silent, and superviseRun's net (tick 0ye) turns even
+          // this into a finalize if it ever fires.
+          throw new Error(
+            `run-watch: a look classified as ${JSON.stringify(decision.kind)}, which the watch cannot end on`,
+          );
         }
+        const code = decision.exit_code;
+        lastDetail =
+          decision.process === "gone"
+            ? orchestratorContainerGone(boot)
+            : `the orchestrator exited ${code ?? "unknown"} (boot ${boot})${lingerNote}`;
+        bootEnded = lastDetail;
+        // An orchestrator that EXITED after its supervisor halted is a
+        // decision, not a death (epic hn6's cloud run: boots 1 and 2 both
+        // exited 1 right after a supervision_halted line, and each was
+        // rebooted and spent a boot). The halt's own line is on the run
+        // feed, relayed before the process exited; a replacement would only
+        // re-derive the stop the halt already made. Asked BEFORE the exit
+        // code is classified: a halt exits 3 when the reconciler held (hn6's
+        // run_be66ff09, claim_width), and 3 is also a configuration verdict's
+        // code — the halt line on the feed is what says which it was.
+        const halted =
+          decision.process === "gone"
+            ? null
+            : (
+                await step.do(`${options.label}:halted:${attempt}`, OBSERVE_RETRIES, async () => ({
+                  detail: await supervisionHaltOf(
+                    env.ARTIFACTS,
+                    params.project,
+                    params.run_id,
+                    boot,
+                  ),
+                }))
+              ).detail;
+        const classified = watchEnded(decision, halted);
+        if (classified.kind === "halted") {
+          const detail =
+            `the orchestrator stopped deliberately (boot ${boot}, exit ${code ?? "unknown"}): its ` +
+            `supervisor halted rather than continue — ${halted} — so no sandbox was rebooted` +
+            lingerNote;
+          bootEnded = detail;
+          outcome = { kind: "failed", detail, boots: counter.next - 1 };
+          continue;
+        }
+        if (classified.kind === "terminal") {
+          // A configuration verdict from the boot: the SHA still will not
+          // check out, the pre-flight still fails, the epic the run was
+          // submitted for is still missing from the submitted tree. Another
+          // container reaches the identical answer and only costs money — so
+          // the reason the run STOPS with names the class, not just the code
+          // (terminalExitReason, ticfac tick rf3).
+          bootEnded = `${lastDetail} — a configuration failure (${classified.reason})`;
+          outcome = {
+            kind: "failed",
+            detail: `${lastDetail} — a configuration failure (${classified.reason}), so no sandbox was rebooted`,
+            boots: counter.next - 1,
+          };
+          continue;
+        }
+        // The container died on this run's watch: the one ending that may
+        // boot a replacement, and only because the platform ANSWERED that
+        // the process is over (never on a failed question, never on a live
+        // one — the property the machine's tests pin).
+        lastSeen = { state: decision.process, exit_code: code };
+        reboot = true;
+        break;
       }
 
-      if (ending === "exhausted") {
-        // The orchestrator is still running and this instance is out of looks.
+      if (outcome !== null) {
+        return outcome;
+      }
+      if (!reboot) {
+        // The watch is out of looks with the orchestrator still running.
         // Stop it cleanly — never boot a replacement beside a live one.
         await step.do(`${options.label}:drain:${attempt}`, OBSERVE_RETRIES, () =>
-          drainAndKill(env, params, name, booted.process_id, boot, offset, seq),
+          drainAndKill(env, params, name, booted.process_id, boot, offset, seq, {
+            ...(booted.hosted ? { agent: hostedAgent } : {}),
+            reason: "out of looks",
+          }),
         );
         // Unreachable on the paced backoff (hn6) — kept, and worded honestly,
         // for a pinned cadence or an early wake on the very last look.
         const detail = outOfLooksDetail(
           context.config,
           context.started_at_ms,
-          lastAt,
+          watch.lastAt,
           options.job === "review"
             ? "the review can be requested again"
             : "its work is on the run branch, so resubmitting the epic resumes it",
@@ -2280,6 +2455,16 @@ async function supervisePass(
             };
       }
 
+      // A dead boot's hosted conversation (tick 8gd) is settled with the
+      // rest: the container is about to be destroyed, and an agent left
+      // unsettled keeps its heartbeat re-driving a conversation whose tools
+      // are all dead. Settling it is a no-op when it already settled —
+      // which is the common case here, a conversation that failed honestly.
+      if (booted.hosted) {
+        await step.do(`${options.label}:settle-hosted:${attempt}`, OBSERVE_RETRIES, () =>
+          stopHostedAgent(hostedAgent, "the boot's container was lost"),
+        );
+      }
       // The container is done for. Record why, then boot a replacement whose
       // first instruction reconciles.
       if (attempt < options.max_boots) {
@@ -2375,28 +2560,65 @@ function claudeSubLeaseRefusal(lease: Extract<LeaseOutcome, { ok: false }>): str
   }
 }
 
+/**
+ * Settles a hosted conversation the run is done with (tick 8gd): the agent's
+ * own reclaim, which stops it where it stands — no finish phase — and is a
+ * no-op on an already settled record. Every ending of a hosted boot passes
+ * through here or through `drainAndKill`'s reclaim, so no agent is left
+ * heartbeating over a conversation nothing will ever watch.
+ */
+async function stopHostedAgent(
+  agent: WorkerAgentStub | undefined,
+  reason: string,
+): Promise<{ settled: boolean }> {
+  if (agent === undefined) return { settled: false };
+  await agent.reclaim(reason).catch((error: unknown) => {
+    console.error(
+      `factory run-workflow: could not settle the hosted conversation: ${String(error)}`,
+    );
+  });
+  return { settled: true };
+}
+
 /** Last flush before the orchestrator is killed, so its final words survive. */
 async function drainAndKill(
   env: Env,
   params: RunWorkflowParams,
   name: string,
-  processID: string,
+  processID: string | null,
   boot: number,
   offset: number,
   seq: number,
+  stop?: { agent?: WorkerAgentStub; reason: string },
 ): Promise<{ killed: boolean }> {
   const binding = sandboxBinding(env);
   if (binding === null) return { killed: false };
   const sandbox = await binding.get(name);
+  const agent = stop?.agent;
   try {
-    const output = await sandbox.readOutput(processID, offset);
+    const output =
+      agent !== undefined
+        ? await agent.readLog(offset)
+        : await sandbox.readOutput(processID!, offset);
     await writeHarnessSegment(env.ARTIFACTS, params.project, params.run_id, boot, seq, output.text);
   } catch (error) {
     console.error(
       `factory run-workflow: ${params.run_id} could not make a final log flush: ${String(error)}`,
     );
   }
-  await sandbox.killProcess(processID).catch((error: unknown) => {
+  if (agent !== undefined) {
+    // A hosted conversation has no process to kill (tick 8gd): the run
+    // stops it where it stands — the conversation aborted, no finish
+    // phase, whatever the wip checkpoints pushed is already durable — and
+    // the container's destroy stays in the boot's own finally.
+    await agent.reclaim(stop!.reason).catch((error: unknown) => {
+      console.error(
+        `factory run-workflow: ${params.run_id} could not stop its hosted conversation: ${String(error)}`,
+      );
+    });
+    return { killed: true };
+  }
+  await sandbox.killProcess(processID!).catch((error: unknown) => {
     console.error(
       `factory run-workflow: ${params.run_id} could not kill its orchestrator: ${String(error)}`,
     );
@@ -2704,13 +2926,15 @@ export function applyProgress(outcome: RunOutcome, progress: RunProgress): RunOu
  *  - **The budgets are the same ones.** Cost and wall clock are enforced by
  *    the same pass machinery as any other run, because an autonomous loop with
  *    no ceiling is the one thing worse than a bad review.
- *  - **Routed like every other cloud role.** Its harness and model come from
- *    the worker ladder with the review's own floor (`reviewHarness`/
- *    `workerModel`): omp on GLM — the review is the one cloud boot that still
- *    runs a CLI harness in its container, the workers are hosted on
- *    pi-durable and the pi CLI is deleted (epic 43y, tick jhp) — never the
- *    image's own harness selection, which a deployment that routes nothing
- *    would leave at claude (the xte finding dl8 absorbed).
+ *  - **Routed like every other cloud role, hosted like every other worker.**
+ *    Its harness and model come from the worker ladder with the review's own
+ *    floor (`reviewHarness`/`workerModel`). Since tick 8gd the hosted kind is
+ *    a servable review route: on a deployment that hosts worker conversations
+ *    the review's conversation runs in the run's WorkerAgent and its container
+ *    runs only the review's `--boot`/`--finish` halves, with the CLI floor
+ *    (omp on GLM) as what a deployment that hosts nothing falls to — never
+ *    the image's own harness selection, which a deployment that routes
+ *    nothing would leave at claude (the xte finding dl8 absorbed).
  */
 export async function superviseReview(
   env: Env,

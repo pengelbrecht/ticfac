@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 )
 
 // The parity record (tick sz0): decisions/reconciler-parity.json is the
@@ -145,7 +146,7 @@ func extractRegion(content, begin, end string) ([]string, error) {
 // anchor's region is present exactly once and digests as recorded, and no
 // marker exists that no decision records. The complaints are the check's own
 // words — they are what a person who tripped the check reads.
-func verifyParity(root string, rec parityRecord) []string {
+func verifyParity(files []string, root string, rec parityRecord) []string {
 	var complaints []string
 	seen := map[string]bool{}
 	for _, d := range rec.Decisions {
@@ -185,7 +186,7 @@ func verifyParity(root string, rec parityRecord) []string {
 			}
 		}
 	}
-	complaints = append(complaints, strayMarkers(root, rec)...)
+	complaints = append(complaints, strayMarkers(files, root, rec)...)
 	return complaints
 }
 
@@ -193,7 +194,14 @@ func verifyParity(root string, rec parityRecord) []string {
 // a marker in the code whose decision was deleted (or never written) must
 // not read as a pinned behaviour that verifies by silence. Test files are
 // exempt: the check's own complaints name the marker shape.
-func strayMarkers(root string, rec parityRecord) []string {
+//
+// It reads the tree's TRACKED files, not the directory (tick pqs): a
+// checkout is not a clean room — a Claude Code agent worktree under
+// .claude/worktrees/ held an old branch's cloudflare/src/epic-reconciler.ts
+// and failed this check on main (2026-09-24). A directory walk reads every
+// stray directory a person or tool left under the checkout; the files git
+// knows about are the tree, and nothing else is.
+func strayMarkers(files []string, root string, rec parityRecord) []string {
 	known := map[string]bool{}
 	for _, d := range rec.Decisions {
 		for _, a := range d.Anchors {
@@ -201,34 +209,27 @@ func strayMarkers(root string, rec parityRecord) []string {
 		}
 	}
 	var complaints []string
-	_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		name := entry.Name()
-		if entry.IsDir() {
-			switch name {
-			case ".git", "node_modules", "image", ".ticfac", ".tick", "runs":
-				return fs.SkipDir
-			}
-			return nil
-		}
+	for _, path := range files {
+		name := filepath.Base(path)
 		switch filepath.Ext(name) {
 		case ".go":
 			if strings.HasSuffix(name, "_test.go") {
-				return nil
+				continue
 			}
 		case ".ts":
 		default:
-			return nil
+			continue
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return err
+			// A file the enumerator named that cannot be read is the
+			// enumerator's problem, not a stray marker; its caller reports
+			// it.
+			continue
 		}
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
-			return err
+			continue
 		}
 		for _, ref := range markerRefs(string(data)) {
 			if !known[ref] {
@@ -239,9 +240,37 @@ func strayMarkers(root string, rec parityRecord) []string {
 					rel, id, region, parityRecordPath))
 			}
 		}
+	}
+	return complaints
+}
+
+// copiedFiles enumerates a throwaway copy's .go and .ts files. The throwaway
+// holds only what a control copied into it, so a plain walk is honest there;
+// it is the real checkout that must be enumerated as tracked files (tick
+// pqs), which is what gittest.Tracked does at verifyParity's real call
+// sites.
+func copiedFiles(t *testing.T, root string) []string {
+	t.Helper()
+	var files []string
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		switch filepath.Ext(entry.Name()) {
+		case ".go", ".ts":
+		default:
+			return nil
+		}
+		files = append(files, path)
 		return nil
 	})
-	return complaints
+	if err != nil {
+		t.Fatalf("walk the throwaway copy: %v", err)
+	}
+	return files
 }
 
 // markerRefs reads every `reconciler-decision:<id>:<begin|end>:<region>` token
@@ -333,7 +362,7 @@ func TestReconcilerParityDecisionsMatchTheImplementations(t *testing.T) {
 		}
 	}
 
-	for _, complaint := range verifyParity(root, rec) {
+	for _, complaint := range verifyParity(gittest.Tracked(t, root), root, rec) {
 		t.Error(complaint)
 	}
 }
@@ -408,7 +437,7 @@ func TestParityCheckRefusesAChangedRegion(t *testing.T) {
 
 	// The throwaway verifies clean first: a refusal the copy itself causes
 	// says nothing about the mutation.
-	if got := verifyParity(throwaway, rec); len(got) != 0 {
+	if got := verifyParity(copiedFiles(t, throwaway), throwaway, rec); len(got) != 0 {
 		t.Fatalf("the throwaway copy does not verify clean before the mutation: %v", got)
 	}
 
@@ -426,7 +455,7 @@ func TestParityCheckRefusesAChangedRegion(t *testing.T) {
 		return line
 	})
 
-	complaints := verifyParity(throwaway, rec)
+	complaints := verifyParity(copiedFiles(t, throwaway), throwaway, rec)
 	want := []string{"D26", "boundaries", file}
 	for _, w := range want {
 		found := false
@@ -462,7 +491,7 @@ func TestParityCheckRefusesARemovedMarker(t *testing.T) {
 		return line
 	})
 
-	complaints := verifyParity(throwaway, rec)
+	complaints := verifyParity(copiedFiles(t, throwaway), throwaway, rec)
 	found := false
 	for _, c := range complaints {
 		if strings.Contains(c, "no begin marker") && strings.Contains(c, "D32") {
@@ -497,7 +526,7 @@ func TestParityCheckRefusesAMarkerNoDecisionRecords(t *testing.T) {
 		return line
 	})
 
-	complaints := verifyParity(throwaway, rec)
+	complaints := verifyParity(copiedFiles(t, throwaway), throwaway, rec)
 	found := false
 	for _, c := range complaints {
 		if strings.Contains(c, "D99") && strings.Contains(c, "stray") {
@@ -526,7 +555,7 @@ func TestParityCheckRefusesADecisionWithNoAnchors(t *testing.T) {
 	unpinned.Decisions = append([]parityDecision{}, rec.Decisions...)
 	unpinned.Decisions = append(unpinned.Decisions, parityDecision{ID: "D98", Title: "unpinned", Tick: "sz0"})
 
-	complaints := verifyParity(root, unpinned)
+	complaints := verifyParity(gittest.Tracked(t, root), root, unpinned)
 	found := false
 	for _, c := range complaints {
 		if strings.Contains(c, "D98") && strings.Contains(c, "no anchored region") {

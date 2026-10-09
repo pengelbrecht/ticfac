@@ -15,6 +15,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/tk"
 )
 
@@ -38,13 +39,7 @@ func integrationTrackerFixture(t *testing.T) (repo string) {
 
 	run := func(dir string, args ...string) string {
 		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %s (in %s): %v\n%s", strings.Join(args, " "), dir, err, out)
-		}
-		return string(out)
+		return gittest.Run(t, dir, args...)
 	}
 	write := func(dir, rel, content string) {
 		t.Helper()
@@ -170,7 +165,7 @@ func TestEpicGraphPrefersTheIntegrationBranch(t *testing.T) {
 	// The checkout's own tree, behind the fallback: a clone whose origin
 	// has no epic branch answers from the tree, open statuses included.
 	withoutBranch := repo
-	if out, err := exec.Command("git", "-C", withoutBranch, "push", "origin", "--delete", "epic/qeu").CombinedOutput(); err != nil {
+	if out, err := gittest.Command(withoutBranch, "push", "origin", "--delete", "epic/qeu").CombinedOutput(); err != nil {
 		t.Fatalf("delete the epic branch from origin: %v\n%s", err, out)
 	}
 	graph = epicGraph(context.Background(), withoutBranch, "qeu")
@@ -195,7 +190,7 @@ func TestEpicGraphPrefersTheIntegrationBranch(t *testing.T) {
 // error.
 func TestGraphAtIntegrationBranchWithoutOriginIsNil(t *testing.T) {
 	repo := t.TempDir()
-	if out, err := exec.Command("git", "-C", repo, "init", "--quiet", "-b", "main").CombinedOutput(); err != nil {
+	if out, err := gittest.Command(repo, "init", "--quiet", "-b", "main").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
 	if graph := graphAtIntegrationBranch(context.Background(), repo, "qeu"); graph != nil {

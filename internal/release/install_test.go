@@ -75,6 +75,18 @@ func newInstallHarness(t *testing.T) *installHarness {
 		slug:     releaseSlug(t, root),
 	}
 
+	// install.sh is read IN-PROCESS, before sh runs it (tick mbv). This test
+	// is the gate's only proof of the install path, and go's test cache cannot
+	// see sh's reads: without this read, a cached pass would stand over an
+	// edited install.sh — the audit demonstrated the hole against ciwatchdog's
+	// script, and this harness has the identical shape. The read also asserts
+	// the input exists.
+	if raw, err := os.ReadFile(h.script); err != nil {
+		t.Fatalf("read %s: %v", h.script, err)
+	} else if len(raw) == 0 {
+		t.Fatalf("%s is empty: there is no installer to run", h.script)
+	}
+
 	// Both binaries, built the way goreleaser builds them for this
 	// platform. Ten minutes is a ceiling, not a guess: a warm build cache
 	// answers in seconds and a cold one has never been seen anywhere near

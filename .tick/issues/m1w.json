@@ -3,13 +3,15 @@
   "title": "Local subprocess workers on pi-durable are unmetered: carry the metering setting through worker.json",
   "gloss": "local pi-durable metering",
   "description": "Found folding main into epic/hn6 (2026-10-06): main's pi runner is now the pi-durable Node harness (43y), which has no --extension flag and rejects unknown args, so gzv's metering-extension injection was removed from the subprocess launch. The metering setting is still resolved per dispatch, and herdr panes still load it through the pi CLI, but local subprocess workers' spend is unmetered until the harness reads it from worker.json.",
-  "status": "open",
+  "notes": "2026-10-07 18:12 - ticfac run run_69f8f57832d34601b040367c7207b81f: m1w try 1 (run dispatch #17) merged into epic/ex6 as d6d0069bbf83; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "parent": "ex6",
   "acceptance_criteria": "A local subprocess worker on pi-durable records its model spend (or says not measured) exactly as a herdr/pi-CLI worker does; tests.",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-06T01:20:59.959835Z",
-  "updated_at": "2026-10-06T10:03:55.391431Z"
+  "updated_at": "2026-10-07T18:12:17.171438702Z",
+  "closed_at": "2026-10-07T18:12:17.171438702Z"
 }

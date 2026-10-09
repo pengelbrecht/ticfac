@@ -21,6 +21,8 @@ import (
 
 // short: handle decoding and the agent-name rules, in memory
 func TestLocalRefusesAHandleFromAnotherExecutor(t *testing.T) {
+	t.Parallel()
+
 	h := &subprocess.JobHandle{Executor: subprocess.ExecutorName, Handle: map[string]any{"state": "/tmp/x"}}
 	if _, err := local(h); err == nil {
 		t.Fatal("a handle naming the local-subprocess executor decoded as this executor's: " +
@@ -30,12 +32,16 @@ func TestLocalRefusesAHandleFromAnotherExecutor(t *testing.T) {
 
 // short: handle decoding and the agent-name rules, in memory
 func TestLocalRefusesAHandleWithNoState(t *testing.T) {
+	t.Parallel()
+
 	if _, err := local(&subprocess.JobHandle{Executor: ExecutorName}); err == nil {
 		t.Fatal("a handle carrying no state directory decoded: nothing can be re-addressed through it")
 	}
 }
 
 func TestTheMinimalHandleResolvesThroughTheAttemptRecord(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -74,6 +80,8 @@ func TestTheMinimalHandleResolvesThroughTheAttemptRecord(t *testing.T) {
 }
 
 func TestTheHandleRoundTripsThroughJSON(t *testing.T) {
+	t.Parallel()
+
 	// The handle is a durable record: it is written to the run's attempt
 	// marker on origin and read back by a fresh clone. A handle that does
 	// not survive its own JSON round trip is one nobody can re-address.
@@ -105,6 +113,8 @@ func TestTheHandleRoundTripsThroughJSON(t *testing.T) {
 
 // short: handle decoding and the agent-name rules, in memory
 func TestAgentNameIsALegalHerdrName(t *testing.T) {
+	t.Parallel()
+
 	for _, check := range []struct {
 		tick    string
 		attempt int
@@ -139,6 +149,8 @@ func TestAgentNameIsALegalHerdrName(t *testing.T) {
 // discriminator.
 // short: handle decoding and the agent-name rules, in memory
 func TestAgentNameNeverTruncatesTheAttemptDiscriminator(t *testing.T) {
+	t.Parallel()
+
 	long := "averylongtickidentifierthat-will-not-fit-inside-32-chars"
 	seen := map[string]bool{}
 	for _, attempt := range []int{1, 2, 12, 123} {

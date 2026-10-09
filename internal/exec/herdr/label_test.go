@@ -17,6 +17,8 @@ import (
 // the sidebar's workspace and its agent read as one attempt.
 
 func TestTheWorkspaceLabelIdentifiesTheAttempt(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	if _, err := h.start("t1"); err != nil {
 		t.Fatal(err)
@@ -54,6 +56,8 @@ func TestTheWorkspaceLabelIdentifiesTheAttempt(t *testing.T) {
 // attempt-suffixed string.
 // short: reads the attempt-scoped label off a record
 func TestTickOfFactsReadsTheAttemptScopedLabelAsTheTick(t *testing.T) {
+	t.Parallel()
+
 	for label, want := range map[string]string{
 		"tick-t1-a2":   "t1",
 		"tick-55i-a11": "55i",

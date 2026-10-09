@@ -28,6 +28,7 @@ import (
 // see localHarnessBundleCurrentSourcesHash's own comment for why that
 // trade is worth it here.
 func TestLocalHarnessBundleMatchesItsSources(t *testing.T) {
+	t.Parallel()
 	root, err := contracts.RepoRoot()
 	if err != nil {
 		t.Fatal(err)

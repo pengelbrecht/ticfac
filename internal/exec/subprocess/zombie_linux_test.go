@@ -25,6 +25,8 @@ import (
 //
 // short: one child process, killed in its cradle; the kill is the whole cost
 func TestAReapPendingZombieIsNotAlive(t *testing.T) {
+	t.Parallel()
+
 	cmd := exec.Command("sleep", "300")
 	if err := cmd.Start(); err != nil {
 		t.Skipf("cannot start a child to kill: %v", err)
@@ -112,6 +114,8 @@ func waitCorpse(t *testing.T, pid int) {
 //
 // short: one shell and one sleeper, one group signal; the kill is the whole cost
 func TestAKilledGroupIsDeadThoughNobodyReapsIt(t *testing.T) {
+	t.Parallel()
+
 	_, pgid, child := startCorpseGroup(t)
 	if !groupAlive(pgid) {
 		t.Fatal("the group did not read as alive before the kill")
@@ -140,6 +144,8 @@ func TestAKilledGroupIsDeadThoughNobodyReapsIt(t *testing.T) {
 //
 // short: one shell and one sleeper, one pid-directed kill; the kill is the whole cost
 func TestAGroupWithALiveMemberIsAliveThoughItsLeaderIsDead(t *testing.T) {
+	t.Parallel()
+
 	_, pgid, child := startCorpseGroup(t)
 	// Kill the leader alone, the way a group signal that was missed by every
 	// member is: the child keeps running in the group, holding the lock a stop
@@ -162,6 +168,8 @@ func TestAGroupWithALiveMemberIsAliveThoughItsLeaderIsDead(t *testing.T) {
 
 // short: a table over state letters; no process
 func TestAProcEntryThatVanishedIsDeadNotAlive(t *testing.T) {
+	t.Parallel()
+
 	for state, dead := range map[string]bool{"": true, "Z": true, "X": true, "R": false, "S": false, "D": false, "T": false} {
 		if got := deadByProcState(state); got != dead {
 			t.Errorf("state %q reads dead=%v, want %v", state, got, dead)

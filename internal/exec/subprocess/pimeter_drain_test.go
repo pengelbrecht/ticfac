@@ -153,6 +153,8 @@ func TestFakeGatewaySeesAClientThatStopsAtTheFinish(t *testing.T) {
 // header), and pi reads the stream past `finish_reason` to the usage tail and
 // [DONE] — the read the real gateway needs before it writes the call's row.
 func TestPiDrainsTheGatewayStreamThroughTheMeteringOverride(t *testing.T) {
+	t.Parallel()
+
 	shorttest.EndToEnd(t)
 	pi, err := exec.LookPath("pi")
 	if err != nil {

@@ -131,6 +131,41 @@ review_not_ready_report() {
 	} > "$TICFAC_RESULT_PATH"
 }
 
+# json_string turns stdin's bytes into the body of one JSON string literal:
+# backslashes and quotes escaped, each newline the two characters \n. The
+# whole-file proposals below embed the .tick/runners.toml the worktree
+# carries, and shell has no JSON encoder.
+json_string() {
+	sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | awk '{printf "%s\\n", $0}'
+}
+
+# content_proposal is a whole-file replacement of .tick/runners.toml: the
+# file as the worktree carries it — BEFORE any proposal has been applied,
+# the appends land only at the close-out — with one marker comment after the
+# version line. Two ticks composing from the same base produce two
+# different proposals, so neither deduplicates against the other.
+content_proposal() {
+	awk -v marker="# whole-file replacement proposed by $TICFAC_TICK" \
+		'{print} /^version = 2$/ {print marker}' \
+		< "$TICFAC_WORKTREE/.tick/runners.toml" | json_string
+}
+
+# report_protected_change reports DONE with one finding (given as $1, one
+# JSON object without the wrapping block) whose protected_change is the
+# tick's proposal: the protected_change_finding shape, over committed work.
+report_protected_change() {
+	mkdir -p "$(dirname "$TICFAC_RESULT_PATH")"
+	{
+		printf '# %s\n\n' "$TICFAC_TICK"
+		printf '%s\n' '```findings v2'
+		printf '%s\n' "$1"
+		printf '%s\n' '```'
+		printf '\n'
+		verdict_line
+		printf 'STATUS: %s\n' "$status"
+	} > "$TICFAC_RESULT_PATH"
+}
+
 # The gate-repair worker (tick wj6): the gate failed because a deletion left
 # a stale reference — a check that reads a file the tick deleted. The fake
 # stands in for an agent that read the failing check's output out of the
@@ -528,6 +563,30 @@ gate_break_wrong_repair)
 		report
 	fi
 	;;
+gate_break_touched)
+	# dz1's shape for the touched-packages check (tick r1f): the tick changes
+	# a Go package's code — alpha's Answer — in a way the whole-repo short
+	# suite cannot see (alpha's test skips under -short) and only that
+	# package's full suite fails. The repository the probe seeds (gate_
+	# touched_run_test.go) declares the real gate's two Go halves, and its
+	# cmd/gate-touched reads the pair the integrated gate exports. The
+	# plan-repair worker lands a fix for the OTHER half — a file no Go package
+	# owns, the wrong-repair shape above — so the re-gate over the repaired
+	# tree must still refuse, through the union pair: a repair of one check
+	# must not stop the gate covering the tick's own exposure.
+	if [ "$TICFAC_ROLE" = "plan-repair" ]; then
+		repair_gate_nothing
+		report
+	elif in_gate_break_tick; then
+		printf '%s\n' 'package alpha' '' '// Answer is what the tick changes; 2 is the broken value.' 'const Answer = 2' \
+			> "$TICFAC_WORKTREE/alpha/alpha.go"
+		commit
+		report
+	else
+		commit
+		report
+	fi
+	;;
 stall-then-report)
 	# The Phase 3 shape (tick 7zs), with an ending: the worker is alive,
 	# produces nothing — no commit, no file, no report — for long enough that
@@ -720,6 +779,33 @@ protected_change_only)
 			printf '\nSTATUS: %s\n' "$status"
 		} > "$TICFAC_RESULT_PATH"
 	fi
+	;;
+protected_change_order)
+	# Epic ex6's tgx: THREE findings propose changes to the SAME protected
+	# file — a1 an append (the 2pn shape: the gate cell the run's deliverable
+	# lives in) and a2 and b1 whole-file contents composed from bases before
+	# the appended lines existed (the q6z/2p3 shape). Applied in findings-key
+	# order, the append landed first and both replacements then wiped it off
+	# the branch; the run must apply a file's content replacements before its
+	# appends. The Go test keys this scenario on the titles below — their
+	# finding keys sort append, a2, b1, exactly the order that lost the cell.
+	commit
+	case "$TICFAC_TICK" in
+	a1)
+		report_protected_change '[{"kind": "defect", "title": "The per-tick gate runs no lint suite", "severity": "high", "protected_change": {"path": ".tick/runners.toml", "append": "\n# the lint suite, declared for the gate\n[testing.commands.lint]\ncommand = \"test -f work-a1.txt\"\ndescription = \"the lint suite\"\n"}}]'
+		;;
+	a2)
+		content="$(content_proposal)"
+		report_protected_change "$(printf '[{"kind": "defect", "title": "%s", "severity": "medium", "protected_change": {"path": ".tick/runners.toml", "content": "%s"}}]' 'runners.toml carries a stale comment' "$content")"
+		;;
+	b1)
+		content="$(content_proposal)"
+		report_protected_change "$(printf '[{"kind": "defect", "title": "%s", "severity": "low", "protected_change": {"path": ".tick/runners.toml", "content": "%s"}}]' 'The implement cell still carries the dead --approve arg' "$content")"
+		;;
+	*)
+		report
+		;;
+	esac
 	;;
 protected_edit_prose)
 	# The same discovery as protected_change_finding, as the incident's
@@ -1308,6 +1394,22 @@ hang)
 	# transient window with a forked child a group signal could miss.
 	commit
 	exec sleep 86400
+	;;
+linger-past-grace)
+	# The o3q shape: the worker $LINGER_TICK names does its work, reports, and
+	# then keeps running PAST the grace a cancel of an attempt that has
+	# reported waits out (#141) — long enough that the release which follows
+	# its collect waits the grace out and records a durable cancellation over
+	# the verdict the run has already collected. Every other tick is the plain
+	# report mode, so the fixture costs one worker's seconds and not five.
+	if [ "$TICFAC_TICK" = "${LINGER_TICK:-a1}" ]; then
+		commit
+		report
+		sleep "${LINGER_SECONDS:-30}"
+	else
+		commit
+		report
+	fi
 	;;
 busy-a1)
 	# The 9fc shape (tick dh1): a1 keeps writing into its worktree and

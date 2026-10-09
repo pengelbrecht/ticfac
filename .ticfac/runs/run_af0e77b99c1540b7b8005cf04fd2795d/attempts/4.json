@@ -1,0 +1,56 @@
+{
+  "schema_version": 3,
+  "attempt": 4,
+  "tick_id": "q6z",
+  "dispatched_at": "2026-10-07T23:41:05Z",
+  "job_handle": {
+    "attempt": 4,
+    "base_sha": "2364d3703e949aa3ac5e48d044222bb8325d9952",
+    "collected_from": {
+      "run_id": "run_69f8f57832d34601b040367c7207b81f",
+      "job_id": "run-run_69f8f57832d34601b040367c7207b81f/tick-q6z/attempt-21",
+      "attempt": 21,
+      "write_ref": "refs/heads/tick/ex6/attempt-21/q6z",
+      "sha": "72d2f3cc5cb223fb75588e700b0c4a2377fe2d11",
+      "evidence": "the factory recorded its worker container completed with exit 0 at 2026-10-07T20:51:59.584Z"
+    },
+    "executor": "cloudflare-sandbox",
+    "job_id": "run-run_af0e77b99c1540b7b8005cf04fd2795d/tick-q6z/attempt-4",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "prompt_digest": "sha256:effa476595b059738e6f98bc9537bd7329458e4effe203a7ba67a361b9df3642",
+    "remote": "origin",
+    "resumed_from": null,
+    "role": "implement-tick",
+    "substrate_protocol": 0,
+    "substrate_server_version": "",
+    "taken_over": {
+      "run_id": "run_69f8f57832d34601b040367c7207b81f",
+      "evidence": "its checkpoint on the integration branch reads failed"
+    },
+    "tick_id": "q6z",
+    "tier": "economy",
+    "touch": null,
+    "try": 1,
+    "wall_seconds": 28800,
+    "write_ref": "refs/heads/ticfac/run-run_af0e77b99c1540b7b8005cf04fd2795d/tick-q6z/attempt-4"
+  },
+  "provenance": {
+    "run_id": "run_af0e77b99c1540b7b8005cf04fd2795d",
+    "tick_id": "q6z",
+    "attempt": 4,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "2364d3703e949aa3ac5e48d044222bb8325d9952",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:f6d30e41f279e14ec58e01f070b5f9560dd75d0f23147e11fdef84a873c82087",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

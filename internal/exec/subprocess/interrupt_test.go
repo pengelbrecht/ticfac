@@ -106,6 +106,8 @@ func gone(pid int) bool {
 //
 // short: one node process and three sleeps, for well under a second
 func TestHungToolGroupsAreTheDetachedGroupsUnderTheRunner(t *testing.T) {
+	t.Parallel()
+
 	tree := startToolTree(t)
 	groups, err := hungToolGroups(tree.runner.Process.Pid)
 	if err != nil {
@@ -123,6 +125,8 @@ func TestHungToolGroupsAreTheDetachedGroupsUnderTheRunner(t *testing.T) {
 //
 // short: one node process and three sleeps, for well under a second
 func TestInterruptingAHungToolKillsItsGroupAndSparesTheRunner(t *testing.T) {
+	t.Parallel()
+
 	tree := startToolTree(t)
 	runnerPID := tree.runner.Process.Pid
 	groups, err := hungToolGroups(runnerPID)
@@ -162,6 +166,8 @@ func TestInterruptingAHungToolKillsItsGroupAndSparesTheRunner(t *testing.T) {
 //
 // short: one node process and three sleeps, for well under a second
 func TestAnInterruptSignalsOnlyGroupsStillLedUnderTheRunner(t *testing.T) {
+	t.Parallel()
+
 	tree := startToolTree(t)
 	stranger := exec.Command("sleep", "3600")
 	stranger.SysProcAttr = newProcessGroup()

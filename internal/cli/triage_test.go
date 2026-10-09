@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -42,12 +42,7 @@ func triageKey(short string) string {
 // the actor default reads and for reading records off the branch.
 func gitIn(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s (in %s): %v\n%s", strings.Join(args, " "), dir, err, out)
-	}
-	return string(out)
+	return gittest.Run(t, dir, args...)
 }
 
 // showOnOrigin reads one path off the integration branch as ORIGIN holds it:

@@ -1,7 +1,7 @@
 package runconfig
 
 import (
-	"io/fs"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -82,28 +82,30 @@ func TestNothingInTicfacPointsAtAReferenceTicksDeleted(t *testing.T) {
 		t.Fatalf("the repository root is not two levels above internal/runconfig: %v", err)
 	}
 	pointer := regexp.MustCompile(`skills/ticks/references/([A-Za-z0-9_.-]+)`)
-	skipDirs := map[string]bool{
-		".git": true, "node_modules": true, ".wrangler": true, "dist": true,
-		// The tracker's and the run's own records are history, not links.
+
+	// Tracked files, not a directory walk (tick pqs): a checkout is not a
+	// clean room — an agent worktree or a scratch clone under it is no party
+	// to this tree, and the old skip list had to name every stray directory
+	// after the fact. The tracker's and the run's own records are history,
+	// not links — still excluded, by path now rather than by directory name.
+	history := map[string]bool{
 		".tick": true, ".ticfac": true, "runs": true,
 	}
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
+	for _, path := range gittest.Tracked(t, root) {
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			continue
 		}
-		if d.IsDir() {
-			if skipDirs[d.Name()] && path != root {
-				return filepath.SkipDir
-			}
-			return nil
+		if top, _, _ := strings.Cut(filepath.ToSlash(rel), "/"); history[top] {
+			continue
 		}
-		info, err := d.Info()
+		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() || info.Size() > 4<<20 {
-			return err
+			continue
 		}
 		body, err := os.ReadFile(path)
 		if err != nil {
-			return err
+			continue
 		}
 		for _, m := range pointer.FindAllSubmatch(body, -1) {
 			if name := string(m[1]); !stillInTicks[name] {
@@ -111,9 +113,5 @@ func TestNothingInTicfacPointsAtAReferenceTicksDeleted(t *testing.T) {
 				t.Errorf("%s points at skills/ticks/references/%s, which ticks deleted at v0.32.0 (chz): the reference is ticfac's now (internal/runconfig/)", rel, name)
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 }

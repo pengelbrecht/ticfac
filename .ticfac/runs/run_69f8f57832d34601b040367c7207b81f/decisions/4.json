@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 4,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "[A1] says every worker, implement and role jobs, local and cloud, runs on pi-durable. The cloud PR-review boot still runs omp on GLM: reviewHarness() drops pi-durable and pi and falls back to omp. Its exception was written onto 43y's notes for worker 8em (2026-10-05 18:25), and no amendment record or operator commit confirms it, because .ticfac/runs/epic-43y/amendments/ does not exist. Either the operator confirms the exception on the record, or the review conversation moves onto a hosted WorkerAgent (a review boot/finish contract in the image, the supervisor routed off the CLI floor).\nevidence: cloudflare/src/worker-boot.ts:504 (REVIEW_DEFAULT_HARNESS = \"omp\"), :529 (NOT_A_REVIEW_HARNESS); .tick/issues/43y.json notes 2026-10-05 18:25\n\nticfac run epic-43y created this tick by absorbing the finding d89b47c98c8aba305e706bf59f45aaa3b6f3f22d9ac52428aeabf716fc119c93 (reported by run-epic-43y/tick-j2k/attempt-69): the finding was judged against the epic's definition of done and gates done item A1. The decision record — item id, verdict, observed or predicted, confidence — is .ticfac/runs/epic-43y/absorptions/d89b47c98c8aba305e706bf59f45aaa3b6f3f22d9ac52428aeabf716fc119c93.json on the run branch.",
+    "epic_id": "ex6",
+    "role": "classify-tick",
+    "tick_id": "8gd",
+    "title": "Host the cloud PR-review boot on pi-durable, or operator confirms its omp floor"
+  },
+  "response": {
+    "choice": "design",
+    "confidence": 0.64,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.14,
+      "design": 0.71,
+      "diagnosis": 0.11,
+      "mechanical": 0.03,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1430,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-07T13:49:19Z",
+  "answered_at": "2026-10-07T13:49:19Z",
+  "provenance": {
+    "run_id": "run_69f8f57832d34601b040367c7207b81f",
+    "tick_id": "8gd",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ex6",
+    "source_sha": "8f1712a4ee3375a0274c687434cdd05ad63c43a4",
+    "integration_ref": "refs/heads/epic/ex6",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:0fd84feaa6def26de94fef1a4da33b194dfa9b1fa1c66cc1c31a8a555019f2a4",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

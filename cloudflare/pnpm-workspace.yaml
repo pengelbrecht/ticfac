@@ -1,5 +1,9 @@
 allowBuilds:
   esbuild: true
+  # Hegel 0.4.7's native engine: koffi links its prebuilt platform binary
+  # (its cnoke install script, never a compiler) so the plain-Node vitest leg
+  # that runs the property tests can load it on CI too.
+  koffi: true
   workerd: true
 # The operator's global release-age gate (3 days) holds back new packages.
 # Cloudflare's own packages are exempt for this project: the factory tracks

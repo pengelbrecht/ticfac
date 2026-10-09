@@ -1,0 +1,14 @@
+{
+  "id": "5k6",
+  "title": "q6z and 2p3 ask for the same one-paste edit to the same cell",
+  "description": "Two open blockers of ex6's final review carry the same deliverable: q6z (from 2q5's finding bab43662…) and 2p3 (from uxi's c1dded50…) both ask for the [roles.implement] args line and its comment in .tick/runners.toml to go, and 2p3 is already three attempts into its ladder. One operator paste closes both, but the run is running two ladders for it. A person should close one as the other's duplicate — nothing here needs a worker, and a tick dispatched to merge them would hit the same .tick/ wall as the ticks it merges.\nevidence: .tick/issues/q6z.json and .tick/issues/2p3.json, both open, both blockers of 0rt\n\nticfac run run_69f8f57832d34601b040367c7207b81f filed this backlog tick from the finding da855f96760330ba2f30008c191e0a393b225ebdd5984e31ef87ecb83d09ea4e (reported by run-run_69f8f57832d34601b040367c7207b81f/tick-q6z/attempt-20) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/da855f96760330ba2f30008c191e0a393b225ebdd5984e31ef87ecb83d09ea4e.json on the run branch.",
+  "notes": "2026-10-07 20:06 - ticfac run run_69f8f57832d34601b040367c7207b81f: created by absorbing finding da855f96760330ba2f30008c191e0a393b225ebdd5984e31ef87ecb83d09ea4e — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/da855f96760330ba2f30008c191e0a393b225ebdd5984e31ef87ecb83d09ea4e.json on epic/ex6, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_69f8f57832d34601b040367c7207b81f/tick-q6z/attempt-20",
+  "created_by": "ticfac run run_69f8f57832d34601b040367c7207b81f",
+  "created_at": "2026-10-07T20:06:08Z",
+  "updated_at": "2026-10-07T20:06:14.536592524Z"
+}

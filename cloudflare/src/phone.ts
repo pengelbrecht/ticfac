@@ -920,7 +920,7 @@ function ciHTML(doc: StatusDoc): string {
     const age = ageSeconds(doc, check.started_at);
     return age === null ? `${check.name} ◐` : `${check.name} ◐ ${humanDuration(age)}`;
   });
-  const line = `CI #${ci.pr.number}${parts.length === 0 ? "" : " " + parts.join(" · ")}`;
+  const line = `CI #${ci.pr.number}${parts.length === 0 ? "" : ` ${parts.join(" · ")}`}`;
   return `<p class="ci">${escapeHTML(line)}</p>`;
 }
 

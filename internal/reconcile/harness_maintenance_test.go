@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pengelbrecht/ticfac/internal/gitbin"
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
 )
 
@@ -125,11 +125,13 @@ func TestEveryGitTheTestsStartGoesThroughTheHarnessRunner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The two sanctioned builders of a git command line, exempted BY FUNCTION
-	// and not by file: one states the rule, the other is the control that
-	// proves the rule bites. A file-wide exemption would let a third git in
-	// beside them without anybody noticing.
-	sanctioned := map[string]bool{"command": true, "unpinnedGit": true}
+	// The one sanctioned builder of a git command line, exempted BY FUNCTION
+	// and not by file. unpinnedGit left the table when tick pqs moved its
+	// construction into gittest.Control: it starts nothing itself now, so
+	// an exec.Command reappearing in it fails here like anywhere else. A
+	// file-wide exemption would let a third git in beside the builder
+	// without anybody noticing.
+	sanctioned := map[string]bool{"command": true}
 
 	var offenders []string
 	for _, entry := range entries {
@@ -162,7 +164,7 @@ func TestEveryGitTheTestsStartGoesThroughTheHarnessRunner(t *testing.T) {
 	sort.Strings(offenders)
 	if len(offenders) != 0 {
 		t.Errorf("these tests start git without going through harnessCommand:\n  %s\n"+
-			"harnessCommand is where gitbin.WithNoAutoMaintenance is stated, and a git without it ends "+
+			"harnessCommand is where gittest.Env is stated, and a git without it ends "+
 			"by forking `git maintenance run --auto --detach` into the repository the test is about to "+
 			"delete — a background process that outlives the test and breaks the NEXT one's fixture "+
 			"(tick qsn). Route it through mustRun or harnessCommand.",
@@ -293,8 +295,8 @@ func moveSource(t *testing.T, source, name string) {
 	mustRun(t, source, "git", "commit", "--quiet", "-m", "upstream moves for "+name)
 }
 
-// unpinnedGit is a git run WITHOUT the harness's pins: an operator's own
-// command, which is a git that DOES end by starting background maintenance.
+// unpinnedGit is a git run WITHOUT the harness's pins: a plain git, which is
+// a git that DOES end by starting background maintenance.
 //
 // It exists for the two CONTROLS that need one — this file's, and the one
 // maintenance_test.go states before it asserts anything about the
@@ -303,18 +305,20 @@ func moveSource(t *testing.T, source, name string) {
 // where no git would have. Nothing else in this package may build a git
 // command; TestEveryGitTheTestsStartGoesThroughTheHarnessRunner is what says
 // so, and this file is exempt from it precisely because of these two lines.
+//
+// The environment is gittest.Control: every hermetic property of the
+// harness's git except the maintenance pins, and NOTHING of the host's — no
+// inherited pins, no config file. UNPINNED has to be constructed, not
+// inherited: os.Environ() carries whatever GIT_CONFIG_COUNT pins the process
+// was started under (the read-only source grade pins maintenance.auto=false),
+// and git reads those above every config file; a control run under them, or
+// under a host's own maintenance pin in its global config, starts no
+// maintenance and the fixture reports that as the tree's failure instead of
+// the environment's — the shape the learnings warn about: a gate verdict is
+// about the tree only if the host is bounded (tick pqs moved the env into
+// gittest so the control is the same construction everywhere).
 func unpinnedGit(dir string, args ...string) *exec.Cmd {
-	cmd := exec.Command(gitbin.Path(), args...)
-	cmd.Dir = dir
-	// UNPINNED has to be constructed, not inherited. os.Environ() carries
-	// whatever GIT_CONFIG_COUNT pins the process was started under — the
-	// read-only source grade pins maintenance.auto=false — and git reads those
-	// above every config file. A control run under them starts no maintenance,
-	// and the fixture reports that as the tree's failure instead of the
-	// environment's, which is the shape the learnings warn about: a gate
-	// verdict is about the tree only if the host is bounded.
-	cmd.Env = append(gitbin.WithoutPinnedConfig(os.Environ()), "GIT_TERMINAL_PROMPT=0")
-	return cmd
+	return gittest.Control(dir, args...)
 }
 
 func mustSucceed(t *testing.T, cmd *exec.Cmd) {

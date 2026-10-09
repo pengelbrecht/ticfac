@@ -1,0 +1,17 @@
+{
+  "id": "yet",
+  "title": "Review: halve the internal/reconcile test suite",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "blocked_by": [
+    "kf1",
+    "9xx"
+  ],
+  "parent": "1lq",
+  "role": "review",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-08T14:39:34.268876Z",
+  "updated_at": "2026-10-08T14:39:34.268876Z"
+}

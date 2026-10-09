@@ -99,6 +99,68 @@ func TestWatchHoldAlertNamesTheEpicNotAPlaceholder(t *testing.T) {
 	}
 }
 
+// A hold a RESUME answered is the previous incarnation's history, never the
+// current one's alarm (tick z7w): the watch's exit code and its --json state
+// word read the standing feed's LAST terminal word — a resumed run that
+// completed answers done — and an alert that still says "is HOLDING ...
+// Nothing proceeds until somebody decides" over that answer sends a person
+// to triage a finding the run already settled. The alert and the answer are
+// one contract: the alert fires exactly when the run's own answer is held.
+// Found by the agent-surface property suite (TestPBTWatchAlertsAHoldExactly
+// WhenTheRunHoldsIt), on the tree as it stood.
+func TestAWatchNeverAlertsAHoldAResumeAnswered(t *testing.T) {
+	repo := t.TempDir()
+	attempt := 2
+	writeFeedEvent(t, repo, "epic-3pd", runfeed.NewEvent(
+		time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC), "epic-3pd", "t1", &attempt,
+		reconcile.StageRunHeld, "finding_untriaged: a finding waits for a person"))
+	writeFeedEvent(t, repo, "epic-3pd", runfeed.NewEvent(
+		time.Date(2026, 10, 7, 12, 30, 0, 0, time.UTC), "epic-3pd", "", nil,
+		runfeed.StageRunFinished, "failed: t1 did not pass"))
+	writeFeedEvent(t, repo, "epic-3pd", runfeed.NewEvent(
+		time.Date(2026, 10, 7, 12, 31, 0, 0, time.UTC), "epic-3pd", "", nil,
+		runfeed.StageResumed, "resumed after the finding was settled"))
+	writeFeedEvent(t, repo, "epic-3pd", runfeed.NewEvent(
+		time.Date(2026, 10, 7, 12, 41, 0, 0, time.UTC), "epic-3pd", "", nil,
+		reconcile.StageRunFinished, "completed"))
+
+	for _, asJSON := range []bool{false, true} {
+		var stdout, stderr syncBuffer
+		args := []string{"watch", "--repo", repo, "epic-3pd"}
+		if asJSON {
+			args = []string{"watch", "--json", "--repo", repo, "epic-3pd"}
+		}
+		code := Run(args, &stdout, &stderr)
+		if code != exitSuccess {
+			t.Fatalf("a resumed, completed run exited %d, want 0; stderr %q", code, stderr.String())
+		}
+		if strings.Contains(stderr.String(), "is HOLDING") {
+			t.Errorf("the watch alerted a hold a resume answered — the run's own answer is done, and the alert would send a person to triage a finding the run settled: %q",
+				stderr.String())
+		}
+		if asJSON && !strings.Contains(stdout.String(), `"state": "done"`) {
+			t.Errorf("the document's state word is not done: %s", stdout.String())
+		}
+	}
+
+	// The hold that still stands keeps its alert: the suppression is about
+	// the run's own answer, never about the alert itself.
+	other := t.TempDir()
+	writeFeedEvent(t, other, "epic-3pd", runfeed.NewEvent(
+		time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC), "epic-3pd", "t1", &attempt,
+		reconcile.StageRunHeld, "finding_untriaged: a finding waits for a person"))
+	writeFeedEvent(t, other, "epic-3pd", runfeed.NewEvent(
+		time.Date(2026, 10, 7, 12, 41, 0, 0, time.UTC), "epic-3pd", "", nil,
+		reconcile.StageRunFinished, "failed: t1 did not pass"))
+	var stdout, stderr syncBuffer
+	if code := Run([]string{"watch", "--repo", other, "epic-3pd"}, &stdout, &stderr); code != ExitHeld {
+		t.Fatalf("a run holding a finding exited %d, want %d; stderr %q", code, ExitHeld, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "is HOLDING") {
+		t.Errorf("a hold that stands lost its alert: %q", stderr.String())
+	}
+}
+
 // writeRunCheckpoint writes one run's durable checkpoint record into a
 // checkout's working tree — the directory `statusRecords` reads when the
 // run id spells no epic hint — carrying an epic id the run id itself does

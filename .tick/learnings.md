@@ -1,39 +1,40 @@
 # Learnings
 
 Repo-specific gotchas, Problem → Cause → Rule. Hard cap 150 lines — compact every retro.
-Seeded from ticks' learnings 2026-09-02; last compacted at the v5t (2026-10-07) and bo9 (2026-10-08) close-outs.
+Seeded from ticks' learnings 2026-09-02; last compacted at the v5t (2026-10-07), bo9 and t8u (2026-10-08) close-outs.
 
 ## Planning an epic
 
-**Problem:** EIGHT epics closed without the run their acceptance names (Phase 4, xte, yoh, 2jn, hn6's
-`ticfac watch`; 43y's [A4]/[A2]; v5t's [A1]; bo9's [A1], verified by READING all eight hops — no factory
-was reachable). 43y's and v5t's COULD not: the factory deploys main only. v5t's 6fv tested its door with
-WORKER_AGENTS unbound, which production binds (yhe). **Rule:** When an epic's gate is a run or a view, the
-FIRST tick wires the thinnest path through the PRODUCTION entry point, its tests binding what production
-binds (wrangler.toml), and a named tick INSIDE performs it; a hop-by-hop READ is not that run.
+**Problem:** EIGHT epics closed without the run their acceptance names (Phase 4, xte, yoh, 2jn, hn6's `ticfac watch`; 43y's [A4]/[A2]; v5t's
+[A1]; bo9's [A1], verified by READING all eight hops — no factory was reachable). 43y's and v5t's COULD not: the factory deploys main only.
+v5t's 6fv tested its door with WORKER_AGENTS unbound, which production binds (yhe). **Rule:** When an epic's gate is a run or a view, the
+FIRST tick wires the thinnest path through the PRODUCTION entry point, its tests binding what production binds (wrangler.toml), and a named
+tick INSIDE performs it; a hop-by-hop READ is not that run.
 
-**Problem:** gvc absorbed none of 21 findings; 2jn scored none of 30: the data the machinery reads was
-prose. 0ek's four decisions are prose too — one NARROWED its own tick — because the envelope's `decisions`
-field has no report block filling it. **Rule:** An orchestrator epic names the NEXT run on the rebuilt
-binary as its demo; [A<n>] items AND a command per item at planning. A NARROWED scope is typed, or unseen.
+**Problem:** t8u's [A1] asked for the full suite halved "on a quiet host" with no BEFORE recorded and no tick on its floor
+(internal/reconcile, 41m serial): its ticks cut the per-tick gate 452s → 162s uncached while reconcile moved ~13%, and two reviews could not
+time a quiet host (load 8-17). **Rule:** A speed epic records its before at PLANNING — the command, the figure, and a measure this shared
+host can give (CI step durations, a serial test-elapsed sum) — and puts a tick on the measured floor first.
 
-**Problem:** hn6 planned 9 ticks and closed 65: ten repairs each fixed ONE pairing of which word wins
-across nine runs. **Rule:** An epic that renders run state lists the state matrix (running, held,
-stopped, failed, prior, cloud, local …) × every surface at planning, ONE precedence table tested over it.
+**Problem:** gvc absorbed none of 21 findings; 2jn scored none of 30: the data the machinery reads was prose. 0ek's four decisions are prose
+too — one NARROWED its own tick — because the envelope's `decisions` field has no report block filling it. **Rule:** An orchestrator epic
+names the NEXT run on the rebuilt binary as its demo; [A<n>] items AND a command per item at planning. A NARROWED scope is typed, or unseen.
+
+**Problem:** hn6 planned 9 ticks and closed 65: ten repairs each fixed ONE pairing of which word wins across nine runs. **Rule:** An epic
+that renders run state lists the state matrix (running, held, stopped, failed, prior, cloud, local …) × every surface at planning, ONE
+precedence table tested over it.
 
 **Problem:** 2jn's NOT READY review's ten findings each became a parallel tick (16 ticks, 7 resolves, a
 silent same-function collision, 7o5); v5t's two became y38 (Go) and yhe (TS) on ONE step-down seam: a
 resolve and a duplicate high finding (bw7). **Rule:** A reviewer reports ONE blocking finding per SEAM,
 naming every side of it: the run makes one tick per finding, so the report is the only fold there is.
 
-**Problem:** A policy held per layer and failed in the whole: xte checked the cloud overlay, then a tier
-overlay replaced the model; yoh keyed the Workers-AI rule on the substrate, not the executor (78v).
-**Rule:** Check a policy on the FINAL resolved value, keyed on what actually crosses the boundary.
+**Problem:** A policy held per layer and failed in the whole: xte checked the cloud overlay, then a tier overlay replaced the model; yoh keyed the
+Workers-AI rule on the substrate, not the executor (78v). **Rule:** Check a policy on the FINAL resolved value, keyed on what crosses the boundary.
 
-**Problem:** wne put a vocabulary (mrn) and its consumer (0ju) in one wave; hn6's wave 1 HAND-TYPED
-goldens for values wave 2 could never produce; bo9's rkk made `skills install|get`'s name optional while
-g5f, same wave, ADDED `skills diff` still demanding it. **Rule:** DECLARING and CONSUMING a vocabulary —
-or CHANGING a family's convention and ADDING to it — are different waves; fixtures check the builder.
+**Problem:** wne put a vocabulary (mrn) and its consumer (0ju) in one wave; hn6's wave 1 HAND-TYPED goldens for values wave 2 could never
+produce; bo9's rkk made `skills install|get`'s name optional while g5f, same wave, ADDED `skills diff` still demanding it. **Rule:**
+DECLARING and CONSUMING a vocabulary — or CHANGING a family's convention and ADDING to it — are different waves; fixtures check the builder.
 
 **Problem:** l6t deleted the wave path and four things only it produced; after 43y's jhp deleted the pi
 CLI, six ticks chased kind "pi" (twa's would have killed every cloud container at boot). **Rule:** A
@@ -44,22 +45,19 @@ moving into this repo brings its exemptions; test resume and re-run, not only th
 
 ## Orchestration
 
-**Problem:** Wave-2 branched from a base missing wave-1; two same-wave ticks cut additions to one
-file. **Rule:** Name the SHA; check `--is-ancestor`. Two additions to one file are a union in
-INTENT, not in text — hand the resolve to a worker holding the context. ONE owner per artifact.
+**Problem:** Wave-2 branched from a base missing wave-1; two same-wave ticks cut additions to one file. **Rule:** Name the SHA; check
+`--is-ancestor`. Two additions to one file are a union in INTENT, not text: a worker holding the context resolves it. ONE owner per artifact.
 
 **Problem:** A worker committed tracker state its prompt forbade. **Rule:** A boundary the substrate
 can enforce must not rest on instruction-following — make it impossible and REPORT every attempt.
 
-**Problem:** FOUR of bo9's six ticks carried "BOUNDARY VIOLATION ATTEMPTED — a model ignored an explicit
-instruction"; only 0ek's `tk decide` was a write. The guard matches `$1` alone and omits tk's read-only
-`skills`/`decisions`/`frontier`, so `tk skills diff ticks` reads as a violation. **Rule:** A refused READ
-is not a violation: track tk's read vocabulary, match the SUBCOMMAND past global flags, banner WRITES only
-— or the one real attempt is lost in the noise.
+**Problem:** FOUR of bo9's six ticks carried "BOUNDARY VIOLATION ATTEMPTED — a model ignored an explicit instruction"; only 0ek's `tk
+decide` was a write. The guard matches `$1` alone and omits tk's read-only `skills`/`decisions`/`frontier`, so `tk skills diff ticks` reads
+as a violation. **Rule:** A refused READ is not a violation: track tk's read vocabulary, match the SUBCOMMAND past global flags, banner
+WRITES only — or the one real attempt is lost in the noise.
 
-**Problem:** Parallel ticks sharing a return shape were green alone, broken together; an "in flight"
-state outlived its writer. **Rule:** The merge gate is the only test of a shared contract; settle
-in-flight state from durable evidence, never by trusting the claimer.
+**Problem:** Parallel ticks sharing a return shape were green alone, broken together; an "in flight" state outlived its writer. **Rule:**
+The merge gate is the only test of a shared contract; settle in-flight state from durable evidence, never by trusting the claimer.
 
 **Problem:** ncv stopped EIGHT times for untriaged findings; yoh needed a person ~20 times. **Rule:**
 A hold that fires when the system does its job (finding things) makes "unattended" impossible; put
@@ -98,26 +96,26 @@ REPRODUCE a reported defect at the base, and read WHICH assertion fails there.
 fixed a printed "clear with" command that could not clear its hold. **Rule:** A repair names EVERY
 implementation of the seam, leaves a guard test and reproduces on the old code; a command printed for a person comes from ONE builder and a test PARSES it with the real CLI.
 
-**Problem:** 06t deleted the stray RESULT-*.md reports and passed its gate; the integration merge
-(keepReportsOut) restored all seven, and only round two's `git ls-tree epic/hn6` saw it (obk).
-**Rule:** A repair whose effect is a TREE state is accepted on the INTEGRATED head, never the branch.
+**Problem:** 06t deleted stray RESULT-*.md reports and passed its gate; the integration merge (keepReportsOut) restored all seven; only round two's
+`git ls-tree epic/hn6` saw it (obk). **Rule:** A repair whose effect is a TREE state is accepted on the INTEGRATED head, never the branch.
 
 **Problem:** A boot step past its retries escaped supervisePass. **Rule:** Every ending is
 finalize's: catch a throwing step AT ITS STEP; a test fails each step past its retries.
 
-**Problem:** Gate evidence keyed by commit was wrong both ways: the run writes `.ticfac/` to the branch it
-gates — and bo9's epic head sat 60 bookkeeping commits past the newest CI run. **Rule:** Key evidence by
-the SOURCE (tree minus the run's own path); a close-out reads CI on the last CODE-BEARING commit and PROVES
-the remainder code-free (`git diff --stat <sha>..HEAD -- . ':(exclude).tick' ':(exclude).ticfac'`).
+**Problem:** Gate evidence keyed by commit was wrong both ways: the run writes `.ticfac/` to the branch it gates — and bo9's epic head sat
+60 bookkeeping commits past the newest CI run. **Rule:** Key evidence by the SOURCE (tree minus the run's own path); a close-out reads CI on
+the last CODE-BEARING commit and PROVES the remainder code-free (`git diff --stat <sha>..HEAD -- . ':(exclude).tick' ':(exclude).ticfac'`).
 
-**Problem:** Wall-clock tests refused innocent work six times; ONE host SIGTERM defect (8d6) failed at
-base in 18 ticks; one 43y 120s harness bound was filed five times (h3c 7oy 4ao omq 30e). **Rule:** A gate
-verdict is about the tree only if the host is bounded (registrytest.GuardMain); before filing "fails at base", grep `.tick/issues/` — the run must dedupe on the test id.
+**Problem:** Wall-clock tests refused innocent work six times; ONE host SIGTERM defect (8d6) failed at base in 18 ticks; one 43y 120s
+harness bound was filed five times (h3c 7oy 4ao omq 30e). **Rule:** A gate verdict is about the tree only if the host is bounded
+(registrytest.GuardMain); before filing "fails at base", grep `.tick/issues/` — the run must dedupe on the test id.
 
 **Problem:** wne's gates went green with 7 of 10 relevant tests skipped under `-short`; yoh's ts gate ran
-no vitest; dz1's and 43y's (enb, 4w7) red EndToEnd epic CI sat unread until a review. **Rule:** A test the
+no vitest; dz1's, 43y's (enb, 4w7) and t8u's (p4c: 15 runs, Apple git 2.50 vs CI's 2.55) red
+epic CI sat unread until a review; z7w's -short properties doubled internal/cli's wall, unseen. **Rule:** A test the
 gate does not run is not evidence: add it or name the gap. A NEW package's suite joins
 `[testing.commands]` in its tick; a tick touching dispatch, claims or a profile runs `./internal/reconcile/`.
+A test of git's OWN behaviour (hooks, ref transactions) is green only on CI's git; a tick adding tests reports its package's -short wall.
 
 **Problem:** A NOT READY was recorded ready-to-merge; 6in's close-out read an all-SKIPPED head as CI
 green (#100). **Rule:** A verdict is a typed field, and a skip is not a pass: green needs a success.
@@ -130,9 +128,8 @@ work and report in ONE commit; v5t's Go executor said `cloudflare-workers-ai/…
 the real shape; fix a forgiving fake in the same change. A TS↔Go seam gets a parity guard over its
 spellings and one Go test driving the REAL door (claude_sub_e2e_test.go's shape); "first try" is `$TICFAC_TRY`.
 
-**Problem:** hn6's activity fixture spelled a claude worker's model `claude-opus-5`; real attempts say
-`opus`, so a live claude worker's activity is never read. **Rule:** Copy a fixture's identity
-strings from a real record (`.ticfac/runs/*/attempts/*.json`), never type them.
+**Problem:** hn6's activity fixture spelled a claude worker's model `claude-opus-5`; real attempts say `opus`, so a live claude worker's
+activity is never read. **Rule:** Copy a fixture's identity strings from a real record (`.ticfac/runs/*/attempts/*.json`), never type them.
 
 ## Boundaries this repo pays to learn
 
@@ -142,9 +139,12 @@ FILE's keys are the bundle's; $TICFAC_* is the operator-preference surface.
 **Problem:** A login-route test read the login page's own 401: `SELF.fetch` FOLLOWS a 303. **Rule:**
 A redirect-asserting route test passes `redirect: "manual"`.
 
-**Problem:** A 1,000,000 max-output drew a bodyless 400 pi read as context overflow; 8,192 truncated GLM;
-GLM via `cloudflare-workers-ai` leaked `<think>` tags. dm2 blamed row-less pi runs on pi abandoning the
-stream; 648 showed pi drains it — the gateway passes pi's own `Authorization` upstream (a bad key fails
-10000) and needs `/workers-ai/v1`. **Rule:** A bodyless 4xx is REQUEST SHAPE until proven otherwise;
-change one variable at a time; off-vendor, set `compat.thinkingFormat`. Verify a gateway route by reading
-its LOG ROW back, and a cause by REPRODUCING it.
+**Problem:** A 1,000,000 max-output drew a bodyless 400 pi read as context overflow; 8,192 truncated GLM; GLM via `cloudflare-workers-ai`
+leaked `<think>` tags. dm2 blamed row-less pi runs on pi abandoning the stream; 648 showed pi drains it — the gateway passes pi's own
+`Authorization` upstream (a bad key fails 10000) and needs `/workers-ai/v1`. **Rule:** A bodyless 4xx is REQUEST SHAPE until proven
+otherwise; change one variable at a time; off-vendor, set `compat.thinkingFormat`. Verify a gateway route by reading its LOG ROW back, and a
+cause by REPRODUCING it.
+
+**Problem:** Three gate guards ran a repo script through a shell — a broken watchdog answered `ok (cached)`: go's test cache sees
+only the test binary's own opens; a subprocess's never, and outside-module files not at all. **Rule:** A drift guard reads its
+input in-process, inside the module, or it is not guarding (mbv); a host-tool guard (wirevocab × herdr) needs -count=1 somewhere.

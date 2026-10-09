@@ -1,0 +1,14 @@
+{
+  "id": "z30",
+  "title": "make gate runs only the Go third of the three commands the run gate runs",
+  "description": "AGENTS.md and .tick/config.md tell a human the bar to merge is `make gate`, and that target runs the Go half only: the TypeScript half is `make ts-gate` and the harness half is `make harness-gate`, each its own [testing.commands] entry by design, so a person following the documented bar runs a third of what the run's integrated gate runs. Either an umbrella target (gate-all: gate ts-gate harness-gate) or a sentence in both documents naming all three would close the gap; this tick makes it a third rather than a half, which is why it is worth its own tick rather than a line here.\nevidence: AGENTS.md:3-6 and .tick/config.md:10 name `make gate`; Makefile carries gate, ts-gate and harness-gate as three separate targets\n\nticfac run run_69f8f57832d34601b040367c7207b81f filed this backlog tick from the finding 7a943005cea1fdf844242c1cea5eb73fe5e41f2194f65e9e5b738880a64611b2 (reported by run-run_69f8f57832d34601b040367c7207b81f/tick-2pn/attempt-10) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/7a943005cea1fdf844242c1cea5eb73fe5e41f2194f65e9e5b738880a64611b2.json on the run branch.",
+  "notes": "2026-10-07 15:20 - ticfac run run_69f8f57832d34601b040367c7207b81f: created by absorbing finding 7a943005cea1fdf844242c1cea5eb73fe5e41f2194f65e9e5b738880a64611b2 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_69f8f57832d34601b040367c7207b81f/absorptions/7a943005cea1fdf844242c1cea5eb73fe5e41f2194f65e9e5b738880a64611b2.json on epic/ex6, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_69f8f57832d34601b040367c7207b81f/tick-2pn/attempt-10",
+  "created_by": "ticfac run run_69f8f57832d34601b040367c7207b81f",
+  "created_at": "2026-10-07T15:20:39Z",
+  "updated_at": "2026-10-07T15:20:51.504892606Z"
+}

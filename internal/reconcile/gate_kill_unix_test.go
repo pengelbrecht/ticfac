@@ -49,7 +49,7 @@ func TestAGateThatTimesOutTakesItsChildrenWithIt(t *testing.T) {
 	command := "sh -c 'echo $$ > " + pidFile + "; sleep 120' & sleep 120"
 
 	started := time.Now()
-	_, _, code, err := runShell(context.Background(), dir, command, 300*time.Millisecond)
+	_, _, code, err := runShell(context.Background(), dir, command, 300*time.Millisecond, nil)
 	elapsed := time.Since(started)
 
 	if err == nil {

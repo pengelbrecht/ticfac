@@ -1,0 +1,14 @@
+{
+  "id": "5hj",
+  "title": "Run the close-out's full suite under the gate's stripped git environment too",
+  "description": "The per-tick gate now measures CI's git environment (tick pqs, .tick/runners.toml `go` command), but only for the -short suite it runs. The full suite — where the end-to-end fixtures live, and where the lkd exit-128 instance actually was — still runs unstripped at close-out on a laptop with the developer's global git identity. Giving `make test` (harmless on CI, whose runners have no global gitconfig) the same env prefix would make close-out measure CI the same way the gate now does.\nevidence: Makefile `test:` recipe vs the `gate:` recipe; .tick/runners.toml [testing.commands] go\n\nticfac run epic-t8u filed this backlog tick from the finding c26614e4640adb2cbac0b2342f029a18f766f6251d25fa87b2a73d1ab0fda85f (reported by run-epic-t8u/tick-pqs/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/c26614e4640adb2cbac0b2342f029a18f766f6251d25fa87b2a73d1ab0fda85f.json on the run branch.",
+  "notes": "2026-10-07 20:12 - ticfac run epic-t8u: created by absorbing finding c26614e4640adb2cbac0b2342f029a18f766f6251d25fa87b2a73d1ab0fda85f — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/c26614e4640adb2cbac0b2342f029a18f766f6251d25fa87b2a73d1ab0fda85f.json on epic/t8u, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-pqs/attempt-1",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-07T18:12:45Z",
+  "updated_at": "2026-10-07T18:12:53.400453Z"
+}

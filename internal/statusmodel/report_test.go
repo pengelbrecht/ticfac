@@ -3,7 +3,6 @@ package statusmodel
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/pengelbrecht/ticfac/internal/gittest"
 	"github.com/pengelbrecht/ticfac/internal/runstate"
 )
 
@@ -27,12 +27,9 @@ import (
 // everything it needs in the repository itself.
 func gitIn(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null")
-	out, err := cmd.Output()
+	out, err := gittest.Command(dir, args...).Output()
 	if err != nil {
-		t.Fatalf("git %s in %s: %v\n%s", strings.Join(args, " "), dir, err, out)
+		t.Fatalf("git %s in %s: %v\n%s", args, dir, err, out)
 	}
 	return string(out)
 }

@@ -21,6 +21,7 @@ import (
 //
 // The seam settles the attempt at exactly the instant that used to be misread,
 // so this fails every time against the old order rather than on a bad day.
+// serial: swaps the package-level observeBeforeLiveness seam, which every observe in this process reads.
 func TestAnAttemptThatSettlesMidObservationIsNotLost(t *testing.T) {
 	dir := t.TempDir()
 	st := newStore(dir)

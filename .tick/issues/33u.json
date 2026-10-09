@@ -1,0 +1,14 @@
+{
+  "id": "33u",
+  "title": "Parallelise internal/cli's 472 serial tests: the per-tick gate's floor",
+  "description": "Under -short, internal/cli is the gate's long pole: 154s of the uncached gate's 162s here, and 120s alone. Of that, 472 top-level tests run serially, summing ~78s, because 158 t.Setenv and 12 os.Chdir/t.Chdir lines bar t.Parallel(). The other ~40s is z7w's property tests, which zi6 owns. Thread the env and cwd inputs through the command's options, as yzk proposes for subprocess and herdr and as Options.Procs/Now already do, so the tests can join the parallel pack. With zi6, cli and so the gate should drop toward ~1 min. It does not move t8u's A1 (reconcile is that floor).\nevidence: go test -short -count=1 -parallel 12 -json ./internal/cli/: wall 120s; serial top-level tests 472 summing 78.0s; grep -c 't.Setenv(' internal/cli/*_test.go = 158\n\nticfac run epic-t8u filed this backlog tick from the finding 447f13e4539111258ea758ac12646e1883a35dc5c3fc66a6fb40844af34e8f52 (reported by run-epic-t8u/tick-j1h/attempt-22) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/epic-t8u/absorptions/447f13e4539111258ea758ac12646e1883a35dc5c3fc66a6fb40844af34e8f52.json on the run branch.",
+  "notes": "2026-10-08 07:39 - ticfac run epic-t8u: created by absorbing finding 447f13e4539111258ea758ac12646e1883a35dc5c3fc66a6fb40844af34e8f52 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/epic-t8u/absorptions/447f13e4539111258ea758ac12646e1883a35dc5c3fc66a6fb40844af34e8f52.json on epic/t8u, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "peter@engelbrecht.dk",
+  "discovered_from": "run-epic-t8u/tick-j1h/attempt-22",
+  "created_by": "ticfac run epic-t8u",
+  "created_at": "2026-10-08T05:39:00Z",
+  "updated_at": "2026-10-08T05:39:05.470812Z"
+}

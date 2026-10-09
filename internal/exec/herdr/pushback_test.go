@@ -27,6 +27,8 @@ func pushbacksIn(observations []subprocess.Observation) []subprocess.Observation
 // Before 4m6 this attempt settled on its unreadable findings block and the
 // reconciler held the run for a person.
 func TestAnUnreadableReportIsPushedBackInThePaneAndAcceptedWhenFixed(t *testing.T) {
+	t.Parallel()
+
 	shorttest.EndToEnd(t)
 	h := nudgeHarness(t, "bad_findings_then_fixed")
 	handle, err := h.start("t1")
@@ -52,6 +54,8 @@ func TestAnUnreadableReportIsPushedBackInThePaneAndAcceptedWhenFixed(t *testing.
 // A report that stays unreadable is pushed back twice and then collects as
 // missing-result: failed and retried, never a hold.
 func TestAReportThatStaysUnreadableIsMissingResultAfterThePanePushbacks(t *testing.T) {
+	t.Parallel()
+
 	shorttest.EndToEnd(t)
 	h := nudgeHarness(t, "bad_findings_forever")
 	handle, err := h.start("t1")

@@ -21,6 +21,8 @@ import (
 //
 // short: reads a handful of files under t.TempDir()
 func TestTheProcessTableIsReadFromProcInClockTicks(t *testing.T) {
+	t.Parallel()
+
 	root := t.TempDir()
 	write := func(pid, line string) {
 		if err := os.MkdirAll(filepath.Join(root, pid), 0o755); err != nil {
@@ -62,6 +64,8 @@ func TestTheProcessTableIsReadFromProcInClockTicks(t *testing.T) {
 //
 // short: one busy child for a fraction of a second
 func TestABusyToolsCPUIsVisibleBeforeItsFirstSecond(t *testing.T) {
+	t.Parallel()
+
 	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
 		t.Skip("the process table is read on linux and darwin")
 	}

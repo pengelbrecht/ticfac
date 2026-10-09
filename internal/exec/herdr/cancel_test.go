@@ -15,6 +15,8 @@ import (
 // through herdr's own interrupt surface. Never a teardown.
 
 func TestCancelRevokesThenInterrupts(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -58,6 +60,8 @@ func TestCancelRevokesThenInterrupts(t *testing.T) {
 }
 
 func TestCancelIsIdempotent(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -85,6 +89,8 @@ func TestCancelIsIdempotent(t *testing.T) {
 }
 
 func TestCancelDoesNotRenameASettledAttempt(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -122,6 +128,8 @@ func TestCancelDoesNotRenameASettledAttempt(t *testing.T) {
 }
 
 func TestCancelOnAWorkingAgentRecordsTheFullRefusal(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -145,6 +153,8 @@ func TestCancelOnAWorkingAgentRecordsTheFullRefusal(t *testing.T) {
 }
 
 func TestCancelAfterAReportDoesNotRenameTheVerdict(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -192,6 +202,8 @@ func TestCancelAfterAReportDoesNotRenameTheVerdict(t *testing.T) {
 }
 
 func TestCancelOnASettledGoneAgentRecordsNoVerdictRename(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -233,6 +245,8 @@ func TestCancelOnASettledGoneAgentRecordsNoVerdictRename(t *testing.T) {
 }
 
 func TestCancelWithHerdrDownStillRevokes(t *testing.T) {
+	t.Parallel()
+
 	h := newHarness(t, harnessOptions{})
 	handle, err := h.start("t1")
 	if err != nil {
@@ -278,6 +292,8 @@ func TestCancelWithHerdrDownStillRevokes(t *testing.T) {
 // certain, so this fails every time against the two-stamp code rather than
 // only on a bad day.
 func TestACancelAcknowledgesTheTimeItRecorded(t *testing.T) {
+	t.Parallel()
+
 	var mu sync.Mutex
 	tick := time.Date(2026, 9, 19, 17, 9, 0, 0, time.UTC)
 	advancing := func() time.Time {
