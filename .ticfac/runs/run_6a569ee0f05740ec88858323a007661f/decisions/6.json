@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 6,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The epic redesigned the watch dashboard and the overview's per-run headline but left tui/ — the terminal property suite CI's bombadil job runs over the real binary on a real pty — untouched, so CI has been red on epic/ymf since the ugm merge (runs 37889870803, 37894993735 and 37903617070 on c8c57d30, 52d7cced and 6e95c4c2, bombadil the only red job; make bombadil fails locally, 2 of 2 specifications). Two causes: watch.spec.ts's frame marker is the \"TICK\" column header the redesign removed, so firstFrameWithinItsBound fails (\"frameShown.current was never true\") and the other four watch properties — all '!frameShown || holds' — are vacuous, pinning nothing about the new screen; and overview.spec.ts's clearing-command property fails because the new three-line per-run headline (blank + phase track + \"▲ here\") grows the fixture listing from 25 to 37 lines at 80 columns, past the 30-row pane the world was sized for, scrolling the held run's row off the screen. This is the epic's unmet \"[A8] make gate passes and CI is green\" — named in the verdict rather than in breaks because the epic's record parses only [A1] as an item (see the fourth finding) — and the repository's own rule holds the close-out on a red PR. The fix is re-pointing the suite at the new layout, not a marker swap: the watch spec's row-order property (a subsequence of plan order) contradicts the redesign's grouping by state, its \"needs you: nothing\" string no longer matches the dashboard's \"Needs you: nothing\", the overview must fit its pane again, and the seeded programs still print old-layout screens with \"TICK\" headers.\nevidence: make bombadil exits 2: 'firstFrameWithinItsBound was violated … frameShown.current was never true' and 'everyStopShowsItsClearingCommand was violated'; CI run 37903617070 (epic/ymf@6e95c4c2, 2026-10-09 08:13) job bombadil=failure, the other eleven jobs green; git diff daffbf60a..HEAD --stat -- tui/ is empty; tui/specs/watch.spec.ts:21-27 (frameShown keys on \"TICK\")\n\nticfac run run_6a569ee0f05740ec88858323a007661f filed this backlog tick from the finding a38f01ceee36945de64f119a8634025ad067c0b5db03b0f7271f0e3b6cc8ae54 (reported by run-run_6a569ee0f05740ec88858323a007661f/tick-8t5/attempt-3) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/a38f01ceee36945de64f119a8634025ad067c0b5db03b0f7271f0e3b6cc8ae54.json on the run branch.",
+    "epic_id": "ymf",
+    "role": "classify-tick",
+    "tick_id": "vii",
+    "title": "CI red on epic/ymf: the bombadil property suite still pins the old dashboard"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.24,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.17,
+      "design": 0.03,
+      "diagnosis": 0.25,
+      "mechanical": 0.39,
+      "translation": 0.16
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1888,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-09T10:16:25Z",
+  "answered_at": "2026-10-09T10:16:25Z",
+  "provenance": {
+    "run_id": "run_6a569ee0f05740ec88858323a007661f",
+    "tick_id": "vii",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "e225f811d9b413b413059729b491939f5a69a5f2",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
