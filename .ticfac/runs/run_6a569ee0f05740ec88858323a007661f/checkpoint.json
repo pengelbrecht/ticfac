@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 35,
-  "state": "publishing",
-  "reason": "closing 4oj behind its validated review-epic answer",
-  "updated_at": "2026-10-09T13:30:12Z",
+  "sequence": 36,
+  "state": "running",
+  "reason": "4oj is closed",
+  "updated_at": "2026-10-09T13:30:14Z",
   "ticks": [
     {
       "tick_id": "ugm",
@@ -33,7 +33,7 @@
     },
     {
       "tick_id": "4oj",
-      "state": "reported",
+      "state": "closed",
       "attempt": 6
     }
   ],
