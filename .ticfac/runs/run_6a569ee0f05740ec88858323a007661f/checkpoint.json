@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 28,
-  "state": "integrating",
-  "reason": "integrating vii attempt 5 into epic/ymf",
-  "updated_at": "2026-10-09T12:28:40Z",
+  "sequence": 29,
+  "state": "gating",
+  "reason": "running the integrated gate for vii on 35a5caa91309",
+  "updated_at": "2026-10-09T12:33:48Z",
   "ticks": [
     {
       "tick_id": "ugm",
@@ -28,7 +28,7 @@
     },
     {
       "tick_id": "vii",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 5
     },
     {
