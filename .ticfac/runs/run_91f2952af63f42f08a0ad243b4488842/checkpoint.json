@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 35,
-  "state": "gating",
-  "reason": "running the integrated gate for b13 on 39a19d87737a",
-  "updated_at": "2026-10-08T23:54:43Z",
+  "sequence": 36,
+  "state": "publishing",
+  "reason": "closing b13 behind the integrated gate on 39a19d87737a",
+  "updated_at": "2026-10-09T00:04:56Z",
   "ticks": [
     {
       "tick_id": "47j",
