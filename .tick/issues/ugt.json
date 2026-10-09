@@ -1,0 +1,13 @@
+{
+  "id": "ugt",
+  "title": "Watch's stream-path hold alert still dereferences a nil command",
+  "description": "dfb is open and untouched by this tick: in the stream path's hold alert, the switch on hold reason dereferences *clearing with no nil check for several classes, while HoldClearingCommand returns nil whenever the epic id cannot be stated (its own tick-mwt rule), so a run_held line on a run whose epic is unstated panics the watch. One nil guard (fall back to the default case's wording) fixes it.\nevidence: internal/cli/watch.go:440-469 (*clearing); internal/statusmodel/commands.go:185 (return nil when epicID == \"\")\n\nticfac run run_6a569ee0f05740ec88858323a007661f filed this backlog tick from the finding cc61c7b9387ca9fd4ca9f1698f486f53e09e0a90354c43937fc839ee79be2fb0 (reported by run-run_6a569ee0f05740ec88858323a007661f/tick-ugm/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/cc61c7b9387ca9fd4ca9f1698f486f53e09e0a90354c43937fc839ee79be2fb0.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_6a569ee0f05740ec88858323a007661f/tick-ugm/attempt-1",
+  "created_by": "ticfac run run_6a569ee0f05740ec88858323a007661f",
+  "created_at": "2026-10-09T05:41:40Z",
+  "updated_at": "2026-10-09T05:41:40Z"
+}
