@@ -2,6 +2,7 @@
   "id": "c3i",
   "title": "A dead run's dispatched tick still grows a live per-tick elapsed",
   "description": "4dn is open and untouched by this tick: the status model treats the newest run's dispatched/reported row as a live attempt without checking whether that run itself ended, so a failed run's stale dispatched row keeps a growing per-tick elapsed while the run-level clock is frozen. The redesigned frame renders the model's field as-is, so the defect now shows as a wrong elapsed on a HELD-group row.\nevidence: internal/statusmodel/build.go isLiveAttempt (per 4dn's record); renderer renders tick.duration_seconds unmodified\n\nticfac run run_6a569ee0f05740ec88858323a007661f filed this backlog tick from the finding 3b97629155148ff9f84a78fb9a10b8f550db12d5e5bffedb8948b3a4f39f40e4 (reported by run-run_6a569ee0f05740ec88858323a007661f/tick-ugm/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/3b97629155148ff9f84a78fb9a10b8f550db12d5e5bffedb8948b3a4f39f40e4.json on the run branch.",
+  "notes": "2026-10-09 05:42 - ticfac run run_6a569ee0f05740ec88858323a007661f: created by absorbing finding 3b97629155148ff9f84a78fb9a10b8f550db12d5e5bffedb8948b3a4f39f40e4 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/3b97629155148ff9f84a78fb9a10b8f550db12d5e5bffedb8948b3a4f39f40e4.json on epic/ymf, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_6a569ee0f05740ec88858323a007661f/tick-ugm/attempt-1",
   "created_by": "ticfac run run_6a569ee0f05740ec88858323a007661f",
   "created_at": "2026-10-09T05:41:57Z",
-  "updated_at": "2026-10-09T05:41:57Z"
+  "updated_at": "2026-10-09T05:42:02.847552955Z"
 }
