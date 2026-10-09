@@ -1,0 +1,13 @@
+{
+  "id": "ijh",
+  "title": "DONE header and health line disagree while a tick is merged but not closed",
+  "description": "A tick the run merged into the epic but has not yet closed (checkpoint state \"integrated\", the window its integrated gate runs in — minutes to a quarter hour in this repository) reads status word \"merged\" and sits in the DONE group, and the new DONE (n) header counts it, while the health line's \"N of M done\" counts only tracker-closed ticks: one integrated tick beside two closed ones renders \"● healthy · 2 of 3 done\" over \"DONE (3)\". This is the count-pair self-disagreement t0y was about, surviving jym's duplicate-only fix, in the live window every implement tick passes through; the pinned t0y acceptance (an ended+merged fixture, where all ticks are closed) still holds.\nevidence: internal/cli/watch_view.go dashSectionHeader (the DONE count excludes duplicates only); internal/statusmodel/build.go buildWaves (tickProgress.Closed counts tickClosed only); internal/statusmodel/pipeline.go endState (tickIntegrated reads merged done); statusmodel.Build over one integrated + two closed ticks renders \"2 of 3 done\" beside \"DONE (3)\"\n\nticfac run run_6a569ee0f05740ec88858323a007661f filed this backlog tick from the finding a6a5f24a6b484dfee136e217dd4318d4e58cd3935ba86358ebf57ac7ab2a8ec5 (reported by run-run_6a569ee0f05740ec88858323a007661f/tick-8t5/attempt-3) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/a6a5f24a6b484dfee136e217dd4318d4e58cd3935ba86358ebf57ac7ab2a8ec5.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_6a569ee0f05740ec88858323a007661f/tick-8t5/attempt-3",
+  "created_by": "ticfac run run_6a569ee0f05740ec88858323a007661f",
+  "created_at": "2026-10-09T10:15:00Z",
+  "updated_at": "2026-10-09T10:15:00Z"
+}
