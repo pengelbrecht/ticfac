@@ -1,3 +1,10 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ymf/attempt-1/ugm`, base `3b5b8bd5ef4453c8a3c36f32668a79003ea694c7`, harness `pi-durable` exited 0, 3 work commit(s), 0 uncommitted path(s)._
+
+_ticks-worker: a carried attempt — its base `3b5b8bd5ef4453c8a3c36f32668a79003ea694c7` is the head of the work it continued, which was cut from `9a103dfebeb6e27e8dab3c225df3f57531e69f8d`; its work commits are counted from the carried head._
+
 # ugm — the watch dashboard rendered per the 2026-10 redesign
 
 Branch `tick/ymf/attempt-1/ugm`, one commit on top of the dispatch snapshot:
