@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "4oj",
   "attempt": 6,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-09T13:29:49Z",
+  "triaged_at": "2026-10-09T13:29:58Z",
+  "triaged_by": "ticfac run run_6a569ee0f05740ec88858323a007661f absorbing k6z",
+  "promoted_as": "k6z",
   "provenance": {
     "run_id": "run_6a569ee0f05740ec88858323a007661f",
     "tick_id": "4oj",
