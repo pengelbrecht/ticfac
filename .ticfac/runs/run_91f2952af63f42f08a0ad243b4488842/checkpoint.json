@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 39,
-  "state": "running",
-  "reason": "ugm is running as attempt 7",
-  "updated_at": "2026-10-09T00:05:20Z",
+  "sequence": 40,
+  "state": "collecting",
+  "reason": "collecting ugm attempt 7",
+  "updated_at": "2026-10-09T00:15:26Z",
   "ticks": [
     {
       "tick_id": "47j",
