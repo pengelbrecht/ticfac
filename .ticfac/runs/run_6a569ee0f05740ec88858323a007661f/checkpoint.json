@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_6a569ee0f05740ec88858323a007661f",
   "epic_id": "ymf",
-  "sequence": 5,
-  "state": "integrating",
-  "reason": "integrating ugm attempt 1 into epic/ymf",
-  "updated_at": "2026-10-09T05:42:28Z",
+  "sequence": 6,
+  "state": "gating",
+  "reason": "running the integrated gate for ugm on c8c57d30c5ad",
+  "updated_at": "2026-10-09T05:47:33Z",
   "ticks": [
     {
       "tick_id": "ugm",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 1
     },
     {
