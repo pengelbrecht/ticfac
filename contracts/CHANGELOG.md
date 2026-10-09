@@ -53,6 +53,24 @@ loud.
 
 ---
 
+## 2.7.0
+
+MINOR: `status-model.json`'s elapsed rule is stated and its stopped-run golden
+is corrected (tick jym, epic ymf, folding defect 4dn). The rule the schema
+couldn't pin and `checked_beyond_schema` now states: a tick's
+`elapsed_seconds` is measured only while its attempt is in flight — the
+census's standing answer for it, or its state's dispatched/reported word from
+the run that owns the row while THAT run has not ended. A run that stopped
+with a tick still marked dispatched left its last word, not live work, and
+the per-tick clock now stops where the run-level one already does (tick 4dn,
+the same clamp `progress.run_elapsed_seconds` has had since 1.5.0). The
+`dashboard_stopped` golden carried the old behavior fossilized — 46x and v7z
+kept counting (1318s and 2400s to `generated_at`) on a run whose liveness says
+`stopped` — and now carries null there, the value the rule derives. No schema
+or field changed shape, so an unchanged consumer is still correct: the renderers
+read the field as-is, and null is already a shape they all handle. Consumers:
+no code change required; the cloudflare pin bumps in the same commit.
+
 ## 2.6.0
 
 MINOR: the fold of main into epic/ymf — two parallel cuts become one again,

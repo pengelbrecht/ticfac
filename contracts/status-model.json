@@ -86,7 +86,8 @@
     "recent holds at most the last five feed lines, oldest first — the schema cannot count or order; the builder's test does",
     "a cost line with metered false carries usd null — the anyOf pins it, the negative refuses it, and no renderer may print $0.00 for spend nobody measured",
     "the progress counts count the epic's real ticks: a tick whose duplicate_of is non-null is excluded from total and closed — a duplicate closed as one is not work the epic owes, though its row still stands (dimmed, naming the tick the work belongs to)",
-    "progress.run_elapsed_seconds is a measured span, never a renderer derivation: the earliest dispatch the try history states, to generated_at — and CLAMPED at the run's end when the run's own records state one (a terminal checkpoint, or a run_finished or run_died line no resume stands after), so a finished run's clock stops where the run did; null when no dispatch marker states a start. The golden value rule derives it from the document's own stamps, the tail's own last line the only end it can see — the builder's tests pin the resume that lifts the freeze"
+    "progress.run_elapsed_seconds is a measured span, never a renderer derivation: the earliest dispatch the try history states, to generated_at — and CLAMPED at the run's end when the run's own records state one (a terminal checkpoint, or a run_finished or run_died line no resume stands after), so a finished run's clock stops where the run did; null when no dispatch marker states a start. The golden value rule derives it from the document's own stamps, the tail's own last line the only end it can see — the builder's tests pin the resume that lifts the freeze",
+    "a tick's elapsed_seconds is measured only while its attempt is IN FLIGHT: the census's standing answer for it, or its state's dispatched/reported word from the run that owns the row while THAT run has not ended — a run that stopped with a tick still marked dispatched left its last word, not live work, and its per-tick clock stops where the run-level one already does (tick 4dn). The golden value rule reads the end the document itself states: a terminal line the tail or the liveness hint carries with no resume after it, or the probe's own end-word (completed, stopped, failed) in the state field"
   ],
 
   "records": {
@@ -2372,7 +2373,7 @@
               "tier": "frontier",
               "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
               "executor": "herdr",
-              "elapsed_seconds": 1318
+              "elapsed_seconds": null
             }
           ]
         },
@@ -2435,7 +2436,7 @@
               "tier": "closeout",
               "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
               "executor": "local-subprocess",
-              "elapsed_seconds": 2400
+              "elapsed_seconds": null
             }
           ]
         }

@@ -747,7 +747,15 @@ func dashboardMiddle(m statusmodel.Model, st watchStyles, width int, selected st
 }
 
 // dashSectionHeader is one group's header line: the group's name, and, for
-// the groups the design counts, how many ticks it holds.
+// the groups the design counts, how many ticks it holds. The DONE count is
+// the same number the health line states beside it — the epic's real ticks,
+// which the progress counts count (the contract pins a duplicate out of
+// total and closed) — so a duplicate's row stands in DONE, dimmed and naming
+// the tick its work belongs to, without turning "4 of 4 done" into
+// "DONE (5)": one number for one question, said the same way twice on the
+// frame (tick t0y, folding h4u). The other counted groups keep counting
+// their rows: their headers describe the group they sit over, and a
+// duplicate parked outside DONE is still a row the group holds.
 func dashSectionHeader(section dashSection, sources map[string]dashRowSource) string {
 	if section.name == "" {
 		return "" // the no-groups fallback carries no header
@@ -756,10 +764,15 @@ func dashSectionHeader(section dashSection, sources map[string]dashRowSource) st
 		seen := map[string]bool{}
 		n := 0
 		for _, id := range section.ids {
-			if _, ok := sources[id]; ok && !seen[id] {
-				seen[id] = true
-				n++
+			src, ok := sources[id]
+			if !ok || seen[id] {
+				continue
 			}
+			seen[id] = true
+			if section.name == "DONE" && src.duplicate {
+				continue // not separate work, and the DONE count counts work
+			}
+			n++
 		}
 		return fmt.Sprintf("%s (%d)", section.name, n)
 	}
