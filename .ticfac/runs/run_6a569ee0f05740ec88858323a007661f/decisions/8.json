@@ -1,0 +1,72 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "ymf",
+    "job_id": "run-run_6a569ee0f05740ec88858323a007661f/tick-4oj/attempt-6",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (cloudflare-sandbox/pi-durable, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:c64677c8ed510391d85d8f252dd964bff0cfa948806715fd644320ecb29e56ea",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "306f537e4c72611f5ca84f0689473d1389f23ad1",
+    "tick_id": "4oj"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "Deferred finding kv3, confirmed on the integrated tree and judged blocking. statusWordOf takes the cell's first not-done stage, and for a tick whose only closure evidence is the tracker (closed by hand, or watched from a checkout without the closing run's records) claimState answers pending while workState, gateState and endState read the close as done — the word is \"up next\" and the tick lands in UP NEXT while the same screen's health line counts it done. It is a steady contradiction on a reachable input, in the epic's own new statusword.go, and it breaks A1's \"ticks grouped by state with status words\": the suite's honest watch frame reads \"2 of 4 done\" over \"UP NEXT (4) t01 · t02 · t03 · t04\" with groups.done empty. The fix is one rule: a tick whose state is closed with no readable records reads done/merged and groups DONE, consistent with the health line.\nevidence: internal/statusmodel/statusword.go:71 (liveStageOf picks claim) with internal/statusmodel/pipeline.go:326-333 (claimState pending with no markers); over tui's fixture world, ticfac watch --json epic-hld answers t01 state \"closed\", status \"up next\", groups.up_next [t01,t02,t03,t04], progress.ticks.closed 2, and the suite's honest frame (tui/.tui-work trace) shows \"· 2 of 4 done\" above \"UP NEXT (4) t01 first wave tick one · t02 …\"",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "The dashboard words a tracker-closed tick \"up next\" while counting it done"
+      },
+      {
+        "body": "The re-pointed terminal property suite holds the dashboard's frame marker, group order, needs-you wording, pane fit and first-frame bound honest, but no property asserts that the health line's \"N of M done\" agrees with the grouping — the gap through which the blocking contradiction stood green on the suite's own honest frame. A property (with its seeded program) that a tick the health line counts done never reads \"up next\" would close it, and would have caught this round's defect in CI instead of a worker's eye.\nevidence: tui/specs/watch.spec.ts (P1-P5 are the suite's whole watch property set); the honest frame it holds green shows \"2 of 4 done\" over \"UP NEXT (4)\" containing the two counted-done ticks",
+        "kind": "proposed-tick",
+        "severity": "low",
+        "target": "",
+        "title": "The watch suite pins order and wording but nothing pins the counts agree"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/ymf/attempt-6/4oj",
+      "commits": 1,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/ymf/attempt-6/4oj:RESULT-4oj.md",
+      "review_verdict": "NOT READY",
+      "review_verdict_detail": "fix the status-word derivation so a tick whose only closure evidence is the tracker reads done/merged and sits in DONE rather than \"up next\" in UP NEXT while the health line counts it done (tick kv3, breaking A1), and land it so the suite's honest frame renders \"2 of 4 done\" over DONE (2) and UP NEXT (2); everything else this round re-verified holds — make gate green, make bombadil green (honest 2/2, seeded 8/8) and CI green on epic/ymf@35a5caa913, the five goldens at both sizes, the t0y/dfb/4dn/zrl fixes with their tests, the worker excerpts and metered-only cost"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "reviewed epic ymf round 2 on the integrated tree: the round-1 bombadil blocker is verified fixed and green (local suite, seeded half and CI 37930297384), the rest of the acceptance re-verified, and the deferred finding kv3 reproduced with the real binary and named blocking — the verdict above is NOT READY on that one finding"
+  },
+  "validated": true,
+  "requested_at": "2026-10-09T13:30:10Z",
+  "answered_at": "2026-10-09T13:30:10Z",
+  "provenance": {
+    "run_id": "run_6a569ee0f05740ec88858323a007661f",
+    "tick_id": "4oj",
+    "attempt": 6,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "306f537e4c72611f5ca84f0689473d1389f23ad1",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:c64677c8ed510391d85d8f252dd964bff0cfa948806715fd644320ecb29e56ea",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
