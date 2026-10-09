@@ -2,6 +2,7 @@
   "id": "4oj",
   "title": "Re-review ymf after its NOT READY review's blocking findings (round 2)",
   "description": "Review the epic ymf again, AS INTEGRATED, now that the blocking findings of its NOT READY review are fixed. This is review round 2; 2 count toward the bound of 2.\n\nThe previous review (8t5, decision 5) judged it NOT READY: re-point the tui terminal property suite at the new dashboard layout (the watch frame marker, the group-order rows and the needs-you wording; the overview's pane fit; the seeded programs) so `make bombadil` and CI's bombadil job are green on epic/ymf — A8's \"CI is green\" is the one unmet item; its blocking finding(s): \"CI red on epic/ymf: the bombadil property suite still pins the old dashboard\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY that spends the bound is not reviewed again by the run unless the tree changes after it: it holds for a person with your reasons.",
+  "notes": "2026-10-09 12:28 - ticfac run run_6a569ee0f05740ec88858323a007661f: DEFERRED FINDING for this review's judgement (key e740036384f66facdd6df48f826a9d5ce79abbd8f3978be771e23f438f99bbdf, backlog tick kv3). A worker reported it after the epic's work was done: kind \"defect\", title \"The dashboard words a tracker-closed tick \\\"up next\\\" while counting it done\", severity high, claiming breaks done item A1 (demonstrated by \"pnpm -C tui test\"). It enters the epic only if you name it blocking: re-report it in your findings block with exactly this kind and title, severity high, as a reason for REVIEW-VERDICT: NOT READY. Otherwise it stays backlog and is listed in the epic PR.",
   "status": "open",
   "priority": 1,
   "type": "task",
@@ -13,5 +14,5 @@
   "role": "review",
   "created_by": "ticfac run run_6a569ee0f05740ec88858323a007661f",
   "created_at": "2026-10-09T10:16:12Z",
-  "updated_at": "2026-10-09T10:16:12Z"
+  "updated_at": "2026-10-09T12:28:11.017669409Z"
 }
