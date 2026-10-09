@@ -1,3 +1,10 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ymf/attempt-5/vii`, base `fcc9be9290e3c53698d00cb8dd8898f9c470c8b6`, harness `pi-durable` exited 0, 4 work commit(s), 0 uncommitted path(s)._
+
+_ticks-worker: a carried attempt — its base `fcc9be9290e3c53698d00cb8dd8898f9c470c8b6` is the head of the work it continued, which was cut from `5dc592bdbdfef3d0e95cb48e9ac7b6d2903d7c43`; its work commits are counted from the carried head._
+
 # RESULT-vii — the terminal property suite holds the redesigned dashboard
 
 ## What this attempt inherited, and what it did with it
