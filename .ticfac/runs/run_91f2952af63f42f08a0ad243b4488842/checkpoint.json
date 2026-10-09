@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 41,
-  "state": "running",
-  "reason": "ugm try 1 (run dispatch #7) is rejected (missing-result): the harness wrote no report: the report at RESULT-ugm.md on tick/ymf/attempt-7/ugm is the container's fallback (NO AGENT REPORT), its account of a harness fault and not a question for a person — the tick is dispatched again, carrying whatever landed",
-  "updated_at": "2026-10-09T00:15:35Z",
+  "sequence": 42,
+  "state": "dispatching",
+  "reason": "dispatching ugm as attempt 8",
+  "updated_at": "2026-10-09T00:15:42Z",
   "ticks": [
     {
       "tick_id": "47j",
@@ -29,7 +29,7 @@
     },
     {
       "tick_id": "ugm",
-      "state": "rejected",
+      "state": "ready",
       "attempt": 7
     },
     {
