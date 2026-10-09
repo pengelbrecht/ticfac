@@ -39,6 +39,7 @@ import {
   leaseLostTrip,
   MAX_SANDBOX_BOOTS,
   MAX_UNANSWERED_LOOKS,
+  maxTransientReboots,
   orchestratorContainerGone,
   PROCESS_QUERY_ATTEMPTS,
   type RunOutcome,
@@ -810,6 +811,19 @@ async function withoutRetryDelays(): Promise<void> {
   introspectors.push(introspector as unknown as { dispose(): Promise<void> });
   await introspector.modifyAll(async (m) => {
     await m.disableRetryDelays();
+  });
+}
+
+/**
+ * Every Workflow instance created for the rest of the calling test skips its
+ * `step.sleep`s: for the transient-reboot tests, whose backoff is minutes
+ * (TRANSIENT_REBOOT_BACKOFF_MS) and is asserted by the feed line, not waited.
+ */
+async function withoutSleeps(): Promise<void> {
+  const introspector = await introspectWorkflow(env.RUN_WORKFLOW as unknown as Workflow);
+  introspectors.push(introspector as unknown as { dispose(): Promise<void> });
+  await introspector.modifyAll(async (m) => {
+    await m.disableSleeps();
   });
 }
 
@@ -1631,6 +1645,87 @@ describe("a dead orchestrator is replaced, not the end of the run", () => {
     const run = await settled(runID);
     expect(run.state).toBe("failed");
     expect(sandboxes.booted).toHaveLength(MAX_SANDBOX_BOOTS);
+  });
+
+  it("still fails after the bounded boots when every orchestrator stops on a configuration it cannot use (exit 7)", async () => {
+    const { runID } = await ignite();
+    // Exit 7 is the route answering no (a 401, an unknown model): not a
+    // transient, so it spends the crash budget exactly as before.
+    for (let boot = 0; boot < MAX_SANDBOX_BOOTS; boot++) {
+      const sandbox = await waitFor(`sandbox ${boot + 1}`, async () =>
+        sandboxes.booted.length > boot && sandboxes.booted[boot]!.processes.length > 0
+          ? sandboxes.booted[boot]!
+          : null,
+      );
+      sandbox.current.exit(7);
+    }
+
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    expect(sandboxes.booted).toHaveLength(MAX_SANDBOX_BOOTS);
+  });
+
+  // Epic ymf's cloud run (run_91f2952a, 2026-10-09): the orchestrator was
+  // evicted ten hours in, and its replacements' pre-flight probes met a
+  // twenty-minute Workers AI outage (HTTP 500, AiError 4007). Each stopped,
+  // the third boot ended the run, and the provider answered again twenty
+  // minutes later. A boot that stops on the provider not answering (exit 14)
+  // is waited out and rebooted outside the crash budget.
+  it("waits out an orchestrator whose boots stop on a provider outage (exit 14), outside the crash budget", async () => {
+    await withoutSleeps();
+    const { runID, project } = await ignite();
+    const outages = MAX_SANDBOX_BOOTS + 1;
+    for (let boot = 0; boot < outages; boot++) {
+      const sandbox = await waitFor(`sandbox ${boot + 1}`, async () =>
+        sandboxes.booted.length > boot && sandboxes.booted[boot]!.processes.length > 0
+          ? sandboxes.booted[boot]!
+          : null,
+      );
+      sandbox.current.say(
+        "ticks-entrypoint: error: the gateway did not answer a one-token request usably within 30s " +
+          "(asked 4 time(s)); the last try got HTTP 500.\n",
+      );
+      sandbox.current.exit(14);
+    }
+    const last = await waitFor("the orchestrator after the outage", async () =>
+      sandboxes.booted.length > outages && sandboxes.booted[outages]!.processes.length > 0
+        ? sandboxes.booted[outages]!.current
+        : null,
+    );
+    expect(last.env.TICKS_PHASE).toBe("reconcile");
+    orchestratorPushedWork();
+    last.exit(0);
+
+    const run = await settled(runID);
+    expect(run.state).toBe("completed");
+    expect(sandboxes.booted).toHaveLength(outages + 1);
+    const feed = await readRunFeed(env.ARTIFACTS, project, runID);
+    expect(feed).toContain(
+      "the model provider is failing (HTTP 500); retrying the orchestrator in 1 minute",
+    );
+    expect(feed).toContain("retrying the orchestrator in 10 minutes");
+  });
+
+  it("ends a run whose provider stays down through the whole transient window, with the reason", async () => {
+    await withoutSleeps();
+    const { runID, project } = await ignite();
+    const boots = maxTransientReboots() + 1;
+    for (let boot = 0; boot < boots; boot++) {
+      const sandbox = await waitFor(`sandbox ${boot + 1}`, async () =>
+        sandboxes.booted.length > boot && sandboxes.booted[boot]!.processes.length > 0
+          ? sandboxes.booted[boot]!
+          : null,
+      );
+      sandbox.current.exit(14);
+    }
+
+    const run = await settled(runID);
+    expect(run.state).toBe("failed");
+    expect(sandboxes.booted).toHaveLength(boots);
+    const record = (await readRunRecord(env.ARTIFACTS, project, runID)) as RunRecord;
+    expect(record.detail).toContain("the model provider is failing");
+    expect(record.detail).toContain(`on ${boots} orchestrator boots in a row`);
+    expect(record.detail).toContain("resubmitting the epic resumes it");
   });
 
   // tick 4lv (yoh final-review finding 0c110874): the boot step carries a

@@ -183,6 +183,52 @@ export async function readHarnessOutput(
 }
 
 /**
+ * What one boot's pre-flight probe last got, in the container's own words —
+ * "HTTP 500", "no answer within 30s" — read from the end of that boot's
+ * segments, or null when the boot said nothing of the kind (or the read
+ * failed: this only colours a feed line, so it never throws).
+ *
+ * The image's probe stops with "… the last try got HTTP 500." when the model
+ * gateway, or the provider behind it, never answered usably (image/common.sh,
+ * probe_model); the supervisor quotes the status so the feed says "the model
+ * provider is failing (HTTP 500)" rather than an exit code (ymf run_91f2952a).
+ */
+export async function bootProbeOutcome(
+  bucket: R2Bucket | undefined | null,
+  project: string,
+  runID: string,
+  boot: number,
+): Promise<string | null> {
+  if (bucket === undefined || bucket === null) return null;
+  try {
+    const prefix = `${harnessStreamPrefix(project, runID)}${pad(boot, ATTEMPT_WIDTH)}/`;
+    const keys: string[] = [];
+    let cursor: string | undefined;
+    for (;;) {
+      const page: R2Objects = await bucket.list({
+        prefix,
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      keys.push(...page.objects.map((object) => object.key));
+      if (!page.truncated) break;
+      cursor = page.cursor;
+    }
+    keys.sort();
+    // The stop is the boot's last words: the last two segments hold it even
+    // when a relay split the message across a segment boundary.
+    let text = "";
+    for (const key of keys.slice(-2)) {
+      const object = await bucket.get(key);
+      if (object !== null) text += await object.text();
+    }
+    const matches = [...text.matchAll(/the last try got (HTTP \d{3}|no answer within \d+s)/g)];
+    return matches.length === 0 ? null : matches[matches.length - 1]![1]!;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Collapses the segment stream into one `harness.log`.
  *
  * Best effort and deliberately last: the segments are the durable record, so a

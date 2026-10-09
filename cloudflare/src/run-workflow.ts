@@ -69,6 +69,7 @@ import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from "cloud
 import type { WorkerAttemptSpec } from "ticfac-harness";
 
 import {
+  bootProbeOutcome,
   type RunRecord,
   writeCombinedHarnessLog,
   writeHarnessSegment,
@@ -146,6 +147,7 @@ import { type LeaseLostReason, MAX_LEASE_TTL_MS } from "./run-room";
 import {
   DONE_SETTLE_LOOK_MS,
   MAX_UNANSWERED_LOOKS,
+  transientExitReason,
   type WatchConfig,
   type WatchDecision,
   watchDelay,
@@ -185,6 +187,53 @@ import { reviewHarness, WORKER_DEFAULT_HARNESS, workerModel } from "./worker-boo
  * answer with a bigger bill.
  */
 export const MAX_SANDBOX_BOOTS = 3;
+
+/**
+ * How long the supervisor waits before rebooting an orchestrator whose boot
+ * stopped on a service outside it not answering (run-watch.ts,
+ * TRANSIENT_EXIT_CODES: the model provider behind the gateway, or origin),
+ * by how many such reboots came before it in a row: 1, 2, 5, then 10 minutes.
+ *
+ * Such a boot is not a crash and does not spend {@link MAX_SANDBOX_BOOTS}:
+ * nothing of the run was tried, and the container already retried the
+ * service for minutes before it gave up. Epic ymf's cloud run (run_91f2952a,
+ * 2026-10-09) is why: its orchestrator was evicted ten hours in, both
+ * replacements stopped on a Workers AI outage (HTTP 500, AiError 4007) at
+ * their pre-flight probe, and the third boot ended the run — twenty minutes
+ * before the provider answered again.
+ */
+export const TRANSIENT_REBOOT_BACKOFF_MS: readonly number[] = [60_000, 120_000, 300_000, 600_000];
+
+/**
+ * The most backoff consecutive transient boots may wait out in all before the
+ * run ends: an hour of a provider (or origin) that does not answer is an
+ * outage an operator should see, and containers that die in their pre-flight
+ * still cost money. A crash in between resets the streak.
+ */
+export const TRANSIENT_REBOOT_WINDOW_MS = 3_600_000;
+
+/**
+ * A boot that ran more looks than this before it exited 14/15 did not stop in
+ * its pre-flight (the probe's window is minutes), so its exit is read as the
+ * crash it then is. Also the bound the step budget reserves per transient boot.
+ */
+export const TRANSIENT_BOOT_MAX_LOOKS = 20;
+
+/** The wait before the transient reboot that follows `streak` earlier ones. */
+export function transientRebootDelay(streak: number): number {
+  return TRANSIENT_REBOOT_BACKOFF_MS[Math.min(streak, TRANSIENT_REBOOT_BACKOFF_MS.length - 1)]!;
+}
+
+/** How many transient reboots fit {@link TRANSIENT_REBOOT_WINDOW_MS}. */
+export function maxTransientReboots(): number {
+  let waited = 0;
+  let n = 0;
+  while (waited + transientRebootDelay(n) <= TRANSIENT_REBOOT_WINDOW_MS) {
+    waited += transientRebootDelay(n);
+    n++;
+  }
+  return n;
+}
 
 /*
  * The closeout pass that used to follow a trip had its own, smaller boot
@@ -237,6 +286,9 @@ export const STEPS_PER_LOOK = 3;
 const RUN_OVERHEAD_STEPS = 64;
 /** Steps one boot spends outside its looks: kill check, boot, lease, trip/drain, ended, destroy, reconcile. */
 const BOOT_OVERHEAD_STEPS = 16;
+/** Steps the transient reboots may spend in all: each a boot, its pre-flight looks and the record. */
+const TRANSIENT_STEPS =
+  maxTransientReboots() * (BOOT_OVERHEAD_STEPS + 2 + TRANSIENT_BOOT_MAX_LOOKS * STEPS_PER_LOOK);
 
 /**
  * How many times the looks the plain backoff needs to cover the wall clock a
@@ -707,7 +759,10 @@ export function looksToCover(
 /** The most looks per boot that keep a whole run inside {@link WORKFLOW_STEP_LIMIT}. */
 function stepBoundLooks(): number {
   const available =
-    WORKFLOW_STEP_LIMIT - RUN_OVERHEAD_STEPS - MAX_SANDBOX_BOOTS * BOOT_OVERHEAD_STEPS;
+    WORKFLOW_STEP_LIMIT -
+    RUN_OVERHEAD_STEPS -
+    TRANSIENT_STEPS -
+    MAX_SANDBOX_BOOTS * BOOT_OVERHEAD_STEPS;
   return Math.floor(available / (MAX_SANDBOX_BOOTS * STEPS_PER_LOOK));
 }
 
@@ -731,6 +786,7 @@ export function lookBudget(
 export function worstCaseRunSteps(config: RunConfig): number {
   return (
     RUN_OVERHEAD_STEPS +
+    TRANSIENT_STEPS +
     MAX_SANDBOX_BOOTS * (BOOT_OVERHEAD_STEPS + config.max_observations * STEPS_PER_LOOK)
   );
 }
@@ -1724,7 +1780,15 @@ async function supervisePass(
     exit_code: null,
   };
 
-  for (let attempt = 1; attempt <= options.max_boots; attempt++) {
+  // Crashes spend the boot budget; a boot that stopped on a service outside
+  // it not answering (exit 14/15) spends the transient window instead, and a
+  // crash resets that streak (TRANSIENT_REBOOT_BACKOFF_MS).
+  let crashes = 0;
+  let transient = { reboots: 0, waited_ms: 0 };
+  for (let attempt = 1; crashes < options.max_boots; attempt++) {
+    // Set when this boot ends transient and a replacement is due: the wait
+    // happens after the finally below has destroyed this boot's container.
+    let transientWait: number | null = null;
     // Before anything is credentialled — before a boot is even counted: does a
     // hard stop stand?
     //
@@ -2149,6 +2213,7 @@ async function supervisePass(
       // did before the extraction.
       let outcome: PassOutcome | null = null;
       let reboot = false;
+      let rebootTransient = false;
 
       while (outcome === null && !reboot && !watchOut(watch, watchConfig)) {
         const look = watch.looksTaken;
@@ -2419,6 +2484,10 @@ async function supervisePass(
         // the process is over (never on a failed question, never on a live
         // one — the property the machine's tests pin).
         lastSeen = { state: decision.process, exit_code: code };
+        rebootTransient =
+          classified.kind === "reboot" &&
+          classified.transient &&
+          watch.looksTaken <= TRANSIENT_BOOT_MAX_LOOKS;
         reboot = true;
         break;
       }
@@ -2465,9 +2534,46 @@ async function supervisePass(
           stopHostedAgent(hostedAgent, "the boot's container was lost"),
         );
       }
+      if (rebootTransient) {
+        // A service outside the container did not answer its boot (ymf
+        // run_91f2952a): wait it out and boot again, outside the crash
+        // budget, for as long as the window allows.
+        const exitCode = lastSeen.exit_code ?? 14;
+        const delay = transientRebootDelay(transient.reboots);
+        const said = (
+          await step.do(`${options.label}:transient:${attempt}`, OBSERVE_RETRIES, async () => ({
+            said: await bootProbeOutcome(env.ARTIFACTS, params.project, params.run_id, boot),
+          }))
+        ).said;
+        const what =
+          exitCode === 15
+            ? "origin is not answering"
+            : `the model provider is failing${said === null ? "" : ` (${said})`}`;
+        if (transient.waited_ms + delay > TRANSIENT_REBOOT_WINDOW_MS) {
+          const detail =
+            `${lastDetail} — ${what}: ${transientExitReason(exitCode)}, on ${transient.reboots + 1} ` +
+            `orchestrator boots in a row over ${Math.round(transient.waited_ms / 60_000)} minutes of backoff, ` +
+            "so the run ended rather than keep booting containers that stop in their pre-flight. Nothing " +
+            "of the epic was lost: its work is on the run branch, and resubmitting the epic resumes it " +
+            "once the service answers";
+          bootEnded = detail;
+          return { kind: "failed", detail, boots: counter.next - 1 };
+        }
+        transient = { reboots: transient.reboots + 1, waited_ms: transient.waited_ms + delay };
+        transientWait = delay;
+        bootEnded =
+          `${lastDetail} — ${what}; retrying the orchestrator in ${Math.round(delay / 60_000)} ` +
+          `minute${delay === 60_000 ? "" : "s"} (transient reboot ${transient.reboots}, outside the ` +
+          `${options.max_boots}-boot crash budget)`;
+      } else {
+        crashes++;
+        transient = { reboots: 0, waited_ms: 0 };
+      }
       // The container is done for. Record why, then boot a replacement whose
       // first instruction reconciles.
-      if (attempt < options.max_boots) {
+      if (transientWait !== null || crashes < options.max_boots) {
+        const rebootDecision =
+          transientWait !== null ? `transient-reboot:${boot}` : `reboot:${boot}`;
         await step.do(`${options.label}:reconcile:${attempt}`, OBSERVE_RETRIES, async () => {
           await writeReconcileRecord(env.ARTIFACTS, params.project, {
             run_id: params.run_id,
@@ -2479,7 +2585,7 @@ async function supervisePass(
           await logDispatch(env, {
             run_id: params.run_id,
             epic: params.epic,
-            decision: `reboot:${boot}`,
+            decision: rebootDecision,
             reason: null,
           });
           // The dying container itself is destroyed by the finally below, the
@@ -2532,6 +2638,11 @@ async function supervisePass(
         if (pool !== null) await pool.release(name);
         return { destroyed };
       });
+    }
+    // The transient backoff, with this boot's container already destroyed:
+    // nothing bills while the service is given time to come back.
+    if (transientWait !== null) {
+      await step.sleep(`${options.label}:transient-wait:${attempt}`, transientWait);
     }
   }
 

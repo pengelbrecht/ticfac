@@ -5,9 +5,11 @@ import { expect, it } from "vitest";
 import {
   DONE_SETTLE_LOOK_MS,
   isTerminalExit,
+  isTransientExit,
   MAX_UNANSWERED_LOOKS,
   processEnded,
   TERMINAL_EXIT_CODES,
+  TRANSIENT_EXIT_CODES,
   type WatchConfig,
   type WatchDecision,
   type WatchLook,
@@ -62,12 +64,13 @@ const PROCESS_STATES: readonly WatchProcessState[] = [
 
 const processGen = gs.sampledFrom(PROCESS_STATES);
 
-/** An exit code the platform might answer with: 0, a real failure, a config code. */
+/** An exit code the platform might answer with: 0, a real failure, a config code, a transient one. */
 const exitCodeGen = gs.oneOf(
   gs.just(0),
   gs.just(null),
   gs.integers({ minValue: 1, maxValue: 255 }),
   gs.sampledFrom(TERMINAL_EXIT_CODES),
+  gs.sampledFrom(TRANSIENT_EXIT_CODES),
 );
 
 const stopTripGen = gs.composite<Extract<WatchTrip, { kind: "stop" }>>((tc) => ({
@@ -557,6 +560,9 @@ it("the exit classification: a halted or terminal exit never reboots, and `gone`
       if (process === "gone") {
         expect(classified.kind === "terminal" || classified.kind === "reboot").toBe(true);
         expect(classified.kind).toBe(isTerminalExit(exitCode) ? "terminal" : "reboot");
+        // A container the platform took says nothing about a service: its
+        // reboot spends the crash budget, never the transient window.
+        if (classified.kind === "reboot") expect(classified.transient).toBe(false);
         return;
       }
       // Halt wins, terminal next, reboot only for a death on this run's watch.
@@ -569,6 +575,11 @@ it("the exit classification: a halted or terminal exit never reboots, and `gone`
         return;
       }
       expect(classified.kind).toBe("reboot");
+      // A service outside the container not answering (14, 15) is the one
+      // reboot that waits out a backoff instead of spending a boot.
+      if (classified.kind === "reboot") {
+        expect(classified.transient).toBe(isTransientExit(exitCode));
+      }
     },
     { testCases: 1500 },
   );
