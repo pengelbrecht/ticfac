@@ -70,6 +70,7 @@ import type { WorkerAttemptSpec } from "ticfac-harness";
 
 import {
   bootProbeOutcome,
+  probeOutcomeIn,
   type RunRecord,
   writeCombinedHarnessLog,
   writeHarnessSegment,
@@ -2541,9 +2542,25 @@ async function supervisePass(
         const exitCode = lastSeen.exit_code ?? 14;
         const delay = transientRebootDelay(transient.reboots);
         const said = (
-          await step.do(`${options.label}:transient:${attempt}`, OBSERVE_RETRIES, async () => ({
-            said: await bootProbeOutcome(env.ARTIFACTS, params.project, params.run_id, boot),
-          }))
+          await step.do(`${options.label}:transient:${attempt}`, OBSERVE_RETRIES, async () => {
+            // The container's last words may have landed after the look that
+            // saw it exit read its output: read what is left first, then the
+            // segments the looks already relayed.
+            let rest = "";
+            if (booted.process_id !== null) {
+              try {
+                const sandbox = await sandboxBinding(env)?.get(name);
+                rest = (await sandbox?.readOutput(booted.process_id, offset))?.text ?? "";
+              } catch {
+                rest = "";
+              }
+            }
+            return {
+              said:
+                probeOutcomeIn(rest) ??
+                (await bootProbeOutcome(env.ARTIFACTS, params.project, params.run_id, boot)),
+            };
+          })
         ).said;
         const what =
           exitCode === 15

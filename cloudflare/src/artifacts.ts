@@ -221,11 +221,16 @@ export async function bootProbeOutcome(
       const object = await bucket.get(key);
       if (object !== null) text += await object.text();
     }
-    const matches = [...text.matchAll(/the last try got (HTTP \d{3}|no answer within \d+s)/g)];
-    return matches.length === 0 ? null : matches[matches.length - 1]![1]!;
+    return probeOutcomeIn(text);
   } catch {
     return null;
   }
+}
+
+/** The last probe outcome a stretch of container output names, or null. */
+export function probeOutcomeIn(text: string): string | null {
+  const matches = [...text.matchAll(/the last try got (HTTP \d{3}|no answer within \d+s)/g)];
+  return matches.length === 0 ? null : matches[matches.length - 1]![1]!;
 }
 
 /**
