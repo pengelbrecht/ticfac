@@ -2,6 +2,7 @@
   "id": "baq",
   "title": "The epic's acceptance criteria parse as one item: [A2]..[A8] are mid-line",
   "description": ".tick/issues/ymf.json's acceptance_criteria is one line, and internal/acceptance's parser takes a bracketed [A\u003cn\u003e] only at a line's start (a mid-line bracket is a reference, never a definition), so the epic's definition of done carries exactly one item of record — A1 — and [A2] through [A8] are references no machine can key on: [evidence.acceptance] cannot bind a command to them and a findings block cannot name the item it breaks (this review's blocking finding names [A8] only in its body and on the verdict line, because breaks.item: \"A8\" is refused as \"not an acceptance item of the epic\"). The fix is a tracker edit — re-mark the criteria one item per line — which is the run's to apply.\nevidence: .tick/issues/ymf.json acceptance_criteria (one line, [A1]..[A8]); internal/acceptance/acceptance.go attemptedMark ('^[ \\t]*\\[A([^\\]]*)\\]', line-anchored); lint-report on this report refused breaks.item \"A8\" with \"the epic's items are A1\"\n\nticfac run run_6a569ee0f05740ec88858323a007661f filed this backlog tick from the finding ee64b11654e443027cd0aac33a1b8f87048ecda3ca502674b3b421457d8047a7 (reported by run-run_6a569ee0f05740ec88858323a007661f/tick-8t5/attempt-3) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/ee64b11654e443027cd0aac33a1b8f87048ecda3ca502674b3b421457d8047a7.json on the run branch.",
+  "notes": "2026-10-09 10:15 - ticfac run run_6a569ee0f05740ec88858323a007661f: created by absorbing finding ee64b11654e443027cd0aac33a1b8f87048ecda3ca502674b3b421457d8047a7 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/ee64b11654e443027cd0aac33a1b8f87048ecda3ca502674b3b421457d8047a7.json on epic/ymf, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_6a569ee0f05740ec88858323a007661f/tick-8t5/attempt-3",
   "created_by": "ticfac run run_6a569ee0f05740ec88858323a007661f",
   "created_at": "2026-10-09T10:15:46Z",
-  "updated_at": "2026-10-09T10:15:46Z"
+  "updated_at": "2026-10-09T10:15:52.807890613Z"
 }
