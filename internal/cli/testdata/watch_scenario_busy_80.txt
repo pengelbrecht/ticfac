@@ -1,0 +1,22 @@
+order feed v1 (9g5)                                 claude · cloud · running 55m
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Needs you: nothing                           ● healthy · 3 of 18 done · ~8h left
+
+Building ──── Reviewing ──── Closing out ──── PR & CI ──── Merged
+▲ here (wave 1 of 2)
+NOW
+  tgi  order-feed …  writing code                               19m  "adding th…
+  5az  smoke valid…  writing code (attempt 2, model escalated)  8m   "running p…
+  v1g  safe intrad…  testing                                    32m  gate runni…
+DONE (3)
+  gzt  sum same-ke…  merged                                     22m
+  rtk  order-feed …  merged                                     34m
+  ww2  kitchen_ord…  merged                                     45m
+UP NEXT (12)   s3r kanpla-etl /sync/intraday · wmd paired report capture …
+               then: Reviewing → Closing out → PR & CI → Merged
+config claude · MAX1 · 34% of 5h
+
+─ latest ─────────────────────────────────────────────────────────────────────
+13:02:00  ww2#1  finished and merged
+13:08:00  v1g#1  merged into the epic, now testing
+                                       [enter] details  [e] all events  [q] quit

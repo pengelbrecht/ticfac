@@ -170,7 +170,7 @@ func watchOnAPty(t *testing.T, width, height int) {
 		t.Fatalf("press j on the pty: %v", err)
 	}
 	ptyWaitsFor(t, stream, "the cursor marker j moved", func(s string) bool {
-		return strings.Contains(s, "▸t1")
+		return strings.Contains(s, "▸ t1")
 	})
 
 	// The run ends, still holding: the dashboard does not close (tick 2xk) —
@@ -191,7 +191,7 @@ func watchOnAPty(t *testing.T, width, height int) {
 		t.Fatalf("press j on the pty: %v", err)
 	}
 	ptyWaitsFor(t, stream, "the cursor marker j moved past the end", func(s string) bool {
-		return strings.Contains(s, "▸t2")
+		return strings.Contains(s, "▸ t2")
 	})
 	if _, err := master.Write([]byte("\r")); err != nil {
 		t.Fatalf("press enter on the pty: %v", err)

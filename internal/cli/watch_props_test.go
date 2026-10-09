@@ -9,9 +9,11 @@ package cli
 //
 // The four properties are the ones the epic's spec names for this layout:
 //
-//	P1  rows never reorder: the tick ids, in the order their rows appear in
-//	    frame(m), are a subsequence of plan order; and the ids the two frames
-//	    m and advance(m) both show keep their order across the advance.
+//	P1  rows follow the groups: the tick ids, in the order their rows appear
+//	    in frame(m), are a prefix of the model's own group order (NOW, then
+//	    DONE, then HELD — the queued ticks render on the collapsed UP NEXT
+//	    line, not as rows), whatever the states, the widths and the height
+//	    fit do.
 //	P2  needs-you is never empty while a hold exists: a hold is announced —
 //	    with its clearing command wherever the pane seats the whole line, and
 //	    wrapped under the announcement where it does not (tick 9um), so a
@@ -52,7 +54,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -236,6 +237,7 @@ func genModel(r *rand.Rand) statusmodel.Model {
 			default:
 				tick.Pipeline = propPipelineAll(stages, statusmodel.StageStatePending)
 			}
+			tick.Status = propStatusWord(tick)
 			wave.Ticks = append(wave.Ticks, tick)
 		}
 		waves = append(waves, wave)
@@ -474,7 +476,9 @@ func genModel(r *rand.Rand) statusmodel.Model {
 				{Phase: statusmodel.PhaseCI, State: statusmodel.PhaseStatePending},
 				{Phase: statusmodel.PhaseMerge, State: statusmodel.PhaseStatePending},
 			},
-			Wave: &statusmodel.WaveRef{Active: frontier, Total: nw},
+			Wave:  &statusmodel.WaveRef{Active: frontier, Total: nw},
+			Track: propTrack(),
+			Here:  0,
 		},
 		Progress: statusmodel.Progress{
 			Ticks: &statusmodel.TickProgress{Total: total, Closed: closed, Open: total - closed},
@@ -545,6 +549,7 @@ func genModel(r *rand.Rand) statusmodel.Model {
 			Checks: checks,
 		}
 	}
+	m.Groups = propGroups(m)
 	if len(attention) > 0 {
 		first := attention[0]
 		if first.NeedsPerson {
@@ -583,6 +588,89 @@ func propPipeline(stages []string, states ...string) []statusmodel.PipelineStage
 		out[i] = statusmodel.PipelineStage{Stage: stage, State: state}
 	}
 	return out
+}
+
+// propStatusWord derives the plain-language status word for one generated
+// tick — the same derivation the status model's own statusWordOf performs
+// for the shapes this generator draws (closed with an all-done pipeline,
+// dispatched with one live stage, ready with nothing dispatched), mirrored
+// here because the derivation is unexported and the generator hand-builds
+// the model the way the contract's builder would leave it.
+func propStatusWord(tick statusmodel.Tick) string {
+	if tick.State == "closed" {
+		if len(tick.Pipeline) > 0 && tick.Pipeline[len(tick.Pipeline)-1].Stage == statusmodel.StageMerged {
+			return statusmodel.WordMerged
+		}
+		return statusmodel.WordDone
+	}
+	if tick.State != "dispatched" {
+		return statusmodel.WordUpNext
+	}
+	for _, stage := range tick.Pipeline {
+		switch stage.State {
+		case statusmodel.StageStateDone:
+			continue
+		case statusmodel.StageStateFailed:
+			return statusmodel.WordFailedPrefix + "the integrated gate refused attempt " + fmt.Sprint(*tick.Try)
+		case statusmodel.StageStateActive:
+			switch stage.Stage {
+			case statusmodel.StageWork:
+				if tick.Role == "closeout" {
+					return statusmodel.WordClosingOut
+				}
+				return statusmodel.WordWritingCode
+			case statusmodel.StageReview:
+				return statusmodel.WordReviewing
+			case statusmodel.StageGate:
+				return statusmodel.WordTesting
+			case statusmodel.StageCI:
+				return statusmodel.WordWaitingForCI
+			}
+			return statusmodel.WordClaimed
+		default:
+			return statusmodel.WordUpNext
+		}
+	}
+	return statusmodel.WordDone
+}
+
+// propTrack is the phase track the generator's phases derive to: plan done
+// and waves active fold into "building" active, everything else pending,
+// the marker on building — the same fold phaseTrackOf performs, mirrored for
+// the generator's hand-built models.
+func propTrack() []statusmodel.TrackStep {
+	return []statusmodel.TrackStep{
+		{Label: statusmodel.TrackLabels[0], State: statusmodel.PhaseStateActive},
+		{Label: statusmodel.TrackLabels[1], State: statusmodel.PhaseStatePending},
+		{Label: statusmodel.TrackLabels[2], State: statusmodel.PhaseStatePending},
+		{Label: statusmodel.TrackLabels[3], State: statusmodel.PhaseStatePending},
+		{Label: statusmodel.TrackLabels[4], State: statusmodel.PhaseStatePending},
+	}
+}
+
+// propGroups buckets the generated ticks by their status word, the same
+// mapping groupsOf performs for the shapes the generator draws: finished
+// ticks are DONE, queued and blocked ones UP NEXT, everything the run is on
+// now — failures it is recovering from included — NOW. The generator is
+// always alive and holds nothing, so no tick lands in HELD.
+func propGroups(m statusmodel.Model) *statusmodel.TickGroups {
+	g := &statusmodel.TickGroups{Now: []string{}, Done: []string{}, UpNext: []string{}, Held: []string{}}
+	if m.Waves == nil {
+		return nil
+	}
+	for _, wave := range *m.Waves {
+		for _, tick := range wave.Ticks {
+			switch {
+			case tick.Status == statusmodel.WordMerged || tick.Status == statusmodel.WordDone:
+				g.Done = append(g.Done, tick.TickID)
+			case tick.Status == statusmodel.WordUpNext || strings.HasPrefix(tick.Status, statusmodel.WordWaitingPrefix):
+				g.UpNext = append(g.UpNext, tick.TickID)
+			default:
+				g.Now = append(g.Now, tick.TickID)
+			}
+		}
+	}
+	return g
 }
 
 func propPipelineAll(stages []string, state string) []statusmodel.PipelineStage {
@@ -661,6 +749,13 @@ func advance(m statusmodel.Model, r *rand.Rand) statusmodel.Model {
 		}
 		next.Progress.Ticks = &statusmodel.TickProgress{Total: total, Closed: closed, Open: total - closed}
 	}
+	for wi := range *next.Waves {
+		for ti := range (*next.Waves)[wi].Ticks {
+			t := &(*next.Waves)[wi].Ticks[ti]
+			t.Status = propStatusWord(*t)
+		}
+	}
+	next.Groups = propGroups(next)
 	return next
 }
 
@@ -699,34 +794,35 @@ func propPlan(m statusmodel.Model) []string {
 }
 
 // propRowID is the tick id one frame line's row carries, "" when the line is
-// not a tick row. It reads the head dashTickRow writes: the optional child
-// indent, the mark (" " or the selected "▸"), the optional absorbed "+", then
-// the id ending its padded cell. The generator's ids are one length, so the
-// cell's end is the id's end.
-func propRowID(line string, ids map[string]bool, idLen int) string {
-	rest, ok := strings.CutPrefix(line, "  └")
+// not a tick row. It reads the head the row renderer writes: the leading
+// mark ("▸ " for the drill-in cursor's row, the two-space indent otherwise),
+// then the id (with the absorbed "+" when the run absorbed it), then the
+// rest of the row. The generator's ids are one length and separated by two
+// spaces, so the head is unambiguous.
+func propRowID(line string, ids map[string]bool) string {
+	rest, ok := strings.CutPrefix(line, "▸ ")
 	if !ok {
-		rest = line
+		rest, ok = strings.CutPrefix(line, "  ")
+		if !ok {
+			return ""
+		}
 	}
-	mark, size := utf8.DecodeRuneInString(rest)
-	if mark != ' ' && mark != '▸' {
-		return ""
+	if strings.HasPrefix(rest, "+") {
+		rest = rest[1:]
 	}
-	body := rest[size:]
-	if strings.HasPrefix(body, "+") {
-		body = body[1:]
+	for id := range ids {
+		if rest == id || strings.HasPrefix(rest, id+"  ") {
+			return id
+		}
 	}
-	if len(body) < idLen+1 || !ids[body[:idLen]] || body[idLen] != ' ' {
-		return ""
-	}
-	return body[:idLen]
+	return ""
 }
 
 // propRowIDs is the sequence in which the frame's rows carry the plan's ticks.
-func propRowIDs(frame []string, ids map[string]bool, idLen int) []string {
+func propRowIDs(frame []string, ids map[string]bool) []string {
 	out := []string{}
 	for _, line := range frame {
-		if id := propRowID(line, ids, idLen); id != "" {
+		if id := propRowID(line, ids); id != "" {
 			out = append(out, id)
 		}
 	}
@@ -766,66 +862,45 @@ type dashProperty struct {
 	breakFrame func(frame []string, m statusmodel.Model) []string
 }
 
-// propRowsNeverReorder is P1: the frame's rows are a subsequence of plan
-// order — never another order, however the states, the widths and the height
-// fit shuffle the cells — and the rows both frames show keep their order
-// across the advance.
-func propRowsNeverReorder(frame []string, advanceFrame func() []string, m, _ statusmodel.Model, _, _, _ int) error {
+// propRowsFollowGroups is P1: the frame's rows are a PREFIX of the model's
+// own group order — every NOW row, then every DONE row, then every HELD
+// row, in each group's own order — whatever the states, the widths and the
+// height fit do. (Rows drop only from the bottom, so what appears is always
+// the prefix's head; and the queued ticks are not rows at all — they render
+// on the collapsed UP NEXT line.)
+func propRowsFollowGroups(frame []string, _ func() []string, m, _ statusmodel.Model, _, _, _ int) error {
 	plan := propPlan(m)
 	ids := make(map[string]bool, len(plan))
 	for _, id := range plan {
 		ids[id] = true
 	}
-	idLen := 0
-	if len(plan) > 0 {
-		idLen = len(plan[0])
+	got := propRowIDs(frame, ids)
+	want := []string{}
+	if m.Groups != nil {
+		want = append(want, m.Groups.Now...)
+		want = append(want, m.Groups.Done...)
+		want = append(want, m.Groups.Held...)
 	}
-	got := propRowIDs(frame, ids, idLen)
-	if !propSubsequence(plan, got) {
-		return fmt.Errorf("the rows are not in plan order: plan %v, frame %v", plan, got)
+	if len(got) > len(want) {
+		return fmt.Errorf("the frame carries more rows than the groups do: %v vs %v", got, want)
 	}
-	agot := propRowIDs(advanceFrame(), ids, idLen)
-	inFrame, inAdvance := make(map[string]bool, len(got)), make(map[string]bool, len(agot))
-	for _, id := range got {
-		inFrame[id] = true
-	}
-	for _, id := range agot {
-		inAdvance[id] = true
-	}
-	before := []string{}
-	for _, id := range got {
-		if inAdvance[id] {
-			before = append(before, id)
-		}
-	}
-	after := []string{}
-	for _, id := range agot {
-		if inFrame[id] {
-			after = append(after, id)
-		}
-	}
-	if len(before) != len(after) {
-		return fmt.Errorf("the frames disagree on which rows they share: %v vs %v", before, after)
-	}
-	for i := range before {
-		if before[i] != after[i] {
-			return fmt.Errorf("the advanced frame reordered the rows both frames show: %v became %v", before, after)
+	for i, id := range got {
+		if id != want[i] {
+			return fmt.Errorf("the rows are not in group order: got %v, want the prefix %v of %v", got, want[:len(got)], want)
 		}
 	}
 	return nil
 }
 
 // propNeedsYou is P2, the first question. A run with no hold is quiet:
-// "needs you: nothing". A run with a hold never says that, announces the
-// hold, and shows the whole hold line — what and clearing command — wherever
-// the pane seats it (width 0, the unknown width, draws everything, so the
-// whole line is pinned there always). Where the pane does not seat the line,
-// the renderer wraps it under the announcement instead of truncating it
-// (tick 9um), and a hold is then shown whole or not at all: whenever its
-// announcement line is in the frame, every line of its block is, and every
-// word of the clearing command with them — a hold whose command fell off
-// the pane's edge is the defect the wrap exists to prevent.
-func propNeedsYou(frame []string, _ func() []string, m, _ statusmodel.Model, width, height, unbounded int) error {
+// "Needs you: nothing" — from height 3 up, where the head's own lines
+// survive. A run with a hold never says that, and every box the frame shows
+// is WHOLE: its content lines all appear together, and every word of the
+// clearing command is on the screen — a hold whose command fell off the
+// pane's edge is the defect the box's wrap exists to prevent (tick 9um), so
+// what the frame shows of a hold is all of it, and a hold that does not fit
+// (a short pane's head fold) is not shown at all.
+func propNeedsYou(frame []string, _ func() []string, m, _ statusmodel.Model, width, height, _ int) error {
 	joined := strings.Join(frame, "\n")
 	var holds []statusmodel.Attention
 	for _, a := range m.Attention {
@@ -834,87 +909,65 @@ func propNeedsYou(frame []string, _ func() []string, m, _ statusmodel.Model, wid
 		}
 	}
 	if len(holds) == 0 {
-		if height == 0 || height >= 8 {
-			if !strings.Contains(joined, "needs you: nothing") {
+		if height == 0 || height >= 3 {
+			if !strings.Contains(joined, "Needs you: nothing") {
 				return fmt.Errorf("nothing needs a person and the frame does not say so")
 			}
 		}
 		return nil
 	}
-	if strings.Contains(joined, "needs you: nothing") {
+	if strings.Contains(joined, "Needs you: nothing") {
 		return fmt.Errorf("a held run still says nothing needs a person")
 	}
-	if !strings.Contains(joined, "needs you:") {
-		return fmt.Errorf("a hold exists and no line announces it")
-	}
-	if !strings.Contains(joined, "needs you:") {
-		return fmt.Errorf("a hold exists and no line announces it")
-	}
-	if height <= 0 || height >= unbounded {
-		// The pane seats the whole frame — nothing is folded away — so every
-		// hold whose line the width seats pins that line exactly.
-		for _, a := range holds {
-			want := "needs you: " + a.What
-			if a.UnblockCommand != nil && *a.UnblockCommand != "" {
-				want += " — " + *a.UnblockCommand
-			}
-			if width <= 0 || width >= ansi.StringWidth(want) {
-				if !strings.Contains(joined, want) {
-					return fmt.Errorf("the hold line %q is missing where the pane seats it", want)
-				}
-			}
-		}
-	}
-	// Where the pane does not seat a line, the renderer wraps it under the
-	// announcement (tick 9um), and a hold is then shown whole or not at all:
-	// whenever its announcement line is in the frame, every line of its
-	// block is, and every word of the clearing command with them — a hold
-	// whose command fell off the pane's edge is the defect the wrap exists
-	// to prevent. The blocks sit in the frame in the model's order; walking
-	// them in order keeps a hold whose twin shares its announcement from
-	// borrowing the twin's lines, and lets the height fold's whole-block
-	// drops pass: a hold the fold dropped has no announcement in the frame
-	// and asks nothing.
-	pos := 0
+	seenAnchors := map[string]bool{}
 	for _, a := range holds {
-		block := dashboardHoldLines(a, plainStyles(), width)
-		at := propLineFrom(frame, block[0], pos)
-		if at < 0 {
-			continue // the height fold dropped the block whole
-		}
-		pos = at + 1
-		for _, line := range block[1:] {
-			if pos >= len(frame) || frame[pos] != line {
-				return fmt.Errorf("the hold's announcement shows but its wrapped line %q is missing", line)
+		seenAnchors[a.What] = true
+		var content []string
+		for _, line := range dashboardNeedsBox(a, plainStyles(), width) {
+			if strings.HasPrefix(line, "│") {
+				content = append(content, line)
 			}
-			pos++
 		}
-		if a.UnblockCommand == nil || *a.UnblockCommand == "" {
+		if len(content) == 0 {
 			continue
 		}
-		if width <= 0 || len(block) == 1 {
-			// The pane seats the whole line: it was the one line it always
-			// was, block[0] among them.
+		// The box's first content line is its identity — the announcement's
+		// start. If it is on the screen, the whole box is; a wrapped
+		// continuation line can coincide with a sibling hold's, so the
+		// anchor, not any-line presence, is what says the box is shown —
+		// and two holds whose narrow wraps share a first line are
+		// indistinguishable in the frame: the first covers the shape.
+		if seenAnchors[content[0]] {
 			continue
 		}
-		for _, word := range strings.Fields(*a.UnblockCommand) {
-			if !strings.Contains(joined, word) {
-				return fmt.Errorf("the clearing command's word %q fell out of the wrapped hold", word)
+		seenAnchors[content[0]] = true
+		if !containsLine(frame, content[0]) {
+			continue
+		}
+		for _, line := range content {
+			if !containsLine(frame, line) {
+				return fmt.Errorf("the hold's box renders partially: %q shows without %q", content[0], line)
+			}
+		}
+		if a.UnblockCommand != nil && *a.UnblockCommand != "" {
+			for _, word := range strings.Fields(*a.UnblockCommand) {
+				if !strings.Contains(joined, word) {
+					return fmt.Errorf("the clearing command's word %q fell out of its box", word)
+				}
 			}
 		}
 	}
 	return nil
 }
 
-// propLineFrom returns the index of the first line at or after start that
-// equals want, -1 when none does.
-func propLineFrom(frame []string, want string, start int) int {
-	for i := start; i < len(frame); i++ {
-		if frame[i] == want {
-			return i
+// containsLine says whether the frame carries one exact line.
+func containsLine(frame []string, want string) bool {
+	for _, line := range frame {
+		if line == want {
+			return true
 		}
 	}
-	return -1
+	return false
 }
 
 // propCostHonest is P3: the cost line shows only what is METERED (tick b13,
@@ -983,8 +1036,8 @@ func propFitsPane(frame []string, _ func() []string, _, _ statusmodel.Model, wid
 // dashProperties is the tick's four properties, each with its breaker.
 var dashProperties = []dashProperty{
 	{
-		name:       "rows never reorder",
-		check:      propRowsNeverReorder,
+		name:       "rows follow the groups",
+		check:      propRowsFollowGroups,
 		breakFrame: breakReversedRows,
 	},
 	{
@@ -1008,22 +1061,18 @@ var dashProperties = []dashProperty{
 // The deliberately broken renderers
 // ---------------------------------------------------------------------------
 
-// breakReversedRows reverses the table's rows in place — every row keeps a
-// row-shaped line, so the frame still looks like a table, and the rows are in
-// the wrong order. P1's breaker.
+// breakReversedRows reverses the row order in place — every line keeps its
+// row shape, so the frame still looks like a table, and the rows are in the
+// wrong order. P1's breaker.
 func breakReversedRows(frame []string, m statusmodel.Model) []string {
 	plan := propPlan(m)
 	ids := make(map[string]bool, len(plan))
 	for _, id := range plan {
 		ids[id] = true
 	}
-	idLen := 0
-	if len(plan) > 0 {
-		idLen = len(plan[0])
-	}
 	idx := []int{}
 	for i, line := range frame {
-		if propRowID(line, ids, idLen) != "" {
+		if propRowID(line, ids) != "" {
 			idx = append(idx, i)
 		}
 	}
@@ -1037,21 +1086,15 @@ func breakReversedRows(frame []string, m statusmodel.Model) []string {
 	return out
 }
 
-// breakDroppedAttention drops every hold's line — the frame answers the first
-// question with silence. P2's breaker.
-func breakDroppedAttention(frame []string, m statusmodel.Model) []string {
+// breakDroppedAttention drops every line that answers the first question —
+// the quiet one and the boxes alike. P2's breaker.
+func breakDroppedAttention(frame []string, _ statusmodel.Model) []string {
 	out := make([]string, 0, len(frame))
 	for _, line := range frame {
-		drop := false
-		for _, a := range m.Attention {
-			if a.NeedsPerson && strings.Contains(line, "needs you: "+a.What) {
-				drop = true
-				break
-			}
+		if strings.Contains(line, "Needs you:") {
+			continue
 		}
-		if !drop {
-			out = append(out, line)
-		}
+		out = append(out, line)
 	}
 	return out
 }

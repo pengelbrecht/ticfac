@@ -1,23 +1,29 @@
-hpd the epic the runs worked                                                                              cloud · failed
-██████████████░░░░░░░░░░ 3/5 ticks · 2d19h · ● stopped: the Workflow's own record says failed, so the run has ended
-✓ plan ◐ waves ✓ review ✓ close-out ○ ci ○ merge
-needs you: run run_bbb held at3 for a person: rejected_attempt_carries_work: attempt 12 of at3 was rejected with commits
-  nothing merged
-  ticfac settle hpd at3 12 --run-id run_bbb --release "<who>"
-needs you: run run_ccc failed: the orchestrator could not claim the epic's width — ticfac run hpd --cloud
+the epic the runs worked (hpd)                                                                      cloud · failed 2d19h
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Needs you: run run_bbb held at3 for a person: rejected_attempt_carries_work: attempt 12 of at3 was rejected with │
+│   commits nothing merged                                                                                         │
+│ clear with: ticfac settle hpd at3 12 --run-id run_bbb --release "<who>"                                          │
+└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ Needs you: run run_ccc failed: the orchestrator could not claim the epic's width │
+│ clear with: ticfac run hpd --cloud                                               │
+└──────────────────────────────────────────────────────────────────────────────────┘
+● stopped: the Workflow's own record says failed, so the run has ended · 3 of 5 done
 
- TICK  WHAT             TIER     PIPELINE                       TIME  ATTEMPTS
- at1   first            strong   claim ▸ work ▸ gate ▸ merged ✓ 1h55m 1
- at2   second           frontier claim ▸ work ▸ gate ▸ merged ✓ 2h55m 2 ⤴
- at3   third            strong   claim ▸ ✗work ▸ …              1d21h 1
- dup   duplicate of at2          …                                    0
- at4   fourth           strong   claim ▸ ●work ▸ …              1h    1
- at5   fifth            strong   claim ▸ work ▸ gate ▸ merged ✓ 35m   1
+Building ──── Reviewing ──── Closing out ──── PR & CI ──── Merged
+▲ here
+NOW
+  at4  writing code                                  1h
+DONE (3)
+  at1  merged                                        1h55m
+  at2  merged                                        2h55m
+  at5  merged                                        35m
+UP NEXT (1)   dup duplicate of at2
+              then: PR & CI → Merged
+HELD (1)
+  at3  held: rejected_attempt_carries_work: attemp…  1d21h
 
-WORKERS                                       ACTIVITY        LAST
-at4  glm-5.3 · cloudflare-sandbox
-
-CI: no PR yet
-─ recent ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-04:30:00 at4#1        dispatched, writing code
-05:00:00 run          run finished: the orchestrator could not claim the epic's width           [e] events  [enter] tick
+─ latest ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+04:30:00  at4#1  dispatched, writing code
+05:00:00  run  run finished: the orchestrator could not claim the epic's width [enter] details  [e] all events  [q] quit

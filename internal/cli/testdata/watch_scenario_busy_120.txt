@@ -1,0 +1,21 @@
+order feed v1 (9g5)                                                                         claude · cloud · running 55m
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Needs you: nothing                                                                   ● healthy · 3 of 18 done · ~8h left
+
+Building ──── Reviewing ──── Closing out ──── PR & CI ──── Merged
+▲ here (wave 1 of 2)
+NOW
+  tgi  order-feed service skeleton       writing code                               19m  "adding the /feed handler"
+  5az  smoke validation vs kofoed dumps  writing code (attempt 2, model escalated)  8m   "running pytest"
+  v1g  safe intraday kanpla pulls        testing                                    32m  gate running
+DONE (3)
+  gzt  sum same-key kanpla lines         merged                                     22m
+  rtk  order-feed contract v1            merged                                     34m
+  ww2  kitchen_order_feed dbt view       merged                                     45m
+UP NEXT (12)   s3r kanpla-etl /sync/intraday · wmd paired report capture · k4f intraday reconciliation report …
+               then: Reviewing → Closing out → PR & CI → Merged
+config claude · MAX1 · 34% of 5h
+
+─ latest ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+13:02:00  ww2#1  finished and merged
+13:08:00  v1g#1  merged into the epic, now testing                             [enter] details  [e] all events  [q] quit
