@@ -328,6 +328,9 @@ esac
 		// set hands the container. Tests that exercise the repository's own
 		// role/tier routing delete it.
 		EnvModel: "claude-fable-5",
+		// No waits between probe retries: a test that asserts the backoff sets
+		// its own. The image default is minutes of sleep per failing boot.
+		EnvModelProbeBackoff: "0",
 	}
 	return f
 }
