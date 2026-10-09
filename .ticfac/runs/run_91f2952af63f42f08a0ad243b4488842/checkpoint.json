@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_91f2952af63f42f08a0ad243b4488842",
   "epic_id": "ymf",
-  "sequence": 42,
-  "state": "dispatching",
-  "reason": "dispatching ugm as attempt 8",
-  "updated_at": "2026-10-09T00:15:42Z",
+  "sequence": 43,
+  "state": "running",
+  "reason": "ugm is running as attempt 8",
+  "updated_at": "2026-10-09T00:15:49Z",
   "ticks": [
     {
       "tick_id": "47j",
@@ -29,8 +29,8 @@
     },
     {
       "tick_id": "ugm",
-      "state": "ready",
-      "attempt": 7
+      "state": "dispatched",
+      "attempt": 8
     },
     {
       "tick_id": "jym",
