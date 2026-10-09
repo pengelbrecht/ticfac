@@ -1,0 +1,13 @@
+{
+  "id": "ze7",
+  "title": "A blocking finding adopted at the review bound's last round ends the run held",
+  "description": "ymf's round-2 review named kv3 blocking — a deferred finding, first named blocking there — and because that round also spent the bound of 2, answerNotReadyReview absorbed nothing and the run ends at a landing hold for a person, over a fix the run could have made in the same shape vii fixed round 1's (one status-word rule, one test). The bound's design reads a second NOT READY as \"a disagreement the run cannot settle by itself — another round is the same judgement asked again\"; round 2's was a NEW finding, not a re-asked question. Whether a review that adopts a deferred finding on its last round should buy the round the fix needs, or whether the hold is the intended cost of the deferral, is an operator decision on the machinery, made visible by this epic's outcome.\nevidence: internal/reconcile/review_rounds.go:66 (maxReviewRounds) with answerNotReadyReview's spent() branch (review_rounds.go:527-532); .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/e740036384f66facdd6df48f826a9d5ce79abbd8f3978be771e23f438f99bbdf.json (kv3, basis worker-asserted-high, placement deferred-to-review)\n\nticfac run run_6a569ee0f05740ec88858323a007661f filed this backlog tick from the finding 61a8cf971d882818a02e6071284e6c25946fe2ac515158ea98f6526541675774 (reported by run-run_6a569ee0f05740ec88858323a007661f/tick-jml/attempt-7) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/61a8cf971d882818a02e6071284e6c25946fe2ac515158ea98f6526541675774.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_6a569ee0f05740ec88858323a007661f/tick-jml/attempt-7",
+  "created_by": "ticfac run run_6a569ee0f05740ec88858323a007661f",
+  "created_at": "2026-10-09T14:36:54Z",
+  "updated_at": "2026-10-09T14:36:54Z"
+}
