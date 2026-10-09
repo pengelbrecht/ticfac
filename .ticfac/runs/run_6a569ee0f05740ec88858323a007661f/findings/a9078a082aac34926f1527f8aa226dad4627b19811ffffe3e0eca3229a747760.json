@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "ugm",
   "attempt": 1,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-09T05:42:08Z",
+  "triaged_at": "2026-10-09T05:42:17Z",
+  "triaged_by": "ticfac run run_6a569ee0f05740ec88858323a007661f absorbing zvj",
+  "promoted_as": "zvj",
   "provenance": {
     "run_id": "run_6a569ee0f05740ec88858323a007661f",
     "tick_id": "ugm",
