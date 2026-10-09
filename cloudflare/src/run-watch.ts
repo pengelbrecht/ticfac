@@ -170,6 +170,33 @@ export function terminalExitReason(code: number): string {
   }
 }
 
+/**
+ * The exit codes that mean "a service outside the container did not answer
+ * through the boot's own retry window" — the image's EXIT_GATEWAY_UNAVAILABLE
+ * (14: the model gateway, or the provider behind it, gave no usable answer to
+ * the pre-flight probe) and EXIT_ORIGIN_UNAVAILABLE (15: origin did not answer
+ * the fetch). Neither is a verdict on the run or its configuration, and
+ * neither is a crash: nothing of the run was tried, and the same container
+ * booted a few minutes later usually starts. Epic ymf's cloud run
+ * (run_91f2952a, 2026-10-09) ended ten hours in because a twenty-minute
+ * Workers AI outage spent the boots a crash would. The supervisor reboots on
+ * these after a backoff, outside the crash budget, for a bounded window
+ * (run-workflow.ts, TRANSIENT_REBOOT_BACKOFF_MS).
+ */
+export const TRANSIENT_EXIT_CODES: readonly number[] = [14, 15];
+
+/** Whether an exit is a service outside the container not answering (14, 15). */
+export function isTransientExit(code: number | null): boolean {
+  return code !== null && TRANSIENT_EXIT_CODES.includes(code);
+}
+
+/** What a transient exit code says did not answer, in operator words. */
+export function transientExitReason(code: number): string {
+  return code === 15
+    ? "origin did not answer the fetch through the boot's retry window"
+    : "the model provider gave no usable answer to the boot's pre-flight probe through its retry window";
+}
+
 // --------------------------------------------------------- the watch state ---
 
 /**
@@ -410,8 +437,14 @@ export type WatchEndedDecision =
   | { kind: "halted" }
   /** A configuration verdict: another container reaches the identical answer. */
   | { kind: "terminal"; reason: string }
-  /** The container died on this run's watch: a replacement may be booted. */
-  | { kind: "reboot" };
+  /**
+   * The container died on this run's watch: a replacement may be booted.
+   * `transient` marks a boot that stopped on a service outside it not
+   * answering (TRANSIENT_EXIT_CODES): the replacement waits out a backoff and
+   * does not spend the crash budget. Never set for a `gone` container — the
+   * platform took it, so its exit code says nothing about a service.
+   */
+  | { kind: "reboot"; transient: boolean };
 
 export function watchEnded(
   ended: Extract<WatchDecision, { kind: "ended" }>,
@@ -421,5 +454,8 @@ export function watchEnded(
   if (isTerminalExit(ended.exit_code)) {
     return { kind: "terminal", reason: terminalExitReason(ended.exit_code ?? -1) };
   }
-  return { kind: "reboot" };
+  return {
+    kind: "reboot",
+    transient: ended.process !== "gone" && isTransientExit(ended.exit_code),
+  };
 }

@@ -507,8 +507,8 @@ starts a command in a sandbox.
 | `TICKS_MODEL` | no | The model the harness runs on. When unset, the entrypoint asks the checkout (`ticfac sandbox model`); when nothing routes one, the boot is refused with exit 7 rather than started. |
 | `TICKS_CONFIG` | no | The named run config this boot's submission carried (tick ba4), forwarded to a `run`-phase boot's `ticfac run-epic` as its own `--config`. Unset, run-epic selects by the epic's own `config:` label and the runners files' declared default. |
 | `TICKS_MODEL_PROBE_TIMEOUT` | no | Seconds the one-token gateway probe may take (default 30). |
-| `TICKS_MODEL_PROBE_TRIES` | no | How many times the gateway probe is asked in all when it gets no usable answer — none at all, or a transient 408/429/502/504/52x (default 4, about three minutes with the backoff). Still silent after the last try is exit 14. A refusal the gateway answered is never retried. |
-| `TICKS_MODEL_PROBE_BACKOFF` | no | Seconds × the try number waited between those tries (default 10). |
+| `TICKS_MODEL_PROBE_TRIES` | no | How many times the gateway probe is asked in all when it gets no usable answer — none at all, a 408 or 429, a 5xx from the gateway or the provider behind it (Workers AI's 500 AiError included), or Workers AI's capacity error (default 4: two minutes of backoff, four if every try times out). Still no usable answer after the last try is exit 14. A refusal is never retried: any other 4xx, and the gateway's own 503 `…_not_configured`. The same window covers a harness probe whose call the provider answered with a rate limit or a server error. |
+| `TICKS_MODEL_PROBE_BACKOFF` | no | Seconds × the try number waited between those tries (default 20). |
 | `TICKS_FETCH_WINDOW` | no | Seconds the boot keeps re-trying a fetch origin did not answer before it exits 15 (default 120). A fetch the remote refused (401/403/404, a rejected credential) is never retried. |
 | `TICKS_BOOT_RETRY_BACKOFF` | no | The first wait between those fetch retries, in seconds; it doubles up to 30 (default 5). |
 | `TICKS_HARNESS_PROBE_TIMEOUT` | no | Seconds the harness's own pre-flight round-trip may take (default 120). Larger than the gateway probe's because it starts a whole agent CLI. |
@@ -932,7 +932,7 @@ provider's model is exit 7 rather than a run that cannot make one call.
 **The route is proved, not assumed.** One bounded, one-token completion goes
 through the gateway with the run's own credential before the harness starts —
 the same content gate `tk herd spawn` applies to workers, for the same reason.
-A gateway that does not answer at all — a timeout, a refused connection, a 502/504 from it or its upstream, a rate limit — is asked again with backoff, up to `TICKS_MODEL_PROBE_TRIES` times, before the boot gives up with exit 14: a factory Worker being redeployed or a Workers AI model loading cold outlasts one 30s try (epic hn6, run_37b36bfe). A refusal is quoted verbatim with its status, at once: the factory's own gateway errors
+A gateway that does not answer usably — a timeout, a refused connection, a rate limit, a 5xx from it or the provider behind it (Workers AI's outages arrive as `500 AiError` with internalCode 4007, its capacity errors as internalCode 3040) — is asked again with backoff, up to `TICKS_MODEL_PROBE_TRIES` times, before the boot gives up with exit 14: a factory Worker being redeployed, a Workers AI model loading cold or a provider outage outlasts one 30s try (epic hn6, run_37b36bfe; epic ymf, run_91f2952a, whose orchestrator boots exited 7 on a twenty-minute Workers AI outage and ended a ten-hour run). A refusal — a 4xx, or the factory gateway's own 503 `…_not_configured` — is quoted verbatim with its status, at once: the factory's own gateway errors
 name the setup command that fixes them, and collapsing them into one message would
 throw the fix away. This runs before toolchain provisioning, setup and the
 pre-flight, because a run that cannot make a model call is over whether or not
@@ -972,14 +972,14 @@ distinct, because these are read from a log after the sandbox is gone:
 | 7 | A gateway with no usable model behind it: nothing routed, a model whose provider cannot be named, a model the chosen harness does not speak, or a gateway that refused the probe. |
 | 8 | The gateway answers and the harness cannot use it: no provider wired for the route, a credential the harness looks for under another name, or a harness round-trip that failed, timed out, or exited clean without answering. |
 | 13 | The start commit is not on origin: the fetch worked and the dispatched SHA is not among what it brought. |
-| 14 | The gateway gave no usable answer to the one-token probe through every try (`TICKS_MODEL_PROBE_TRIES`). Infrastructure, not the tick: the orchestrator dispatches the job again at the same tier, spending no rung of the ladder, at most three times per tick; the next one stops the run with a refusal naming the gateway. |
+| 14 | The gateway, or the provider behind it, gave no usable answer to the one-token probe (or answered the harness probe's call with a rate limit or server error) through every try (`TICKS_MODEL_PROBE_TRIES`). Infrastructure, not the tick: on a worker the orchestrator dispatches the job again at the same tier after a backoff (1, 2, 5, then 10 minutes), spending no rung of the ladder, for up to an hour of backoff per tick, and the next one stops the run with a refusal naming the gateway; on the cloud orchestrator's own boot the Workflow reboots it after a backoff (1, 2, 5, then 10 minutes) outside its three-boot crash budget, for up to an hour of consecutive such boots. |
 | 15 | Origin did not answer the fetch through the whole retry window (`TICKS_FETCH_WINDOW`). Infrastructure, handled like 14. |
 | other | The harness's own exit status — the entrypoint `exec`s it. |
 
 On a **worker**, none of 2–8, 14 or 15 is a verdict on the tick: the harness
 never ran, so the orchestrator spends no rung of the tier ladder on it. 14 and
-15 are transient, and the job is dispatched again at the same tier (at most
-three times per tick). 2, 4, 5, 6, 7 and 8 are deterministic environment
+15 are transient, and the job is dispatched again at the same tier after a backoff
+(1, 2, 5, then 10 minutes; up to an hour of backoff per tick). 2, 4, 5, 6, 7 and 8 are deterministic environment
 faults: a retry boots the same image on the same repository, at any tier, and
 stops the same way. So the run stops at once with `worker_boot_fault`, naming
 the cause, the boot's own reason and what to fix.

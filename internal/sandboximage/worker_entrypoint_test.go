@@ -163,6 +163,9 @@ func newWorkerFixture(t *testing.T) *workerFixture {
 		// The stand-in agent's default behaviour: do the job properly.
 		"TICKS_TEST_WORKER_COMMIT": "1",
 		"TICKS_TEST_WORKER_RESULT": "STATUS: DONE",
+		// No waits between probe retries: a test that asserts the backoff sets
+		// its own. The image default is minutes of sleep per failing boot.
+		EnvModelProbeBackoff: "0",
 	}
 	return f
 }
@@ -290,7 +293,7 @@ for a in "$@"; do
   prev="$a"
 done
 printf '%s\n' "$*" >> "$TICKS_TEST_CURL_RECORD"
-[ -z "$out" ] || printf '{"ok":true}' > "$out"
+[ -z "$out" ] || printf '%s' "${TICKS_TEST_CURL_BODY:-{\"ok\":true}}" > "$out"
 # TICKS_TEST_CURL_STATUS_SEQ answers successive calls in turn — "000 000 200"
 # is a gateway that answers on the third try — and its last entry answers
 # every call after it.
