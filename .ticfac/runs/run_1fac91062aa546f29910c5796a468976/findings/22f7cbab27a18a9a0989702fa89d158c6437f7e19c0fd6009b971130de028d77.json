@@ -10,8 +10,11 @@
   "target": "charmbracelet/freeze",
   "tick_id": "cl7",
   "attempt": 2,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-10T17:38:12Z",
+  "triaged_at": "2026-10-10T17:38:20Z",
+  "triaged_by": "ticfac run run_1fac91062aa546f29910c5796a468976 absorbing 2yn",
+  "promoted_as": "2yn",
   "provenance": {
     "run_id": "run_1fac91062aa546f29910c5796a468976",
     "tick_id": "cl7",
