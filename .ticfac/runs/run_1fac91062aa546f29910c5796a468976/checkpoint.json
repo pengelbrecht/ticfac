@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 9,
+  "sequence": 10,
   "state": "running",
-  "reason": "h3s is running as attempt 4",
-  "updated_at": "2026-10-10T16:40:49Z",
+  "reason": "az1 try 1 (run dispatch #1) is rejected (missing-result): the harness wrote no report: the report at RESULT-az1.md on tick/ozw/attempt-1/az1 is the container's fallback (NO AGENT REPORT), its account of a harness fault and not a question for a person — the tick is dispatched again, carrying whatever landed",
+  "updated_at": "2026-10-10T16:46:04Z",
   "ticks": [
     {
       "tick_id": "az1",
-      "state": "dispatched",
+      "state": "rejected",
       "attempt": 1
     },
     {
