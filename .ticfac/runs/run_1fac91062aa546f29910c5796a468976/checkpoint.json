@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 56,
-  "state": "integrating",
-  "reason": "integrating 72z attempt 9 into epic/ozw",
-  "updated_at": "2026-10-10T22:32:11Z",
+  "sequence": 57,
+  "state": "gating",
+  "reason": "running the integrated gate for 72z on 7297759f7531",
+  "updated_at": "2026-10-10T22:32:19Z",
   "ticks": [
     {
       "tick_id": "az1",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "72z",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 9
     },
     {
