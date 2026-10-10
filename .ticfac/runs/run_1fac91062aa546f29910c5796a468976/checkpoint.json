@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 20,
-  "state": "integrating",
-  "reason": "integrating az1 attempt 5 into epic/ozw",
-  "updated_at": "2026-10-10T18:09:46Z",
+  "sequence": 21,
+  "state": "gating",
+  "reason": "running the integrated gate for az1 on 1aaa20c8e59e",
+  "updated_at": "2026-10-10T18:14:52Z",
   "ticks": [
     {
       "tick_id": "az1",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 5
     },
     {
