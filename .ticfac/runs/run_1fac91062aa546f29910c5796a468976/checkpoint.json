@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 35,
-  "state": "running",
-  "reason": "c1d is running as attempt 6",
-  "updated_at": "2026-10-10T20:02:27Z",
+  "sequence": 36,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for c1d",
+  "updated_at": "2026-10-10T20:47:43Z",
   "ticks": [
     {
       "tick_id": "az1",
