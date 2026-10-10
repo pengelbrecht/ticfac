@@ -2,14 +2,15 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 2,
-  "state": "dispatching",
-  "reason": "dispatching az1 as attempt 1",
-  "updated_at": "2026-10-10T16:39:49Z",
+  "sequence": 3,
+  "state": "running",
+  "reason": "az1 is running as attempt 1",
+  "updated_at": "2026-10-10T16:39:57Z",
   "ticks": [
     {
       "tick_id": "az1",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 1
     },
     {
       "tick_id": "cl7",
