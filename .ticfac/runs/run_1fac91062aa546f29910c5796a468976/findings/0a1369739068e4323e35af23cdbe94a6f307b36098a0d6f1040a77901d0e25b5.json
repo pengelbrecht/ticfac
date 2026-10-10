@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "7px",
   "attempt": 7,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-10T20:59:26Z",
+  "triaged_at": "2026-10-10T20:59:34Z",
+  "triaged_by": "ticfac run run_1fac91062aa546f29910c5796a468976 absorbing s7a",
+  "promoted_as": "s7a",
   "provenance": {
     "run_id": "run_1fac91062aa546f29910c5796a468976",
     "tick_id": "7px",
