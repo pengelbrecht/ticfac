@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 18,
-  "state": "running",
-  "reason": "cl7 is closed",
-  "updated_at": "2026-10-10T18:09:14Z",
+  "sequence": 19,
+  "state": "collecting",
+  "reason": "az1 try 2 (run dispatch #5) is collected (ready-to-merge)",
+  "updated_at": "2026-10-10T18:09:42Z",
   "ticks": [
     {
       "tick_id": "az1",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 5
     },
     {
