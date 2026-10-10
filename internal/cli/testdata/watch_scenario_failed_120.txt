@@ -8,10 +8,13 @@ the failed epic's run (fld)                                                     
 
 Building ──── Reviewing ──── Closing out ──── PR & CI ──── Merged
 ▲ here (wave 1 of 1)
+
 DONE (1)
   f1   the landed tick   merged                                        15m
+
 UP NEXT (2)   f3 the waiting tick · f4 the other waiting tick
               then: Reviewing → Closing out → PR & CI → Merged
+
 HELD (1)
   f2   the refused tick  failed: the integrated gate refused attempt…  25m
 

@@ -4,7 +4,9 @@ Needs you: nothing                                                              
 
 Building ──── Reviewing ──── Closing out ──── PR & CI ──── Merged
 ▲ here (wave 1 of 2)
+
 NOW
+<<<<<<< HEAD
   tgi  order-feed service skeleton       writing code                          19m  "adding the /feed handler"
   5az  smoke validation vs kofoed dumps  writing code (attempt 2 · escalated)  8m   "running pytest"
   v1g  safe intraday kanpla pulls        testing                               32m  gate running
@@ -12,6 +14,17 @@ DONE (3)
   gzt  sum same-key kanpla lines         merged                                22m
   rtk  order-feed contract v1            merged                                34m
   ww2  kitchen_order_feed dbt view       merged                                45m
+=======
+  tgi  order-feed service skeleton       writing code                               19m  "adding the /feed handler"
+  5az  smoke validation vs kofoed dumps  writing code (attempt 2, model escalated)  8m   "running pytest"
+  v1g  safe intraday kanpla pulls        testing                                    32m  gate running
+
+DONE (3)
+  gzt  sum same-key kanpla lines         merged                                     22m
+  rtk  order-feed contract v1            merged                                     34m
+  ww2  kitchen_order_feed dbt view       merged                                     45m
+
+>>>>>>> 9f023b9639854964e66d76f5e8e8850571a5dc8d
 UP NEXT (12)   s3r kanpla-etl /sync/intraday · wmd paired report capture · k4f intraday reconciliation report …
                then: Reviewing → Closing out → PR & CI → Merged
 config claude · MAX1 · 34% of 5h

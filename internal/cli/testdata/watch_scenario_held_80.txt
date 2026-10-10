@@ -8,12 +8,21 @@ the held epic's work (hld)                                   local · running 45
 
 Building ──── Reviewing ──── Closing out ──── PR & CI ──── Merged
 ▲ here (wave 1 of 2)
+
 NOW
+<<<<<<< HEAD
   h3   the running tick  writing code                                  10m
 DONE (1)
   h1   the first tick    merged                                        10m
 UP NEXT (2)   h4 the queued tick · h5 the last queued tick
               then: Reviewing → Closing out → PR & CI → Merged
+=======
+  h3   the runni…  writing code                                  10m  "editing …
+
+DONE (1)
+  h1   the first…  merged                                        10m
+
+>>>>>>> 9f023b9639854964e66d76f5e8e8850571a5dc8d
 HELD (1)
   h2   the held tick     held: the attempt was struck out for release  20m
 

@@ -1139,6 +1139,114 @@ func TestDashboardGroupsFollowTheModel(t *testing.T) {
 	}
 }
 
+// dashGroupHeaderName is the group's name when a line opens one of the
+// dashboard's four groups ("NOW", "DONE (2)", "UP NEXT (4) ...", "HELD (1)"),
+// empty otherwise — the same recognition the row-grouping tests use.
+func dashGroupHeaderName(line string) string {
+	for _, name := range []string{"NOW", "DONE", "UP NEXT", "HELD"} {
+		if line == name || strings.HasPrefix(line, name+" (") {
+			return name
+		}
+	}
+	return ""
+}
+
+// dashSpacedGroups checks the spacing structure tick h3s pins: one blank
+// line between the phase track and the first group, one between each
+// adjacent pair of groups, and no two blank lines standing together —
+// the frame stays one continuous column of readable bands.
+func dashSpacedGroups(t *testing.T, frame []string, label string) {
+	t.Helper()
+	joined := strings.Join(frame, "\n")
+	for i := 1; i < len(frame); i++ {
+		if frame[i] == "" && frame[i-1] == "" {
+			t.Fatalf("%s: two blank lines stand together at lines %d and %d:\n%s", label, i, i+1, joined)
+		}
+	}
+	lastGroup := ""
+	for i, line := range frame {
+		group := dashGroupHeaderName(line)
+		if group == "" {
+			continue
+		}
+		if i == 0 || frame[i-1] != "" {
+			t.Fatalf("%s: the %s group does not stand one blank line below what precedes it:\n%s", label, group, joined)
+		}
+		if lastGroup == "" && (i < 2 || !strings.Contains(frame[i-2], "▲ here")) {
+			t.Fatalf("%s: the %s group does not stand one blank line below the phase track:\n%s", label, group, joined)
+		}
+		lastGroup = group
+	}
+	if lastGroup == "" {
+		t.Fatalf("%s: the frame carries no group header:\n%s", label, joined)
+	}
+}
+
+// TestDashboardGroupsAreSpaced (tick h3s): the dashboard's groups and the
+// phase track no longer run together. At a roomy pane the spacing stands
+// in full, with every group's rows intact.
+func TestDashboardGroupsAreSpaced(t *testing.T) {
+	t.Parallel()
+	for name, m := range dashboardScenarios() {
+		t.Run(name+"_120x40", func(t *testing.T) {
+			t.Parallel()
+			dashSpacedGroups(t, renderWatchFrame(m, plainStyles(), 120, 40, ""), name+" at 120x40")
+		})
+	}
+}
+
+// TestDashboardSpacingFitsEightyByTwentyFour (tick h3s): the five scenarios
+// still fit 80x24 WITH the spacing — the fit collapses UP NEXT first, never
+// the blank lines, so an 80-column frame reads as spaced as a 120-column
+// one.
+func TestDashboardSpacingFitsEightyByTwentyFour(t *testing.T) {
+	t.Parallel()
+	for name, m := range dashboardScenarios() {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			frame := renderWatchFrame(m, plainStyles(), 80, 24, "")
+			if len(frame) > 24 {
+				t.Fatalf("the %s scenario renders %d lines in a 24-line pane:\n%s", name, len(frame), strings.Join(frame, "\n"))
+			}
+			dashSpacedGroups(t, frame, name+" at 80x24")
+		})
+	}
+}
+
+// TestDashboardSpacingCollapsesUpNextFirst (tick h3s): where a pane cannot
+// afford the spacing at 80x24, the UP NEXT group is the first and only
+// thing that yields — the groups' own rows keep their seats, and the blank
+// lines stay. The busy scenario gives up the "then:" line and keeps its
+// queue and every row; the held scenario gives the UP NEXT group whole and
+// keeps every row.
+func TestDashboardSpacingCollapsesUpNextFirst(t *testing.T) {
+	t.Parallel()
+	busy := renderWatchFrame(scenarioBusy(), plainStyles(), 80, 24, "")
+	busyJoined := strings.Join(busy, "\n")
+	if !strings.Contains(busyJoined, "UP NEXT (12)") {
+		t.Errorf("the busy scenario's UP NEXT line lost its queue at 80x24:\n%s", busyJoined)
+	}
+	if strings.Contains(busyJoined, "then:") {
+		t.Errorf("the busy scenario kept the then: line the 80x24 fold should have dropped:\n%s", busyJoined)
+	}
+	for _, id := range []string{"tgi", "5az", "v1g", "gzt", "rtk", "ww2"} {
+		if dashRowLine(busy, id) < 0 {
+			t.Errorf("the busy scenario lost the %s row at 80x24:\n%s", id, busyJoined)
+		}
+	}
+
+	held := renderWatchFrame(scenarioHeld(), plainStyles(), 80, 24, "")
+	heldJoined := strings.Join(held, "\n")
+	if strings.Contains(heldJoined, "UP NEXT") {
+		t.Errorf("the held scenario kept the UP NEXT group the 80x24 fold should have dropped:\n%s", heldJoined)
+	}
+	for _, id := range []string{"h3", "h1", "h2"} {
+		if dashRowLine(held, id) < 0 {
+			t.Errorf("the held scenario lost the %s row at 80x24:\n%s", id, heldJoined)
+		}
+	}
+}
+
 // childRowFixture is a landed epic with one absorbed child under its parent
 // — the shape the old dashboard indented ("└ +t1c") and shifted at narrow
 // widths. Every status word is the same short one, so the row table's
@@ -1763,17 +1871,19 @@ func TestDashboardColumnsStayAligned(t *testing.T) {
 }
 
 // TestDashboardFitsHeight: a pane shorter than the frame keeps the headline
-// and the tail, and compresses the middle in place — the phase track yields
-// first (a pane crowded with content owes its rows a seat before it owes
-// the map one), then the DONE rows fold into their group's header, then
-// rows trim from the bottom with one "+N more" at the fold — and the whole
-// frame is never taller than the pane.
+// and the tail, and compresses the middle in place — the UP NEXT group
+// collapses first (its "then:" line, then the group itself), the spacing
+// between the groups yields, then the DONE rows fold into their group's
+// header, then rows trim from the bottom with one "+N more" at the fold —
+// and the whole frame is never taller than the pane. The contract golden
+// carries no UP NEXT group, so here the collapse steps are no-ops: what
+// these panes exercise is the DONE fold, the trim and the track's yield.
 func TestDashboardFitsHeight(t *testing.T) {
 	t.Parallel()
 	m := dashboardContractGolden(t)
 	full := renderWatchFrame(m, plainStyles(), 120, 0, "")
 
-	// A pane that seats the whole level-1 frame: everything visible.
+	// A pane that seats the whole DONE-folded frame: everything visible.
 	frame := renderWatchFrame(m, plainStyles(), 120, 15, "")
 	if len(frame) > 15 || !strings.Contains(strings.Join(frame, "\n"), "▲ here") {
 		t.Errorf("a 15-line pane does not seat the whole frame:\n%s", strings.Join(frame, "\n"))
