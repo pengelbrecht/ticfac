@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-etl-3-go-touched",
+  "provenance": {
+    "run_id": "run_1fac91062aa546f29910c5796a468976",
+    "tick_id": "etl",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/ozw",
+    "source_sha": "323f813550e46b16d993b97c2aabb9c370cebe77",
+    "integration_ref": "refs/heads/epic/ozw",
+    "phase": "integrated",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:f6d30e41f279e14ec58e01f070b5f9560dd75d0f23147e11fdef84a873c82087",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "go-touched",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go run ./cmd/gate-touched -timeout 45m -parallel 12 -leave-to-ci github.com/pengelbrecht/ticfac/internal/reconcile"
+    ]
+  },
+  "started_at": "2026-10-10T19:41:56Z",
+  "finished_at": "2026-10-10T19:46:56Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "gate-touched: the diff 77a96507179f...49c15301d464; full (non-short) suites of 4 package(s):\n  github.com/pengelbrecht/ticfac/cmd/ticfac\n  github.com/pengelbrecht/ticfac/internal/cli\n  github.com/pengelbrecht/ticfac/internal/contracts/parity\n  github.com/pengelbrecht/ticfac/internal/statusmodel\n$ go test -timeout 45m -parallel 12 github.com/pengelbrecht/ticfac/cmd/ticfac github.com/pengelbrecht/ticfac/internal/cli github.com/pengelbrecht/ticfac/internal/contracts/parity github.com/pengelbrecht/ticfac/internal/statusmodel\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t67.799s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t0.183s\nok  \tgithub.com/pengelbrecht/ticfac/internal/statusmodel\t1.202s\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:a375c23717b6250c48ceb20fbb1283a4ab95eedbe4fb07de0e26e7ee9d9cc971",
+  "persistence_uri": "git:refs/heads/epic/ozw:.ticfac/runs/run_1fac91062aa546f29910c5796a468976/evidence/gate-etl-3-go-touched.json"
+}
