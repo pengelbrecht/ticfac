@@ -69,7 +69,11 @@ and a run that is not going still reads stopped. The negative that refused
 Consumers: the renderers gain a `paused` case (internal/cli's dashVerdict and
 cloudflare/src/status.ts's verdictWord, plus a colour for its dot) — a
 consumer that renders unknown states through its default arm is still
-correct. The cloudflare pin bumps in the same commit.
+correct. Two hand-authored goldens whose verdicts said `healthy` beside a
+needs-you entry (`status_model_completed_awaiting_merge`,
+`status_model_refused_last_try`) now carry the `paused` verdict the builder
+derives for them — the golden documents what the derivation produces, not
+what it used to. The cloudflare pin bumps in the same commit.
 
 ## 2.7.0
 
