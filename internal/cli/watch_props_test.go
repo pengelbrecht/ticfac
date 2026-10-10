@@ -439,7 +439,11 @@ func genModel(r *rand.Rand) statusmodel.Model {
 	}
 
 	// Health: mostly healthy with a recovery or two, sometimes degraded or
-	// stopped, with the run's own word for why.
+	// stopped, with the run's own word for why — and paused (tick etl) when
+	// the attention list already carries a person's decision: the generator
+	// draws the two facts independently, so it enforces here the agreement
+	// the model's own builder enforces, and every property reads a model the
+	// builder could have produced.
 	verdict := statusmodel.HealthVerdict{State: statusmodel.VerdictHealthy}
 	switch roll := r.IntN(10); {
 	case roll < 7:
@@ -457,6 +461,12 @@ func genModel(r *rand.Rand) statusmodel.Model {
 	default:
 		verdict.State = statusmodel.VerdictStopped
 		verdict.Summary = "pid 4242 is gone without its own terminal line"
+	}
+	for _, a := range attention {
+		if a.NeedsPerson && verdict.State == statusmodel.VerdictHealthy {
+			verdict.State = statusmodel.VerdictPaused
+			verdict.Summary = "needs you"
+		}
 	}
 
 	m := statusmodel.Model{
@@ -964,6 +974,33 @@ func propNeedsYou(frame []string, _ func() []string, m, _ statusmodel.Model, wid
 	return nil
 }
 
+// propHealthAgreesWithNeedsYou is P5 (tick etl): the health line and the
+// needs-you box are two renderings of one model, and they cannot disagree —
+// with anything in needs-you, "● healthy" appears nowhere in the frame (the
+// health word names the person's wait: paused, or whatever harder state the
+// model also states), and with nothing in it, the paused word appears
+// nowhere. Both checks read only the bullet-marked headline words, so the
+// feed tail's own "paused: needs you" sentences never count as the health
+// line's answer — the exact drift the two facts once produced, rendered and
+// caught on every generated shape.
+func propHealthAgreesWithNeedsYou(frame []string, _ func() []string, m, _ statusmodel.Model, _, _, _ int) error {
+	joined := strings.Join(frame, "\n")
+	needs := false
+	for _, a := range m.Attention {
+		if a.NeedsPerson {
+			needs = true
+			break
+		}
+	}
+	if needs && strings.Contains(joined, "● healthy") {
+		return fmt.Errorf("the needs-you box stands and the health line still reads healthy")
+	}
+	if !needs && strings.Contains(joined, "● paused") {
+		return fmt.Errorf("nothing needs a person and the health line reads paused")
+	}
+	return nil
+}
+
 // containsLine says whether the frame carries one exact line.
 func containsLine(frame []string, want string) bool {
 	for _, line := range frame {
@@ -1102,6 +1139,11 @@ var dashProperties = []dashProperty{
 		breakFrame: breakDroppedAttention,
 	},
 	{
+		name:       "the health line agrees with needs-you",
+		check:      propHealthAgreesWithNeedsYou,
+		breakFrame: breakHealthyDespiteNeedsYou,
+	},
+	{
 		name:       "the cost line shows only what is metered",
 		check:      propCostHonest,
 		breakFrame: breakFabricatesUnmeteredZero,
@@ -1154,6 +1196,31 @@ func breakDroppedAttention(frame []string, _ statusmodel.Model) []string {
 	for _, line := range frame {
 		if strings.Contains(line, "Needs you:") {
 			continue
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+// breakHealthyDespiteNeedsYou rewrites the headline's verdict word to
+// "● healthy" on any model whose needs-you list carries a person's decision
+// — the pre-etl defect rendered whole: the box says a hold stands, the line
+// beneath it says everything is fine. P5's breaker.
+func breakHealthyDespiteNeedsYou(frame []string, m statusmodel.Model) []string {
+	needs := false
+	for _, a := range m.Attention {
+		if a.NeedsPerson {
+			needs = true
+			break
+		}
+	}
+	if !needs {
+		return frame
+	}
+	out := make([]string, 0, len(frame))
+	for _, line := range frame {
+		if at := strings.Index(line, "● "); at >= 0 {
+			line = line[:at] + "● healthy"
 		}
 		out = append(out, line)
 	}

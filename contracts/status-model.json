@@ -533,7 +533,7 @@
       "required": ["state", "summary", "recovered"],
       "additionalProperties": false,
       "properties": {
-        "state": { "type": "string", "enum": ["healthy", "degraded", "stopped"], "description": "The closed vocabulary of the headline.\n- healthy: the run needs nobody and recovered what it hit\n- degraded: something is wrong but the run is going\n- stopped: the run is not going" },
+        "state": { "type": "string", "enum": ["healthy", "degraded", "stopped", "paused"], "description": "The closed vocabulary of the headline.\n- healthy: the run needs nobody and recovered what it hit\n- degraded: something is wrong but the run is going\n- stopped: the run is not going\n- paused: the headline names the person's wait — anything is in needs-you (a hold while the run goes, a merge or findings after it stopped), and the word says what the box above the line says (tick etl)" },
         "summary": { "type": "string", "description": "The one-line why beside the word — the sentence a person reads under the headline, empty when the word says it all." },
         "recovered": { "type": "array", "items": { "$ref": "#/$defs/recovery" }, "description": "What the run got past by itself, so it is shown as calm and not as alarms. Empty when nothing needed getting past." }
       }
@@ -1101,7 +1101,7 @@
         "pushes": 0,
         "peak_pushes_per_minute": 0,
         "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 },
-        "verdict": { "state": "healthy", "summary": "", "recovered": [] }
+        "verdict": { "state": "paused", "summary": "needs you", "recovered": [] }
       },
       "gates": [],
       "ci": {
@@ -2749,7 +2749,7 @@
         "pushes": 0,
         "peak_pushes_per_minute": 0,
         "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 },
-        "verdict": { "state": "healthy", "summary": "healthy", "recovered": [] }
+        "verdict": { "state": "paused", "summary": "needs you", "recovered": [] }
       },
       "gates": [
         {
@@ -3094,7 +3094,7 @@
     {
       "record": "status_model",
       "why": "a verdict state outside the closed vocabulary — the headline is a word a person reads, and a word nobody agreed to is a headline no renderer can print",
-      "expect_error_contains": "$.health.verdict.state: paused is not one of the permitted values",
+      "expect_error_contains": "$.health.verdict.state: halted is not one of the permitted values",
       "document": {
         "schema_version": 1,
         "run_id": "epic-2jn",
@@ -3111,7 +3111,7 @@
         "workers": null,
         "waits_on": null,
         "attention": [],
-        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "paused", "summary": "", "recovered": [] } },
+        "health": { "remote_retries": 0, "interventions": 0, "stall_warnings": 0, "wall_clocks_fired": 0, "pushes": 0, "peak_pushes_per_minute": 0, "github_errors": { "network": 0, "ref_update_failed": 0, "server_fault": 0, "auth_refused": 0, "cross_repo_refused": 0 }, "verdict": { "state": "halted", "summary": "", "recovered": [] } },
         "gates": [],
         "ci": null,
         "cost": { "subscription": null, "recorded_usd": 0, "attempts": 0, "basis": "usage recorded on decision records; worker jobs record no cost", "lines": [] },

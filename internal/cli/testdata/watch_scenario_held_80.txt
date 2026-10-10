@@ -4,7 +4,7 @@ the held epic's work (hld)                                   local · running 45
 │ Needs you: attempt 2 of h2 was struck out for release │
 │ clear with: ticfac settle hld h2 2 --release "<who>"  │
 └───────────────────────────────────────────────────────┘
-● healthy · 1 of 5 done · ~1h left
+● paused · needs you · 1 of 5 done · ~1h left
 
 Building ──── Reviewing ──── Closing out ──── PR & CI ──── Merged
 ▲ here (wave 1 of 2)

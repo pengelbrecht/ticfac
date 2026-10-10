@@ -210,6 +210,13 @@ func TestWatchColourGridPerState(t *testing.T) {
 	// check; the cost line is primary text — it states what is metered, and
 	// since tick b13 it no longer carries a dim "not metered" recital at all.
 	assertGridAttr(t, gridCells(grid, "● healthy"), "● healthy", "green", false, false)
+
+	// The paused verdict (tick etl) is amber: the run is going and waits on
+	// a person — attention, not a failure; the box above it carries the red.
+	paused := dashboardFixture()
+	paused.Health.Verdict = statusmodel.HealthVerdict{State: statusmodel.VerdictPaused, Summary: "needs you"}
+	pausedGrid := colourGrid(t, paused, 120, 0)
+	assertGridAttr(t, gridCells(pausedGrid, "● paused · needs you"), "● paused · needs you", "amber", false, false)
 	for _, row := range grid {
 		for _, cell := range row {
 			if strings.Contains(cell.text, "metered") {
