@@ -3,13 +3,14 @@
   "title": "At 80 columns a tick title gets the width before its status",
   "gloss": "titles at 80 cols",
   "description": "watch_scenario_busy_80 shows 'order-feed …' while the status column ('writing code (attempt 2, model escalated)') takes 40 cells. Allocate width title-first; shorten status words ('attempt 2 · escalated') and the activity excerpt before titles.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "parent": "ozw",
   "acceptance_criteria": "busy 80x24 golden shows titles readable; no line exceeds 80; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-10T09:53:09.541878Z",
-  "updated_at": "2026-10-10T09:53:09.541878Z"
+  "updated_at": "2026-10-10T16:39:52.56786712Z",
+  "started_at": "2026-10-10T16:39:52.56786567Z"
 }
