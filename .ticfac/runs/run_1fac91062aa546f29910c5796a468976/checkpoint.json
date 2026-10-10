@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 41,
-  "state": "collecting",
-  "reason": "7px try 1 (run dispatch #7) is collected (ready-to-merge)",
-  "updated_at": "2026-10-10T20:59:42Z",
+  "sequence": 42,
+  "state": "integrating",
+  "reason": "integrating 7px attempt 7 into epic/ozw",
+  "updated_at": "2026-10-10T20:59:45Z",
   "ticks": [
     {
       "tick_id": "az1",
