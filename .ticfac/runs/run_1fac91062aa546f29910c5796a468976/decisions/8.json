@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 8,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "",
+    "description": "The five PNGs in docs/design/watch-redesign-2026-10/ were captured at 0f14d342c (2026-10-10 17:23, cl7's attempt) and never again: the az1 (18:09), h3s (19:00) and etl (19:31) merges each changed the pinned frames the capture renders from, so the epic's committed evidence shows a superseded dashboard. watch-held-120x40.png reads '● healthy · 1 of 5 done' beneath its needs-you box — the exact line [A1] removed, in green — none of the five shows [A4]'s blank lines, and busy's status column reads the long note spelling. etl's report flagged it and named the epic's own [A3]/[A5] as the owner, but no remaining tick carries it: after etl only the review and a bare close-out remain. Run docs/design/watch-redesign-2026-10/capture.sh on the integrated tree (it asserts each source equals the pinned golden and verifies itself in place) and commit the five PNGs. No breaks claim: the epic's criteria parse as one item, so [A3]/[A5] cannot be keyed (third finding).\nevidence: git log -1 --format=%ci -- docs/design/watch-redesign-2026-10/watch-held-120x40.png → 2026-10-10 17:23:06, before merges 1aaa20c8e59e/f2472bf0140e/323f813550e4; git show 0f14d342c:internal/cli/testdata/watch_scenario_held_120.txt:7 → '● healthy · 1 of 5 done · ~1h left'\n\nticfac run run_1fac91062aa546f29910c5796a468976 filed this backlog tick from the finding 5bb0ae81694c456010a80c4f2da6eb3831a67f4acfbc1a59215ffb608f3d1614 (reported by run-run_1fac91062aa546f29910c5796a468976/tick-c1d/attempt-6) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_1fac91062aa546f29910c5796a468976/absorptions/5bb0ae81694c456010a80c4f2da6eb3831a67f4acfbc1a59215ffb608f3d1614.json on the run branch.",
+    "epic_id": "ozw",
+    "role": "classify-tick",
+    "tick_id": "7px",
+    "title": "The committed watch screenshots predate the epic: held still reads '● healthy'"
+  },
+  "response": {
+    "choice": "mechanical",
+    "confidence": 0.84,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.06,
+      "design": 0.01,
+      "diagnosis": 0.06,
+      "mechanical": 0.87,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1736,
+      "output_tokens": 59
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-10T20:49:04Z",
+  "answered_at": "2026-10-10T20:49:04Z",
+  "provenance": {
+    "run_id": "run_1fac91062aa546f29910c5796a468976",
+    "tick_id": "7px",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ozw",
+    "source_sha": "1c0125675ca6febb2791a2ba0674c0c7c6f4653e",
+    "integration_ref": "refs/heads/epic/ozw",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
