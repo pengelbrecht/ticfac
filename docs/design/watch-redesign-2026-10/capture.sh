@@ -26,6 +26,10 @@ repo=$(cd "$here/../../.." && pwd)
 src=$(mktemp -d)
 trap 'rm -rf "$src"' EXIT
 
+if [ "$out" != "$here" ]; then
+	mkdir -p "$out"
+fi
+
 (cd "$repo" && go test ./internal/cli -run TestDashboardScreenshotSources -count=1 -screenshot-dir="$src") >/dev/null
 
 for scenario in fresh busy held landed failed; do
@@ -36,7 +40,11 @@ for scenario in fresh busy held landed failed; do
 		"$src/watch-$scenario.ansi" -o "$out/watch-$scenario-120x40.png"
 done
 
-# The capture verifies itself: the guard reads the freshly written PNGs back.
-(cd "$repo" && go test ./internal/cli -run TestCommittedScreenshotsShowTheColourAccents -count=1)
+# The capture verifies itself when it captures in place: the guard reads the
+# committed PNGs back, which is only the freshly written set when the output
+# directory is the one the repository commits.
+if [ "$out" = "$here" ]; then
+	(cd "$repo" && go test ./internal/cli -run TestCommittedScreenshotsShowTheColourAccents -count=1)
+fi
 
 echo "captured the five screenshots in colour into $out"
