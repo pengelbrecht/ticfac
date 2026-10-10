@@ -1,6 +1,7 @@
 {
   "id": "c1d",
   "title": "Final review of the watch polish diff",
+  "notes": "2026-10-10 20:48 - ticfac run run_1fac91062aa546f29910c5796a468976: c1d try 1 (run dispatch #6) reported a finding the run itself decided — defect \"The committed watch screenshots predate the epic: held still reads '● healthy'\" (key 5bb0ae81694c456010a80c4f2da6eb3831a67f4acfbc1a59215ffb608f3d1614, severity high, for this repository) is promoted to a backlog tick with an owner, 7px; the decision record is on the run branch at .ticfac/runs/run_1fac91062aa546f29910c5796a468976/absorptions/5bb0ae81694c456010a80c4f2da6eb3831a67f4acfbc1a59215ffb608f3d1614.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -15,6 +16,6 @@
   "role": "review",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-10T09:53:09.635641Z",
-  "updated_at": "2026-10-10T20:02:22.519360949Z",
+  "updated_at": "2026-10-10T20:48:03.648472838Z",
   "started_at": "2026-10-10T20:02:22.519359658Z"
 }
