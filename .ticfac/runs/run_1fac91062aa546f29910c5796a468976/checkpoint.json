@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 55,
-  "state": "collecting",
-  "reason": "collecting the closeout-epic job for 72z",
-  "updated_at": "2026-10-10T22:31:31Z",
+  "sequence": 56,
+  "state": "integrating",
+  "reason": "integrating 72z attempt 9 into epic/ozw",
+  "updated_at": "2026-10-10T22:32:11Z",
   "ticks": [
     {
       "tick_id": "az1",
@@ -34,7 +34,7 @@
     },
     {
       "tick_id": "72z",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 9
     },
     {
