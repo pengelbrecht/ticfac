@@ -1,0 +1,13 @@
+{
+  "id": "2yn",
+  "title": "For charmbracelet/freeze: freeze's ANSI renderer ignores SGR 2 and drops fills when bold follows",
+  "description": "charmbracelet/freeze v0.2.2's CSI dispatcher has no case for SGR 2 (faint) — dim text renders at full brightness — and every SGR sequence starts a fresh span, so a bare bold arriving after a colour sequence renders the text unstyled (red+bold came out white). Terminals accumulate attributes, so both are render-only defects; the repo's capture source re-spells both (faint -\u003e 90, colour-then-bold -\u003e combined 1;3X) rather than depending on a fix. Filing upstream in case the ANSI path gets tightened.\nevidence: ansi.go CsiDispatch: case 1 adds an empty tspan (the font-weight attr is commented out); no case 2; palette map in the same file\n\nThis finding is for charmbracelet/freeze, not for this repository. ticfac run run_1fac91062aa546f29910c5796a468976 filed this backlog tick from the finding 22f7cbab27a18a9a0989702fa89d158c6437f7e19c0fd6009b971130de028d77 (reported by run-run_1fac91062aa546f29910c5796a468976/tick-cl7/attempt-2) so it is not lost: the finding is routed to charmbracelet/freeze, and this run cannot fix another repository: it claims no done item of this epic, and it gates none of this epic's done items whatever it claims — absorbing it would hold the epic on work no tick of this run can do. The run did not file it there because charmbracelet/freeze is not a repository this factory files into — no [findings.route.\"charmbracelet/freeze\"] file = true in .tick/runners.toml, so it filed a backlog tick in this repository naming charmbracelet/freeze and carrying the finding verbatim, for a person to carry it there. Carry it to charmbracelet/freeze's tracker and close this tick. The decision record is .ticfac/runs/run_1fac91062aa546f29910c5796a468976/absorptions/22f7cbab27a18a9a0989702fa89d158c6437f7e19c0fd6009b971130de028d77.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_1fac91062aa546f29910c5796a468976/tick-cl7/attempt-2",
+  "created_by": "ticfac run run_1fac91062aa546f29910c5796a468976",
+  "created_at": "2026-10-10T17:38:17Z",
+  "updated_at": "2026-10-10T17:38:17Z"
+}
