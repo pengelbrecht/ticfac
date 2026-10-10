@@ -1,0 +1,13 @@
+{
+  "id": "s7a",
+  "title": "Pin the freeze version capture.sh installs, or the PNGs drift with tool updates",
+  "description": "capture.sh's not-on-PATH message recommends `go install github.com/charmbracelet/freeze@latest`, unpinned. The .ansi capture sources are asserted against the pinned goldens, but the PNG rendering itself (glyph shaping, spacing) depends on the freeze version, so a re-capture on a newer freeze produces PNG diffs a reviewer cannot attribute to the dashboard rather than to the tool. Pin the version (or add freeze as a tool dependency) so a capture's diff only ever reflects frame changes.\nevidence: docs/design/watch-redesign-2026-10/capture.sh:21 (the @latest recommendation)\n\nticfac run run_1fac91062aa546f29910c5796a468976 filed this backlog tick from the finding 0a1369739068e4323e35af23cdbe94a6f307b36098a0d6f1040a77901d0e25b5 (reported by run-run_1fac91062aa546f29910c5796a468976/tick-7px/attempt-7) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_1fac91062aa546f29910c5796a468976/absorptions/0a1369739068e4323e35af23cdbe94a6f307b36098a0d6f1040a77901d0e25b5.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_1fac91062aa546f29910c5796a468976/tick-7px/attempt-7",
+  "created_by": "ticfac run run_1fac91062aa546f29910c5796a468976",
+  "created_at": "2026-10-10T20:59:31Z",
+  "updated_at": "2026-10-10T20:59:31Z"
+}
