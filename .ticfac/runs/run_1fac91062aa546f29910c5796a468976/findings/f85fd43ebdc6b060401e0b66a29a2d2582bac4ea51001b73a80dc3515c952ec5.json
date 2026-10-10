@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "az1",
   "attempt": 5,
-  "status": "proposed",
+  "status": "promoted",
   "proposed_at": "2026-10-10T18:09:26Z",
+  "triaged_at": "2026-10-10T18:09:34Z",
+  "triaged_by": "ticfac run run_1fac91062aa546f29910c5796a468976 absorbing 3j0",
+  "promoted_as": "3j0",
   "provenance": {
     "run_id": "run_1fac91062aa546f29910c5796a468976",
     "tick_id": "az1",
