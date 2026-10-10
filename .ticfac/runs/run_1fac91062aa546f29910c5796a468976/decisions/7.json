@@ -1,0 +1,79 @@
+{
+  "schema_version": 3,
+  "decision": 7,
+  "role": "review-epic",
+  "request": {
+    "epic_id": "ozw",
+    "job_id": "run-run_1fac91062aa546f29910c5796a468976/tick-c1d/attempt-6",
+    "output_schema": "ticfac.job-result.review-epic.v1",
+    "profile": "review-epic@1.2.0 (cloudflare-sandbox/pi-durable, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:c64677c8ed510391d85d8f252dd964bff0cfa948806715fd644320ecb29e56ea",
+    "role": "review-epic",
+    "source_grade": "read-only",
+    "source_sha": "e2798863eac23ad51faacf832a591fe2097f6b9d",
+    "tick_id": "c1d"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "The five PNGs in docs/design/watch-redesign-2026-10/ were captured at 0f14d342c (2026-10-10 17:23, cl7's attempt) and never again: the az1 (18:09), h3s (19:00) and etl (19:31) merges each changed the pinned frames the capture renders from, so the epic's committed evidence shows a superseded dashboard. watch-held-120x40.png reads '● healthy · 1 of 5 done' beneath its needs-you box — the exact line [A1] removed, in green — none of the five shows [A4]'s blank lines, and busy's status column reads the long note spelling. etl's report flagged it and named the epic's own [A3]/[A5] as the owner, but no remaining tick carries it: after etl only the review and a bare close-out remain. Run docs/design/watch-redesign-2026-10/capture.sh on the integrated tree (it asserts each source equals the pinned golden and verifies itself in place) and commit the five PNGs. No breaks claim: the epic's criteria parse as one item, so [A3]/[A5] cannot be keyed (third finding).\nevidence: git log -1 --format=%ci -- docs/design/watch-redesign-2026-10/watch-held-120x40.png → 2026-10-10 17:23:06, before merges 1aaa20c8e59e/f2472bf0140e/323f813550e4; git show 0f14d342c:internal/cli/testdata/watch_scenario_held_120.txt:7 → '● healthy · 1 of 5 done · ~1h left'",
+        "kind": "defect",
+        "severity": "high",
+        "target": "",
+        "title": "The committed watch screenshots predate the epic: held still reads '● healthy'"
+      },
+      {
+        "body": "TestCommittedScreenshotsShowTheColourAccents asserts only hue families, and TestDashboardScreenshotSources skips without -screenshot-dir, so nothing in the gate compares the committed PNGs — or their sources — with the frames the goldens pin. That is how three green merges left the committed evidence a frame behind this epic's own headline fix, and it makes cl7's claim that the guard 'will refuse a monochrome or stale capture' only half true: monochrome it refuses, stale it cannot see. Commit the five capture sources (watch-<scenario>.ansi) beside the PNGs and assert them in the gate against the styled render, so a stale capture fails make gate instead of waiting for a person to read the images.\nevidence: internal/cli/watch_screenshots_test.go:104-106 (the source writer skips in the gate), :221 (the hue-only assertion)",
+        "kind": "defect",
+        "severity": "medium",
+        "target": "",
+        "title": "No gate check ties the committed PNGs to the current renderer"
+      },
+      {
+        "body": "internal/acceptance's parser takes a [A<n>] mark only at a line's start, and .tick/issues/ozw.json carries its five criteria on one line, so the epic's definition of done has exactly one item of record (A1) — the same defect the ymf review filed low, recurring, and the run has not applied the tracker edit. This review's blocking finding breaks the committed-screenshots clause of [A3] and [A5]'s 'screenshots updated', but breaks.item cannot name them, so it carries no claim a machine can key on. The fix is a tracker edit — re-mark the criteria one item per line — which is the run's to apply.\nevidence: .tick/issues/ozw.json acceptance_criteria (one line, [A1]..[A5]); internal/acceptance/acceptance.go:18 (attemptedMark is line-anchored)",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "ozw's acceptance criteria parse as one item again: [A2]..[A5] are mid-line"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/ozw/attempt-6/c1d",
+      "commits": 1,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/ozw/attempt-6/c1d:RESULT-c1d.md",
+      "review_verdict": "NOT READY",
+      "review_verdict_detail": "regenerate the five committed screenshots from the integrated renderer (docs/design/watch-redesign-2026-10/capture.sh) and commit them: the held PNG still shows \"● healthy\" over its needs-you box, and none shows the epic's spacing or compact note"
+    },
+    "role": "review-epic",
+    "schema_id": "ticfac.job-result.review-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (NOT READY — regenerate the five committed screenshots from the integrated renderer (docs/design/watch-redesign-2026-10/capture.sh) and commit them: the held PNG still shows \"● healthy\" over its needs-you box, and none shows the epic's spacing or compact note)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-10T20:48:41Z",
+  "answered_at": "2026-10-10T20:48:41Z",
+  "provenance": {
+    "run_id": "run_1fac91062aa546f29910c5796a468976",
+    "tick_id": "c1d",
+    "attempt": 6,
+    "source_ref": "refs/heads/epic/ozw",
+    "source_sha": "e2798863eac23ad51faacf832a591fe2097f6b9d",
+    "integration_ref": "refs/heads/epic/ozw",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:c64677c8ed510391d85d8f252dd964bff0cfa948806715fd644320ecb29e56ea",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
