@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 27,
-  "state": "publishing",
-  "reason": "closing h3s behind the integrated gate on f2472bf0140e",
-  "updated_at": "2026-10-10T19:26:23Z",
+  "sequence": 28,
+  "state": "running",
+  "reason": "h3s is closed",
+  "updated_at": "2026-10-10T19:26:25Z",
   "ticks": [
     {
       "tick_id": "az1",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "h3s",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 4
     },
     {
