@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ozw/attempt-8/z0b`, base `4192d84a2dabc66022ed8b052172752d8b9d42ea`, harness `pi-durable` exited 0, 1 work commit(s), 0 uncommitted path(s)._
+
 # Review of epic ozw, AS INTEGRATED — round 2 (tick z0b)
 
 Epic: **ozw "Watch redesign polish: health vs needs-you, titles at 80 columns,
