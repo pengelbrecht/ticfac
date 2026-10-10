@@ -10,8 +10,11 @@
   "target": "",
   "tick_id": "72z",
   "attempt": 9,
-  "status": "proposed",
+  "status": "fixed",
   "proposed_at": "2026-10-10T22:31:35Z",
+  "triaged_at": "2026-10-10T22:31:42Z",
+  "triaged_by": "ticfac run run_1fac91062aa546f29910c5796a468976 applying the tracker edit the finding carries",
+  "fixed_as": "5159bc5135f6aa89d455ca9a45c2fc1c8fa5c810",
   "provenance": {
     "run_id": "run_1fac91062aa546f29910c5796a468976",
     "tick_id": "72z",
