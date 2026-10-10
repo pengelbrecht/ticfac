@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 19,
-  "state": "collecting",
-  "reason": "az1 try 2 (run dispatch #5) is collected (ready-to-merge)",
-  "updated_at": "2026-10-10T18:09:42Z",
+  "sequence": 20,
+  "state": "integrating",
+  "reason": "integrating az1 attempt 5 into epic/ozw",
+  "updated_at": "2026-10-10T18:09:46Z",
   "ticks": [
     {
       "tick_id": "az1",
