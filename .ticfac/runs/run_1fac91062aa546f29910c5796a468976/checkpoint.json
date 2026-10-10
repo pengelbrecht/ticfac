@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 53,
-  "state": "dispatching",
-  "reason": "dispatching 72z as attempt 9",
-  "updated_at": "2026-10-10T21:46:09Z",
+  "sequence": 54,
+  "state": "running",
+  "reason": "72z is running as attempt 9",
+  "updated_at": "2026-10-10T21:46:16Z",
   "ticks": [
     {
       "tick_id": "az1",
@@ -34,7 +34,8 @@
     },
     {
       "tick_id": "72z",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 9
     },
     {
       "tick_id": "7px",
