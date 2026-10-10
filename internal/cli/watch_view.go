@@ -901,10 +901,13 @@ func dashboardRowSource(t *statusmodel.Tick, workers []statusmodel.Worker, st wa
 		what = "duplicate of " + *t.DuplicateOf
 	}
 	// The word and its exception are one cell, but the colour reads the
-	// word alone — the exception rides the word's hue, never its own.
+	// word alone — the exception rides the word's hue, never its own. The
+	// note travels in its compact spelling: the row is the glance surface,
+	// and 'attempt 2 · escalated' says what the model's own note says in the
+	// cells a row owes it (tick az1).
 	word := t.Status
 	if t.Exception != nil && *t.Exception != "" {
-		word += " (" + *t.Exception + ")"
+		word += " (" + statusmodel.CompactException(*t.Exception) + ")"
 	}
 	elapsed := ""
 	if t.DurationSeconds != nil {
@@ -992,11 +995,17 @@ type dashRowCols struct {
 // dashRowColumns sizes the row table's columns to the widest content each
 // carries — capped at the layout's maxima — and decides which columns the
 // pane's width keeps: the excerpt first to go (the status word already says
-// what is happening), then the work's own name, then the elapsed time. What
-// is left after the fixed columns is shared between the name and the
-// excerpt, each to its cap, and neither below its floor — below it the
-// column drops. Width 0 means unknown: every column with content, no
-// dropping.
+// what is happening), then the work's own name, then the elapsed time.
+//
+// What is left after the fixed columns is the NAME's before it is the
+// excerpt's (tick az1): the work's own title takes it to its natural width,
+// and the excerpt claims only what remains — so a pane that cannot seat
+// both keeps the thing a person scans a row for and gives up the worker's
+// live action. The status column's own claim is the note in its shortened
+// spelling (statusmodel.CompactException), the excerpt's is what the title
+// leaves it, and neither column renders below its floor: below it the
+// column drops, its separator returning to the title. Width 0 means
+// unknown: every column with content, no dropping.
 func dashRowColumns(rowIDs []string, sources map[string]dashRowSource, width int) dashRowCols {
 	cols := dashRowCols{idW: 3}
 	statusNat, whatNat, timeNat, exNat := 0, 0, 0, 0
@@ -1024,7 +1033,7 @@ func dashRowColumns(rowIDs []string, sources map[string]dashRowSource, width int
 	// threshold and can seat them beside what is already there — a column
 	// that would be truncated by the pane's edge is not a column, it is a
 	// lie. The elapsed time seats before the name and the excerpt; the name
-	// and the excerpt then share what is left.
+	// then takes what is left before the excerpt claims any of it.
 	used := 2 + cols.idW + 2 + cols.statusW
 	cols.showTime = width >= dashTimeFrom && timeNat > 0 && used+2+cols.timeW <= width
 	if cols.showTime {
@@ -1041,11 +1050,13 @@ func dashRowColumns(rowIDs []string, sources map[string]dashRowSource, width int
 	}
 	switch {
 	case cols.showWhat && cols.showEx:
-		what := min(whatNat, max(dashWhatFloor, (room+1)/2))
+		// Title-first (tick az1): the name takes the room to its own natural
+		// width, and the excerpt claims what is left of it. Below its floor
+		// the excerpt drops — it is the column that yields — and its
+		// separator returns to the name, which keeps the room it freed.
+		what := min(whatNat, max(room, 0))
 		ex := min(exNat, room-what)
 		if ex < dashExcerptFloor {
-			// The excerpt has no honest room: it drops, and the name takes
-			// what is left.
 			cols.showEx = false
 			room += 2
 			ex = 0

@@ -5,13 +5,13 @@ Needs you: nothing                           ● healthy · 3 of 18 done · ~8h 
 Building ──── Reviewing ──── Closing out ──── PR & CI ──── Merged
 ▲ here (wave 1 of 2)
 NOW
-  tgi  order-feed …  writing code                               19m  "adding th…
-  5az  smoke valid…  writing code (attempt 2, model escalated)  8m   "running p…
-  v1g  safe intrad…  testing                                    32m  gate runni…
+  tgi  order-feed service skeleton     writing code                          19m
+  5az  smoke validation vs kofoed du…  writing code (attempt 2 · escalated)  8m
+  v1g  safe intraday kanpla pulls      testing                               32m
 DONE (3)
-  gzt  sum same-ke…  merged                                     22m
-  rtk  order-feed …  merged                                     34m
-  ww2  kitchen_ord…  merged                                     45m
+  gzt  sum same-key kanpla lines       merged                                22m
+  rtk  order-feed contract v1          merged                                34m
+  ww2  kitchen_order_feed dbt view     merged                                45m
 UP NEXT (12)   s3r kanpla-etl /sync/intraday · wmd paired report capture …
                then: Reviewing → Closing out → PR & CI → Merged
 config claude · MAX1 · 34% of 5h

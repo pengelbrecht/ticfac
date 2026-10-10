@@ -188,9 +188,9 @@ func TestWatchColourGridPerState(t *testing.T) {
 
 	// A status word carries its state's hue: testing is amber (in flight),
 	// merged is green (done), a queued tick's collapsed line has no hue of
-	// its own.
-	assertGridAttr(t, gridCellsInRow(grid, t2row, "testing (attempt 2, model escalated)"),
-		"testing (attempt 2, model escalated)", "amber", false, false)
+	// its own. The note rides the word in its compact spelling (tick az1).
+	assertGridAttr(t, gridCellsInRow(grid, t2row, "testing (attempt 2 · escalated)"),
+		"testing (attempt 2 · escalated)", "amber", false, false)
 	assertGridAttr(t, gridCellsInRow(grid, "the first tick's gloss", "merged"),
 		"merged", "green", false, false)
 
