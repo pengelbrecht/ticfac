@@ -7,8 +7,9 @@
   "priority": 2,
   "type": "task",
   "owner": "ticks-sandbox@ticks.invalid",
+  "parent": "ozw",
   "discovered_from": "run-run_1fac91062aa546f29910c5796a468976/tick-c1d/attempt-6",
   "created_by": "ticfac run run_1fac91062aa546f29910c5796a468976",
   "created_at": "2026-10-10T20:47:55Z",
-  "updated_at": "2026-10-10T20:48:00.528306389Z"
+  "updated_at": "2026-10-10T20:48:50Z"
 }
