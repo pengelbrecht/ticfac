@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 43,
-  "state": "gating",
-  "reason": "running the integrated gate for 7px on 29d4f5e31390",
-  "updated_at": "2026-10-10T21:04:52Z",
+  "sequence": 44,
+  "state": "publishing",
+  "reason": "closing 7px behind the integrated gate on 29d4f5e31390",
+  "updated_at": "2026-10-10T21:25:11Z",
   "ticks": [
     {
       "tick_id": "az1",
