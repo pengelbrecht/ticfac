@@ -3,6 +3,7 @@
   "title": "Colour accents in the new dashboard, and screenshots that show them",
   "gloss": "colour + screenshots",
   "description": "The ymf screenshots (docs/design/watch-redesign-2026-10/*.png) are monochrome. Find whether the new view dropped the colour accents (green done, amber in progress, red failed/held, dim pending/mechanics) or the capture ran without colour; fix whichever, and re-capture the five screenshots in colour.",
+  "notes": "2026-10-10 17:38 - ticfac run run_1fac91062aa546f29910c5796a468976: cl7 try 1 (run dispatch #2) reported a finding the run itself decided — defect \"freeze's ANSI renderer ignores SGR 2 and drops fills when bold follows\" (key 22f7cbab27a18a9a0989702fa89d158c6437f7e19c0fd6009b971130de028d77, severity low, for charmbracelet/freeze) is promoted to a backlog tick with an owner, 2yn; the decision record is on the run branch at .ticfac/runs/run_1fac91062aa546f29910c5796a468976/absorptions/22f7cbab27a18a9a0989702fa89d158c6437f7e19c0fd6009b971130de028d77.json, and the draft is triaged as promoted.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +12,6 @@
   "acceptance_criteria": "colour accents render on a colour terminal (test on the styled output); the five PNGs re-captured in colour; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-10T09:53:09.575194Z",
-  "updated_at": "2026-10-10T16:40:10.564968419Z",
+  "updated_at": "2026-10-10T17:38:25.811487368Z",
   "started_at": "2026-10-10T16:40:10.56496771Z"
 }
