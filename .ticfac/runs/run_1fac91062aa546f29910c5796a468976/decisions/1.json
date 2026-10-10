@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 1,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "busy 80x24 golden shows titles readable; no line exceeds 80; make gate",
+    "description": "watch_scenario_busy_80 shows 'order-feed …' while the status column ('writing code (attempt 2, model escalated)') takes 40 cells. Allocate width title-first; shorten status words ('attempt 2 · escalated') and the activity excerpt before titles.",
+    "epic_id": "ozw",
+    "role": "classify-tick",
+    "tick_id": "az1",
+    "title": "At 80 columns a tick title gets the width before its status"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.76,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.81,
+      "design": 0.03,
+      "diagnosis": 0,
+      "mechanical": 0.16,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1076,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-10T16:39:46Z",
+  "answered_at": "2026-10-10T16:39:46Z",
+  "provenance": {
+    "run_id": "run_1fac91062aa546f29910c5796a468976",
+    "tick_id": "az1",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ozw",
+    "source_sha": "addaa8550ca92534786c0ed1ba5e97e08dcc6750",
+    "integration_ref": "refs/heads/epic/ozw",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
