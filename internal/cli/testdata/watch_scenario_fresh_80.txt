@@ -4,6 +4,7 @@ Needs you: nothing                                       ● healthy · 0 of 3 d
 
 Building ──── Reviewing ──── Closing out ──── PR & CI ──── Merged
 ▲ here (wave 1 of 1)
+
 UP NEXT (3)   p1 the first tick of the plan · p2 the second tick of the plan …
               then: Reviewing → Closing out → PR & CI → Merged
 
