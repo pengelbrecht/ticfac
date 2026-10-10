@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 32,
-  "state": "publishing",
-  "reason": "closing etl behind the integrated gate on 323f813550e4",
-  "updated_at": "2026-10-10T20:02:07Z",
+  "sequence": 33,
+  "state": "running",
+  "reason": "etl is closed",
+  "updated_at": "2026-10-10T20:02:09Z",
   "ticks": [
     {
       "tick_id": "az1",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "etl",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 3
     },
     {
