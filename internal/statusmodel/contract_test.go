@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -280,6 +281,108 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 		VerdictHealthy, VerdictDegraded, VerdictStopped)
 	enumAgrees(t, "$defs.cost_line.properties.source", defs["cost_line"].Properties["source"].Enum,
 		CostSourceDecisions, CostSourceWorkersAI, CostSourceClaude, CostSourcePiLocal, CostSourceOther)
+}
+
+// TestTheContractBindsTheLeasedSubscription (tick b13): the one dashboard
+// field whose golden value is null, held to what that null is. The
+// dashboard golden is a LOCAL run, and a local run's jobs lease nothing
+// from the factory's claude-sub pool — the local gathering reads no pool at
+// all — so its cost.subscription is the null the builder itself builds for
+// that host. It is a stated absence, not a decay: populating the golden to
+// make the contract's "carries every one of them populated" sentence read
+// true would hand the wave-3 renderers and the phone page a document no
+// gathering can produce, the exact hand-typed-golden failure this suite
+// exists to refuse.
+//
+// What the golden cannot carry, this binding derives FROM it: the same
+// document with the subscription set the way a leasing run's model carries
+// it. That derivation — imported, not transcribed, so it cannot drift from
+// the fixture the waves render against — is what a renderer owes the field,
+// and here it is held to the three guarantees the golden gives every field
+// it does populate:
+//
+//   - the schema ADMITS the populated document, so the shape a renderer
+//     reads out of this derivation is a shape the contract accepts;
+//   - the field is REQUIRED in the cost object — 2.4.0's rule that "no
+//     subscription" is a stated null, never a missing key, so a consumer
+//     may key on its presence;
+//   - the Go Model round-trips it, label and both windows, field for field.
+func TestTheContractBindsTheLeasedSubscription(t *testing.T) {
+	t.Parallel()
+	record, defs, goldens := bundleFixture(t)
+	raw, ok := goldens[dashboardGoldenName]
+	if !ok {
+		t.Fatalf("the contract carries no golden named %q — the wave-3 renderers and the phone page reference it by name",
+			dashboardGoldenName)
+	}
+	var golden Model
+	if err := json.Unmarshal(raw, &golden); err != nil {
+		t.Fatalf("the dashboard golden does not decode into the Go Model: %v", err)
+	}
+	// The null, and the host that makes it the builder's own answer rather
+	// than a decay. If the golden ever moves to a cloud run, this anchor
+	// moves with it: a cloud run's jobs DO lease, and its golden should then
+	// carry the populated shape in its own right.
+	if golden.Cost.Subscription != nil {
+		t.Errorf("the dashboard golden carries cost.subscription %+v: it is a %s run, and a local run's jobs lease nothing from the factory's pool — a populated golden is a document no gathering produces",
+			golden.Cost.Subscription, golden.Host)
+	}
+	if golden.Host != HostLocal {
+		t.Errorf("the dashboard golden's host is %q: the null subscription this binding pins is the LOCAL gathering's answer, and the anchor must move with the host",
+			golden.Host)
+	}
+
+	// The populated shape, derived from the golden's own document: the run's
+	// jobs lease MAX1, and the proxy answered both windows.
+	var document map[string]any
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatalf("the dashboard golden does not parse: %v", err)
+	}
+	cost, ok := document["cost"].(map[string]any)
+	if !ok {
+		t.Fatal("the dashboard golden carries no cost object to derive from")
+	}
+	cost["subscription"] = map[string]any{"label": "MAX1", "five_hour": 0.34, "seven_day": 0.08}
+	if problems := schema.Validate(record, defs, document); len(problems) > 0 {
+		t.Errorf("a golden carrying its run's leased subscription is refused by the schema it is the golden of:\n%s",
+			strings.Join(problems, "\n"))
+	}
+	// Required in the cost object: the absent subscription states itself.
+	if !slices.Contains(defs["cost"].Required, "subscription") {
+		t.Errorf("the cost object requires %v: cost.subscription must be required-and-null, never a key a consumer has to look for",
+			defs["cost"].Required)
+	}
+
+	// The Go Model round-trips the populated document field for field — the
+	// discipline that catches a field the type drops to a stray omitempty
+	// before it breaks a renderer.
+	populated, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("the derived golden does not marshal: %v", err)
+	}
+	var leasing Model
+	if err := json.Unmarshal(populated, &leasing); err != nil {
+		t.Fatalf("a golden carrying a leased subscription does not decode into the Go Model: %v", err)
+	}
+	if leasing.Cost.Subscription == nil || leasing.Cost.Subscription.Label != "MAX1" ||
+		leasing.Cost.Subscription.FiveHour == nil || *leasing.Cost.Subscription.FiveHour != 0.34 ||
+		leasing.Cost.Subscription.SevenDay == nil || *leasing.Cost.Subscription.SevenDay != 0.08 {
+		t.Errorf("the leased subscription did not survive the round trip: %+v", leasing.Cost.Subscription)
+	}
+	remarshaled, err := json.Marshal(leasing)
+	if err != nil {
+		t.Fatalf("the decoded model does not re-marshal: %v", err)
+	}
+	var round, again any
+	if err := json.Unmarshal(remarshaled, &round); err != nil {
+		t.Fatalf("the re-marshaled golden does not parse: %v", err)
+	}
+	if err := json.Unmarshal(populated, &again); err != nil {
+		t.Fatalf("the derived golden does not parse: %v", err)
+	}
+	if !reflect.DeepEqual(again, round) {
+		t.Errorf("the Go Model does not round-trip the golden carrying a leased subscription:\n got %s", remarshaled)
+	}
 }
 
 // TestTheContractBindsTheRefusedLastTryGolden: the fixture the bundle owes
@@ -748,11 +851,55 @@ func goldenLineDispatchesLater(line *runfeed.Event, tickID string, attempt int) 
 
 // isLive is the contract suite's elapsed rule over a golden document (one
 // run's model): the state says dispatched or reported, or a standing
-// worktree answers for it. The BUILDER's own live question is
-// isLiveAttempt, which also knows which run's records the state came from —
-// a state an earlier run wrote is history, not a present tense.
-func isLive(state string, stands bool) bool {
-	return stands || state == tickDispatched || state == tickReported
+// worktree answers for it — and the run has not ended, by the end the
+// document itself states (tick 4dn): a terminal line the tail or the
+// liveness hint carries, no resume standing after it, or the probe's own
+// end-word vocabulary — completed, stopped, failed — the state a cloud
+// run's record writes and a stopped run's liveness carries. The BUILDER's
+// own live question is isLiveAttempt, which also knows which run's records
+// the state came from and reads the run's whole records for the end — a
+// state an earlier run wrote is history, not a present tense. What the
+// builder reads from the checkpoint this mirror reads from the state word
+// the document carries instead: a golden's checkpoint is not in the
+// document, and the end-word is the same durable word that checkpoint
+// wrote.
+func isLive(state string, stands, ended bool) bool {
+	if stands {
+		return true
+	}
+	if ended {
+		return false
+	}
+	return state == tickDispatched || state == tickReported
+}
+
+// goldenRunEnded reads the run's end off the document the way the elapsed
+// rule needs it: a terminal line (run_finished or run_died) that the tail's
+// five lines or the liveness hint carries and no resume answers, or the
+// probe's own end-word vocabulary in the state field. A local run's dead
+// without a word is NOT an end the elapsed rule reads — the builder's
+// runEndedAt answers the same for it.
+func goldenRunEnded(model *Model) bool {
+	lastTerminal, lastResume := -1, -1
+	lines := make([]*runfeed.Event, 0, len(model.Recent)+1)
+	for i := range model.Recent {
+		lines = append(lines, &model.Recent[i])
+	}
+	if model.Liveness.LastEvent != nil {
+		lines = append(lines, model.Liveness.LastEvent)
+	}
+	for i, line := range lines {
+		switch line.Stage {
+		case reconcile.StageRunFinished, reconcile.StageRunDied:
+			lastTerminal = i
+		case reconcile.StageResumed, reconcile.StageResumedAutomatically:
+			lastResume = i
+		}
+	}
+	if lastTerminal >= 0 && lastResume < lastTerminal {
+		return true
+	}
+	return livenessNamesAnEnd(model.Liveness.State)
 }
 
 // goldenStandsFor is the census half of workState's and isLive's standing
@@ -941,7 +1088,7 @@ func goldenElapsedAgreesWithTheStamps(t *testing.T, golden string, model *Model,
 		}
 		return
 	}
-	if !isLive(tick.State, goldenStandsFor(model, tick.TickID, current)) {
+	if !isLive(tick.State, goldenStandsFor(model, tick.TickID, current), goldenRunEnded(model)) {
 		if got != nil {
 			t.Errorf("%s's elapsed is %d, want null: the current attempt is not live — no standing worker answers for it and the state is %q",
 				where, *got, tick.State)

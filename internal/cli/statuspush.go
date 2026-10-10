@@ -330,7 +330,7 @@ func statusSnapshotTrimmed(ctx context.Context, repo, runID, host string) (statu
 	if host == "" {
 		host = statusmodel.HostLocal
 	}
-	model := localStatusModelHosted(ctx, repo, runID, runlifeProbeOf(repo, runID, time.Now()), modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost}, host)
+	model := localStatusModelHosted(ctx, repo, runID, runlifeProbeOf(repo, runID, time.Now()), modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: workerActivity}, host)
 	labels, dropped := labelsForModel(model, tickLabels(ctx, repo))
 	return statusSnapshotEnvelope{
 		SchemaVersion: statusPushEnvelopeVersion,

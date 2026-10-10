@@ -3,13 +3,15 @@
   "title": "Status model: plain-language tick status, epic phase track, needs-you, ticks grouped by state",
   "gloss": "status words + grouping",
   "description": "In internal/statusmodel, derive for every tick a status word (waiting on X / up next / claimed / writing code / testing / merged / reviewing / closing out / waiting for CI / held: reason / failed: reason / done) from the existing pipeline derivation (pipeline.go), plus an inline exception note (attempt N, model escalated, stalled Nm) only when it applies; the epic-level phase (building wave i of n / reviewing / closing out / PR \u0026 CI / merged) with a you-are-here index; the needs-you item(s) with their exact clearing command; and tick groups NOW/DONE/UP NEXT/HELD. Versioned in the status model JSON (ticfac status --json) so watch and the phone page share it. Unit tests per status word and per group, from recorded fixtures.",
-  "status": "open",
+  "notes": "2026-10-08 18:15 - ticfac run run_91f2952af63f42f08a0ad243b4488842: lck try 1 (run dispatch #4) reported a finding the run itself decided — proposed-tick \"Phone page can now render the shared status words and tick groups\" (key daae765a8cc36fded7aeab8ec5f64c443f202d717a45bf505002e751f62645f7, severity low, for this repository) is promoted to a backlog tick with an owner, lgs; the decision record is on the run branch at .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/daae765a8cc36fded7aeab8ec5f64c443f202d717a45bf505002e751f62645f7.json, and the draft is triaged as promoted.\n2026-10-08 18:36 - ticfac run run_91f2952af63f42f08a0ad243b4488842: lck try 1 (run dispatch #4) merged into epic/ymf as 76af4578d5ca; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "parent": "ymf",
   "acceptance_criteria": "every status word and group derived from records, tested; ticfac status --json carries them; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.314108Z",
-  "updated_at": "2026-10-08T13:16:48.314108Z"
+  "updated_at": "2026-10-08T18:36:02.506103013Z",
+  "closed_at": "2026-10-08T18:36:02.506103013Z"
 }

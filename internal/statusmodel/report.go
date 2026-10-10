@@ -188,7 +188,7 @@ func archivedSummary(runID, tickID string, attempt int) (string, bool) {
 	if runID == "" {
 		return "", false // a run id nobody recorded is not any run's by default
 	}
-	for _, root := range reportStateRoots() {
+	for _, root := range ExecStateRoots() {
 		state, ok := findAttemptState(filepath.Join(root, runID, tickID, strconv.Itoa(attempt)))
 		if !ok || !attemptNamesTick(state, tickID) {
 			continue
@@ -203,11 +203,14 @@ func archivedSummary(runID, tickID string, attempt int) (string, bool) {
 	return "", false
 }
 
-// reportStateRoots are the roots one run's executor state may live under:
+// ExecStateRoots are the roots one run's executor state may live under:
 // the override's own runs directory when the environment names one, else
 // every executor's runs directory under ~/.ticfac/exec — the reader does not
-// know which executor ran the attempt, so it walks them all.
-func reportStateRoots() []string {
+// know which executor ran the attempt, so it walks them all. The same roots
+// the workers panel's other per-attempt readers walk, exported for the
+// activity line's local door reader (tick 93n), which must find the same
+// attempt the handle and runner readers do.
+func ExecStateRoots() []string {
 	if dir := os.Getenv(EnvExecStateDir); dir != "" {
 		return []string{filepath.Join(dir, "runs")}
 	}

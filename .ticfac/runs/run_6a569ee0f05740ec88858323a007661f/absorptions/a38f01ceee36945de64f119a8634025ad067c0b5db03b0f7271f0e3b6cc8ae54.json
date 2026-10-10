@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "key": "a38f01ceee36945de64f119a8634025ad067c0b5db03b0f7271f0e3b6cc8ae54",
+  "tick_id": "vii",
+  "gating": true,
+  "basis": "reviewer",
+  "reason": "the final review (8t5, decision 5) judged the epic NOT READY and named this finding blocking, so it is the epic's work and is fixed before the re-review. It had been decided before the review named it (basis backlog-default, placed backlog: the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR)",
+  "placement": "before-review",
+  "decided_at": "2026-10-09T10:16:09Z",
+  "provenance": {
+    "run_id": "run_6a569ee0f05740ec88858323a007661f",
+    "tick_id": "8t5",
+    "attempt": 3,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "2311a2804c461cbeb43025395dd3046add68dba1",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "review",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "review-epic",
+    "tier": null,
+    "profile_digest": "sha256:c64677c8ed510391d85d8f252dd964bff0cfa948806715fd644320ecb29e56ea",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-ugm-1-go-touched-a2ba745b0ef0-f6d30e41f279-d02e2b66d782",
+  "provenance": {
+    "run_id": "run_6a569ee0f05740ec88858323a007661f",
+    "tick_id": "ugm",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "52d7cced0f7e556fb441b174c55387ae34bd9cf1",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "integrated",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:f6d30e41f279e14ec58e01f070b5f9560dd75d0f23147e11fdef84a873c82087",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "go-touched",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go run ./cmd/gate-touched -timeout 45m -parallel 12 -leave-to-ci github.com/pengelbrecht/ticfac/internal/reconcile"
+    ]
+  },
+  "started_at": "2026-10-09T06:44:28Z",
+  "finished_at": "2026-10-09T06:47:50Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "gate-touched: github.com/pengelbrecht/ticfac/internal/reconcile is left to CI: this gate declares its full suite too expensive to pay per tick, so the short suite and CI's are its cover\ngate-touched: the diff 9521a412c468...52d7cced0f7e; full (non-short) suites of 18 package(s):\n  github.com/pengelbrecht/ticfac/cmd/ticfac\n  github.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\n  github.com/pengelbrecht/ticfac/internal/cli\n  github.com/pengelbrecht/ticfac/internal/contracts/parity\n  github.com/pengelbrecht/ticfac/internal/escalation\n  github.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox\n  github.com/pengelbrecht/ticfac/internal/exec/herdr\n  github.com/pengelbrecht/ticfac/internal/exec/subprocess\n  github.com/pengelbrecht/ticfac/internal/factory\n  github.com/pengelbrecht/ticfac/internal/feedrelay\n  github.com/pengelbrecht/ticfac/internal/profile\n  github.com/pengelbrecht/ticfac/internal/refsweep\n  github.com/pengelbrecht/ticfac/internal/runfeed\n  github.com/pengelbrecht/ticfac/internal/runlife\n  github.com/pengelbrecht/ticfac/internal/runstate\n  github.com/pengelbrecht/ticfac/internal/sandbox\n  github.com/pengelbrecht/ticfac/internal/sandboximage\n  github.com/pengelbrecht/ticfac/internal/statusmodel\n$ go test -timeout 45m -parallel 12 github.com/pengelbrecht/ticfac/cmd/ticfac github.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess github.com/pengelbrecht/ticfac/internal/cli github.com/pengelbrecht/ticfac/internal/contracts/parity github.com/pengelbrecht/ticfac/internal/escalation github.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox github.com/pengelbrecht/ticfac/internal/exec/herdr github.com/pengelbrecht/ticfac/internal/exec/subprocess github.com/pengelbrecht/ticfac/internal/factory github.com/pengelbrecht/ticfac/internal/feedrelay github.com/pengelbrecht/ticfac/internal/profile github.com/pengelbrecht/ticfac/internal/refsweep github.com/pengelbrecht/ticfac/internal/runfeed github.com/pengelbrecht/ticfac/internal/runlife github.com/pengelbrecht/ticfac/internal/runstate github.com/pengelbrecht/ticfac/internal/sandbox github.com/pengelbrecht/ticfac/internal/sandboximage github.com/pengelbrecht/ticfac/internal/statusmodel\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac\t[no test files]\n?   \tgithub.com/pengelbrecht/ticfac/cmd/ticfac-exec-subprocess\t[no test files]\nok  \tgithub.com/pengelbrecht/ticfac/internal/cli\t112.436s\nok  \tgithub.com/pengelbrecht/ticfac/internal/contracts/parity\t0.185s\nok  \tgithub.com/pengelbrecht/ticfac/internal/escalation\t0.008s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/cloudflaresandbox\t18.052s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/herdr\t15.493s\nok  \tgithub.com/pengelbrecht/ticfac/internal/exec/subprocess\t40.511s\nok  \tgithub.com/pengelbrecht/ticfac/internal/factory\t97.819s\nok  \tgithub.com/pengelbrecht/ticfac/internal/feedrelay\t0.029s\nok  \tgithub.com/pengelbrecht/ticfac/internal/profile\t1.850s\nok  \tgithub.com/pengelbrecht/ticfac/internal/refsweep\t8.938s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runfeed\t0.450s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runlife\t0.849s\nok  \tgithub.com/pengelbrecht/ticfac/internal/runstate\t36.350s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandbox\t0.264s\nok  \tgithub.com/pengelbrecht/ticfac/internal/sandboximage\t155.324s\nok  \tgithub.com/pengelbrecht/ticfac/internal/statusmodel\t3.212s\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:bd8c506517a63a5effbe9e3f65c3428c3da714e3cca815c6a2a2fdf1debae173",
+  "persistence_uri": "git:refs/heads/epic/ymf:.ticfac/runs/run_6a569ee0f05740ec88858323a007661f/evidence/gate-ugm-1-go-touched-a2ba745b0ef0-f6d30e41f279-d02e2b66d782.json"
+}

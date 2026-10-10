@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 14,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "golden frames for 5 scenarios x 2 sizes committed and checked in the gate; nothing wraps or truncates the needs-you line; screenshots in the report; make gate",
+    "description": "Rewrite the dashboard view (internal/cli/watch_view.go and friends) to the layout in docs/design/watch-redesign-2026-10.md from the new status-model fields: header (epic title, config, where, elapsed), needs-you line/box, health line, phase track, NOW/DONE/UP NEXT/HELD groups (UP NEXT collapsed to one line beyond the screen), latest sentences, key hints. Keep enter (tick drill-down) and e (events) working. Golden frames for the five scenarios at 80x24 and 120x40 rendered through the repo's terminal-emulator test harness (see existing watch_pty tests); attach vhs/freeze screenshots of the five at 120x40 to the report.",
+    "epic_id": "ymf",
+    "role": "classify-tick",
+    "tick_id": "ugm",
+    "title": "Render the new dashboard layout at 80x24 and 120x40, with golden frames through a terminal emulator"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.99,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.99,
+      "design": 0,
+      "diagnosis": 0,
+      "mechanical": 0,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1209,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-09T00:05:09Z",
+  "answered_at": "2026-10-09T00:05:09Z",
+  "provenance": {
+    "run_id": "run_91f2952af63f42f08a0ad243b4488842",
+    "tick_id": "ugm",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "8225e5abc3741dac295ca1b40f2e32e08a430556",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

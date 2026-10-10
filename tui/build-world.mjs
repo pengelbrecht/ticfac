@@ -71,8 +71,12 @@ function runDir(runID) {
 //   epic-old  a run that failed three weeks ago — history by age (#87).
 //
 // The world holds five runs and two registry entries, so the whole listing
-// fits a 30-row pane: the properties assert the VISIBLE answer, and a
-// listing taller than the pane scrolls its own head off.
+// fits the runner's pane: the properties assert the VISIBLE answer, and a
+// listing taller than the pane scrolls its own head off. Since the watch
+// redesign (epic ymf) each non-history run's block carries the dashboard's
+// own headline — the health line, the phase track, the you-are-here marker
+// — so the listing at the runner's 100 columns is ~40 lines and the pane
+// is 45 rows (run-suite.mjs).
 {
   const held = runDir("epic-hld");
   held.say(50, "dispatched", "t1 try 1 dispatched as job-1", "t1", 1);

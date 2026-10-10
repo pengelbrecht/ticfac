@@ -1,0 +1,67 @@
+{
+  "schema_version": 3,
+  "run_id": "run_91f2952af63f42f08a0ad243b4488842",
+  "epic_id": "ymf",
+  "sequence": 43,
+  "state": "running",
+  "reason": "ugm is running as attempt 8",
+  "updated_at": "2026-10-09T00:15:49Z",
+  "ticks": [
+    {
+      "tick_id": "47j",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "93n",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "b13",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "lck",
+      "state": "closed",
+      "attempt": 4
+    },
+    {
+      "tick_id": "ugm",
+      "state": "dispatched",
+      "attempt": 8
+    },
+    {
+      "tick_id": "jym",
+      "state": "ready"
+    },
+    {
+      "tick_id": "8t5",
+      "state": "ready"
+    },
+    {
+      "tick_id": "jml",
+      "state": "ready"
+    }
+  ],
+  "provenance": {
+    "run_id": "run_91f2952af63f42f08a0ad243b4488842",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "a3660a96d4617e5b58187addab2115c9a0bebfef",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": null,
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

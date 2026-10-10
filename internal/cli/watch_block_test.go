@@ -136,25 +136,24 @@ func TestWatchOnATerminalRendersTheEpicInPlace(t *testing.T) {
 	// The frame renders from the model: the phase bar names the wave the run
 	// is in, and the frontier's ticks hold fixed rows.
 	watchWaitsFor(t, "the phase bar", func() bool {
-		return strings.Contains(stdout.String(), "◐ waves 2/3")
+		return strings.Contains(stdout.String(), "▲ here (wave 2 of 3)")
 	}, &stdout, &stderr)
 	watchWaitsFor(t, "the frontier's rows", func() bool {
 		out := stdout.String()
-		return strings.Contains(out, " t2    the second tick") && strings.Contains(out, " t3    the third tick")
+		return strings.Contains(out, " t2   the second tick") && strings.Contains(out, " t3 the third tick")
 	}, &stdout, &stderr)
-	// Every tick of the epic is a fixed row in the dashboard's table, and
-	// the whole epic is in every frame — the done wave's ticks as much as
-	// the upcoming ones.
-	watchWaitsFor(t, "the whole epic's rows", func() bool {
+	// Every tick of the epic is in every frame — the done wave's ticks as
+	// rows, the queued ones on the collapsed up-next line.
+	watchWaitsFor(t, "the whole epic", func() bool {
 		out := stdout.String()
-		return strings.Contains(out, " t1    the first tick") && strings.Contains(out, " t4    the fourth tick") &&
-			strings.Contains(out, " t5    the fifth tick")
+		return strings.Contains(out, " t1   the first tick") && strings.Contains(out, "t4 the fourth tick") &&
+			strings.Contains(out, "t5 the fifth tick")
 	}, &stdout, &stderr)
 	// Redrawn in place, not appended: the cursor moves back over the frame.
 	watchWaitsFor(t, "an in-place redraw", func() bool {
 		return strings.Contains(stdout.String(), "\x1b[J")
 	}, &stdout, &stderr)
-	if strings.Count(stdout.String(), "◐ waves 2/3") < 2 {
+	if strings.Count(stdout.String(), "▲ here (wave 2 of 3)") < 2 {
 		t.Errorf("the frame was never redrawn in place:\n%s", stdout.String())
 	}
 
@@ -165,7 +164,7 @@ func TestWatchOnATerminalRendersTheEpicInPlace(t *testing.T) {
 	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "t2", &two,
 		reconcile.StageGateFailed, "the integrated gate refused: go test failed"))
 	watchWaitsFor(t, "the event in the tail", func() bool {
-		return strings.Contains(stdout.String(), "gate_failed: the integrated gate refused")
+		return strings.Contains(stdout.String(), "tests failed: the integrated gate refused")
 	}, &stdout, &stderr)
 
 	// The run's own last word ends the watch.
@@ -221,7 +220,7 @@ func TestWatchOnATerminalEndsHoldingForAPerson(t *testing.T) {
 
 	// Attention first: the hold leads the frame while the run is live.
 	watchWaitsFor(t, "the attention line", func() bool {
-		return strings.Contains(stdout.String(), "needs you: attempt_unaddressed")
+		return strings.Contains(stdout.String(), "Needs you: attempt_unaddressed")
 	}, &stdout, &stderr)
 	// The alert is kept above the block, once — not once per frame.
 	watchWaitsFor(t, "the kept alert", func() bool {
@@ -302,7 +301,7 @@ func TestWatchOnATerminalFollowsACloudRun(t *testing.T) {
 
 	watchWaitsFor(t, "the cloud frame", func() bool {
 		out := stdout.String()
-		return strings.Contains(out, "cloud · alive") && strings.Contains(out, " t1    the one tick")
+		return strings.Contains(out, "cloud · running") && strings.Contains(out, "t1 the one tick")
 	}, &stdout, &stderr)
 
 	// The Workflow's record is the liveness answer: it says completed, the
@@ -675,13 +674,13 @@ func TestWatchOnATerminalTakesKeys(t *testing.T) {
 	}()
 
 	watchWaitsFor(t, "the dashboard", func() bool {
-		return strings.Contains(stdout.String(), "◐ waves 2/3")
+		return strings.Contains(stdout.String(), "▲ here (wave 2 of 3)")
 	}, &stdout, &stderr)
 
 	// j moves the cursor onto the plan's first row.
 	keys <- "j"
 	watchWaitsFor(t, "the cursor on t1", func() bool {
-		return strings.Contains(stdout.String(), "▸t1")
+		return strings.Contains(stdout.String(), "▸ t1")
 	}, &stdout, &stderr)
 
 	// enter opens the tick's drill view.
@@ -695,7 +694,7 @@ func TestWatchOnATerminalTakesKeys(t *testing.T) {
 	keys <- "esc"
 	watchWaitsFor(t, "back on the dashboard", func() bool {
 		out := stdout.String()
-		return strings.LastIndex(out, "◐ waves 2/3") > strings.LastIndex(out, "[esc] back")
+		return strings.LastIndex(out, "▲ here (wave 2 of 3)") > strings.LastIndex(out, "[esc] back")
 	}, &stdout, &stderr)
 
 	// e opens the whole feed: the standing feed's own lines, not the tail's
@@ -714,7 +713,7 @@ func TestWatchOnATerminalTakesKeys(t *testing.T) {
 	keys <- "esc"
 	watchWaitsFor(t, "back on the dashboard again", func() bool {
 		out := stdout.String()
-		return strings.LastIndex(out, "◐ waves 2/3") > strings.LastIndex(out, "origin refused the fetch")
+		return strings.LastIndex(out, "▲ here (wave 2 of 3)") > strings.LastIndex(out, "origin refused the fetch")
 	}, &stdout, &stderr)
 	keys <- "q"
 	var got int
@@ -767,7 +766,7 @@ func TestWatchKeyedFramesEndCRLF(t *testing.T) {
 	}()
 
 	watchWaitsFor(t, "the first frame", func() bool {
-		return strings.Contains(stdout.String(), "◐ waves 2/3")
+		return strings.Contains(stdout.String(), "▲ here (wave 2 of 3)")
 	}, &stdout, &stderr)
 
 	writeFeedEvent(t, repo, runID, runfeed.NewEvent(time.Now(), runID, "", nil,

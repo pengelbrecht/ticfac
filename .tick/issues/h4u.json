@@ -1,0 +1,14 @@
+{
+  "id": "h4u",
+  "title": "Health line's done-count and DONE group can disagree on duplicates",
+  "description": "t0y's class of inconsistency survives the redesign in a narrower form: the model's progress counts exclude closed duplicates (internal/statusmodel/build.go skips ticks with DuplicateOf set) while the renderer's DONE group lists every tick whose status word is merged/done, so an epic carrying a closed duplicate can render '5 of 5 done' beside 'DONE (6)'. The old manifestations (bar vs table vs CI line vs phase strip) are gone; only this one count pair can still disagree.\nevidence: internal/statusmodel/build.go:437 (progress skips DuplicateOf); internal/cli/watch_view.go dashboardMiddle (DONE group takes every merged/done status)\n\nticfac run run_6a569ee0f05740ec88858323a007661f filed this backlog tick from the finding f02cc84dd9d1e963716799cedd7d1974b3fb34994cb4c18adc88a8fbc87749dc (reported by run-run_6a569ee0f05740ec88858323a007661f/tick-ugm/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/f02cc84dd9d1e963716799cedd7d1974b3fb34994cb4c18adc88a8fbc87749dc.json on the run branch.",
+  "notes": "2026-10-09 05:41 - ticfac run run_6a569ee0f05740ec88858323a007661f: created by absorbing finding f02cc84dd9d1e963716799cedd7d1974b3fb34994cb4c18adc88a8fbc87749dc — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/f02cc84dd9d1e963716799cedd7d1974b3fb34994cb4c18adc88a8fbc87749dc.json on epic/ymf, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_6a569ee0f05740ec88858323a007661f/tick-ugm/attempt-1",
+  "created_by": "ticfac run run_6a569ee0f05740ec88858323a007661f",
+  "created_at": "2026-10-09T05:41:24Z",
+  "updated_at": "2026-10-09T05:41:29.261759487Z"
+}

@@ -234,10 +234,19 @@ type Model struct {
 	Waves *[]Wave `json:"waves"`
 
 	// Workers is one entry per live worker (a standing attempt), with its
-	// own gaps, its runner's silence and its last turn. Null when the
-	// census cannot be taken (a cloud run's workers are not on this
-	// machine); empty when it read and nothing stands.
+	// own gaps, its runner's silence and its last turn — a local run's
+	// worktree census, a cloud run's checkpoint one (tick 93n). Null when
+	// the census cannot be taken at all; empty when it read and nothing
+	// stands.
 	Workers *[]Worker `json:"workers"`
+
+	// Groups is every tick of the epic in one of the four buckets the watch
+	// redesign groups by state — NOW (the run is on them now), DONE, UP NEXT
+	// and HELD (stuck where a person is wanted) — as tick ids in the waves'
+	// own order, so a renderer groups the rows without re-deriving a word.
+	// Null when the tracker could not be read: no waves to group and unread
+	// waves are different claims.
+	Groups *TickGroups `json:"groups"`
 
 	// WaitsOn is the one thing the run is blocked on, with the command that
 	// unblocks it when it needs a person. Null when nothing blocks it.
@@ -289,13 +298,33 @@ type Liveness struct {
 
 // Lifecycle is where the epic stands in its own progress, and each phase's
 // state beside it — the progress bar a renderer draws and the phase a person
-// glances at.
+// glances at. Track is the same progress in the operator's words, the one
+// epic-level line the watch redesign draws (building / reviewing / closing
+// out / PR & CI / merged), with Here the step the marker sits on.
 type Lifecycle struct {
 	Phase  string       `json:"phase"`
 	Phases []PhaseState `json:"phases"`
 	// Wave says which wave the run is in and how many there are, when the
 	// run is in the waves phase and the tracker answered. Null otherwise.
 	Wave *WaveRef `json:"wave"`
+
+	// Track is the epic's phase track: five steps in fixed order, each in the
+	// phase states the Phases above use. It folds the lifecycle's six phases
+	// into the five a person reads — plan and waves are both "building" — so
+	// a renderer lays one line out from the track alone and never re-derives
+	// it from the phases a second time.
+	Track []TrackStep `json:"track"`
+	// Here is the index into Track the "you are here" marker sits on: the
+	// newest step the epic is in, else the next one ahead, else the last —
+	// a merged epic is here at merged, a fresh one at building.
+	Here int `json:"here"`
+}
+
+// TrackStep is one step of the epic's phase track: its label, in the words
+// the watch redesign's layout names, and the phase state it is in.
+type TrackStep struct {
+	Label string `json:"label"`
+	State string `json:"state"`
 }
 
 // PhaseState is one phase's own state, in the Phases order.
@@ -364,6 +393,25 @@ type Tick struct {
 	// the fact the lifecycle phases and the pipeline stage list derive from.
 	Role  string `json:"role,omitempty"`
 	State string `json:"state"`
+
+	// Status is the tick's answer in the operator's words — the plain-language
+	// word the dashboard's groups render (epic ymf, tick lck), derived from the
+	// pipeline cell and the records below it. The vocabulary is the watch
+	// redesign's: waiting (blocked by X), up next, claimed, writing code,
+	// testing, merging, merged, reviewing, closing out, waiting for CI, held:
+	// <reason>, failed: <reason>, done. It is a rendering of the pipeline, not
+	// a second opinion about it: the same records that fill the cell fill the
+	// word, and nothing a worker claims about its own work reaches either.
+	Status string `json:"status"`
+
+	// Exception is the inline note that travels beside the status when it
+	// applies — "attempt N" for a tick whose current work is not its first
+	// try, "model escalated" for one the tier ladder re-cut higher, "stalled
+	// Nm" for a standing worker whose durable output went quiet past the
+	// stall threshold — joined with ", ". Null when none applies, and never
+	// for a tick that has finished: a merged or done row's history is its
+	// try list, not a caveat on it.
+	Exception *string `json:"exception"`
 
 	// Pipeline is the tick's own pipeline cell — the stages this role's
 	// tick passes through, each with its own state, the shape a dashboard
@@ -482,6 +530,17 @@ type ReportDiff struct {
 	Files      int `json:"files"`
 	Insertions int `json:"insertions"`
 	Deletions  int `json:"deletions"`
+}
+
+// TickGroups is the four state buckets of the epic's ticks, each carrying
+// its tick ids in the waves' own order. A tick's bucket is derived from its
+// status word; the mapping is stated in the contract, not guessed at by a
+// renderer.
+type TickGroups struct {
+	Now    []string `json:"now"`
+	Done   []string `json:"done"`
+	UpNext []string `json:"up_next"`
+	Held   []string `json:"held"`
 }
 
 // Worker is one live worker: a standing attempt, its measured gaps, its
@@ -704,6 +763,11 @@ type CheckState struct {
 // local one); worker jobs record no cost of their own, and the basis says
 // so — a number that quietly claimed more than what was measured would be a
 // lie with a decimal point (hn6 rule 7).
+//
+// Since tick b13 it also carries the subscription window use of a run riding
+// the claude-sub rung: a run whose workers lease the operator's subscription
+// pays no wallet money at all, so its cost line is the SUBSCRIPTION's, and
+// this field is where that fact travels to every surface that renders cost.
 type Cost struct {
 	// RecordedUSD is the sum of the metered lines, and NULL when no line
 	// is metered (tick dm2): a 0 beside all-unmetered lines read as a
@@ -720,6 +784,26 @@ type Cost struct {
 	// does, because an unmetered line wearing a $0.00 is a fabricated spend
 	// (hn6 rule 7). Empty when nothing has been split yet.
 	Lines []CostLine `json:"lines"`
+
+	// Subscription is the claude-sub subscription a cloud run's jobs lease
+	// (tick b13), with the window use the factory's proxy last saw on the
+	// account's shared 5h and 7d windows — the windows the operator's own
+	// interactive use draws on, which is why a run on the subscription says
+	// how much of it is spent instead of a wallet number that is always
+	// $0.00. Null when the run leased nothing the factory's /api/claude-sub
+	// names — never a guess, and never a token: the label is the only
+	// identifier this carries.
+	Subscription *CostSubscription `json:"subscription"`
+}
+
+// CostSubscription is one claude-sub subscription's window use as the model
+// states it (tick b13): the label the pool leases under, and the fraction of
+// each window the factory's proxy last saw used — null per window until a
+// proxied answer has carried that window's utilization header.
+type CostSubscription struct {
+	Label    string   `json:"label"`
+	FiveHour *float64 `json:"five_hour"`
+	SevenDay *float64 `json:"seven_day"`
 }
 
 // CostLine is one source's share of the run's spend: the river, whether the

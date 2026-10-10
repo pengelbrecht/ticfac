@@ -1,0 +1,29 @@
+{
+  "schema_version": 3,
+  "key": "61a8cf971d882818a02e6071284e6c25946fe2ac515158ea98f6526541675774",
+  "tick_id": "ze7",
+  "gating": false,
+  "basis": "backlog-default",
+  "reason": "its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "placement": "backlog",
+  "decided_at": "2026-10-09T14:36:51Z",
+  "provenance": {
+    "run_id": "run_6a569ee0f05740ec88858323a007661f",
+    "tick_id": "jml",
+    "attempt": 7,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "92cac3b93bb21b7fc907e60fc7ac6014db7daa48",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "closeout",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:f083fe6b9410166a3480b4a729d1ba6272f1f7bcf1e97fb5f5e5f3e926c72124",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

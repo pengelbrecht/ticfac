@@ -482,55 +482,11 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 			}
 			clearing := statusmodel.HoldClearingCommand(epicOf(), host, address, runID, event)
 			head := fmt.Sprintf("\nticfac watch: run %s is HOLDING %s for a person:\n%s\n", runID, what, event.Detail)
-			switch statusmodel.HoldReason(event.Detail) {
-			case reconcile.RefusedFindingUntriaged:
-				fmt.Fprintf(stderr, "%s"+
-					"Nothing proceeds until somebody decides. Triage the finding(s) with `%s` — "+
-					"every untriaged finding of the run settles there, by short key prefix — "+
-					"or answer what the tick is waiting for. The "+
-					"evidence is on the integration branch, not in this line.\n\n", head, *clearing)
-			case reconcile.RefusedEpicAmendmentUnconfirmed:
-				fmt.Fprintf(stderr, "%s"+
-					"Nothing proceeds until the operator decides. `%s` lists the "+
-					"worker-proposed notes on the epic's own record; settle each with "+
-					"`ticfac amendment %s <key> --confirm --by <who>` — or the same command with --reject to "+
-					"disown it — or answer what the tick is waiting for. The evidence is on the "+
-					"integration branch, not in this line.\n\n", head, *clearing, epicOf())
-			case reconcile.RefusedClaimWidth, reconcile.RefusedForeignClaim:
-				fmt.Fprintf(stderr, "%s"+
-					"Nothing proceeds until the world changes — and a release is not what changes it: "+
-					"no attempt was ever dispatched, so settle refuses the hold's dash attempt. "+
-					"The hold ends when the claim it names does, and `%s` runs the epic again, "+
-					"re-deriving from the graph and proceeding the moment it has. The evidence is on "+
-					"the integration branch, not in this line.\n\n", head, *clearing)
-			case reconcile.RefusedAbsorptionDepth:
-				fmt.Fprintf(stderr, "%s"+
-					"Nothing proceeds until somebody judges the chain the line carries: decide the "+
-					"finding with `%s` — or take the escape the line itself names, raising the bound "+
-					"with --absorption-depth and running the epic again. The evidence is on the "+
-					"integration branch, not in this line.\n\n", head, *clearing)
-			case reconcile.RefusedLandReviewNotReady:
-				fmt.Fprintf(stderr, "%s"+
-					"Nothing proceeds until a person accepts or rejects the work the run's own review "+
-					"refused — and the release the attempt above might suggest clears nothing: the "+
-					"hold is the review's verdict recorded on the PR, which a resume re-reads. The "+
-					"moves are the line's own: fix what the review says would make it ready and run "+
-					"the epic again with `%s`, merge the PR by hand to accept it (a re-run then "+
-					"finds it merged), or close it. The evidence is on the integration branch, not "+
-					"in this line.\n\n", head, *clearing)
-			default:
-				if clearing != nil {
-					fmt.Fprintf(stderr, "%s"+
-						"Nothing proceeds until somebody decides. Release it with `%s` — add --carry-work to base the "+
-						"next try on the commits the released one left — or answer what the tick is waiting for. The "+
-						"evidence is on the integration branch, not in this line.\n\n", head, *clearing)
-				} else {
-					fmt.Fprintf(stderr, "%s"+
-						"Nothing proceeds until somebody decides. No one command clears this hold — "+
-						"answer what the tick is waiting for. The evidence is on the integration branch, not in this line.\n\n",
-						head)
-				}
-			}
+			// The wording handles the nil the builder can return (tick mwt): an
+			// epic the model cannot state, or a hold no command clears, reads the
+			// no-command wording — a nil pointer is a decision to read, never one
+			// to dereference (tick dfb, and its stream-path echo ugt).
+			fmt.Fprint(stderr, head+holdAlertWording(statusmodel.HoldReason(event.Detail), clearing, epicOf()))
 		}
 		if event.Stage == reconcile.StageRunFinished || event.Stage == reconcile.StageRunDied {
 			// The run's own last word ends the watch: a watcher must not
@@ -671,6 +627,61 @@ func watchCommand(ctx context.Context, args []string, repo *string, interval *ti
 		return finish(agentStateCancelled, nil)
 	}
 	return finish(agentStateDone, nil)
+}
+
+// holdAlertWording words one hold's alert, after the head the caller prints:
+// the sentence the hold's reason carries, with the clearing command that
+// reason decided on (the same decision HoldClearingCommand made, tick gf0)
+// — or, when that decision is nil, the no-command wording. The builder can
+// legitimately answer nil: an epic it cannot state names no command (tick
+// mwt), and a hold no closed rule knows names none either. The old inline
+// switch dereferenced the pointer in five cases with no nil check — a
+// stream-path hold on a run whose epic is unstated would panic the watch
+// instead of alerting it (tick dfb, found on the model path, whose
+// stream-path echo ugt reported) — and every case now reads the command
+// through this one wording, nil-safe, so the guard lives in one place.
+func holdAlertWording(reason string, clearing *string, epic string) string {
+	if clearing == nil {
+		return "Nothing proceeds until somebody decides. No one command clears this hold — " +
+			"answer what the tick is waiting for. The evidence is on the integration branch, not in this line.\n\n"
+	}
+	command := *clearing
+	switch reason {
+	case reconcile.RefusedFindingUntriaged:
+		return "Nothing proceeds until somebody decides. Triage the finding(s) with `" + command + "` — " +
+			"every untriaged finding of the run settles there, by short key prefix — " +
+			"or answer what the tick is waiting for. The " +
+			"evidence is on the integration branch, not in this line.\n\n"
+	case reconcile.RefusedEpicAmendmentUnconfirmed:
+		return "Nothing proceeds until the operator decides. `" + command + "` lists the " +
+			"worker-proposed notes on the epic's own record; settle each with " +
+			"`ticfac amendment " + epic + " <key> --confirm --by <who>` — or the same command with --reject to " +
+			"disown it — or answer what the tick is waiting for. The evidence is on the " +
+			"integration branch, not in this line.\n\n"
+	case reconcile.RefusedClaimWidth, reconcile.RefusedForeignClaim:
+		return "Nothing proceeds until the world changes — and a release is not what changes it: " +
+			"no attempt was ever dispatched, so settle refuses the hold's dash attempt. " +
+			"The hold ends when the claim it names does, and `" + command + "` runs the epic again, " +
+			"re-deriving from the graph and proceeding the moment it has. The evidence is on " +
+			"the integration branch, not in this line.\n\n"
+	case reconcile.RefusedAbsorptionDepth:
+		return "Nothing proceeds until somebody judges the chain the line carries: decide the " +
+			"finding with `" + command + "` — or take the escape the line itself names, raising the bound " +
+			"with --absorption-depth and running the epic again. The evidence is on the " +
+			"integration branch, not in this line.\n\n"
+	case reconcile.RefusedLandReviewNotReady:
+		return "Nothing proceeds until a person accepts or rejects the work the run's own review " +
+			"refused — and the release the attempt above might suggest clears nothing: the " +
+			"hold is the review's verdict recorded on the PR, which a resume re-reads. The " +
+			"moves are the line's own: fix what the review says would make it ready and run " +
+			"the epic again with `" + command + "`, merge the PR by hand to accept it (a re-run then " +
+			"finds it merged), or close it. The evidence is on the integration branch, not " +
+			"in this line.\n\n"
+	default:
+		return "Nothing proceeds until somebody decides. Release it with `" + command + "` — add --carry-work to base the " +
+			"next try on the commits the released one left — or answer what the tick is waiting for. The " +
+			"evidence is on the integration branch, not in this line.\n\n"
+	}
 }
 
 // watchLineEndedFailed says whether the run's own terminal line says the run
@@ -839,7 +850,11 @@ func watchRunStillAlive(source runfeed.Source, kind, repo, runID string) bool {
 // durable sources — so the watch's one document and the live view's last
 // frame cannot disagree.
 func watchGatherModel(ctx context.Context, source runfeed.Source, kind, repo, runID string) (statusmodel.Model, error) {
-	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost}
+	// Both the activity reader (tick 93n) and the claude-sub reader (tick b13)
+	// ride here: the cloud gathering reads the subscription a run's jobs lease,
+	// and the local gathering never asks — its jobs lease nothing from the
+	// factory's pool.
+	gather := modelGatherers{graph: epicGraph, ci: statusCI, workerCost: statusWorkerCost, activity: workerActivity, claudeSub: statusClaudeSub}
 	if cloudSource, ok := source.(*cloudFeedSource); ok && kind == "cloud" {
 		record, err := readCloudRunRecord(ctx, cloudSource.client, cloudSource.runID)
 		if err != nil {
@@ -961,7 +976,20 @@ func watchLive(ctx context.Context, source runfeed.Source, kind, repo, runID str
 	graphCache := &watchGraphCache{ttl: watchSourceTTL, read: epicGraph}
 	ciCache := &watchCICache{ttl: watchSourceTTL, read: statusCI}
 	costCache := &watchCostCache{ttl: watchSourceTTL, read: statusWorkerCost}
-	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI, workerCost: costCache.WorkerCost}
+	// Activity gets its own, shorter TTL: it is the one line the dashboard
+	// sells as LIVE ("what is happening right now"), so it is let go stale
+	// for seconds, never the graph's and the CI's thirty. Its read is the
+	// two-host dispatcher (tick 93n): a cloud watch reads the factory's
+	// sockets, a local watch the workers' doors — both bounded to one
+	// snapshot per TTL per worker.
+	activityCache := &watchActivityCache{ttl: watchActivityTTL, read: workerActivity}
+	// The leased subscription rides the sources' own thirty (tick b13): a pool
+	// snapshot is a live read of a Durable Object, not a socket dialled per
+	// worker, and the leases a running run holds and releases are picked up
+	// within the same half a minute as the graph and the CI.
+	claudeSubCache := &watchClaudeSubCache{ttl: watchSourceTTL, read: statusClaudeSub}
+	gather := modelGatherers{graph: graphCache.Graph, ci: ciCache.CI, workerCost: costCache.WorkerCost,
+		activity: activityCache.Activity, claudeSub: claudeSubCache.Subscription}
 
 	// The model builder: local and cloud gather through their own sources
 	// (status_model.go), and both are the same model — the same frame renders
@@ -1760,6 +1788,78 @@ func (c *watchCostCache) WorkerCost(ctx context.Context, runID string) (*statusm
 	}
 	c.cost, c.cached, c.at = cost, true, time.Now()
 	return cost, nil
+}
+
+// watchActivityTTL is activity's own cache window: short enough that the
+// "what is happening right now" line still reads as live, long enough that
+// a worker is not dialled a fresh watch socket every redraw.
+const watchActivityTTL = 5 * time.Second
+
+// watchActivityCache serves one cloud worker's activity snapshot at most
+// once per TTL, keyed by (tick, attempt) — the same weight the graph, the
+// CI and the cost are capped at: a socket dial and a credential, not a
+// stat, and a frame every two seconds must not pay for one per worker.
+// Concurrent redraws may race the same key; the loser's read is simply
+// overwritten, which costs at most one redundant socket, never a wrong
+// answer.
+type watchActivityCache struct {
+	ttl   time.Duration
+	read  func(context.Context, *cloudClient, string, string, int) *statusmodel.ActivityInput
+	mu    sync.Mutex
+	cache map[string]watchActivityEntry
+}
+
+type watchActivityEntry struct {
+	input *statusmodel.ActivityInput
+	at    time.Time
+}
+
+func (c *watchActivityCache) Activity(ctx context.Context, client *cloudClient, runID, tickID string, attempt int) *statusmodel.ActivityInput {
+	key := fmt.Sprintf("%s#%d", tickID, attempt)
+	c.mu.Lock()
+	if e, ok := c.cache[key]; ok && time.Since(e.at) < c.ttl {
+		c.mu.Unlock()
+		return e.input
+	}
+	c.mu.Unlock()
+
+	input := c.read(ctx, client, runID, tickID, attempt)
+
+	c.mu.Lock()
+	if c.cache == nil {
+		c.cache = map[string]watchActivityEntry{}
+	}
+	c.cache[key] = watchActivityEntry{input: input, at: time.Now()}
+	c.mu.Unlock()
+	return input
+}
+
+// watchClaudeSubCache serves the leased claude-sub subscription at most once
+// per TTL (tick b13): the pool snapshot is a live read of a Durable Object
+// and a frame every two seconds must not ask it every two seconds. An error
+// is returned fresh (a factory that cannot be asked is a fact the model
+// degrades per frame, never one it silently freezes); a successful answer,
+// nil included, is cached — "no lease right now" is an answer too, and the
+// leases a running run holds and releases are picked up within half a
+// minute.
+type watchClaudeSubCache struct {
+	ttl    time.Duration
+	read   func(context.Context, string) (*statusmodel.CostSubscription, error)
+	sub    *statusmodel.CostSubscription
+	cached bool
+	at     time.Time
+}
+
+func (c *watchClaudeSubCache) Subscription(ctx context.Context, runID string) (*statusmodel.CostSubscription, error) {
+	if c.cached && time.Since(c.at) < c.ttl {
+		return c.sub, nil
+	}
+	sub, err := c.read(ctx, runID)
+	if err != nil {
+		return nil, err
+	}
+	c.sub, c.cached, c.at = sub, true, time.Now()
+	return sub, nil
 }
 
 // clockOf is the line's own time, as a person reads it. A stamp that does not

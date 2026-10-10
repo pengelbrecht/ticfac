@@ -3,10 +3,11 @@
   "title": "Render the new dashboard layout at 80x24 and 120x40, with golden frames through a terminal emulator",
   "gloss": "new watch layout",
   "description": "Rewrite the dashboard view (internal/cli/watch_view.go and friends) to the layout in docs/design/watch-redesign-2026-10.md from the new status-model fields: header (epic title, config, where, elapsed), needs-you line/box, health line, phase track, NOW/DONE/UP NEXT/HELD groups (UP NEXT collapsed to one line beyond the screen), latest sentences, key hints. Keep enter (tick drill-down) and e (events) working. Golden frames for the five scenarios at 80x24 and 120x40 rendered through the repo's terminal-emulator test harness (see existing watch_pty tests); attach vhs/freeze screenshots of the five at 120x40 to the report.",
-  "status": "open",
+  "notes": "2026-10-09 05:41 - ticfac run run_6a569ee0f05740ec88858323a007661f: ugm try 1 (run dispatch #1) reported a finding the run itself decided — defect \"Health line's done-count and DONE group can disagree on duplicates\" (key f02cc84dd9d1e963716799cedd7d1974b3fb34994cb4c18adc88a8fbc87749dc, severity low, for this repository) is promoted to a backlog tick with an owner, h4u; the decision record is on the run branch at .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/f02cc84dd9d1e963716799cedd7d1974b3fb34994cb4c18adc88a8fbc87749dc.json, and the draft is triaged as promoted.\n2026-10-09 05:41 - ticfac run run_6a569ee0f05740ec88858323a007661f: ugm try 1 (run dispatch #1) reported a finding the run itself decided — defect \"Watch's stream-path hold alert still dereferences a nil command\" (key cc61c7b9387ca9fd4ca9f1698f486f53e09e0a90354c43937fc839ee79be2fb0, severity medium, for this repository) is promoted to a backlog tick with an owner, ugt; the decision record is on the run branch at .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/cc61c7b9387ca9fd4ca9f1698f486f53e09e0a90354c43937fc839ee79be2fb0.json, and the draft is triaged as promoted.\n2026-10-09 05:42 - ticfac run run_6a569ee0f05740ec88858323a007661f: ugm try 1 (run dispatch #1) reported a finding the run itself decided — defect \"A dead run's dispatched tick still grows a live per-tick elapsed\" (key 3b97629155148ff9f84a78fb9a10b8f550db12d5e5bffedb8948b3a4f39f40e4, severity medium, for this repository) is promoted to a backlog tick with an owner, c3i; the decision record is on the run branch at .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/3b97629155148ff9f84a78fb9a10b8f550db12d5e5bffedb8948b3a4f39f40e4.json, and the draft is triaged as promoted.\n2026-10-09 05:42 - ticfac run run_6a569ee0f05740ec88858323a007661f: ugm try 1 (run dispatch #1) reported a finding the run itself decided — defect \"zrl's manifestation is gone; the tick can be closed as fixed\" (key a9078a082aac34926f1527f8aa226dad4627b19811ffffe3e0eca3229a747760, severity low, for this repository) is promoted to a backlog tick with an owner, zvj; the decision record is on the run branch at .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/a9078a082aac34926f1527f8aa226dad4627b19811ffffe3e0eca3229a747760.json, and the draft is triaged as promoted.\n2026-10-09 06:56 - ticfac run run_6a569ee0f05740ec88858323a007661f: ugm try 1 (run dispatch #1) merged into epic/ymf as 52d7cced0f7e; the integrated gate (go, go-touched, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "blocked_by": [
     "lck",
     "93n",
@@ -17,5 +18,6 @@
   "acceptance_criteria": "golden frames for 5 scenarios x 2 sizes committed and checked in the gate; nothing wraps or truncates the needs-you line; screenshots in the report; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.452677Z",
-  "updated_at": "2026-10-08T13:16:48.452677Z"
+  "updated_at": "2026-10-09T06:56:47.602172773Z",
+  "closed_at": "2026-10-09T06:56:47.602172773Z"
 }

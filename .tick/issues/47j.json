@@ -3,13 +3,15 @@
   "title": "Readable feed sentences for the dashboard's latest section",
   "gloss": "feed in sentences",
   "description": "Map run feed stages to short operator sentences without shas or internal terms ('v1g merged into the epic, now testing', 'ww2 finished and merged', 'review says not ready: \u003cone line\u003e', 'paused: needs you'), dropping pure mechanics (pushed, push_queued, policy_stated, cleaned_up) from this section. Raw events stay on the [e] view unchanged.",
-  "status": "open",
+  "notes": "2026-10-08 14:30 - ticfac run run_91f2952af63f42f08a0ad243b4488842: 47j try 1 (run dispatch #1) merged into epic/ymf as 1e6ca05c40f5; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "parent": "ymf",
   "acceptance_criteria": "a mapping for every stage the feed emits (a test fails when a new stage has none); mechanics filtered; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.378131Z",
-  "updated_at": "2026-10-08T13:16:48.378131Z"
+  "updated_at": "2026-10-08T14:30:22.420893419Z",
+  "closed_at": "2026-10-08T14:30:22.420893419Z"
 }

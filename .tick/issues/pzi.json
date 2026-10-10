@@ -1,0 +1,14 @@
+{
+  "id": "pzi",
+  "title": "t0y, dfb, 4dn and zrl are fixed but the tracker still shows them open",
+  "description": "jym closed on the acceptance \"t0y, dfb, 4dn, zrl each fixed with a test and closed\", and the fixes are in the diff with tests — but all four tick records still read status \"open\" with only the 2026-10-08 planning note \"fixed under epic ymf (tick jym)\", so the epic's own tracker disagrees with the work its diff carries and A6 reads false against the tracker until they close. jym's report says closing is the run's move rather than the worker's; the close-out (jml) should close the four ticks as part of landing, or they stay on the open list and on the epic's PR.\nevidence: .tick/issues/t0y.json, .tick/issues/dfb.json, .tick/issues/4dn.json, .tick/issues/zrl.json — all still status \"open\" after jym closed at 2026-10-09T08:43:41Z\n\nticfac run run_6a569ee0f05740ec88858323a007661f filed this backlog tick from the finding b65bff29124c743da3489951e2453d66ce57b4b2efc7818101864f4f564bce66 (reported by run-run_6a569ee0f05740ec88858323a007661f/tick-8t5/attempt-3) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/b65bff29124c743da3489951e2453d66ce57b4b2efc7818101864f4f564bce66.json on the run branch.",
+  "notes": "2026-10-09 10:15 - ticfac run run_6a569ee0f05740ec88858323a007661f: created by absorbing finding b65bff29124c743da3489951e2453d66ce57b4b2efc7818101864f4f564bce66 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/b65bff29124c743da3489951e2453d66ce57b4b2efc7818101864f4f564bce66.json on epic/ymf, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_6a569ee0f05740ec88858323a007661f/tick-8t5/attempt-3",
+  "created_by": "ticfac run run_6a569ee0f05740ec88858323a007661f",
+  "created_at": "2026-10-09T10:15:26Z",
+  "updated_at": "2026-10-09T10:15:32.483357014Z"
+}

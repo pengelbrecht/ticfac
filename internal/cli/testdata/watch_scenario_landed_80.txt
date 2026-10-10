@@ -1,0 +1,17 @@
+the landed epic (lnd)                                 claude · local · done 2h9m
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Needs you: nothing                                       ● healthy · 4 of 4 done
+
+Building ──── Reviewing ──── Closing out ──── PR & CI ──── Merged
+                                                           ▲ here
+DONE (4)
+  l1   the first landed tick   merged  12m
+  l2   the second landed tick  merged  20m
+  l3   the third landed tick   merged  9m
+  l4   the fourth landed tick  merged  31m
+config claude · cost Workers AI $0.41
+
+─ latest ─────────────────────────────────────────────────────────────────────
+19:10:00  l4#1  finished and merged
+19:11:00  run  merged into the base branch
+                                       [enter] details  [e] all events  [q] quit

@@ -1,0 +1,68 @@
+{
+  "schema_version": 3,
+  "decision": 13,
+  "role": "resolve-conflict",
+  "request": {
+    "attempt": 6,
+    "attempt_head": "62eec9afcc951801ff7594dfad82af550f65d2d0",
+    "conflict_files": [
+      "cloudflare/contracts.pin.json",
+      "contracts/bundle.json",
+      "contracts/status-model.json",
+      "internal/cli/status.go",
+      "internal/cli/status_model.go",
+      "internal/cli/watch.go"
+    ],
+    "conflicting_ticks": [
+      "b13",
+      "93n",
+      "lck"
+    ],
+    "epic_id": "ymf",
+    "job_id": "run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-6",
+    "output_schema": "ticfac.job-result.resolve-conflict.v1",
+    "profile": "resolve-conflict@1.0.0 (cloudflare-sandbox/pi-durable, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:23144ea32cf28f1239dd92468623401f9fd47e3ab39fd521acabf73b0a46dee8",
+    "resolve_branch": "ticfac/run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-6",
+    "role": "resolve-conflict",
+    "source_grade": "write",
+    "tick_id": "b13"
+  },
+  "response": {
+    "conflict_detail": "6 conflicts: content in cloudflare/contracts.pin.json; content in contracts/bundle.json; content in contracts/status-model.json; content in internal/cli/status.go; content in internal/cli/status_model.go; content in internal/cli/watch.go",
+    "conflict_files": [
+      "cloudflare/contracts.pin.json",
+      "contracts/bundle.json",
+      "contracts/status-model.json",
+      "internal/cli/status.go",
+      "internal/cli/status_model.go",
+      "internal/cli/watch.go"
+    ],
+    "job_id": "run-run_91f2952af63f42f08a0ad243b4488842/tick-b13/resolve-6",
+    "merge": "39a19d87737ab2ee6739b905896753f8e6e8fcd9",
+    "resolve_head": "c86e5086c3f52ef493ab78240962ac15ff51c10a",
+    "status": "merged"
+  },
+  "validated": true,
+  "requested_at": "2026-10-08T23:49:41Z",
+  "answered_at": "2026-10-08T23:49:41Z",
+  "provenance": {
+    "run_id": "run_91f2952af63f42f08a0ad243b4488842",
+    "tick_id": "b13",
+    "attempt": 6,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "6a00ad6685e7233c1f0d2fc4a91c6c0f2ebcc95c",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "resolve-conflict",
+    "tier": "strong",
+    "profile_digest": "sha256:23144ea32cf28f1239dd92468623401f9fd47e3ab39fd521acabf73b0a46dee8",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:9591e443c6d71bc9796ff9190391bfb23b6543f1b6778daa7d0c6d63dcb06e56",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

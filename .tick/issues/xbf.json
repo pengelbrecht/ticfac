@@ -1,0 +1,14 @@
+{
+  "id": "xbf",
+  "title": "Three claims of the terminal suite have no seeded program that isolates them",
+  "description": "The suite's non-vacuity rule is one deliberately broken program per property, but three claims still rest on nothing: the watch's frame-fits-the-pane has no seeded program at all; the watch's needs-you property has a second claim — every word of the clearing command on screen — that needs-you-nothing.sh never isolates, because its violation fires on the \"Needs you: nothing\" lie first; and the overview's exits-with-the-table's-own-code has none either. Each needs a program that breaks only that claim, the shape groups-reordered.sh takes for the grouped-order property's second claim.\nevidence: tui/seeded/ holds 8 programs; the uncovered claims are tui/specs/watch.spec.ts:136 (the command words), tui/specs/watch.spec.ts:153 (frame fits the pane) and tui/specs/overview.spec.ts:86 (the listing answers and ends)\n\nticfac run run_6a569ee0f05740ec88858323a007661f filed this backlog tick from the finding 437459744716eaf8e2263b56b265fb9ab8ae2114c56917840c45893f8dff692a (reported by run-run_6a569ee0f05740ec88858323a007661f/tick-vii/attempt-5) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/437459744716eaf8e2263b56b265fb9ab8ae2114c56917840c45893f8dff692a.json on the run branch.",
+  "notes": "2026-10-09 12:28 - ticfac run run_6a569ee0f05740ec88858323a007661f: created by absorbing finding 437459744716eaf8e2263b56b265fb9ab8ae2114c56917840c45893f8dff692a — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/437459744716eaf8e2263b56b265fb9ab8ae2114c56917840c45893f8dff692a.json on epic/ymf, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_6a569ee0f05740ec88858323a007661f/tick-vii/attempt-5",
+  "created_by": "ticfac run run_6a569ee0f05740ec88858323a007661f",
+  "created_at": "2026-10-09T12:28:24Z",
+  "updated_at": "2026-10-09T12:28:30.589354942Z"
+}

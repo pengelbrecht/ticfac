@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 4,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "t0y, dfb, 4dn, zrl each fixed with a test and closed; make gate",
+    "description": "Fix the open watch defects on the new layout, each with a test: t0y (an ended, merged run's tick count, CI and phase disagree with the facts), dfb (the hold alert dereferences a nil clearing command), 4dn (an ended run's dispatched row still grows a live elapsed), zrl (below 48 cells a child row's columns shift by its indent — may disappear with the layout; prove it). Close those ticks.",
+    "epic_id": "ymf",
+    "role": "classify-tick",
+    "tick_id": "jym",
+    "title": "Fold in the open watch defects: t0y, dfb, 4dn, zrl"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.52,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.62,
+      "design": 0,
+      "diagnosis": 0.34,
+      "mechanical": 0.03,
+      "translation": 0.01
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1119,
+      "output_tokens": 57
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-09T06:56:58Z",
+  "answered_at": "2026-10-09T06:56:58Z",
+  "provenance": {
+    "run_id": "run_6a569ee0f05740ec88858323a007661f",
+    "tick_id": "jym",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "a5ce6ec6cfb0b38ecf0dfb4850877753b9bc639a",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

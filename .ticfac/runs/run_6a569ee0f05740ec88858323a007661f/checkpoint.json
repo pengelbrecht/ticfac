@@ -1,0 +1,60 @@
+{
+  "schema_version": 3,
+  "run_id": "run_6a569ee0f05740ec88858323a007661f",
+  "epic_id": "ymf",
+  "sequence": 48,
+  "state": "completed",
+  "reason": "every tick of ymf is closed behind the integrated gate; the epic PR #272 is ready: main at ac93b8b8c4fc folded in, CI green on 22dda2557015",
+  "updated_at": "2026-10-09T15:20:12Z",
+  "ticks": [
+    {
+      "tick_id": "ugm",
+      "state": "closed",
+      "attempt": 1
+    },
+    {
+      "tick_id": "jym",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "8t5",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "jml",
+      "state": "closed",
+      "attempt": 7
+    },
+    {
+      "tick_id": "vii",
+      "state": "closed",
+      "attempt": 5
+    },
+    {
+      "tick_id": "4oj",
+      "state": "closed",
+      "attempt": 6
+    }
+  ],
+  "provenance": {
+    "run_id": "run_6a569ee0f05740ec88858323a007661f",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ymf",
+    "source_sha": "22dda2557015f01a51bd119a7645e67ea7aa9d4d",
+    "integration_ref": "refs/heads/epic/ymf",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": null,
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

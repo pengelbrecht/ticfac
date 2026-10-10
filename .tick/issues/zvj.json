@@ -1,0 +1,14 @@
+{
+  "id": "zvj",
+  "title": "zrl's manifestation is gone; the tick can be closed as fixed",
+  "description": "zrl reported that below 48 cells a child row's columns shifted by its 3-cell indent in the old table. The redesigned dashboard has no child indentation in its group rows (groups make row adjacency meaningless), so the defect can no longer occur anywhere in the watch; zrl can be closed against this commit.\nevidence: internal/cli/watch_view.go dashboardRowLine (no ParentTickID handling); old behaviour pinned in git history internal/cli/watch_view.go@base dashboardTable\n\nticfac run run_6a569ee0f05740ec88858323a007661f filed this backlog tick from the finding a9078a082aac34926f1527f8aa226dad4627b19811ffffe3e0eca3229a747760 (reported by run-run_6a569ee0f05740ec88858323a007661f/tick-ugm/attempt-1) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/a9078a082aac34926f1527f8aa226dad4627b19811ffffe3e0eca3229a747760.json on the run branch.",
+  "notes": "2026-10-09 05:42 - ticfac run run_6a569ee0f05740ec88858323a007661f: created by absorbing finding a9078a082aac34926f1527f8aa226dad4627b19811ffffe3e0eca3229a747760 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_6a569ee0f05740ec88858323a007661f/absorptions/a9078a082aac34926f1527f8aa226dad4627b19811ffffe3e0eca3229a747760.json on epic/ymf, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_6a569ee0f05740ec88858323a007661f/tick-ugm/attempt-1",
+  "created_by": "ticfac run run_6a569ee0f05740ec88858323a007661f",
+  "created_at": "2026-10-09T05:42:14Z",
+  "updated_at": "2026-10-09T05:42:19.721457859Z"
+}

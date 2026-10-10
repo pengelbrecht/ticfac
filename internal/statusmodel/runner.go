@@ -43,7 +43,7 @@ import (
 // and a per-frame file read is what a two-second redraw can afford.
 func WorkerRunner(runID string) func(tickID string, attempt int) *string {
 	return func(tickID string, attempt int) *string {
-		for _, root := range reportStateRoots() {
+		for _, root := range ExecStateRoots() {
 			state, ok := findAttemptState(filepath.Join(root, runID, tickID, strconv.Itoa(attempt)))
 			if !ok || !attemptNamesTick(state, tickID) {
 				continue

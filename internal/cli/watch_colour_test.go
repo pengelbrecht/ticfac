@@ -13,10 +13,10 @@ package cli
 // flight/working/stall warning; red = failed/rejected/held/needs-you (the
 // needs-you line the most prominent thing on screen when non-empty:
 // red+bold); cyan = tick ids and key hints; dim/grey = secondary text
-// (closed groups, provenance, the feed tail's timestamps, "not metered");
-// bold for section headers. At most those four hues, no background fills,
-// and NO_COLOR and TERM=dumb render plain text with an identical layout —
-// colour never changes widths.
+// (closed groups, provenance, the feed tail's timestamps); bold for section
+// headers. At most those four hues, no background fills, and NO_COLOR and
+// TERM=dumb render plain text with an identical layout — colour never
+// changes widths.
 
 import (
 	"strings"
@@ -185,62 +185,89 @@ func TestWatchColourGridPerState(t *testing.T) {
 
 	// Tick ids are cyan — the identity a person scans for.
 	assertGridAttr(t, gridCellsInRow(grid, t2row, "t2"), "t2", "cyan", false, false)
-	assertGridAttr(t, gridCellsInRow(grid, "a repair child", "t1c"), "t1c", "cyan", false, false)
 
-	// An in-flight pipeline stage is amber, in words and in glyphs.
-	assertGridAttr(t, gridCellsInRow(grid, t2row, "●gate"), "●gate", "amber", false, false)
-	narrow := colourGrid(t, m, 99, 0)
-	assertGridAttr(t, gridCellsInRow(narrow, t2row, "●"), "●", "amber", false, false)
+	// A status word carries its state's hue: testing is amber (in flight),
+	// merged is green (done), a queued tick's collapsed line has no hue of
+	// its own.
+	assertGridAttr(t, gridCellsInRow(grid, t2row, "testing (attempt 2, model escalated)"),
+		"testing (attempt 2, model escalated)", "amber", false, false)
+	assertGridAttr(t, gridCellsInRow(grid, "the first tick's gloss", "merged"),
+		"merged", "green", false, false)
 
-	// Section headers are bold: the table's, the workers panel's, the
-	// recent rule's.
-	for _, header := range []string{"TICK", "WORKERS", "recent"} {
+	// Section headers are bold: the groups' and the latest rule's.
+	for _, header := range []string{"NOW", "DONE (2)", "latest"} {
 		assertGridAttr(t, gridCells(grid, header), header, "", false, true)
 	}
 
 	// Key hints are cyan.
-	assertGridAttr(t, gridCells(grid, "[e] events"), "[e] events", "cyan", false, false)
+	assertGridAttr(t, gridCells(grid, "[enter] details"), "[enter] details", "cyan", false, false)
 
-	// The feed tail's timestamps are dim, and its tick ids cyan.
+	// The latest sentences' timestamps are dim, and their tick ids cyan.
 	assertGridAttr(t, gridCells(grid, "18:58:02"), "18:58:02", "", true, false)
 	assertGridAttr(t, gridCells(grid, "t2#2"), "t2#2", "cyan", false, false)
 
 	// The health verdict carries its state's hue, and so does a passed CI
-	// check; "not metered" is secondary text, dim.
+	// check; the cost line is primary text — it states what is metered, and
+	// since tick b13 it no longer carries a dim "not metered" recital at all.
 	assertGridAttr(t, gridCells(grid, "● healthy"), "● healthy", "green", false, false)
-	assertGridAttr(t, gridCellsInRow(grid, "CI #98", "✓"), "✓", "green", false, false)
-	assertGridAttr(t, gridCells(grid, "not metered"), "not metered", "", true, false)
+	for _, row := range grid {
+		for _, cell := range row {
+			if strings.Contains(cell.text, "metered") {
+				t.Errorf("the dashboard still renders a %q cost cell (tick b13: nothing when there is no metered cost)", cell.text)
+			}
+		}
+	}
 
-	// A failed/held row is red: the pipeline stage the tick is stuck at,
+	// A failed/held row is red: the status word the tick is stuck at,
 	// refused.
 	held := dashboardFixture()
-	t2 := &(*held.Waves)[1].Ticks[0]
-	t2.State = "rejected"
-	t2.Pipeline = []statusmodel.PipelineStage{
-		{Stage: statusmodel.StageClaim, State: statusmodel.StageStateDone},
-		{Stage: statusmodel.StageWork, State: statusmodel.StageStateFailed},
-		{Stage: statusmodel.StageGate, State: statusmodel.StageStatePending},
-		{Stage: statusmodel.StageMerged, State: statusmodel.StageStatePending},
-	}
+	t2 := &(*held.Workers)[0]
+	_ = t2
 	heldGrid := colourGrid(t, held, 120, 0)
-	assertGridAttr(t, gridCellsInRow(heldGrid, t2row, "✗work"), "✗work", "red", false, false)
+	assertGridAttr(t, gridCellsInRow(heldGrid, "the review tick's gloss", "reviewing"),
+		"reviewing", "amber", false, false)
+	failed := dashboardFixture()
+	f2 := &(*failed.Waves)[1].Ticks[0]
+	f2.Status = statusmodel.WordFailedPrefix + "the integrated gate refused"
+	failedGrid := colourGrid(t, failed, 120, 0)
+	assertGridAttr(t, gridCellsInRow(failedGrid, "the second tick's gloss", "failed: the integrated gate refused"),
+		"failed: the integrated gate refused", "red", false, false)
 
-	// Needs-you is the most prominent thing on screen when non-empty:
-	// red and bold, the whole line.
-	held.Attention = []statusmodel.Attention{{
+	// Needs-you is the most prominent thing on screen when non-empty: the
+	// whole box red, its announcement bold.
+	heldGrid = nil
+	m.Attention = []statusmodel.Attention{{
 		Kind:           statusmodel.WaitHeldForPerson,
 		What:           "attempt 2 of t2 struck out: the refusal the run recorded",
 		NeedsPerson:    true,
 		UnblockCommand: ptr("ticfac settle rmod t2 2 --release"),
 	}}
-	heldGrid = colourGrid(t, held, 120, 0)
-	assertGridAttr(t, gridCells(heldGrid, "needs you: attempt 2 of t2 struck out"),
-		"needs you: attempt 2 of t2 struck out", "red", false, true)
+	boxGrid := colourGrid(t, m, 120, 0)
+	assertGridAttr(t, gridCells(boxGrid, "Needs you: attempt 2 of t2 struck out"),
+		"Needs you: attempt 2 of t2 struck out", "red", false, true)
+	assertGridAttr(t, gridCells(boxGrid, "clear with: ticfac settle rmod t2 2 --release"),
+		"clear with: ticfac settle rmod t2 2 --release", "red", false, false)
 
-	// A collapsed closed group is dim: history, quietly.
-	full := renderWatchFrame(m, plainStyles(), 120, 0, "")
-	collapsed := screenGrid(renderWatchFrame(m, ansiWatchStyles(), 120, len(full)-1, ""))
-	assertGridAttr(t, gridCells(collapsed, "✓ 2 closed"), "✓ 2 closed", "", true, false)
+	// A duplicate's row is dim whole: history, quietly.
+	epic := epicStateFixture()
+	epic.Groups.UpNext = nil
+	epic.Groups.Done = append(epic.Groups.Done, "dup")
+	for wi := range *epic.Waves {
+		for ti := range (*epic.Waves)[wi].Ticks {
+			tick := &(*epic.Waves)[wi].Ticks[ti]
+			if tick.TickID == "dup" {
+				tick.Status = statusmodel.WordMerged
+				tick.Pipeline = []statusmodel.PipelineStage{
+					{Stage: statusmodel.StageClaim, State: statusmodel.StageStateDone},
+					{Stage: statusmodel.StageWork, State: statusmodel.StageStateDone},
+					{Stage: statusmodel.StageGate, State: statusmodel.StageStateDone},
+					{Stage: statusmodel.StageMerged, State: statusmodel.StageStateDone},
+				}
+			}
+		}
+	}
+	dupGrid := colourGrid(t, epic, 120, 0)
+	assertGridAttr(t, gridCells(dupGrid, "dup  duplicate of at2"), "dup  duplicate of at2", "", true, false)
 }
 
 // TestWatchColourHonoursNoColor: NO_COLOR and TERM=dumb render plain text

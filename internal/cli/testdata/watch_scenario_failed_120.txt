@@ -1,0 +1,20 @@
+the failed epic's run (fld)                                                                         local · failed 1h12m
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+┌─────────────────────────────────────────────────┐
+│ Needs you: run epic-fld failed: f2 did not pass │
+│ clear with: ticfac run-epic fld --resume        │
+└─────────────────────────────────────────────────┘
+● stopped · 1 of 4 done
+
+Building ──── Reviewing ──── Closing out ──── PR & CI ──── Merged
+▲ here (wave 1 of 1)
+DONE (1)
+  f1   the landed tick   merged                                        15m
+UP NEXT (2)   f3 the waiting tick · f4 the other waiting tick
+              then: Reviewing → Closing out → PR & CI → Merged
+HELD (1)
+  f2   the refused tick  failed: the integrated gate refused attempt…  25m
+
+─ latest ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+19:09:00  f2#2  tests failed: the integrated gate refused attempt 2 of f2 (go)
+19:12:00  run  run finished: f2 did not pass                                   [enter] details  [e] all events  [q] quit

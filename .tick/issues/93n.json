@@ -3,13 +3,15 @@
   "title": "Live activity excerpt per running worker, local and cloud",
   "gloss": "worker activity line",
   "description": "A one-line excerpt of what each running worker is doing now: its latest tool call (summarised: 'running pytest', 'editing internal/x.go') or latest assistant sentence, from the conversation stream pi-durable and claude already produce (local: the runner log / worker.sqlite; cloud: the factory's worker stream that ticfac cloud logs reads). Add it to the status model per running tick with its age; cap length; never a secret (strip env, tokens). Remove the 'workers run in the cloud — not visible from here' line.",
-  "status": "open",
+  "notes": "2026-10-08 15:46 - ticfac run run_91f2952af63f42f08a0ad243b4488842: 93n try 1 (run dispatch #2) reported a finding the run itself decided — contract \"status-model contract still says a cloud run's census cannot be taken\" (key 2e072a05346b9b5c4f73ac000d8efec4930504549d8e658e6ea6f92b10e4482b, severity medium, for this repository) is promoted to a backlog tick with an owner, pl5; the decision record is on the run branch at .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/2e072a05346b9b5c4f73ac000d8efec4930504549d8e658e6ea6f92b10e4482b.json, and the draft is triaged as promoted.\n2026-10-08 15:47 - ticfac run run_91f2952af63f42f08a0ad243b4488842: 93n try 1 (run dispatch #2) reported a finding the run itself decided — proposed-tick \"Cloud run's pushed status model carries no workers census at all\" (key 850a4901cfd5f48324310857d24a3afc4bd5df44291059888d8b56999a1d7835, severity medium, for this repository) is promoted to a backlog tick with an owner, pta; the decision record is on the run branch at .ticfac/runs/run_91f2952af63f42f08a0ad243b4488842/absorptions/850a4901cfd5f48324310857d24a3afc4bd5df44291059888d8b56999a1d7835.json, and the draft is triaged as promoted.\n2026-10-08 16:02 - ticfac run run_91f2952af63f42f08a0ad243b4488842: 93n try 1 (run dispatch #2) merged into epic/ymf as a69efe518bc4; the integrated gate (go, ts) passed.",
+  "status": "closed",
   "priority": 2,
   "type": "task",
-  "owner": "ticks-sandbox@ticks.invalid",
+  "owner": "ticfac",
   "parent": "ymf",
   "acceptance_criteria": "each running tick carries an activity line with its age, local and cloud, tested with recorded streams; no token or URL can appear; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-08T13:16:48.350244Z",
-  "updated_at": "2026-10-08T13:16:48.350244Z"
+  "updated_at": "2026-10-08T16:02:43.509127003Z",
+  "closed_at": "2026-10-08T16:02:43.509127003Z"
 }
