@@ -1,0 +1,13 @@
+{
+  "id": "7px",
+  "title": "The committed watch screenshots predate the epic: held still reads '● healthy'",
+  "description": "The five PNGs in docs/design/watch-redesign-2026-10/ were captured at 0f14d342c (2026-10-10 17:23, cl7's attempt) and never again: the az1 (18:09), h3s (19:00) and etl (19:31) merges each changed the pinned frames the capture renders from, so the epic's committed evidence shows a superseded dashboard. watch-held-120x40.png reads '● healthy · 1 of 5 done' beneath its needs-you box — the exact line [A1] removed, in green — none of the five shows [A4]'s blank lines, and busy's status column reads the long note spelling. etl's report flagged it and named the epic's own [A3]/[A5] as the owner, but no remaining tick carries it: after etl only the review and a bare close-out remain. Run docs/design/watch-redesign-2026-10/capture.sh on the integrated tree (it asserts each source equals the pinned golden and verifies itself in place) and commit the five PNGs. No breaks claim: the epic's criteria parse as one item, so [A3]/[A5] cannot be keyed (third finding).\nevidence: git log -1 --format=%ci -- docs/design/watch-redesign-2026-10/watch-held-120x40.png → 2026-10-10 17:23:06, before merges 1aaa20c8e59e/f2472bf0140e/323f813550e4; git show 0f14d342c:internal/cli/testdata/watch_scenario_held_120.txt:7 → '● healthy · 1 of 5 done · ~1h left'\n\nticfac run run_1fac91062aa546f29910c5796a468976 filed this backlog tick from the finding 5bb0ae81694c456010a80c4f2da6eb3831a67f4acfbc1a59215ffb608f3d1614 (reported by run-run_1fac91062aa546f29910c5796a468976/tick-c1d/attempt-6) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_1fac91062aa546f29910c5796a468976/absorptions/5bb0ae81694c456010a80c4f2da6eb3831a67f4acfbc1a59215ffb608f3d1614.json on the run branch.",
+  "status": "open",
+  "priority": 2,
+  "type": "task",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "discovered_from": "run-run_1fac91062aa546f29910c5796a468976/tick-c1d/attempt-6",
+  "created_by": "ticfac run run_1fac91062aa546f29910c5796a468976",
+  "created_at": "2026-10-10T20:47:55Z",
+  "updated_at": "2026-10-10T20:47:55Z"
+}
