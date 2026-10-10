@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 30,
-  "state": "integrating",
-  "reason": "integrating etl attempt 3 into epic/ozw",
-  "updated_at": "2026-10-10T19:31:37Z",
+  "sequence": 31,
+  "state": "gating",
+  "reason": "running the integrated gate for etl on 323f813550e4",
+  "updated_at": "2026-10-10T19:31:48Z",
   "ticks": [
     {
       "tick_id": "az1",
@@ -19,7 +19,7 @@
     },
     {
       "tick_id": "etl",
-      "state": "reported",
+      "state": "integrated",
       "attempt": 3
     },
     {
