@@ -1,3 +1,8 @@
+<!-- ticks-worker: container facts, prepended after the harness exited. The
+agent's report, including its STATUS line, is unchanged below. -->
+
+_ticks-worker: branch `tick/ozw/attempt-9/72z`, base `b31fb02f38f4410c8becc44a0406bbd96eabb5fb`, harness `pi-durable` exited 0, 2 work commit(s), 0 uncommitted path(s)._
+
 # Epic ozw closed out: the watch polish the operator accepted from ymf's merge
 
 The close-out of epic `ozw` (tick `72z`, attempt 9, run
