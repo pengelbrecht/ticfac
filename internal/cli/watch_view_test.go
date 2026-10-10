@@ -1787,17 +1787,19 @@ func TestDashboardColumnsStayAligned(t *testing.T) {
 }
 
 // TestDashboardFitsHeight: a pane shorter than the frame keeps the headline
-// and the tail, and compresses the middle in place — the phase track yields
-// first (a pane crowded with content owes its rows a seat before it owes
-// the map one), then the DONE rows fold into their group's header, then
-// rows trim from the bottom with one "+N more" at the fold — and the whole
-// frame is never taller than the pane.
+// and the tail, and compresses the middle in place — the UP NEXT group
+// collapses first (its "then:" line, then the group itself), the spacing
+// between the groups yields, then the DONE rows fold into their group's
+// header, then rows trim from the bottom with one "+N more" at the fold —
+// and the whole frame is never taller than the pane. The contract golden
+// carries no UP NEXT group, so here the collapse steps are no-ops: what
+// these panes exercise is the DONE fold, the trim and the track's yield.
 func TestDashboardFitsHeight(t *testing.T) {
 	t.Parallel()
 	m := dashboardContractGolden(t)
 	full := renderWatchFrame(m, plainStyles(), 120, 0, "")
 
-	// A pane that seats the whole level-1 frame: everything visible.
+	// A pane that seats the whole DONE-folded frame: everything visible.
 	frame := renderWatchFrame(m, plainStyles(), 120, 15, "")
 	if len(frame) > 15 || !strings.Contains(strings.Join(frame, "\n"), "▲ here") {
 		t.Errorf("a 15-line pane does not seat the whole frame:\n%s", strings.Join(frame, "\n"))
