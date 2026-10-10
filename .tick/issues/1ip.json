@@ -2,6 +2,7 @@
   "id": "1ip",
   "title": "ozw's acceptance criteria parse as one item again: [A2]..[A5] are mid-line",
   "description": "internal/acceptance's parser takes a [A\u003cn\u003e] mark only at a line's start, and .tick/issues/ozw.json carries its five criteria on one line, so the epic's definition of done has exactly one item of record (A1) — the same defect the ymf review filed low, recurring, and the run has not applied the tracker edit. This review's blocking finding breaks the committed-screenshots clause of [A3] and [A5]'s 'screenshots updated', but breaks.item cannot name them, so it carries no claim a machine can key on. The fix is a tracker edit — re-mark the criteria one item per line — which is the run's to apply.\nevidence: .tick/issues/ozw.json acceptance_criteria (one line, [A1]..[A5]); internal/acceptance/acceptance.go:18 (attemptedMark is line-anchored)\n\nticfac run run_1fac91062aa546f29910c5796a468976 filed this backlog tick from the finding 7172474d29767fddbf91d98ad3700bbc9232a9c3c7b276f217a27904e0463226 (reported by run-run_1fac91062aa546f29910c5796a468976/tick-c1d/attempt-6) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_1fac91062aa546f29910c5796a468976/absorptions/7172474d29767fddbf91d98ad3700bbc9232a9c3c7b276f217a27904e0463226.json on the run branch.",
+  "notes": "2026-10-10 20:48 - ticfac run run_1fac91062aa546f29910c5796a468976: created by absorbing finding 7172474d29767fddbf91d98ad3700bbc9232a9c3c7b276f217a27904e0463226 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_1fac91062aa546f29910c5796a468976/absorptions/7172474d29767fddbf91d98ad3700bbc9232a9c3c7b276f217a27904e0463226.json on epic/ozw, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_1fac91062aa546f29910c5796a468976/tick-c1d/attempt-6",
   "created_by": "ticfac run run_1fac91062aa546f29910c5796a468976",
   "created_at": "2026-10-10T20:48:30Z",
-  "updated_at": "2026-10-10T20:48:30Z"
+  "updated_at": "2026-10-10T20:48:35.825390744Z"
 }
