@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 7,
-  "state": "running",
-  "reason": "etl is running as attempt 3",
-  "updated_at": "2026-10-10T16:40:32Z",
+  "sequence": 8,
+  "state": "dispatching",
+  "reason": "dispatching h3s as attempt 4",
+  "updated_at": "2026-10-10T16:40:41Z",
   "ticks": [
     {
       "tick_id": "az1",
