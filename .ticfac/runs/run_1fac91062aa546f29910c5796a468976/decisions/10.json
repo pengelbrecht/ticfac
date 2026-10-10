@@ -1,0 +1,78 @@
+{
+  "schema_version": 3,
+  "decision": 10,
+  "role": "closeout-epic",
+  "request": {
+    "epic_id": "ozw",
+    "job_id": "run-run_1fac91062aa546f29910c5796a468976/tick-72z/attempt-9",
+    "output_schema": "ticfac.job-result.closeout-epic.v1",
+    "profile": "closeout-epic@1.0.0 (cloudflare-sandbox/pi-durable, cloudflare-workers-ai/@cf/zai-org/glm-5.3)",
+    "profile_digest": "sha256:f083fe6b9410166a3480b4a729d1ba6272f1f7bcf1e97fb5f5e5f3e926c72124",
+    "role": "closeout-epic",
+    "source_grade": "write",
+    "source_sha": "b31fb02f38f4410c8becc44a0406bbd96eabb5fb",
+    "tick_id": "72z"
+  },
+  "response": {
+    "findings": [
+      {
+        "body": "The epic's definition of done states its five [A<n>] marks on one line, and internal/acceptance's parser takes a bracketed [A<n>] only at a line's start (a mid-line bracket is a reference, never a definition), so the record carries exactly one item of record — A1 — and [A2]..[A5] are references nothing can key on: no command can bind evidence to them and a finding cannot name the item it breaks. This epic paid for it twice — its round-1 review's blocking finding (the committed screenshots, [A3]/[A5] material) carried no breaks claim, so the run's absorption had to fall back on the reviewer basis rather than a done-item claim — and it is the same defect the ymf review filed low, recurring one day after ymf's own record was re-flowed. Tick 1ip, open, records it. The tracker edit this finding carries re-marks the same five items one per line — the same words, nothing dropped — so the machinery the epic's close-out feeds (the epic PR's done-evidence section, the [evidence.acceptance] table, a future finding's breaks claim) can address all five.\nevidence: .tick/issues/ozw.json acceptance_criteria (one line, [A1]..[A5]); internal/acceptance/acceptance.go:18 (attemptedMark is line-anchored)\ntracker edit: acceptance_criteria of ozw (applied by the run)",
+        "kind": "defect",
+        "severity": "low",
+        "target": "",
+        "title": "Re-flow ozw's acceptance criteria so [A1]..[A5] parse as five items"
+      },
+      {
+        "body": "The one-item-per-line rule was written into the learnings at ymf's close-out and applied to ymf's own record the same day; ozw was planned one line again the next morning, spent the whole epic with [A2]..[A5] unkeyable, and its round-1 review could not name the item its blocking finding broke. The run's only reader of an epic's criteria is the PR's done-evidence section, after the fact (internal/reconcile/pr_reviewer.go:220); nothing checks the record when the epic is claimed or admitted, so the rule rests on the planner reading a learnings file at the moment of writing the record. The check is cheap — acceptance.Parse against the [A<n>] marks the text carries — and the repair channel already exists (the tracker edit): a run that admits an epic whose marks parse as fewer items than it marks should re-flow it or refuse, not blind its own evidence binding for the epic's whole life and repair the record at close-out.\nevidence: .tick/issues/ozw.json acceptance_criteria (one line, [A1]..[A5]) against .tick/issues/ymf.json (re-flowed 2026-10-09, the day before ozw was created); internal/reconcile/pr_reviewer.go:220 (the only acceptance.Parse reader, post hoc)",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "A run admits an epic whose acceptance marks parse as fewer items than it marks"
+      },
+      {
+        "body": "The ozw close-out's retro, as the whole new .tick/learnings.md. It is a compaction, not an append: the file is at its 150-line hard cap, so two rules gain the halves this epic paid for — the prose-data rule gains the enforcement point (ozw's five marks went one line again the day after ymf's re-flow, and its round-1 review could key no item onto its blocking finding: the rule is enforced where the record is first read, not repaired at close-out), and the gate-coverage rule gains committed rendered evidence as the same claim (ozw's five watch PNGs aged under three green merges — the gate pins the frames they render, nothing tied the images to them — so an epic that names committed screenshots puts the re-capture in the tick that LAST changes a pinned frame, or asserts the capture sources in the gate) — and two same-family merges come out (the two boundary pairs into one; the dz1 resume pair into the hn6 restart pair it shares a family with), at exactly 150 lines. A cloud close-out still cannot commit the file itself (tick 3hw, open: the container's pre-commit hook refuses every .tick/ path), so it rides this protected change as bo9's and ymf's did.\nprotected change: a new .tick/learnings.md (applied by the run after its close-out, for the merger to review)",
+        "kind": "proposed-tick",
+        "severity": "medium",
+        "target": "",
+        "title": "Apply the ozw close-out retro: the compacted .tick/learnings.md"
+      }
+    ],
+    "result": {
+      "boundary_violations": [],
+      "branch": "tick/ozw/attempt-9/72z",
+      "commits": 3,
+      "findings_folded": [],
+      "findings_problem": "",
+      "needs_human": false,
+      "report_path": "tick/ozw/attempt-9/72z:RESULT-72z.md",
+      "verdict": "ready-to-merge"
+    },
+    "role": "closeout-epic",
+    "schema_id": "ticfac.job-result.closeout-epic.v1",
+    "schema_version": 2,
+    "status": "DONE",
+    "summary": "DONE (ready-to-merge)"
+  },
+  "validated": true,
+  "requested_at": "2026-10-10T22:32:10Z",
+  "answered_at": "2026-10-10T22:32:10Z",
+  "provenance": {
+    "run_id": "run_1fac91062aa546f29910c5796a468976",
+    "tick_id": "72z",
+    "attempt": 9,
+    "source_ref": "refs/heads/epic/ozw",
+    "source_sha": "b31fb02f38f4410c8becc44a0406bbd96eabb5fb",
+    "integration_ref": "refs/heads/epic/ozw",
+    "phase": "closeout",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "closeout-epic",
+    "tier": null,
+    "profile_digest": "sha256:f083fe6b9410166a3480b4a729d1ba6272f1f7bcf1e97fb5f5e5f3e926c72124",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
