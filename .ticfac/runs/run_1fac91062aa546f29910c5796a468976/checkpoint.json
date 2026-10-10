@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 23,
-  "state": "running",
-  "reason": "az1 is closed",
-  "updated_at": "2026-10-10T18:35:26Z",
+  "sequence": 24,
+  "state": "collecting",
+  "reason": "h3s try 1 (run dispatch #4) is collected (ready-to-merge)",
+  "updated_at": "2026-10-10T18:35:36Z",
   "ticks": [
     {
       "tick_id": "az1",
@@ -24,7 +24,7 @@
     },
     {
       "tick_id": "h3s",
-      "state": "dispatched",
+      "state": "reported",
       "attempt": 4
     },
     {
