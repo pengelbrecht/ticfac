@@ -1,6 +1,7 @@
 {
   "id": "72z",
   "title": "Close out the watch polish epic",
+  "notes": "2026-10-10 22:31 - ticfac run run_1fac91062aa546f29910c5796a468976: 72z try 1 (run dispatch #9) reported a finding whose fix is a tracker edit it carried — defect \"Re-flow ozw's acceptance criteria so [A1]..[A5] parse as five items\" (key 5d175562c90199e17c9c6cc5c064a46151537ccd60f4997c4730c45e3162f020, severity low). The run applied the edit of the acceptance_criteria of ozw itself, onto epic/ozw at 5159bc5135f6, and the draft is triaged as fixed by that commit.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -13,6 +14,6 @@
   "role": "closeout",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-10T09:53:09.66456Z",
-  "updated_at": "2026-10-10T21:46:11.842908386Z",
+  "updated_at": "2026-10-10T22:31:44.491197797Z",
   "started_at": "2026-10-10T21:46:11.842907076Z"
 }
