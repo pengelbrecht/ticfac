@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 60,
-  "state": "running",
-  "reason": "72z is closed",
-  "updated_at": "2026-10-10T22:51:34Z",
+  "sequence": 61,
+  "state": "gating",
+  "reason": "running the integrated gate for 72z on 17c55a05e5c0",
+  "updated_at": "2026-10-10T22:51:54Z",
   "ticks": [
     {
       "tick_id": "az1",
@@ -53,7 +53,7 @@
     "tick_id": null,
     "attempt": null,
     "source_ref": "refs/heads/epic/ozw",
-    "source_sha": "d2cb10d6be2393d5d581e09bec8149ed70ae8ebb",
+    "source_sha": "17c55a05e5c0d3a1a1d912c3259b4cb87d52ea60",
     "integration_ref": "refs/heads/epic/ozw",
     "phase": "worker",
     "executor": null,
