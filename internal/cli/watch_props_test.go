@@ -1026,7 +1026,7 @@ func propCostHonest(frame []string, _ func() []string, m, _ statusmodel.Model, w
 // title is WHOLE, at every pane width. The old allocation split the room
 // left after the status column half and half, which cut 'order-feed …' to
 // twelve cells beside a ten-cell excerpt; this is the agreement that ends.
-func propTitleBeforeExcerpt(frame []string, _ func() []string, m, _ statusmodel.Model, _, _, _ int) error {
+func propTitleBeforeExcerpt(frame []string, _ func() []string, m, _ statusmodel.Model, width, _, _ int) error {
 	plan := propPlan(m)
 	ids := make(map[string]bool, len(plan))
 	for _, id := range plan {
@@ -1058,8 +1058,15 @@ func propTitleBeforeExcerpt(frame []string, _ func() []string, m, _ statusmodel.
 		if !strings.ContainsRune(line, '"') {
 			continue // no live excerpt on this row: the title may take the room
 		}
-		if !strings.Contains(line, what) {
-			return fmt.Errorf("the %s row's title %q is cut beside a live excerpt: %q", id, what, line)
+		// The words the row owes the title: its own, whole — except at the
+		// unknown width, where the columns draw to their layout maxima and
+		// the WHAT column's cap is a cap the pane did not impose.
+		want := what
+		if width == 0 {
+			want = dashCell(what, dashWhatCols)
+		}
+		if !strings.Contains(line, want) {
+			return fmt.Errorf("the %s row's title %q is cut beside a live excerpt: %q", id, want, line)
 		}
 	}
 	return nil
@@ -1212,7 +1219,13 @@ func breakCutsTheTitleBesideAnExcerpt(frame []string, m statusmodel.Model) []str
 			continue
 		}
 		what := whats[id]
-		if ansi.StringWidth(what) <= 12 {
+		// The title as the frame carries it — whole where the pane seats it,
+		// at the WHAT column's cap where the width is unknown — so the cut
+		// lands on the words the row actually shows.
+		if !strings.Contains(line, what) {
+			what = dashCell(what, dashWhatCols)
+		}
+		if ansi.StringWidth(what) <= 12 || !strings.Contains(line, what) {
 			continue
 		}
 		cut := ansi.Truncate(what, 12, "…")
