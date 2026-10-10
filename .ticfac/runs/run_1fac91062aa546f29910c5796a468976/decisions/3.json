@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 3,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "held scenario no longer reads healthy; status-model test; goldens updated; make gate",
+    "description": "watch_scenario_held shows a needs-you box and then '● healthy · 1 of 5 done'. Derive the health word from the needs-you state too (status model, so the phone page agrees), amber/red accordingly.",
+    "epic_id": "ozw",
+    "role": "classify-tick",
+    "tick_id": "etl",
+    "title": "The health line says 'paused · needs you' whenever needs-you is not empty"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.92,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.94,
+      "design": 0.01,
+      "diagnosis": 0,
+      "mechanical": 0.02,
+      "translation": 0.03
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1061,
+      "output_tokens": 56
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-10T16:40:21Z",
+  "answered_at": "2026-10-10T16:40:21Z",
+  "provenance": {
+    "run_id": "run_1fac91062aa546f29910c5796a468976",
+    "tick_id": "etl",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ozw",
+    "source_sha": "d2ddd42871d4ebf0587cf77c3f11e6ef9b339a53",
+    "integration_ref": "refs/heads/epic/ozw",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
