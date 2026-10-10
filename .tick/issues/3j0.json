@@ -2,6 +2,7 @@
   "id": "3j0",
   "title": "Width 0 says \"no truncation\" but caps the row's title column at 32",
   "description": "renderWatchFrame's contract comment says an unknown width means no column drops, no truncation, but dashRowColumns' width\u003c=0 branch caps the WHAT column at dashWhatCols (32) and the excerpt at 36, so a title longer than 32 cells IS cut on the pipe/log path. Pre-existing, outside this tick's rule (the pane never imposed it there); my new P5 states its expectation with the cap rather than fixing it, so a future fix to either side has a guard already in place.\nevidence: internal/cli/watch_view.go:1023-1026 against the doc comment at internal/cli/watch_view.go:30\n\nticfac run run_1fac91062aa546f29910c5796a468976 filed this backlog tick from the finding f85fd43ebdc6b060401e0b66a29a2d2582bac4ea51001b73a80dc3515c952ec5 (reported by run-run_1fac91062aa546f29910c5796a468976/tick-az1/attempt-5) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_1fac91062aa546f29910c5796a468976/absorptions/f85fd43ebdc6b060401e0b66a29a2d2582bac4ea51001b73a80dc3515c952ec5.json on the run branch.",
+  "notes": "2026-10-10 18:09 - ticfac run run_1fac91062aa546f29910c5796a468976: created by absorbing finding f85fd43ebdc6b060401e0b66a29a2d2582bac4ea51001b73a80dc3515c952ec5 — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_1fac91062aa546f29910c5796a468976/absorptions/f85fd43ebdc6b060401e0b66a29a2d2582bac4ea51001b73a80dc3515c952ec5.json on epic/ozw, and it says: its severity is low, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_1fac91062aa546f29910c5796a468976/tick-az1/attempt-5",
   "created_by": "ticfac run run_1fac91062aa546f29910c5796a468976",
   "created_at": "2026-10-10T18:09:31Z",
-  "updated_at": "2026-10-10T18:09:31Z"
+  "updated_at": "2026-10-10T18:09:36.995526104Z"
 }
