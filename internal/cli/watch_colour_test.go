@@ -248,6 +248,13 @@ func TestWatchColourGridPerState(t *testing.T) {
 	assertGridAttr(t, gridCells(boxGrid, "clear with: ticfac settle rmod t2 2 --release"),
 		"clear with: ticfac settle rmod t2 2 --release", "red", false, false)
 
+	// A held row is red too: the held half of the palette's red (failed and
+	// held for a person share the hue), on the HELD group's own row.
+	heldRowGrid := colourGrid(t, scenarioHeld(), 120, 0)
+	assertGridAttr(t, gridCellsInRow(heldRowGrid, "the held tick",
+		"held: the attempt was struck out for release"),
+		"held: the attempt was struck out for release", "red", false, false)
+
 	// A duplicate's row is dim whole: history, quietly.
 	epic := epicStateFixture()
 	epic.Groups.UpNext = nil
