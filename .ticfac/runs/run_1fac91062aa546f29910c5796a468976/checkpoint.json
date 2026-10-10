@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 58,
-  "state": "running",
-  "reason": "CI on the epic PR #273 is pending on the head that includes the close-out's own commits; the close-out of ozw is held",
-  "updated_at": "2026-10-10T22:41:22Z",
+  "sequence": 59,
+  "state": "publishing",
+  "reason": "closing 72z behind the integrated gate on 7297759f7531",
+  "updated_at": "2026-10-10T22:51:32Z",
   "ticks": [
     {
       "tick_id": "az1",
