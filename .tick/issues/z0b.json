@@ -2,7 +2,7 @@
   "id": "z0b",
   "title": "Re-review ozw after its NOT READY review's blocking findings (round 2)",
   "description": "Review the epic ozw again, AS INTEGRATED, now that the blocking findings of its NOT READY review are fixed. This is review round 2; 2 count toward the bound of 2.\n\nThe previous review (c1d, decision 7) judged it NOT READY: regenerate the five committed screenshots from the integrated renderer (docs/design/watch-redesign-2026-10/capture.sh) and commit them: the held PNG still shows \"● healthy\" over its needs-you box, and none shows the epic's spacing or compact note; its blocking finding(s): \"The committed watch screenshots predate the epic: held still reads '● healthy'\".\n\nJudge the tree as it stands: READY when the epic does what it said it would, NOT READY naming what still blocks it. A NOT READY that spends the bound is not reviewed again by the run unless the tree changes after it: it holds for a person with your reasons.",
-  "status": "open",
+  "status": "in_progress",
   "priority": 1,
   "type": "task",
   "owner": "ticfac",
@@ -13,5 +13,6 @@
   "role": "review",
   "created_by": "ticfac run run_1fac91062aa546f29910c5796a468976",
   "created_at": "2026-10-10T20:48:53Z",
-  "updated_at": "2026-10-10T20:48:53Z"
+  "updated_at": "2026-10-10T21:25:24.306904324Z",
+  "started_at": "2026-10-10T21:25:24.306903654Z"
 }
