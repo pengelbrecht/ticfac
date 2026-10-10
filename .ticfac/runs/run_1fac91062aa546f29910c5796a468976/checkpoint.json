@@ -2,14 +2,14 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 22,
-  "state": "publishing",
-  "reason": "closing az1 behind the integrated gate on 1aaa20c8e59e",
-  "updated_at": "2026-10-10T18:35:24Z",
+  "sequence": 23,
+  "state": "running",
+  "reason": "az1 is closed",
+  "updated_at": "2026-10-10T18:35:26Z",
   "ticks": [
     {
       "tick_id": "az1",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 5
     },
     {
