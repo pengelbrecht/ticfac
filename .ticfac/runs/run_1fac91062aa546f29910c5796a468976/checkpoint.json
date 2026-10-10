@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 47,
-  "state": "running",
-  "reason": "z0b is running as attempt 8",
-  "updated_at": "2026-10-10T21:25:29Z",
+  "sequence": 48,
+  "state": "collecting",
+  "reason": "collecting the review-epic job for z0b",
+  "updated_at": "2026-10-10T21:45:38Z",
   "ticks": [
     {
       "tick_id": "az1",
