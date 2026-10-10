@@ -3,6 +3,7 @@
   "title": "The health line says 'paused · needs you' whenever needs-you is not empty",
   "gloss": "health vs needs-you",
   "description": "watch_scenario_held shows a needs-you box and then '● healthy · 1 of 5 done'. Derive the health word from the needs-you state too (status model, so the phone page agrees), amber/red accordingly.",
+  "notes": "2026-10-10 20:02 - ticfac run run_1fac91062aa546f29910c5796a468976: etl try 1 (run dispatch #3) merged into epic/ozw as 323f813550e4; the integrated gate (go, go-touched, ts) passed.",
   "status": "in_progress",
   "priority": 2,
   "type": "task",
@@ -11,6 +12,6 @@
   "acceptance_criteria": "held scenario no longer reads healthy; status-model test; goldens updated; make gate",
   "created_by": "ticks-sandbox@ticks.invalid",
   "created_at": "2026-10-10T09:53:09.506993Z",
-  "updated_at": "2026-10-10T16:40:27.303205386Z",
+  "updated_at": "2026-10-10T20:02:08.966156957Z",
   "started_at": "2026-10-10T16:40:27.303204166Z"
 }
