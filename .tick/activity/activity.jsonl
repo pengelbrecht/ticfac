@@ -3629,3 +3629,4 @@
 {"ts":"2026-10-10T09:53:09.604122Z","tick":"h3s","action":"create","actor":"ticks-sandbox@ticks.invalid","epic":"ozw","data":{"priority":2,"title":"Blank lines between the dashboard's groups","type":"task"}}
 {"ts":"2026-10-10T09:53:09.636108Z","tick":"c1d","action":"create","actor":"ticks-sandbox@ticks.invalid","epic":"ozw","data":{"priority":2,"title":"Final review of the watch polish diff","type":"task"}}
 {"ts":"2026-10-10T09:53:09.665028Z","tick":"72z","action":"create","actor":"ticks-sandbox@ticks.invalid","epic":"ozw","data":{"priority":2,"title":"Close out the watch polish epic","type":"task"}}
+{"ts":"2026-10-10T17:40:27.548367504Z","tick":"sqz","action":"create","actor":"peter@engelbrecht.dk","data":{"priority":1,"title":"A resolve-conflict job cannot boot when the conflict is in the lockfile: [sandbox] setup runs npm ci on the conflicted tree","type":"bug"}}

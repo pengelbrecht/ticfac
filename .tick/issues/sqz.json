@@ -1,0 +1,14 @@
+{
+  "id": "sqz",
+  "title": "A resolve-conflict job cannot boot when the conflict is in the lockfile: [sandbox] setup runs npm ci on the conflicted tree",
+  "gloss": "resolve job dies on conflicted lockfile",
+  "description": "Seen 2026-10-10 in forspringai/pulsespring, run run_54594b7cdbf243fbbd65d5bbc9cdcb52 (epic u2d). w6p and vn6 both added jose to package.json; w6p conflicted with epic/u2d in 6 files including package.json and package-lock.json. The run committed the conflicted merge (f0a1582, branch tick/u2d/attempt-5-resolve-5-b43272b1/w6p-boot-stopped) and dispatched a resolve-conflict job on it. The container's [sandbox] setup is 'npm ci', which refuses a package-lock.json holding conflict markers, so the job stopped at boot (exit 6). The run then classified it as worker_boot_fault ('every job of this run boots the same image ... would stop the same way') and halted the whole epic with supervision_halted.\n\nTwo problems:\n1. The resolve job runs repo setup against a tree that cannot be set up by construction. Any two ticks that add dependencies in parallel hit this; in a Node repo that is common.\n2. The halt is misclassified: implement jobs on clean trees boot fine (the run had 4 green ticks); only jobs on the conflicted tree fail. 'Every job would stop the same way' is false.\n\nWorkaround used: resolved the merge by hand (union, lockfile regenerated with npm install), gate green, pushed epic/u2d, closed w6p, re-ran the epic.\n\nPossible fixes: run setup on the epic tip (the 'ours' side) before checking out the conflicted merge; or have the resolve job resolve lockfile conflicts mechanically (take ours, re-run the package manager's install) before setup; or skip setup failures for resolve jobs and let the gate catch them. And scope worker_boot_fault to the job kind that failed.",
+  "status": "open",
+  "priority": 1,
+  "type": "bug",
+  "owner": "peter@engelbrecht.dk",
+  "acceptance_criteria": "A resolve-conflict job whose conflict includes package-lock.json boots and produces a resolved, gated merge in a test fixture repo with [sandbox] setup = npm ci; a boot failure confined to resolve jobs does not halt the run as worker_boot_fault.",
+  "created_by": "peter@engelbrecht.dk",
+  "created_at": "2026-10-10T17:40:27.547832622Z",
+  "updated_at": "2026-10-10T17:40:27.547832622Z"
+}
