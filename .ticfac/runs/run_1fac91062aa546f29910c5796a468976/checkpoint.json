@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 46,
-  "state": "dispatching",
-  "reason": "dispatching z0b as attempt 8",
-  "updated_at": "2026-10-10T21:25:21Z",
+  "sequence": 47,
+  "state": "running",
+  "reason": "z0b is running as attempt 8",
+  "updated_at": "2026-10-10T21:25:29Z",
   "ticks": [
     {
       "tick_id": "az1",
@@ -43,7 +43,8 @@
     },
     {
       "tick_id": "z0b",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 8
     }
   ],
   "provenance": {
