@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 34,
-  "state": "dispatching",
-  "reason": "dispatching c1d as attempt 6",
-  "updated_at": "2026-10-10T20:02:19Z",
+  "sequence": 35,
+  "state": "running",
+  "reason": "c1d is running as attempt 6",
+  "updated_at": "2026-10-10T20:02:27Z",
   "ticks": [
     {
       "tick_id": "az1",
@@ -29,7 +29,8 @@
     },
     {
       "tick_id": "c1d",
-      "state": "ready"
+      "state": "dispatched",
+      "attempt": 6
     },
     {
       "tick_id": "72z",
