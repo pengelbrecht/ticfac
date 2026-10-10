@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 16,
-  "state": "gating",
-  "reason": "running the integrated gate for cl7 on 36834236b8c1",
-  "updated_at": "2026-10-10T17:43:39Z",
+  "sequence": 17,
+  "state": "publishing",
+  "reason": "closing cl7 behind the integrated gate on 36834236b8c1",
+  "updated_at": "2026-10-10T18:09:12Z",
   "ticks": [
     {
       "tick_id": "az1",
