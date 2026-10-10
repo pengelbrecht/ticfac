@@ -1,0 +1,17 @@
+{
+  "id": "ozw",
+  "title": "Watch redesign polish: health vs needs-you, titles at 80 columns, colour, group spacing",
+  "gloss": "watch polish",
+  "description": "Follow-ups the operator accepted when merging ymf (PR #272, 2026-10-10), found reading its golden frames and screenshots (docs/design/watch-redesign-2026-10/): the health line contradicts the needs-you box; tick titles are truncated at 80 columns; the screenshots show no colour; the NOW/DONE/UP NEXT/HELD groups run together.",
+  "status": "open",
+  "priority": 2,
+  "type": "epic",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "labels": [
+    "config:glm"
+  ],
+  "acceptance_criteria": "[A1] With anything in needs-you, the health line no longer reads healthy (e.g. 'paused · needs you'). [A2] At 80x24 a tick title gets the width before the status: the busy scenario shows 'order-feed service skeleton' in full or nearly, the status shortens or wraps instead. [A3] The dashboard uses its colour accents on a colour terminal (green done, amber in progress, red failed/held, dim pending), and the committed screenshots show them. [A4] A blank line separates the groups and the phase track, within 80x24 for the five scenarios. [A5] Golden frames and screenshots updated; make gate passes and CI is green.",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-10T09:53:09.466434Z",
+  "updated_at": "2026-10-10T09:53:09.466434Z"
+}
