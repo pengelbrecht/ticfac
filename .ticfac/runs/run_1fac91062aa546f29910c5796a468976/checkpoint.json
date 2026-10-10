@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 44,
-  "state": "publishing",
-  "reason": "closing 7px behind the integrated gate on 29d4f5e31390",
-  "updated_at": "2026-10-10T21:25:11Z",
+  "sequence": 45,
+  "state": "running",
+  "reason": "7px is closed",
+  "updated_at": "2026-10-10T21:25:13Z",
   "ticks": [
     {
       "tick_id": "az1",
@@ -38,7 +38,7 @@
     },
     {
       "tick_id": "7px",
-      "state": "integrated",
+      "state": "closed",
       "attempt": 7
     },
     {
