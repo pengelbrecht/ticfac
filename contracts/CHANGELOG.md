@@ -53,6 +53,24 @@ loud.
 
 ---
 
+## 2.8.0
+
+MINOR: `status-model.json`'s health-verdict vocabulary grows a word (tick etl,
+epic ozw): `paused` — the headline's name for the person's wait, derived from
+the model's own needs-you list. Anything in needs-you and the headline reads
+`paused` with `"needs you"` as its summary, so the health line can no longer
+read `healthy` over a hold, a merge or untriaged findings, and the box above
+the line says the same thing the word does — on the terminal, through
+`dashVerdict`, and on the phone page, through `verdictWord` (the word rides
+behind the health line's own separator: "paused · needs you"). Degraded and
+stopped keep their precedence: something wrong with a live run names itself,
+and a run that is not going still reads stopped. The negative that refused
+`paused` as outside the vocabulary now refuses `halted` in its place.
+Consumers: the renderers gain a `paused` case (internal/cli's dashVerdict and
+cloudflare/src/status.ts's verdictWord, plus a colour for its dot) — a
+consumer that renders unknown states through its default arm is still
+correct. The cloudflare pin bumps in the same commit.
+
 ## 2.7.0
 
 MINOR: `status-model.json`'s elapsed rule is stated and its stopped-run golden

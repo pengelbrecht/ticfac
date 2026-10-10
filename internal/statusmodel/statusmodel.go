@@ -170,6 +170,11 @@ const (
 	VerdictHealthy  = "healthy"
 	VerdictDegraded = "degraded"
 	VerdictStopped  = "stopped"
+	// VerdictPaused is the headline's name for the person's wait (tick etl):
+	// anything in the needs-you list and the word is paused, so the health
+	// line and the box it renders under say one thing — the same derivation
+	// the phone page renders, one model, one word.
+	VerdictPaused = "paused"
 )
 
 // Cost line sources, the closed vocabulary of where a cost line's number came
@@ -640,7 +645,8 @@ type Attention Wait
 // feed lines that stated them: the facts a watcher reads to answer "is it
 // healthy" without parsing a single line of prose. The Verdict is the
 // answer itself — a word a person reads, grown by its own wave-2 tick from
-// the counts and the run's own words.
+// the counts and the run's own words, and by tick etl from the needs-you
+// list too: anything waiting for a person and the headline reads paused.
 type Health struct {
 	RemoteRetries   int `json:"remote_retries"`
 	Interventions   int `json:"interventions"`

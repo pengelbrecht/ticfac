@@ -800,6 +800,46 @@ describe("a cloud run renders the model its own orchestrator pushed (hn6 h7w)", 
     expect(stoppedBody).not.toContain('<span class="state done">done</span>');
   });
 
+  it("spells the paused verdict in the terminal's own words (tick etl)", async () => {
+    // The dashboard golden with the needs-you state the Go builder derives:
+    // anything in attention and the verdict is paused with "needs you" its
+    // summary — the health line and the box say one thing, here as in the
+    // terminal (TestTheWatchAndThePhoneSpellOneVerdictWord's paused half).
+    const pausedModel = {
+      ...goldens.dashboard,
+      attention: [
+        {
+          kind: "held-for-person",
+          what: "attempt 2 of h2 was struck out for release",
+          since: "2026-09-28T19:16:00Z",
+          needs_person: true,
+          unblock_command: `ticfac settle hld h2 2 --release "<who>"`,
+        },
+      ],
+      waits_on: {
+        kind: "held-for-person",
+        what: "attempt 2 of h2 was struck out for release",
+        since: "2026-09-28T19:16:00Z",
+        needs_person: true,
+        unblock_command: `ticfac settle hld h2 2 --release "<who>"`,
+      },
+      health: {
+        remote_retries: 0,
+        interventions: 0,
+        stall_warnings: 0,
+        wall_clocks_fired: 0,
+        verdict: { state: "paused", summary: "needs you", recovered: [] },
+      },
+    };
+    const body = await renderedLocalPage(pausedModel);
+    expect(body).toContain("paused · needs you");
+    expect(body).not.toContain("paused: needs you");
+    expect(body).toContain('class="verdict verdict-paused"');
+    expect(body).not.toContain('class="verdict verdict-healthy"');
+    // The box beneath the headline still names what needs a person.
+    expect(body).toContain("needs you: attempt 2 of h2 was struck out for release");
+  });
+
   it("renders the golden's elapsed, live workers and CI — the sections the same model gives the terminal", async () => {
     const body = await renderedLocalPage(goldens.dashboard);
     // The run's elapsed, the model's own clamped clock (tick e6g) — the

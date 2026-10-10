@@ -1240,9 +1240,10 @@ func dashSeat(left, right string, width int) string {
 }
 
 // dashVerdict is the health headline (hn6 rule 3): a word a person reads —
-// green "● healthy", amber "● degraded: …" or red "● stopped: …" — with what
-// the run got past by itself riding in brackets as calm, never as alarms.
-// Raw counters are the reader's drill-in, not the headline's words.
+// green "● healthy", amber "● degraded: …" or "● paused · needs you", red
+// "● stopped: …" — with what the run got past by itself riding in brackets
+// as calm, never as alarms. Raw counters are the reader's drill-in, not the
+// headline's words.
 func dashVerdict(m statusmodel.Model, st watchStyles) string {
 	v := m.Health.Verdict
 	var head string
@@ -1262,6 +1263,16 @@ func dashVerdict(m statusmodel.Model, st watchStyles) string {
 			head = st.amber("● " + v.Summary)
 		default:
 			head = st.amber("● degraded: " + v.Summary)
+		}
+	case statusmodel.VerdictPaused:
+		// The paused state (tick etl) is the needs-you list the box above
+		// already renders, so its summary rides behind the health line's own
+		// separator — "● paused · needs you" — the same words the box states,
+		// never a colon pretending the summary is the run's failure.
+		if v.Summary == "" {
+			head = st.amber("● paused")
+		} else {
+			head = st.amber("● paused · " + v.Summary)
 		}
 	case statusmodel.VerdictStopped:
 		if v.Summary == "" {

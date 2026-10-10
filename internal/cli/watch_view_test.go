@@ -710,8 +710,11 @@ func scenarioHeld() statusmodel.Model {
 			Since: ptr("2026-09-28T19:16:00Z"), NeedsPerson: true,
 			UnblockCommand: ptr(`ticfac settle hld h2 2 --release "<who>"`),
 		}},
+		// The health line (tick etl): anything in needs-you and the verdict is
+		// paused — the builder derives it from the attention list, and the
+		// hand-built scenario carries what the builder would derive.
 		Health: statusmodel.Health{
-			Verdict: statusmodel.HealthVerdict{State: statusmodel.VerdictHealthy},
+			Verdict: statusmodel.HealthVerdict{State: statusmodel.VerdictPaused, Summary: "needs you"},
 		},
 		Remaining: &statusmodel.Remaining{
 			ApproximateSeconds: 3600,
@@ -1555,10 +1558,11 @@ func TestDashboardCostLineRendersMeteredOnly(t *testing.T) {
 }
 
 // TestDashboardVerdictColours: health as a verdict, coloured as the verdict
-// it is (hn6 rule 3) — green healthy, amber degraded with its why, red
-// stopped with its why — and what the run recovered from by itself riding in
-// brackets as calm, with a measured span through the frame's own clock and a
-// count as "×n" where no span was stated.
+// it is (hn6 rule 3) — green healthy, amber degraded with its why, amber
+// paused with its why (tick etl), red stopped with its why — and what the
+// run recovered from by itself riding in brackets as calm, with a measured
+// span through the frame's own clock and a count as "×n" where no span was
+// stated.
 func TestDashboardVerdictColours(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -1569,6 +1573,8 @@ func TestDashboardVerdictColours(t *testing.T) {
 		{statusmodel.HealthVerdict{State: statusmodel.VerdictHealthy}, "● healthy", "32"},
 		{statusmodel.HealthVerdict{State: statusmodel.VerdictDegraded,
 			Summary: "degraded: t2 nudged as stuck (5m ago)"}, "● degraded: t2 nudged as stuck (5m ago)", "33"},
+		{statusmodel.HealthVerdict{State: statusmodel.VerdictPaused,
+			Summary: "needs you"}, "● paused · needs you", "33"},
 		{statusmodel.HealthVerdict{State: statusmodel.VerdictStopped,
 			Summary: "pid 4242 is gone without its own terminal line"}, "● stopped: pid 4242 is gone without its own terminal line", "31"},
 	} {
@@ -2167,6 +2173,22 @@ func TestTheWatchAndThePhoneSpellOneVerdictWord(t *testing.T) {
 	}
 	if strings.HasSuffix(dashVerdict(stopped, plainStyles()), "stopped: ") {
 		t.Error("the stopped verdict ends in a colon with nothing behind it")
+	}
+
+	// Paused (tick etl): the needs-you state the builder derives rides behind
+	// the health line's own separator — never a colon — and an empty summary
+	// reads the bare word, like every other state's.
+	paused := statusmodel.Model{Health: statusmodel.Health{
+		Verdict: statusmodel.HealthVerdict{State: statusmodel.VerdictPaused, Summary: "needs you"}}}
+	if got := dashVerdict(paused, plainStyles()); got != "● paused · needs you" {
+		t.Errorf("a paused run's verdict reads %q, want the line's own separator", got)
+	}
+	paused.Health.Verdict.Summary = ""
+	if got := dashVerdict(paused, plainStyles()); got != "● paused" {
+		t.Errorf("a paused run with no summary reads %q, want the bare word", got)
+	}
+	if strings.Contains(dashVerdict(paused, plainStyles()), "paused:") {
+		t.Error("the paused verdict spells a colon with nothing behind it")
 	}
 
 	// The sibling shapes every renderer must also agree on, so the shared
