@@ -2,6 +2,7 @@
   "id": "m8b",
   "title": "No gate check ties the committed PNGs to the current renderer",
   "description": "TestCommittedScreenshotsShowTheColourAccents asserts only hue families, and TestDashboardScreenshotSources skips without -screenshot-dir, so nothing in the gate compares the committed PNGs — or their sources — with the frames the goldens pin. That is how three green merges left the committed evidence a frame behind this epic's own headline fix, and it makes cl7's claim that the guard 'will refuse a monochrome or stale capture' only half true: monochrome it refuses, stale it cannot see. Commit the five capture sources (watch-\u003cscenario\u003e.ansi) beside the PNGs and assert them in the gate against the styled render, so a stale capture fails make gate instead of waiting for a person to read the images.\nevidence: internal/cli/watch_screenshots_test.go:104-106 (the source writer skips in the gate), :221 (the hue-only assertion)\n\nticfac run run_1fac91062aa546f29910c5796a468976 filed this backlog tick from the finding 64ca6ded3127ea8c284d04a81c1ee84baf9531b7f49b494715e850138bdc974d (reported by run-run_1fac91062aa546f29910c5796a468976/tick-c1d/attempt-6) rather than absorb it into the running epic: it is not absorbed: only a finding the final reviewer names blocking, or a high-severity one whose reporter names the done item it breaks while the work is under way, enters the running epic. The decision record is .ticfac/runs/run_1fac91062aa546f29910c5796a468976/absorptions/64ca6ded3127ea8c284d04a81c1ee84baf9531b7f49b494715e850138bdc974d.json on the run branch.",
+  "notes": "2026-10-10 20:48 - ticfac run run_1fac91062aa546f29910c5796a468976: created by absorbing finding 64ca6ded3127ea8c284d04a81c1ee84baf9531b7f49b494715e850138bdc974d — a backlog tick with an owner, outside the epic, listed in the epic PR. The decision record is .ticfac/runs/run_1fac91062aa546f29910c5796a468976/absorptions/64ca6ded3127ea8c284d04a81c1ee84baf9531b7f49b494715e850138bdc974d.json on epic/ozw, and it says: its severity is medium, not high; the reporter names no done item it breaks. A finding enters the running epic only when the final reviewer names it blocking, or when its reporter rates it high severity and names the done item it breaks while the epic's work is under way; this one is a backlog tick with an owner, listed in the epic PR",
   "status": "open",
   "priority": 2,
   "type": "task",
@@ -9,5 +10,5 @@
   "discovered_from": "run-run_1fac91062aa546f29910c5796a468976/tick-c1d/attempt-6",
   "created_by": "ticfac run run_1fac91062aa546f29910c5796a468976",
   "created_at": "2026-10-10T20:48:12Z",
-  "updated_at": "2026-10-10T20:48:12Z"
+  "updated_at": "2026-10-10T20:48:18.170461726Z"
 }
