@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "decision": 5,
+  "role": "triage-failure",
+  "request": {
+    "attempt": 1,
+    "epic_id": "ozw",
+    "job_id": "run-run_1fac91062aa546f29910c5796a468976/tick-az1/attempt-1",
+    "op": "settle_attempt",
+    "run_id": "run_1fac91062aa546f29910c5796a468976",
+    "state": "rejected",
+    "tick_id": "az1"
+  },
+  "response": {
+    "by_run": true,
+    "carry_ref": "refs/heads/ticfac/run-run_1fac91062aa546f29910c5796a468976/tick-az1/attempt-1",
+    "carry_sha": "81c9e74e23d3b379a02a8cf7e6fc35a834410191",
+    "disposition": "carry-work",
+    "reason": "missing-result",
+    "released_by": "ticfac",
+    "settled": true,
+    "state": "rejected",
+    "step": "escalate"
+  },
+  "validated": true,
+  "requested_at": "2026-10-10T16:46:02Z",
+  "answered_at": "2026-10-10T16:46:02Z",
+  "provenance": {
+    "run_id": "run_1fac91062aa546f29910c5796a468976",
+    "tick_id": "az1",
+    "attempt": 1,
+    "source_ref": "refs/heads/epic/ozw",
+    "source_sha": "938dc53d361deeec2559bdedfc931845d51a2871",
+    "integration_ref": "refs/heads/epic/ozw",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:f6d30e41f279e14ec58e01f070b5f9560dd75d0f23147e11fdef84a873c82087",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}
