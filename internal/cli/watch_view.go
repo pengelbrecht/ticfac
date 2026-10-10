@@ -151,9 +151,9 @@ func renderWatchFrame(m statusmodel.Model, st watchStyles, width, height int, se
 	foot := dashboardTail(m, st, width)
 	// The head in two variants: full (identity, the needs-you boxes, the
 	// health line, the phase track) and minimal (identity, the boxes, the
-	// health line) — the track is the first thing the height fit yields,
-	// because a pane crowded with holds still owes its rows a seat before it
-	// owes the map a seat.
+	// health line) — the track is the first of the head's own lines the
+	// height fit gives up, because a pane crowded with holds still owes
+	// its rows a seat before it owes the map one.
 	headFull := make([]string, 0, len(base)+8)
 	headFull = append(headFull, base[0], frameRule(width))
 	for _, box := range boxes {
@@ -166,52 +166,66 @@ func renderWatchFrame(m statusmodel.Model, st watchStyles, width, height int, se
 		headMin = append(headMin, box...)
 	}
 	headMin = append(headMin, base[1:1+dashboardHealthLineCount(m, width)]...)
-	middle := func(level, maxRows int) []string {
-		mid, _ := dashboardMiddle(m, st, width, selected, level, maxRows)
+	middle := func(spaced bool, level, maxRows int) []string {
+		mid, _ := dashboardMiddle(m, st, width, selected, spaced, level, maxRows)
 		return mid
 	}
-	assemble := func(head []string, level, maxRows int) []string {
+	// The blank line between the phase track and the first group (tick
+	// h3s): one, and only when the head ends with the track — a model
+	// without a track ends its head with the blank the headline already
+	// puts there, and a second would read as an empty band.
+	spacer := func(head []string, spaced bool, mid []string) []string {
+		if !spaced || len(mid) == 0 || len(head) == 0 || head[len(head)-1] == "" {
+			return mid
+		}
+		return append([]string{""}, mid...)
+	}
+	assemble := func(head []string, spaced bool, level, maxRows int) []string {
 		out := append([]string{}, head...)
 		if level >= 0 {
-			out = append(out, middle(level, maxRows)...)
+			out = append(out, spacer(head, spaced, middle(spaced, level, maxRows))...)
 		}
 		return append(out, foot...)
 	}
 
-	// The height fit, in the order the frame gives things up: the DONE
-	// rows folded into their group's header, then rows trimmed from the
-	// bottom with one "+N more" at the fold (the drill-in cursor's row
-	// never among the trimmed), then the UP NEXT line's items dropped —
-	// first with the phase track standing, then with the track dropped so
-	// the rows keep their seat — and only then the middle dropped entirely.
-	// A pane shorter than even the minimal head keeps as much of the head
-	// as fits, whole needs-you boxes only. Fitting never reorders what it
-	// keeps.
+	// The height fit, in the order the frame gives things up: the UP NEXT
+	// group collapses first — its "then:" line, then the group itself
+	// (tick h3s: the queue is what a person glances at, not what they
+	// watch, so it is the cheapest thing to lose, and losing it is what
+	// lets the five scenarios keep their spacing and their rows at 80x24)
+	// — then the spacing between the groups yields, then the DONE rows
+	// fold into their group's header, then rows trim from the bottom with
+	// one "+N more" at the fold (the drill-in cursor's row never among the
+	// trimmed), then the phase track drops so the rows keep their seat —
+	// and only then the middle dropped entirely. A pane shorter than even
+	// the minimal head keeps as much of the head as fits, whole needs-you
+	// boxes only. Fitting never reorders what it keeps.
 	if height <= 0 {
-		return finishFrame(assemble(headFull, 0, -1), width)
+		return finishFrame(assemble(headFull, true, 0, -1), width)
 	}
-	_, totalRows := dashboardMiddle(m, st, width, selected, 1, 0)
+	_, totalRows := dashboardMiddle(m, st, width, selected, false, 3, 0)
 	trim := func(head []string) ([]string, bool) {
 		for k := totalRows - 1; k >= 0; k-- {
-			if frame := assemble(head, 1, k); len(frame) <= height {
+			if frame := assemble(head, false, 3, k); len(frame) <= height {
 				return frame, true
 			}
 		}
 		return nil, false
 	}
 	for _, c := range []struct {
-		head    []string
-		level   int
-		maxRows int
+		head   []string
+		spaced bool
+		level  int
 	}{
-		{headFull, 0, -1}, {headFull, 1, -1}, {headFull, 2, -1},
-		{headMin, 0, -1}, {headMin, 1, -1}, {headMin, 2, -1},
-		{headFull, -1, -1}, {headMin, -1, -1},
+		{headFull, true, 0}, {headFull, true, 1}, {headFull, true, 2},
+		{headFull, false, 0}, {headFull, false, 1}, {headFull, false, 2}, {headFull, false, 3},
+		{headMin, false, 0}, {headMin, false, 1}, {headMin, false, 2}, {headMin, false, 3},
+		{headFull, false, -1}, {headMin, false, -1},
 	} {
-		if frame := assemble(c.head, c.level, c.maxRows); len(frame) <= height {
+		if frame := assemble(c.head, c.spaced, c.level, -1); len(frame) <= height {
 			return finishFrame(frame, width)
 		}
-		if c.level == 1 {
+		if c.level == 3 {
 			if frame, ok := trim(c.head); ok {
 				return finishFrame(frame, width)
 			}
@@ -616,13 +630,17 @@ type dashSection struct {
 
 // dashboardMiddle is everything between the headline and the latest rule:
 // the ticks grouped by state (NOW / DONE / UP NEXT / HELD), the census note
-// when one cannot be taken, and the cost line. The level folds detail as
-// the pane's height demands — 0 the whole groups, 1 the DONE rows folded
-// into their header, 2 the UP NEXT line's items folded too — and maxRows
-// caps the NOW and HELD rows the frame keeps, counting what it drops in one
-// "+N more" line at the fold. The rows are the model's own groups (tick
-// lck) rendered in the groups' own order; the renderer re-derives nothing.
-func dashboardMiddle(m statusmodel.Model, st watchStyles, width int, selected string, level, maxRows int) ([]string, int) {
+// when one cannot be taken, and the cost line. When spaced, one blank line
+// separates each adjacent pair of groups (tick h3s) — never before the
+// first rendered group, and never around the census note or the cost line,
+// which are not groups. The level folds detail as the pane's height
+// demands — 0 the whole groups, 1 the UP NEXT line without its "then:"
+// line, 2 the UP NEXT group gone entirely, 3 the DONE rows folded into
+// their header — and maxRows caps the NOW and HELD rows the frame keeps,
+// counting what it drops in one "+N more" line at the fold. The rows are
+// the model's own groups (tick lck) rendered in the groups' own order; the
+// renderer re-derives nothing.
+func dashboardMiddle(m statusmodel.Model, st watchStyles, width int, selected string, spaced bool, level, maxRows int) ([]string, int) {
 	if m.Waves == nil {
 		return []string{st.dim("the epic's shape could not be read (the tracker did not answer)")}, 0
 	}
@@ -692,9 +710,18 @@ func dashboardMiddle(m statusmodel.Model, st watchStyles, width int, selected st
 	out := make([]string, 0, 12)
 	shown, total := 0, 0
 	lastRowsEnd := -1
+	// gap is the one blank line that separates two adjacent groups (tick
+	// h3s) — only where a group already stands, so the first group on the
+	// frame meets the phase track's own blank instead of a doubled one.
+	gap := func() {
+		if spaced && len(out) > 0 {
+			out = append(out, "")
+		}
+	}
 	for _, section := range sections {
 		if section.name == "UP NEXT" {
-			if len(section.ids) > 0 {
+			if len(section.ids) > 0 && level < 2 {
+				gap()
 				out = append(out, dashboardUpNext(section, sources, m, st, width, level)...)
 			}
 			continue
@@ -702,8 +729,9 @@ func dashboardMiddle(m statusmodel.Model, st watchStyles, width int, selected st
 		if len(section.ids) == 0 {
 			continue
 		}
-		if section.name == "DONE" && level >= 1 {
+		if section.name == "DONE" && level >= 3 {
 			// Folded: the header alone counts what the rows would say.
+			gap()
 			out = append(out, st.bold(dashSectionHeader(section, sources)))
 			continue
 		}
@@ -723,6 +751,7 @@ func dashboardMiddle(m statusmodel.Model, st watchStyles, width int, selected st
 		if len(rows) == 0 {
 			continue // a section whose rows the fold dropped: no header alone
 		}
+		gap()
 		out = append(out, st.bold(dashSectionHeader(section, sources)))
 		out = append(out, rows...)
 		lastRowsEnd = len(out)
@@ -784,13 +813,12 @@ func dashSectionHeader(section dashSection, sources map[string]dashRowSource) st
 // where the pane ends — and, when the epic's track still has steps ahead of
 // the marker, a dim "then:" line naming them, indented under the items. The
 // group is always collapsed: the queue is what a person glances at, not
-// what they watch.
+// what they watch. Level 1 drops the "then:" line — the first thing the
+// height fit gives up (tick h3s); level 2 drops the group entirely, which
+// the caller handles and never reaches here.
 func dashboardUpNext(section dashSection, sources map[string]dashRowSource, m statusmodel.Model, st watchStyles, width, level int) []string {
 	header := dashSectionHeader(section, sources)
 	out := []string{st.bold(header)}
-	if level >= 2 {
-		return out // the fold keeps the header alone
-	}
 	items := make([]string, 0, len(section.ids))
 	for _, id := range section.ids {
 		src, ok := sources[id]
@@ -809,6 +837,11 @@ func dashboardUpNext(section dashSection, sources map[string]dashRowSource, m st
 	}
 	if text := dashFoldItems(items, avail); text != "" {
 		out[0] += "   " + text
+	}
+	if level >= 1 {
+		// The fold keeps the header and its items but drops the "then:"
+		// line (tick h3s): the steps ahead are the track's own news.
+		return out
 	}
 	if then := dashThenLine(m, st); then != "" {
 		out = append(out, strings.Repeat(" ", ansi.StringWidth(header)+3)+then)
