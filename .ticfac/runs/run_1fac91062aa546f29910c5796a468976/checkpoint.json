@@ -2,10 +2,10 @@
   "schema_version": 3,
   "run_id": "run_1fac91062aa546f29910c5796a468976",
   "epic_id": "ozw",
-  "sequence": 52,
-  "state": "running",
-  "reason": "CI is green on the epic PR #273; the close-out of ozw is admitted",
-  "updated_at": "2026-10-10T21:46:06Z",
+  "sequence": 53,
+  "state": "dispatching",
+  "reason": "dispatching 72z as attempt 9",
+  "updated_at": "2026-10-10T21:46:09Z",
   "ticks": [
     {
       "tick_id": "az1",
