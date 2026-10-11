@@ -122,6 +122,7 @@ func (r *Reconciler) startWithRoom(executor Executor, tick string, spec *subproc
 		if !isNoCapacity(err) {
 			if err == nil {
 				r.noteClaudeSubStepDown(executor, tick, handle)
+				r.noteStartFallback(executor, tick, handle)
 			}
 			return handle, err
 		}
@@ -165,6 +166,31 @@ func (r *Reconciler) noteClaudeSubStepDown(executor Executor, tick string, handl
 	}
 	if detail, down := noter.ClaudeSubStepDown(handle); down {
 		r.record(tick, StageClaudeSubSteppedDown, "%s", detail)
+	}
+}
+
+// StageStartFellBack is the feed line of a job its executor started on a
+// fallback substrate because the one its profile names could not start it —
+// a herdr pane whose agent never became ready, run on the headless local
+// runner instead (tick o35) — so a reader sees why a herdr run has a job
+// with no pane, and that the run went on without a person.
+const StageStartFellBack = "start_fell_back"
+
+// StartFallbacks is an executor that can say a job it started fell back to
+// another substrate, and why. The reconciler names no executor: the hook is
+// the executor's to implement (internal/cli's herdr wrapper does).
+type StartFallbacks interface {
+	StartFallback(handle *subprocess.JobHandle) (string, bool)
+}
+
+// noteStartFallback records a started job's fallback on the feed.
+func (r *Reconciler) noteStartFallback(executor Executor, tick string, handle *subprocess.JobHandle) {
+	noter, ok := executor.(StartFallbacks)
+	if !ok || handle == nil {
+		return
+	}
+	if detail, fell := noter.StartFallback(handle); fell {
+		r.record(tick, StageStartFellBack, "%s", detail)
 	}
 }
 

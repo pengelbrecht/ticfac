@@ -19,6 +19,7 @@ import (
 
 	"github.com/pengelbrecht/ticfac/internal/contracts"
 	"github.com/pengelbrecht/ticfac/internal/shorttest"
+	"github.com/pengelbrecht/ticfac/internal/tempdir"
 )
 
 // fakeAgent is one fake-agent.sh process the harness started. done closes
@@ -159,8 +160,22 @@ func TestAFakeAgentExitsOnceItsScratchDirIsGone(t *testing.T) {
 // TestMain is the package's leak check: a fake agent still alive once every
 // test has finished is a failure of the package, and is killed here so the
 // failure does not also become a leak.
+//
+// It also keeps every executor this package's tests build off the operator's
+// real Claude Code config (tick o35): an executor built without an explicit
+// ClaudeConfigPath resolves Claude Code's own location, and a claude launch
+// registers folder trust there. CLAUDE_CONFIG_DIR points that resolution at a
+// directory of the suite's own, so a test that forgets the option writes into
+// a scratch file, never ~/.claude.json.
 func TestMain(m *testing.M) {
+	claudeConfig, err := os.MkdirTemp("", tempdir.Pattern("ticfac-herdr-claude-config-"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+	_ = os.Setenv("CLAUDE_CONFIG_DIR", claudeConfig)
 	code := m.Run()
+	_ = os.RemoveAll(claudeConfig)
 	// No grace here: each harness's cleanup already waited for its groups
 	// to empty, so anything alive now was never stopped.
 	if pids, desc := leakedFakeAgents(); len(pids) > 0 {
