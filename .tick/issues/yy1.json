@@ -1,0 +1,14 @@
+{
+  "id": "yy1",
+  "title": "herdr executor tests leak their fake agents: 5 orphaned fake-agent.sh per test run, alive for days",
+  "gloss": "herdr test fake-agent leak",
+  "description": "Reported 2026-10-11 from the thorpeleverage session: 80 orphaned /bin/sh internal/exec/herdr/testdata/fake-agent.sh processes, PPID 1, 3-7 days old, 16 each from TestAWorkingAgentIsNotNudged, TestAReportThatStaysUnreadableIsMissingResultAfterThePanePushbac(k), TestAnUnverifiedKindKeepsTheGraceForAnAgentStillWorking, TestAnUnreadableReportIsPushedBackInThePaneAndAcceptedWhenFixed, TestAnAgentThatNeverReportsIsMissingResultAfterTheNudgesAreSpent — 5 per run of the package, run from epic-t8u worker worktrees (0bg, o3q, p4c, pqs, r1f, u51, x73). These are the modes that never exit on their own (sleep/ignore/esc_only); the fake agent is started detached (harness_test.go ~447) and t.Cleanup never kills it. A leak of this exact class was cleaned by hand before (fake-agent.sh, 2026-10). Killed by exact pid 2026-10-11. Fix: start the fake agent in its own process group and kill the group in t.Cleanup; make fake-agent.sh exit when its temp dir or parent disappears; add a package TestMain leak check that fails if any fake agent this package started is still alive.",
+  "status": "open",
+  "priority": 2,
+  "type": "bug",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "running go test ./internal/exec/herdr/ leaves no fake-agent.sh process behind (leak check in TestMain fails without the fix); make gate",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-11T15:36:50.000038Z",
+  "updated_at": "2026-10-11T15:36:50.000038Z"
+}
