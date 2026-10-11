@@ -118,7 +118,13 @@ func executorFactory(runner, gate string) func(reconcile.Dispatch) (reconcile.Ex
 		case subprocess.ExecutorName:
 			return local(d)
 		case herdr.ExecutorName:
-			return herdrExecutor(gate, d)
+			executor, substrate, err := herdrExecutor(gate, d)
+			if err != nil {
+				return nil, substrate, err
+			}
+			// A pane that cannot start runs the job on the headless local
+			// runner instead of halting the run for a person (tick o35).
+			return withHeadlessFallback(executor, d, local), substrate, nil
 		case cloudflaresandbox.ExecutorName:
 			return sandboxExecutor(d)
 		default:
@@ -152,11 +158,7 @@ func sweeperFactory(gate string) func(reconcile.Dispatch) (reconcile.LeftoverSwe
 		if err != nil {
 			return nil, err
 		}
-		sweeper, ok := executor.(reconcile.LeftoverSweeper)
-		if !ok {
-			return nil, fmt.Errorf("the herdr executor cannot sweep")
-		}
-		return sweeper, nil
+		return executor, nil
 	}
 }
 
@@ -232,7 +234,7 @@ const pushInterval = 60 * time.Second
 // leaves no half-made workspace behind — and reports the substrate the
 // handshake observed, which the reconciler states in the dispatch's
 // provenance.
-func herdrExecutor(gate string, d reconcile.Dispatch) (reconcile.Executor, reconcile.Substrate, error) {
+func herdrExecutor(gate string, d reconcile.Dispatch) (*herdr.Executor, reconcile.Substrate, error) {
 	cfg, argv, err := spawnArgv(gate, d)
 	if err != nil {
 		return nil, reconcile.Substrate{}, err

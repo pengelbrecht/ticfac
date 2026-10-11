@@ -665,6 +665,9 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		Remote:     "origin",
 		Attempt:    1,
 		Now:        clock,
+		// Folder trust lands in a config of the test's own, never the
+		// operator's ~/.claude.json (tick o35).
+		ClaudeConfigPath: filepath.Join(root, "claude-config", ".claude.json"),
 	})
 	if err != nil {
 		t.Fatal(err)

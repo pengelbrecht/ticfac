@@ -72,6 +72,7 @@ var feedSentences = map[string]feedSentenceBuilder{
 
 	// Dispatch, starts and the base fold.
 	reconcile.StageStartFailed:     feedPrefixed("a dispatch failed to start: "),
+	reconcile.StageStartFellBack:   feedPrefixed("running headless instead: "),
 	reconcile.StageStartPublished:  feedConst("published a commit so the next try isn't stuck on it"),
 	reconcile.StageRefreshDeferred: feedConst("pulling in the latest base didn't land yet; working ahead and retrying"),
 	reconcile.StageRunHeld:         feedConst("paused: needs you"),

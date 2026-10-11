@@ -98,8 +98,15 @@ type Options struct {
 	// StartupTimeout bounds the two measured startup races Start absorbs —
 	// the agent_pane_busy retry and the interactive_ready poll — with the
 	// caller's patience budget rather than a fixed attempt count. Zero is
+	// $TICFAC_HERDR_STARTUP_TIMEOUT when that is set (startup.go), else
 	// DefaultStartupTimeout.
 	StartupTimeout time.Duration
+
+	// ClaudeConfigPath is the Claude Code config the executor registers
+	// folder trust in before it launches claude in a worktree it created
+	// (trust.go, tick o35). Empty resolves Claude Code's own location
+	// (ClaudeConfigPath()); "-" turns the registration off.
+	ClaudeConfigPath string
 
 	// ConfirmTimeout bounds the one wait Start attaches to the prompt
 	// submission: the wait for the agent to reach `working`. Its elapsing is
@@ -229,7 +236,22 @@ func New(opts Options) (*Executor, error) {
 		opts.Procs = subprocess.SystemProcs
 	}
 	if opts.StartupTimeout <= 0 {
+		fromEnv, err := StartupTimeoutFromEnv()
+		if err != nil {
+			return nil, fmt.Errorf("herdr executor: %w", err)
+		}
+		opts.StartupTimeout = fromEnv
+	}
+	if opts.StartupTimeout <= 0 {
 		opts.StartupTimeout = DefaultStartupTimeout
+	}
+	switch opts.ClaudeConfigPath {
+	case "-":
+		opts.ClaudeConfigPath = ""
+	case "":
+		// Unresolvable (no home directory) is registration off, not a
+		// dispatch that fails: the pane then reports the dialog precisely.
+		opts.ClaudeConfigPath, _ = ClaudeConfigPath()
 	}
 	if opts.ConfirmTimeout <= 0 {
 		opts.ConfirmTimeout = DefaultConfirmTimeout
@@ -325,6 +347,14 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		// is not this attempt's.
 		if handle, relaunched, err := e.relaunchRefusedLaunch(st, existing, spec); relaunched || err != nil {
 			return handle, err
+		}
+		// A launch an earlier incarnation never confirmed, whose agent herdr
+		// answers is STUCK — there, not working, not ready, not pending — was
+		// never prompted (the prompt follows a confirmed launch): it is the
+		// pane-start failure, reported as one, so the caller can run the job
+		// elsewhere instead of holding it for a person (tick o35).
+		if pse := e.stuckUnconfirmedLaunch(st, existing); pse != nil {
+			return nil, pse
 		}
 		status := e.statusOf(existing)
 		switch {
@@ -470,7 +500,25 @@ func (e *Executor) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error
 		return nil, err
 	}
 
-	if _, err := e.startAgent(ctx, st, record); err != nil {
+	_, err = e.startAgent(ctx, st, record)
+	if pse, stuck := AsPaneStartError(err); stuck {
+		// The pane's agent came up and is stuck — at a dialog, most often —
+		// with no prompt ever sent (tick o35). It is re-dispatched ONCE, in
+		// the same pane: the dialog is dismissed, trust is registered again
+		// and the launch repeated. A second failure is the caller's to
+		// answer (internal/cli falls back to the headless runner).
+		if obsErr := st.observe(subprocess.Observation{At: e.stamp(), Kind: subprocess.ObsHeartbeat,
+			Detail: fmt.Sprintf("%v; no prompt was sent, so the pane is cleared and the launch re-dispatched once",
+				pse)}); obsErr != nil {
+			return nil, fmt.Errorf("record the stuck pane: %w", obsErr)
+		}
+		e.clearStuckPane(ctx, st, record)
+		_, err = e.startAgent(ctx, st, record)
+		if again, stuck := AsPaneStartError(err); stuck {
+			again.Redispatched = true
+		}
+	}
+	if err != nil {
 		// Never clean up on a substrate failure: the pane, the workspace and
 		// the record stay as diagnostic state. The attempt is terminal —
 		// never launched — so a re-Start of this identity is refused as
@@ -524,6 +572,18 @@ func (e *Executor) startAgent(ctx context.Context, st *store, record *attemptRec
 	if err != nil {
 		return nil, err
 	}
+	// Trust first (tick o35): claude in a worktree it has never seen stops
+	// at its folder-trust dialog, and the worktree is one this executor
+	// created, so it is this executor's to trust.
+	e.registerTrust(st, record)
+	began := e.now()
+	started, err := e.launchAgent(ctx, st, record, args)
+	return started, e.paneStartFailure(ctx, record, began, err)
+}
+
+// launchAgent is startAgent's launch-and-wait, every failure returned as it
+// happened; startAgent classifies a stuck pane on top of it.
+func (e *Executor) launchAgent(ctx context.Context, st *store, record *attemptRecord, args []string) (*client.AgentStarted, error) {
 	params := client.AgentStartParams{
 		Name:   record.AgentName,
 		Kind:   record.Kind,
