@@ -489,6 +489,7 @@ h1 { font-size: 1.1rem; margin: .4rem 0 1rem; }
                 margin-right: .3rem; background: #7c8494; }
 .verdict-healthy .dot { background: #4ade80; }
 .verdict-degraded .dot { background: #ffb27a; }
+.verdict-paused .dot { background: #ffb27a; }
 .verdict-stopped .dot { background: #ff9c9c; }
 .phases { margin: .4rem 0 0; font-size: .85rem; }
 .ph { margin-right: .35rem; white-space: nowrap; }

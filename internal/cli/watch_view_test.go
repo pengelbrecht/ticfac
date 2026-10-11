@@ -710,8 +710,11 @@ func scenarioHeld() statusmodel.Model {
 			Since: ptr("2026-09-28T19:16:00Z"), NeedsPerson: true,
 			UnblockCommand: ptr(`ticfac settle hld h2 2 --release "<who>"`),
 		}},
+		// The health line (tick etl): anything in needs-you and the verdict is
+		// paused — the builder derives it from the attention list, and the
+		// hand-built scenario carries what the builder would derive.
 		Health: statusmodel.Health{
-			Verdict: statusmodel.HealthVerdict{State: statusmodel.VerdictHealthy},
+			Verdict: statusmodel.HealthVerdict{State: statusmodel.VerdictPaused, Summary: "needs you"},
 		},
 		Remaining: &statusmodel.Remaining{
 			ApproximateSeconds: 3600,
@@ -1139,6 +1142,114 @@ func TestDashboardGroupsFollowTheModel(t *testing.T) {
 	}
 }
 
+// dashGroupHeaderName is the group's name when a line opens one of the
+// dashboard's four groups ("NOW", "DONE (2)", "UP NEXT (4) ...", "HELD (1)"),
+// empty otherwise — the same recognition the row-grouping tests use.
+func dashGroupHeaderName(line string) string {
+	for _, name := range []string{"NOW", "DONE", "UP NEXT", "HELD"} {
+		if line == name || strings.HasPrefix(line, name+" (") {
+			return name
+		}
+	}
+	return ""
+}
+
+// dashSpacedGroups checks the spacing structure tick h3s pins: one blank
+// line between the phase track and the first group, one between each
+// adjacent pair of groups, and no two blank lines standing together —
+// the frame stays one continuous column of readable bands.
+func dashSpacedGroups(t *testing.T, frame []string, label string) {
+	t.Helper()
+	joined := strings.Join(frame, "\n")
+	for i := 1; i < len(frame); i++ {
+		if frame[i] == "" && frame[i-1] == "" {
+			t.Fatalf("%s: two blank lines stand together at lines %d and %d:\n%s", label, i, i+1, joined)
+		}
+	}
+	lastGroup := ""
+	for i, line := range frame {
+		group := dashGroupHeaderName(line)
+		if group == "" {
+			continue
+		}
+		if i == 0 || frame[i-1] != "" {
+			t.Fatalf("%s: the %s group does not stand one blank line below what precedes it:\n%s", label, group, joined)
+		}
+		if lastGroup == "" && (i < 2 || !strings.Contains(frame[i-2], "▲ here")) {
+			t.Fatalf("%s: the %s group does not stand one blank line below the phase track:\n%s", label, group, joined)
+		}
+		lastGroup = group
+	}
+	if lastGroup == "" {
+		t.Fatalf("%s: the frame carries no group header:\n%s", label, joined)
+	}
+}
+
+// TestDashboardGroupsAreSpaced (tick h3s): the dashboard's groups and the
+// phase track no longer run together. At a roomy pane the spacing stands
+// in full, with every group's rows intact.
+func TestDashboardGroupsAreSpaced(t *testing.T) {
+	t.Parallel()
+	for name, m := range dashboardScenarios() {
+		t.Run(name+"_120x40", func(t *testing.T) {
+			t.Parallel()
+			dashSpacedGroups(t, renderWatchFrame(m, plainStyles(), 120, 40, ""), name+" at 120x40")
+		})
+	}
+}
+
+// TestDashboardSpacingFitsEightyByTwentyFour (tick h3s): the five scenarios
+// still fit 80x24 WITH the spacing — the fit collapses UP NEXT first, never
+// the blank lines, so an 80-column frame reads as spaced as a 120-column
+// one.
+func TestDashboardSpacingFitsEightyByTwentyFour(t *testing.T) {
+	t.Parallel()
+	for name, m := range dashboardScenarios() {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			frame := renderWatchFrame(m, plainStyles(), 80, 24, "")
+			if len(frame) > 24 {
+				t.Fatalf("the %s scenario renders %d lines in a 24-line pane:\n%s", name, len(frame), strings.Join(frame, "\n"))
+			}
+			dashSpacedGroups(t, frame, name+" at 80x24")
+		})
+	}
+}
+
+// TestDashboardSpacingCollapsesUpNextFirst (tick h3s): where a pane cannot
+// afford the spacing at 80x24, the UP NEXT group is the first and only
+// thing that yields — the groups' own rows keep their seats, and the blank
+// lines stay. The busy scenario gives up the "then:" line and keeps its
+// queue and every row; the held scenario gives the UP NEXT group whole and
+// keeps every row.
+func TestDashboardSpacingCollapsesUpNextFirst(t *testing.T) {
+	t.Parallel()
+	busy := renderWatchFrame(scenarioBusy(), plainStyles(), 80, 24, "")
+	busyJoined := strings.Join(busy, "\n")
+	if !strings.Contains(busyJoined, "UP NEXT (12)") {
+		t.Errorf("the busy scenario's UP NEXT line lost its queue at 80x24:\n%s", busyJoined)
+	}
+	if strings.Contains(busyJoined, "then:") {
+		t.Errorf("the busy scenario kept the then: line the 80x24 fold should have dropped:\n%s", busyJoined)
+	}
+	for _, id := range []string{"tgi", "5az", "v1g", "gzt", "rtk", "ww2"} {
+		if dashRowLine(busy, id) < 0 {
+			t.Errorf("the busy scenario lost the %s row at 80x24:\n%s", id, busyJoined)
+		}
+	}
+
+	held := renderWatchFrame(scenarioHeld(), plainStyles(), 80, 24, "")
+	heldJoined := strings.Join(held, "\n")
+	if strings.Contains(heldJoined, "UP NEXT") {
+		t.Errorf("the held scenario kept the UP NEXT group the 80x24 fold should have dropped:\n%s", heldJoined)
+	}
+	for _, id := range []string{"h3", "h1", "h2"} {
+		if dashRowLine(held, id) < 0 {
+			t.Errorf("the held scenario lost the %s row at 80x24:\n%s", id, heldJoined)
+		}
+	}
+}
+
 // childRowFixture is a landed epic with one absorbed child under its parent
 // — the shape the old dashboard indented ("└ +t1c") and shifted at narrow
 // widths. Every status word is the same short one, so the row table's
@@ -1195,7 +1306,7 @@ func TestDashboardRowsCarryStatusWords(t *testing.T) {
 	frame := renderWatchFrame(dashboardFixture(), plainStyles(), 0, 0, "")
 	joined := strings.Join(frame, "\n")
 	for _, want := range []string{
-		"testing (attempt 2, model escalated)",
+		"testing (attempt 2 · escalated)",
 		"merged",
 		"reviewing",
 	} {
@@ -1204,10 +1315,14 @@ func TestDashboardRowsCarryStatusWords(t *testing.T) {
 		}
 	}
 	// The exception rides the status word inline, in its parentheses — never
-	// a column of its own.
+	// a column of its own — and in the compact spelling the row owes its
+	// width: the model's own long note stays in the model (tick az1).
 	t2 := frame[dashRowLine(frame, "t2")]
-	if !strings.Contains(t2, "testing (attempt 2, model escalated)") {
+	if !strings.Contains(t2, "testing (attempt 2 · escalated)") {
 		t.Errorf("t2's row does not carry its exception inline: %q", t2)
+	}
+	if strings.Contains(t2, "model escalated") {
+		t.Errorf("t2's row spends cells on the note's long spelling: %q", t2)
 	}
 }
 
@@ -1555,10 +1670,11 @@ func TestDashboardCostLineRendersMeteredOnly(t *testing.T) {
 }
 
 // TestDashboardVerdictColours: health as a verdict, coloured as the verdict
-// it is (hn6 rule 3) — green healthy, amber degraded with its why, red
-// stopped with its why — and what the run recovered from by itself riding in
-// brackets as calm, with a measured span through the frame's own clock and a
-// count as "×n" where no span was stated.
+// it is (hn6 rule 3) — green healthy, amber degraded with its why, amber
+// paused with its why (tick etl), red stopped with its why — and what the
+// run recovered from by itself riding in brackets as calm, with a measured
+// span through the frame's own clock and a count as "×n" where no span was
+// stated.
 func TestDashboardVerdictColours(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -1569,6 +1685,8 @@ func TestDashboardVerdictColours(t *testing.T) {
 		{statusmodel.HealthVerdict{State: statusmodel.VerdictHealthy}, "● healthy", "32"},
 		{statusmodel.HealthVerdict{State: statusmodel.VerdictDegraded,
 			Summary: "degraded: t2 nudged as stuck (5m ago)"}, "● degraded: t2 nudged as stuck (5m ago)", "33"},
+		{statusmodel.HealthVerdict{State: statusmodel.VerdictPaused,
+			Summary: "needs you"}, "● paused · needs you", "33"},
 		{statusmodel.HealthVerdict{State: statusmodel.VerdictStopped,
 			Summary: "pid 4242 is gone without its own terminal line"}, "● stopped: pid 4242 is gone without its own terminal line", "31"},
 	} {
@@ -1594,11 +1712,88 @@ func TestDashboardVerdictColours(t *testing.T) {
 	}
 }
 
+// TestAtEightyColumnsTheTitleTakesItsWidthBeforeTheStatus (tick az1): the
+// busy frame at 80 columns spent half the pane on the status column —
+// 'writing code (attempt 2, model escalated)' is 40 cells — and cut every
+// title to 'order-feed …'. The name takes the width now: the row a person
+// scans for reads whole, the status column's claim is the note in its
+// shortened spelling, and the live excerpt is the column that gave up its
+// seat to make the room — the order the tick names (the status words and
+// the excerpt shorten before the titles do).
+func TestAtEightyColumnsTheTitleTakesItsWidthBeforeTheStatus(t *testing.T) {
+	t.Parallel()
+	frame := renderWatchFrame(scenarioBusy(), plainStyles(), 80, 24, "")
+	joined := strings.Join(frame, "\n")
+
+	// The design's own title, whole: 27 cells that the old allocation cut
+	// to twelve while the status column took forty — and every other title
+	// the column seats, whole with it. Only the 32-cell one is cut, at the
+	// pane's own edge, still nearly whole.
+	tgi := frame[dashRowLine(frame, "tgi")]
+	if !strings.Contains(tgi, "order-feed service skeleton") {
+		t.Errorf("the busy 80-column frame still cuts the title: %q", tgi)
+	}
+	for _, id := range []string{"v1g", "gzt", "rtk", "ww2"} {
+		if line := frame[dashRowLine(frame, id)]; !strings.Contains(line, busyTitleOf(id)) {
+			t.Errorf("the %s row's title is cut at 80 columns: %q", id, line)
+		}
+	}
+	// The widest title is the one the pane cannot seat whole — it keeps its
+	// first 26 cells, nearly whole, cut at the pane's own edge.
+	five := frame[dashRowLine(frame, "5az")]
+	if !strings.Contains(five, "smoke validation vs kofoed") {
+		t.Errorf("the widest title is cut short of nearly whole at 80 columns: %q", five)
+	}
+
+	// The status shortens instead: the note rides the word in its compact
+	// spelling, never the model's own long one.
+	if !strings.Contains(five, "writing code (attempt 2 · escalated)") {
+		t.Errorf("the escalated row does not carry the shortened note: %q", five)
+	}
+	if strings.Contains(joined, "model escalated") {
+		t.Errorf("the frame still spends cells on the note's long spelling:\n%s", joined)
+	}
+
+	// The excerpt is the column that yielded: at 80 the titles needed the
+	// room, and the status word already says what is happening.
+	for _, id := range []string{"tgi", "5az", "v1g"} {
+		if line := frame[dashRowLine(frame, id)]; strings.ContainsRune(line, '"') {
+			t.Errorf("the %s row keeps a live excerpt at 80 while the titles needed the room: %q", id, line)
+		}
+	}
+
+	// No line is wider than the pane the frame was drawn for.
+	for i, line := range frame {
+		if got := ansi.StringWidth(line); got > 80 {
+			t.Errorf("line %d is %d cells wide in an 80-column pane: %q", i, got, line)
+		}
+	}
+}
+
+// busyTitleOf is one busy-scenario tick's own title, the words the row's
+// WHAT cell owes it — the string a title-first allocation has to keep whole
+// wherever the pane seats it.
+func busyTitleOf(id string) string {
+	for _, wave := range *scenarioBusy().Waves {
+		for _, tick := range wave.Ticks {
+			if tick.TickID == id {
+				if tick.Gloss != "" {
+					return tick.Gloss
+				}
+				return tick.Title
+			}
+		}
+	}
+	return ""
+}
+
 // TestDashboardNarrowWidths: the pane's width drops columns in the tick's
-// fixed order, and no line is ever wider than the pane. At 63 the worker's
-// excerpt is gone (the name may follow when the status needs the room); at
-// 47 the name is gone too — and the tick's identity and its status word
-// never go at any width.
+// fixed order, and no line is ever wider than the pane. The name takes the
+// room before the excerpt does (tick az1), so at 80 the worker's excerpt is
+// the column that gave up its seat — every title the pane seats is whole and
+// the status carries its note in the shortened spelling; at 63 the excerpt
+// is gone with the name cut to what is left; at 47 the name is gone too —
+// and the tick's identity and its status word never go at any width.
 func TestDashboardNarrowWidths(t *testing.T) {
 	t.Parallel()
 	m := dashboardContractGolden(t)
@@ -1606,11 +1801,14 @@ func TestDashboardNarrowWidths(t *testing.T) {
 
 	w80 := renderWatchFrame(m, plainStyles(), 80, 0, "")
 	joined80 := strings.Join(w80, "\n")
-	if !strings.Contains(joined80, `"ran go te`) {
-		t.Errorf("an 80-column pane dropped the excerpt column entirely:\n%s", joined80)
+	if !strings.Contains(joined80, "port sandbox verbs to ticfac") {
+		t.Errorf("an 80-column pane cut a title the pane seats whole:\n%s", joined80)
 	}
-	if !strings.Contains(joined80, "port sandb") {
-		t.Errorf("an 80-column pane dropped the name column:\n%s", joined80)
+	if strings.Contains(joined80, `"ran go te`) {
+		t.Errorf("an 80-column pane keeps the excerpt beside the titles that needed its room:\n%s", joined80)
+	}
+	if !strings.Contains(joined80, "testing (attempt 2 · escalated)") {
+		t.Errorf("an 80-column pane lost the status note:\n%s", joined80)
 	}
 
 	w63 := renderWatchFrame(m, plainStyles(), 63, 0, "")
@@ -1618,7 +1816,7 @@ func TestDashboardNarrowWidths(t *testing.T) {
 	if strings.Contains(joined63, `"ran go te`) {
 		t.Errorf("a 63-column pane still shows the workers' excerpts:\n%s", joined63)
 	}
-	if !strings.Contains(joined63, "testing (attempt 2, model escalated)") {
+	if !strings.Contains(joined63, "testing (attempt 2 · escalated)") {
 		t.Errorf("a 63-column pane lost the status word:\n%s", joined63)
 	}
 
@@ -1627,7 +1825,7 @@ func TestDashboardNarrowWidths(t *testing.T) {
 	if strings.Contains(joined47, "port sandb") {
 		t.Errorf("a 47-column pane still shows the name column:\n%s", joined47)
 	}
-	if !strings.Contains(joined47, "testing (attempt 2, model escalated)") {
+	if !strings.Contains(joined47, "testing (attempt 2 · escalated)") {
 		t.Errorf("a 47-column pane lost the status word:\n%s", joined47)
 	}
 
@@ -1679,17 +1877,19 @@ func TestDashboardColumnsStayAligned(t *testing.T) {
 }
 
 // TestDashboardFitsHeight: a pane shorter than the frame keeps the headline
-// and the tail, and compresses the middle in place — the phase track yields
-// first (a pane crowded with content owes its rows a seat before it owes
-// the map one), then the DONE rows fold into their group's header, then
-// rows trim from the bottom with one "+N more" at the fold — and the whole
-// frame is never taller than the pane.
+// and the tail, and compresses the middle in place — the UP NEXT group
+// collapses first (its "then:" line, then the group itself), the spacing
+// between the groups yields, then the DONE rows fold into their group's
+// header, then rows trim from the bottom with one "+N more" at the fold —
+// and the whole frame is never taller than the pane. The contract golden
+// carries no UP NEXT group, so here the collapse steps are no-ops: what
+// these panes exercise is the DONE fold, the trim and the track's yield.
 func TestDashboardFitsHeight(t *testing.T) {
 	t.Parallel()
 	m := dashboardContractGolden(t)
 	full := renderWatchFrame(m, plainStyles(), 120, 0, "")
 
-	// A pane that seats the whole level-1 frame: everything visible.
+	// A pane that seats the whole DONE-folded frame: everything visible.
 	frame := renderWatchFrame(m, plainStyles(), 120, 15, "")
 	if len(frame) > 15 || !strings.Contains(strings.Join(frame, "\n"), "▲ here") {
 		t.Errorf("a 15-line pane does not seat the whole frame:\n%s", strings.Join(frame, "\n"))
@@ -2169,6 +2369,22 @@ func TestTheWatchAndThePhoneSpellOneVerdictWord(t *testing.T) {
 		t.Error("the stopped verdict ends in a colon with nothing behind it")
 	}
 
+	// Paused (tick etl): the needs-you state the builder derives rides behind
+	// the health line's own separator — never a colon — and an empty summary
+	// reads the bare word, like every other state's.
+	paused := statusmodel.Model{Health: statusmodel.Health{
+		Verdict: statusmodel.HealthVerdict{State: statusmodel.VerdictPaused, Summary: "needs you"}}}
+	if got := dashVerdict(paused, plainStyles()); got != "● paused · needs you" {
+		t.Errorf("a paused run's verdict reads %q, want the line's own separator", got)
+	}
+	paused.Health.Verdict.Summary = ""
+	if got := dashVerdict(paused, plainStyles()); got != "● paused" {
+		t.Errorf("a paused run with no summary reads %q, want the bare word", got)
+	}
+	if strings.Contains(dashVerdict(paused, plainStyles()), "paused:") {
+		t.Error("the paused verdict spells a colon with nothing behind it")
+	}
+
 	// The sibling shapes every renderer must also agree on, so the shared
 	// vocabulary is pinned whole: a degraded summary WITHOUT the builder's
 	// prefix gains it, a stopped summary keeps its own words, and a stopped
@@ -2280,7 +2496,10 @@ func TestTheFrameCarriesTheContractGolden(t *testing.T) {
 		"▲ here",
 		"NOW",
 		"DONE (2)",
-		"testing (attempt 2, model escalated)",
+		// The note in its compact spelling (tick az1): the model's own golden
+		// keeps the long one, the row renders the short one.
+		"testing (attempt 2 · escalated)",
+		`"ran go test ./internal/reconcile"`,
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("the contract golden's frame does not carry %q:\n%s", want, joined)

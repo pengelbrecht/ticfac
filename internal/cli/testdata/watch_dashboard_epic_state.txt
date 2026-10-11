@@ -13,14 +13,18 @@ the epic the runs worked (hpd)                                                  
 
 Building ──── Reviewing ──── Closing out ──── PR & CI ──── Merged
 ▲ here
+
 NOW
   at4  writing code                                  1h
+
 DONE (3)
   at1  merged                                        1h55m
   at2  merged                                        2h55m
   at5  merged                                        35m
+
 UP NEXT (1)   dup duplicate of at2
               then: PR & CI → Merged
+
 HELD (1)
   at3  held: rejected_attempt_carries_work: attemp…  1d21h
 

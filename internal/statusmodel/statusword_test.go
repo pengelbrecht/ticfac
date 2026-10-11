@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/pengelbrecht/ticfac/internal/reconcile"
 	"github.com/pengelbrecht/ticfac/internal/runfeed"
 	"github.com/pengelbrecht/ticfac/internal/runprogress"
@@ -552,6 +554,55 @@ func TestTheStatusExceptions(t *testing.T) {
 			c.records(), nil, nil, true))
 		if got := statusTick(t, model, "aaa").Exception; got != nil {
 			t.Errorf("a first try's exception is %v, want nil", got)
+		}
+	})
+
+	// The compact form, read off the notes the builder itself writes — the
+	// spelling a glance surface owes its width (tick az1), pinned here so the
+	// two spellings of one note cannot drift apart.
+	t.Run("the compact form shortens the escalated retry", func(t *testing.T) {
+		t.Parallel()
+		model := Build(statusSources(
+			[]tk.GraphWave{{Wave: 1, Tasks: []tk.GraphTask{{ID: "aaa", Title: "A", Status: "open"}}}},
+			inFlight("strong", "claude-opus-5", "frontier", "claude-opus-5").records(), nil, nil, true))
+		tick := statusTick(t, model, "aaa")
+		if tick.Exception == nil {
+			t.Fatalf("the escalated retry carries no note")
+		}
+		if got, want := CompactException(*tick.Exception), "attempt 2 · escalated"; got != want {
+			t.Errorf("the compact form of %q is %q, want %q", *tick.Exception, got, want)
+		}
+	})
+
+	t.Run("a single component keeps its own words", func(t *testing.T) {
+		t.Parallel()
+		if got, want := CompactException("attempt 2"), "attempt 2"; got != want {
+			t.Errorf("a single component's compact form is %q, want %q", got, want)
+		}
+		if got, want := CompactException("stalled 20m"), "stalled 20m"; got != want {
+			t.Errorf("a stall's compact form is %q, want %q", got, want)
+		}
+		if got := CompactException(""); got != "" {
+			t.Errorf("no note compacts to %q, want the empty string", got)
+		}
+	})
+
+	t.Run("every component's compact form is never wider than its own words", func(t *testing.T) {
+		t.Parallel()
+		// The whole vocabulary the note is built from, alone and joined —
+		// the compact form is a rendering of the same facts, so it can never
+		// cost a surface more cells than the note itself.
+		notes := []string{
+			"attempt 3",
+			ExceptionEscalate,
+			"stalled 45m",
+			"attempt 3, " + ExceptionEscalate,
+			"attempt 3, " + ExceptionEscalate + ", stalled 45m",
+		}
+		for _, note := range notes {
+			if got := CompactException(note); ansi.StringWidth(got) > ansi.StringWidth(note) {
+				t.Errorf("the compact form %q is wider than its own note %q", got, note)
+			}
 		}
 	})
 

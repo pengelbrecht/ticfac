@@ -85,6 +85,13 @@ func buildHealth(feed []runfeed.Event) Health {
 //     could not be read, a worker nudged as stuck with nothing after the
 //     nudge, a remote that exhausted its retries, a stall warning fresh
 //     enough to still be news. The first cause in that order is the summary.
+//   - paused: the headline names the person's wait (tick etl) — the
+//     needs-you list carries anything and the word is paused, so the health
+//     line can never read healthy over a hold, a merge or findings waiting
+//     for one, and the box above the line says the same thing the word
+//     does. The summary is "needs you"; the entry itself is the box's.
+//     The harder words keep their precedence: a run that is not going reads
+//     stopped, and a live run with something wrong reads degraded.
 //   - healthy: otherwise, and the word itself is the summary.
 //
 // Recovered rides in every state: what the run got past by itself is calm
@@ -99,6 +106,9 @@ func buildVerdict(src Sources, m Model) HealthVerdict {
 		if cause := degradedCause(src, m); cause != "" {
 			return HealthVerdict{State: VerdictDegraded, Summary: cause, Recovered: recovered}
 		}
+	}
+	if len(m.Attention) > 0 {
+		return HealthVerdict{State: VerdictPaused, Summary: "needs you", Recovered: recovered}
 	}
 	return HealthVerdict{State: VerdictHealthy, Summary: VerdictHealthy, Recovered: recovered}
 }

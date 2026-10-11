@@ -1,0 +1,30 @@
+{
+  "schema_version": 3,
+  "key": "22f7cbab27a18a9a0989702fa89d158c6437f7e19c0fd6009b971130de028d77",
+  "tick_id": "2yn",
+  "gating": false,
+  "basis": "rule",
+  "reason": "the finding is routed to charmbracelet/freeze, and this run cannot fix another repository: it claims no done item of this epic, and it gates none of this epic's done items whatever it claims — absorbing it would hold the epic on work no tick of this run can do. The run did not file it there because charmbracelet/freeze is not a repository this factory files into — no [findings.route.\"charmbracelet/freeze\"] file = true in .tick/runners.toml, so it filed a backlog tick in this repository naming charmbracelet/freeze and carrying the finding verbatim, for a person to carry it there",
+  "placement": "backlog",
+  "target": "charmbracelet/freeze",
+  "decided_at": "2026-10-10T17:38:14Z",
+  "provenance": {
+    "run_id": "run_1fac91062aa546f29910c5796a468976",
+    "tick_id": "cl7",
+    "attempt": 2,
+    "source_ref": "refs/heads/epic/ozw",
+    "source_sha": "45ee0e0480c278e342f4ad66d6616c0d31077dd0",
+    "integration_ref": "refs/heads/epic/ozw",
+    "phase": "worker",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:f6d30e41f279e14ec58e01f070b5f9560dd75d0f23147e11fdef84a873c82087",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

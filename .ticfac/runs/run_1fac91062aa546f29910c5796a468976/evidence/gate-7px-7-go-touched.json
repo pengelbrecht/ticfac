@@ -1,0 +1,47 @@
+{
+  "schema_version": 3,
+  "key": "gate-7px-7-go-touched",
+  "provenance": {
+    "run_id": "run_1fac91062aa546f29910c5796a468976",
+    "tick_id": "7px",
+    "attempt": 7,
+    "source_ref": "refs/heads/epic/ozw",
+    "source_sha": "29d4f5e31390452e2f11ad414a38f594fae13f3b",
+    "integration_ref": "refs/heads/epic/ozw",
+    "phase": "integrated",
+    "executor": "cloudflare-sandbox",
+    "workspace_id": null,
+    "backend": null,
+    "role": "implement-tick",
+    "tier": "economy",
+    "profile_digest": "sha256:f6d30e41f279e14ec58e01f070b5f9560dd75d0f23147e11fdef84a873c82087",
+    "model": "cloudflare-workers-ai/@cf/zai-org/glm-5.3-flash",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  },
+  "check": {
+    "id": "go-touched",
+    "kind": "command",
+    "command": [
+      "sh",
+      "-c",
+      "go run ./cmd/gate-touched -timeout 45m -parallel 12 -leave-to-ci github.com/pengelbrecht/ticfac/internal/reconcile"
+    ]
+  },
+  "started_at": "2026-10-10T21:10:02Z",
+  "finished_at": "2026-10-10T21:15:02Z",
+  "exit_code": 0,
+  "output": {
+    "mode": "inline",
+    "stdout": "gate-touched: the diff 21ca5946546a...b4cf3abf12e4 changes no Go package, so no full suite runs\n",
+    "stderr": "",
+    "truncated": false,
+    "redacted": false,
+    "max_bytes": 16384
+  },
+  "result": "pass",
+  "acceptance": "required",
+  "content_digest": "sha256:6582e8b7e4dccb0516ede45a4d7d4d7aeef3b74684e8284e8eb803c8fb40af85",
+  "persistence_uri": "git:refs/heads/epic/ozw:.ticfac/runs/run_1fac91062aa546f29910c5796a468976/evidence/gate-7px-7-go-touched.json"
+}

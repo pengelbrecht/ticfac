@@ -1,7 +1,7 @@
 # Learnings
 
 Repo-specific gotchas, Problem → Cause → Rule. Hard cap 150 lines — compact every retro.
-Seeded from ticks' learnings 2026-09-02; last compacted at the bo9, t8u (2026-10-08) and ymf (2026-10-09) close-outs.
+Seeded from ticks' learnings 2026-09-02; last compacted at the bo9, t8u (2026-10-08), ymf (2026-10-09) and ozw (2026-10-10) close-outs.
 
 ## Planning an epic
 
@@ -18,9 +18,11 @@ give (CI step durations, a serial test-elapsed sum) — and puts a tick on the m
 
 **Problem:** gvc absorbed none of 21 findings; 2jn scored none of 30: the data the machinery reads was prose. 0ek's four decisions are prose
 too — one NARROWED its own tick — because the envelope's `decisions` field has no report block filling it; ymf's eight [A<n>] marks sat on
-ONE line, so the done parsed as item A1 and [A2]..[A8] stayed unaddressable all epic (ex6's four marks did the same). **Rule:** An
-orchestrator epic names the NEXT run on the rebuilt binary as its demo; [A<n>] items AND a command per item at planning, ONE PER LINE. A
-NARROWED scope is typed, or unseen.
+ONE line, so the done parsed as item A1 and [A2]..[A8] stayed unaddressable all epic (ex6's four marks did the same; ozw's five went one
+line again the day after ymf's re-flow, and ozw's round-1 review could key no item onto its blocking finding). **Rule:** An orchestrator
+epic names the NEXT run on the rebuilt binary as its demo; [A<n>] items AND a command per item at planning, ONE PER LINE — enforced where
+the record is first read, not repaired at close-out: a run that admits an epic whose marks parse as fewer items than it marks re-flows it
+or refuses. A NARROWED scope is typed, or unseen.
 
 **Problem:** hn6 planned 9 ticks and closed 65: ten repairs each fixed ONE pairing of which word wins; ymf redesigned the dashboard and left
 tui/'s pty suite pinning the old screen — every CI run on the branch red from the first merge while the per-tick gate stayed green, and the
@@ -43,21 +45,15 @@ DECLARING and CONSUMING a vocabulary — or CHANGING a family's convention and A
 CLI, six ticks chased kind "pi" (twa's would have killed every cloud container at boot). **Rule:** A
 deletion tick first LISTS every effect and pointer of the path in BOTH repos (grep the NAME), each owned.
 
-**Problem:** dz1's re-run held on the claim its STOPPED predecessor left. **Rule:** An enforcement
-moving into this repo brings its exemptions; test resume and re-run, not only the refusal.
-
 ## Orchestration
 
 **Problem:** Wave-2 branched from a base missing wave-1; two same-wave ticks cut additions to one file. **Rule:** Name the SHA; check
 `--is-ancestor`. Two additions to one file are a union in INTENT, not text: a worker holding the context resolves it. ONE owner per artifact.
 
-**Problem:** A worker committed tracker state its prompt forbade. **Rule:** A boundary the substrate
-can enforce must not rest on instruction-following — make it impossible and REPORT every attempt.
-
-**Problem:** FOUR of bo9's six ticks carried "BOUNDARY VIOLATION ATTEMPTED — a model ignored an explicit instruction"; only 0ek's `tk
-decide` was a write: the guard matches `$1` alone, so the read-only `tk skills diff ticks` read as a violation. **Rule:** A refused READ is
-not a violation: track tk's read vocabulary, match the SUBCOMMAND past global flags, banner WRITES only — or the one real attempt is lost
-in the noise.
+**Problem:** A worker committed tracker state its prompt forbade; bo9's guard matched `$1` alone, so FOUR of six ticks bannered "BOUNDARY
+VIOLATION ATTEMPTED" over the read-only `tk skills diff ticks`, leaving 0ek's one real write (`tk decide`) lost in the noise. **Rule:** A
+boundary the substrate can enforce must not rest on instruction-following — make it impossible and REPORT every attempt; a refused READ is
+not a violation: match the SUBCOMMAND past global flags, banner WRITES only.
 
 **Problem:** Parallel ticks sharing a return shape were green alone, broken together; an "in flight" state outlived its writer. **Rule:**
 The merge gate is the only test of a shared contract; settle in-flight state from durable evidence, never by trusting the claimer.
@@ -79,9 +75,10 @@ another repo's change is an `upstream-tick`; an exception or routing cell is a n
 host `rerere.enabled` replayed a person's resolve into a machine merge. **Rule:** Process-global and host
 git state never reach the run: fetch into a per-run ref (`--no-write-fetch-head --refmap=`), and state the run's own git environment (`-c rerere.enabled=false`).
 
-**Problem:** epic-hn6, restarted on its id after a SIGINT, read `phase: cancelled`: a restart wrote no
-`resumed` line, so the old `run_died` stayed its last word. **Rule:** Every incarnation states itself
-in the feed; a reader of "the last terminal line" is only as true as the writer's resume line.
+**Problem:** dz1's re-run held on the claim its STOPPED predecessor left; epic-hn6, restarted on its id after a SIGINT, read `phase:
+cancelled` — a restart wrote no `resumed` line, so the old `run_died` stayed its last word. **Rule:** An enforcement moving into this repo
+brings its exemptions; test resume and re-run, not only the refusal; every incarnation states itself in the feed — a reader of "the last
+terminal line" is only as true as the writer's resume line.
 
 ## Waiting and watching
 
@@ -114,7 +111,10 @@ harness bound was filed five times (h3c 7oy 4ao omq 30e). **Rule:** A gate verdi
 and t8u's (p4c: Apple git 2.50 vs CI's 2.55) red epic CI sat unread until a review; z7w's -short properties doubled internal/cli's wall,
 unseen. **Rule:** A test the gate does not run is not evidence: add it or name the gap. A NEW package's suite joins `[testing.commands]` in
 its tick; a tick touching dispatch, claims or a profile runs `./internal/reconcile/`. A test of git's OWN behaviour (hooks, ref
-transactions) is green only on CI's git; a tick adding tests reports its package's -short wall.
+transactions) is green only on CI's git; a tick adding tests reports its package's -short wall. Committed RENDERED evidence is the same
+claim: ozw's five watch PNGs aged under three green merges — the gate pins the frames they render, nothing tied the images to them — so an
+epic that names committed screenshots puts the re-capture in the tick that LAST changes a pinned frame, or asserts the capture sources in
+the gate.
 
 **Problem:** The re-pointed watch suite pinned the dashboard's wording, order and pane fit, and held green over a frame whose health line
 read "2 of 4 done" while UP NEXT held all four ticks — kv3, ymf's round-2 blocker, stood green on the suite's own honest frame. **Rule:** A

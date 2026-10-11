@@ -7,7 +7,7 @@ package cli
 // over hundreds of generated models at every pane shape the tick names — the
 // inputs a fixture writer never thinks to draw.
 //
-// The four properties are the ones the epic's spec names for this layout:
+// The five properties are the ones the epic's spec names for this layout:
 //
 //	P1  rows follow the groups: the tick ids, in the order their rows appear
 //	    in frame(m), are a prefix of the model's own group order (NOW, then
@@ -27,6 +27,10 @@ package cli
 //	    and the line reads whole wherever the pane seats it.
 //	P4  the frame fits the pane: no line wider than the pane, no frame
 //	    taller than it.
+//	P5  the excerpt never costs a title its words (tick az1): a row that
+//	    still seats a worker's live excerpt is a row whose title is whole —
+//	    the excerpt is the first column to give up its seat, the work's own
+//	    name the last, whatever the pane's width is.
 //
 // Each property runs over 500 seeded models at widths {0, 30, 47, 63, 80, 99,
 // 120, 200} and heights {0, 8, 12, 24, 60} — 0 meaning unknown on either
@@ -435,7 +439,11 @@ func genModel(r *rand.Rand) statusmodel.Model {
 	}
 
 	// Health: mostly healthy with a recovery or two, sometimes degraded or
-	// stopped, with the run's own word for why.
+	// stopped, with the run's own word for why — and paused (tick etl) when
+	// the attention list already carries a person's decision: the generator
+	// draws the two facts independently, so it enforces here the agreement
+	// the model's own builder enforces, and every property reads a model the
+	// builder could have produced.
 	verdict := statusmodel.HealthVerdict{State: statusmodel.VerdictHealthy}
 	switch roll := r.IntN(10); {
 	case roll < 7:
@@ -453,6 +461,12 @@ func genModel(r *rand.Rand) statusmodel.Model {
 	default:
 		verdict.State = statusmodel.VerdictStopped
 		verdict.Summary = "pid 4242 is gone without its own terminal line"
+	}
+	for _, a := range attention {
+		if a.NeedsPerson && verdict.State == statusmodel.VerdictHealthy {
+			verdict.State = statusmodel.VerdictPaused
+			verdict.Summary = "needs you"
+		}
 	}
 
 	m := statusmodel.Model{
@@ -960,6 +974,33 @@ func propNeedsYou(frame []string, _ func() []string, m, _ statusmodel.Model, wid
 	return nil
 }
 
+// propHealthAgreesWithNeedsYou is P5 (tick etl): the health line and the
+// needs-you box are two renderings of one model, and they cannot disagree —
+// with anything in needs-you, "● healthy" appears nowhere in the frame (the
+// health word names the person's wait: paused, or whatever harder state the
+// model also states), and with nothing in it, the paused word appears
+// nowhere. Both checks read only the bullet-marked headline words, so the
+// feed tail's own "paused: needs you" sentences never count as the health
+// line's answer — the exact drift the two facts once produced, rendered and
+// caught on every generated shape.
+func propHealthAgreesWithNeedsYou(frame []string, _ func() []string, m, _ statusmodel.Model, _, _, _ int) error {
+	joined := strings.Join(frame, "\n")
+	needs := false
+	for _, a := range m.Attention {
+		if a.NeedsPerson {
+			needs = true
+			break
+		}
+	}
+	if needs && strings.Contains(joined, "● healthy") {
+		return fmt.Errorf("the needs-you box stands and the health line still reads healthy")
+	}
+	if !needs && strings.Contains(joined, "● paused") {
+		return fmt.Errorf("nothing needs a person and the health line reads paused")
+	}
+	return nil
+}
+
 // containsLine says whether the frame carries one exact line.
 func containsLine(frame []string, want string) bool {
 	for _, line := range frame {
@@ -1016,6 +1057,58 @@ func propCostHonest(frame []string, _ func() []string, m, _ statusmodel.Model, w
 	return nil
 }
 
+// propTitleBeforeExcerpt is P5 (tick az1): the work's own name is what a
+// person scans a row for, and a worker's live excerpt is what the row gives
+// up first — so a row that still shows a quoted excerpt is a row whose
+// title is WHOLE, at every pane width. The old allocation split the room
+// left after the status column half and half, which cut 'order-feed …' to
+// twelve cells beside a ten-cell excerpt; this is the agreement that ends.
+func propTitleBeforeExcerpt(frame []string, _ func() []string, m, _ statusmodel.Model, width, _, _ int) error {
+	plan := propPlan(m)
+	ids := make(map[string]bool, len(plan))
+	for _, id := range plan {
+		ids[id] = true
+	}
+	whats := make(map[string]string, len(plan))
+	if m.Waves != nil {
+		for _, wave := range *m.Waves {
+			for _, tick := range wave.Ticks {
+				what := tick.Gloss
+				if what == "" {
+					what = tick.Title
+				}
+				whats[tick.TickID] = what
+			}
+		}
+	}
+	for _, line := range frame {
+		id := propRowID(line, ids)
+		if id == "" {
+			continue // not a tick row: a header, the collapsed UP NEXT line
+		}
+		what, ok := whats[id]
+		if !ok || what == "" {
+			continue
+		}
+		// A worker's live excerpt is the row's quoted cell; the gate word the
+		// run itself drives is unquoted, and no other row cell quotes.
+		if !strings.ContainsRune(line, '"') {
+			continue // no live excerpt on this row: the title may take the room
+		}
+		// The words the row owes the title: its own, whole — except at the
+		// unknown width, where the columns draw to their layout maxima and
+		// the WHAT column's cap is a cap the pane did not impose.
+		want := what
+		if width == 0 {
+			want = dashCell(what, dashWhatCols)
+		}
+		if !strings.Contains(line, want) {
+			return fmt.Errorf("the %s row's title %q is cut beside a live excerpt: %q", id, want, line)
+		}
+	}
+	return nil
+}
+
 // propFitsPane is P4: the frame fits the pane it was drawn for — no line
 // wider than it, no frame taller than it. The unknown axis (0) is unbounded
 // by definition: the caller that knows nothing draws everything.
@@ -1033,7 +1126,7 @@ func propFitsPane(frame []string, _ func() []string, _, _ statusmodel.Model, wid
 	return nil
 }
 
-// dashProperties is the tick's four properties, each with its breaker.
+// dashProperties is the tick's five properties, each with its breaker.
 var dashProperties = []dashProperty{
 	{
 		name:       "rows follow the groups",
@@ -1046,6 +1139,11 @@ var dashProperties = []dashProperty{
 		breakFrame: breakDroppedAttention,
 	},
 	{
+		name:       "the health line agrees with needs-you",
+		check:      propHealthAgreesWithNeedsYou,
+		breakFrame: breakHealthyDespiteNeedsYou,
+	},
+	{
 		name:       "the cost line shows only what is metered",
 		check:      propCostHonest,
 		breakFrame: breakFabricatesUnmeteredZero,
@@ -1054,6 +1152,11 @@ var dashProperties = []dashProperty{
 		name:       "the frame fits the pane",
 		check:      propFitsPane,
 		breakFrame: breakPaddedFirstLine,
+	},
+	{
+		name:       "the excerpt never costs a title its words",
+		check:      propTitleBeforeExcerpt,
+		breakFrame: breakCutsTheTitleBesideAnExcerpt,
 	},
 }
 
@@ -1099,6 +1202,31 @@ func breakDroppedAttention(frame []string, _ statusmodel.Model) []string {
 	return out
 }
 
+// breakHealthyDespiteNeedsYou rewrites the headline's verdict word to
+// "● healthy" on any model whose needs-you list carries a person's decision
+// — the pre-etl defect rendered whole: the box says a hold stands, the line
+// beneath it says everything is fine. P5's breaker.
+func breakHealthyDespiteNeedsYou(frame []string, m statusmodel.Model) []string {
+	needs := false
+	for _, a := range m.Attention {
+		if a.NeedsPerson {
+			needs = true
+			break
+		}
+	}
+	if !needs {
+		return frame
+	}
+	out := make([]string, 0, len(frame))
+	for _, line := range frame {
+		if at := strings.Index(line, "● "); at >= 0 {
+			line = line[:at] + "● healthy"
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
 // breakFabricatesUnmeteredZero appends a fabricated "claude $0.00" segment
 // to the cost line the frame carries (or states one where no cost line was
 // drawn at all) — spend nothing measured, wearing a number. P3's breaker.
@@ -1131,11 +1259,54 @@ func breakPaddedFirstLine(frame []string, _ statusmodel.Model) []string {
 	return out
 }
 
+// breakCutsTheTitleBesideAnExcerpt cuts every title that sits beside a live
+// excerpt to twelve cells — the shape the old half-and-half allocation drew,
+// where a name nobody could read shared a pane with a worker's live action.
+// P5's breaker: it breaks only the excerpt/title agreement, never a row's
+// place or order.
+func breakCutsTheTitleBesideAnExcerpt(frame []string, m statusmodel.Model) []string {
+	out := append([]string{}, frame...)
+	ids := make(map[string]bool)
+	whats := map[string]string{}
+	if m.Waves != nil {
+		for _, wave := range *m.Waves {
+			for _, tick := range wave.Ticks {
+				ids[tick.TickID] = true
+				what := tick.Gloss
+				if what == "" {
+					what = tick.Title
+				}
+				whats[tick.TickID] = what
+			}
+		}
+	}
+	for i, line := range out {
+		id := propRowID(line, ids)
+		if id == "" || !strings.ContainsRune(line, '"') {
+			continue
+		}
+		what := whats[id]
+		// The title as the frame carries it — whole where the pane seats it,
+		// at the WHAT column's cap where the width is unknown — so the cut
+		// lands on the words the row actually shows.
+		if !strings.Contains(line, what) {
+			what = dashCell(what, dashWhatCols)
+		}
+		if ansi.StringWidth(what) <= 12 || !strings.Contains(line, what) {
+			continue
+		}
+		cut := ansi.Truncate(what, 12, "…")
+		cut += strings.Repeat(" ", ansi.StringWidth(what)-ansi.StringWidth(cut))
+		out[i] = strings.Replace(line, what, cut, 1)
+	}
+	return out
+}
+
 // ---------------------------------------------------------------------------
 // The tests
 // ---------------------------------------------------------------------------
 
-// TestDashboardProperties: the four layout properties hold over 500 seeded
+// TestDashboardProperties: the five layout properties hold over 500 seeded
 // models at every pane shape the tick names, for the model and for its
 // advance. A failure prints the seed, the pane shape and the minimal failing
 // model as JSON, and the seed re-runs the whole population plus exactly that

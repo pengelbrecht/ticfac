@@ -1,0 +1,52 @@
+{
+  "schema_version": 3,
+  "decision": 4,
+  "role": "classify-tick",
+  "request": {
+    "acceptance_criteria": "goldens show the spacing at 120x40 and fit 80x24; make gate",
+    "description": "NOW/DONE/UP NEXT/HELD and the phase track run together. Separate them with one blank line where the screen has room, collapsing UP NEXT first so the five scenarios still fit 80x24.",
+    "epic_id": "ozw",
+    "role": "classify-tick",
+    "tick_id": "h3s",
+    "title": "Blank lines between the dashboard's groups"
+  },
+  "response": {
+    "choice": "construction",
+    "confidence": 0.75,
+    "model": "jev-1.13.0",
+    "probabilities": {
+      "construction": 0.8,
+      "design": 0.02,
+      "diagnosis": 0,
+      "mechanical": 0.18,
+      "translation": 0
+    },
+    "usage": {
+      "cost_usd": null,
+      "input_tokens": 1057,
+      "output_tokens": 58
+    }
+  },
+  "validated": true,
+  "requested_at": "2026-10-10T16:40:38Z",
+  "answered_at": "2026-10-10T16:40:38Z",
+  "provenance": {
+    "run_id": "run_1fac91062aa546f29910c5796a468976",
+    "tick_id": "h3s",
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ozw",
+    "source_sha": "07874335ef6382dfc12e71fa04fc36db2603d48e",
+    "integration_ref": "refs/heads/epic/ozw",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": "jev-1.13.0",
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

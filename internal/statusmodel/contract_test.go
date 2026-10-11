@@ -278,7 +278,7 @@ func TestTheContractBindsTheDashboardGolden(t *testing.T) {
 	enumAgrees(t, "$defs.pipeline_state", defs["pipeline_state"].Enum,
 		StageStatePending, StageStateActive, StageStateDone, StageStateFailed)
 	enumAgrees(t, "$defs.health_verdict.properties.state", defs["health_verdict"].Properties["state"].Enum,
-		VerdictHealthy, VerdictDegraded, VerdictStopped)
+		VerdictHealthy, VerdictDegraded, VerdictStopped, VerdictPaused)
 	enumAgrees(t, "$defs.cost_line.properties.source", defs["cost_line"].Properties["source"].Enum,
 		CostSourceDecisions, CostSourceWorkersAI, CostSourceClaude, CostSourcePiLocal, CostSourceOther)
 }

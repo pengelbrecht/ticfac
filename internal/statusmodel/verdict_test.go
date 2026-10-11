@@ -41,6 +41,102 @@ func assertValidatesAgainstTheContract(t *testing.T, model Model) {
 	}
 }
 
+// TestVerdictPausedWhenNeedsYouIsNotEmpty (epic ozw, tick etl): a live run
+// whose needs-you list carries anything for a person no longer answers
+// healthy — the word is paused, the summary "needs you", so the health line
+// and the box above it say one thing and the phone page, rendering the same
+// model, agrees. The hold the feed states is the entry; the derivation is
+// the attention list, not the line, so every attention source counts.
+func TestVerdictPausedWhenNeedsYouIsNotEmpty(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	four := 4
+	src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "6dh", &four,
+		reconcile.StageRunHeld, "attempt 3 of 6dh struck out: the refusal the run recorded"))
+	model := Build(src)
+
+	if model.Health.Verdict.State != VerdictPaused {
+		t.Fatalf("a run holding for a person reads %q, want paused", model.Health.Verdict.State)
+	}
+	if model.Health.Verdict.Summary != "needs you" {
+		t.Errorf("the paused summary is %q, want %q", model.Health.Verdict.Summary, "needs you")
+	}
+	if len(model.Attention) == 0 {
+		t.Fatal("the fixture holds no attention: the test would pin nothing")
+	}
+	assertValidatesAgainstTheContract(t, model)
+
+	// The word rides on the list, not on the wait — and the harder words keep
+	// their precedence: a dead run with the same wait in needs-you still
+	// reads stopped, never paused.
+	dead := runningEpicSources()
+	dead.Liveness = LivenessInput{Alive: false, State: "dead", Reason: "pid 4242 is gone", Source: "run.pid"}
+	model = Build(dead)
+	if model.Health.Verdict.State != VerdictStopped {
+		t.Errorf("a dead run reads %q, want stopped: not going is the harder word, needs-you or not", model.Health.Verdict.State)
+	}
+}
+
+// TestVerdictPausedOnAMergeWait: a completed run's open PR is in needs-you
+// (the merge is the person's), so the health line reads paused beside it —
+// the calm amber of work that is over and waiting, never red, and never the
+// green that hides the person the frame is for (tick etl).
+func TestVerdictPausedOnAMergeWait(t *testing.T) {
+	t.Parallel()
+	merge := runningEpicSources()
+	merge.Records.Checkpoint.State = "completed"
+	merge.Liveness.Alive = false
+	merge.Liveness.State = "not_running"
+	merge.Liveness.Reason = "no process holds this run: it finished its own work"
+	merge.Standing, merge.StandingRead, merge.Session = nil, false, nil
+	merge.CI = &CIInput{
+		State: "green",
+		PR: &PR{Number: 12, URL: "https://github.com/example/ticfac/pull/12",
+			HeadRef: "epic/2jn", HeadSHA: "9f2ab", BaseRef: "main"},
+		Checks: []CheckState{{Name: "go", Status: "completed", Conclusion: "success"}},
+	}
+	model := Build(merge)
+
+	if model.Health.Verdict.State != VerdictPaused {
+		t.Errorf("a completed run waiting on its merge reads %+v, want paused: the merge wait is in needs-you", model.Health.Verdict)
+	}
+	if model.Health.Verdict.Summary != "needs you" {
+		t.Errorf("the paused summary is %q, want %q", model.Health.Verdict.Summary, "needs you")
+	}
+	assertValidatesAgainstTheContract(t, model)
+
+	// Without the PR there is no merge wait — but the run's own untriaged
+	// finding is still a person's question, so this half asks clean too: no
+	// PR, nothing untriaged, the healthy word stands.
+	merge.CI = nil
+	merge.Records.Findings = nil
+	model = Build(merge)
+	if model.Health.Verdict.State != VerdictHealthy {
+		t.Errorf("a completed run with nothing in needs-you reads %+v, want healthy", model.Health.Verdict)
+	}
+}
+
+// TestVerdictDegradedOutranksPaused: something wrong with a live run names
+// itself in the headline even while a hold stands — the box already says the
+// hold, and the health line is the run's own state (the same precedence the
+// stopped state keeps over a dead run's needs-you entry).
+func TestVerdictDegradedOutranksPaused(t *testing.T) {
+	t.Parallel()
+	src := runningEpicSources()
+	src.Degraded = []string{"forge"}
+	four := 4
+	src.Feed = append(src.Feed, runfeed.NewEvent(testNow.Add(-10*time.Minute), "epic-2jn", "6dh", &four,
+		reconcile.StageRunHeld, "attempt 3 of 6dh struck out: the refusal the run recorded"))
+	model := Build(src)
+
+	if model.Health.Verdict.State != VerdictDegraded {
+		t.Errorf("a held run with an unreadable source reads %q, want degraded", model.Health.Verdict.State)
+	}
+	if len(model.Attention) == 0 {
+		t.Fatal("the fixture holds no attention: the test would pin nothing")
+	}
+}
+
 // TestVerdictHealthyWhenNothingHappened: a live run whose feed states no
 // typed trouble answers healthy, the word itself the summary, and an empty
 // recovered list — "nothing needed getting past" is a claim the empty list
@@ -321,6 +417,10 @@ func TestVerdictACompletedOrCancelledRunIsNotStopped(t *testing.T) {
 	completed.Records.Checkpoint.State = "completed"
 	completed.Liveness.Alive = false
 	completed.Standing, completed.StandingRead, completed.Session = nil, false, nil
+	// The run's own untriaged finding is a person's question (tick etl) and
+	// would read paused; this case is about the done word alone, so it is
+	// asked clean — nothing in needs-you, the healthy word stands.
+	completed.Records.Findings = nil
 	model := Build(completed)
 	if model.Health.Verdict.State != VerdictHealthy || model.Health.Verdict.Summary != VerdictHealthy {
 		t.Errorf("a completed run reads %+v, want the healthy word: done is the run's own terminal answer, not a stop",
@@ -339,7 +439,8 @@ func TestVerdictACompletedOrCancelledRunIsNotStopped(t *testing.T) {
 	// is the done class's own answer too (tick jkb): the verdict exemption
 	// once listed only done and cancelled, and a completed local run read
 	// red "stopped" while the only thing left of it was the person's merge.
-	// The merge wait is the frame's needs-you answer; the verdict is calm.
+	// The merge wait is the frame's needs-you answer, and the verdict states
+	// it: paused, the calm amber of work that is over and waiting (tick etl).
 	merge := runningEpicSources()
 	merge.Records.Checkpoint.State = "completed"
 	merge.Liveness.Alive = false
@@ -356,8 +457,8 @@ func TestVerdictACompletedOrCancelledRunIsNotStopped(t *testing.T) {
 	if model.Lifecycle.Phase != PhaseMerge {
 		t.Fatalf("a completed run with its PR open reads phase %q, want merge", model.Lifecycle.Phase)
 	}
-	if model.Health.Verdict.State == VerdictStopped {
-		t.Errorf("a completed run waiting on its merge reads %+v, want not stopped: its work is over, the merge is the person's",
+	if model.Health.Verdict.State != VerdictPaused {
+		t.Errorf("a completed run waiting on its merge reads %+v, want paused: its work is over, the merge is the person's (tick etl)",
 			model.Health.Verdict)
 	}
 	if model.WaitsOn == nil || model.WaitsOn.Kind != WaitMerge {

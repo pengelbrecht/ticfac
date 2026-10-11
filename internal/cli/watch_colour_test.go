@@ -188,9 +188,9 @@ func TestWatchColourGridPerState(t *testing.T) {
 
 	// A status word carries its state's hue: testing is amber (in flight),
 	// merged is green (done), a queued tick's collapsed line has no hue of
-	// its own.
-	assertGridAttr(t, gridCellsInRow(grid, t2row, "testing (attempt 2, model escalated)"),
-		"testing (attempt 2, model escalated)", "amber", false, false)
+	// its own. The note rides the word in its compact spelling (tick az1).
+	assertGridAttr(t, gridCellsInRow(grid, t2row, "testing (attempt 2 · escalated)"),
+		"testing (attempt 2 · escalated)", "amber", false, false)
 	assertGridAttr(t, gridCellsInRow(grid, "the first tick's gloss", "merged"),
 		"merged", "green", false, false)
 
@@ -210,6 +210,13 @@ func TestWatchColourGridPerState(t *testing.T) {
 	// check; the cost line is primary text — it states what is metered, and
 	// since tick b13 it no longer carries a dim "not metered" recital at all.
 	assertGridAttr(t, gridCells(grid, "● healthy"), "● healthy", "green", false, false)
+
+	// The paused verdict (tick etl) is amber: the run is going and waits on
+	// a person — attention, not a failure; the box above it carries the red.
+	paused := dashboardFixture()
+	paused.Health.Verdict = statusmodel.HealthVerdict{State: statusmodel.VerdictPaused, Summary: "needs you"}
+	pausedGrid := colourGrid(t, paused, 120, 0)
+	assertGridAttr(t, gridCells(pausedGrid, "● paused · needs you"), "● paused · needs you", "amber", false, false)
 	for _, row := range grid {
 		for _, cell := range row {
 			if strings.Contains(cell.text, "metered") {
@@ -247,6 +254,13 @@ func TestWatchColourGridPerState(t *testing.T) {
 		"Needs you: attempt 2 of t2 struck out", "red", false, true)
 	assertGridAttr(t, gridCells(boxGrid, "clear with: ticfac settle rmod t2 2 --release"),
 		"clear with: ticfac settle rmod t2 2 --release", "red", false, false)
+
+	// A held row is red too: the held half of the palette's red (failed and
+	// held for a person share the hue), on the HELD group's own row.
+	heldRowGrid := colourGrid(t, scenarioHeld(), 120, 0)
+	assertGridAttr(t, gridCellsInRow(heldRowGrid, "the held tick",
+		"held: the attempt was struck out for release"),
+		"held: the attempt was struck out for release", "red", false, false)
 
 	// A duplicate's row is dim whole: history, quietly.
 	epic := epicStateFixture()

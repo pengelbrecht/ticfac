@@ -42,6 +42,18 @@ const (
 	ExceptionAttempt  = "attempt" // followed by the try number
 	ExceptionEscalate = "model escalated"
 	ExceptionStalled  = "stalled" // followed by the idle span in minutes
+
+	// The escalated component's compact spelling: the same fact without the
+	// word the note's neighbours already carry — 'model' says nothing beside
+	// 'attempt 2' that 'escalated' does not (tick az1).
+	ExceptionEscalateCompact = "escalated"
+
+	// The note's own separators: the note the model carries joins its
+	// components with a comma, the compact form a glance surface renders
+	// joins them with a middle dot — one place for each spelling, so the
+	// two cannot drift apart.
+	exceptionJoin        = ", "
+	exceptionCompactJoin = " · "
 )
 
 // TrackLabels is the epic phase track's fixed vocabulary, in the order the
@@ -258,8 +270,30 @@ func (p *pipelineIndex) exceptionOf(tick *Tick, status string) *string {
 	if len(parts) == 0 {
 		return nil
 	}
-	note := strings.Join(parts, ", ")
+	note := strings.Join(parts, exceptionJoin)
 	return &note
+}
+
+// CompactException is the exception note in the spelling a glance surface
+// owes its width: the same components, each in its short form, joined with a
+// middle dot — 'attempt 2, model escalated' reads 'attempt 2 · escalated'
+// (tick az1). The note the model carries stays the long one — it is the
+// contract's own words, and the surfaces that have the room (the records,
+// the phone page) keep it — so this is a rendering of the same facts, and it
+// never widens the note it renders. A component the compact vocabulary does
+// not name keeps its own words: a note nobody shortened here is a note a
+// reader still reads whole.
+func CompactException(note string) string {
+	if note == "" {
+		return ""
+	}
+	parts := strings.Split(note, exceptionJoin)
+	for i, part := range parts {
+		if part == ExceptionEscalate {
+			parts[i] = ExceptionEscalateCompact
+		}
+	}
+	return strings.Join(parts, exceptionCompactJoin)
 }
 
 // escalated says whether this tick's current attempt is a re-cut: its tier

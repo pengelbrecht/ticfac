@@ -60,5 +60,14 @@ subscription's window use ("MAX1 · 34% of 5h") instead of "$0.00".
 Golden frames rendered through a real terminal emulator at 80x24 and 120x40
 for: a fresh run, a busy wave, a held tick (needs-you box), an ended landed
 run, an ended failed run. Each frame is checked against the three questions.
-Screenshots (vhs or freeze) are attached to the workers' reports and the epic
-PR for the operator's eye.
+
+The five `watch-*-120x40.png` screenshots in this directory are captured from
+the STYLED output — `capture.sh` renders each scenario's frame with the
+terminal's own style set and freeze turns it into a PNG — so they show the
+dashboard's colour accents: green done, amber in progress, red failed/held,
+dim pending/mechanics, cyan identities and hints (tick cl7; the first capture
+fed the pipeline plain text and came out monochrome, and
+`TestCommittedScreenshotsShowTheColourAccents` now reads the committed PNGs
+back so that cannot happen silently again). The captures use no window
+chrome: window controls would bring their own red, yellow and green, and the
+colour on screen must be the frame's own.

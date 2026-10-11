@@ -1,0 +1,70 @@
+{
+  "schema_version": 3,
+  "run_id": "run_1fac91062aa546f29910c5796a468976",
+  "epic_id": "ozw",
+  "sequence": 62,
+  "state": "completed",
+  "reason": "every tick of ozw is closed behind the integrated gate; the epic PR #273 is ready: main at 63ce94835235 folded in, CI green on 784bbda5c0f8. This incarnation was reached after 1 AUTOMATIC CONTINUATION(S) of this run, each one an intervention nobody typed: the run did not reach here unattended",
+  "updated_at": "2026-10-10T23:00:29Z",
+  "ticks": [
+    {
+      "tick_id": "az1",
+      "state": "closed",
+      "attempt": 5
+    },
+    {
+      "tick_id": "cl7",
+      "state": "closed",
+      "attempt": 2
+    },
+    {
+      "tick_id": "etl",
+      "state": "closed",
+      "attempt": 3
+    },
+    {
+      "tick_id": "h3s",
+      "state": "closed",
+      "attempt": 4
+    },
+    {
+      "tick_id": "c1d",
+      "state": "closed",
+      "attempt": 6
+    },
+    {
+      "tick_id": "72z",
+      "state": "closed",
+      "attempt": 9
+    },
+    {
+      "tick_id": "7px",
+      "state": "closed",
+      "attempt": 7
+    },
+    {
+      "tick_id": "z0b",
+      "state": "closed",
+      "attempt": 8
+    }
+  ],
+  "provenance": {
+    "run_id": "run_1fac91062aa546f29910c5796a468976",
+    "tick_id": null,
+    "attempt": null,
+    "source_ref": "refs/heads/epic/ozw",
+    "source_sha": "17c55a05e5c0d3a1a1d912c3259b4cb87d52ea60",
+    "integration_ref": "refs/heads/epic/ozw",
+    "phase": "worker",
+    "executor": null,
+    "workspace_id": null,
+    "backend": null,
+    "role": null,
+    "tier": null,
+    "profile_digest": "sha256:e5dcf58278bbfabbff96f749051b9d7d454e483dfeb7eb5dc697575bbae13804",
+    "model": null,
+    "context_manifest_digest": "sha256:a2ba745b0ef04871dc23e64cafe92f9b02569f24fe430399c8b57e196cb6414e",
+    "substrate_protocol": null,
+    "substrate_server_version": null
+  }
+}

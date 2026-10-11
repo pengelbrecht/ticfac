@@ -661,6 +661,9 @@ export type RunClass = "held" | "failed" | "running" | "done" | "cancelled";
  *    that said nothing (empty summary) is the bare word, never a dangling
  *    "stopped: ".
  *  - `healthy` — the word itself, whatever the summary says.
+ *  - `paused` — the headline's name for the person's wait (tick etl): the
+ *    summary ("needs you") rides behind the health line's own separator,
+ *    never a colon — the same words the needs-you box beside it states.
  *
  * The degraded and stopped goldens of the contract bundle are the fixtures
  * that pin this wording on both renderers: internal/cli renders them
@@ -675,6 +678,8 @@ export function verdictWord(state: string, summary: string | null | undefined): 
     case "degraded":
       if (text === "") return "degraded";
       return text.startsWith("degraded:") ? text : `degraded: ${text}`;
+    case "paused":
+      return text === "" ? "paused" : `paused · ${text}`;
     case "stopped":
       return text === "" ? "stopped" : `stopped: ${text}`;
     default:
