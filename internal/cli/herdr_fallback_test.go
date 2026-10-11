@@ -53,9 +53,10 @@ func (f *fakePane) AbandonUnstartedLaunch(spec *subprocess.JobSpec, reason strin
 
 // fakeLocal is the headless half, recording the dispatch it was built for.
 type fakeLocal struct {
-	built  []reconcile.Dispatch
-	starts int
-	asked  []string
+	built   []reconcile.Dispatch
+	starts  int
+	asked   []string
+	handles []*subprocess.JobHandle
 }
 
 func (f *fakeLocal) factory(d reconcile.Dispatch) (reconcile.Executor, reconcile.Substrate, error) {
@@ -64,9 +65,19 @@ func (f *fakeLocal) factory(d reconcile.Dispatch) (reconcile.Executor, reconcile
 }
 func (f *fakeLocal) Start(spec *subprocess.JobSpec) (*subprocess.JobHandle, error) {
 	f.starts++
-	return &subprocess.JobHandle{JobID: spec.JobID, Executor: subprocess.ExecutorName}, nil
+	// The local executor's own attempt record, where it keeps it.
+	state := filepath.Join(f.built[len(f.built)-1].StateDir, "repokey", "attemptkey")
+	if err := os.MkdirAll(state, 0o755); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(filepath.Join(state, "attempt.json"), []byte("{}"), 0o644); err != nil {
+		return nil, err
+	}
+	return &subprocess.JobHandle{JobID: spec.JobID, Executor: subprocess.ExecutorName,
+		Handle: map[string]any{"state": state}}, nil
 }
-func (f *fakeLocal) Inspect(*subprocess.JobHandle, string) (*subprocess.JobStatus, error) {
+func (f *fakeLocal) Inspect(h *subprocess.JobHandle, _ string) (*subprocess.JobStatus, error) {
+	f.handles = append(f.handles, h)
 	f.asked = append(f.asked, "inspect")
 	return &subprocess.JobStatus{}, nil
 }
@@ -108,6 +119,13 @@ func TestAPaneThatCannotStartFallsBackToTheHeadlessRunner(t *testing.T) {
 	w := withHeadlessFallback(pane, d, local.factory)
 
 	spec := &subprocess.JobSpec{JobID: "r1/tick-t1/attempt-1"}
+	// Before any fallback a herdr handle is herdr's.
+	if _, err := w.Inspect(&subprocess.JobHandle{Executor: herdr.ExecutorName}, ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(pane.asked) != 1 || len(local.asked) != 0 {
+		t.Fatalf("a herdr handle before any fallback went to local %v / herdr %v", local.asked, pane.asked)
+	}
 	handle, err := w.Start(spec)
 	if err != nil {
 		t.Fatalf("a pane that cannot start halted the dispatch: %v", err)
@@ -128,17 +146,31 @@ func TestAPaneThatCannotStartFallsBackToTheHeadlessRunner(t *testing.T) {
 		t.Errorf("the fallback note does not say what happened: %q", note)
 	}
 
-	for _, op := range []func(*subprocess.JobHandle){
-		func(h *subprocess.JobHandle) { _, _ = w.Inspect(h, "") },
-		func(h *subprocess.JobHandle) { _, _ = w.CollectDetail(h) },
-		func(h *subprocess.JobHandle) { _, _ = w.Cancel(h) },
-		func(h *subprocess.JobHandle) { _ = w.Dispose(h, subprocess.DisposeOptions{}) },
+	// Every operation on the fallen-back attempt reaches the local executor:
+	// its own handle, and the reconciler's MINIMAL handle built from the
+	// dispatch marker (naming herdr, pointing at herdr's state), which is
+	// re-addressed at the local attempt's own state.
+	minimal := &subprocess.JobHandle{JobID: spec.JobID, Attempt: 1, Executor: herdr.ExecutorName,
+		Handle: map[string]any{"state": filepath.Join(d.StateDir, "herdr-state")}}
+	for _, op := range []func(*subprocess.JobHandle) error{
+		func(h *subprocess.JobHandle) error { _, err := w.Inspect(h, ""); return err },
+		func(h *subprocess.JobHandle) error { _, err := w.CollectDetail(h); return err },
+		func(h *subprocess.JobHandle) error { _, err := w.Cancel(h); return err },
+		func(h *subprocess.JobHandle) error { return w.Dispose(h, subprocess.DisposeOptions{}) },
 	} {
-		op(handle)
-		op(&subprocess.JobHandle{Executor: herdr.ExecutorName})
+		if err := op(handle); err != nil {
+			t.Fatal(err)
+		}
+		if err := op(minimal); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if len(local.asked) != 4 || len(pane.asked) != 4 {
-		t.Errorf("operations were not routed by the handle's executor: local %v, herdr %v", local.asked, pane.asked)
+	if len(local.asked) != 8 || len(pane.asked) != 1 {
+		t.Errorf("operations on the fallen-back attempt were not all local: local %v, herdr %v", local.asked, pane.asked)
+	}
+	if got := local.handles[len(local.handles)-1]; got.Executor != subprocess.ExecutorName ||
+		got.Handle["state"] != handle.Handle["state"] {
+		t.Errorf("the minimal handle reached the local executor as %+v, want it re-addressed at %v", got, handle.Handle["state"])
 	}
 
 	// A resumed run builds a fresh wrapper over the same state: the durable

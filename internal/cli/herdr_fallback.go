@@ -151,17 +151,54 @@ func (w *herdrWithFallback) StartFallback(handle *subprocess.JobHandle) (string,
 	return note, ok
 }
 
-// route is the executor that issued handle: the local one for a handle it
-// names, herdr for every other.
-func (w *herdrWithFallback) route(handle *subprocess.JobHandle) (reconcile.Executor, error) {
+// route is the executor that issued handle, and the handle to give it: the
+// local one for a handle it names; the local one too for the reconciler's
+// MINIMAL handle (built from the dispatch marker, so naming herdr, with the
+// state directory it found by walking) once this attempt fell back —
+// re-addressed at the local executor's own attempt state; herdr for every
+// other.
+func (w *herdrWithFallback) route(handle *subprocess.JobHandle) (reconcile.Executor, *subprocess.JobHandle, error) {
 	if handle != nil && handle.Executor == subprocess.ExecutorName {
-		return w.localExecutor()
+		local, err := w.localExecutor()
+		return local, handle, err
 	}
-	return w.herdr, nil
+	if handle != nil && w.fellBack() {
+		state, ok := attemptStateUnder(w.stateDir)
+		if !ok {
+			return nil, nil, fmt.Errorf("attempt %d of %s fell back to the headless runner, and no attempt "+
+				"record is under %s", handle.Attempt, handle.JobID, w.stateDir)
+		}
+		local, err := w.localExecutor()
+		if err != nil {
+			return nil, nil, err
+		}
+		readdressed := *handle
+		readdressed.Executor = subprocess.ExecutorName
+		readdressed.Handle = map[string]any{"state": state}
+		return local, &readdressed, nil
+	}
+	return w.herdr, handle, nil
+}
+
+// attemptStateUnder is the directory of the first attempt record under root
+// — how the reconciler itself finds an attempt's state (findAttemptState).
+func attemptStateUnder(root string) (string, bool) {
+	found := ""
+	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if !entry.IsDir() && entry.Name() == "attempt.json" {
+			found = filepath.Dir(path)
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found, found != ""
 }
 
 func (w *herdrWithFallback) Inspect(handle *subprocess.JobHandle, cursor string) (*subprocess.JobStatus, error) {
-	ex, err := w.route(handle)
+	ex, handle, err := w.route(handle)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +206,7 @@ func (w *herdrWithFallback) Inspect(handle *subprocess.JobHandle, cursor string)
 }
 
 func (w *herdrWithFallback) CollectDetail(handle *subprocess.JobHandle) (*subprocess.Collection, error) {
-	ex, err := w.route(handle)
+	ex, handle, err := w.route(handle)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +214,7 @@ func (w *herdrWithFallback) CollectDetail(handle *subprocess.JobHandle) (*subpro
 }
 
 func (w *herdrWithFallback) Cancel(handle *subprocess.JobHandle) (*subprocess.CancelAck, error) {
-	ex, err := w.route(handle)
+	ex, handle, err := w.route(handle)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +222,7 @@ func (w *herdrWithFallback) Cancel(handle *subprocess.JobHandle) (*subprocess.Ca
 }
 
 func (w *herdrWithFallback) Dispose(handle *subprocess.JobHandle, opts subprocess.DisposeOptions) error {
-	ex, err := w.route(handle)
+	ex, handle, err := w.route(handle)
 	if err != nil {
 		return err
 	}
