@@ -121,7 +121,8 @@ type harness struct {
 	spawn          bool   // agent.start launches the fake agent process
 	mode           string // the fake agent's mode
 	agentCmd       *exec.Cmd
-	paneCloseCalls []string // pane ids pane.close accepted, in order (the wall-clock escalation's record)
+	agents         []*fakeAgent // every fake agent this harness started; its cleanup stops them all
+	paneCloseCalls []string     // pane ids pane.close accepted, in order (the wall-clock escalation's record)
 	// confirmWaitServed records how long the fake's agent.wait route served
 	// each confirm wait — the gate's acknowledgement call, its only caller —
 	// so a test can assert on the wait's own cost at the server, where the
@@ -263,6 +264,9 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 	if err := os.MkdirAll(state, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	// Registered after t.TempDir, so it runs BEFORE the temp dirs go: every
+	// fake agent this test started is stopped and reaped (tick yy1).
+	t.Cleanup(h.stopFakeAgents)
 	// The tick the prompt points at, in the base the attempt branches from.
 	writeTickRecord(t, repo, "t1",
 		"Create the file hello.txt containing exactly the word hello, and commit it.")
@@ -452,11 +456,18 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 				return herdtest.RespondErr(w, req.ID, herdtest.CodeInvalidRequest, "agent.start: "+err.Error())
 			}
 			cmd.Stdout, cmd.Stderr = logFile, logFile
+			// Its own process group, so the harness's cleanup (and pane.close)
+			// stops the agent AND whatever it is running: the never-exit modes
+			// otherwise outlived the test by days (tick yy1).
+			cmd.SysProcAttr = fakeAgentProcAttr()
 			if err := cmd.Start(); err != nil {
 				return herdtest.RespondErr(w, req.ID, herdtest.CodeInvalidRequest, "agent.start: "+err.Error())
 			}
+			registerFakeAgent(cmd.Process.Pid, h.t.Name())
+			agent := &fakeAgent{cmd: cmd, done: make(chan struct{})}
 			h.mu.Lock()
 			h.agentCmd = cmd
+			h.agents = append(h.agents, agent)
 			h.mu.Unlock()
 			// cmd.Wait is the only writer of the process's exit facts, and it
 			// runs on its own goroutine: a test waiting on the exit reads the
@@ -466,6 +477,7 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 				h.mu.Lock()
 				h.agentProcDone, h.agentProcErr = true, err
 				h.mu.Unlock()
+				close(agent.done)
 			}()
 		}
 		h.mu.Lock()
@@ -630,8 +642,8 @@ func newHarness(t *testing.T, opts harnessOptions) *harness {
 		if cmd != nil && cmd.Process != nil && !lingers {
 			// Closing the pane kills the process the pane runs — herdr's own
 			// behaviour, and the fact that makes the close the stop that
-			// actually stops.
-			_ = cmd.Process.Kill()
+			// actually stops. The whole group: the pane's children go too.
+			signalFakeAgentGroup(cmd.Process.Pid, true)
 		}
 		return herdtest.RespondJSON(w, req.ID, map[string]any{"type": "ok"})
 	})
