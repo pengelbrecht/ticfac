@@ -44,6 +44,21 @@ status_file=$3
 interrupt_file=$4
 mode=${5:-implement}
 
+# The test that started this agent can vanish without stopping it (a killed
+# test binary, a cleanup that never ran): the never-exit modes then lived on,
+# reparented to init, for days (tick yy1). Every wait loop pauses through
+# here, and the agent exits by itself once the process that started it is
+# gone or its scratch directory (the test's temp dir) has been removed.
+parent=$PPID
+scratch=$(dirname "$status_file")
+pause() {
+	if ! kill -0 "$parent" 2>/dev/null || [ ! -d "$scratch" ]; then
+		echo "fake agent: the test that started me is gone; exiting" >&2
+		exit 1
+	fi
+	sleep "$1"
+}
+
 report_working() { printf 'working\n' > "$status_file"; }
 report_done() { printf 'done\n' > "$status_file"; }
 
@@ -55,7 +70,7 @@ wait_for_prompt() {
 			echo "fake agent: no prompt within 30s" >&2
 			exit 1
 		fi
-		sleep 0.05
+		pause 0.05
 	done
 }
 
@@ -73,7 +88,7 @@ if [ "$mode" = "sleep" ]; then
 	wait_for_prompt
 	report_working
 	while [ ! -f "$interrupt_file" ]; do
-		sleep 0.1
+		pause 0.1
 	done
 	echo "fake agent: interrupted; stopping without committing" >&2
 	exit 130
@@ -88,7 +103,7 @@ if [ "$mode" = "esc_only" ]; then
 		if [ -f "$interrupt_file" ] && grep -qw esc "$interrupt_file"; then
 			printf 'idle\n' > "$status_file"
 		fi
-		sleep 0.05
+		pause 0.05
 	done
 fi
 
@@ -100,7 +115,7 @@ if [ "$mode" = "ignore" ]; then
 	wait_for_prompt
 	report_working
 	while :; do
-		sleep 0.1
+		pause 0.1
 	done
 fi
 
@@ -133,7 +148,7 @@ if [ "$mode" = "bad_findings_then_fixed" ] || [ "$mode" = "bad_findings_forever"
 			fi
 			report_done
 		fi
-		sleep 0.05
+		pause 0.05
 	done
 fi
 
@@ -165,7 +180,7 @@ if [ "$mode" = "stop_early" ] || [ "$mode" = "never_report" ]; then
 			fi
 			report_done
 		fi
-		sleep 0.05
+		pause 0.05
 	done
 fi
 
