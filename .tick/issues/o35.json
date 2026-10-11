@@ -1,0 +1,14 @@
+{
+  "id": "o35",
+  "title": "A herdr pane's claude stops at the folder-trust dialog in a fresh worktree; the dispatch is lost and the run halts",
+  "gloss": "herdr claude trust dialog",
+  "description": "Reported from a run in another repo (thorpeleverage, epic spq, 2026-10-11, herdr 0.9.3): the final-review tick was dispatched to a herdr pane running claude --permission-mode bypassPermissions … in a fresh worktree under ~/.herdr/worktrees/\u003crepo\u003e/…; Claude Code stopped at its folder-trust dialog ('Quick safety check: Is this a project you created or one you trust?'), never reported interactive_ready within the 60s DefaultStartupTimeout (internal/exec/herdr/executor.go:162, not configurable), start_failed → supervision_halted attempt_unaddressed; on resume the pane read live (blocked) and held for a person. bypassPermissions does not skip the trust dialog. Fix: before launching claude in a pane, register trust for that worktree path the way Claude Code records it (~/.claude.json projects[\u003cpath\u003e].hasTrustDialogAccepted) — only for worktrees ticfac itself created — or detect the dialog in the pane and answer/fail fast with a precise reason; make the startup budget configurable; a start_failed on a pane must re-dispatch (or fall back to the headless runner) rather than halt for a person.",
+  "status": "open",
+  "priority": 1,
+  "type": "bug",
+  "owner": "ticks-sandbox@ticks.invalid",
+  "acceptance_criteria": "a review/close-out dispatched to a herdr pane in a never-seen worktree starts without a person; a pane blocked at a dialog is detected and reported precisely; the startup budget is configurable; test; make gate",
+  "created_by": "ticks-sandbox@ticks.invalid",
+  "created_at": "2026-10-11T15:20:32.374585Z",
+  "updated_at": "2026-10-11T15:20:32.374585Z"
+}
